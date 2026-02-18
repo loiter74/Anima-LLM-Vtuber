@@ -1,0 +1,23 @@
+# OpenAI 服务配置 - 需设置环境变量 OPENAI_API_KEY
+
+asr:
+  type: openai
+  api_key: "${OPENAI_API_KEY}"
+  model: "whisper-1"
+
+tts:
+  type: openai
+  api_key: "${OPENAI_API_KEY}"
+  model: "tts-1"  # tts-1(标准) / tts-1-hd(高清)
+  voice: "nova"   # alloy/echo/fable/onyx/nova/shimmer
+  response_format: "mp3"
+  speed: 1.0  # 0.25-4.0, 1.0=正常
+
+agent:
+  memory_enabled: true
+  llm_config:
+    type: openai
+    model: "gpt-4o-mini"  # gpt-4o / gpt-4o-mini / gpt-4-turbo
+    api_key: "${OPENAI_API_KEY}"
+    temperature: 0.7  # 0.0(确定) - 2.0(随机)
+    max_tokens: 4096
