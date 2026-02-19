@@ -1,18 +1,24 @@
-"""应用总配置 - profile 驱动的配置加载"""
+"""应用总配置 - 服务驱动的配置加载"""
 
 import os
 import re
 from pathlib import Path
 from typing import Optional, Dict, Any
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, TypeAdapter
 from loguru import logger
 
 from .core.base import BaseConfig
 from .system import SystemConfig
-from .providers.asr import ASRConfig, MockASRConfig
-from .providers.tts import TTSConfig, MockTTSConfig
+from .providers.asr import ASRConfig
+from .providers.tts import TTSConfig
+from .providers.vad import VADConfig
 from .agent import AgentConfig
 from .persona import PersonaConfig
+
+# 创建 TypeAdapter 用于验证 Discriminated Union 类型
+_asr_adapter = TypeAdapter(ASRConfig)
+_tts_adapter = TypeAdapter(TTSConfig)
+_vad_adapter = TypeAdapter(VADConfig)
 
 
 def expand_env_vars(value):
@@ -36,17 +42,7 @@ def expand_env_vars(value):
 
 
 CONFIG_DIR = Path(__file__).parent.parent.parent.parent / "config"
-
-
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """深度合并字典"""
-    result = base.copy()
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = value
-    return result
+SERVICES_DIR = CONFIG_DIR / "services"
 
 
 def _load_yaml_file(path: Path) -> Dict[str, Any]:
@@ -64,37 +60,52 @@ def _load_yaml_file(path: Path) -> Dict[str, Any]:
     return data or {}
 
 
-def _load_profile(profile_name: str) -> Dict[str, Any]:
-    """加载 profile 配置"""
-    profile_path = CONFIG_DIR / "profiles" / f"{profile_name}.yaml"
-    if not profile_path.exists():
-        raise FileNotFoundError(f"Profile 不存在: {profile_path}")
-    logger.info(f"加载 profile: {profile_name}")
-    return _load_yaml_file(profile_path)
+def _load_service_config(service_type: str, service_name: str) -> Dict[str, Any]:
+    """
+    加载单个服务的配置
+    
+    Args:
+        service_type: 服务类型 (asr/tts/agent)
+        service_name: 服务名称 (openai/glm/ollama/mock 等)
+    
+    Returns:
+        Dict: 服务配置
+    """
+    service_path = SERVICES_DIR / service_type / f"{service_name}.yaml"
+    if not service_path.exists():
+        raise FileNotFoundError(f"服务配置不存在: {service_path}")
+    logger.info(f"加载服务配置: {service_type}/{service_name}")
+    return _load_yaml_file(service_path)
+
+
+class ServicesConfig(BaseConfig):
+    """服务组合配置"""
+    asr: str = Field(default="mock", description="ASR 服务名称")
+    tts: str = Field(default="mock", description="TTS 服务名称")
+    agent: str = Field(default="mock", description="Agent 服务名称")
+    vad: str = Field(default="mock", description="VAD 服务名称")
 
 
 class AppConfig(BaseConfig):
     """
     应用总配置
     
-    AI 服务配置全部从 profile 加载，主配置文件只包含：
-    - profile: 服务方案名称
-    - persona: 人设名称
-    - system: 系统配置
+    通过 services 字段指定各服务，配置文件位于 config/services/{type}/{name}.yaml
     """
-    # 服务方案（必需）
-    profile: str = Field(..., description="服务方案名称")
-    
     # 人设
     persona: str = Field(default="default", description="人设名称")
+    
+    # 服务组合
+    services: ServicesConfig = Field(default_factory=ServicesConfig)
     
     # 系统配置
     system: SystemConfig = Field(default_factory=SystemConfig)
     
-    # AI 服务配置（从 profile 加载，不设默认值）
+    # AI 服务配置（从服务配置文件加载）
     asr: Optional[ASRConfig] = Field(default=None)
     tts: Optional[TTSConfig] = Field(default=None)
     agent: Optional[AgentConfig] = Field(default=None)
+    vad: Optional[VADConfig] = Field(default=None)
     
     # 私有字段
     _persona: Optional[PersonaConfig] = PrivateAttr(default=None)
@@ -115,8 +126,8 @@ class AppConfig(BaseConfig):
         从 YAML 文件加载配置
         
         加载流程:
-        1. 读取主配置文件（profile, persona, system）
-        2. 加载 profile（包含 asr, tts, agent）
+        1. 读取主配置文件
+        2. 从 services/{type}/{name}.yaml 分别加载各服务
         3. 展开环境变量
         4. 应用环境变量覆盖
         """
@@ -125,29 +136,63 @@ class AppConfig(BaseConfig):
             raise FileNotFoundError(f"配置文件不存在: {path}")
         
         main_config = _load_yaml_file(path)
-        
-        # 获取 profile 名称
-        profile_name = main_config.get("profile")
-        if not profile_name:
-            raise ValueError("配置文件缺少 profile 字段")
-        
-        # 加载 profile（AI 服务配置）
-        profile_data = _load_profile(profile_name)
-        
-        # 合并：profile 提供基础，main_config 覆盖
-        merged = _deep_merge(profile_data, main_config)
+        config = cls._load_services_mode(main_config)
         
         # 展开环境变量
-        merged = expand_env_vars(merged)
-        
-        # 创建配置对象
-        config = cls(**merged)
+        config._apply_env_expansion()
         
         # 应用环境变量覆盖
         config._apply_env_overrides()
         
-        logger.info(f"配置加载完成: profile={profile_name}, persona={config.persona}")
+        logger.info(f"配置加载完成: persona={config.persona}")
         return config
+
+    @classmethod
+    def _load_services_mode(cls, main_config: Dict[str, Any]) -> "AppConfig":
+        """Services 模式加载"""
+        services_config = main_config.get("services", {})
+        
+        # 加载各个服务配置
+        asr_name = services_config.get("asr", "mock")
+        tts_name = services_config.get("tts", "mock")
+        agent_name = services_config.get("agent", "mock")
+        vad_name = services_config.get("vad", "mock")
+        
+        asr_data = _load_service_config("asr", asr_name)
+        tts_data = _load_service_config("tts", tts_name)
+        agent_data = _load_service_config("agent", agent_name)
+        vad_data = _load_service_config("vad", vad_name)
+        
+        # 构建完整配置
+        merged = {
+            **main_config,
+            "asr": asr_data,
+            "tts": tts_data,
+            "agent": agent_data,
+            "vad": vad_data,
+        }
+        
+        return cls(**merged)
+
+    def _apply_env_expansion(self) -> None:
+        """递归展开所有配置中的环境变量"""
+        # 展开各服务配置中的环境变量
+        # 由于 ASRConfig/TTSConfig 是 Discriminated Union，
+        # 需要使用 TypeAdapter 来验证
+        if self.asr:
+            asr_dict = self.asr.model_dump()
+            asr_dict = expand_env_vars(asr_dict)
+            self.asr = _asr_adapter.validate_python(asr_dict)
+        
+        if self.tts:
+            tts_dict = self.tts.model_dump()
+            tts_dict = expand_env_vars(tts_dict)
+            self.tts = _tts_adapter.validate_python(tts_dict)
+        
+        if self.agent:
+            agent_dict = self.agent.model_dump()
+            agent_dict = expand_env_vars(agent_dict)
+            self.agent = AgentConfig.model_validate(agent_dict)
 
     def _apply_env_overrides(self) -> None:
         """应用环境变量覆盖"""

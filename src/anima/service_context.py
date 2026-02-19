@@ -6,11 +6,12 @@
 from typing import Callable, Optional
 from loguru import logger
 
-from .config import AppConfig, ASRConfig, TTSConfig, AgentConfig, PersonaConfig, GLMLLMConfig
+from .config import AppConfig, ASRConfig, TTSConfig, AgentConfig, PersonaConfig, VADConfig
 from .services import ASRInterface, TTSInterface, AgentInterface
-from .services.asr.factory import ASRFactory
-from .services.tts.factory import TTSFactory
-from .services.agent.factory import AgentFactory
+from .services.asr import ASRFactory
+from .services.tts import TTSFactory
+from .services.llm import LLMFactory as AgentFactory
+from .services.vad import VADInterface, VADFactory
 
 
 class ServiceContext:
@@ -34,6 +35,7 @@ class ServiceContext:
         self.asr_engine: Optional[ASRInterface] = None
         self.tts_engine: Optional[TTSInterface] = None
         self.agent_engine: Optional[AgentInterface] = None
+        self.vad_engine: Optional[VADInterface] = None
         
         # 会话状态
         self.session_id: Optional[str] = None
@@ -73,6 +75,7 @@ class ServiceContext:
         await self.init_asr(config.asr)
         await self.init_tts(config.tts)
         await self.init_agent(config.agent, config.get_persona(), app_config=config)
+        await self.init_vad(config.vad)
 
         logger.info(f"[{self.session_id}] 服务加载完成")
 
@@ -196,6 +199,30 @@ class ServiceContext:
         """
         return persona_config.build_system_prompt()
 
+    async def init_vad(self, vad_config: VADConfig) -> None:
+        """
+        初始化 VAD 服务（使用工厂模式）
+
+        Args:
+            vad_config: VAD 配置
+        """
+        if self.vad_engine is not None:
+            logger.debug(f"[{self.session_id}] VAD 已初始化，跳过")
+            return
+
+        provider = vad_config.type
+        logger.info(f"[{self.session_id}] 初始化 VAD: {provider}")
+
+        self.vad_engine = VADFactory.create(
+            provider=provider,
+            sample_rate=getattr(vad_config, 'sample_rate', 16000),
+            prob_threshold=getattr(vad_config, 'prob_threshold', 0.4),
+            db_threshold=getattr(vad_config, 'db_threshold', 60),
+            required_hits=getattr(vad_config, 'required_hits', 3),
+            required_misses=getattr(vad_config, 'required_misses', 24),
+            smoothing_window=getattr(vad_config, 'smoothing_window', 5),
+        )
+
     # ========================================
     # 生命周期管理
     # ========================================
@@ -215,6 +242,10 @@ class ServiceContext:
         if self.agent_engine:
             await self.agent_engine.close()
             self.agent_engine = None
+
+        if self.vad_engine:
+            await self.vad_engine.close()
+            self.vad_engine = None
 
         logger.info(f"[{self.session_id}] 服务上下文已关闭")
 

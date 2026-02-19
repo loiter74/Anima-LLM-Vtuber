@@ -1,128 +1,91 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MessageSquare, Send, Bot, User, Wifi, WifiOff } from "lucide-react"
-import { getSocket, connectSocket, disconnectSocket } from "@/lib/socket"
+import { Badge } from "@/components/ui/badge"
+import { 
+  MessageSquare, 
+  Send, 
+  Bot, 
+  User, 
+  Wifi, 
+  WifiOff, 
+  Mic, 
+  MicOff,
+  Square,
+  Trash2,
+  Loader2
+} from "lucide-react"
+import { useConversation, ConversationStatus } from "@/hooks/use-conversation"
 
-interface ChatMessage {
-  id: string
-  sender: "user" | "ai"
-  message: string
-  time: string
+// 状态徽章颜色
+const statusStyles: Record<ConversationStatus, { bg: string; text: string; label: string }> = {
+  idle: { bg: "bg-gray-500/15", text: "text-gray-500", label: "空闲" },
+  listening: { bg: "bg-blue-500/15", text: "text-blue-500", label: "倾听中" },
+  processing: { bg: "bg-yellow-500/15", text: "text-yellow-500", label: "思考中" },
+  speaking: { bg: "bg-green-500/15", text: "text-green-500", label: "说话中" },
+  interrupted: { bg: "bg-orange-500/15", text: "text-orange-500", label: "已打断" },
+  error: { bg: "bg-red-500/15", text: "text-red-500", label: "错误" },
 }
 
-const INITIAL_MESSAGES: ChatMessage[] = [
-  {
-    id: "1",
-    sender: "ai",
-    message: "你好！我是你的 AI 伴侣。今天过得怎么样？",
-    time: "14:30",
-  },
-]
-
 export function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
-  const [inputValue, setInputValue] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // 获取当前时间字符串
-  const getCurrentTime = () => {
-    const now = new Date()
-    return `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`
-  }
+  // 使用对话 hook
+  const {
+    isConnected,
+    status,
+    messages,
+    currentResponse,
+    isTyping,
+    error,
+    connect,
+    sendText,
+    startRecording,
+    stopRecording,
+    interrupt,
+    clearHistory,
+  } = useConversation({
+    autoConnect: true,
+    onStatusChange: (newStatus) => {
+      console.log("[ChatPanel] 状态变化:", newStatus)
+    },
+    onError: (err) => {
+      console.error("[ChatPanel] 错误:", err)
+    },
+  })
 
-  // 添加消息
-  const addMessage = useCallback((sender: "user" | "ai", message: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        sender,
-        message,
-        time: getCurrentTime(),
-      },
-    ])
-  }, [])
-
-  // 初始化 Socket.IO 连接
-  useEffect(() => {
-    const socket = getSocket()
-
-    // 连接成功
-    socket.on("connect", () => {
-      console.log("[ChatPanel] 已连接到服务器")
-      setIsConnected(true)
-    })
-
-    // 断开连接
-    socket.on("disconnect", () => {
-      console.log("[ChatPanel] 已断开连接")
-      setIsConnected(false)
-    })
-
-    // 接收 AI 回复
-    socket.on("full-text", (data: { type: string; text: string }) => {
-      console.log("[ChatPanel] 收到 AI 回复:", data.text)
-      setIsTyping(false)
-      addMessage("ai", data.text)
-    })
-
-    // 连接建立确认
-    socket.on("connection-established", (data: { message: string; sid: string }) => {
-      console.log("[ChatPanel] 服务器确认连接:", data)
-    })
-
-    // 连接到服务器
-    connectSocket()
-
-    // 清理
-    return () => {
-      socket.off("connect")
-      socket.off("disconnect")
-      socket.off("full-text")
-      socket.off("connection-established")
+  // 发送消息
+  const handleSend = useCallback((text: string) => {
+    if (!text.trim()) return
+    sendText(text)
+    if (inputRef.current) {
+      inputRef.current.value = ""
     }
-  }, [addMessage])
+  }, [sendText])
+
+  // 切换录音
+  const toggleRecording = useCallback(() => {
+    if (status === "listening") {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }, [status, startRecording, stopRecording])
 
   // 滚动到底部
   useEffect(() => {
-    // ScrollArea 内部的 viewport 元素
     const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
     if (viewport) {
       viewport.scrollTop = viewport.scrollHeight
     }
-  }, [messages, isTyping])
+  }, [messages, currentResponse, isTyping])
 
-  // 发送消息
-  const handleSend = () => {
-    if (!inputValue.trim()) return
-
-    const text = inputValue.trim()
-    
-    // 添加用户消息到界面
-    addMessage("user", text)
-    setInputValue("")
-
-    // 如果已连接，发送到后端
-    if (isConnected) {
-      setIsTyping(true)
-      const socket = getSocket()
-      socket.emit("text_input", { text })
-    } else {
-      // 未连接时显示提示
-      addMessage("ai", "⚠️ 未连接到服务器，请检查后端是否启动")
-    }
-  }
-
-  // 重连
-  const handleReconnect = () => {
-    connectSocket()
-  }
+  // 获取当前状态样式
+  const statusStyle = statusStyles[status]
 
   return (
     <div className="flex h-full flex-col">
@@ -142,8 +105,17 @@ export function ChatPanel() {
           </div>
         </div>
         
-        {/* 连接状态 */}
+        {/* 状态和控制 */}
         <div className="flex items-center gap-2">
+          {/* 状态徽章 */}
+          <Badge 
+            variant="outline" 
+            className={`${statusStyle.bg} ${statusStyle.text} border-0`}
+          >
+            {statusStyle.label}
+          </Badge>
+          
+          {/* 连接状态 */}
           {isConnected ? (
             <div className="flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1">
               <Wifi className="size-3 text-green-500" />
@@ -153,7 +125,7 @@ export function ChatPanel() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleReconnect}
+              onClick={connect}
               className="flex items-center gap-1.5 rounded-full bg-red-500/15 px-2.5 py-1 hover:bg-red-500/25"
             >
               <WifiOff className="size-3 text-red-500" />
@@ -163,10 +135,25 @@ export function ChatPanel() {
         </div>
       </div>
 
-      {/* Messages - 添加 min-h-0 确保滚动正常工作 */}
+      {/* Messages */}
       <div className="min-h-0 flex-1">
         <ScrollArea className="h-full" ref={scrollRef}>
           <div className="flex flex-col gap-3 p-4">
+            {/* 欢迎消息 */}
+            {messages.length === 0 && (
+              <div className="flex gap-2.5">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Bot className="size-3.5 text-primary" />
+                </div>
+                <div className="flex max-w-[75%] flex-col gap-1">
+                  <div className="rounded-2xl rounded-tl-sm border border-border bg-card px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground shadow-sm">
+                    你好！我是你的 AI 伴侣。今天过得怎么样？
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 消息列表 */}
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -198,7 +185,7 @@ export function ChatPanel() {
                         : "rounded-tr-sm bg-primary text-primary-foreground"
                     }`}
                   >
-                    {msg.message}
+                    {msg.text}
                   </div>
                   <span className="px-1 text-[10px] text-muted-foreground">
                     {msg.time}
@@ -207,8 +194,23 @@ export function ChatPanel() {
               </div>
             ))}
 
+            {/* 流式响应（正在生成） */}
+            {currentResponse && (
+              <div className="flex gap-2.5">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <Bot className="size-3.5 text-primary" />
+                </div>
+                <div className="flex max-w-[75%] flex-col gap-1">
+                  <div className="rounded-2xl rounded-tl-sm border border-border bg-card px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground shadow-sm">
+                    {currentResponse}
+                    <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-primary" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Typing indicator */}
-            {isTyping && (
+            {isTyping && !currentResponse && (
               <div className="flex gap-2.5">
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <Bot className="size-3.5 text-primary" />
@@ -229,8 +231,83 @@ export function ChatPanel() {
                 </div>
               </div>
             )}
+
+            {/* Error message */}
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
           </div>
         </ScrollArea>
+      </div>
+
+      {/* 工具栏 */}
+      <div className="border-t border-border px-3 py-2">
+        <div className="flex items-center justify-between">
+          {/* 左侧工具 */}
+          <div className="flex items-center gap-1">
+            {/* 语音输入 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 ${status === "listening" ? "text-red-500" : ""}`}
+              onClick={toggleRecording}
+              disabled={!isConnected || status === "processing"}
+              title={status === "listening" ? "停止录音" : "开始录音"}
+            >
+              {status === "listening" ? (
+                <MicOff className="size-4" />
+              ) : (
+                <Mic className="size-4" />
+              )}
+            </Button>
+            
+            {/* 打断 */}
+            {(status === "speaking" || status === "processing") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-orange-500"
+                onClick={interrupt}
+                title="打断"
+              >
+                <Square className="size-4" />
+              </Button>
+            )}
+            
+            {/* 清空历史 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={clearHistory}
+              disabled={messages.length === 0}
+              title="清空历史"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+          
+          {/* 状态指示 */}
+          {status === "listening" && (
+            <div className="flex items-center gap-1.5 text-xs text-red-500">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+              </span>
+              录音中
+            </div>
+          )}
+          
+          {status === "processing" && (
+            <div className="flex items-center gap-1.5 text-xs text-yellow-500">
+              <Loader2 className="size-3 animate-spin" />
+              处理中
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Input area */}
@@ -239,21 +316,23 @@ export function ChatPanel() {
           className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            handleSend()
+            const input = inputRef.current
+            if (input) {
+              handleSend(input.value)
+            }
           }}
         >
           <Input
+            ref={inputRef}
             placeholder="输入消息..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
             className="h-9 text-xs"
-            disabled={isTyping}
+            disabled={isTyping || status === "processing" || status === "listening"}
           />
           <Button
             type="submit"
             size="sm"
             className="h-9 w-9 shrink-0 p-0"
-            disabled={isTyping || !inputValue.trim()}
+            disabled={isTyping || status === "processing" || status === "listening"}
           >
             <Send className="size-3.5" />
             <span className="sr-only">发送消息</span>

@@ -1,6 +1,9 @@
 /**
  * Socket.IO 客户端服务
  * 连接到后端 Socket.IO 服务器
+ * 
+ * 注意：推荐使用 useConversation hook 进行对话操作
+ * 此文件提供底层 Socket.IO 连接管理
  */
 
 import { io, Socket } from "socket.io-client"
@@ -10,6 +13,32 @@ const SERVER_URL = "http://localhost:12394"
 
 // Socket 实例（单例模式）
 let socket: Socket | null = null
+
+// 事件类型定义
+export interface SocketEvents {
+  // 连接事件
+  "connection-established": { message: string; sid: string }
+  
+  // 对话事件
+  "text": { text: string; from_name?: string }
+  "audio": { audio_url?: string; audio_data?: string; seq?: number }
+  "control": { text: string }
+  "tool_call": { name: string; args: Record<string, unknown> }
+  "error": { message: string }
+  
+  // 兼容旧事件
+  "full-text": { type: string; text: string }
+  "transcript": { text: string; is_final: boolean }
+  
+  // 历史记录
+  "history-list": { histories: Array<{ uid: string; preview: string }> }
+  "history-data": { messages: Array<{ role: string; content: string }> }
+  "history-cleared": { type: string }
+  "new-history-created": { type: string; history_uid: string }
+  
+  // 配置
+  "config-switched": { type: string; message: string }
+}
 
 /**
  * 获取 Socket 实例
@@ -61,10 +90,10 @@ export function disconnectSocket(): void {
 /**
  * 发送文本消息
  */
-export function sendTextMessage(text: string): void {
+export function sendTextMessage(text: string, metadata?: Record<string, unknown>): void {
   const socket = getSocket()
   if (socket.connected) {
-    socket.emit("text_input", { text })
+    socket.emit("text_input", { text, metadata })
   } else {
     console.warn("[Socket] 未连接，无法发送消息")
   }
@@ -73,20 +102,60 @@ export function sendTextMessage(text: string): void {
 /**
  * 发送打断信号
  */
-export function sendInterrupt(): void {
+export function sendInterrupt(heardText?: string): void {
   const socket = getSocket()
   if (socket.connected) {
-    socket.emit("interrupt_signal", { text: "用户打断" })
+    socket.emit("interrupt_signal", { text: heardText || "" })
   }
 }
 
 /**
- * 请求历史记录
+ * 发送音频数据
  */
-export function fetchHistory(): void {
+export function sendAudioData(audio: number[]): void {
+  const socket = getSocket()
+  if (socket.connected) {
+    socket.emit("raw_audio_data", { audio })
+  }
+}
+
+/**
+ * 通知音频结束
+ */
+export function sendAudioEnd(): void {
+  const socket = getSocket()
+  if (socket.connected) {
+    socket.emit("mic_audio_end", {})
+  }
+}
+
+/**
+ * 请求历史记录列表
+ */
+export function fetchHistoryList(): void {
   const socket = getSocket()
   if (socket.connected) {
     socket.emit("fetch_history_list", {})
+  }
+}
+
+/**
+ * 请求特定历史记录
+ */
+export function fetchHistory(historyUid: string): void {
+  const socket = getSocket()
+  if (socket.connected) {
+    socket.emit("fetch_history", { history_uid: historyUid })
+  }
+}
+
+/**
+ * 清空对话历史
+ */
+export function clearHistory(): void {
+  const socket = getSocket()
+  if (socket.connected) {
+    socket.emit("clear_history", {})
   }
 }
 
@@ -97,6 +166,16 @@ export function switchConfig(file: string): void {
   const socket = getSocket()
   if (socket.connected) {
     socket.emit("switch_config", { file })
+  }
+}
+
+/**
+ * 创建新对话历史
+ */
+export function createNewHistory(): void {
+  const socket = getSocket()
+  if (socket.connected) {
+    socket.emit("create_new_history", {})
   }
 }
 

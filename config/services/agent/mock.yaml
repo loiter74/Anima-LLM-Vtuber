@@ -1,0 +1,5 @@
+# Mock Agent 配置（用于测试）
+
+memory_enabled: false
+llm_config:
+  type: mock

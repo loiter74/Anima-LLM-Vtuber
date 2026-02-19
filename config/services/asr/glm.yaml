@@ -1,0 +1,6 @@
+# 智谱 GLM ASR 配置
+
+type: glm
+api_key: "${LLM_API_KEY}"
+model: "glm-asr-2512"
+stream: false  # true(实时) / false(完整)

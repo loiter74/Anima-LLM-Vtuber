@@ -34,6 +34,7 @@ class ProviderRegistry:
         "llm": {},
         "asr": {},
         "tts": {},
+        "vad": {},
     }
     
     # 服务类存储: {"llm": {"openai": OpenAIAgent, ...}, ...}
@@ -41,6 +42,7 @@ class ProviderRegistry:
         "llm": {},
         "asr": {},
         "tts": {},
+        "vad": {},
     }
     
     # 兼容旧 API
@@ -49,7 +51,7 @@ class ProviderRegistry:
     # ==================== 配置类注册 ====================
     
     @classmethod
-    def register_config(cls, category: Literal["llm", "asr", "tts"], provider_type: str):
+    def register_config(cls, category: Literal["llm", "asr", "tts", "vad"], provider_type: str):
         """
         装饰器：注册提供者配置类（推荐使用此名称）
         

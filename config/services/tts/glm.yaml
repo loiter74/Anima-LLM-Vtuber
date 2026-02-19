@@ -1,0 +1,9 @@
+# 智谱 GLM TTS 配置
+
+type: glm
+api_key: "${LLM_API_KEY}"
+model: "glm-tts"
+voice: "female"  # male / female
+response_format: "wav"  # wav / mp3
+speed: 1.0  # 0.25-4.0, 1.0=正常
+volume: 1.0  # 0.0-2.0, 1.0=正常

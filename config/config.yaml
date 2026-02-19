@@ -2,11 +2,20 @@
 # Anima 配置文件
 # ============================================
 
-# 服务方案: mock / openai / glm / ollama / full-openai
-profile: "glm"
-
 # 人设: default / neuro-vtuber
 persona: "neuro-vtuber"
+
+# ============================================
+# 服务组合配置
+# ============================================
+# 可以通过名称引用 config/services/ 目录下的服务配置
+# 例如: asr: glm 会加载 config/services/asr/glm.yaml
+
+services:
+  asr: glm
+  tts: glm
+  agent: glm
+  vad: mock   # vad: silero / mock
 
 # ============================================
 # 系统配置

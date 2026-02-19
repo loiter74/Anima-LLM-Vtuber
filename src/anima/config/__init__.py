@@ -44,6 +44,14 @@ from .providers.tts import (
     GLMTTSConfig,
 )
 
+# Providers - VAD
+from .providers.vad import (
+    VADConfig,
+    VADBaseConfig,
+    MockVADConfig,
+    SileroVADConfig,
+)
+
 # Composite configs
 from .agent import AgentConfig
 from .system import SystemConfig
@@ -74,6 +82,11 @@ __all__ = [
     "OpenAITTSConfig",
     "EdgeTTSConfig",
     "GLMTTSConfig",
+    # VAD Providers
+    "VADConfig",
+    "VADBaseConfig",
+    "MockVADConfig",
+    "SileroVADConfig",
     # Composite
     "AgentConfig",
     "SystemConfig",

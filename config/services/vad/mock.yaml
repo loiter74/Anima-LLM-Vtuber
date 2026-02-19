@@ -1,0 +1,7 @@
+# Mock VAD 配置（用于测试）
+
+type: mock
+sample_rate: 16000
+db_threshold: -30.0        # 分贝阈值
+min_speech_duration: 5     # 最小语音帧数
+min_silence_duration: 15   # 最小静音帧数
