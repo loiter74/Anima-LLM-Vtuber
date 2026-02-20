@@ -83,23 +83,46 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const audioBufferRef = useRef<number[]>([])
+  const handlerIdRef = useRef<string>(`handler-${Math.random().toString(36).substr(2, 9)}`)  // 唯一标识符
+  const registrationCountRef = useRef<number>(0)  // 追踪注册次数
+  const handleSentenceCallCountRef = useRef<number>(0)  // 追踪 handleSentence 调用次数
+  const lastProcessedCompleteSeqRef = useRef<number>(-1)  // 追踪上一次处理的完成标记 seq，防止重复
+
+  // 使用 ref 存储外部回调函数
+  const onStatusChangeRef = useRef(onStatusChange)
+  const onErrorRef = useRef(onError)
 
   // 更新状态
   const updateStatus = useCallback((newStatus: ConversationStatus) => {
     setStatus(newStatus)
-    onStatusChange?.(newStatus)
-  }, [onStatusChange])
+    onStatusChangeRef.current?.(newStatus)
+  }, [])
 
   // 添加消息
   const addMessage = useCallback((sender: "user" | "ai", text: string) => {
-    const message: Message = {
-      id: generateId(),
-      sender,
-      text,
-      time: getCurrentTime(),
-    }
-    setMessages((prev) => [...prev, message])
-    return message.id
+    const currentTime = getCurrentTime()
+
+    setMessages((prev) => {
+      // 检查最后一条消息是否完全相同（React 双重调用会产生连续的相同消息）
+      if (prev.length > 0) {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg.sender === sender && lastMsg.text === text && lastMsg.time === currentTime) {
+          console.log(`[addMessage-${handlerIdRef.current}] 检测到重复消息，跳过 - 发送者: ${sender}, 文本: ${text.substring(0, 30)}`)
+          return prev
+        }
+      }
+
+      const messageId = generateId()
+      const message: Message = {
+        id: messageId,
+        sender,
+        text,
+        time: currentTime,
+      }
+
+      console.log(`[addMessage-${handlerIdRef.current}] 添加消息 - ID: ${messageId}, 发送者: ${sender}, 文本: ${text.substring(0, 50)}`)
+      return [...prev, message]
+    })
   }, [])
 
   // 更新消息
@@ -109,14 +132,122 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     )
   }, [])
 
+  // 播放音频（从 base64 字符串）
+  const playAudioFromHex = useCallback((base64Data: string) => {
+    try {
+      console.log("[Conversation] 开始播放音频，数据长度:", base64Data.length)
+
+      // 将 base64 转换为 Blob URL
+      const binaryString = atob(base64Data)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+
+      // 创建 Blob 和 URL
+      const blob = new Blob([bytes], { type: 'audio/mpeg' })
+      const audioUrl = URL.createObjectURL(blob)
+
+      console.log("[Conversation] 创建音频 Blob URL:", audioUrl)
+
+      // 使用 HTML5 Audio 元素播放 MP3
+      const audio = new Audio(audioUrl)
+
+      audio.oncanplaythrough = () => {
+        console.log("[Conversation] 音频可以播放")
+        audio.play().catch(err => {
+          console.error("[Conversation] 音频播放失败:", err)
+          updateStatus("idle")
+        })
+      }
+
+      audio.onended = () => {
+        console.log("[Conversation] 音频播放完成")
+        updateStatus("idle")
+        URL.revokeObjectURL(audioUrl) // 释放内存
+      }
+
+      audio.onerror = (e) => {
+        console.error("[Conversation] 音频加载错误:", e)
+        updateStatus("idle")
+        URL.revokeObjectURL(audioUrl)
+      }
+
+    } catch (err) {
+      console.error("[Conversation] 播放音频出错:", err)
+      updateStatus("idle")
+    }
+  }, [updateStatus])
+
+  // 使用 ref 存储内部回调函数，避免 useEffect 重复执行
+  const addMessageRef = useRef(addMessage)
+  const updateStatusRef = useRef(updateStatus)
+  const setIsTypingRef = useRef(setIsTyping)
+  const setCurrentResponseRef = useRef(setCurrentResponse)
+  const playAudioRef = useRef(playAudioFromHex)
+
+  // 更新 ref
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+    onErrorRef.current = onError
+    addMessageRef.current = addMessage
+    updateStatusRef.current = updateStatus
+    setIsTypingRef.current = setIsTyping
+    setCurrentResponseRef.current = setCurrentResponse
+    playAudioRef.current = playAudioFromHex
+  })
+
+  // 句子事件处理函数（稳定引用）
+  const handleSentence = useCallback((data: { text: string; type: string; seq: number }) => {
+    handleSentenceCallCountRef.current += 1
+    console.log(`[handleSentence-${handlerIdRef.current}] 收到事件 (第${handleSentenceCallCountRef.current}次调用) - seq: ${data.seq}, 文本: "${data.text}", 类型: ${data.type}`)
+
+    // 空文本表示完成标记
+    if (data.text === "") {
+      // 防止重复处理同一个完成标记（React 双渲染问题）
+      if (data.seq === lastProcessedCompleteSeqRef.current) {
+        console.log(`[handleSentence-${handlerIdRef.current}] 跳过重复的完成标记 seq=${data.seq}`)
+        return
+      }
+
+      console.log(`[handleSentence-${handlerIdRef.current}] 检测到完成标记 seq=${data.seq}，准备添加消息`)
+      lastProcessedCompleteSeqRef.current = data.seq
+
+      // 将完整的响应添加到消息列表
+      setCurrentResponseRef.current?.((prevResponse: string) => {
+        console.log(`[handleSentence-${handlerIdRef.current}] 当前完整响应: "${prevResponse}"`)
+        if (prevResponse) {
+          console.log(`[handleSentence-${handlerIdRef.current}] 调用 addMessage("ai", "${prevResponse}")`)
+          addMessageRef.current?.("ai", prevResponse)
+        } else {
+          console.log(`[handleSentence-${handlerIdRef.current}] 警告：prevResponse 为空，跳过添加`)
+        }
+        return ""
+      })
+      setIsTypingRef.current?.(false)
+      updateStatusRef.current?.("idle")
+      console.log(`[handleSentence-${handlerIdRef.current}] 完成标记处理完毕`)
+    } else {
+      // 追加到当前响应
+      console.log(`[handleSentence-${handlerIdRef.current}] 追加文本: "${data.text}"`)
+      setCurrentResponseRef.current?.((prev: string) => {
+        const newText = prev + data.text
+        console.log(`[handleSentence-${handlerIdRef.current}] 响应更新: "${prev}" + "${data.text}" = "${newText}"`)
+        return newText
+      })
+    }
+  }, [])  // 空依赖数组，函数引用稳定
+
   // 初始化 Socket.IO
   useEffect(() => {
+    console.log("[useEffect] Socket.IO 初始化开始")
     const socket = io(SERVER_URL, {
       transports: ["websocket", "polling"],
       autoConnect: false,
     })
 
     socketRef.current = socket
+    console.log("[useEffect] Socket 实例已创建")
 
     // 连接成功
     socket.on("connect", () => {
@@ -129,14 +260,14 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     socket.on("disconnect", (reason) => {
       console.log("[Conversation] 已断开连接:", reason)
       setIsConnected(false)
-      updateStatus("idle")
+      updateStatusRef.current?.("idle")
     })
 
     // 连接错误
     socket.on("connect_error", (err) => {
       console.error("[Conversation] 连接错误:", err.message)
       setError(`连接失败: ${err.message}`)
-      onError?.(`连接失败: ${err.message}`)
+      onErrorRef.current?.(`连接失败: ${err.message}`)
     })
 
     // 连接确认
@@ -146,58 +277,64 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
     // ========== 新事件格式 ==========
 
-    // 接收文本消息
-    socket.on("text", (data: { text: string; from_name?: string }) => {
-      console.log("[Conversation] 收到文本:", data.text)
-      
-      // 追加到当前响应
-      setCurrentResponse((prev) => prev + data.text)
-      
-      // 如果是完整消息，添加到消息列表
-      if (data.from_name === "AI") {
-        setIsTyping(false)
-        addMessage("ai", data.text)
-        setCurrentResponse("")
-        updateStatus("idle")
+    // 接收流式文本片段（sentence事件）- 这是唯一的消息接收方式
+    registrationCountRef.current += 1
+    console.log(`[useEffect-${handlerIdRef.current}] 注册 sentence 事件监听器 (第${registrationCountRef.current}次注册), handleSentence 引用:`, handleSentence.name || 'anonymous')
+    socket.on("sentence", handleSentence)
+
+    // 检查 Socket.IO 内部监听器数量（调试用）
+    try {
+      const ioListeners = (socket as any).io?.opts?.transforms || []
+      const eventListeners = (socket as any)._callbacks || {}
+      const sentenceListeners = Object.keys(eventListeners).filter((k) => k.includes("sentence")).length
+      console.log(`[useEffect-${handlerIdRef.current}] sentence 事件监听器已注册, 检测到的监听器数量: ${sentenceListeners}`)
+
+      if (sentenceListeners > 1) {
+        console.error(`[useEffect-${handlerIdRef.current}] ⚠️ 警告：检测到 ${sentenceListeners} 个 sentence 事件监听器！这可能导致重复消息！`)
       }
-    })
+    } catch (err) {
+      console.log(`[useEffect-${handlerIdRef.current}] sentence 事件监听器已注册`)
+    }
 
     // 接收音频
     socket.on("audio", (data: { audio_url?: string; audio_data?: string; seq?: number }) => {
       console.log("[Conversation] 收到音频:", data.audio_url || `数据长度: ${data.audio_data?.length || 0}`)
-      updateStatus("speaking")
-      
+      updateStatusRef.current?.("speaking")
       // 如果有音频数据，播放
       if (data.audio_data) {
-        playAudioFromHex(data.audio_data)
+        playAudioRef.current?.(data.audio_data)
       }
     })
 
     // 接收控制信号
     socket.on("control", (data: { text: string }) => {
       console.log("[Conversation] 控制信号:", data.text)
-      
+
+      const updateStatus = updateStatusRef.current
+      const setIsTyping = setIsTypingRef.current
+      const setCurrentResponse = setCurrentResponseRef.current
+
       switch (data.text) {
         case "start-mic":
-          updateStatus("listening")
+          updateStatus?.("listening")
           break
         case "interrupt":
         case "interrupted":
-          updateStatus("interrupted")
-          setIsTyping(false)
-          setCurrentResponse("")
+          updateStatus?.("interrupted")
+          setIsTyping?.(false)
+          setCurrentResponse?.("")
           break
         case "mic-audio-end":
-          updateStatus("processing")
+          updateStatus?.("processing")
           break
         case "no-audio-data":
-          updateStatus("idle")
+          updateStatus?.("idle")
           break
         case "conversation-start":
-          updateStatus("processing")
+          updateStatus?.("processing")
           break
         case "conversation-end":
-          updateStatus("idle")
+          updateStatus?.("idle")
           break
       }
     })
@@ -211,26 +348,17 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     socket.on("error", (data: { message: string }) => {
       console.error("[Conversation] 服务器错误:", data.message)
       setError(data.message)
-      onError?.(data.message)
-      updateStatus("error")
+      onErrorRef.current?.(data.message)
+      updateStatusRef.current?.("error")
     })
 
     // ========== 兼容旧事件格式 ==========
-
-    // 完整文本（旧格式）
-    socket.on("full-text", (data: { type: string; text: string }) => {
-      console.log("[Conversation] 收到完整文本:", data.text)
-      setIsTyping(false)
-      addMessage("ai", data.text)
-      setCurrentResponse("")
-      updateStatus("idle")
-    })
 
     // ASR 结果
     socket.on("transcript", (data: { text: string; is_final: boolean }) => {
       console.log("[Conversation] ASR 结果:", data.text, "is_final:", data.is_final)
       if (data.is_final && data.text) {
-        addMessage("user", data.text)
+        addMessageRef.current?.("user", data.text)
       }
     })
 
@@ -257,41 +385,16 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     }
 
     return () => {
+      console.log(`[useEffect cleanup-${handlerIdRef.current}] 清理函数执行 (第${registrationCountRef.current}次注册后)`)
+      console.log(`[useEffect cleanup-${handlerIdRef.current}] 移除 sentence 事件监听器, handleSentence 引用:`, handleSentence.name || 'anonymous')
+      // 移除所有事件监听器，防止重复注册
+      socket.off("sentence", handleSentence)
+      console.log(`[useEffect cleanup-${handlerIdRef.current}] sentence 事件监听器已移除`)
       socket.disconnect()
       socketRef.current = null
+      console.log(`[useEffect cleanup-${handlerIdRef.current}] Socket 已断开并清理`)
     }
-  }, [autoConnect, addMessage, updateStatus, onError])
-
-  // 播放音频（从 hex 字符串）
-  const playAudioFromHex = useCallback((hexData: string) => {
-    try {
-      // 将 hex 转换为 ArrayBuffer
-      const binaryString = atob(hexData)
-      const bytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
-      }
-
-      // 创建音频上下文
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext()
-      }
-
-      // 解码并播放
-      audioContextRef.current.decodeAudioData(bytes.buffer, (audioBuffer) => {
-        const source = audioContextRef.current!.createBufferSource()
-        source.buffer = audioBuffer
-        source.connect(audioContextRef.current!.destination)
-        source.start(0)
-        
-        source.onended = () => {
-          updateStatus("idle")
-        }
-      })
-    } catch (err) {
-      console.error("[Conversation] 播放音频出错:", err)
-    }
-  }, [updateStatus])
+  }, [autoConnect, handleSentence])  // 依赖 handleSentence
 
   // 连接
   const connect = useCallback(() => {
@@ -313,26 +416,67 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
     // 添加用户消息
     addMessage("user", text)
-    
+
     // 发送到服务器
     if (socketRef.current?.connected) {
+      // 清空之前的响应（修复消息合并问题）
+      setCurrentResponse("")
       setIsTyping(true)
       updateStatus("processing")
       socketRef.current.emit("text_input", { text })
+
+      // 设置超时，如果30秒内没有响应则重置状态
+      const timeout = setTimeout(() => {
+        setIsTyping((prevIsTyping) => {
+          if (prevIsTyping) {
+            console.warn("[Conversation] 响应超时，重置状态")
+            updateStatus("idle")
+            setError("响应超时，请重试")
+            onErrorRef.current?.("响应超时，请重试")
+            return false
+          }
+          return prevIsTyping
+        })
+      }, 30000)
+
+      // 保存 timeout ID 以便清理（可选）
+      ;(sendText as any)._timeout = timeout
     } else {
       setError("未连接到服务器")
-      onError?.("未连接到服务器")
+      onErrorRef.current?.("未连接到服务器")
+      // 连接失败时重置状态，避免输入框被禁用
+      setIsTyping(false)
+      updateStatus("idle")
     }
-  }, [addMessage, updateStatus, onError])
+  }, [addMessage, updateStatus])
 
   // 开始录制音频
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      // 先检查权限状态（如果浏览器支持）
+      if (navigator.permissions) {
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+          if (permissionStatus.state === 'denied') {
+            const errorMsg = "麦克风权限被拒绝。请在浏览器地址栏点击锁图标，允许麦克风访问后刷新页面。"
+            setError(errorMsg)
+            onErrorRef.current?.(errorMsg)
+            onError?.(errorMsg)
+            return
+          }
+        } catch (err) {
+          // 某些浏览器不支持查询麦克风权限状态，忽略错误
+          console.log("[Conversation] 无法查询麦克风权限状态:", err)
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
           channelCount: 1,
-        } 
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
       })
       
       mediaStreamRef.current = stream
@@ -374,10 +518,27 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       
     } catch (err) {
       console.error("[Conversation] 录音启动失败:", err)
-      setError("无法访问麦克风")
-      onError?.("无法访问麦克风")
+
+      // 提供更友好的错误信息
+      let errorMessage = "无法访问麦克风"
+
+      if (err instanceof DOMException) {
+        if (err.name === 'NotAllowedError') {
+          errorMessage = "麦克风权限被拒绝。请点击浏览器地址栏的锁图标，允许" +
+            (window.location.protocol === 'https:' ? '' : '在 https 或 localhost 环境下') +
+            "麦克风访问权限。"
+        } else if (err.name === 'NotFoundError') {
+          errorMessage = "未检测到麦克风设备。请连接麦克风后重试。"
+        } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+          errorMessage = "浏览器安全限制：麦克风权限需要 HTTPS 或 localhost 环境。"
+        }
+      }
+
+      setError(errorMessage)
+      onErrorRef.current?.(errorMessage)
+      onError?.(errorMessage)
     }
-  }, [updateStatus, onError])
+  }, [updateStatus, onError, onErrorRef])
 
   // 停止录制
   const stopRecording = useCallback(() => {
@@ -415,14 +576,14 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
   // 打断
   const interrupt = useCallback(() => {
     if (socketRef.current?.connected) {
-      socketRef.current.emit("interrupt_signal", { 
-        text: currentResponse 
+      socketRef.current.emit("interrupt_signal", {
+        text: currentResponse
       })
     }
     setCurrentResponse("")
     setIsTyping(false)
     updateStatus("interrupted")
-  }, [currentResponse, updateStatus])
+  }, [currentResponse])
 
   // 清空历史
   const clearHistory = useCallback(() => {
