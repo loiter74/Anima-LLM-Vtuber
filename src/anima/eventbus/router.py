@@ -62,28 +62,36 @@ class EventRouter:
     ) -> "EventRouter":
         """
         注册 Handler 到事件类型
-        
+
         Args:
             event_type: 事件类型
             handler: Handler 实例
             priority: 优先级（数值越大越先执行）
-            
+
         Returns:
             self（支持链式调用）
         """
         # 添加到本地注册表
         if event_type not in self._handlers:
             self._handlers[event_type] = []
-        
+
+        # 检查是否已经注册过相同的 handler 实例
+        for existing_handler, _ in self._handlers[event_type]:
+            if existing_handler is handler:
+                logger.warning(
+                    f"EventRouter: Handler {handler.__class__.__name__} 已经注册到 '{event_type}'，跳过重复注册"
+                )
+                return self
+
         self._handlers[event_type].append((handler, priority))
-        
+
         # 如果已经 setup 过，则动态直接挂载
         if self._setup_done:
             self._mount_handler(event_type, handler, priority)
-        
+
         logger.debug(
             f"EventRouter: 注册 '{event_type}' -> {handler.__class__.__name__} "
-            f"(priority={priority}, dynamic={self._setup_done})"
+            f"(priority={priority}, dynamic={self._setup_done}, handler_id={id(handler)})"
         )
         return self
     

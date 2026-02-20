@@ -18,7 +18,8 @@ import {
   Trash2,
   Loader2
 } from "lucide-react"
-import { useConversation, ConversationStatus } from "@/hooks/use-conversation"
+import { ConversationStatus } from "@/hooks/use-conversation"
+import { useConversationContext } from "@/contexts/conversation-context"
 
 // 状态徽章颜色
 const statusStyles: Record<ConversationStatus, { bg: string; text: string; label: string }> = {
@@ -34,7 +35,7 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 使用对话 hook
+  // 使用共享的对话 Context
   const {
     isConnected,
     status,
@@ -48,15 +49,7 @@ export function ChatPanel() {
     stopRecording,
     interrupt,
     clearHistory,
-  } = useConversation({
-    autoConnect: true,
-    onStatusChange: (newStatus) => {
-      console.log("[ChatPanel] 状态变化:", newStatus)
-    },
-    onError: (err) => {
-      console.error("[ChatPanel] 错误:", err)
-    },
-  })
+  } = useConversationContext()
 
   // 发送消息
   const handleSend = useCallback((text: string) => {
@@ -243,27 +236,11 @@ export function ChatPanel() {
         </ScrollArea>
       </div>
 
-      {/* 工具栏 */}
+      {/* 工具栏 - 只保留打断和清空历史，麦克风在底部工具栏 */}
       <div className="border-t border-border px-3 py-2">
         <div className="flex items-center justify-between">
           {/* 左侧工具 */}
           <div className="flex items-center gap-1">
-            {/* 语音输入 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-8 w-8 p-0 ${status === "listening" ? "text-red-500" : ""}`}
-              onClick={toggleRecording}
-              disabled={!isConnected || status === "processing"}
-              title={status === "listening" ? "停止录音" : "开始录音"}
-            >
-              {status === "listening" ? (
-                <MicOff className="size-4" />
-              ) : (
-                <Mic className="size-4" />
-              )}
-            </Button>
-            
             {/* 打断 */}
             {(status === "speaking" || status === "processing") && (
               <Button
@@ -297,7 +274,7 @@ export function ChatPanel() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
               </span>
-              录音中
+              录音中（请使用底部麦克风按钮）
             </div>
           )}
           

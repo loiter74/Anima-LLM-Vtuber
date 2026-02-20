@@ -6,8 +6,11 @@ from typing import Union, Optional
 from pathlib import Path
 
 from ..interface import TTSInterface
+from ....config.core.registry import ProviderRegistry
+from ....config.providers.tts.mock import MockTTSConfig
 
 
+@ProviderRegistry.register_service("tts", "mock")
 class MockTTS(TTSInterface):
     """
     Mock TTS 实现

@@ -6,6 +6,14 @@ Socket.IO 服务端实现
 重构：使用 ConversationOrchestrator 整合对话逻辑
 """
 
+# 加载 .env 文件中的环境变量（必须在其他导入之前）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # 如果没有安装 python-dotenv，跳过（依赖系统环境变量）
+    pass
+
 import socketio
 import json
 import numpy as np
@@ -20,13 +28,14 @@ from anima.services.conversation import (
     ConversationOrchestrator,
     SessionManager,
 )
-from anima.handlers import TextHandler
+from anima.handlers import TextHandler, AudioHandler
 from anima.eventbus import EventPriority
 
 # 创建 Socket.IO 服务器
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    cors_allowed_origins=['http://localhost:3000', 'http://127.0.0.1:3000', '*'],
+    cors_credentials=True,
 )
 
 # 创建 FastAPI 应用
@@ -126,14 +135,15 @@ async def get_or_create_context(sid: str) -> ServiceContext:
 async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
     """
     获取或创建指定会话的 ConversationOrchestrator
-    
+
     Args:
         sid: session id
-        
+
     Returns:
         ConversationOrchestrator: 该会话的对话编排器
     """
     if sid not in orchestrators:
+        logger.info(f"[{sid}] 创建新的 ConversationOrchestrator")
         ctx = await get_or_create_context(sid)
         
         # WebSocket 发送函数
@@ -155,8 +165,14 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         
         # 创建并注册 TextHandler（使用 EventRouter）
         text_handler = TextHandler(websocket_send=websocket_send)
+        logger.info(f"[{sid}] 创建 TextHandler 实例: ID={id(text_handler)}")
         orchestrator.register_handler("sentence", text_handler, priority=EventPriority.NORMAL)
-        
+        logger.info(f"[{sid}] TextHandler 已注册到 sentence 事件")
+
+        # 创建并注册 AudioHandler
+        audio_handler = AudioHandler(websocket_send=websocket_send)
+        orchestrator.register_handler("audio", audio_handler, priority=EventPriority.NORMAL)
+
         # 启动编排器（将 EventRouter 连接到 EventBus）
         orchestrator.start()
         
@@ -188,6 +204,53 @@ async def cleanup_context(sid: str) -> None:
         await ctx.close()
         del session_contexts[sid]
         logger.info(f"已清理会话 {sid} 的所有资源")
+
+
+async def _process_audio_input(sid: str) -> None:
+    """
+    处理音频输入的辅助函数
+    
+    从缓冲区获取音频数据并通过 ConversationOrchestrator 处理
+    """
+    try:
+        # 获取累积的音频数据
+        audio_data = audio_buffer_manager.pop(sid)
+        
+        if audio_data is None or len(audio_data) == 0:
+            logger.warning(f"[{sid}] _process_audio_input: 没有音频数据")
+            await sio.emit('control', {
+                'type': 'control',
+                'text': 'no-audio-data'
+            }, to=sid)
+            return
+        
+        audio_duration = len(audio_data) / 16000  # 假设 16kHz
+        logger.info(f"[{sid}] 🎙️ 开始处理音频，时长: {audio_duration:.2f}秒")
+        
+        orchestrator = await get_or_create_orchestrator(sid)
+        
+        # 使用编排器处理音频输入
+        result = await orchestrator.process_input(
+            raw_input=audio_data,
+            metadata={},
+            from_name='User',
+        )
+        
+        if result.error:
+            logger.error(f"[{sid}] 处理出错: {result.error}")
+            await sio.emit('error', {
+                'type': 'error',
+                'message': result.error
+            }, to=sid)
+        else:
+            logger.info(f"[{sid}] ✅ 音频处理完成")
+        
+    except Exception as e:
+        logger.error(f"[{sid}] _process_audio_input 出错: {e}", exc_info=True)
+        await sio.emit('error', {
+            'type': 'error',
+            'message': str(e)
+        }, to=sid)
 
 
 # ============================================
@@ -288,6 +351,7 @@ async def raw_audio_data(sid, data):
     audio_chunk = data.get('audio', [])
     
     if not audio_chunk:
+        logger.debug(f"[{sid}] 收到空音频数据")
         return
     
     try:
@@ -297,34 +361,37 @@ async def raw_audio_data(sid, data):
         if ctx.vad_engine is None:
             # 没有 VAD，直接累积音频
             audio_buffer_manager.append(sid, audio_chunk)
+            logger.debug(f"[{sid}] 无VAD，累积音频: {len(audio_chunk)} 采样点")
             return
         
-        # 使用 VAD 检测语音
-        for audio_bytes in ctx.vad_engine.detect_speech(audio_chunk):
-            if audio_bytes == b"<|PAUSE|>":
-                # 检测到暂停，发送打断信号
-                await sio.emit('control', {
-                    'type': 'control',
-                    'text': 'interrupt'
-                }, to=sid)
-                
-            elif audio_bytes == b"<|RESUME|>":
-                # 恢复信号，继续
-                pass
-                
-            elif len(audio_bytes) > 1024:
-                # 检测到语音活动，保存音频并触发对话
-                audio_data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
-                audio_buffer_manager.append(sid, audio_data.tolist())
-                
-                # 触发对话（类似 mic_audio_end）
-                await sio.emit('control', {
-                    'type': 'control',
-                    'text': 'mic-audio-end'
-                }, to=sid)
+        # 使用 VAD 检测语音（返回 VADResult 对象，不是可迭代对象）
+        result = ctx.vad_engine.detect_speech(audio_chunk)
+        
+        # 记录 VAD 状态
+        logger.debug(f"[{sid}] VAD 状态: {result.state}, 音频长度: {len(audio_chunk)}")
+        
+        # 处理检测结果
+        if result.is_speech_start:
+            # 检测到语音开始
+            logger.info(f"[{sid}] ✅ VAD 检测到语音开始")
+            
+        elif result.is_speech_end and len(result.audio_data) > 1024:
+            # 检测到语音结束，保存音频并触发对话
+            logger.info(f"[{sid}] ✅ VAD 检测到语音结束，音频长度: {len(result.audio_data)} 字节")
+            audio_data = np.frombuffer(result.audio_data, dtype=np.int16).astype(np.float32)
+            audio_buffer_manager.append(sid, audio_data.tolist())
+            
+            # 发送控制信号通知前端
+            await sio.emit('control', {
+                'type': 'control',
+                'text': 'mic-audio-end'
+            }, to=sid)
+            
+            # 直接触发对话处理（不需要等前端发送 mic_audio_end）
+            await _process_audio_input(sid)
                 
     except Exception as e:
-        logger.error(f"[{sid}] VAD 处理出错: {e}")
+        logger.error(f"[{sid}] VAD 处理出错: {e}", exc_info=True)
 
 
 @sio.event
@@ -384,10 +451,10 @@ async def interrupt_signal(sid, data):
     heard_response = data.get('text', '')
     logger.info(f"[{sid}] 收到打断信号，已听到的回复: {heard_response[:50] if heard_response else '(空)'}...")
     
-    # 打断编排器
+    # 打断编排器（interrupt() 是同步方法，不需要 await）
     if sid in orchestrators:
         orchestrator = orchestrators[sid]
-        await orchestrator.interrupt()
+        orchestrator.interrupt()
     
     # 更新上下文状态
     if sid in session_contexts:

@@ -90,15 +90,19 @@ class LLMInterface(ABC):
     
     @abstractmethod
     def set_memory_from_history(
-        self, 
-        conf_uid: str, 
+        self,
+        conf_uid: str,
         history_uid: str
     ) -> None:
         """
         从历史记录恢复对话记忆
-        
+
         Args:
             conf_uid: 配置 UID
             history_uid: 历史 UID
         """
         pass
+
+
+# 别名：保持向后兼容
+AgentInterface = LLMInterface

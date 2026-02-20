@@ -67,27 +67,31 @@ class OutputPipeline(BasePipeline):
                 if self._interrupted or ctx.skip_remaining:
                     logger.info("输出管线被中断")
                     break
-                
+
                 # 处理不同类型的 chunk
                 if isinstance(chunk, dict):
                     chunk_type = chunk.get("type", "text")
                     chunk_data = chunk.get("content", chunk.get("data", ""))
-                    
+
                     if chunk_type == "text":
                         await self._emit_sentence(chunk_data)
                         full_response += chunk_data
-                        
+
                     elif chunk_type == "sentence":
                         await self._emit_sentence(chunk_data)
                         full_response += chunk_data
-                        
+
                     elif chunk_type == "tool_call":
                         await self._emit_event(EventType.TOOL_CALL, chunk)
-                        
+
                 elif isinstance(chunk, str):
                     await self._emit_sentence(chunk)
                     full_response += chunk
-            
+
+            # 发送完成标记（只要没被中断就发送，即使内容为空）
+            if not self._interrupted:
+                await self._emit_completion_marker()
+
             # 更新上下文
             ctx.response = full_response
             return full_response
@@ -100,9 +104,27 @@ class OutputPipeline(BasePipeline):
         """发射句子事件"""
         if not text or not text.strip():
             return
-        
+
         await self._emit_event(EventType.SENTENCE, text)
-    
+
+    async def _emit_completion_marker(self) -> None:
+        """发送文本完成标记"""
+        if self.event_bus is None:
+            return
+
+        from anima.core import OutputEvent
+
+        # 发送空文本作为完成标记
+        event = OutputEvent(
+            type=EventType.SENTENCE,
+            data="",  # 空文本表示完成
+            seq=self._seq + 1,
+            metadata={"is_complete": True},
+        )
+
+        await self.event_bus.emit(event)
+        logger.debug("输出管线: 发送完成标记")
+
     async def _emit_event(self, event_type: str, data: Any) -> None:
         """发射事件到 EventBus"""
         if self.event_bus is None:

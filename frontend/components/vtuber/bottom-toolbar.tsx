@@ -31,11 +31,32 @@ import {
   Globe,
   RefreshCw,
 } from "lucide-react"
+import { useConversationContext } from "@/contexts/conversation-context"
 
 export function BottomToolbar() {
-  const [micOn, setMicOn] = useState(true)
   const [volume, setVolume] = useState([75])
   const [speechRate, setSpeechRate] = useState([1.0])
+  
+  // 使用共享的对话 Context
+  const { 
+    isConnected, 
+    status, 
+    startRecording, 
+    stopRecording 
+  } = useConversationContext()
+  
+  // 麦克风状态：根据录音状态判断
+  const isRecording = status === "listening"
+  const isProcessing = status === "processing" || status === "speaking"
+
+  // 切换麦克风
+  const toggleMic = async () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      await startRecording()
+    }
+  }
 
   return (
     <div className="flex items-center justify-between border-t border-border bg-card px-4 py-3">
@@ -44,23 +65,30 @@ export function BottomToolbar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={micOn ? "default" : "secondary"}
+              variant={isRecording ? "default" : "secondary"}
               size="sm"
               className="h-9 gap-2 px-4"
-              onClick={() => setMicOn(!micOn)}
+              onClick={toggleMic}
+              disabled={!isConnected || isProcessing}
             >
-              {micOn ? (
+              {isRecording ? (
                 <Mic className="size-4" />
               ) : (
                 <MicOff className="size-4" />
               )}
               <span className="text-xs font-medium">
-                {micOn ? "Mic On" : "Mic Off"}
+                {isRecording ? "Mic On" : "Mic Off"}
               </span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {micOn ? "Mute microphone" : "Unmute microphone"}
+            {!isConnected 
+              ? "未连接到服务器" 
+              : isProcessing 
+                ? "正在处理中..." 
+                : isRecording 
+                  ? "关闭麦克风" 
+                  : "开启麦克风"}
           </TooltipContent>
         </Tooltip>
 
@@ -85,11 +113,15 @@ export function BottomToolbar() {
       <div className="hidden items-center gap-3 md:flex">
         <div className="flex items-center gap-1.5">
           <Cpu className="size-3.5 text-primary" />
-          <span className="text-xs text-muted-foreground">AI Model Active</span>
+          <span className="text-xs text-muted-foreground">
+            {isConnected ? "AI Model Active" : "Disconnected"}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <Gauge className="size-3.5 text-accent-foreground" />
-          <span className="text-xs text-muted-foreground">Latency 28ms</span>
+          <span className="text-xs text-muted-foreground">
+            Status: {status}
+          </span>
         </div>
       </div>
 

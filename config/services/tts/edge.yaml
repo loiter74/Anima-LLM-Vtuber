@@ -6,5 +6,3 @@ voice: "zh-CN-XiaoxiaoNeural"  # 中文女声
 # - zh-CN-YunxiNeural (中文男声)
 # - zh-CN-YunyangNeural (中文男声，新闻播报)
 # - en-US-JennyNeural (英文女声)
-rate: "+0%"  # 语速调整: -50% 到 +100%
-volume: "+0%"  # 音量调整: -50% 到 +100%

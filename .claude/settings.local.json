@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(iconv:*)",
+      "Bash(/c/Users/30262/Project/Anima/scripts/check_simple.py:*)",
+      "Bash(/c/Users/30262/Project/Anima/docs/backend_test_report.md:*)",
+      "Bash(cmd //c scripts\\\\start.bat)",
+      "Bash(./scripts/start.bat)",
+      "Bash(cmd /c \"scripts\\\\start.bat\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File scripts/start.ps1)",
+      "Bash(findstr:*)",
+      "Bash(tasklist:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(pnpm update:*)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm remove:*)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(LLM_API_KEY=\"2999522451b90b217fba0b4825dcd49f.Sk4fxLAj0f5UIvGa\" python:*)",
+      "Bash(PYTHONPATH=/c/Users/30262/Project/Anima/src LLM_API_KEY=\"2999522451b90b217fba0b4825dcd49f.Sk4fxLAj0f5UIvGa\" python:*)",
+      "Bash(PYTHONPATH=/c/Users/30262/Project/Anima/src python:*)",
+      "Bash(test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(timeout:*)",
+      "Bash(set PYTHONPATH=C:Users30262ProjectAnimasrc:*)",
+      "Bash(PYTHONPATH=\"C:/Users/30262/Project/Anima/src:$PYTHONPATH\" python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "Bash(env:*)",
+      "Bash(git remote set-url:*)"
+    ]
+  }
+}

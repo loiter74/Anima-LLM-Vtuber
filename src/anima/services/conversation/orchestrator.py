@@ -84,8 +84,14 @@ class ConversationOrchestrator:
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
         self.agent = agent
-        self.websocket_send = websocket_send
         self.session_id = session_id or "default"
+
+        # 包装 websocket_send（如果提供）以适配前端事件格式
+        self.websocket_send = websocket_send
+        if websocket_send is not None:
+            from anima.handlers.socket_adapter import SocketEventAdapter
+            adapter = SocketEventAdapter(websocket_send)
+            self.websocket_send = adapter.send
         
         # 创建 EventBus 和 EventRouter
         self.event_bus = EventBus()

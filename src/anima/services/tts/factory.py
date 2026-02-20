@@ -31,7 +31,7 @@ class TTSFactory:
                 voice=kwargs.get("voice", "alloy"),
                 base_url=kwargs.get("base_url")
             )
-        elif provider == "edge_tts":
+        elif provider == "edge" or provider == "edge_tts":
             from .implementations.edge_tts import EdgeTTS
             return EdgeTTS(voice=kwargs.get("voice"))
         elif provider == "glm":

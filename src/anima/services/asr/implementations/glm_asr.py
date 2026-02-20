@@ -10,8 +10,11 @@ import os
 from loguru import logger
 
 from ..interface import ASRInterface
+from ....config.core.registry import ProviderRegistry
+from ....config.providers.asr.glm import GLMASRConfig
 
 
+@ProviderRegistry.register_service("asr", "glm")
 class GLMASR(ASRInterface):
     """
     GLM ASR 实现

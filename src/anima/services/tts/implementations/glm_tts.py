@@ -10,8 +10,11 @@ import os
 from loguru import logger
 
 from ..interface import TTSInterface
+from ....config.core.registry import ProviderRegistry
+from ....config.providers.tts.glm import GLMTTSConfig
 
 
+@ProviderRegistry.register_service("tts", "glm")
 class GLMTTS(TTSInterface):
     """
     GLM TTS 实现

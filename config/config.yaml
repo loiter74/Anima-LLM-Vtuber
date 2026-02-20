@@ -13,9 +13,9 @@ persona: "neuro-vtuber"
 
 services:
   asr: glm
-  tts: glm
+  tts: edge   # 使用 Edge TTS（微软免费TTS，无配额限制）
   agent: glm
-  vad: mock   # vad: silero / mock
+  vad: silero   # vad: silero / mock
 
 # ============================================
 # 系统配置

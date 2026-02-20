@@ -1,7 +1,7 @@
 # 智谱 GLM TTS 配置
 
 type: glm
-api_key: "${LLM_API_KEY}"
+api_key: "${GLM_API_KEY}"
 model: "glm-tts"
 voice: "female"  # male / female
 response_format: "wav"  # wav / mp3

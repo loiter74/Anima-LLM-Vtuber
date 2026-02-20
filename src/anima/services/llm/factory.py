@@ -45,9 +45,9 @@ class LLMFactory:
         except ValueError as e:
             logger.error(f"创建 LLM 服务失败: {e}")
             # 降级到 Mock 实现
-            logger.warning("降级使用 MockLLM")
-            from .implementations.mock_llm import MockLLM
-            return MockLLM(system_prompt=system_prompt)
+            logger.warning("降级使用 MockAgent")
+            from .implementations.mock_agent import MockAgent
+            return MockAgent(system_prompt=system_prompt)
 
     @staticmethod
     def create(provider: str, system_prompt: str = "", **kwargs) -> LLMInterface:

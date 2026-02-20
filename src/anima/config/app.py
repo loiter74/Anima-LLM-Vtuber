@@ -65,7 +65,7 @@ def _load_service_config(service_type: str, service_name: str) -> Dict[str, Any]
     加载单个服务的配置
     
     Args:
-        service_type: 服务类型 (asr/tts/agent)
+        service_type: 服务类型 (asr/tts/llm/vad)
         service_name: 服务名称 (openai/glm/ollama/mock 等)
     
     Returns:
@@ -160,7 +160,7 @@ class AppConfig(BaseConfig):
         
         asr_data = _load_service_config("asr", asr_name)
         tts_data = _load_service_config("tts", tts_name)
-        agent_data = _load_service_config("agent", agent_name)
+        agent_data = _load_service_config("llm", agent_name)
         vad_data = _load_service_config("vad", vad_name)
         
         # 构建完整配置

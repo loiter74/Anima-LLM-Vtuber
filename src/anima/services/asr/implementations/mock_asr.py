@@ -6,8 +6,11 @@ from typing import Union
 from pathlib import Path
 
 from ..interface import ASRInterface
+from ....config.core.registry import ProviderRegistry
+from ....config.providers.asr.mock import MockASRConfig
 
 
+@ProviderRegistry.register_service("asr", "mock")
 class MockASR(ASRInterface):
     """
     Mock ASR 实现

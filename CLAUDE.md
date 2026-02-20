@@ -30,6 +30,11 @@ pnpm lint       # Run ESLint
 - `scripts/start.bat` - Windows startup script
 - `scripts/start.ps1` - PowerShell startup script
 
+All scripts support options:
+- `--skip-backend` / `--skip-frontend` - Start only one service
+- `--install` - Reinstall dependencies before starting
+- `--help` - Show help information
+
 ## Architecture Overview
 
 Anima is a modular AI VTuber framework with a plugin-based architecture. The system follows a **pipeline + event-driven** pattern with three main layers:
@@ -60,6 +65,7 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 **2. ServiceContext (`src/anima/service_context.py`)**
 - Service container holding ASR, TTS, LLM, and VAD engine instances
+- VAD (Voice Activity Detection) options: `silero` (Silero VAD model), `mock`
 - Lazy initialization - services loaded via `load_from_config(AppConfig)`
 - Services use factory pattern: `AgentFactory.create_from_config()`
 - Lifecycle management: `async def close()` cleans up all resources
@@ -76,6 +82,7 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Processes Agent streaming response
 - Iterates through `chat_stream()` AsyncIterator
 - Emits `OutputEvent`s to EventBus for each chunk
+- Sends completion marker (empty text event) when streaming finishes
 - Handles interruption via `interrupt()` method
 
 **PipelineContext** (`src/anima/core/context.py`):
@@ -103,6 +110,13 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Receive WebSocket send function in constructor
 - Emit via `self.send(message_dict)`
 
+**Available Handlers**:
+- `TextHandler` - Emits text chunks via WebSocket
+- `SocketEventAdapter` - Adapts backend events to frontend format
+  - Maps event names: `sentence` → `text`, `user-transcript` → `transcript`
+  - Adds missing fields for frontend compatibility
+  - Can be disabled via `enable_adapter=False`
+
 **6. Provider Registry (`src/anima/config/core/registry.py`)**
 - Decorator-based plugin system
 - `@ProviderRegistry.register_config("llm", "openai")` - registers config class
@@ -110,6 +124,15 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Supports discriminated unions for type-safe config loading
 
 ## Configuration System
+
+### Supported Services
+
+| Type | Providers |
+|------|-----------|
+| LLM | OpenAI, GLM (智谱), Ollama, Mock |
+| ASR | OpenAI Whisper, GLM ASR, Mock |
+| TTS | OpenAI TTS, GLM TTS, Edge TTS, Mock |
+| VAD | Silero VAD, Mock |
 
 ### Modular Service Configuration
 
@@ -246,17 +269,22 @@ class ConversationResult:
 - `connect` / `disconnect`
 - `text_input` - { text, metadata, from_name }
 - `mic_audio_data` - { audio: [] }
-- `raw_audio_data` - { audio: [] } (for VAD)
+- `raw_audio_data` - { audio: [] } (for VAD processing)
 - `mic_audio_end` - Triggers conversation processing
 - `interrupt_signal` - Interrupt current response
 
-**Server → Client:**
+**Server → Client (before SocketEventAdapter)**:
 - `connection-established`
 - `sentence` - Streaming text chunks
 - `audio` - Audio chunks
 - `user-transcript` - ASR result
 - `control` - Control signals (start-mic, stop-mic, interrupt, etc.)
 - `error`
+
+**Server → Client (after SocketEventAdapter)**:
+- `text` - Adapted from `sentence` (frontend expects this)
+- `transcript` - Adapted from `user-transcript`
+- Other events remain unchanged
 
 ## Important Implementation Notes
 
@@ -277,6 +305,11 @@ class ConversationResult:
 **Environment Variables**:
 - Use `${VAR_NAME}` in YAML configs for API keys
 - Supported vars: `LLM_API_KEY`, `ASR_API_KEY`, `TTS_API_KEY`, etc.
+- Environment variables can override config values:
+  - `LLM_API_KEY` - Overrides LLM API key
+  - `LLM_MODEL` - Overrides LLM model
+  - `ASR_API_KEY` - Overrides ASR API key
+  - `TTS_API_KEY` - Overrides TTS API key
 
 **Factory Pattern**:
 - Services created via `Factory.create()` or `Factory.create_from_config()`
