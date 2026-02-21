@@ -55,6 +55,7 @@ export function ChatPanel() {
   // 发送消息
   const handleSend = useCallback((text: string) => {
     if (!text.trim()) return
+    console.log("[ChatPanel] 发送文本消息:", text)
     sendText(text)
     if (inputRef.current) {
       inputRef.current.value = ""
