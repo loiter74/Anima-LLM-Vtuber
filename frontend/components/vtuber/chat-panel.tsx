@@ -18,19 +18,10 @@ import {
   Trash2,
   Loader2
 } from "lucide-react"
-import { ConversationStatus } from "@/hooks/use-conversation"
+import { logger } from "@/lib/logger"
+import type { ConversationStatus } from "@/shared/types/conversation"
 import { useConversationContext } from "@/contexts/conversation-context"
-import { VolumeMonitor } from "./volume-monitor"
-
-// 状态徽章颜色
-const statusStyles: Record<ConversationStatus, { bg: string; text: string; label: string }> = {
-  idle: { bg: "bg-gray-500/15", text: "text-gray-500", label: "空闲" },
-  listening: { bg: "bg-blue-500/15", text: "text-blue-500", label: "倾听中" },
-  processing: { bg: "bg-yellow-500/15", text: "text-yellow-500", label: "思考中" },
-  speaking: { bg: "bg-green-500/15", text: "text-green-500", label: "说话中" },
-  interrupted: { bg: "bg-orange-500/15", text: "text-orange-500", label: "已打断" },
-  error: { bg: "bg-red-500/15", text: "text-red-500", label: "错误" },
-}
+import { STATUS_STYLES } from "@/lib/constants/status"
 
 export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -50,13 +41,12 @@ export function ChatPanel() {
     stopRecording,
     interrupt,
     clearHistory,
-    sendTestAudio,
   } = useConversationContext()
 
   // 发送消息
   const handleSend = useCallback((text: string) => {
     if (!text.trim()) return
-    console.log("[ChatPanel] 发送文本消息:", text)
+    logger.debug("[ChatPanel] 发送文本消息:", text)
     sendText(text)
     if (inputRef.current) {
       inputRef.current.value = ""
@@ -81,7 +71,7 @@ export function ChatPanel() {
   }, [messages, currentResponse, isTyping])
 
   // 获取当前状态样式
-  const statusStyle = statusStyles[status]
+  const statusStyle = STATUS_STYLES[status]
 
   return (
     <div className="flex h-full flex-col">
@@ -244,18 +234,6 @@ export function ChatPanel() {
         <div className="flex items-center justify-between">
           {/* 左侧工具 */}
           <div className="flex items-center gap-1">
-            {/* 测试音频按钮（模拟） */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-xs text-purple-500"
-              onClick={sendTestAudio}
-              disabled={!isConnected || status === "processing"}
-              title="发送测试音频（模拟语音）"
-            >
-              🧪 模拟
-            </Button>
-
             {/* 打断 */}
             {(status === "speaking" || status === "processing") && (
               <Button
@@ -268,7 +246,7 @@ export function ChatPanel() {
                 <Square className="size-4" />
               </Button>
             )}
-            
+
             {/* 清空历史 */}
             <Button
               variant="ghost"
@@ -300,11 +278,6 @@ export function ChatPanel() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* 音量监控 */}
-      <div className="border-t border-border px-3 py-2">
-        <VolumeMonitor />
       </div>
 
       {/* Input area */}

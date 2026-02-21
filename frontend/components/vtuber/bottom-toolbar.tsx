@@ -20,6 +20,14 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip"
+import { AudioPlayer } from "@/features/audio/services/AudioPlayer"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Mic,
   MicOff,
@@ -30,13 +38,23 @@ import {
   Monitor,
   Globe,
   RefreshCw,
+  Bug,
 } from "lucide-react"
 import { useConversationContext } from "@/contexts/conversation-context"
+import { logger, LogLevel } from "@/lib/logger"
+import { getStorage, setStorage } from "@/lib/utils/storage"
 
 export function BottomToolbar() {
   const [volume, setVolume] = useState([75])
   const [speechRate, setSpeechRate] = useState([1.0])
-  
+
+  // 日志级别状态
+  const [frontendLogLevel, setFrontendLogLevel] = useState<LogLevel>(() => {
+    return getStorage<LogLevel>('anima_log_level', LogLevel.INFO)
+  })
+
+  const [backendLogLevel, setBackendLogLevel] = useState("INFO")
+
   // 使用共享的对话 Context
   const { 
     isConnected, 
@@ -54,6 +72,13 @@ export function BottomToolbar() {
     if (isRecording) {
       stopRecording()
     } else {
+      // 🔥🔥🔥 点击麦克风时，立即停止所有正在播放的音频
+      logger.debug('[BottomToolbar] 🎤 麦克风按钮被点击，停止所有音频播放')
+      console.log('[BottomToolbar] 🎤 麦克风按钮被点击，停止所有音频播放')
+      AudioPlayer.stopGlobalAudio()
+      logger.debug('[BottomToolbar] ✅ 音频已停止，开始录音')
+      console.log('[BottomToolbar] ✅ 音频已停止，开始录音')
+
       await startRecording()
     }
   }
@@ -129,7 +154,12 @@ export function BottomToolbar() {
       <div className="flex items-center gap-2">
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="secondary" size="sm" className="h-9 gap-2 px-4">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-9 gap-2 px-4"
+              suppressHydrationWarning
+            >
               <Settings className="size-4" />
               <span className="text-xs font-medium">Settings</span>
             </Button>
@@ -208,6 +238,79 @@ export function BottomToolbar() {
                   <Switch defaultChecked />
                 </div>
               </div>
+
+              {/* Separator */}
+              <Separator />
+
+              {/* Log Levels */}
+              <div className="flex flex-col gap-3">
+                <Label className="text-sm font-medium text-foreground">
+                  Log Levels
+                </Label>
+
+                {/* Frontend Log Level */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bug className="size-4 text-muted-foreground" />
+                    <Label className="text-sm text-foreground">
+                      Frontend
+                    </Label>
+                  </div>
+                  <Select
+                    value={frontendLogLevel.toString()}
+                    onValueChange={(value) => {
+                      const newLevel = parseInt(value, 10) as LogLevel
+                      setFrontendLogLevel(newLevel)
+                      setStorage('anima_log_level', newLevel)
+                      logger.setLevel(newLevel)
+                    }}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={LogLevel.DEBUG.toString()}>Debug</SelectItem>
+                      <SelectItem value={LogLevel.INFO.toString()}>Info</SelectItem>
+                      <SelectItem value={LogLevel.WARN.toString()}>Warn</SelectItem>
+                      <SelectItem value={LogLevel.ERROR.toString()}>Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Backend Log Level */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bug className="size-4 text-muted-foreground" />
+                    <Label className="text-sm text-foreground">
+                      Backend
+                    </Label>
+                  </div>
+                  <Select
+                    value={backendLogLevel}
+                    onValueChange={(value) => {
+                      setBackendLogLevel(value)
+                      // 通过 Socket.IO 发送到后端
+                      const socket = (window as any).socket
+                      if (socket?.connected) {
+                        socket.emit('set_log_level', { level: value })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DEBUG">Debug</SelectItem>
+                      <SelectItem value="INFO">Info</SelectItem>
+                      <SelectItem value="WARNING">Warning</SelectItem>
+                      <SelectItem value="ERROR">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Separator */}
+              <Separator />
 
               {/* Live2D Info */}
               <div className="rounded-lg bg-muted p-3">

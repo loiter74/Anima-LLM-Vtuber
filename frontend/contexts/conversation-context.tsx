@@ -1,20 +1,27 @@
 /**
- * 对话 Context
- * 在组件之间共享对话状态和方法
+ * Conversation Context
+ * Provides conversation state and methods to components
  */
 
 "use client"
 
 import { createContext, useContext, ReactNode } from "react"
-import { useConversation, UseConversationReturn } from "@/hooks/use-conversation"
+import { useConversation } from "@/features/conversation/hooks/useConversation"
+import type { UseConversationReturn } from "@/features/conversation/hooks/useConversation"
 
-// 创建 Context
+// Create Context
 const ConversationContext = createContext<UseConversationReturn | null>(null)
 
-// Provider 组件
-export function ConversationProvider({ children }: { children: ReactNode }) {
+// Provider component
+export function ConversationProvider({
+  children,
+  autoConnect = true,
+}: {
+  children: ReactNode
+  autoConnect?: boolean
+}) {
   const conversation = useConversation({
-    autoConnect: true,
+    autoConnect,
   })
 
   return (

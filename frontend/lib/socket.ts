@@ -49,6 +49,11 @@ export function getSocket(): Socket {
     socket = io(SERVER_URL, {
       transports: ["websocket", "polling"],
       autoConnect: false, // 手动连接
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     })
 
     // 连接事件

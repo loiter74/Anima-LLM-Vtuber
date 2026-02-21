@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,47 +9,24 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip"
 import { Maximize2, Minimize2, Video, VideoOff } from "lucide-react"
-
-const EXPRESSIONS = [
-  { name: "Neutral", label: "Neutral" },
-  { name: "Happy", label: "Happy" },
-  { name: "Surprised", label: "Surprised" },
-  { name: "Thinking", label: "Thinking" },
-]
+import { useConversationContext } from "@/contexts/conversation-context"
+import { useTimer } from "@/hooks/use-timer"
+import { formatTime } from "@/lib/utils/format"
+import { EXPRESSIONS } from "@/lib/constants/status"
 
 export function LivePreview() {
   const [isLive, setIsLive] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentExpression, setCurrentExpression] = useState("Neutral")
-  const [elapsedTime, setElapsedTime] = useState(0)
-  const [isSpeaking, setIsSpeaking] = useState(false)
 
-  // Simulate speaking animation
-  useEffect(() => {
-    if (!isLive) {
-      setIsSpeaking(false)
-      return
-    }
-    const interval = setInterval(() => {
-      setIsSpeaking((prev) => !prev)
-    }, 2000 + Math.random() * 3000)
-    return () => clearInterval(interval)
-  }, [isLive])
+  // 从 conversation context 获取真实的对话状态
+  const { status } = useConversationContext()
 
-  useEffect(() => {
-    if (!isLive) return
-    const interval = setInterval(() => {
-      setElapsedTime((t) => t + 1)
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [isLive])
+  // 根据真实状态判断是否正在说话
+  const isSpeaking = status === "speaking"
 
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = s % 60
-    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`
-  }
+  // 使用 useTimer hook
+  const { elapsedTime } = useTimer({ interval: 1000, autoStart: isLive })
 
   return (
     <div className="flex h-full flex-col">
@@ -126,25 +103,61 @@ export function LivePreview() {
               </p>
             </div>
 
-            {/* Speaking indicator - visible when model is active */}
-            {isLive && isSpeaking && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
-                <div className="flex items-center gap-0.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div
-                      key={i}
-                      className="w-0.5 rounded-full bg-accent animate-pulse"
-                      style={{
-                        height: `${6 + Math.random() * 10}px`,
-                        animationDelay: `${i * 0.08}s`,
-                        animationDuration: `${0.4 + i * 0.08}s`,
-                      }}
-                    />
-                  ))}
-                  <span className="ml-2 text-[10px] font-medium text-muted-foreground">
-                    Speaking...
-                  </span>
-                </div>
+            {/* Status indicators */}
+            {isLive && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+                {/* Speaking indicator */}
+                {isSpeaking && (
+                  <div className="flex items-center gap-0.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div
+                        key={i}
+                        className="w-0.5 rounded-full bg-accent animate-pulse"
+                        style={{
+                          height: `${6 + Math.random() * 10}px`,
+                          animationDelay: `${i * 0.08}s`,
+                          animationDuration: `${0.4 + i * 0.08}s`,
+                        }}
+                      />
+                    ))}
+                    <span className="ml-2 text-[10px] font-medium text-muted-foreground">
+                      Speaking...
+                    </span>
+                  </div>
+                )}
+
+                {/* Processing indicator */}
+                {(status === "processing" || status === "idle") && !isSpeaking && (
+                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                    <div className="size-1.5 rounded-full bg-yellow-500 animate-ping" />
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      {status === "processing" ? "处理中..." : "待机中"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Listening indicator */}
+                {status === "listening" && !isSpeaking && (
+                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                    <div className="relative flex size-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                    </div>
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      录音中...
+                    </span>
+                  </div>
+                )}
+
+                {/* Error indicator */}
+                {status === "error" && !isSpeaking && (
+                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-destructive/50">
+                    <div className="size-2 rounded-full bg-destructive" />
+                    <span className="text-[10px] font-medium text-destructive">
+                      错误
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -258,6 +258,15 @@ Personas define the AI's character and system prompt:
 - Built into system prompt via `app_config.get_system_prompt()`
 - Fields: name, description, system_prompt, greeting, etc.
 
+### User Settings System
+
+User-specific settings are managed separately from project configuration:
+- `UserSettings` class (`src/anima/config/user_settings.py`)
+- Persisted to `.user_settings.yaml` in project root (excluded from git)
+- Primary use: Runtime log level configuration
+- Loaded automatically at server startup
+- Methods: `get_log_level()`, `set_log_level(level)`, `save()`
+
 ### Adding a New Service Provider
 
 **Step 1: Create config class** (`src/anima/config/providers/llm/my_provider.py`):
@@ -480,6 +489,19 @@ class ConversationResult:
 - CORS allowed origins: `http://localhost:3000`, `http://127.0.0.1:3000`, `*`
 - Custom config file: `python -m anima.socketio_server path/to/config.yaml`
 
+**User Settings**:
+- `UserSettings` class manages per-user configuration (not committed to git)
+- Settings persisted to `.user_settings.yaml` in project root (excluded via .gitignore)
+- Primary use: Log level persistence across server restarts
+- Loaded at server startup via `user_settings = UserSettings(root_dir)`
+- Methods: `get_log_level()`, `set_log_level(level)`, `save()`
+
+**Logger Management**:
+- `LoggerManager` (`src/anima/utils/logger_manager.py`) wraps loguru for dynamic log level switching
+- Singleton instance: `logger_manager = LoggerManager.get_instance()`
+- Use `logger_manager.set_level("DEBUG")` to change log level at runtime
+- Valid levels: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL
+
 ## Frontend Structure
 
 - `app/` - Next.js App Router (`page.tsx` is the main entry point)
@@ -512,7 +534,8 @@ src/anima/
 │   ├── agent.py            # Agent configuration
 │   ├── app.py              # Main AppConfig class
 │   ├── persona.py          # Persona configuration
-│   └── system.py           # System settings
+│   ├── system.py           # System settings
+│   └── user_settings.py    # User-specific settings (persisted to .user_settings.yaml)
 ├── core/                   # Core data structures
 │   ├── context.py          # PipelineContext
 │   ├── events.py           # EventType, OutputEvent
@@ -536,6 +559,9 @@ src/anima/
 │   ├── audio_handler.py    # Audio output handler
 │   └── socket_adapter.py   # Socket event adapter
 ├── state/                  # State management
+├── utils/                  # Utility modules
+│   ├── logger_manager.py   # Dynamic log level management
+│   └── __init__.py
 ├── service_context.py      # Service container
 └── socketio_server.py      # Main server entry point
 ```

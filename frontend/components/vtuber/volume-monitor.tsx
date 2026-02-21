@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Mic, MicOff, Radio, Signal } from "lucide-react"
+import { logger } from "@/lib/logger"
 
 export function VolumeMonitor() {
   const [volume, setVolume] = useState(0) // 0-100
@@ -10,7 +11,7 @@ export function VolumeMonitor() {
   const [chunksSent, setChunksSent] = useState(0)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const animationRef = useRef<number>()
+  const animationRef = useRef<ReturnType<typeof requestAnimationFrame> | undefined>(undefined)
   const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export function VolumeMonitor() {
 
       updateVolume()
     } catch (err) {
-      console.error("[VolumeMonitor] 初始化失败:", err)
+      logger.error("[VolumeMonitor] 初始化失败:", err)
     }
   }
 

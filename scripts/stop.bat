@@ -95,15 +95,35 @@ if "%SKIP_BACKEND%"=="0" (
     echo [INFO] Stopping backend (port 12394)...
 
     REM Find and stop processes on port 12394
+    set "BACKEND_PIDS="
     for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":12394.*LISTENING"') do (
         echo [INFO] Found process on port 12394: %%a
-        taskkill /PID %%a /F >nul 2>&1
-        if not errorlevel 1 (
-            set "BACKEND_STOPPED=1"
-        )
+        set "BACKEND_PIDS=!BACKEND_PIDS! %%a"
     )
 
-    timeout /t 2 /nobreak >nul
+    REM First try graceful shutdown (without /F)
+    if not "!BACKEND_PIDS!"=="" (
+        echo [INFO] Attempting graceful shutdown...
+        for %%p in (!BACKEND_PIDS!) do (
+            taskkill /PID %%p >nul 2>&1
+        )
+        
+        REM Wait for graceful shutdown
+        timeout /t 3 /nobreak >nul
+        
+        REM Check if processes still exist
+        for %%p in (!BACKEND_PIDS!) do (
+            tasklist /FI "PID eq %%p" 2>nul | findstr "%%p" >nul
+            if not errorlevel 1 (
+                echo [WARNING] Process %%p did not close gracefully, forcing...
+                taskkill /PID %%p /F >nul 2>&1
+            )
+        )
+        
+        set "BACKEND_STOPPED=1"
+    )
+
+    timeout /t 1 /nobreak >nul
 
     if "!BACKEND_STOPPED!"=="1" (
         echo [SUCCESS] Backend service stopped

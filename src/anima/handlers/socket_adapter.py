@@ -15,9 +15,9 @@ class SocketEventAdapter:
     """
 
     # 事件名称映射表
-    # 注意：sentence 事件由 TextHandler 直接发送，不需要转换
+    # sentence 需要映射为 text（前端期望 text 事件）
     EVENT_NAME_MAPPING = {
-        # "sentence": "text",  # 已禁用：TextHandler 直接发送 sentence 事件
+        "sentence": "text",  # 启用映射：后端发送 sentence，前端期望 text
         "user-transcript": "transcript",
         # 其他事件保持原样
         "audio": "audio",
@@ -72,16 +72,15 @@ class SocketEventAdapter:
         """转换单个事件"""
         event_type = event.get("type", "")
 
-        # sentence 事件不转换，直接透传（由 TextHandler 处理）
-        if event_type == "sentence":
-            return event
-
         # 转换事件名称
         mapped_type = self.EVENT_NAME_MAPPING.get(event_type, event_type)
 
         # 转换数据格式
         if event_type == "user-transcript":
             return self._adapt_transcript_event(event)
+        elif event_type == "sentence":
+            # sentence 事件需要特殊处理以保持字段兼容性
+            return self._adapt_sentence_event(event)
         else:
             # 其他事件保持原样，只转换 type
             return {"type": mapped_type, **{k: v for k, v in event.items() if k != "type"}}
@@ -96,6 +95,7 @@ class SocketEventAdapter:
             return {
                 "type": "text",
                 "text": "",
+                "seq": seq,  # 保留 seq 字段，前端需要它来判断重复的完成标记
                 "from_name": "AI",  # 标记完整消息结束
             }
 
@@ -103,6 +103,7 @@ class SocketEventAdapter:
         return {
             "type": "text",
             "text": text,
+            "seq": seq,  # 保留 seq 字段
             # 不发送 from_name，前端会累积
         }
 

@@ -29,54 +29,51 @@ function Stop-ServiceOnPort {
 
     $stopped = $false
 
-    # Method 1: Graceful shutdown via process close
-    $netstat = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
-    $pids = @()
+    # Method 1: Use Get-NetTCPConnection (more reliable)
+    $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+        Where-Object { $_.State -eq "Listen" }
 
-    foreach ($line in $netstat) {
-        if ($line -match '\s+(\d+)\s*$') {
-            $pids += [int]$matches[1]
-        }
-    }
+    if ($connections) {
+        $processIds = @($connections | ForEach-Object { $_.OwningProcess } | Select-Object -Unique)
 
-    if ($pids.Count -gt 0) {
-        Write-Info "Found process(es) on port ${Port}: $($pids -join ', ')"
+        if ($processIds.Count -gt 0) {
+            Write-Info "Found process(es) on port ${Port}: $($processIds -join ', ')"
 
-        foreach ($pid in $pids) {
-            try {
-                $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
-                if ($process) {
-                    Write-Info "Attempting graceful shutdown of PID ${pid} ($($process.ProcessName))..."
-                    $process.CloseMainWindow() | Out-Null
-                    $stopped = $true
+            foreach ($processId in $processIds) {
+                try {
+                    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+                    if ($process) {
+                        Write-Info "Stopping PID ${processId} ($($process.ProcessName))..."
 
-                    # Wait for graceful shutdown
-                    Start-Sleep -Milliseconds 2000
+                        # Method 1: Try Stop-Process first
+                        Stop-Process -Id $processId -Force -ErrorAction Stop
 
-                    # Check if still running
-                    $stillRunning = Get-Process -Id $pid -ErrorAction SilentlyContinue
-                    if ($stillRunning) {
-                        Write-Warning "Process ${pid} did not close gracefully, forcing..."
-                        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                    } else {
-                        Write-Success "Process ${pid} closed gracefully"
+                        # Method 2: If Stop-Process fails, use taskkill
+                        if ($? -eq $false) {
+                            Write-Info "Using taskkill as fallback..."
+                            & taskkill /F /PID $processId 2>&1 | Out-Null
+                        }
+
+                        $stopped = $true
+                        Write-Success "Stopped process ${processId}"
                     }
+                } catch {
+                    Write-Warning "Could not stop process ${processId} - $($_.Exception.Message)"
                 }
-            } catch {
-                Write-Warning "Could not stop process ${pid} - $($_.Exception.Message)"
             }
-        }
 
-        # Wait for port to be released
-        $maxWait = 5
-        $waited = 0
-        while ($waited -lt $maxWait) {
-            $stillListening = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
-            if (-not $stillListening) {
-                break
+            # Wait for port to be released
+            $maxWait = 5
+            $waited = 0
+            while ($waited -lt $maxWait) {
+                $stillListening = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+                    Where-Object { $_.State -eq "Listen" }
+                if (-not $stillListening) {
+                    break
+                }
+                Start-Sleep -Seconds 1
+                $waited++
             }
-            Start-Sleep -Seconds 1
-            $waited++
         }
     }
 
@@ -106,22 +103,29 @@ function Stop-ProcessesByName {
     }
 
     if ($processes) {
-        foreach ($proc in $processes) {
+        foreach ($proc in @($processes)) {  # Force array copy
             Write-Info "Stopping $ProcessName process $($proc.ProcessId)..."
             try {
-                # Try graceful shutdown first
-                $netProc = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue
-                if ($netProc) {
-                    $netProc.CloseMainWindow() | Out-Null
-                    Start-Sleep -Milliseconds 1500
+                # Method 1: Try Stop-Process
+                $stopResult = Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
 
-                    # Check if still running
-                    $stillRunning = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue
-                    if ($stillRunning) {
-                        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+                # Method 2: If Stop-Process fails, use taskkill
+                if ($? -eq $false -or $stopResult -eq $null) {
+                    Write-Info "Using taskkill as fallback for PID $($proc.ProcessId)..."
+                    $taskkillResult = & taskkill /F /PID $proc.ProcessId 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        $stopped = $true
+                        Write-Success "Stopped process $($proc.ProcessId) via taskkill"
+                    } else {
+                        Write-Warning "taskkill failed: $taskkillResult"
                     }
+                } else {
+                    $stopped = $true
+                    Write-Success "Stopped process $($proc.ProcessId)"
                 }
-                $stopped = $true
+
+                # Brief pause between kills
+                Start-Sleep -Milliseconds 500
             } catch {
                 Write-Warning "Could not stop process $($proc.ProcessId) - $($_.Exception.Message)"
             }
@@ -263,11 +267,14 @@ if (-not $SkipBackend) {
         $backendPortInUse = $true
 
         # Show which process is holding the port
-        $pid = $backendPort.OwningProcess
-        $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $procId = $backendPort.OwningProcess
+        $process = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($process) {
-            Write-Warning "  Held by: $($process.ProcessName) (PID: $pid)"
-            Write-Warning "  Command: $((Get-WmiObject Win32_Process -Filter "ProcessId=$pid").CommandLine)"
+            Write-Warning "  Held by: $($process.ProcessName) (PID: $procId)"
+            $cmdLine = (Get-WmiObject Win32_Process -Filter "ProcessId=$procId").CommandLine
+            if ($cmdLine) {
+                Write-Warning "  Command: $cmdLine"
+            }
         }
     } else {
         Write-Success "Port 12394 (backend): Released"
@@ -283,11 +290,14 @@ if (-not $SkipFrontend) {
         $frontendPortInUse = $true
 
         # Show which process is holding the port
-        $pid = $frontendPort.OwningProcess
-        $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $procId = $frontendPort.OwningProcess
+        $process = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($process) {
-            Write-Warning "  Held by: $($process.ProcessName) (PID: $pid)"
-            Write-Warning "  Command: $((Get-WmiObject Win32_Process -Filter "ProcessId=$pid").CommandLine)"
+            Write-Warning "  Held by: $($process.ProcessName) (PID: $procId)"
+            $cmdLine = (Get-WmiObject Win32_Process -Filter "ProcessId=$procId").CommandLine
+            if ($cmdLine) {
+                Write-Warning "  Command: $cmdLine"
+            }
         }
     } else {
         Write-Success "Port 3000 (frontend): Released"

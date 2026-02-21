@@ -17,13 +17,13 @@ try:
     env_path = Path(__file__).parent.parent.parent / '.env'
     if env_path.exists():
         load_dotenv(env_path, override=True)
-        logger.info(f"✅ 已加载环境变量文件: {env_path}")
+        logger.info(f"[OK] 已加载环境变量文件: {env_path}")
         # 立即验证关键环境变量
         glm_key = os.getenv("GLM_API_KEY")
         if glm_key:
-            logger.info(f"✅ GLM_API_KEY 已从 .env 加载: {glm_key[:20]}... (长度: {len(glm_key)})")
+            logger.info(f"[OK] GLM_API_KEY 已从 .env 加载: {glm_key[:20]}... (长度: {len(glm_key)})")
         else:
-            logger.error("⚠️ .env 文件已加载，但 GLM_API_KEY 仍未设置！")
+            logger.error("[WARNING] .env 文件已加载，但 GLM_API_KEY 仍未设置！")
     else:
         logger.warning(f".env 文件不存在: {env_path}，将使用系统环境变量")
 except ImportError:
@@ -34,9 +34,9 @@ except ImportError:
 # 最终验证关键环境变量
 glm_key = os.getenv("GLM_API_KEY")
 if glm_key:
-    logger.info(f"✅ GLM_API_KEY 在运行时可用: {glm_key[:20]}...")
+    logger.info(f"[OK] GLM_API_KEY 在运行时可用: {glm_key[:20]}...")
 else:
-    logger.error("⚠️ GLM_API_KEY 在运行时不可用，GLM将降级到MockLLM")
+    logger.error("[WARNING] GLM_API_KEY 在运行时不可用，GLM将降级到MockLLM")
 
 import socketio
 import json
@@ -53,6 +53,8 @@ from anima.services.conversation import (
 )
 from anima.handlers import TextHandler, AudioHandler
 from anima.eventbus import EventPriority
+from anima.utils.logger_manager import logger_manager
+from anima.config.user_settings import UserSettings
 
 # 创建 Socket.IO 服务器
 sio = socketio.AsyncServer(
@@ -88,6 +90,14 @@ vad_active_sessions: Dict[str, dict] = {}
 
 # 全局配置（可被所有会话共享）
 global_config: AppConfig = None
+
+# 用户配置（持久化到 .user_settings.yaml）
+user_settings = UserSettings(Path(__file__).parent.parent.parent)
+
+# 应用用户配置的日志级别
+initial_log_level = user_settings.get_log_level()
+logger_manager.set_level(initial_log_level)
+logger.info(f"应用用户日志级别配置: {initial_log_level}")
 
 # VAD 超时设置（秒）
 VAD_TIMEOUT_SECONDS = 15  # 如果VAD持续活跃超过15秒，强制触发ASR
@@ -159,7 +169,7 @@ async def get_or_create_context(sid: str) -> ServiceContext:
         await ctx.load_from_config(config)
 
         session_contexts[sid] = ctx
-        print(f"[{sid}] ✅ ServiceContext 创建完成")
+        print(f"[{sid}] [OK] ServiceContext 创建完成")
         logger.info(f"为会话 {sid} 创建了新的 ServiceContext")
     else:
         # print(f"\n[{sid}] ♻️ 使用现有 ServiceContext")  # 注释掉以减少日志噪音
@@ -198,15 +208,15 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
             websocket_send=websocket_send,
             session_id=sid,
         )
-        
-        # 创建并注册 TextHandler（使用 EventRouter）
-        text_handler = TextHandler(websocket_send=websocket_send)
+
+        # 创建并注册 TextHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
+        text_handler = TextHandler(websocket_send=orchestrator.websocket_send)
         logger.info(f"[{sid}] 创建 TextHandler 实例: ID={id(text_handler)}")
         orchestrator.register_handler("sentence", text_handler, priority=EventPriority.NORMAL)
         logger.info(f"[{sid}] TextHandler 已注册到 sentence 事件")
 
-        # 创建并注册 AudioHandler
-        audio_handler = AudioHandler(websocket_send=websocket_send)
+        # 创建并注册 AudioHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
+        audio_handler = AudioHandler(websocket_send=orchestrator.websocket_send)
         orchestrator.register_handler("audio", audio_handler, priority=EventPriority.NORMAL)
 
         # 启动编排器（将 EventRouter 连接到 EventBus）
@@ -290,7 +300,7 @@ async def _process_audio_input(sid: str) -> None:
                 'text': 'conversation-end'
             }, to=sid)
         else:
-            logger.info(f"[{sid}] ✅ 音频处理完成")
+            logger.info(f"[{sid}] [OK] 音频处理完成")
             # 发送 conversation-end 信号，通知前端恢复监听
             await sio.emit('control', {
                 'type': 'control',
@@ -320,7 +330,7 @@ async def connect(sid, environ):
     客户端连接时触发
     """
     print(f"\n{'='*60}")
-    print(f"✅ 客户端已连接: {sid}")
+    print(f"[OK] 客户端已连接: {sid}")
     print(f"{'='*60}\n")
     logger.info(f"客户端已连接: {sid}")
 
@@ -425,20 +435,18 @@ async def raw_audio_data(sid, data):
     # 导入 numpy（在条件块之前，确保后续代码可以使用）
     import numpy as np
 
-    # 每 10 个块打印一次音频统计信息（更频繁）
-    # 已注释以减少控制台噪音
+    # 每 50 个块打印一次音频统计信息
     count = raw_audio_data.counter[sid]
-    if count % 10 == 1:
+    if count % 50 == 1:
         audio_arr = np.array(audio_chunk)
         audio_min = float(np.min(audio_arr)) if len(audio_arr) > 0 else 0
         audio_max = float(np.max(audio_arr)) if len(audio_arr) > 0 else 0
         audio_mean = float(np.mean(np.abs(audio_arr))) if len(audio_arr) > 0 else 0
         audio_rms = float(np.sqrt(np.mean(audio_arr**2))) if len(audio_arr) > 0 else 0
 
-        # print(f"\n[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples")
-        # print(f"  Range: [{audio_min:.2f}, {audio_max:.2f}], Mean: {audio_mean:.2f}, RMS: {audio_rms:.2f}")
-        # logger.info(f"[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples, range=[{audio_min:.2f}, {audio_max:.2f}], mean={audio_mean:.2f}, rms={audio_rms:.2f}")
-        pass
+        # 诊断日志
+        logger.info(f"[{sid}] 🎙️ Audio chunk #{count}: {len(audio_chunk)} samples")
+        logger.info(f"  Range: [{audio_min:.2f}, {audio_max:.2f}], Mean: {audio_mean:.2f}, RMS: {audio_rms:.2f}")
 
     try:
         ctx = await get_or_create_context(sid)
@@ -448,7 +456,7 @@ async def raw_audio_data(sid, data):
             # 没有 VAD，直接累积音频
             audio_buffer_manager.append(sid, audio_chunk)
             if count % 100 == 1:
-                logger.warning(f"[{sid}] ⚠️ VAD 引擎未初始化，直接累积音频: {len(audio_chunk)} 采样点")
+                logger.warning(f"[{sid}] [WARNING] VAD 引擎未初始化，直接累积音频: {len(audio_chunk)} 采样点")
             return
 
         # 使用 VAD 检测语音（返回 VADResult 对象，不是可迭代对象）
@@ -508,11 +516,21 @@ async def raw_audio_data(sid, data):
         # 处理检测结果
         if result.is_speech_start:
             # 检测到语音开始
-            logger.info(f"[{sid}] ✅ VAD 检测到语音开始")
+            logger.info(f"[{sid}] [OK] VAD 检测到语音开始")
+
+            # 🔥 自动打断：如果当前正在处理对话，则自动打断
+            if sid in orchestrators and orchestrators[sid].is_processing:
+                logger.info(f"[{sid}] 🎤 检测到新语音，自动打断当前回复")
+                orchestrators[sid].interrupt()
+                # 发送打断信号给前端
+                await sio.emit('control', {
+                    'type': 'control',
+                    'text': 'interrupt'
+                }, to=sid)
 
         elif result.is_speech_end and len(result.audio_data) > 1024:
             # 检测到语音结束，保存音频并触发对话
-            logger.info(f"[{sid}] ✅ VAD 检测到语音结束，音频长度: {len(result.audio_data)} 字节")
+            logger.info(f"[{sid}] [OK] VAD 检测到语音结束，音频长度: {len(result.audio_data)} 字节")
 
             # 清除超时记录
             if sid in vad_active_sessions:
@@ -699,12 +717,39 @@ async def create_new_history(sid, data):
     创建新的对话历史
     """
     logger.info(f"[{sid}] 创建新对话历史")
-    
+
     # TODO: 创建新的历史记录
-    
+
     await sio.emit('new-history-created', {
         'type': 'new-history-created',
         'history_uid': 'new_history_001'
+    }, to=sid)
+
+
+@sio.event
+async def set_log_level(sid, data):
+    """
+    设置后端日志级别
+
+    Args:
+        data: { level: str } - 日志级别 (DEBUG/INFO/WARNING/ERROR)
+    """
+    level = data.get('level', 'INFO').upper()
+    logger.info(f"[{sid}] 请求设置日志级别为: {level}")
+
+    # 设置日志级别
+    success = logger_manager.set_level(level)
+
+    if success:
+        # 持久化到用户配置文件
+        user_settings.set_log_level(level)
+
+    # 确认响应
+    await sio.emit('log_level_changed', {
+        'type': 'log_level_changed',
+        'success': success,
+        'level': logger_manager.get_level(),
+        'message': f'日志级别已设置为 {logger_manager.get_level()}' if success else '设置失败'
     }, to=sid)
 
 
@@ -716,6 +761,113 @@ async def create_new_history(sid, data):
 async def heartbeat(sid, data):
     """心跳检测"""
     await sio.emit('heartbeat-ack', {}, to=sid)
+
+
+# ============================================
+# 优雅关闭
+# ============================================
+
+import signal
+import asyncio
+
+# 关闭标志
+shutdown_event = asyncio.Event()
+
+
+async def cleanup_all_resources():
+    """清理所有资源"""
+    logger.info("开始清理所有资源...")
+    
+    # 清理所有编排器
+    for sid, orchestrator in list(orchestrators.items()):
+        try:
+            orchestrator.stop()
+            logger.debug(f"[{sid}] 编排器已停止")
+        except Exception as e:
+            logger.error(f"[{sid}] 停止编排器时出错: {e}")
+    orchestrators.clear()
+    
+    # 清理所有会话上下文
+    for sid, ctx in list(session_contexts.items()):
+        try:
+            await ctx.close()
+            logger.debug(f"[{sid}] 上下文已关闭")
+        except Exception as e:
+            logger.error(f"[{sid}] 关闭上下文时出错: {e}")
+    session_contexts.clear()
+    
+    # 清理音频缓冲区
+    audio_buffers.clear()
+    vad_active_sessions.clear()
+    
+    logger.info("所有资源已清理完成")
+
+
+def signal_handler(signum, frame):
+    """信号处理器"""
+    signal_name = signal.Signals(signum).name
+    logger.info(f"收到信号 {signal_name}，准备优雅关闭...")
+    
+    # 设置关闭事件
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(shutdown_event.set)
+    except RuntimeError:
+        # 如果没有运行中的事件循环，直接退出
+        logger.info("没有运行中的事件循环，直接退出")
+        import sys
+        sys.exit(0)
+
+
+def setup_signal_handlers():
+    """设置信号处理器"""
+    # Windows 和 Unix 都支持的信号
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # taskkill (无 /F)
+    
+    # Windows 特有的信号
+    if hasattr(signal, 'CTRL_BREAK_EVENT'):
+        try:
+            signal.signal(signal.CTRL_BREAK_EVENT, signal_handler)
+        except (ValueError, OSError):
+            pass
+    
+    if hasattr(signal, 'CTRL_C_EVENT'):
+        try:
+            signal.signal(signal.CTRL_C_EVENT, signal_handler)
+        except (ValueError, OSError):
+            pass
+    
+    logger.debug("信号处理器已设置")
+
+
+# ============================================
+# FastAPI 生命周期事件
+# ============================================
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI 应用生命周期管理"""
+    # 启动时
+    logger.info("服务器启动中...")
+    setup_signal_handlers()
+    
+    yield
+    
+    # 关闭时
+    logger.info("服务器关闭中...")
+    await cleanup_all_resources()
+    logger.info("服务器已关闭")
+
+
+# 重新创建 FastAPI 应用（带生命周期）
+app = FastAPI(title="Anima - AI Virtual Companion", lifespan=lifespan)
+
+# 重新挂载 Socket.IO
+socket_app = socketio.ASGIApp(sio, app)
 
 
 # ============================================
@@ -740,7 +892,8 @@ def init_config(config_path: str = None) -> None:
     logger.info(f"配置加载完成: {global_config.system.host}:{global_config.system.port}")
 
 
-if __name__ == '__main__':
+def run_server():
+    """运行服务器"""
     import sys
     
     # 解析命令行参数
@@ -754,9 +907,25 @@ if __name__ == '__main__':
     logger.info("启动 Socket.IO 服务器...")
     logger.info(f"访问 http://{global_config.system.host}:{global_config.system.port} 测试")
     
-    uvicorn.run(
+    # 配置 uvicorn
+    config = uvicorn.Config(
         'anima.socketio_server:socket_app',
         host=global_config.system.host,
         port=global_config.system.port,
-        reload=True
+        reload=False,  # 禁用 reload 以避免信号处理问题
+        access_log=False,  # 减少日志噪音
     )
+    
+    server = uvicorn.Server(config)
+    
+    # 运行服务器
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        logger.info("收到键盘中断，正在关闭...")
+    finally:
+        logger.info("服务器已退出")
+
+
+if __name__ == '__main__':
+    run_server()

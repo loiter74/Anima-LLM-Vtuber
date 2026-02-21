@@ -50,6 +50,11 @@ class SileroVAD(VADInterface):
         # 状态机
         self.state_machine = SileroStateMachine(self)
 
+        # 诊断日志标志（防止重复日志）
+        self._vad_logged = False
+        self._vad_int16_logged = False
+        self._vad_normalized_logged = False
+
         logger.info(f"✅ Silero VAD 初始化完成")
         logger.info(f"   - 采样率: {sample_rate} Hz")
         logger.info(f"   - 概率阈值: {prob_threshold}")
@@ -104,11 +109,38 @@ class SileroVAD(VADInterface):
         # 转换为 numpy 数组并智能归一化
         audio_np = np.array(audio_data, dtype=np.float32)
 
+        # 🔥 诊断：记录原始音频数据范围（只记录第一个块，避免刷屏）
+        if not hasattr(self, '_vad_logged'):
+            if len(audio_np) > 0:
+                orig_min = float(np.min(audio_np))
+                orig_max = float(np.max(audio_np))
+                orig_abs_max = float(np.max(np.abs(audio_np)))
+            self._vad_logged = True
+        elif len(audio_np) > 0:
+            orig_min = float(np.min(audio_np))
+            orig_max = float(np.max(audio_np))
+            orig_abs_max = float(np.max(np.abs(audio_np)))
+        else:
+            orig_min = orig_max = orig_abs_max = 0.0
+
         # 检测是否为 int16 PCM 数据（值范围超出 [-1.0, 1.0]）
+        is_int16 = False
         if len(audio_np) > 0 and np.max(np.abs(audio_np)) > 1.0:
             # int16 PCM 数据，归一化到 [-1.0, 1.0]
-            # logger.debug(f"检测到 int16 PCM 数据，归一化到 [-1.0, 1.0]，原始范围: [{np.min(audio_np):.2f}, {np.max(audio_np):.2f}]")
+            if not hasattr(self, '_vad_int16_logged'):
+                logger.info(f"[VAD] ✅ 检测到 int16 PCM 数据格式，将自动归一化")
+                self._vad_int16_logged = True
             audio_np = audio_np / 32767.0
+            is_int16 = True
+
+        # 打印归一化后的信号幅度（只打印一次）
+        if not hasattr(self, '_vad_normalized_logged'):
+            norm_min = float(np.min(audio_np)) if len(audio_np) > 0 else 0
+            norm_max = float(np.max(audio_np)) if len(audio_np) > 0 else 0
+            norm_rms = float(np.sqrt(np.mean(audio_np**2))) if len(audio_np) > 0 else 0
+            logger.info(f"[VAD] 📊 归一化后信号范围: [{norm_min:.4f}, {norm_max:.4f}], RMS: {norm_rms:.4f}")
+            logger.info(f"[VAD] 💡 提示：Silero VAD 在 RMS > 0.01 时工作良好，当前 RMS: {norm_rms:.4f}")
+            self._vad_normalized_logged = True
 
         # 🔥 关键修复：记录所有事件，返回最后一个重要事件
         # 不要在遇到第一个事件时就返回，要处理完所有块
@@ -275,7 +307,7 @@ class SileroStateMachine:
 
         # 临时启用诊断日志（每10个块打印一次）
         if self._chunk_count % 10 == 1:
-            logger.info(f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, speech={is_speech}, hit={self.hit_count}, miss={self.miss_count}")
+            logger.debug(f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, speech={is_speech}, hit={self.hit_count}, miss={self.miss_count}")
 
         # 状态机处理
         if self.state == VADState.IDLE:
