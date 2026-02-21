@@ -500,8 +500,9 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
         audio: {
           sampleRate: 16000,
           channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
+          echoCancellation: false,   // 禁用回声消除（会降低音量）
+          noiseSuppression: false,   // 禁用噪音抑制（会大幅降低音量）
+          autoGainControl: false,    // 禁用自动增益控制
         }
       })
       

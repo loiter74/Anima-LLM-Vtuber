@@ -51,10 +51,19 @@ export function VolumeMonitor() {
 
   const initVolumeMonitor = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // 使用与录音相同的音频约束（禁用音量限制）
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        }
+      })
       streamRef.current = stream
 
-      const audioContext = new AudioContext()
+      const audioContext = new AudioContext({ sampleRate: 16000 })
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 256
       analyser.smoothingTimeConstant = 0.8
