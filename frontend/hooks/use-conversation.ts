@@ -517,8 +517,20 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
       // 音频块计数器
       let audioChunkCount = 0
+      let lastLogTime = Date.now()
 
       processor.onaudioprocess = (event) => {
+        audioChunkCount++
+
+        // 每 5 秒打印一次心跳日志
+        const now = Date.now()
+        if (now - lastLogTime > 5000) {
+          console.log(`[Conversation] 💓 onaudioprocess 心跳: 已处理 ${audioChunkCount} 个块`)
+          console.log(`[Conversation]    - socket connected: ${socketRef.current?.connected}`)
+          console.log(`[Conversation]    - shouldSendAudio: ${shouldSendAudioRef.current}`)
+          lastLogTime = now
+        }
+
         const inputData = event.inputBuffer.getChannelData(0)
 
         // 转换为 16-bit PCM（节省带宽）
@@ -527,8 +539,6 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           const s = Math.max(-1, Math.min(1, inputData[i]))
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
-
-        audioChunkCount++
 
         // 只有在 shouldSendAudio 为 true 时才发送音频数据
         // 这样可以在 AI 回复时暂停发送音频，避免数据混杂
@@ -541,13 +551,22 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           if (audioChunkCount % 100 === 1) {
             console.log(`[Conversation] 🎙️ 发送音频块 #${audioChunkCount}, 长度: ${pcmData.length} 采样点`)
           }
-        } else if (!shouldSendAudioRef.current && audioChunkCount % 100 === 1) {
-          console.log(`[Conversation] ⏸️ 音频暂停发送 (shouldSendAudio=false), 块 #${audioChunkCount}`)
+        } else {
+          // 每 100 个块打印一次未发送的原因
+          if (audioChunkCount % 100 === 1) {
+            if (!socketRef.current?.connected) {
+              console.warn(`[Conversation] ⚠️ 未连接到服务器，跳过发送块 #${audioChunkCount}`)
+            } else if (!shouldSendAudioRef.current) {
+              console.log(`[Conversation] ⏸️ 音频暂停发送 (shouldSendAudio=false), 块 #${audioChunkCount}`)
+            }
+          }
         }
 
         // 保存原始音频数据用于fallback（如果VAD未检测到语音结束）
         audioBufferRef.current.push(...Array.from(inputData))
       }
+
+      console.log("[Conversation] ✅ 录音已启动，开始发送音频数据")
 
       console.log("[Conversation] ✅ 录音已启动，开始发送音频数据")
 

@@ -124,17 +124,18 @@ audio_buffer_manager = AudioBufferManager()
 async def get_or_create_context(sid: str) -> ServiceContext:
     """
     获取或创建指定会话的 ServiceContext
-    
+
     Args:
         sid: session id
-        
+
     Returns:
         ServiceContext: 该会话的服务上下文
     """
     if sid not in session_contexts:
+        print(f"\n[{sid}] 🔧 创建新的 ServiceContext")
         ctx = ServiceContext()
         ctx.session_id = sid
-        
+
         # 设置发送消息的回调函数
         async def send_text_callback(message: str):
             if isinstance(message, str):
@@ -142,16 +143,20 @@ async def get_or_create_context(sid: str) -> ServiceContext:
             else:
                 data = message
             await sio.emit(data.get('type', 'message'), data, to=sid)
-        
+
         ctx.send_text = send_text_callback
-        
+
         # 加载配置（使用全局配置或默认配置）
+        print(f"[{sid}] 📋 加载配置...")
         config = global_config or AppConfig.load()
         await ctx.load_from_config(config)
-        
+
         session_contexts[sid] = ctx
+        print(f"[{sid}] ✅ ServiceContext 创建完成")
         logger.info(f"为会话 {sid} 创建了新的 ServiceContext")
-    
+    else:
+        print(f"\n[{sid}] ♻️ 使用现有 ServiceContext")
+
     return session_contexts[sid]
 
 
@@ -306,19 +311,23 @@ async def connect(sid, environ):
     """
     客户端连接时触发
     """
+    print(f"\n{'='*60}")
+    print(f"✅ 客户端已连接: {sid}")
+    print(f"{'='*60}\n")
     logger.info(f"客户端已连接: {sid}")
-    
+
     # 发送欢迎消息
     await sio.emit('connection-established', {
         'message': '连接成功',
         'sid': sid
     }, to=sid)
-    
+
     # 发送启动麦克风信号
     await sio.emit('control', {
         'type': 'control',
         'text': 'start-mic'
     }, to=sid)
+    print(f"📤 已发送 start-mic 信号给客户端 {sid}")
 
 
 @sio.event
@@ -408,6 +417,7 @@ async def raw_audio_data(sid, data):
     # 每 100 个块打印一次接收日志
     count = raw_audio_data.counter[sid]
     if count % 100 == 1:
+        print(f"\n[{sid}] 🎙️ 开始接收音频数据 (第 {count} 块)")
         logger.info(f"[{sid}] 🎙️ 开始接收音频数据 (第 {count} 块)")
 
     try:
