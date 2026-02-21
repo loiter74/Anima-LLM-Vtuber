@@ -12,7 +12,7 @@ persona: "neuro-vtuber"
 # 例如: asr: glm 会加载 config/services/asr/glm.yaml
 
 services:
-  asr: glm
+  asr: mock   # 临时使用 Mock ASR（GLM 账户余额不足）
   tts: edge   # 使用 Edge TTS（微软免费TTS，无配额限制）
   agent: glm
   vad: silero   # vad: silero / mock

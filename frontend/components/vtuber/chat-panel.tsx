@@ -50,6 +50,7 @@ export function ChatPanel() {
     interrupt,
     clearHistory,
     sendTestAudio,
+    sendRealTestAudio,
   } = useConversationContext()
 
   // 发送消息
@@ -242,7 +243,7 @@ export function ChatPanel() {
         <div className="flex items-center justify-between">
           {/* 左侧工具 */}
           <div className="flex items-center gap-1">
-            {/* 测试音频按钮 */}
+            {/* 测试音频按钮（模拟） */}
             <Button
               variant="ghost"
               size="sm"
@@ -251,7 +252,39 @@ export function ChatPanel() {
               disabled={!isConnected || status === "processing"}
               title="发送测试音频（模拟语音）"
             >
-              🧪 测试音频
+              🧪 模拟
+            </Button>
+
+            {/* 真实测试音频按钮 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-green-500"
+              onClick={() => sendRealTestAudio("test_chinese_female.mp3")}
+              disabled={!isConnected || status === "processing"}
+              title="发送真实中文语音（女声）"
+            >
+              🎵 女声
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-blue-500"
+              onClick={() => sendRealTestAudio("test_chinese_male.mp3")}
+              disabled={!isConnected || status === "processing"}
+              title="发送真实中文语音（男声）"
+            >
+              🎵 男声
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-pink-500"
+              onClick={() => sendRealTestAudio("test_chinese_young.mp3")}
+              disabled={!isConnected || status === "processing"}
+              title="发送真实中文语音（年轻女声）"
+            >
+              🎵 年轻
             </Button>
 
             {/* 打断 */}

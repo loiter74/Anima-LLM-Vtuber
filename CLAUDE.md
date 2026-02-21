@@ -29,12 +29,24 @@ pnpm lint       # Run ESLint
 - `scripts/start.sh` - Unix startup script (starts both backend and frontend)
 - `scripts/start.bat` - Windows batch startup script
 - `scripts/start.ps1` - PowerShell startup script (recommended on Windows)
-- `scripts/stop.bat` / `scripts/stop.ps1` - Stop scripts
+- `scripts/stop.sh` - Unix stop script (Linux/macOS)
+- `scripts/stop.bat` / `scripts/stop.ps1` - Windows stop scripts
 
 All scripts support options:
-- `--skip-backend` / `--skip-frontend` - Start only one service
-- `--install` - Reinstall dependencies before starting
+- `--skip-backend` / `--skip-frontend` - Start/stop only one service
+- `--install` - Reinstall dependencies before starting (start scripts only)
 - `--help` - Show help information
+
+**Note**: PowerShell scripts use PascalCase parameters (`-SkipFrontend` instead of `--skip-frontend`)
+
+### Testing
+```bash
+# End-to-end testing with Playwright
+# Requires: backend running on port 12394, frontend on port 3000
+python .claude/test_anima_flow.py
+```
+
+Test files are located in `.claude/` directory for automation testing.
 
 **Quick start (Windows):**
 ```powershell
@@ -77,6 +89,18 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Auto-assembles default pipeline steps (ASRStep, TextCleanStep)
 - Handles interruption via `interrupt()` method
 - Returns `ConversationResult` with response_text, audio_path, error
+- **Handler Registration**: Use `register_handler(event_type, handler)` to add handlers to the EventBus
+  ```python
+  orchestrator.register_handler("sentence", text_handler)
+  orchestrator.register_handler("audio", audio_handler)
+  ```
+- **Priority Registration**: Pass `priority=EventPriority.HIGH` to control handler execution order
+
+**1.1 SessionManager (`src/anima/services/conversation/session_manager.py`)**
+- Factory-based session manager alternative to direct dict storage
+- Methods: `set_factory(factory_func)`, `get_or_create(session_id)`, `cleanup(session_id)`
+- Use when you need centralized session lifecycle management
+- Currently socketio_server.py uses simple dict (`session_contexts` and `orchestrators`)
 
 **2. ServiceContext (`src/anima/service_context.py`)**
 - Service container holding ASR, TTS, LLM, and VAD engine instances
@@ -84,6 +108,9 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - **VAD System**: Automatically detects speech in audio stream, triggers ASR when silence detected
   - Silero VAD: Uses pre-trained torch model for voice activity detection
   - Mock VAD: Always returns true (useful for testing)
+  - **Audio Requirements**: Expects 16kHz sample rate, configurable via `config/services/vad/silero.yaml`
+  - **VAD Timeout**: 15-second safety timeout prevents hanging if speech end isn't detected
+  - **Tunable Parameters**: `prob_threshold`, `db_threshold`, `required_hits`, `required_misses`, `smoothing_window`
 - Lazy initialization - services loaded via `load_from_config(AppConfig)`
 - Services use factory pattern: `AgentFactory.create_from_config()`
 - Lifecycle management: `async def close()` cleans up all resources
@@ -115,6 +142,7 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Methods: `subscribe(event_type, handler, priority)`, `emit(event)`, `unsubscribe(sub)`
 - Returns `Subscription` objects for management
 - Exception isolation: one handler failure doesn't affect others
+- **Priority Levels**: Use `EventPriority.HIGH`, `EventPriority.NORMAL`, `EventPriority.LOW` to control handler execution order
 
 **EventRouter** (`router.py`):
 - Routes events to specific Handler instances
@@ -152,11 +180,15 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 | TTS | OpenAI TTS, GLM TTS, Edge TTS, Mock |
 | VAD | Silero VAD, Mock |
 
+**Default Service Configuration**:
+- Edge TTS is the default TTS provider because it's free and has no quota limits (Microsoft)
+- Silero VAD is the default VAD for production (mock available for testing)
+
 **GLM (智谱 AI) Integration:**
 - The project heavily uses GLM services for LLM, ASR, and TTS
-- Uses `zai-sdk` (custom SDK for GLM APIs)
+- Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
 - Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
-- Environment variable: `GLM_API_KEY` or `LLM_API_KEY`
+- Environment variable: `GLM_API_KEY` or `LLM_API_KEY` (GLM_API_KEY takes precedence)
 
 ### Modular Service Configuration
 
@@ -314,6 +346,36 @@ class ConversationResult:
 - `transcript` - Adapted from `user-transcript`
 - Other events remain unchanged
 
+## Troubleshooting
+
+**Port Already in Use**:
+- Backend (12394) or frontend (3000) port conflicts
+- Use stop scripts: `.\scripts\stop.ps1` (Windows) or `./scripts/stop.sh` (Unix)
+- Scripts verify port release and clean up temporary files
+
+**GLM API Key Not Working**:
+- Check `.env` file exists in project root
+- Verify `GLM_API_KEY` is set (not `LLM_API_KEY`)
+- Server logs confirm `.env` loading on startup
+- Fallback: GLM services degrade to Mock if API key missing
+
+**VAD Issues**:
+- Audio must be 16kHz sample rate
+- Adjust sensitivity in `config/services/vad/silero.yaml`:
+  - Lower `prob_threshold` (e.g., 0.3) for more sensitive detection
+  - Lower `db_threshold` (e.g., 20) for quieter environments
+  - Increase `required_misses` (e.g., 40) for longer speech pause tolerance
+
+**Frontend Can't Connect to Backend**:
+- Verify backend is running on http://localhost:12394
+- Check CORS settings in `socketio_server.py`
+- Ensure frontend URL matches allowed origins
+
+**Silero VAD Model Download Fails**:
+- First run downloads model automatically (~66MB)
+- Check internet connection if model fails to load
+- Model cached locally after first download
+
 ## Important Implementation Notes
 
 **Logging**:
@@ -326,6 +388,11 @@ class ConversationResult:
 - Each WebSocket connection gets its own `ServiceContext` and `ConversationOrchestrator`
 - Stored in `session_contexts[sid]` and `orchestrators[sid]` dicts
 - Cleaned up on disconnect via `cleanup_context(sid)`
+
+**Audio Buffering**:
+- `AudioBufferManager` class manages audio chunks per session before processing
+- Audio buffers stored in `audio_buffers: Dict[str, list]` keyed by session_id
+- Used when client sends `mic_audio_data` before `mic_audio_end`
 
 **Async/Await**:
 - Entire backend is async - use `await` for all I/O
@@ -340,7 +407,8 @@ class ConversationResult:
 - Use `${VAR_NAME}` in YAML configs for API keys
 - Supported vars: `LLM_API_KEY`, `ASR_API_KEY`, `TTS_API_KEY`, etc.
 - Environment variables can override config values:
-  - `LLM_API_KEY` - Overrides LLM API key
+  - `GLM_API_KEY` - GLM (智谱 AI) API key for LLM/ASR/TTS services (also checked as `LLM_API_KEY` fallback)
+  - `LLM_API_KEY` - Generic LLM API key (used by GLM if `GLM_API_KEY` not set)
   - `LLM_MODEL` - Overrides LLM model
   - `ASR_API_KEY` - Overrides ASR API key
   - `TTS_API_KEY` - Overrides TTS API key
@@ -361,6 +429,13 @@ class ConversationResult:
 **.env Loading**:
 - The socketio_server loads `.env` file at startup (before other imports)
 - Place `.env` in project root with your API keys
+- Server logs confirm whether `.env` was loaded successfully
+
+**Server Configuration**:
+- Default port: `12394` (configurable in `config/config.yaml` under `system.port`)
+- Default host: `localhost` (configurable under `system.host`)
+- CORS allowed origins: `http://localhost:3000`, `http://127.0.0.1:3000`, `*`
+- Custom config file: `python -m anima.socketio_server path/to/config.yaml`
 
 ## Frontend Structure
 

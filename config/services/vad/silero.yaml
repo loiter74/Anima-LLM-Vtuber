@@ -2,8 +2,8 @@
 
 type: silero
 sample_rate: 16000
-prob_threshold: 0.4        # 语音概率阈值
-db_threshold: 60           # 分贝阈值
-required_hits: 3           # 开始说话需要的连续命中次数 (约 0.1s)
-required_misses: 24        # 停止说话需要的连续未命中次数 (约 0.8s)
+prob_threshold: 0.15       # 语音概率阈值（降低以适应测试音频）
+db_threshold: 20           # 分贝阈值（降低以适应数字音频输入）
+required_hits: 2           # 开始说话需要的连续命中次数 (约 0.06s)
+required_misses: 20        # 停止说话需要的连续未命中次数 (约 0.65s)
 smoothing_window: 5        # 平滑窗口大小

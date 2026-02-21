@@ -1,37 +1,41 @@
 @echo off
 REM ============================================
-REM Anima 项目启动脚本 (Windows)
-REM 同时启动后端和前端服务
+REM Anima Project Start Script (Windows)
+REM Enhanced with resource cleanup
 REM ============================================
 
 setlocal EnableDelayedExpansion
 
 echo.
 echo ========================================
-echo   Anima 项目启动脚本
+echo   Anima Project Startup Script
 echo ========================================
 echo.
 
-REM 获取脚本所在目录的父目录（项目根目录）
+REM Get script and project directories
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%.."
 cd /d "%PROJECT_ROOT%"
 
-REM 检查 Python 是否可用
+REM ============================================
+REM Check Prerequisites
+REM ============================================
+
+REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请先安装 Python
+    echo [ERROR] Python not found, please install Python first
     pause
     exit /b 1
 )
 
-REM 检查 Node.js/pnpm 是否可用
+REM Check Node.js/pnpm
 pnpm --version >nul 2>&1
 if errorlevel 1 (
-    echo [警告] 未找到 pnpm，尝试使用 npm...
+    echo [WARNING] pnpm not found, trying npm...
     npm --version >nul 2>&1
     if errorlevel 1 (
-        echo [错误] 未找到 Node.js，请先安装 Node.js
+        echo [ERROR] Node.js not found, please install Node.js first
         pause
         exit /b 1
     )
@@ -40,10 +44,13 @@ if errorlevel 1 (
     set "PKG_MANAGER=pnpm"
 )
 
-echo [信息] 使用包管理器: !PKG_MANAGER!
+echo [INFO] Package manager: !PKG_MANAGER!
 echo.
 
-REM 解析参数
+REM ============================================
+REM Parse Arguments
+REM ============================================
+
 set "SKIP_BACKEND=0"
 set "SKIP_FRONTEND=0"
 set "INSTALL_DEPS=0"
@@ -59,25 +66,101 @@ shift
 goto :parse_args
 
 :show_help
-echo 用法: start.bat [选项]
+echo Usage: start.bat [Options]
 echo.
-echo 选项:
-echo   --skip-backend    跳过后端启动
-echo   --skip-frontend   跳过前端启动
-echo   --install         重新安装依赖
-echo   -h, --help        显示帮助信息
+echo Options:
+echo   --skip-backend    Skip backend startup
+echo   --skip-frontend   Skip frontend startup
+echo   --install         Reinstall dependencies
+echo   -h, --help        Show help message
+echo.
+echo Resource Management:
+echo   - Automatically stops existing processes on startup
+echo   - Cleans up temporary files and caches
 echo.
 pause
 exit /b 0
 
 :end_parse
 
-REM 安装依赖
+REM ============================================
+REM Phase 1: Stop Existing Services
+REM ============================================
+
+echo ========================================
+echo   Phase 1: Stopping Existing Services
+echo ========================================
+echo.
+
+REM Stop backend processes
+if "%SKIP_BACKEND%"=="0" (
+    echo [INFO] Stopping backend services on port 12394...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":12394.*LISTENING"') do (
+        echo [INFO] Stopping process %%a...
+        taskkill /F /PID %%a >nul 2>&1
+    )
+    timeout /t 1 /nobreak >nul
+
+    REM Also stop Python processes with anima/socketio_server
+    for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" ^| findstr "python.exe"') do (
+        wmic process where "ProcessId=%%a and CommandLine like '%%socketio_server%%'" call terminate >nul 2>&1
+    )
+)
+
+REM Stop frontend processes
+if "%SKIP_FRONTEND%"=="0" (
+    echo [INFO] Stopping frontend services on port 3000...
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000.*LISTENING"') do (
+        echo [INFO] Stopping process %%a...
+        taskkill /F /PID %%a >nul 2>&1
+    )
+    timeout /t 1 /nobreak >nul
+
+    REM Also stop Node processes with next
+    for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq node.exe" ^| findstr "node.exe"') do (
+        wmic process where "ProcessId=%%a and CommandLine like '%%next%%'" call terminate >nul 2>&1
+    )
+)
+
+echo [SUCCESS] All existing services stopped
+echo.
+
+REM ============================================
+REM Phase 2: Clean Temporary Files
+REM ============================================
+
+echo ========================================
+echo   Phase 2: Cleaning Resources
+echo ========================================
+echo.
+
+if exist "%PROJECT_ROOT%\src\__pycache__" (
+    rmdir /s /q "%PROJECT_ROOT%\src\__pycache__" 2>nul
+    echo [INFO] Removed Python cache
+)
+
+if exist "%PROJECT_ROOT%\frontend\.next\cache" (
+    rmdir /s /q "%PROJECT_ROOT%\frontend\.next\cache" 2>nul
+    echo [INFO] Removed Next.js cache
+)
+
+echo [SUCCESS] Temporary files cleaned
+echo.
+
+REM ============================================
+REM Phase 3: Install Dependencies (Optional)
+REM ============================================
+
 if "%INSTALL_DEPS%"=="1" (
-    echo [信息] 安装后端依赖...
+    echo ========================================
+    echo   Phase 3: Installing Dependencies
+    echo ========================================
+    echo.
+
+    echo [INFO] Installing backend dependencies...
     pip install -r requirements.txt
-    
-    echo [信息] 安装前端依赖...
+
+    echo [INFO] Installing frontend dependencies...
     cd frontend
     if "!PKG_MANAGER!"=="pnpm" (
         pnpm install
@@ -88,24 +171,30 @@ if "%INSTALL_DEPS%"=="1" (
     echo.
 )
 
-REM 启动后端
+REM ============================================
+REM Phase 4: Start Services
+REM ============================================
+
+echo ========================================
+echo   Phase 4: Starting Services
+echo ========================================
+echo.
+
+REM Start backend
 if "%SKIP_BACKEND%"=="0" (
-    echo [信息] 启动后端服务器 (端口 12394)...
+    echo [INFO] Starting backend server (port 12394)...
     start "Anima Backend" cmd /k "cd /d "%PROJECT_ROOT%\src" && python -m anima.socketio_server"
-    echo [成功] 后端服务已在新窗口启动: http://localhost:12394
-) else (
-    echo [跳过] 后端服务
-)
+    echo [SUCCESS] Backend started: http://localhost:12394
 
-REM 等待后端启动
-if "%SKIP_BACKEND%"=="0" (
-    echo [信息] 等待后端启动...
+    echo [INFO] Waiting for backend to start...
     timeout /t 3 /nobreak >nul
+) else (
+    echo [WARNING] Skipping backend
 )
 
-REM 启动前端
+REM Start frontend
 if "%SKIP_FRONTEND%"=="0" (
-    echo [信息] 启动前端开发服务器...
+    echo [INFO] Starting frontend dev server...
     cd frontend
     if "!PKG_MANAGER!"=="pnpm" (
         start "Anima Frontend" cmd /k "set NEXT_PRIVATE_BENCHMARK_ENABLED=false&& pnpm dev"
@@ -113,23 +202,24 @@ if "%SKIP_FRONTEND%"=="0" (
         start "Anima Frontend" cmd /k "set NEXT_PRIVATE_BENCHMARK_ENABLED=false&& npm run dev"
     )
     cd ..
-    echo [成功] 前端服务已在新窗口启动: http://localhost:3000
+    echo [SUCCESS] Frontend started: http://localhost:3000
 ) else (
-    echo [跳过] 前端服务
+    echo [WARNING] Skipping frontend
 )
 
 echo.
 echo ========================================
-echo   启动完成！
-echo ========================================
-echo.
-if "%SKIP_BACKEND%"=="0" echo   后端: http://localhost:12394
-if "%SKIP_FRONTEND%"=="0" echo   前端: http://localhost:3000
-echo.
-echo   按任意键退出此窗口...
-echo   (服务将在独立的命令行窗口中运行)
+echo   Startup Complete!
 echo ========================================
 echo.
 
-pause >nul
+if "%SKIP_BACKEND%"=="0" echo   Backend: http://localhost:12394
+if "%SKIP_FRONTEND%"=="0" echo   Frontend: http://localhost:3000
+
+echo.
+echo   Press Ctrl+C in service windows to stop
+echo   Or run: scripts\stop.bat
+echo.
+
+pause
 exit /b 0

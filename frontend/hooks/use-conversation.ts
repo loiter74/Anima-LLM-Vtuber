@@ -52,7 +52,8 @@ export interface UseConversationReturn {
   stopRecording: () => void
   interrupt: () => void
   clearHistory: () => void
-  sendTestAudio: () => void  // 新增：发送测试音频
+  sendTestAudio: () => void  // 发送模拟测试音频
+  sendRealTestAudio: (filename?: string) => Promise<void>  // 发送真实测试音频
 }
 
 // 生成唯一 ID
@@ -683,17 +684,66 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       if (sentChunks >= totalSamples / chunkSize) {
         clearInterval(sendInterval)
         console.log(`[Conversation] ✅ 测试音频发送完成，共发送 ${sentChunks} 个块`)
+
+        // 🔥 关键修复：发送静音块来触发VAD的语音结束检测
+        console.log("[Conversation] 🎯 发送静音块，触发VAD语音结束")
+
+        // 发送至少30个静音块（30 * 4096 / 16000 ≈ 7.7秒，超过VAD的24个块阈值）
+        const silenceChunks = 30
+        let sentSilenceChunks = 0
+
+        const silenceInterval = setInterval(() => {
+          if (sentSilenceChunks >= silenceChunks) {
+            clearInterval(silenceInterval)
+            console.log(`[Conversation] ✅ 静音块发送完成`)
+            return
+          }
+
+          // 生成全零的静音数据
+          const silenceData = new Int16Array(chunkSize).fill(0)
+
+          socketRef.current.emit("raw_audio_data", {
+            audio: Array.from(silenceData)
+          })
+
+          sentSilenceChunks++
+
+          if (sentSilenceChunks % 10 === 1) {
+            console.log(`[Conversation] 🤫 发送静音块 #${sentSilenceChunks}/${silenceChunks}`)
+          }
+        }, 10)  // 每 10ms 发送一块
+
         return
       }
 
       // 生成模拟的音频数据（模拟语音波形）
       const pcmData = new Int16Array(chunkSize)
       for (let i = 0; i < chunkSize; i++) {
-        // 模拟语音：混合正弦波 + 随机噪声
         const t = (sentChunks * chunkSize + i) / sampleRate
-        const signal = Math.sin(2 * Math.PI * 440 * t) * 0.3 +  // 440Hz 主频
-                       Math.sin(2 * Math.PI * 880 * t) * 0.15 +  // 880Hz 泛音
-                       (Math.random() - 0.5) * 0.1  // 背景噪声
+
+        // 🔥 改进的语音模拟：更丰富的频率 + 振幅调制
+        // 基础频率（类似人声基频 150-300Hz）
+        const baseFreq = 200 + Math.sin(t * 0.5) * 50  // 150-250Hz 波动
+        // 振幅调制（模拟说话的强弱变化）
+        const amplitude = 0.6 + Math.sin(t * 3) * 0.2 + Math.sin(t * 7) * 0.1  // 0.3-0.9
+
+        // 多频率合成（模拟共振峰）
+        const signal = (
+          // 基频
+          Math.sin(2 * Math.PI * baseFreq * t) * amplitude +
+          // 泛音 1 (2x)
+          Math.sin(2 * Math.PI * baseFreq * 2 * t) * amplitude * 0.5 +
+          // 泛音 2 (3x)
+          Math.sin(2 * Math.PI * baseFreq * 3 * t) * amplitude * 0.3 +
+          // 泛音 3 (4x)
+          Math.sin(2 * Math.PI * baseFreq * 4 * t) * amplitude * 0.15 +
+          // 高频成分（模拟摩擦音）
+          Math.sin(2 * Math.PI * 3000 * t) * amplitude * 0.08 +
+          Math.sin(2 * Math.PI * 4500 * t) * amplitude * 0.05 +
+          // 噪声（模拟气流声）
+          (Math.random() - 0.5) * 0.15
+        ) * 0.7  // 总体增益
+
         pcmData[i] = Math.max(-32768, Math.min(32767, signal * 32767))
       }
 
@@ -711,6 +761,114 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     }, 10)  // 每 10ms 发送一块
 
     updateStatus("listening")
+  }, [updateStatus])
+
+  // 发送真实的测试音频（从文件加载）
+  const sendRealTestAudio = useCallback(async (filename: string = "test_chinese_female.mp3") => {
+    console.log(`[Conversation] 🎵 开始发送真实测试音频: ${filename}`)
+
+    if (!socketRef.current?.connected) {
+      console.error("[Conversation] ❌ 未连接到服务器")
+      setError("未连接到服务器")
+      return
+    }
+
+    try {
+      // 加载音频文件
+      const audioUrl = `/test_audio/${filename}`
+      console.log(`[Conversation] 📂 加载音频: ${audioUrl}`)
+
+      const response = await fetch(audioUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to load audio: ${response.status}`)
+      }
+
+      const arrayBuffer = await response.arrayBuffer()
+      console.log(`[Conversation] ✅ 音频加载成功: ${arrayBuffer.byteLength} 字节`)
+
+      // 解码音频数据
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 16000  // 确保使用 16kHz 采样率
+      })
+
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      console.log(`[Conversation] ✅ 音频解码成功:`)
+      console.log(`   - 时长: ${audioBuffer.duration.toFixed(2)} 秒`)
+      console.log(`   - 采样率: ${audioBuffer.sampleRate} Hz`)
+      console.log(`   - 声道数: ${audioBuffer.numberOfChannels}`)
+
+      // 获取 PCM 数据（单声道）
+      const pcmData = audioBuffer.getChannelData(0)  // Float32Array
+
+      // 转换为 Int16 PCM
+      const int16Data = new Int16Array(pcmData.length)
+      for (let i = 0; i < pcmData.length; i++) {
+        const s = Math.max(-1, Math.min(1, pcmData[i]))
+        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+      }
+
+      console.log(`[Conversation] ✅ 转换为 Int16 PCM: ${int16Data.length} 采样点`)
+
+      // 分块发送
+      const chunkSize = 4096
+      const totalChunks = Math.ceil(int16Data.length / chunkSize)
+      let sentChunks = 0
+
+      const sendInterval = setInterval(() => {
+        if (sentChunks >= totalChunks) {
+          clearInterval(sendInterval)
+          console.log(`[Conversation] ✅ 真实音频发送完成，共发送 ${sentChunks} 个块`)
+
+          // 发送静音块触发 VAD 语音结束检测
+          console.log("[Conversation] 🎯 发送静音块，触发VAD语音结束")
+          const silenceChunks = 30
+          let sentSilenceChunks = 0
+
+          const silenceInterval = setInterval(() => {
+            if (sentSilenceChunks >= silenceChunks) {
+              clearInterval(silenceInterval)
+              console.log(`[Conversation] ✅ 静音块发送完成`)
+              return
+            }
+
+            const silenceData = new Int16Array(chunkSize).fill(0)
+            socketRef.current!.emit("raw_audio_data", {
+              audio: Array.from(silenceData)
+            })
+
+            sentSilenceChunks++
+            if (sentSilenceChunks % 10 === 1) {
+              console.log(`[Conversation] 🤫 发送静音块 #${sentSilenceChunks}/${silenceChunks}`)
+            }
+          }, 10)
+
+          return
+        }
+
+        // 获取当前块
+        const start = sentChunks * chunkSize
+        const end = Math.min(start + chunkSize, int16Data.length)
+        const chunk = int16Data.slice(start, end)
+
+        // 发送音频数据
+        socketRef.current.emit("raw_audio_data", {
+          audio: Array.from(chunk)
+        })
+
+        sentChunks++
+
+        // 每 10 个块打印一次日志
+        if (sentChunks % 10 === 1) {
+          console.log(`[Conversation] 🎵 发送真实音频块 #${sentChunks}/${totalChunks}`)
+        }
+      }, 10)  // 每 10ms 发送一块
+
+      updateStatus("listening")
+
+    } catch (error) {
+      console.error("[Conversation] ❌ 发送真实音频失败:", error)
+      setError(`发送真实音频失败: ${error}`)
+    }
   }, [updateStatus])
 
   return {
@@ -731,5 +889,6 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     interrupt,
     clearHistory,
     sendTestAudio,
+    sendRealTestAudio,
   }
 }

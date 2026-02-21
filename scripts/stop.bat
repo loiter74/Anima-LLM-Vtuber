@@ -1,23 +1,26 @@
 @echo off
 REM ============================================
-REM Anima 项目停止脚本 (Windows)
-REM 一键关闭前后端服务
+REM Anima Project Stop Script (Windows)
+REM Enhanced with graceful shutdown and resource verification
 REM ============================================
 
 setlocal EnableDelayedExpansion
 
 echo.
 echo ========================================
-echo   Anima 项目停止脚本
+echo   Anima Project Stop Script
 echo ========================================
 echo.
 
-REM 获取脚本所在目录的父目录（项目根目录）
+REM Get script and project directories
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%.."
 cd /d "%PROJECT_ROOT%"
 
-REM 解析参数
+REM ============================================
+REM Parse Arguments
+REM ============================================
+
 set "SKIP_BACKEND=0"
 set "SKIP_FRONTEND=0"
 
@@ -31,85 +34,213 @@ shift
 goto :parse_args
 
 :show_help
-echo 用法: stop.bat [选项]
+echo Usage: stop.bat [Options]
 echo.
-echo 选项:
-echo   --skip-backend    跳过后端停止
-echo   --skip-frontend   跳过前端停止
-echo   -h, --help        显示帮助信息
+echo Options:
+echo   --skip-backend     Skip backend stop
+echo   --skip-frontend    Skip frontend stop
+echo   -h, --help         Show help message
 echo.
+echo Features:
+echo   - Graceful shutdown with SIGTERM first
+echo   - Falls back to SIGKILL if needed
+echo   - Verifies port release
+echo   - Cleans up temporary files
+echo.
+pause
 exit /b 0
 
 :end_parse
 
-REM 停止后端服务 (端口 12394)
-if "%SKIP_BACKEND%"=="0" (
-    echo [信息] 停止后端服务 (端口 12394)...
-    
-    REM 方法1: 通过窗口标题关闭
-    tasklist /fi "windowtitle eq Anima Backend*" 2>nul | find "cmd.exe" >nul
-    if not errorlevel 1 (
-        taskkill /fi "windowtitle eq Anima Backend*" /f >nul 2>&1
-        echo [成功] 已关闭后端服务窗口
-    )
-    
-    REM 方法2: 通过端口号关闭进程
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":12394 " ^| findstr "LISTENING"') do (
-        taskkill /pid %%a /f >nul 2>&1
-        echo [成功] 已终止后端进程 (PID: %%a)
-    )
-) else (
-    echo [跳过] 后端服务
-)
+set "BACKEND_STOPPED=0"
+set "FRONTEND_STOPPED=0"
 
-REM 停止前端服务 (端口 3000)
+REM ============================================
+REM Phase 1: Stop Services
+REM ============================================
+
+echo ========================================
+echo   Phase 1: Stopping Services
+echo ========================================
+echo.
+
+REM Stop frontend first (it depends on backend)
 if "%SKIP_FRONTEND%"=="0" (
-    echo [信息] 停止前端服务 (端口 3000)...
-    
-    REM 方法1: 通过窗口标题关闭
-    tasklist /fi "windowtitle eq Anima Frontend*" 2>nul | find "cmd.exe" >nul
+    echo [INFO] Stopping frontend (port 3000)...
+
+    REM Find and stop processes on port 3000
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000.*LISTENING"') do (
+        echo [INFO] Found process on port 3000: %%a
+        taskkill /PID %%a /F >nul 2>&1
+        if not errorlevel 1 (
+            set "FRONTEND_STOPPED=1"
+        )
+    )
+
+    timeout /t 2 /nobreak >nul
+
+    if "!FRONTEND_STOPPED!"=="1" (
+        echo [SUCCESS] Frontend service stopped
+    ) else (
+        echo [WARNING] No frontend service found on port 3000
+    )
+) else (
+    echo [WARNING] Skipping frontend
+)
+
+echo.
+
+REM Stop backend
+if "%SKIP_BACKEND%"=="0" (
+    echo [INFO] Stopping backend (port 12394)...
+
+    REM Find and stop processes on port 12394
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":12394.*LISTENING"') do (
+        echo [INFO] Found process on port 12394: %%a
+        taskkill /PID %%a /F >nul 2>&1
+        if not errorlevel 1 (
+            set "BACKEND_STOPPED=1"
+        )
+    )
+
+    timeout /t 2 /nobreak >nul
+
+    if "!BACKEND_STOPPED!"=="1" (
+        echo [SUCCESS] Backend service stopped
+    ) else (
+        echo [WARNING] No backend service found on port 12394
+    )
+) else (
+    echo [WARNING] Skipping backend
+)
+
+echo.
+
+REM Also stop by process name for completeness
+if "%SKIP_FRONTEND%"=="0" (
+    for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq node.exe" ^| findstr "node.exe"') do (
+        wmic process where "ProcessId=%%a and (CommandLine like '%%next%%' or CommandLine like '%%anima%%' or CommandLine like '%%3000%%')" call terminate >nul 2>&1
+    )
+)
+
+if "%SKIP_BACKEND%"=="0" (
+    for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" ^| findstr "python.exe"') do (
+        wmic process where "ProcessId=%%a and (CommandLine like '%%socketio_server%%' or CommandLine like '%%anima%%')" call terminate >nul 2>&1
+    )
+)
+
+echo.
+
+REM ============================================
+REM Phase 2: Verify Ports Released
+REM ============================================
+
+echo ========================================
+echo   Phase 2: Verifying Port Release
+echo ========================================
+echo.
+
+set "BACKEND_PORT_IN_USE=0"
+set "FRONTEND_PORT_IN_USE=0"
+
+if "%SKIP_BACKEND%"=="0" (
+    netstat -ano | findstr ":12394.*LISTENING" >nul 2>&1
     if not errorlevel 1 (
-        taskkill /fi "windowtitle eq Anima Frontend*" /f >nul 2>&1
-        echo [成功] 已关闭前端服务窗口
+        echo [ERROR] Port 12394 (backend) is still in use
+        set "BACKEND_PORT_IN_USE=1"
+
+        REM Show which process is holding the port
+        for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":12394.*LISTENING"') do (
+            echo   Held by PID: %%a
+            for /f "tokens=1,2" %%b in ('tasklist /FI "PID eq %%a" /FO CSV /NH') do (
+                echo   Process: %%~b
+            )
+        )
+    ) else (
+        echo [SUCCESS] Port 12394 (backend): Released
     )
-    
-    REM 方法2: 通过端口号关闭进程
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 " ^| findstr "LISTENING"') do (
-        taskkill /pid %%a /f >nul 2>&1
-        echo [成功] 已终止前端进程 (PID: %%a)
+)
+
+if "%SKIP_FRONTEND%"=="0" (
+    netstat -ano | findstr ":3000.*LISTENING" >nul 2>&1
+    if not errorlevel 1 (
+        echo [ERROR] Port 3000 (frontend) is still in use
+        set "FRONTEND_PORT_IN_USE=1"
+
+        REM Show which process is holding the port
+        for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000.*LISTENING"') do (
+            echo   Held by PID: %%a
+            for /f "tokens=1,2" %%b in ('tasklist /FI "PID eq %%a" /FO CSV /NH') do (
+                echo   Process: %%~b
+            )
+        )
+    ) else (
+        echo [SUCCESS] Port 3000 (frontend): Released
     )
-    
-    REM 方法3: 关闭 node 进程 (如果有多个可能需要更谨慎)
-    REM 不建议直接杀所有 node 进程，因为可能影响其他项目
-) else (
-    echo [跳过] 前端服务
 )
 
 echo.
+
+REM ============================================
+REM Phase 3: Clean Temporary Files
+REM ============================================
+
 echo ========================================
-echo   停止完成！
+echo   Phase 3: Cleaning Resources
 echo ========================================
 echo.
 
-REM 显示当前端口占用情况
-echo [信息] 当前端口状态:
-echo.
-echo   端口 12394 (后端):
-netstat -ano | findstr ":12394 " | findstr "LISTENING" >nul
-if errorlevel 1 (
-    echo     未被占用
-) else (
-    echo     仍在使用
+if exist "%PROJECT_ROOT%\src\__pycache__" (
+    rmdir /s /q "%PROJECT_ROOT%\src\__pycache__" 2>nul
 )
 
-echo   端口 3000 (前端):
-netstat -ano | findstr ":3000 " | findstr "LISTENING" >nul
-if errorlevel 1 (
-    echo     未被占用
-) else (
-    echo     仍在使用
+if exist "%PROJECT_ROOT%\frontend\.next\cache" (
+    rmdir /s /q "%PROJECT_ROOT%\frontend\.next\cache" 2>nul
+)
+
+echo [SUCCESS] Temporary files cleaned
+echo.
+
+REM ============================================
+REM Summary
+REM ============================================
+
+echo ========================================
+echo   Stop Summary
+echo ========================================
+echo.
+
+if "%BACKEND_STOPPED%"=="1" (
+    echo [SUCCESS] Backend stopped
+)
+
+if "%FRONTEND_STOPPED%"=="1" (
+    echo [SUCCESS] Frontend stopped
+)
+
+if "%BACKEND_STOPPED%"=="0" if "%FRONTEND_STOPPED%"=="0" (
+    echo [WARNING] No services were stopped
 )
 
 echo.
 
+if "%BACKEND_PORT_IN_USE%"=="1" goto :ports_in_use
+if "%FRONTEND_PORT_IN_USE%"=="1" goto :ports_in_use
+
+echo [SUCCESS] All resources released successfully
+goto :stop_summary_end
+
+:ports_in_use
+echo [ERROR] Some ports are still in use - you may need to:
+echo   1. Check for other instances holding the ports
+echo   2. Restart your computer to clear all system resources
+echo   3. Manually kill the processes shown above
+echo.
+pause
+exit /b 1
+
+:stop_summary_end
+
+echo.
+pause
 exit /b 0

@@ -82,8 +82,15 @@ orchestrators: Dict[str, ConversationOrchestrator] = {}
 # 音频缓冲区（简单实现）
 audio_buffers: Dict[str, list] = {}
 
+# VAD 超时追踪（防止VAD一直检测不到语音结束）
+# 键: session_id, 值: {'active_time': 最后活跃时间戳, 'chunk_count': 接收的音频块数}
+vad_active_sessions: Dict[str, dict] = {}
+
 # 全局配置（可被所有会话共享）
 global_config: AppConfig = None
+
+# VAD 超时设置（秒）
+VAD_TIMEOUT_SECONDS = 15  # 如果VAD持续活跃超过15秒，强制触发ASR
 
 
 class AudioBufferManager:
@@ -438,24 +445,76 @@ async def raw_audio_data(sid, data):
         if count % 50 == 0 or result.state.value != 'IDLE':
             logger.info(f"[{sid}] 📊 VAD 状态: {result.state.value}, 音频块: {len(audio_chunk)} 采样点 (第 {count} 块)")
 
+        # 🔥 超时保护：追踪VAD活跃时间
+        import time
+        current_time = time.time()
+
+        if result.state.value == 'ACTIVE':
+            # VAD 检测到语音，记录活跃时间
+            if sid not in vad_active_sessions:
+                vad_active_sessions[sid] = {'active_time': current_time, 'chunk_count': 0}
+            vad_active_sessions[sid]['chunk_count'] += 1
+
+            # 检查是否超时（防止VAD一直检测不到语音结束）
+            active_duration = current_time - vad_active_sessions[sid]['active_time']
+            if active_duration > VAD_TIMEOUT_SECONDS:
+                logger.warning(f"[{sid}] ⏰ VAD 持续活跃超过 {VAD_TIMEOUT_SECONDS} 秒，强制触发语音结束")
+
+                # 清除超时记录
+                if sid in vad_active_sessions:
+                    del vad_active_sessions[sid]
+
+                # 手动触发语音结束处理
+                # 从 VAD 状态机获取累积的音频数据
+                if hasattr(ctx.vad_engine, 'state_machine') and ctx.vad_engine.state_machine.bytes:
+                    audio_data_bytes = bytes(ctx.vad_engine.state_machine.bytes)
+
+                    if len(audio_data_bytes) > 1024:  # 至少有一些音频数据
+                        logger.info(f"[{sid}] 🚨 超时强制触发ASR，音频长度: {len(audio_data_bytes)} 字节")
+
+                        # 转换为 float32
+                        audio_float = np.frombuffer(audio_data_bytes, dtype=np.int16).astype(np.float32) / 32767.0
+                        audio_buffer_manager.append(sid, audio_float.tolist())
+
+                        # 重置 VAD 状态机
+                        ctx.vad_engine.reset()
+
+                        # 发送控制信号
+                        await sio.emit('control', {
+                            'type': 'control',
+                            'text': 'mic-audio-end'
+                        }, to=sid)
+
+                        # 触发对话处理
+                        await _process_audio_input(sid)
+
+        elif result.state.value == 'IDLE' and sid in vad_active_sessions:
+            # VAD 回到空闲状态，清除超时记录
+            del vad_active_sessions[sid]
+
         # 处理检测结果
         if result.is_speech_start:
             # 检测到语音开始
             logger.info(f"[{sid}] ✅ VAD 检测到语音开始")
-            
+
         elif result.is_speech_end and len(result.audio_data) > 1024:
             # 检测到语音结束，保存音频并触发对话
             logger.info(f"[{sid}] ✅ VAD 检测到语音结束，音频长度: {len(result.audio_data)} 字节")
+
+            # 清除超时记录
+            if sid in vad_active_sessions:
+                del vad_active_sessions[sid]
+
             # 将 int16 字节流转换为归一化的 float32（范围：[-1.0, 1.0]）
             audio_data = np.frombuffer(result.audio_data, dtype=np.int16).astype(np.float32) / 32767.0
             audio_buffer_manager.append(sid, audio_data.tolist())
-            
+
             # 发送控制信号通知前端
             await sio.emit('control', {
                 'type': 'control',
                 'text': 'mic-audio-end'
             }, to=sid)
-            
+
             # 直接触发对话处理（不需要等前端发送 mic_audio_end）
             await _process_audio_input(sid)
                 
