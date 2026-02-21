@@ -88,6 +88,8 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
   const handleSentenceCallCountRef = useRef<number>(0)  // 追踪 handleSentence 调用次数
   const lastProcessedCompleteSeqRef = useRef<number>(-1)  // 追踪上一次处理的完成标记 seq，防止重复
   const shouldSendAudioRef = useRef<boolean>(true)  // 控制是否发送音频数据（VAD 暂停标志）
+  const startRecordingRef = useRef<(() => void) | null>(null)  // 保存 startRecording 函数引用
+  const isRecordingRef = useRef<boolean>(false)  // 跟踪录音状态
 
   // 使用 ref 存储外部回调函数
   const onStatusChangeRef = useRef(onStatusChange)
@@ -317,9 +319,15 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
       switch (data.text) {
         case "start-mic":
-          updateStatus?.("listening")
-          shouldSendAudioRef.current = true  // 恢复发送音频
-          console.log("[Conversation] ✅ 恢复发送音频数据")
+          // 如果还没开始录音，自动启动录音
+          if (!isRecordingRef.current) {
+            console.log("[Conversation] 🎙️ 收到 start-mic 信号，自动启动录音")
+            startRecordingRef.current?.()
+          } else {
+            console.log("[Conversation] ♻️ 收到 start-mic 信号，录音已在运行，恢复发送音频数据")
+            shouldSendAudioRef.current = true  // 恢复发送音频
+            updateStatus?.("listening")
+          }
           break
         case "interrupt":
         case "interrupted":
@@ -544,6 +552,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       console.log("[Conversation] ✅ 录音已启动，开始发送音频数据")
 
       setIsRecording(true)
+      isRecordingRef.current = true
       updateStatus("listening")
       
     } catch (err) {
@@ -570,6 +579,11 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     }
   }, [updateStatus, onError, onErrorRef])
 
+  // 更新 startRecording ref
+  useEffect(() => {
+    startRecordingRef.current = startRecording
+  }, [startRecording])
+
   // 停止录制
   const stopRecording = useCallback(() => {
     // 停止媒体流
@@ -591,7 +605,8 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     }
     
     setIsRecording(false)
-    
+    isRecordingRef.current = false
+
     // 通知服务器音频结束
     if (socketRef.current?.connected && audioBufferRef.current.length > 0) {
       socketRef.current.emit("mic_audio_end", {})
