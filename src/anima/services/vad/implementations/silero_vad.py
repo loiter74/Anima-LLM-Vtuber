@@ -50,8 +50,12 @@ class SileroVAD(VADInterface):
         # 状态机
         self.state_machine = SileroStateMachine(self)
 
-        logger.info(f"Silero VAD 初始化完成: sample_rate={sample_rate}, "
-                   f"prob_threshold={prob_threshold}, db_threshold={db_threshold}")
+        logger.info(f"✅ Silero VAD 初始化完成")
+        logger.info(f"   - 采样率: {sample_rate} Hz")
+        logger.info(f"   - 概率阈值: {prob_threshold}")
+        logger.info(f"   - 分贝阈值: {db_threshold}")
+        logger.info(f"   - 开始命中次数: {required_hits}")
+        logger.info(f"   - 结束未命中次数: {required_misses}")
 
     @classmethod
     def from_config(cls, config, **kwargs):

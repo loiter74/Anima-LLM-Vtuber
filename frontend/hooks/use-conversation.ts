@@ -507,6 +507,9 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
       audioBufferRef.current = []
 
+      // 音频块计数器
+      let audioChunkCount = 0
+
       processor.onaudioprocess = (event) => {
         const inputData = event.inputBuffer.getChannelData(0)
 
@@ -517,18 +520,29 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
 
+        audioChunkCount++
+
         // 只有在 shouldSendAudio 为 true 时才发送音频数据
         // 这样可以在 AI 回复时暂停发送音频，避免数据混杂
         if (socketRef.current?.connected && shouldSendAudioRef.current) {
           socketRef.current.emit("raw_audio_data", {
             audio: Array.from(pcmData)
           })
+
+          // 每 100 个块打印一次日志
+          if (audioChunkCount % 100 === 1) {
+            console.log(`[Conversation] 🎙️ 发送音频块 #${audioChunkCount}, 长度: ${pcmData.length} 采样点`)
+          }
+        } else if (!shouldSendAudioRef.current && audioChunkCount % 100 === 1) {
+          console.log(`[Conversation] ⏸️ 音频暂停发送 (shouldSendAudio=false), 块 #${audioChunkCount}`)
         }
 
         // 保存原始音频数据用于fallback（如果VAD未检测到语音结束）
         audioBufferRef.current.push(...Array.from(inputData))
       }
-      
+
+      console.log("[Conversation] ✅ 录音已启动，开始发送音频数据")
+
       setIsRecording(true)
       updateStatus("listening")
       

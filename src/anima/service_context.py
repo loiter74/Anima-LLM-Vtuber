@@ -215,10 +215,24 @@ class ServiceContext:
             return
 
         provider = vad_config.type
-        logger.info(f"[{self.session_id}] 初始化 VAD: {provider}")
+        logger.info(f"[{self.session_id}] 🔧 正在初始化 VAD 引擎: {provider}")
 
         # 使用 create_from_config 方法（与其他服务保持一致）
-        self.vad_engine = VADFactory.create_from_config(vad_config)
+        try:
+            self.vad_engine = VADFactory.create_from_config(vad_config)
+            logger.info(f"[{self.session_id}] ✅ VAD 引擎创建成功: {type(self.vad_engine).__name__}")
+
+            # 打印 VAD 配置（仅第一次）
+            if hasattr(self.vad_engine, 'prob_threshold'):
+                logger.info(f"[{self.session_id}] 📊 VAD 配置: "
+                           f"prob_threshold={self.vad_engine.prob_threshold}, "
+                           f"db_threshold={self.vad_engine.db_threshold}, "
+                           f"required_hits={self.vad_engine.required_hits}, "
+                           f"required_misses={self.vad_engine.required_misses}")
+
+        except Exception as e:
+            logger.error(f"[{self.session_id}] ❌ VAD 引擎创建失败: {e}")
+            self.vad_engine = None
 
     # ========================================
     # 生命周期管理

@@ -393,27 +393,41 @@ async def raw_audio_data(sid, data):
     参考 Open-LLM-VTuber 的 _handle_raw_audio_data 实现
     """
     audio_chunk = data.get('audio', [])
-    
+
     if not audio_chunk:
         logger.debug(f"[{sid}] 收到空音频数据")
         return
-    
+
+    # 静态计数器（用于日志）
+    if not hasattr(raw_audio_data, 'counter'):
+        raw_audio_data.counter = {}
+    if sid not in raw_audio_data.counter:
+        raw_audio_data.counter[sid] = 0
+    raw_audio_data.counter[sid] += 1
+
+    # 每 100 个块打印一次接收日志
+    count = raw_audio_data.counter[sid]
+    if count % 100 == 1:
+        logger.info(f"[{sid}] 🎙️ 开始接收音频数据 (第 {count} 块)")
+
     try:
         ctx = await get_or_create_context(sid)
-        
+
         # 检查是否有 VAD 引擎
         if ctx.vad_engine is None:
             # 没有 VAD，直接累积音频
             audio_buffer_manager.append(sid, audio_chunk)
-            logger.debug(f"[{sid}] 无VAD，累积音频: {len(audio_chunk)} 采样点")
+            if count % 100 == 1:
+                logger.warning(f"[{sid}] ⚠️ VAD 引擎未初始化，直接累积音频: {len(audio_chunk)} 采样点")
             return
-        
+
         # 使用 VAD 检测语音（返回 VADResult 对象，不是可迭代对象）
         result = ctx.vad_engine.detect_speech(audio_chunk)
-        
-        # 记录 VAD 状态
-        logger.debug(f"[{sid}] VAD 状态: {result.state}, 音频长度: {len(audio_chunk)}")
-        
+
+        # 记录 VAD 状态（降低频率，避免刷屏）
+        if count % 50 == 0 or result.state.value != 'IDLE':
+            logger.info(f"[{sid}] 📊 VAD 状态: {result.state.value}, 音频块: {len(audio_chunk)} 采样点 (第 {count} 块)")
+
         # 处理检测结果
         if result.is_speech_start:
             # 检测到语音开始
