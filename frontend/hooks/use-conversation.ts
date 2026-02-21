@@ -551,8 +551,8 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
         // 转换为 16-bit PCM（节省带宽）
         const pcmData = new Int16Array(inputData.length)
 
-        // 🔥 音频增益：放大 3 倍以适配低音量麦克风
-        const gain = 3.0
+        // 🔥 音频增益：放大 5 倍以适配弱音量麦克风
+        const gain = 5.0
 
         for (let i = 0; i < inputData.length; i++) {
           // 应用增益并限制在 [-1, 1] 范围
@@ -563,12 +563,12 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
 
-        // 每 100 个块打印一次增益后的统计
-        if (audioChunkCount % 100 === 1) {
+        // 每 10 个块打印一次增益后的统计（更频繁）
+        if (audioChunkCount % 10 === 1) {
           const min = Math.min(...Array.from(pcmData))
           const max = Math.max(...Array.from(pcmData))
           const mean = pcmData.reduce((sum, v) => sum + Math.abs(v), 0) / pcmData.length
-          console.log(`[Conversation] 📊 增益后 PCM: range=[${min}, ${max}], mean=${mean.toFixed(2)}, gain=${gain}x`)
+          console.log(`[Conversation] 📊 增益后 PCM #${audioChunkCount}: range=[${min.toFixed(0)}, ${max.toFixed(0)}], mean=${mean.toFixed(2)}, gain=${gain}x`)
         }
 
         // 只有在 shouldSendAudio 为 true 时才发送音频数据
