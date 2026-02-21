@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>麦克风测试</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        #volumeMeter {
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #volumeBar {
+            height: 100%;
+            background: linear-gradient(to right, #4caf50, #ffeb3b, #f44336);
+            width: 0%;
+            transition: width 0.1s;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎤 麦克风与 Socket.IO 测试</h1>
+
+    <div class="section">
+        <h2>1. Socket.IO 连接测试</h2>
+        <button onclick="testSocketConnect()">连接到后端</button>
+        <button onclick="testSocketDisconnect()">断开连接</button>
+        <div id="socketStatus" class="status info">未连接</div>
+    </div>
+
+    <div class="section">
+        <h2>2. 麦克风权限测试</h2>
+        <button onclick="testMicrophone()">测试麦克风</button>
+        <div id="micStatus" class="status info">未测试</div>
+    </div>
+
+    <div class="section">
+        <h2>3. 音量监控</h2>
+        <div id="volumeMeter">
+            <div id="volumeBar"></div>
+        </div>
+        <p id="volumeText">音量: 0%</p>
+    </div>
+
+    <div class="section">
+        <h2>4. 发送音频到后端</h2>
+        <button onclick="startSending()">开始发送</button>
+        <button onclick="stopSending()">停止发送</button>
+        <div id="sendStatus" class="status info">未发送</div>
+        <p>已发送块数: <span id="chunkCount">0</span></p>
+    </div>
+
+    <div class="section">
+        <h2>5. 控制台日志</h2>
+        <div id="logs" style="max-height: 200px; overflow-y: auto; background: #f5f5f5; padding: 10px; font-family: monospace; font-size: 12px;"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let audioContext = null;
+        let analyser = null;
+        let mediaStream = null;
+        let processor = null;
+        let isSending = false;
+        let chunkCount = 0;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logs.innerHTML = `<div style="color: ${color}">[${time}] ${message}</div>` + logs.innerHTML;
+        }
+
+        function updateStatus(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.className = `status ${type}`;
+            el.textContent = message;
+        }
+
+        // Socket.IO 测试
+        function testSocketConnect() {
+            log('尝试连接到后端...', 'info');
+            socket = io('http://localhost:12394', {
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                log(`✅ Socket.IO 已连接! ID: ${socket.id}`, 'success');
+                updateStatus('socketStatus', `已连接 (ID: ${socket.id})`, 'success');
+            });
+
+            socket.on('disconnect', () => {
+                log('❌ Socket.IO 已断开', 'error');
+                updateStatus('socketStatus', '已断开', 'error');
+            });
+
+            socket.on('connect_error', (err) => {
+                log(`❌ 连接错误: ${err.message}`, 'error');
+                updateStatus('socketStatus', `连接失败: ${err.message}`, 'error');
+            });
+
+            socket.on('control', (data) => {
+                log(`📨 收到控制信号: ${JSON.stringify(data)}`, 'info');
+            });
+
+            socket.on('text', (data) => {
+                log(`📨 收到文本: ${JSON.stringify(data)}`, 'info');
+            });
+
+            socket.on('error', (data) => {
+                log(`❌ 收到错误: ${JSON.stringify(data)}`, 'error');
+            });
+        }
+
+        function testSocketDisconnect() {
+            if (socket) {
+                socket.disconnect();
+                log('已断开连接', 'info');
+            }
+        }
+
+        // 麦克风测试
+        async function testMicrophone() {
+            try {
+                log('请求麦克风权限...', 'info');
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                    }
+                });
+
+                mediaStream = stream;
+                log('✅ 麦克风权限已获取!', 'success');
+                updateStatus('micStatus', '麦克风已授权', 'success');
+
+                // 设置音量分析
+                audioContext = new AudioContext({ sampleRate: 16000 });
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+
+                updateVolume();
+                log('✅ 音量监控已启动', 'success');
+
+            } catch (err) {
+                log(`❌ 麦克风测试失败: ${err.message}`, 'error');
+                updateStatus('micStatus', `失败: ${err.name}`, 'error');
+            }
+        }
+
+        function updateVolume() {
+            if (!analyser) return;
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+
+            const sum = dataArray.reduce((a, b) => a + b, 0);
+            const average = sum / dataArray.length;
+            const volume = Math.round((average / 255) * 100);
+
+            document.getElementById('volumeBar').style.width = volume + '%';
+            document.getElementById('volumeText').textContent = `音量: ${volume}%`;
+
+            requestAnimationFrame(updateVolume);
+        }
+
+        // 发送音频
+        async function startSending() {
+            if (!socket || !socket.connected) {
+                log('❌ Socket.IO 未连接，无法发送', 'error');
+                return;
+            }
+
+            if (!mediaStream) {
+                log('❌ 麦克风未启动，请先测试麦克风', 'error');
+                return;
+            }
+
+            isSending = true;
+            chunkCount = 0;
+            updateStatus('sendStatus', '正在发送...', 'info');
+            log('🎤 开始发送音频数据...', 'info');
+
+            // 创建 ScriptProcessor 并连接到静音输出
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            const silentDestination = audioContext.createMediaStreamDestination();
+
+            source.connect(processor);
+            processor.connect(silentDestination);  // 必须连接才能触发 onaudioprocess
+
+            processor.onaudioprocess = (event) => {
+                if (!isSending) return;
+
+                const inputData = event.inputBuffer.getChannelData(0);
+
+                // 应用 5 倍增益
+                const pcmData = new Int16Array(inputData.length);
+                const gain = 5.0;
+
+                for (let i = 0; i < inputData.length; i++) {
+                    let s = inputData[i] * gain;
+                    s = Math.max(-1, Math.min(1, s));
+                    pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+
+                // 每 10 个块打印日志
+                if (chunkCount % 10 === 1) {
+                    const min = Math.min(...Array.from(pcmData));
+                    const max = Math.max(...Array.from(pcmData));
+                    const mean = pcmData.reduce((sum, v) => sum + Math.abs(v), 0) / pcmData.length;
+                    log(`📊 发送块 #${chunkCount}: range=[${min.toFixed(0)}, ${max.toFixed(0)}], mean=${mean.toFixed(2)}`, 'info');
+                }
+
+                // 发送到后端
+                socket.emit('raw_audio_data', {
+                    audio: Array.from(pcmData)
+                });
+
+                chunkCount++;
+                document.getElementById('chunkCount').textContent = chunkCount;
+            };
+
+            // 保存 processor 引用以便停止
+            window._processor = processor;
+            window._source = source;
+        }
+
+        function stopSending() {
+            isSending = false;
+            updateStatus('sendStatus', '已停止', 'info');
+            log(`⏹️ 已停止发送，共发送 ${chunkCount} 个块`, 'info');
+
+            // 清理 processor
+            if (window._processor && window._source) {
+                window._source.disconnect();
+                window._processor.disconnect();
+                window._processor = null;
+                window._source = null;
+            }
+        }
+    </script>
+</body>
+</html>

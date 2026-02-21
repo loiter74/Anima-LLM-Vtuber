@@ -507,17 +507,20 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       })
       
       mediaStreamRef.current = stream
-      
+
       const audioContext = new AudioContext({ sampleRate: 16000 })
       audioContextRef.current = audioContext
-      
+
       const source = audioContext.createMediaStreamSource(stream)
       const processor = audioContext.createScriptProcessor(4096, 1, 1)
       processorRef.current = processor
 
-      // 连接音频处理节点
+      // 🔥 关键修复：ScriptProcessorNode 必须连接到输出才会触发 onaudioprocess
+      // 创建一个静音的 destination 避免回声
+      const silentDestination = audioContext.createMediaStreamDestination()
       source.connect(processor)
-      // 注意：不连接到 audioContext.destination，避免麦克风回声
+      processor.connect(silentDestination)  // 连接到静音输出，确保 onaudioprocess 触发
+      // 不连接到 audioContext.destination，避免用户听到回声
 
       audioBufferRef.current = []
 
