@@ -5,14 +5,14 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { 
-  MessageSquare, 
-  Send, 
-  Bot, 
-  User, 
-  Wifi, 
-  WifiOff, 
-  Mic, 
+import {
+  MessageSquare,
+  Send,
+  Bot,
+  User,
+  Wifi,
+  WifiOff,
+  Mic,
   MicOff,
   Square,
   Trash2,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { ConversationStatus } from "@/hooks/use-conversation"
 import { useConversationContext } from "@/contexts/conversation-context"
+import { VolumeMonitor } from "./volume-monitor"
 
 // 状态徽章颜色
 const statusStyles: Record<ConversationStatus, { bg: string; text: string; label: string }> = {
@@ -299,6 +300,11 @@ export function ChatPanel() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* 音量监控 */}
+      <div className="border-t border-border px-3 py-2">
+        <VolumeMonitor />
       </div>
 
       {/* Input area */}

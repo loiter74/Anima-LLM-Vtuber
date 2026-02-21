@@ -561,6 +561,9 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
             audio: Array.from(pcmData)
           })
 
+          // 通知音频块已发送（供 VolumeMonitor 使用）
+          window.dispatchEvent(new CustomEvent('audio-chunk-sent'))
+
           // 每 100 个块打印一次日志
           if (audioChunkCount % 100 === 1) {
             console.log(`[Conversation] 🎙️ 发送音频块 #${audioChunkCount}, 长度: ${pcmData.length} 采样点`)
@@ -586,6 +589,11 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
       setIsRecording(true)
       isRecordingRef.current = true
+
+      // 通知录音状态变化（供 VolumeMonitor 使用）
+      ;(window as any).__isRecording = true
+      window.dispatchEvent(new CustomEvent('recording-state-changed', { detail: true }))
+
       updateStatus("listening")
       
     } catch (err) {
@@ -639,6 +647,10 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     
     setIsRecording(false)
     isRecordingRef.current = false
+
+    // 通知录音状态变化（供 VolumeMonitor 使用）
+    ;(window as any).__isRecording = false
+    window.dispatchEvent(new CustomEvent('recording-state-changed', { detail: false }))
 
     // 通知服务器音频结束
     if (socketRef.current?.connected && audioBufferRef.current.length > 0) {
