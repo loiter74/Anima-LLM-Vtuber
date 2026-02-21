@@ -192,8 +192,14 @@ class FasterWhisperASR(ASRInterface):
                 }
             })
 
+        # 记录语言配置
+        logger.debug(f"Faster-Whisper 配置 - language={self.language}, 参数={parameters}")
+
         # 执行转录
         segments, info = model.transcribe(audio_np, **parameters)
+
+        # 记录检测到的语言信息
+        logger.info(f"Faster-Whisper 检测信息: language='{info.language}', language_probability={info.language_probability:.2f}")
 
         # 提取文本
         text_parts = [segment.text for segment in segments]

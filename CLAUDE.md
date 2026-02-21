@@ -176,9 +176,28 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 | Type | Providers |
 |------|-----------|
 | LLM | OpenAI, GLM (智谱 AI), Ollama, Mock |
-| ASR | OpenAI Whisper, GLM ASR, Mock |
+| ASR | OpenAI Whisper, GLM ASR, Faster-Whisper, Mock |
 | TTS | OpenAI TTS, GLM TTS, Edge TTS, Mock |
 | VAD | Silero VAD, Mock |
+
+**Default Service Configuration**:
+- Edge TTS is the default TTS provider because it's free and has no quota limits (Microsoft)
+- Silero VAD is the default VAD for production (mock available for testing)
+- Faster-Whisper is the default ASR provider (free, offline, open-source)
+
+**GLM (智谱 AI) Integration:**
+- The project heavily uses GLM services for LLM, ASR, and TTS
+- Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
+- Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
+- Environment variable: `GLM_API_KEY` or `LLM_API_KEY` (GLM_API_KEY takes precedence)
+
+**Faster-Whisper ASR:**
+- Open-source, offline speech recognition based on OpenAI Whisper
+- Free and runs locally after model download
+- Installation: `pip install faster-whisper` (optional: `pip install pydub` for better audio format support)
+- Recommended model: `distil-large-v3` (fast, accurate, multi-language support)
+- Configuration: `config/services/asr/faster_whisper.yaml`
+- Requires no API key, models are downloaded automatically on first use (~1-3GB depending on model)
 
 **Default Service Configuration**:
 - Edge TTS is the default TTS provider because it's free and has no quota limits (Microsoft)
@@ -201,6 +220,7 @@ config/
 │   ├── asr/
 │   │   ├── openai.yaml
 │   │   ├── glm.yaml
+│   │   ├── faster_whisper.yaml
 │   │   └── mock.yaml
 │   ├── tts/
 │   ├── agent/
@@ -213,10 +233,10 @@ config/
 In `config/config.yaml`:
 ```yaml
 services:
-  asr: glm      # Loads config/services/asr/glm.yaml
-  tts: glm
+  asr: faster_whisper   # Loads config/services/asr/faster_whisper.yaml
+  tts: edge             # Loads config/services/tts/edge.yaml (free, no quota)
   agent: glm
-  vad: mock
+  vad: silero           # VAD for speech activity detection
 
 persona: "neuro-vtuber"
 ```
@@ -376,6 +396,14 @@ class ConversationResult:
 - Check internet connection if model fails to load
 - Model cached locally after first download
 
+**Faster-Whisper ASR Issues**:
+- First run downloads model automatically (size varies: tiny ~40MB, distil-large-v3 ~1.5GB)
+- If `faster-whisper` is not installed: `pip install faster-whisper`
+- For better audio format support (MP3, etc.): `pip install pydub` (optional, fallback to wave module)
+- Model files cached in `~/.cache/huggingface/` (or `download_root` if specified)
+- For GPU acceleration: set `device: cuda` in config and install CUDA
+- For faster CPU inference: set `compute_type: int8` in config
+
 ## Important Implementation Notes
 
 **Logging**:
@@ -483,9 +511,9 @@ src/anima/
 │   └── steps/              # Pipeline steps (ASRStep, TextCleanStep, etc.)
 ├── services/               # Service implementations
 │   ├── llm/                # LLM/Agent services
-│   ├── asr/                # ASR services
+│   ├── asr/                # ASR services (faster_whisper, glm, openai, mock)
 │   ├── tts/                # TTS services
-│   ├── vad/                # VAD services
+│   ├── vad/                # VAD services (silero, mock)
 │   └── conversation/       # ConversationOrchestrator, SessionManager
 ├── handlers/               # Event handlers
 │   ├── base_handler.py     # Base handler class

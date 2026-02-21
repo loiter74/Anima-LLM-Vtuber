@@ -7,7 +7,7 @@ from .factory import ASRFactory
 
 # 导入实现以触发 ProviderRegistry 注册
 try:
-    from .implementations import mock_asr, glm_asr
+    from .implementations import mock_asr, glm_asr, faster_whisper_asr
 except ImportError:
     pass
 

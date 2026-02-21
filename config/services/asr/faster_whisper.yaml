@@ -4,9 +4,9 @@
 type: faster_whisper
 
 # 模型选择
-# 推荐: distil-large-v3 (支持多语言，速度快)
-# 其他选项: tiny, base, small, medium, large-v2, large-v3
-model: distil-large-v3
+# 推荐: large-v3 或 large-v2 (对中文支持最好)
+# 其他选项: tiny, base, small, medium, distil-large-v3
+model: large-v3
 
 # 语言代码
 # zh=中文, en=英文, ja=日语, ko=韩语, etc.
@@ -15,11 +15,11 @@ language: zh
 
 # 设备
 # auto=自动检测, cpu=CPU, cuda=CUDA (需要 GPU)
-device: auto
+device: cuda
 
 # 计算精度
-# default=自动, int8=量化(最快), float16=半精度, float32=全精度
-compute_type: default
+# default=自动, int8=量化(最快), float16=半精度(GPU推荐), float32=全精度
+compute_type: float16
 
 # 模型下载目录（可选，默认 ~/.cache/huggingface）
 # download_root: /path/to/models
@@ -28,7 +28,8 @@ compute_type: default
 beam_size: 5
 
 # VAD 过滤（去除静音片段，提高识别准确率）
-vad_filter: true
+# 临时关闭VAD以排查语言识别问题
+vad_filter: false
 
 # VAD 参数
 vad_parameters:

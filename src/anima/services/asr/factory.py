@@ -44,6 +44,18 @@ class ASRFactory:
                 model=kwargs.get("model", "glm-asr-2512"),
                 stream=kwargs.get("stream", False)
             )
+        elif provider == "faster_whisper":
+            from .implementations.faster_whisper_asr import FasterWhisperASR
+            return FasterWhisperASR(
+                model=kwargs.get("model", "distil-large-v3"),
+                language=kwargs.get("language", "zh"),
+                device=kwargs.get("device", "auto"),
+                compute_type=kwargs.get("compute_type", "default"),
+                download_root=kwargs.get("download_root"),
+                beam_size=kwargs.get("beam_size", 5),
+                vad_filter=kwargs.get("vad_filter", True),
+                vad_parameters=kwargs.get("vad_parameters", {})
+            )
         elif provider == "mock":
             from .implementations.mock_asr import MockASR
             return MockASR()
@@ -55,4 +67,4 @@ class ASRFactory:
     @staticmethod
     def get_available_providers() -> List[str]:
         """获取所有可用的提供商列表"""
-        return ["mock", "openai", "funasr", "glm"]
+        return ["mock", "openai", "glm", "faster_whisper"]

@@ -70,7 +70,13 @@
       "Bash(powershell -Command \".\\\\scripts\\\\start.ps1 --skip-frontend\")",
       "Bash(powershell -ExecutionPolicy Bypass -File \".\\\\scripts\\\\stop.ps1\")",
       "Bash(powershell -ExecutionPolicy Bypass -File \".\\\\scripts\\\\start.ps1\")",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(nvcc:*)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\start.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\stop.ps1\")",
+      "Bash(for:*)",
+      "Bash(do:*)",
+      "Bash(done)"
     ]
   }
 }

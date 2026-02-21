@@ -127,7 +127,14 @@ class ServiceContext:
             model=getattr(asr_config, 'model', 'whisper-1'),
             language=asr_config.language,
             base_url=getattr(asr_config, 'base_url', None),
-            stream=getattr(asr_config, 'stream', False)
+            stream=getattr(asr_config, 'stream', False),
+            # faster-whisper 特定参数
+            device=getattr(asr_config, 'device', 'auto'),
+            compute_type=getattr(asr_config, 'compute_type', 'default'),
+            download_root=getattr(asr_config, 'download_root', None),
+            beam_size=getattr(asr_config, 'beam_size', 5),
+            vad_filter=getattr(asr_config, 'vad_filter', True),
+            vad_parameters=getattr(asr_config, 'vad_parameters', {})
         )
 
     async def init_tts(self, tts_config: TTSConfig) -> None:
