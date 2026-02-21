@@ -46,7 +46,8 @@ function Stop-ExistingServices {
                     Write-Warning "Process $pid not found, skipping..."
                 }
             } catch {
-                Write-Warning "Could not stop process $pid: $_"
+                $errorMsg = $_.Exception.Message
+                Write-Warning "Could not stop process $pid: $errorMsg"
             }
         }
 
