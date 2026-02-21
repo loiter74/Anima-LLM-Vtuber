@@ -2,8 +2,8 @@
 
 type: silero
 sample_rate: 16000
-prob_threshold: 0.05       # 语音概率阈值（非常敏感，适合麦克风输入）
-db_threshold: 10           # 分贝阈值（降低到 10dB，检测更小的声音）
+prob_threshold: 0.02       # 语音概率阈值（极低，适配弱音量麦克风）
+db_threshold: 5            # 分贝阈值（降低到 5dB，检测极小声音）
 required_hits: 2           # 开始说话需要的连续命中次数 (约 0.06s)
 required_misses: 30        # 停止说话需要的连续未命中次数 (约 1s，更耐心)
 smoothing_window: 5        # 平滑窗口大小
