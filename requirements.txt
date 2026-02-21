@@ -13,3 +13,9 @@ torchaudio>=2.0.0
 edge-tts>=6.1.0
 python-dotenv>=1.0.0
 pydub>=0.25.0
+
+# 开源免费 ASR
+faster-whisper>=1.0.0
+# 音频处理优化（可选，用于更好的重采样）
+# librosa>=0.10.0
+# resampy>=0.4.0
