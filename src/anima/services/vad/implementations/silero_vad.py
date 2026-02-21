@@ -90,15 +90,21 @@ class SileroVAD(VADInterface):
         3. 通过状态机判断语音开始/结束
 
         Args:
-            audio_data: 音频数据（float32 列表或 numpy 数组）
+            audio_data: 音频数据（float32 列表或 numpy 数组，范围 [-1.0, 1.0] 或 int16 PCM）
 
         Returns:
             VADResult: 检测结果
         """
         import torch
 
-        # 转换为 numpy 数组
+        # 转换为 numpy 数组并智能归一化
         audio_np = np.array(audio_data, dtype=np.float32)
+
+        # 检测是否为 int16 PCM 数据（值范围超出 [-1.0, 1.0]）
+        if len(audio_np) > 0 and np.max(np.abs(audio_np)) > 1.0:
+            # int16 PCM 数据，归一化到 [-1.0, 1.0]
+            logger.debug(f"检测到 int16 PCM 数据，归一化到 [-1.0, 1.0]，原始范围: [{np.min(audio_np):.2f}, {np.max(audio_np):.2f}]")
+            audio_np = audio_np / 32767.0
 
         # 分块处理
         for i in range(0, len(audio_np), self.window_size_samples):
@@ -284,23 +290,22 @@ class SileroStateMachine:
                     self.state = VADState.IDLE
                     self.miss_count = 0
 
-                    # 只有累积了足够的音频才输出
-                    if len(self.probs) > 30:
-                        # 合并预缓冲和主缓冲区的音频
-                        pre_bytes = b"".join(self.pre_buffer)
-                        audio_data = pre_bytes + bytes(self.bytes)
+                    # 合并预缓冲和主缓冲区的音频
+                    pre_bytes = b"".join(self.pre_buffer)
+                    audio_data = pre_bytes + bytes(self.bytes)
 
-                        self.reset_buffers()
-                        self.pre_buffer.clear()
+                    self.reset_buffers()
+                    self.pre_buffer.clear()
 
+                    # 检查音频长度是否足够（至少0.5秒，约8000字节）
+                    if len(audio_data) > 8000:
                         return VADResult(
                             audio_data=audio_data,
                             is_speech_start=False,
                             is_speech_end=True,
                             state=VADState.IDLE
                         )
-
-                    self.reset_buffers()
-                    self.pre_buffer.clear()
+                    else:
+                        logger.debug(f"音频太短 ({len(audio_data)} 字节)，丢弃")
 
         return None

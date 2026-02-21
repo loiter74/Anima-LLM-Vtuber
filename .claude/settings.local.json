@@ -35,7 +35,12 @@
       "Bash(git push:*)",
       "Bash(git config:*)",
       "Bash(env:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(pkill:*)",
+      "Bash(GLM_API_KEY=\"2999522451b90b217fba0b4825dcd49f.Sk4fxLAj0f5UIvGa\" python:*)",
+      "Bash(PYTHONPATH=/c/Users/30262/Project/Anima/src timeout:*)",
+      "Bash(playwright install:*)",
+      "Bash(ls:*)"
     ]
   }
 }

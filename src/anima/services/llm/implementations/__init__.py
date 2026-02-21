@@ -1,57 +1,57 @@
 """
-Agent 服务实现模块
+LLM 服务实现模块
 
 按需导入，缺少依赖的实现会被跳过
 装饰器在模块导入时执行注册
 """
 
-# MockAgent 无外部依赖
-from .mock_agent import MockAgent
+# MockLLM 无外部依赖
+from .mock_llm import MockLLM
 
-# GLMAgent 使用 zai-sdk（可选依赖）
+# GLMLLM 使用 zai-sdk（可选依赖）
 try:
-    from .glm_agent import GLMAgent
+    from .glm_llm import GLMLLM
 except ImportError:
-    GLMAgent = None  # type: ignore
+    GLMLLM = None  # type: ignore
 
-# OllamaAgent 需要 ollama 包（可选依赖）
+# OllamaLLM 需要 ollama 包（可选依赖）
 try:
-    from .ollama_agent import OllamaAgent
+    from .ollama_llm import OllamaLLM
 except ImportError:
-    OllamaAgent = None  # type: ignore
+    OllamaLLM = None  # type: ignore
 
-# OpenAIAgent 需要 openai 包（可选依赖）
+# OpenAILLM 需要 openai 包（可选依赖）
 try:
-    from .openai_agent import OpenAIAgent
+    from .openai_llm import OpenAILLM
 except ImportError:
-    OpenAIAgent = None  # type: ignore
+    OpenAILLM = None  # type: ignore
 
 
-def get_agent_class(provider: str):
+def get_llm_class(provider: str):
     """
-    获取 Agent 实现类（用于延迟加载）
-    
+    获取 LLM 实现类（用于延迟加载）
+
     Args:
         provider: 提供商名称
-        
+
     Returns:
-        Agent 类，如果不可用则返回 None
+        LLM 类，如果不可用则返回 None
     """
     if provider == "mock":
-        return MockAgent
+        return MockLLM
     elif provider == "glm":
-        return GLMAgent
+        return GLMLLM
     elif provider == "ollama":
-        return OllamaAgent
+        return OllamaLLM
     elif provider == "openai":
-        return OpenAIAgent
+        return OpenAILLM
     return None
 
 
 __all__ = [
-    "MockAgent",
-    "GLMAgent",
-    "OpenAIAgent",
-    "OllamaAgent",
-    "get_agent_class",
+    "MockLLM",
+    "GLMLLM",
+    "OpenAILLM",
+    "OllamaLLM",
+    "get_llm_class",
 ]

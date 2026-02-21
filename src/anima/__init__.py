@@ -20,7 +20,7 @@ from .config import (
     SystemConfig,
 )
 from .service_context import ServiceContext
-from .services import ASRInterface, TTSInterface, AgentInterface
+from .services import ASRInterface, TTSInterface, LLMInterface
 
 __all__ = [
     "AppConfig",
@@ -33,5 +33,5 @@ __all__ = [
     "ServiceContext",
     "ASRInterface",
     "TTSInterface",
-    "AgentInterface",
+    "LLMInterface",
 ]

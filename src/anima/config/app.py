@@ -20,19 +20,38 @@ _asr_adapter = TypeAdapter(ASRConfig)
 _tts_adapter = TypeAdapter(TTSConfig)
 _vad_adapter = TypeAdapter(VADConfig)
 
+# 延迟导入 AgentConfig 的 TypeAdapter（避免循环导入）
+_agent_adapter = None
+
+def _get_agent_adapter():
+    """延迟获取 AgentConfig 的 TypeAdapter"""
+    global _agent_adapter
+    if _agent_adapter is None:
+        from .agent import AgentConfig
+        _agent_adapter = TypeAdapter(AgentConfig)
+    return _agent_adapter
+
 
 def expand_env_vars(value):
     """递归展开字符串中的环境变量"""
     if isinstance(value, str):
         pattern = r'\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)'
-        
+
         def replace_var(match):
             var_name = match.group(1) or match.group(2)
             env_value = os.getenv(var_name, "")
-            if not env_value:
-                logger.debug(f"环境变量 {var_name} 未设置")
+
+            # 详细调试日志 - 重点记录 API Key
+            if var_name == "GLM_API_KEY":
+                if env_value:
+                    logger.info(f"[expand_env_vars] ✅ GLM_API_KEY 已加载: {env_value[:20]}...")
+                else:
+                    logger.error(f"[expand_env_vars] ⚠️ GLM_API_KEY 未设置！API Key将为空，GLM将降级到MockLLM")
+            elif not env_value:
+                logger.debug(f"[expand_env_vars] 环境变量 {var_name} 未设置")
+
             return env_value
-        
+
         return re.sub(pattern, replace_var, value)
     elif isinstance(value, dict):
         return {k: expand_env_vars(v) for k, v in value.items()}
@@ -183,16 +202,31 @@ class AppConfig(BaseConfig):
             asr_dict = self.asr.model_dump()
             asr_dict = expand_env_vars(asr_dict)
             self.asr = _asr_adapter.validate_python(asr_dict)
+            logger.debug(f"ASR 配置展开后: type={self.asr.type}")
         
         if self.tts:
             tts_dict = self.tts.model_dump()
             tts_dict = expand_env_vars(tts_dict)
             self.tts = _tts_adapter.validate_python(tts_dict)
+            logger.debug(f"TTS 配置展开后: type={self.tts.type}")
         
         if self.agent:
             agent_dict = self.agent.model_dump()
+            logger.debug(f"Agent 配置展开前: {agent_dict}")
             agent_dict = expand_env_vars(agent_dict)
+            logger.debug(f"Agent 配置展开后: {agent_dict}")
             self.agent = AgentConfig.model_validate(agent_dict)
+            # 验证 llm_config 的类型和 API Key
+            if self.agent.llm_config:
+                logger.debug(f"Agent LLM 类型: {self.agent.llm_config.type}")
+                logger.debug(f"Agent LLM Config 类: {type(self.agent.llm_config).__name__}")
+                # 检查 API Key 是否保留
+                if hasattr(self.agent.llm_config, 'api_key'):
+                    api_key = self.agent.llm_config.api_key
+                    if api_key:
+                        logger.info(f"[AppConfig] ✅ Agent LLM API Key 已设置: {api_key[:20]}... (长度: {len(api_key)})")
+                    else:
+                        logger.error(f"[AppConfig] ⚠️ Agent LLM API Key 为空！类型: {type(api_key)}")
 
     def _apply_env_overrides(self) -> None:
         """应用环境变量覆盖"""

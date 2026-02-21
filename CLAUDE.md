@@ -27,13 +27,28 @@ pnpm lint       # Run ESLint
 
 ### Startup Scripts
 - `scripts/start.sh` - Unix startup script (starts both backend and frontend)
-- `scripts/start.bat` - Windows startup script
-- `scripts/start.ps1` - PowerShell startup script
+- `scripts/start.bat` - Windows batch startup script
+- `scripts/start.ps1` - PowerShell startup script (recommended on Windows)
+- `scripts/stop.bat` / `scripts/stop.ps1` - Stop scripts
 
 All scripts support options:
 - `--skip-backend` / `--skip-frontend` - Start only one service
 - `--install` - Reinstall dependencies before starting
 - `--help` - Show help information
+
+**Quick start (Windows):**
+```powershell
+# PowerShell
+.\scripts\start.ps1
+
+# Or with dependency reinstall
+.\scripts\start.ps1 --install
+```
+
+**Quick start (Unix/macOS):**
+```bash
+./scripts/start.sh
+```
 
 ## Architecture Overview
 
@@ -66,6 +81,9 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 **2. ServiceContext (`src/anima/service_context.py`)**
 - Service container holding ASR, TTS, LLM, and VAD engine instances
 - VAD (Voice Activity Detection) options: `silero` (Silero VAD model), `mock`
+- **VAD System**: Automatically detects speech in audio stream, triggers ASR when silence detected
+  - Silero VAD: Uses pre-trained torch model for voice activity detection
+  - Mock VAD: Always returns true (useful for testing)
 - Lazy initialization - services loaded via `load_from_config(AppConfig)`
 - Services use factory pattern: `AgentFactory.create_from_config()`
 - Lifecycle management: `async def close()` cleans up all resources
@@ -129,10 +147,16 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 | Type | Providers |
 |------|-----------|
-| LLM | OpenAI, GLM (智谱), Ollama, Mock |
+| LLM | OpenAI, GLM (智谱 AI), Ollama, Mock |
 | ASR | OpenAI Whisper, GLM ASR, Mock |
 | TTS | OpenAI TTS, GLM TTS, Edge TTS, Mock |
 | VAD | Silero VAD, Mock |
+
+**GLM (智谱 AI) Integration:**
+- The project heavily uses GLM services for LLM, ASR, and TTS
+- Uses `zai-sdk` (custom SDK for GLM APIs)
+- Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
+- Environment variable: `GLM_API_KEY` or `LLM_API_KEY`
 
 ### Modular Service Configuration
 
@@ -268,10 +292,14 @@ class ConversationResult:
 **Client → Server:**
 - `connect` / `disconnect`
 - `text_input` - { text, metadata, from_name }
-- `mic_audio_data` - { audio: [] }
-- `raw_audio_data` - { audio: [] } (for VAD processing)
-- `mic_audio_end` - Triggers conversation processing
+- `mic_audio_data` - { audio: [] } - Raw audio chunks (for buffered processing)
+- `raw_audio_data` - { audio: [] } - For VAD (Voice Activity Detection) processing
+- `mic_audio_end` - Triggers conversation processing (signals end of audio input)
 - `interrupt_signal` - Interrupt current response
+
+**Audio Input Paths:**
+1. **VAD Path**: `raw_audio_data` → VAD engine → auto-detects speech end → `mic_audio_end` → ASR → Agent
+2. **Manual Path**: `mic_audio_data` buffers → client sends `mic_audio_end` → ASR → Agent
 
 **Server → Client (before SocketEventAdapter)**:
 - `connection-established`
@@ -287,6 +315,12 @@ class ConversationResult:
 - Other events remain unchanged
 
 ## Important Implementation Notes
+
+**Logging**:
+- Uses `loguru` for structured logging
+- Default log level: INFO (configurable via `system.log_level`)
+- Debug logs include session IDs for tracking requests
+- Example: `logger.debug(f"[{self.session_id}] Processing input")`
 
 **Session Isolation**:
 - Each WebSocket connection gets its own `ServiceContext` and `ConversationOrchestrator`
@@ -315,9 +349,75 @@ class ConversationResult:
 - Services created via `Factory.create()` or `Factory.create_from_config()`
 - Config classes must have matching `type` field
 
+**Environment Variable Expansion**:
+- YAML configs support `${VAR_NAME}` syntax for environment variables
+- Example: `api_key: "${GLM_API_KEY}"`
+- Expansion happens during config loading via `expand_env_vars()` in `config/app.py`
+
+**Fallback Behavior**:
+- `LLMFactory.create_from_config()` falls back to MockAgent if service creation fails
+- This prevents crashes when API keys are missing or services are unavailable
+
+**.env Loading**:
+- The socketio_server loads `.env` file at startup (before other imports)
+- Place `.env` in project root with your API keys
+
 ## Frontend Structure
 
-- `app/` - Next.js App Router
-- `components/vtuber/chat-panel.tsx` - Main chat UI
-- `hooks/use-conversation.ts` - Conversation state management hook
-- `lib/socket.ts` - Socket.IO client singleton
+- `app/` - Next.js App Router (`page.tsx` is the main entry point)
+- `components/vtuber/` - VTuber-specific components
+  - `chat-panel.tsx` - Main chat UI
+  - `live-preview.tsx` - Live2D/live video preview
+  - `bottom-toolbar.tsx` - Control toolbar
+- `components/ui/` - shadcn/ui components (Radix UI + Tailwind)
+- `hooks/` - Custom React hooks
+  - `use-conversation.ts` - Core conversation state management (2000+ lines, handles all Socket.IO events)
+  - `use-mobile.ts` - Mobile detection
+  - `use-toast.ts` - Toast notifications
+- `lib/socket.ts` - Socket.IO client singleton (wrapper around socket.io-client)
+- `contexts/` - React Context providers
+
+**Frontend Development Notes:**
+- Uses pnpm as package manager
+- Next.js 16 with App Router
+- React 19 with TypeScript
+- Socket.IO for real-time communication
+- shadcn/ui for component library (Radix UI primitives + Tailwind CSS)
+
+## Key Source Directories
+
+```
+src/anima/
+├── config/                  # Configuration system
+│   ├── core/               # Registry, base config classes
+│   ├── providers/          # Provider configs (llm/, asr/, tts/, vad/)
+│   ├── agent.py            # Agent configuration
+│   ├── app.py              # Main AppConfig class
+│   ├── persona.py          # Persona configuration
+│   └── system.py           # System settings
+├── core/                   # Core data structures
+│   ├── context.py          # PipelineContext
+│   ├── events.py           # EventType, OutputEvent
+│   └── types.py            # Type definitions
+├── eventbus/               # Event system
+│   ├── bus.py              # EventBus (pub/sub)
+│   └── router.py           # EventRouter (handler management)
+├── pipeline/               # Processing pipelines
+│   ├── input_pipeline.py   # Input processing chain
+│   ├── output_pipeline.py  # Output processing with streaming
+│   └── steps/              # Pipeline steps (ASRStep, TextCleanStep, etc.)
+├── services/               # Service implementations
+│   ├── llm/                # LLM/Agent services
+│   ├── asr/                # ASR services
+│   ├── tts/                # TTS services
+│   ├── vad/                # VAD services
+│   └── conversation/       # ConversationOrchestrator, SessionManager
+├── handlers/               # Event handlers
+│   ├── base_handler.py     # Base handler class
+│   ├── text_handler.py     # Text output handler
+│   ├── audio_handler.py    # Audio output handler
+│   └── socket_adapter.py   # Socket event adapter
+├── state/                  # State management
+├── service_context.py      # Service container
+└── socketio_server.py      # Main server entry point
+```

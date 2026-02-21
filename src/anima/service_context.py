@@ -1,47 +1,47 @@
 """
 服务上下文 - 核心服务容器
-管理所有服务实例（ASR, TTS, Agent）的初始化、存储和生命周期
+管理所有服务实例（ASR, TTS, LLM）的初始化、存储和生命周期
 """
 
 from typing import Callable, Optional
 from loguru import logger
 
 from .config import AppConfig, ASRConfig, TTSConfig, AgentConfig, PersonaConfig, VADConfig
-from .services import ASRInterface, TTSInterface, AgentInterface
+from .services import ASRInterface, TTSInterface, LLMInterface
 from .services.asr import ASRFactory
 from .services.tts import TTSFactory
-from .services.llm import LLMFactory as AgentFactory
+from .services.llm import LLMFactory
 from .services.vad import VADInterface, VADFactory
 
 
 class ServiceContext:
     """
     服务上下文类
-    
+
     负责：
-    1. 存储和管理所有服务实例（ASR, TTS, Agent）
+    1. 存储和管理所有服务实例（ASR, TTS, LLM）
     2. 根据配置初始化服务（通过工厂模式）
     3. 管理会话状态
     4. 处理配置热切换
-    
+
     每个客户端连接对应一个独立的 ServiceContext 实例
     """
 
     def __init__(self):
         # 配置
         self.config: Optional[AppConfig] = None
-        
+
         # 服务实例
         self.asr_engine: Optional[ASRInterface] = None
         self.tts_engine: Optional[TTSInterface] = None
-        self.agent_engine: Optional[AgentInterface] = None
+        self.llm_engine: Optional[LLMInterface] = None
         self.vad_engine: Optional[VADInterface] = None
-        
+
         # 会话状态
         self.session_id: Optional[str] = None
         self.is_speaking: bool = False
         self.is_processing: bool = False
-        
+
         # 回调函数 - 用于向客户端发送消息
         self.send_text: Optional[Callable] = None
 
@@ -51,7 +51,7 @@ class ServiceContext:
             f"  session_id={self.session_id},\n"
             f"  asr={type(self.asr_engine).__name__ if self.asr_engine else 'Not Loaded'},\n"
             f"  tts={type(self.tts_engine).__name__ if self.tts_engine else 'Not Loaded'},\n"
-            f"  agent={type(self.agent_engine).__name__ if self.agent_engine else 'Not Loaded'},\n"
+            f"  llm={type(self.llm_engine).__name__ if self.llm_engine else 'Not Loaded'},\n"
             f"  is_speaking={self.is_speaking},\n"
             f"  is_processing={self.is_processing}\n"
             f")"
@@ -74,7 +74,7 @@ class ServiceContext:
         # 初始化各个服务
         await self.init_asr(config.asr)
         await self.init_tts(config.tts)
-        await self.init_agent(config.agent, config.get_persona(), app_config=config)
+        await self.init_llm(config.agent, config.get_persona(), app_config=config)
         await self.init_vad(config.vad)
 
         logger.info(f"[{self.session_id}] 服务加载完成")
@@ -84,7 +84,7 @@ class ServiceContext:
         config: AppConfig,
         asr_engine: Optional[ASRInterface] = None,
         tts_engine: Optional[TTSInterface] = None,
-        agent_engine: Optional[AgentInterface] = None,
+        llm_engine: Optional[LLMInterface] = None,
         send_text: Optional[Callable] = None,
     ) -> None:
         """
@@ -95,13 +95,13 @@ class ServiceContext:
             config: 应用配置
             asr_engine: 已有的 ASR 实例（可选）
             tts_engine: 已有的 TTS 实例（可选）
-            agent_engine: 已有的 Agent 实例（可选）
+            llm_engine: 已有的 LLM 实例（可选）
             send_text: 发送消息的回调函数
         """
         self.config = config
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
-        self.agent_engine = agent_engine
+        self.llm_engine = llm_engine
         self.send_text = send_text
 
         logger.debug(f"[{self.session_id}] 从缓存加载服务上下文")
@@ -156,21 +156,22 @@ class ServiceContext:
             volume=getattr(tts_config, 'volume', 1.0)
         )
 
-    async def init_agent(self, agent_config: AgentConfig, persona_config: PersonaConfig, app_config: AppConfig = None) -> None:
+    async def init_llm(self, agent_config: AgentConfig, persona_config: PersonaConfig, app_config: AppConfig = None) -> None:
         """
-        初始化 Agent 服务（使用工厂模式 + 配置对象多态）
+        初始化 LLM 服务（使用工厂模式 + 配置对象多态）
 
         Args:
-            agent_config: Agent 配置
+            agent_config: Agent 配置（包含 LLM 配置）
             character_config: 角色配置
             app_config: 应用配置（用于获取人设）
         """
-        if self.agent_engine is not None:
-            logger.debug(f"[{self.session_id}] Agent 已初始化，跳过")
+        if self.llm_engine is not None:
+            logger.debug(f"[{self.session_id}] LLM 已初始化，跳过")
             return
 
         llm_config = agent_config.llm_config
-        logger.info(f"[{self.session_id}] 初始化 Agent: {llm_config.type}/{llm_config.model}")
+        logger.info(f"[{self.session_id}] 初始化 LLM: {llm_config.type}/{llm_config.model}")
+        logger.debug(f"[{self.session_id}] LLM Config 类: {type(llm_config).__name__}")
 
         # 构建系统提示词（优先使用人设系统）
         if app_config:
@@ -180,11 +181,14 @@ class ServiceContext:
         else:
             system_prompt = self._build_system_prompt(agent_config, persona_config)
 
-        # 使用类型安全的配置对象创建 Agent
-        self.agent_engine = AgentFactory.create_from_config(
+        # 使用类型安全的配置对象创建 LLM
+        self.llm_engine = LLMFactory.create_from_config(
             config=llm_config,
             system_prompt=system_prompt
         )
+
+        # 验证创建的 LLM 类型
+        logger.info(f"[{self.session_id}] LLM 创建完成: {type(self.llm_engine).__name__}")
 
     def _build_system_prompt(self, agent_config: AgentConfig, persona_config: PersonaConfig) -> str:
         """
@@ -213,15 +217,8 @@ class ServiceContext:
         provider = vad_config.type
         logger.info(f"[{self.session_id}] 初始化 VAD: {provider}")
 
-        self.vad_engine = VADFactory.create(
-            provider=provider,
-            sample_rate=getattr(vad_config, 'sample_rate', 16000),
-            prob_threshold=getattr(vad_config, 'prob_threshold', 0.4),
-            db_threshold=getattr(vad_config, 'db_threshold', 60),
-            required_hits=getattr(vad_config, 'required_hits', 3),
-            required_misses=getattr(vad_config, 'required_misses', 24),
-            smoothing_window=getattr(vad_config, 'smoothing_window', 5),
-        )
+        # 使用 create_from_config 方法（与其他服务保持一致）
+        self.vad_engine = VADFactory.create_from_config(vad_config)
 
     # ========================================
     # 生命周期管理
@@ -239,9 +236,9 @@ class ServiceContext:
             await self.tts_engine.close()
             self.tts_engine = None
 
-        if self.agent_engine:
-            await self.agent_engine.close()
-            self.agent_engine = None
+        if self.llm_engine:
+            await self.llm_engine.close()
+            self.llm_engine = None
 
         if self.vad_engine:
             await self.vad_engine.close()
@@ -261,14 +258,14 @@ class ServiceContext:
             text: 用户输入的文本
 
         Returns:
-            str: Agent 的回复
+            str: LLM 的回复
         """
-        if not self.agent_engine:
-            raise RuntimeError("Agent 未初始化")
+        if not self.llm_engine:
+            raise RuntimeError("LLM 未初始化")
 
         self.is_processing = True
         try:
-            response = await self.agent_engine.chat(text)
+            response = await self.llm_engine.chat(text)
             return response
         finally:
             self.is_processing = False
@@ -276,7 +273,7 @@ class ServiceContext:
     async def process_audio_input(self, audio_data: bytes) -> str:
         """
         处理音频输入的完整流程
-        ASR -> Agent -> TTS
+        ASR -> LLM -> TTS
 
         Args:
             audio_data: 音频数据

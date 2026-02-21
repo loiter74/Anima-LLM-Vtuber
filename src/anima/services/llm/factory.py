@@ -37,17 +37,20 @@ class LLMFactory:
         Raises:
             ValueError: 如果找不到对应的服务实现
         """
+        logger.debug(f"create_from_config: config.type={config.type}, config class={type(config).__name__}")
+        
         try:
             # 使用 Registry 自动查找并实例化
             llm = ProviderRegistry.create_service("llm", config, system_prompt=system_prompt)
-            logger.info(f"LLM 服务创建成功: type={config.type}")
+            logger.info(f"LLM 服务创建成功: type={config.type}, instance={type(llm).__name__}")
             return llm
-        except ValueError as e:
-            logger.error(f"创建 LLM 服务失败: {e}")
+        except Exception as e:
+            # 捕获所有异常（ValueError, TypeError, ImportError, ConnectionError 等）
+            logger.error(f"创建 LLM 服务失败 (type={config.type}): {type(e).__name__}: {e}")
             # 降级到 Mock 实现
-            logger.warning("降级使用 MockAgent")
-            from .implementations.mock_agent import MockAgent
-            return MockAgent(system_prompt=system_prompt)
+            logger.warning(f"降级使用 MockLLM (原配置: {config.type})")
+            from .implementations.mock_llm import MockLLM
+            return MockLLM(system_prompt=system_prompt)
 
     @staticmethod
     def create(provider: str, system_prompt: str = "", **kwargs) -> LLMInterface:
@@ -96,7 +99,7 @@ class LLMFactory:
         
         config_factory = config_map.get(provider)
         if config_factory is None:
-            logger.warning(f"未知的 Agent 提供商: {provider}，使用 Mock 实现")
+            logger.warning(f"未知的 LLM 提供商: {provider}，使用 Mock 实现")
             config = MockLLMConfig()
         else:
             config = config_factory()

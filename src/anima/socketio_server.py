@@ -6,20 +6,43 @@ Socket.IO 服务端实现
 重构：使用 ConversationOrchestrator 整合对话逻辑
 """
 
+import os
+from pathlib import Path
+from loguru import logger
+
 # 加载 .env 文件中的环境变量（必须在其他导入之前）
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # 获取项目根目录（socketio_server.py 的上上级目录，因为 src/anima/socketio_server.py）
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+        logger.info(f"✅ 已加载环境变量文件: {env_path}")
+        # 立即验证关键环境变量
+        glm_key = os.getenv("GLM_API_KEY")
+        if glm_key:
+            logger.info(f"✅ GLM_API_KEY 已从 .env 加载: {glm_key[:20]}... (长度: {len(glm_key)})")
+        else:
+            logger.error("⚠️ .env 文件已加载，但 GLM_API_KEY 仍未设置！")
+    else:
+        logger.warning(f".env 文件不存在: {env_path}，将使用系统环境变量")
 except ImportError:
     # 如果没有安装 python-dotenv，跳过（依赖系统环境变量）
+    logger.info("python-dotenv 未安装，使用系统环境变量")
     pass
+
+# 最终验证关键环境变量
+glm_key = os.getenv("GLM_API_KEY")
+if glm_key:
+    logger.info(f"✅ GLM_API_KEY 在运行时可用: {glm_key[:20]}...")
+else:
+    logger.error("⚠️ GLM_API_KEY 在运行时不可用，GLM将降级到MockLLM")
 
 import socketio
 import json
 import numpy as np
 from fastapi import FastAPI
 import uvicorn
-from loguru import logger
 from typing import Dict, Union, Optional
 
 from anima.config import AppConfig
@@ -158,7 +181,7 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         orchestrator = ConversationOrchestrator(
             asr_engine=ctx.asr_engine,
             tts_engine=ctx.tts_engine,
-            agent=ctx.agent_engine,
+            agent=ctx.llm_engine,
             websocket_send=websocket_send,
             session_id=sid,
         )
@@ -378,7 +401,8 @@ async def raw_audio_data(sid, data):
         elif result.is_speech_end and len(result.audio_data) > 1024:
             # 检测到语音结束，保存音频并触发对话
             logger.info(f"[{sid}] ✅ VAD 检测到语音结束，音频长度: {len(result.audio_data)} 字节")
-            audio_data = np.frombuffer(result.audio_data, dtype=np.int16).astype(np.float32)
+            # 将 int16 字节流转换为归一化的 float32（范围：[-1.0, 1.0]）
+            audio_data = np.frombuffer(result.audio_data, dtype=np.int16).astype(np.float32) / 32767.0
             audio_buffer_manager.append(sid, audio_data.tolist())
             
             # 发送控制信号通知前端
@@ -543,8 +567,8 @@ async def clear_history(sid, data):
     logger.info(f"[{sid}] 清空对话历史")
     
     ctx = await get_or_create_context(sid)
-    if ctx.agent_engine:
-        ctx.agent_engine.clear_history()
+    if ctx.llm_engine:
+        ctx.llm_engine.clear_history()
         logger.info(f"[{sid}] 对话历史已清空")
         
         await sio.emit('history-cleared', {

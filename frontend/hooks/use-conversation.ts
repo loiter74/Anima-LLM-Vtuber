@@ -451,6 +451,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
   }, [addMessage, updateStatus])
 
   // 开始录制音频
+  // TODO: 考虑迁移到 AudioWorklet API（createScriptProcessor 已被废弃）
   const startRecording = useCallback(async () => {
     try {
       // 先检查权限状态（如果浏览器支持）
@@ -487,29 +488,31 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       const source = audioContext.createMediaStreamSource(stream)
       const processor = audioContext.createScriptProcessor(4096, 1, 1)
       processorRef.current = processor
-      
+
+      // 连接音频处理节点
       source.connect(processor)
-      processor.connect(audioContext.destination)
-      
+      // 注意：不连接到 audioContext.destination，避免麦克风回声
+
       audioBufferRef.current = []
-      
+
       processor.onaudioprocess = (event) => {
         const inputData = event.inputBuffer.getChannelData(0)
-        
-        // 转换为 16-bit PCM
+
+        // 转换为 16-bit PCM（节省带宽）
         const pcmData = new Int16Array(inputData.length)
         for (let i = 0; i < inputData.length; i++) {
           const s = Math.max(-1, Math.min(1, inputData[i]))
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
-        
+
         // 发送音频数据到服务器
         if (socketRef.current?.connected) {
           socketRef.current.emit("raw_audio_data", {
             audio: Array.from(pcmData)
           })
         }
-        
+
+        // 保存原始音频数据用于fallback（如果VAD未检测到语音结束）
         audioBufferRef.current.push(...Array.from(inputData))
       }
       

@@ -54,11 +54,16 @@ class MockVAD(VADInterface):
     def detect_speech(self, audio_data: Union[list, np.ndarray]) -> VADResult:
         """
         检测音频数据中的语音活动
-        
+
         基于简单的音量阈值判断
         """
         # 转换为 numpy 数组
         audio_np = np.array(audio_data, dtype=np.float32)
+
+        # 检测是否为 int16 PCM 数据（值范围超出 [-1.0, 1.0]）
+        if len(audio_np) > 0 and np.max(np.abs(audio_np)) > 1.0:
+            # int16 PCM 数据，归一化到 [-1.0, 1.0]
+            audio_np = audio_np / 32767.0
         
         # 计算分贝值
         db = self._calculate_db(audio_np)

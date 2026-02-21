@@ -6,11 +6,43 @@ from typing import List
 from loguru import logger
 
 from .interface import VADInterface
+from ...config.core.registry import ProviderRegistry
 
 
 class VADFactory:
     """VAD 服务工厂类"""
-    
+
+    @staticmethod
+    def create_from_config(config, **kwargs) -> VADInterface:
+        """
+        根据配置对象创建 VAD 实例（使用 ProviderRegistry）
+
+        Args:
+            config: VAD 配置对象
+            **kwargs: 额外参数
+
+        Returns:
+            VADInterface: VAD 实例
+
+        Raises:
+            ValueError: 如果找不到对应的服务实现
+        """
+        try:
+            vad = ProviderRegistry.create_service("vad", config)
+            logger.info(f"VAD 服务创建成功: type={config.type}")
+            return vad
+        except Exception as e:
+            logger.error(f"创建 VAD 服务失败 (type={config.type}): {type(e).__name__}: {e}")
+            # 降级到 Mock 实现
+            logger.warning(f"降级使用 MockVAD (原配置: {config.type})")
+            from .implementations.mock_vad import MockVAD
+            return MockVAD(
+                sample_rate=getattr(config, 'sample_rate', 16000),
+                db_threshold=-30.0,
+                min_speech_duration=5,
+                min_silence_duration=15,
+            )
+
     @staticmethod
     def create(provider: str, **kwargs) -> VADInterface:
         """

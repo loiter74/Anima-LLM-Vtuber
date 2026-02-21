@@ -19,14 +19,14 @@ class LLMInterface(ABC):
         **kwargs
     ) -> str:
         """
-        与 Agent 进行对话
+        与 LLM 进行对话
 
         Args:
             user_input: 用户输入
             **kwargs: 额外参数
 
         Returns:
-            str: Agent 的回复
+            str: LLM 的回复
         """
         pass
 
@@ -44,7 +44,7 @@ class LLMInterface(ABC):
             **kwargs: 额外参数
 
         Yields:
-            str: Agent 回复的文本片段
+            str: LLM 回复的文本片段
         """
         pass
 
@@ -77,17 +77,17 @@ class LLMInterface(ABC):
     async def close(self) -> None:
         """清理资源"""
         pass
-    
+
     @abstractmethod
     def handle_interrupt(self, heard_response: str = "") -> None:
         """
         处理用户打断
-        
+
         Args:
             heard_response: 用户听到的部分回复（可用于存储历史）
         """
         pass
-    
+
     @abstractmethod
     def set_memory_from_history(
         self,
@@ -102,7 +102,3 @@ class LLMInterface(ABC):
             history_uid: 历史 UID
         """
         pass
-
-
-# 别名：保持向后兼容
-AgentInterface = LLMInterface
