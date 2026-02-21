@@ -43,7 +43,7 @@ export interface UseConversationReturn {
   currentResponse: string
   isTyping: boolean
   error: string | null
-  
+
   // 方法
   connect: () => void
   disconnect: () => void
@@ -52,6 +52,7 @@ export interface UseConversationReturn {
   stopRecording: () => void
   interrupt: () => void
   clearHistory: () => void
+  sendTestAudio: () => void  // 新增：发送测试音频
 }
 
 // 生成唯一 ID
@@ -657,6 +658,61 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     }
   }, [])
 
+  // 发送测试音频（模拟真实语音数据）
+  const sendTestAudio = useCallback(() => {
+    console.log("[Conversation] 🧪 开始发送测试音频数据")
+
+    if (!socketRef.current?.connected) {
+      console.error("[Conversation] ❌ 未连接到服务器")
+      setError("未连接到服务器")
+      return
+    }
+
+    // 生成模拟的音频数据（16-bit PCM，模拟语音）
+    const sampleRate = 16000
+    const duration = 3  // 3秒
+    const totalSamples = sampleRate * duration
+
+    console.log(`[Conversation] 🧪 生成 ${duration} 秒测试音频（${totalSamples} 个采样点）`)
+
+    // 分块发送（每块 4096 个采样点，与真实的 audio processor 相同）
+    const chunkSize = 4096
+    let sentChunks = 0
+
+    const sendInterval = setInterval(() => {
+      if (sentChunks >= totalSamples / chunkSize) {
+        clearInterval(sendInterval)
+        console.log(`[Conversation] ✅ 测试音频发送完成，共发送 ${sentChunks} 个块`)
+        return
+      }
+
+      // 生成模拟的音频数据（模拟语音波形）
+      const pcmData = new Int16Array(chunkSize)
+      for (let i = 0; i < chunkSize; i++) {
+        // 模拟语音：混合正弦波 + 随机噪声
+        const t = (sentChunks * chunkSize + i) / sampleRate
+        const signal = Math.sin(2 * Math.PI * 440 * t) * 0.3 +  // 440Hz 主频
+                       Math.sin(2 * Math.PI * 880 * t) * 0.15 +  // 880Hz 泛音
+                       (Math.random() - 0.5) * 0.1  // 背景噪声
+        pcmData[i] = Math.max(-32768, Math.min(32767, signal * 32767))
+      }
+
+      // 发送音频数据
+      socketRef.current.emit("raw_audio_data", {
+        audio: Array.from(pcmData)
+      })
+
+      sentChunks++
+
+      // 每 10 个块打印一次日志
+      if (sentChunks % 10 === 1) {
+        console.log(`[Conversation] 🧪 发送测试音频块 #${sentChunks}/${totalSamples / chunkSize}`)
+      }
+    }, 10)  // 每 10ms 发送一块
+
+    updateStatus("listening")
+  }, [updateStatus])
+
   return {
     // 状态
     isConnected,
@@ -665,7 +721,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     currentResponse,
     isTyping,
     error,
-    
+
     // 方法
     connect,
     disconnect,
@@ -674,5 +730,6 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     stopRecording,
     interrupt,
     clearHistory,
+    sendTestAudio,
   }
 }
