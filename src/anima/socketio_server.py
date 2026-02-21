@@ -421,10 +421,12 @@ async def raw_audio_data(sid, data):
         raw_audio_data.counter[sid] = 0
     raw_audio_data.counter[sid] += 1
 
+    # 导入 numpy（在条件块之前，确保后续代码可以使用）
+    import numpy as np
+
     # 每 10 个块打印一次音频统计信息（更频繁）
     count = raw_audio_data.counter[sid]
     if count % 10 == 1:
-        import numpy as np
         audio_arr = np.array(audio_chunk)
         audio_min = float(np.min(audio_arr)) if len(audio_arr) > 0 else 0
         audio_max = float(np.max(audio_arr)) if len(audio_arr) > 0 else 0
