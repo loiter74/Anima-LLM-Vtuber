@@ -452,8 +452,8 @@ async def raw_audio_data(sid, data):
         result = ctx.vad_engine.detect_speech(audio_chunk)
 
         # 记录 VAD 状态（降低频率，避免刷屏）
-        if count % 50 == 0 or result.state.value != 'IDLE':
-            logger.info(f"[{sid}] 📊 VAD 状态: {result.state.value}, 音频块: {len(audio_chunk)} 采样点 (第 {count} 块)")
+        # if count % 50 == 0 or result.state.value != 'IDLE':
+        #     logger.info(f"[{sid}] 📊 VAD 状态: {result.state.value}, 音频块: {len(audio_chunk)} 采样点 (第 {count} 块)")
 
         # 🔥 超时保护：追踪VAD活跃时间
         import time
