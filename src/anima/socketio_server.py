@@ -162,7 +162,8 @@ async def get_or_create_context(sid: str) -> ServiceContext:
         print(f"[{sid}] ✅ ServiceContext 创建完成")
         logger.info(f"为会话 {sid} 创建了新的 ServiceContext")
     else:
-        print(f"\n[{sid}] ♻️ 使用现有 ServiceContext")
+        # print(f"\n[{sid}] ♻️ 使用现有 ServiceContext")  # 注释掉以减少日志噪音
+        pass
 
     return session_contexts[sid]
 
