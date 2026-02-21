@@ -426,6 +426,7 @@ async def raw_audio_data(sid, data):
     import numpy as np
 
     # 每 10 个块打印一次音频统计信息（更频繁）
+    # 已注释以减少控制台噪音
     count = raw_audio_data.counter[sid]
     if count % 10 == 1:
         audio_arr = np.array(audio_chunk)
@@ -434,9 +435,10 @@ async def raw_audio_data(sid, data):
         audio_mean = float(np.mean(np.abs(audio_arr))) if len(audio_arr) > 0 else 0
         audio_rms = float(np.sqrt(np.mean(audio_arr**2))) if len(audio_arr) > 0 else 0
 
-        print(f"\n[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples")
-        print(f"  Range: [{audio_min:.2f}, {audio_max:.2f}], Mean: {audio_mean:.2f}, RMS: {audio_rms:.2f}")
-        logger.info(f"[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples, range=[{audio_min:.2f}, {audio_max:.2f}], mean={audio_mean:.2f}, rms={audio_rms:.2f}")
+        # print(f"\n[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples")
+        # print(f"  Range: [{audio_min:.2f}, {audio_max:.2f}], Mean: {audio_mean:.2f}, RMS: {audio_rms:.2f}")
+        # logger.info(f"[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples, range=[{audio_min:.2f}, {audio_max:.2f}], mean={audio_mean:.2f}, rms={audio_rms:.2f}")
+        pass
 
     try:
         ctx = await get_or_create_context(sid)

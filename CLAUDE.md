@@ -14,6 +14,9 @@ python -m anima.socketio_server path/to/config.yaml
 
 # Install dependencies
 pip install -r requirements.txt
+
+# For Faster-Whisper ASR (optional, better audio format support)
+pip install pydub
 ```
 
 ### Frontend (Next.js)
@@ -37,29 +40,31 @@ All scripts support options:
 - `--install` - Reinstall dependencies before starting (start scripts only)
 - `--help` - Show help information
 
-**Note**: PowerShell scripts use PascalCase parameters (`-SkipFrontend` instead of `--skip-frontend`)
+**PowerShell Note**: PowerShell scripts use PascalCase parameters:
+- `-SkipBackend` (not `--skip-backend`)
+- `-SkipFrontend` (not `--skip-frontend`)
+- `-Install` (not `--install`)
+- `-Help` (not `--help`)
 
-### Testing
-```bash
-# End-to-end testing with Playwright
-# Requires: backend running on port 12394, frontend on port 3000
-python .claude/test_anima_flow.py
-```
-
-Test files are located in `.claude/` directory for automation testing.
-
-**Quick start (Windows):**
+**Quick start (Windows PowerShell):**
 ```powershell
-# PowerShell
 .\scripts\start.ps1
-
 # Or with dependency reinstall
-.\scripts\start.ps1 --install
+.\scripts\start.ps1 -Install
 ```
 
 **Quick start (Unix/macOS):**
 ```bash
 ./scripts/start.sh
+```
+
+### Stop Services
+```powershell
+# Windows PowerShell
+.\scripts\stop.ps1
+
+# Unix/macOS
+./scripts/stop.sh
 ```
 
 ## Architecture Overview
@@ -189,25 +194,29 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - The project heavily uses GLM services for LLM, ASR, and TTS
 - Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
 - Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
-- Environment variable: `GLM_API_KEY` or `LLM_API_KEY` (GLM_API_KEY takes precedence)
+- **Environment Variable**: `GLM_API_KEY` (checked first) or `LLM_API_KEY` (fallback)
+- API key loaded from `.env` file at project root or system environment variables
 
 **Faster-Whisper ASR:**
 - Open-source, offline speech recognition based on OpenAI Whisper
 - Free and runs locally after model download
 - Installation: `pip install faster-whisper` (optional: `pip install pydub` for better audio format support)
-- Recommended model: `distil-large-v3` (fast, accurate, multi-language support)
+- Recommended model: `large-v3` for best Chinese accuracy, `distil-large-v3` for speed
 - Configuration: `config/services/asr/faster_whisper.yaml`
 - Requires no API key, models are downloaded automatically on first use (~1-3GB depending on model)
+- GPU support: Set `device: cuda` and `compute_type: float16` in config for faster inference
 
-**Default Service Configuration**:
-- Edge TTS is the default TTS provider because it's free and has no quota limits (Microsoft)
-- Silero VAD is the default VAD for production (mock available for testing)
+**Edge TTS:**
+- Microsoft's free TTS service with no quota limits
+- No API key required
+- Configuration: `config/services/tts/edge.yaml`
+- Multiple voices available, defaults to Chinese female voice
 
-**GLM (智谱 AI) Integration:**
-- The project heavily uses GLM services for LLM, ASR, and TTS
-- Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
-- Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
-- Environment variable: `GLM_API_KEY` or `LLM_API_KEY` (GLM_API_KEY takes precedence)
+**Silero VAD:**
+- Pre-trained torch model for voice activity detection
+- Automatically detects when user stops speaking
+- Configuration: `config/services/vad/silero.yaml`
+- 15-second safety timeout prevents hanging if speech end isn't detected
 
 ### Modular Service Configuration
 
@@ -375,16 +384,22 @@ class ConversationResult:
 
 **GLM API Key Not Working**:
 - Check `.env` file exists in project root
-- Verify `GLM_API_KEY` is set (not `LLM_API_KEY`)
+- Verify `GLM_API_KEY` is set (takes precedence over `LLM_API_KEY`)
 - Server logs confirm `.env` loading on startup
 - Fallback: GLM services degrade to Mock if API key missing
 
 **VAD Issues**:
 - Audio must be 16kHz sample rate
+- Current default thresholds are set high to avoid false triggers from noise:
+  - `prob_threshold: 0.8` - Only detects clear speech
+  - `db_threshold: 40` - Filters out background noise
+  - `required_hits: 8` - Requires ~0.24s of continuous speech to start
+  - `required_misses: 20` - Requires ~0.65s of silence to stop
 - Adjust sensitivity in `config/services/vad/silero.yaml`:
-  - Lower `prob_threshold` (e.g., 0.3) for more sensitive detection
-  - Lower `db_threshold` (e.g., 20) for quieter environments
-  - Increase `required_misses` (e.g., 40) for longer speech pause tolerance
+  - Lower `prob_threshold` (e.g., 0.5) for more sensitive detection
+  - Lower `db_threshold` (e.g., 25-30) for quieter environments
+  - Increase `required_misses` (e.g., 30-40) for longer speech pause tolerance
+  - Decrease `required_hits` (e.g., 4) for faster speech start detection
 
 **Frontend Can't Connect to Backend**:
 - Verify backend is running on http://localhost:12394

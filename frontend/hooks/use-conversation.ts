@@ -256,7 +256,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
     // 连接成功
     socket.on("connect", () => {
-      console.log("[Conversation] 已连接到服务器:", socket.id)
+      // console.log("[Conversation] 已连接到服务器:", socket.id)
       setIsConnected(true)
       setError(null)
     })
@@ -329,7 +329,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
             console.log("[Conversation] 🎙️ 收到 start-mic 信号，自动启动录音")
             startRecordingRef.current?.()
           } else {
-            console.log("[Conversation] ♻️ 收到 start-mic 信号，录音已在运行，恢复发送音频数据")
+            // console.log("[Conversation] ♻️ 收到 start-mic 信号，录音已在运行，恢复发送音频数据")
             shouldSendAudioRef.current = true  // 恢复发送音频
             updateStatus?.("listening")
           }
@@ -531,24 +531,24 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       processor.onaudioprocess = (event) => {
         audioChunkCount++
 
-        // 每 5 秒打印一次心跳日志
+        // 每 5 秒打印一次心跳日志（已注释以减少控制台噪音）
         const now = Date.now()
         if (now - lastLogTime > 5000) {
-          console.log(`[Conversation] 💓 onaudioprocess 心跳: 已处理 ${audioChunkCount} 个块`)
-          console.log(`[Conversation]    - socket connected: ${socketRef.current?.connected}`)
-          console.log(`[Conversation]    - shouldSendAudio: ${shouldSendAudioRef.current}`)
+          // console.log(`[Conversation] 💓 onaudioprocess 心跳: 已处理 ${audioChunkCount} 个块`)
+          // console.log(`[Conversation]    - socket connected: ${socketRef.current?.connected}`)
+          // console.log(`[Conversation]    - shouldSendAudio: ${shouldSendAudioRef.current}`)
           lastLogTime = now
         }
 
         const inputData = event.inputBuffer.getChannelData(0)
 
-        // 每 10 个块打印一次音频统计
+        // 每 10 个块打印一次音频统计（已注释以减少控制台噪音）
         if (audioChunkCount % 10 === 1) {
           const min = Math.min(...inputData)
           const max = Math.max(...inputData)
           const mean = inputData.reduce((sum, v) => sum + Math.abs(v), 0) / inputData.length
-          console.log(`[Conversation] 🎙️ 录音块 #${audioChunkCount}: ${inputData.length} samples`)
-          console.log(`  Range: [${min.toFixed(4)}, ${max.toFixed(4)}], Mean: ${mean.toFixed(4)}`)
+          // console.log(`[Conversation] 🎙️ 录音块 #${audioChunkCount}: ${inputData.length} samples`)
+          // console.log(`  Range: [${min.toFixed(4)}, ${max.toFixed(4)}], Mean: ${mean.toFixed(4)}`)
         }
 
         // 转换为 16-bit PCM（节省带宽）
@@ -566,12 +566,12 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
 
-        // 每 10 个块打印一次增益后的统计（更频繁）
+        // 每 10 个块打印一次增益后的统计（已注释以减少控制台噪音）
         if (audioChunkCount % 10 === 1) {
           const min = Math.min(...Array.from(pcmData))
           const max = Math.max(...Array.from(pcmData))
           const mean = pcmData.reduce((sum, v) => sum + Math.abs(v), 0) / pcmData.length
-          console.log(`[Conversation] 📊 增益后 PCM #${audioChunkCount}: range=[${min.toFixed(0)}, ${max.toFixed(0)}], mean=${mean.toFixed(2)}, gain=${gain}x`)
+          // console.log(`[Conversation] 📊 增益后 PCM #${audioChunkCount}: range=[${min.toFixed(0)}, ${max.toFixed(0)}], mean=${mean.toFixed(2)}, gain=${gain}x`)
         }
 
         // 只有在 shouldSendAudio 为 true 时才发送音频数据
@@ -584,17 +584,18 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           // 通知音频块已发送（供 VolumeMonitor 使用）
           window.dispatchEvent(new CustomEvent('audio-chunk-sent'))
 
-          // 每 100 个块打印一次日志
+          // 每 100 个块打印一次日志（已注释以减少控制台噪音）
           if (audioChunkCount % 100 === 1) {
-            console.log(`[Conversation] 🎙️ 发送音频块 #${audioChunkCount}, 长度: ${pcmData.length} 采样点`)
+            // console.log(`[Conversation] 🎙️ 发送音频块 #${audioChunkCount}, 长度: ${pcmData.length} 采样点`)
           }
         } else {
-          // 每 100 个块打印一次未发送的原因
+          // 每 100 个块打印一次未发送的原因（已注释以减少控制台噪音）
           if (audioChunkCount % 100 === 1) {
             if (!socketRef.current?.connected) {
-              console.warn(`[Conversation] ⚠️ 未连接到服务器，跳过发送块 #${audioChunkCount}`)
+              // console.warn(`[Conversation] ⚠️ 未连接到服务器，跳过发送块 #${audioChunkCount}`)
+              console.warn(`[Conversation] ⚠️ 未连接到服务器`)
             } else if (!shouldSendAudioRef.current) {
-              console.log(`[Conversation] ⏸️ 音频暂停发送 (shouldSendAudio=false), 块 #${audioChunkCount}`)
+              // console.log(`[Conversation] ⏸️ 音频暂停发送 (shouldSendAudio=false), 块 #${audioChunkCount}`)
             }
           }
         }
