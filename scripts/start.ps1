@@ -48,33 +48,33 @@ function Stop-ProcessOnPort {
     if ($pids.Count -gt 0) {
         Write-Warning "Found $($pids.Count) process(es) using port ${Port}: $($pids -join ', ')"
 
-        foreach ($pid in $pids) {
+        foreach ($processId in $pids) {
             try {
-                $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
                 if ($process) {
                     if ($Graceful) {
-                        Write-Info "Attempting graceful shutdown of process ${pid} ($($process.ProcessName))..."
+                        Write-Info "Attempting graceful shutdown of process ${processId} ($($process.ProcessName))..."
                         # Send CTRL+C to Windows process
                         $process.CloseMainWindow() | Out-Null
                         Start-Sleep -Milliseconds 1500
 
                         # Check if still running
-                        $stillRunning = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                        $stillRunning = Get-Process -Id $processId -ErrorAction SilentlyContinue
                         if ($stillRunning) {
-                            Write-Warning "Process ${pid} did not close gracefully, forcing..."
-                            Stop-Process -Id $pid -Force
+                            Write-Warning "Process ${processId} did not close gracefully, forcing..."
+                            Stop-Process -Id $processId -Force
                         } else {
-                            Write-Success "Process ${pid} closed gracefully"
+                            Write-Success "Process ${processId} closed gracefully"
                         }
                     } else {
-                        Write-Info "Force stopping process ${pid} ($($process.ProcessName))..."
-                        Stop-Process -Id $pid -Force
+                        Write-Info "Force stopping process ${processId} ($($process.ProcessName))..."
+                        Stop-Process -Id $processId -Force
                     }
                     Start-Sleep -Milliseconds 500
                 }
             } catch {
                 $errorMsg = $_.Exception.Message
-                Write-Warning "Could not stop process ${pid}: $errorMsg"
+                Write-Warning "Could not stop process ${processId}: $errorMsg"
             }
         }
 

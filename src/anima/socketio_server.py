@@ -421,11 +421,19 @@ async def raw_audio_data(sid, data):
         raw_audio_data.counter[sid] = 0
     raw_audio_data.counter[sid] += 1
 
-    # 每 100 个块打印一次接收日志
+    # 每 10 个块打印一次音频统计信息（更频繁）
     count = raw_audio_data.counter[sid]
-    if count % 100 == 1:
-        print(f"\n[{sid}] 🎙️ 开始接收音频数据 (第 {count} 块)")
-        logger.info(f"[{sid}] 🎙️ 开始接收音频数据 (第 {count} 块)")
+    if count % 10 == 1:
+        import numpy as np
+        audio_arr = np.array(audio_chunk)
+        audio_min = float(np.min(audio_arr)) if len(audio_arr) > 0 else 0
+        audio_max = float(np.max(audio_arr)) if len(audio_arr) > 0 else 0
+        audio_mean = float(np.mean(np.abs(audio_arr))) if len(audio_arr) > 0 else 0
+        audio_rms = float(np.sqrt(np.mean(audio_arr**2))) if len(audio_arr) > 0 else 0
+
+        print(f"\n[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples")
+        print(f"  Range: [{audio_min:.2f}, {audio_max:.2f}], Mean: {audio_mean:.2f}, RMS: {audio_rms:.2f}")
+        logger.info(f"[{sid}] Audio chunk #{count}: {len(audio_chunk)} samples, range=[{audio_min:.2f}, {audio_max:.2f}], mean={audio_mean:.2f}, rms={audio_rms:.2f}")
 
     try:
         ctx = await get_or_create_context(sid)

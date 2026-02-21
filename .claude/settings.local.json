@@ -46,7 +46,31 @@
       "Bash(powershell.exe -Command \"Stop-Process -Id 2196,3560,22868 -Force\")",
       "Bash(powershell.exe -Command \"Get-Process python | Select-Object Id,ProcessName,StartTime | Format-Table\")",
       "Bash(powershell.exe -Command \"Stop-Process -Id 24108 -Force\")",
-      "Bash(powershell.exe -Command \"Get-Process -Id 2196,3560 | Select-Object Id,ProcessName,Path\")"
+      "Bash(powershell.exe -Command \"Get-Process -Id 2196,3560 | Select-Object Id,ProcessName,Path\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/start.ps1)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"& ''.\\\\scripts\\\\start.ps1''\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/quick-start.ps1)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File scripts/validate.ps1)",
+      "Bash(powershell.exe -Command \"$errors = $null; $null = [System.Management.Automation.PSParser]::Tokenize\\(\\(Get-Content ''scripts/start.ps1'' -Raw\\), [ref]$errors\\); if \\($errors\\) { Write-Host ''Syntax errors found:''; $errors | Format-List } else { Write-Host ''start.ps1: OK'' -ForegroundColor Green }\")",
+      "Bash(bash -n \"C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\stop.sh\")",
+      "Bash(echo:*)",
+      "Bash(bash -n \"C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\start.sh\")",
+      "Bash(powershell.exe -Command \"Select-String -Path ''C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\start.ps1'' -Pattern ''$\\\\w+:'' | Select-Object -First 30 LineNumber,Line\")",
+      "Bash(powershell.exe -NoProfile -Command \"try { $null = [System.Management.Automation.PSParser]::Tokenize\\(\\(Get-Content ''C:\\\\Users\\\\30262\\\\Project\\\\Anima\\\\scripts\\\\start.ps1'' -Raw\\), [ref]$null\\); Write-Host ''start.ps1: Syntax OK'' -ForegroundColor Green } catch { Write-Host ''start.ps1: Error'' -ForegroundColor Red; Write-Host $_ -ForegroundColor Red }\")",
+      "Bash(powershell -Command \"cd ''C:\\\\Users\\\\30262\\\\Project\\\\Anima''; .\\\\scripts\\\\stop.ps1 -SkipFrontend\")",
+      "Bash(powershell -Command \"cd ''C:\\\\Users\\\\30262\\\\Project\\\\Anima''; .\\\\scripts\\\\start.ps1 -SkipFrontend -RunInBackground\")",
+      "Bash(powershell -Command \".\\\\scripts\\\\stop.ps1\")",
+      "Bash(powershell -Command \".\\\\scripts\\\\stop.ps1; Start-Sleep -Seconds 2; python -m anima.socketio_server\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File scripts/start.ps1 --skip-frontend)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \".\\\\scripts\\\\stop.ps1; Start-Sleep -Seconds 2; .\\\\scripts\\\\start.ps1 --skip-frontend\")",
+      "Bash(./scripts/start.ps1:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File .scriptsstart.ps1 -SkipFrontend)",
+      "Bash(powershell -Command \".\\\\scripts\\\\start.ps1 -SkipFrontend\")",
+      "Bash(cmd /c start start_backend.bat)",
+      "Bash(powershell -Command \".\\\\scripts\\\\start.ps1 --skip-frontend\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \".\\\\scripts\\\\stop.ps1\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \".\\\\scripts\\\\start.ps1\")",
+      "Bash(git restore:*)"
     ]
   }
 }

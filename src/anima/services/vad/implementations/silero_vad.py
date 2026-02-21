@@ -264,11 +264,12 @@ class SileroStateMachine:
             smoothed_db >= self.vad.db_threshold
         )
 
-        # 每100个块打印一次诊断信息
+        # 每10个块打印一次诊断信息（更频繁）
         self._chunk_count += 1
 
-        if self._chunk_count % 100 == 1:
-            logger.debug(f"[VAD State Machine] Chunk #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f} (threshold={self.vad.prob_threshold}), db={smoothed_db:.1f} (threshold={self.vad.db_threshold}), is_speech={is_speech}")
+        if self._chunk_count % 10 == 1:
+            print(f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, db={smoothed_db:.1f}/{self.vad.db_threshold}, speech={is_speech}")
+            logger.info(f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, db={smoothed_db:.1f}/{self.vad.db_threshold}, speech={is_speech}")
 
         # 状态机处理
         if self.state == VADState.IDLE:

@@ -535,6 +535,15 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
         const inputData = event.inputBuffer.getChannelData(0)
 
+        // 每 10 个块打印一次音频统计
+        if (audioChunkCount % 10 === 1) {
+          const min = Math.min(...inputData)
+          const max = Math.max(...inputData)
+          const mean = inputData.reduce((sum, v) => sum + Math.abs(v), 0) / inputData.length
+          console.log(`[Conversation] 🎙️ 录音块 #${audioChunkCount}: ${inputData.length} samples`)
+          console.log(`  Range: [${min.toFixed(4)}, ${max.toFixed(4)}], Mean: ${mean.toFixed(4)}`)
+        }
+
         // 转换为 16-bit PCM（节省带宽）
         const pcmData = new Int16Array(inputData.length)
         for (let i = 0; i < inputData.length; i++) {
@@ -754,9 +763,15 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
 
       sentChunks++
 
-      // 每 10 个块打印一次日志
+      // 每 10 个块打印一次日志和音频统计
       if (sentChunks % 10 === 1) {
+        // 计算音频统计
+        const min = Math.min(...Array.from(pcmData))
+        const max = Math.max(...Array.from(pcmData))
+        const mean = pcmData.reduce((sum, v) => sum + Math.abs(v), 0) / pcmData.length
+
         console.log(`[Conversation] 🧪 发送测试音频块 #${sentChunks}/${totalSamples / chunkSize}`)
+        console.log(`  Audio: ${pcmData.length} samples, range=[${min}, ${max}], mean=${mean.toFixed(2)}`)
       }
     }, 10)  // 每 10ms 发送一块
 
