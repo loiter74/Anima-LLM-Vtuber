@@ -40,7 +40,13 @@
       "Bash(GLM_API_KEY=\"2999522451b90b217fba0b4825dcd49f.Sk4fxLAj0f5UIvGa\" python:*)",
       "Bash(PYTHONPATH=/c/Users/30262/Project/Anima/src timeout:*)",
       "Bash(playwright install:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(netstat:*)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 2196 2>&1 && taskkill /F /PID 3560 2>&1 && taskkill /F /PID 22868 2>&1\")",
+      "Bash(powershell.exe -Command \"Stop-Process -Id 2196,3560,22868 -Force\")",
+      "Bash(powershell.exe -Command \"Get-Process python | Select-Object Id,ProcessName,StartTime | Format-Table\")",
+      "Bash(powershell.exe -Command \"Stop-Process -Id 24108 -Force\")",
+      "Bash(powershell.exe -Command \"Get-Process -Id 2196,3560 | Select-Object Id,ProcessName,Path\")"
     ]
   }
 }

@@ -16,6 +16,102 @@ function Write-Success { param($msg) Write-Host "[SUCCESS] $msg" -ForegroundColo
 function Write-Warning { param($msg) Write-Host "[WARNING] $msg" -ForegroundColor Yellow }
 function Write-Error { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
+# Stop existing services
+function Stop-ExistingServices {
+    param([string]$Port, [string]$ServiceName)
+
+    Write-Info "Checking for existing $ServiceName processes on port $Port..."
+
+    # Find processes using the port
+    $netstat = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
+    $pids = @()
+
+    foreach ($line in $netstat) {
+        if ($line -match '\s+(\d+)\s*$') {
+            $pids += [int]$matches[1]
+        }
+    }
+
+    if ($pids.Count -gt 0) {
+        Write-Warning "Found $($pids.Count) process(es) using port $Port: $($pids -join ', ')"
+
+        foreach ($pid in $pids) {
+            try {
+                $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                if ($process) {
+                    Write-Info "Stopping process $pid ($($process.ProcessName))..."
+                    Stop-Process -Id $pid -Force
+                    Start-Sleep -Milliseconds 500
+                } else {
+                    Write-Warning "Process $pid not found, skipping..."
+                }
+            } catch {
+                Write-Warning "Could not stop process $pid: $_"
+            }
+        }
+
+        # Wait for ports to be released
+        Start-Sleep -Seconds 1
+
+        # Verify port is free
+        $stillListening = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
+        if ($stillListening) {
+            Write-Error "Port $Port is still in use. Please close all terminal windows and try again."
+            return $false
+        } else {
+            Write-Success "Port $Port released successfully"
+        }
+    } else {
+        Write-Success "Port $Port is free"
+    }
+
+    return $true
+}
+
+# Stop all Python and Node.js processes for this project
+function Stop-ProjectProcesses {
+    Write-Info "Checking for existing Anima processes..."
+
+    $stopped = $false
+
+    # Stop Python processes (backend)
+    $pythonProcesses = Get-Process python -ErrorAction SilentlyContinue | Where-Object {
+        $_.MainWindowTitle -like "*anima*" -or $_.Path -like "*anima*"
+    }
+
+    if ($pythonProcesses) {
+        Write-Warning "Found $($pythonProcesses.Count) Anima Python process(es)"
+        foreach ($proc in $pythonProcesses) {
+            Write-Info "Stopping Python process $($proc.Id)..."
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            $stopped = $true
+        }
+    }
+
+    # Stop Node.js processes (frontend)
+    $nodeProcesses = Get-Process node -ErrorAction SilentlyContinue | Where-Object {
+        $_.MainWindowTitle -like "*next*" -or $_.MainWindowTitle -like "*anima*"
+    }
+
+    if ($nodeProcesses) {
+        Write-Warning "Found $($nodeProcesses.Count) Anima Node.js process(es)"
+        foreach ($proc in $nodeProcesses) {
+            Write-Info "Stopping Node.js process $($proc.Id)..."
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            $stopped = $true
+        }
+    }
+
+    if ($stopped) {
+        Start-Sleep -Seconds 1
+        Write-Success "All existing Anima processes stopped"
+    } else {
+        Write-Success "No existing Anima processes found"
+    }
+
+    return $true
+}
+
 # Show help
 if ($Help) {
     Write-Host @"
@@ -59,6 +155,35 @@ if (Get-Command pnpm -ErrorAction SilentlyContinue) {
 }
 
 Write-Info "Package manager: $PkgManager"
+Write-Host ""
+
+# Stop existing services
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host "  Stopping Existing Services" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host ""
+
+# Stop backend port
+if (-not $SkipBackend) {
+    if (-not (Stop-ExistingServices -Port 12394 -ServiceName "Backend")) {
+        Write-Error "Failed to stop existing backend services"
+        exit 1
+    }
+}
+
+# Stop frontend port
+if (-not $SkipFrontend) {
+    if (-not (Stop-ExistingServices -Port 3000 -ServiceName "Frontend")) {
+        Write-Error "Failed to stop existing frontend services"
+        exit 1
+    }
+}
+
+# Stop any remaining project processes
+Stop-ProjectProcesses
+
+Write-Host ""
+Write-Success "All existing services stopped"
 Write-Host ""
 
 # Install dependencies
