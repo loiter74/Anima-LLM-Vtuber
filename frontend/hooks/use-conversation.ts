@@ -304,10 +304,13 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
     // 接收音频
     socket.on("audio", (data: { audio_url?: string; audio_data?: string; seq?: number }) => {
       console.log("[Conversation] 收到音频:", data.audio_url || `数据长度: ${data.audio_data?.length || 0}`)
-      updateStatusRef.current?.("speaking")
-      // 如果有音频数据，播放
+
+      // 只有在有音频数据时才更新状态并播放
       if (data.audio_data) {
+        updateStatusRef.current?.("speaking")
         playAudioRef.current?.(data.audio_data)
+      } else {
+        console.log("[Conversation] ⚠️ 收到空音频事件，忽略")
       }
     })
 
