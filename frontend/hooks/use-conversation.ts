@@ -87,6 +87,7 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
   const registrationCountRef = useRef<number>(0)  // 追踪注册次数
   const handleSentenceCallCountRef = useRef<number>(0)  // 追踪 handleSentence 调用次数
   const lastProcessedCompleteSeqRef = useRef<number>(-1)  // 追踪上一次处理的完成标记 seq，防止重复
+  const shouldSendAudioRef = useRef<boolean>(true)  // 控制是否发送音频数据（VAD 暂停标志）
 
   // 使用 ref 存储外部回调函数
   const onStatusChangeRef = useRef(onStatusChange)
@@ -317,24 +318,35 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
       switch (data.text) {
         case "start-mic":
           updateStatus?.("listening")
+          shouldSendAudioRef.current = true  // 恢复发送音频
+          console.log("[Conversation] ✅ 恢复发送音频数据")
           break
         case "interrupt":
         case "interrupted":
           updateStatus?.("interrupted")
           setIsTyping?.(false)
           setCurrentResponse?.("")
+          shouldSendAudioRef.current = true  // 打断后恢复发送
+          console.log("[Conversation] ✅ 打断，恢复发送音频数据")
           break
         case "mic-audio-end":
           updateStatus?.("processing")
+          shouldSendAudioRef.current = false  // 暂停发送音频
+          console.log("[Conversation] ⏸️ VAD 检测到语音结束，暂停发送音频数据")
           break
         case "no-audio-data":
           updateStatus?.("idle")
+          shouldSendAudioRef.current = true  // 无数据时恢复发送
+          console.log("[Conversation] ⚠️ 无音频数据，恢复发送")
           break
         case "conversation-start":
           updateStatus?.("processing")
+          shouldSendAudioRef.current = false  // 开始处理时暂停
           break
         case "conversation-end":
           updateStatus?.("idle")
+          shouldSendAudioRef.current = true  // 处理结束，恢复发送
+          console.log("[Conversation] ✅ 对话结束，恢复发送音频数据")
           break
       }
     })
@@ -505,8 +517,9 @@ export function useConversation(options: UseConversationOptions = {}): UseConver
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
         }
 
-        // 发送音频数据到服务器
-        if (socketRef.current?.connected) {
+        // 只有在 shouldSendAudio 为 true 时才发送音频数据
+        // 这样可以在 AI 回复时暂停发送音频，避免数据混杂
+        if (socketRef.current?.connected && shouldSendAudioRef.current) {
           socketRef.current.emit("raw_audio_data", {
             audio: Array.from(pcmData)
           })

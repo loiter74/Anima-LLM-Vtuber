@@ -232,13 +232,13 @@ async def cleanup_context(sid: str) -> None:
 async def _process_audio_input(sid: str) -> None:
     """
     处理音频输入的辅助函数
-    
+
     从缓冲区获取音频数据并通过 ConversationOrchestrator 处理
     """
     try:
         # 获取累积的音频数据
         audio_data = audio_buffer_manager.pop(sid)
-        
+
         if audio_data is None or len(audio_data) == 0:
             logger.warning(f"[{sid}] _process_audio_input: 没有音频数据")
             await sio.emit('control', {
@@ -246,33 +246,54 @@ async def _process_audio_input(sid: str) -> None:
                 'text': 'no-audio-data'
             }, to=sid)
             return
-        
+
         audio_duration = len(audio_data) / 16000  # 假设 16kHz
         logger.info(f"[{sid}] 🎙️ 开始处理音频，时长: {audio_duration:.2f}秒")
-        
+
+        # 发送 conversation-start 信号，通知前端暂停发送音频
+        await sio.emit('control', {
+            'type': 'control',
+            'text': 'conversation-start'
+        }, to=sid)
+
         orchestrator = await get_or_create_orchestrator(sid)
-        
+
         # 使用编排器处理音频输入
         result = await orchestrator.process_input(
             raw_input=audio_data,
             metadata={},
             from_name='User',
         )
-        
+
         if result.error:
             logger.error(f"[{sid}] 处理出错: {result.error}")
             await sio.emit('error', {
                 'type': 'error',
                 'message': result.error
             }, to=sid)
+            # 出错时也发送 conversation-end，恢复前端监听
+            await sio.emit('control', {
+                'type': 'control',
+                'text': 'conversation-end'
+            }, to=sid)
         else:
             logger.info(f"[{sid}] ✅ 音频处理完成")
-        
+            # 发送 conversation-end 信号，通知前端恢复监听
+            await sio.emit('control', {
+                'type': 'control',
+                'text': 'conversation-end'
+            }, to=sid)
+
     except Exception as e:
         logger.error(f"[{sid}] _process_audio_input 出错: {e}", exc_info=True)
         await sio.emit('error', {
             'type': 'error',
             'message': str(e)
+        }, to=sid)
+        # 出错时也发送 conversation-end，恢复前端监听
+        await sio.emit('control', {
+            'type': 'control',
+            'text': 'conversation-end'
         }, to=sid)
 
 
