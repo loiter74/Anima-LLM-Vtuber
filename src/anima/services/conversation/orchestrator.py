@@ -108,6 +108,9 @@ class ConversationOrchestrator:
         self._is_running = False
         self._interrupted = False
         self._is_processing = False
+
+        # 序列计数器（用于事件）
+        self._seq_counter = 0
     
     def _setup_default_pipeline(self) -> None:
         """
@@ -223,6 +226,10 @@ class ConversationOrchestrator:
         """打断当前处理"""
         self._interrupted = True
         self.output_pipeline.interrupt()
+
+        # 发送惊讶表情（同步版本，用于非异步上下文）
+        self._emit_expression_sync("surprised")
+
         logger.info(f"[{self.session_id}] 编排器收到打断信号")
     
     async def process_input(
@@ -302,11 +309,11 @@ class ConversationOrchestrator:
     ) -> ConversationResult:
         """
         处理对话核心逻辑
-        
+
         Args:
             ctx: 管线上下文
             text: 输入文本
-            
+
         Returns:
             ConversationResult
         """
@@ -315,27 +322,36 @@ class ConversationOrchestrator:
                 success=False,
                 error="Agent 未初始化"
             )
-        
+
         logger.info(f"[{self.session_id}] 处理对话: {text[:50]}...")
-        
+
+        # 发送思考表情
+        await self._emit_expression("thinking")
+
         # 获取 Agent 响应流
         agent_stream = self.agent.chat_stream(text)
-        
+
+        # 发送说话表情
+        await self._emit_expression("speaking")
+
         # 使用 OutputPipeline 处理响应流
         response_text = await self.output_pipeline.process(ctx, agent_stream)
-        
+
         if self._interrupted:
             return ConversationResult(
                 success=False,
                 error="处理被中断",
                 metadata={"interrupted": True}
             )
-        
+
         # 如果有 TTS，生成音频
         audio_path = None
         if self.tts_engine and not self._interrupted:
             audio_path = await self._synthesize_audio(response_text)
-        
+
+        # 发送空闲表情
+        await self._emit_expression("idle")
+
         return ConversationResult(
             success=True,
             response_text=response_text,
@@ -370,19 +386,70 @@ class ConversationOrchestrator:
     async def _emit_event(self, event_type: str, data: Any) -> None:
         """
         发送事件到 EventBus
-        
+
         Args:
             event_type: 事件类型
             data: 事件数据
         """
         from anima.core import OutputEvent
-        
+
         event = OutputEvent(
             type=event_type,
             data=data,
         )
-        
+
         await self.event_bus.emit(event)
+
+    async def _emit_expression(self, expression: str) -> None:
+        """
+        发送表情事件到 EventBus（异步版本）
+
+        Args:
+            expression: 表情名称
+        """
+        from anima.core import OutputEvent
+        import time
+
+        logger.info(f"[{self.session_id}] 🎭 正在发送表情事件: {expression}")
+
+        event = OutputEvent(
+            type=EventType.EXPRESSION,
+            data=expression,
+            seq=self._seq_counter,
+            metadata={"timestamp": time.time()}
+        )
+
+        await self.event_bus.emit(event)
+        self._seq_counter += 1
+        logger.info(f"[{self.session_id}] ✅ 表情事件已发送: {expression}")
+
+    def _emit_expression_sync(self, expression: str) -> None:
+        """
+        发送表情事件到 EventBus（同步版本，用于非异步上下文）
+
+        Args:
+            expression: 表情名称
+        """
+        from anima.core import OutputEvent
+        import time
+        import asyncio
+
+        event = OutputEvent(
+            type=EventType.EXPRESSION,
+            data=expression,
+            seq=self._seq_counter,
+            metadata={"timestamp": time.time()}
+        )
+
+        # 在同步上下文中，创建任务来发送事件
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.event_bus.emit(event))
+            self._seq_counter += 1
+            logger.debug(f"[{self.session_id}] 发送表情（同步）: {expression}")
+        except RuntimeError:
+            # 如果没有事件循环，无法发送
+            logger.debug(f"[{self.session_id}] 无法发送表情事件：没有事件循环")
     
     @property
     def is_running(self) -> bool:

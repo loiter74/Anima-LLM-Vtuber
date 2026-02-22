@@ -1,0 +1,28 @@
+# Live2D 配置文件
+# 定义 Live2D 模型路径和表情映射
+
+enabled: true
+
+# Live2D 模型配置
+model:
+  path: "/live2d/haru/haru_greeter_t03.model3.json"
+  scale: 0.5
+  position:
+    x: 0
+    y: 0
+
+# 表情映射配置
+# 将内部状态映射到 Live2D 模型的动作组
+expressions:
+  idle: "idle"           # 空闲状态
+  listening: "listening" # 监听状态
+  thinking: "thinking"   # 思考状态
+  speaking: "speaking"   # 说话状态
+  surprised: "surprised" # 惊讶状态
+  sad: "sad"            # 悲伤状态
+
+# 唇同步配置
+lip_sync:
+  enabled: true
+  sensitivity: 1.0      # 嘴部动作灵敏度 (0.0 - 2.0)
+  smoothing: 0.5        # 平滑系数 (0.0 - 1.0)

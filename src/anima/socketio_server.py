@@ -51,7 +51,7 @@ from anima.services.conversation import (
     ConversationOrchestrator,
     SessionManager,
 )
-from anima.handlers import TextHandler, AudioHandler
+from anima.handlers import TextHandler, AudioHandler, ExpressionHandler
 from anima.eventbus import EventPriority
 from anima.utils.logger_manager import logger_manager
 from anima.config.user_settings import UserSettings
@@ -149,7 +149,7 @@ async def get_or_create_context(sid: str) -> ServiceContext:
         ServiceContext: 该会话的服务上下文
     """
     if sid not in session_contexts:
-        print(f"\n[{sid}] 🔧 创建新的 ServiceContext")
+        print(f"\n[{sid}] [CREATE] 创建新的 ServiceContext")
         ctx = ServiceContext()
         ctx.session_id = sid
 
@@ -164,7 +164,7 @@ async def get_or_create_context(sid: str) -> ServiceContext:
         ctx.send_text = send_text_callback
 
         # 加载配置（使用全局配置或默认配置）
-        print(f"[{sid}] 📋 加载配置...")
+        print(f"[{sid}] [LOAD] 加载配置...")
         config = global_config or AppConfig.load()
         await ctx.load_from_config(config)
 
@@ -218,6 +218,10 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         # 创建并注册 AudioHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
         audio_handler = AudioHandler(websocket_send=orchestrator.websocket_send)
         orchestrator.register_handler("audio", audio_handler, priority=EventPriority.NORMAL)
+
+        # 创建并注册 ExpressionHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
+        expression_handler = ExpressionHandler(websocket_send=orchestrator.websocket_send)
+        orchestrator.register_handler("expression", expression_handler, priority=EventPriority.NORMAL)
 
         # 启动编排器（将 EventRouter 连接到 EventBus）
         orchestrator.start()
@@ -345,7 +349,7 @@ async def connect(sid, environ):
         'type': 'control',
         'text': 'start-mic'
     }, to=sid)
-    print(f"📤 已发送 start-mic 信号给客户端 {sid}")
+    print(f"[OK] 已发送 start-mic 信号给客户端 {sid}")
 
 
 @sio.event

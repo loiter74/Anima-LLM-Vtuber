@@ -1,46 +1,53 @@
 /**
  * SocketService
- * High-level service for Socket.IO communication
- * Wraps SocketClient with application-specific logic
+ * Socket.IO 高级服务包装（单例模式）
  */
 
-import { SocketClient } from '@/lib/socket/SocketClient'
-import { useConnectionStore } from '@/shared/state/stores/connectionStore'
-import { logger } from '@/shared/utils/logger'
-import type { SocketEvents, SocketEmits } from '@/shared/types/socket'
-import { CONTROL_SIGNALS } from '@/shared/constants/events'
+import { SocketClient } from './SocketClient'
+import { useConnectionStore } from '../stores/connectionStore'
+import type { SocketEvents, SocketEmits } from '../types'
+import { CONTROL_SIGNALS } from '../constants/events'
+
+// 全局单例
+let globalClient: SocketClient | null = null
+let globalInitialized = false
 
 export class SocketService {
   private client: SocketClient
   private eventHandlers: Map<keyof SocketEvents, Set<Function>> = new Map()
 
   constructor(url?: string) {
-    this.client = new SocketClient(url)
+    if (!globalClient) {
+      globalClient = new SocketClient(url)
+    }
+    this.client = globalClient
   }
 
   /**
    * Connect to the server
    */
   async connect(): Promise<void> {
+    if (globalInitialized) {
+      return
+    }
+
     const { setStatus, setError, setSessionId } = useConnectionStore.getState()
 
     try {
+      globalInitialized = true
       setStatus('connecting')
       setError(null)
 
       await this.client.connect()
-
-      // Register built-in event handlers
       this.registerBuiltInHandlers()
 
       setStatus('connected')
       setSessionId(this.client.id ?? null)
-
-      logger.debug('[SocketService] Connected successfully')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Connection failed'
       setStatus('error')
       setError(message)
+      globalInitialized = false
       throw error
     }
   }
@@ -52,14 +59,11 @@ export class SocketService {
     const { setStatus, setSessionId } = useConnectionStore.getState()
 
     this.client.disconnect()
-
-    // Clear all event handlers
     this.eventHandlers.clear()
 
     setStatus('disconnected')
     setSessionId(null)
-
-    logger.debug('[SocketService] Disconnected')
+    globalInitialized = false
   }
 
   /**
@@ -71,7 +75,6 @@ export class SocketService {
   ): void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set())
-      // Register with underlying client only once per event
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.client.on(event as any, ((data: any) => {
         this.notifyHandlers(event, data)
@@ -80,8 +83,6 @@ export class SocketService {
 
     const handlers = this.eventHandlers.get(event)!
     handlers.add(callback)
-
-    logger.debug(`[SocketService] Registered handler for "${event}", total: ${handlers.size}`)
   }
 
   /**
@@ -91,21 +92,16 @@ export class SocketService {
     event: Event,
     callback?: SocketEvents[Event]
   ): void {
-    if (!this.eventHandlers.has(event)) {
-      return
-    }
+    if (!this.eventHandlers.has(event)) return
 
     const handlers = this.eventHandlers.get(event)!
 
     if (callback) {
       handlers.delete(callback)
-      logger.debug(`[SocketService] Removed handler for "${event}", remaining: ${handlers.size}`)
     } else {
       handlers.clear()
-      logger.debug(`[SocketService] Cleared all handlers for "${event}"`)
     }
 
-    // Remove from map if no handlers left
     if (handlers.size === 0) {
       this.eventHandlers.delete(event)
     }
@@ -127,14 +123,12 @@ export class SocketService {
   private registerBuiltInHandlers(): void {
     const { setStatus, setError } = useConnectionStore.getState()
 
-    // Connection established
     this.client.on('connection-established', (data) => {
-      logger.debug('[SocketService] Connection established:', data)
+      console.debug('[SocketService] Connection established:', data)
     })
 
-    // Control events
     this.client.on('control', (data) => {
-      logger.debug('[SocketService] Control signal:', data.text)
+      console.debug('[SocketService] Control signal:', data.text)
 
       switch (data.text) {
         case CONTROL_SIGNALS.START_MIC:
@@ -154,13 +148,11 @@ export class SocketService {
           break
       }
 
-      // Forward to registered handlers
       this.notifyHandlers('control', data)
     })
 
-    // Error events
     this.client.on('error', (data) => {
-      logger.error('[SocketService] Server error:', data.message)
+      console.error('[SocketService] Server error:', data.message)
       setError(data.message)
       this.notifyHandlers('error', data)
     })
@@ -174,37 +166,34 @@ export class SocketService {
     data: Parameters<SocketEvents[Event]>[0]
   ): void {
     const handlers = this.eventHandlers.get(event)
-    if (!handlers) {
-      return
-    }
+    if (!handlers) return
 
     for (const handler of handlers) {
       try {
         ;(handler as any)(data)
       } catch (error) {
-        logger.error(`[SocketService] Error in handler for "${event}":`, error)
+        console.error(`[SocketService] Error in handler for "${event}":`, error)
       }
     }
   }
 
-  /**
-   * Get socket ID
-   */
+  /** Get socket ID */
   get id(): string | undefined {
     return this.client.id
   }
 
-  /**
-   * Check if connected
-   */
+  /** Check if connected */
   get connected(): boolean {
     return this.client.connected
   }
 
-  /**
-   * Get raw SocketClient instance
-   */
+  /** Get raw SocketClient instance */
   get raw(): SocketClient {
     return this.client
+  }
+
+  /** Get raw socket instance (for advanced usage) */
+  get socket(): any {
+    return this.client.raw
   }
 }
