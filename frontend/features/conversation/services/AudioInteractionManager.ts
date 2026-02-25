@@ -138,7 +138,7 @@ class AudioInteractionManager {
     })
 
     this.service.on('recording:error', (error: string) => {
-      logger.error('[AudioInteractionManager] Forwarding: recording:error:', error)
+      logger.warn('[AudioInteractionManager] Forwarding: recording:error:', error)
       this.emit('recording:error', error)
     })
 

@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@/shared/utils/logger'
-import type { AudioPlayerOptions } from '@/shared/types/audio'
+import type { AudioPlayerOptions } from '../types'
 
 export type AudioPlayerState = 'idle' | 'playing' | 'stopped' | 'error'
 
@@ -79,8 +79,27 @@ export class AudioPlayer {
   private static readonly WINDOW_AUDIO_KEY = '_currentAudio'
   private static readonly WINDOW_URL_KEY = '_currentAudioUrl'
 
+  // Static flag to track if any audio is playing globally
+  private static _isPlaying: boolean = false
+
   constructor(options: AudioPlayerOptions = {}) {
     this.options = options
+  }
+
+  /**
+   * Check if any audio is currently playing (static method)
+   */
+  static get isPlaying(): boolean {
+    return AudioPlayer._isPlaying
+  }
+
+  /**
+   * Set global playing state
+   */
+  private static setPlayingState(playing: boolean): void {
+    const wasPlaying = AudioPlayer._isPlaying
+    AudioPlayer._isPlaying = playing
+    logger.info(`[AudioPlayer] 全局播放状态: ${wasPlaying} → ${playing ? '播放中' : '停止'}`)
   }
 
   /**
@@ -131,73 +150,47 @@ export class AudioPlayer {
    */
   async play(base64Data: string, format?: string): Promise<void> {
     try {
-      // ========== CHECKPOINT 0: METHOD ENTRY ==========
-      logger.debug('[AudioPlayer] ========== PLAY START ==========')
-      logger.debug('[AudioPlayer] CHECKPOINT 0: Method entry')
-      logger.debug('[AudioPlayer] Raw input type:', typeof base64Data)
-      logger.debug('[AudioPlayer] Raw input length:', base64Data?.length ?? 'null')
-      logger.debug('[AudioPlayer] Format param:', format ?? 'undefined')
-
       // Validate input
       if (!base64Data || typeof base64Data !== 'string') {
-        logger.error('[AudioPlayer] ❌ CHECKPOINT 0 FAILED: Invalid input type')
+        logger.error('[AudioPlayer] 输入无效：必须是字符串')
         throw new Error('Invalid audio data: empty or not a string')
       }
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 0 PASSED: Input validation')
 
       // Check for empty or whitespace-only data
       const trimmedData = base64Data.trim()
       if (trimmedData.length === 0) {
-        logger.error('[AudioPlayer] ❌ CHECKPOINT 0 FAILED: Empty data after trim')
+        logger.error('[AudioPlayer] 输入数据为空')
         throw new Error('Invalid audio data: empty string after trim')
       }
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 0 PASSED: Non-empty data')
 
-      // ========== PHASE 1.2: BASE64 VALIDATION ==========
-      // Validate base64 format at the very start
+      // Validate base64 format
       const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
       const cleanInput = trimmedData
-
-      // Remove data URL prefix if present for validation
       const validationInput = cleanInput.includes(',') ? cleanInput.split(',')[1].trim() : cleanInput
-
-      logger.debug('[AudioPlayer] CHECKPOINT 1: Base64 validation')
-      logger.debug('[AudioPlayer] String to validate length:', validationInput.length)
 
       if (!base64Regex.test(validationInput)) {
         const invalidChars = validationInput.split('').filter(c => !base64Regex.test(c))
-        logger.error('[AudioPlayer] ❌ CHECKPOINT 1 FAILED: INVALID BASE64')
-        logger.error('[AudioPlayer] Invalid chars count:', invalidChars.length)
-        logger.error('[AudioPlayer] First 20 invalid chars:', invalidChars.slice(0, 20).join(','))
-        logger.error('[AudioPlayer] Hex representation:', Array.from(invalidChars.slice(0, 10)).map(c => c.charCodeAt(0).toString(16)).join(' '))
+        logger.error('[AudioPlayer] Base64 格式无效，包含非法字符')
         throw new Error(`Invalid base64 format. Contains invalid characters: ${invalidChars.slice(0, 10).join(',')}`)
       }
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 1 PASSED: Valid base64 format')
-
-      // Log data preview (first 200 chars for debugging)
-      logger.debug('[AudioPlayer] 数据预览 (前200字符):', trimmedData.substring(0, 200))
 
       // Check minimum length (valid MP3 needs at least ~100 bytes, which is ~136 base64 chars)
       if (trimmedData.length < 136) {
-        logger.warn('[AudioPlayer] ⚠️ 数据长度过短，可能不是有效音频:', trimmedData.length)
+        logger.warn('[AudioPlayer] 数据长度过短，可能不是有效音频:', trimmedData.length)
       }
 
-      // Stop any currently playing audio (but don't cleanup our new URL)
-      this.stopCurrentPlayback()
+      // 🆕 Don't call stopCurrentPlayback() here!
+      // playGlobal() will handle stopping old audio via stopGlobalAudio()
+      // This prevents clearing the window refs before new audio is saved
 
-      // ========== CHECKPOINT 2: BASE64 CLEANING ==========
-      logger.debug('[AudioPlayer] CHECKPOINT 2: Base64 cleaning')
-      // Step 1: Clean base64 data
+      // Clean base64 data
       let cleanBase64 = trimmedData
       if (trimmedData.includes(',')) {
         cleanBase64 = trimmedData.split(',')[1]
       }
       cleanBase64 = cleanBase64.trim()
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 2 PASSED: Base64 cleaned, length:', cleanBase64.length)
 
-      // ========== CHECKPOINT 3: BASE64 DECODING ==========
-      logger.debug('[AudioPlayer] CHECKPOINT 3: Base64 decoding')
-      // Step 2: Decode base64 to bytes first (for MIME detection)
+      // Decode base64 to bytes
       let bytes: Uint8Array
       try {
         const binaryString = atob(cleanBase64)
@@ -205,148 +198,140 @@ export class AudioPlayer {
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i)
         }
-        logger.debug('[AudioPlayer] ✅ CHECKPOINT 3 PASSED: Decoded to', bytes.length, 'bytes')
       } catch (decodeError) {
-        logger.error('[AudioPlayer] ❌ CHECKPOINT 3 FAILED: Base64 decode error')
-        logger.error('[AudioPlayer] Decode error:', decodeError)
+        logger.error('[AudioPlayer] Base64 解码失败')
         throw new Error(`Failed to decode base64: ${decodeError instanceof Error ? decodeError.message : String(decodeError)}`)
       }
 
-      // ========== PHASE 1.3: MP3 MAGIC BYTES VERIFICATION ==========
-      logger.debug('[AudioPlayer] CHECKPOINT 4: Magic bytes verification')
-      // Verify it's actually MP3 format
-      const isMp3 = (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) ||
-                    (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)
-
-      logger.debug('[AudioPlayer] First 3 bytes (hex):', Array.from(bytes.slice(0, 3)).map(b => b.toString(16).padStart(2, '0')).join(' '))
-      logger.debug('[AudioPlayer] First 16 bytes (hex):',
-        Array.from(bytes.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' '))
-      logger.debug('[AudioPlayer] MP3 signature check:', isMp3 ? '✅ PASS' : '❌ FAIL')
-
-      if (!isMp3 && format === 'mp3') {
-        logger.warn('[AudioPlayer] ⚠️ WARNING: Format=mp3 but magic bytes don\'t match!')
-        logger.warn('[AudioPlayer] This might be a different audio format or corrupted data')
-      }
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 4 PASSED: Magic bytes checked')
-
-      // ========== CHECKPOINT 5: MIME TYPE DETECTION ==========
-      logger.debug('[AudioPlayer] CHECKPOINT 5: MIME type detection')
-      // Step 3: Detect MIME type from actual bytes
+      // Detect MIME type from actual bytes
       const mimeType = this.detectMimeType(trimmedData, format, bytes)
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 5 PASSED: MIME type =', mimeType)
 
-      // ========== NEW APPROACH: TRY DATA URI FIRST ==========
-      // Data URIs are more reliable than blob URLs in some browsers
-      logger.debug('[AudioPlayer] ========== APPROACH: Using data URI (more reliable) ==========')
+      // Create data URI
       const dataUri = `data:${mimeType};base64,${cleanBase64}`
-      logger.debug('[AudioPlayer] Data URI length:', dataUri.length)
-      logger.debug('[AudioPlayer] Data URI preview (first 100 chars):', dataUri.substring(0, 100))
 
-      // ========== CHECKPOINT 9: AUDIO ELEMENT CREATION ==========
-
-      // ========== CHECKPOINT 9: AUDIO ELEMENT CREATION ==========
-      logger.debug('[AudioPlayer] CHECKPOINT 9: Audio element creation')
-      // IMPORTANT: Create Audio element WITHOUT src first
-      // This allows us to set up event handlers before loading starts
+      // Create Audio element
       const audio = new Audio()
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 9 PASSED: Audio element created')
-
-      // Store references
-      this.currentAudio = audio
-      this.currentUrl = dataUri  // Store data URI instead of blob URL
-      this.state = 'playing'
-
-      // Store in window for global access (e.g., for interrupt)
-      this.storeWindowRefs(audio, dataUri)
-      logger.debug('[AudioPlayer] ✅ CHECKPOINT 10 PASSED: References stored')
 
       // Set up event handlers BEFORE setting src
       // This ensures we catch all events including early errors
+
+      // 使用 playPromise 标志确保只设置一次状态
+      let playPromiseSettled = false
+
       audio.onloadedmetadata = () => {
-        logger.debug('[AudioPlayer] ✅ CHECKPOINT 14: Metadata loaded')
-        logger.debug('[AudioPlayer] Duration:', audio.duration, 'seconds')
-        // Try to play as soon as metadata is loaded
-        audio.play().catch((err) => {
-          logger.warn('[AudioPlayer] Play failed (might be buffering):', err)
-          // Will try again in oncanplay
-        })
+        logger.debug('[AudioPlayer] onloadedmetadata 触发')
+        audio.play()
+          .then(() => {
+            if (!playPromiseSettled) {
+              logger.info('[AudioPlayer] ✅ 播放成功开始 (onloadedmetadata)')
+              AudioPlayer.setPlayingState(true)
+              playPromiseSettled = true
+            }
+          })
+          .catch((err) => {
+            logger.warn('[AudioPlayer] Play failed in onloadedmetadata (might be buffering):', err)
+            // Don't set playPromiseSettled, let other handlers try
+          })
       }
 
       audio.oncanplay = () => {
-        logger.debug('[AudioPlayer] ✅ CHECKPOINT 15: Can play')
-        if (this.state === 'playing' && audio.paused) {
-          audio.play().catch((err) => {
-            logger.error('[AudioPlayer] Play failed in oncanplay:', err)
-            this.handleError(err)
-          })
+        logger.debug('[AudioPlayer] oncanplay 触发')
+        if (this.state === 'playing' && audio.paused && !playPromiseSettled) {
+          audio.play()
+            .then(() => {
+              if (!playPromiseSettled) {
+                logger.info('[AudioPlayer] ✅ 播放成功开始 (oncanplay)')
+                AudioPlayer.setPlayingState(true)
+                playPromiseSettled = true
+              }
+            })
+            .catch((err) => {
+              logger.error('[AudioPlayer] Play failed in oncanplay:', err)
+              if (!playPromiseSettled) {
+                AudioPlayer.setPlayingState(false)
+                this.handleError(err)
+              }
+            })
         }
       }
 
-      // Fallback: if oncanplaythrough fires, ensure we're playing
       audio.oncanplaythrough = () => {
-        logger.debug('[AudioPlayer] ✅ Can play through (fully buffered)')
-        if (this.state === 'playing' && audio.paused) {
-          audio.play().catch((err) => {
-            logger.error('[AudioPlayer] Play failed in oncanplaythrough:', err)
-            this.handleError(err)
-          })
+        logger.debug('[AudioPlayer] oncanplaythrough 触发')
+        if (this.state === 'playing' && audio.paused && !playPromiseSettled) {
+          audio.play()
+            .then(() => {
+              if (!playPromiseSettled) {
+                logger.info('[AudioPlayer] ✅ 播放成功开始 (oncanplaythrough)')
+                AudioPlayer.setPlayingState(true)
+                playPromiseSettled = true
+              }
+            })
+            .catch((err) => {
+              logger.error('[AudioPlayer] Play failed in oncanplaythrough:', err)
+              if (!playPromiseSettled) {
+                AudioPlayer.setPlayingState(false)
+                this.handleError(err)
+              }
+            })
+        }
+      }
+
+      // 添加 onplay 事件处理器作为最终保障
+      audio.onplay = () => {
+        logger.debug('[AudioPlayer] onplay 事件触发')
+        if (!playPromiseSettled) {
+          logger.info('[AudioPlayer] ✅ 播放成功开始 (onplay 事件)')
+          AudioPlayer.setPlayingState(true)
+          playPromiseSettled = true
         }
       }
 
       audio.onended = () => {
-        logger.debug('[AudioPlayer] ========== 音频播放完成 ==========')
+        logger.info('[AudioPlayer] === ONENDED EVENT FIRED ===')
+        AudioPlayer.setPlayingState(false)
         this.cleanup()
         this.state = 'idle'
         this.options.onPlayEnd?.()
       }
 
       audio.onerror = (e) => {
-        // Get more detailed error information
         const errorDetail = this.getAudioErrorDetail(audio.error)
-        const audioSrc = audio.src || '(no src)'
-        logger.error('[AudioPlayer] ❌ CHECKPOINT ERROR: Audio loading failed')
-        logger.error('[AudioPlayer] Error detail:', errorDetail)
-        logger.error('[AudioPlayer] Audio source:', audioSrc.substring(0, 100) + '...')
-        logger.error('[AudioPlayer] Raw event:', e)
-
-        // Additional debugging info
-        logger.error('[AudioPlayer] Is data URI:', audioSrc.startsWith('data:') ? 'YES' : 'NO')
-        logger.error('[AudioPlayer] Original data length:', trimmedData.length)
-        logger.error('[AudioPlayer] Decoded bytes:', bytes.length)
-        logger.error('[AudioPlayer] MIME type:', mimeType)
-
+        logger.warn('[AudioPlayer] ONERROR EVENT -', errorDetail)
+        AudioPlayer.setPlayingState(false)
         this.cleanup()
         this.state = 'error'
         this.options.onError?.(new Error(`音频加载错误: ${errorDetail}`))
       }
 
       audio.onloadstart = () => {
-        logger.debug('[AudioPlayer] ========== CHECKPOINT 11: Load started ==========')
+        // Load started
       }
 
       audio.onprogress = () => {
-        if (audio.buffered.length > 0) {
-          logger.debug('[AudioPlayer] CHECKPOINT 12: Progress - buffered:', audio.buffered.end(0), 'seconds')
-        }
+        // Loading progress
       }
 
       audio.onsuspend = () => {
-        logger.debug('[AudioPlayer] CHECKPOINT 13: Loading suspended (browser paused)')
+        // Loading suspended
       }
 
-      // ========== CHECKPOINT 11: SET SRC ==========
-      logger.debug('[AudioPlayer] ========== CHECKPOINT 11: Setting src (data URI) ==========')
-      // NOW set the src and call load() after event handlers are in place
+      // Set src and load audio
       audio.src = dataUri
-      logger.debug('[AudioPlayer] ✅ audio.src set to data URI (length:', dataUri.length, 'chars)')
-
-      // IMPORTANT: Must call load() to trigger the browser to start loading the audio
-      logger.debug('[AudioPlayer] ========== CHECKPOINT 12: Calling load() ==========')
       audio.load()
-      logger.debug('[AudioPlayer] ✅ audio.load() called, readyState:', audio.readyState)
+
+      // 🆕 Save audio reference (critical for stopGlobalAudio to work!)
+      this.currentAudio = audio
+      this.currentUrl = dataUri
+      this.storeWindowRefs(audio, dataUri)
+      this.state = 'playing'
+
+      // 🆕 立即设置全局播放状态（不要等待 onplay 事件）
+      AudioPlayer.setPlayingState(true)
+      logger.info('[AudioPlayer] ✅ 全局播放状态已设置为 true（同步）')
+
+      logger.info('[AudioPlayer] ✅ Audio 元素已保存，可以被打断')
 
       this.options.onPlayStart?.()
-      logger.debug('[AudioPlayer] ========== ALL CHECKPOINTS PASSED, WAITING FOR PLAYBACK ==========')
     } catch (err) {
       logger.error('[AudioPlayer] 播放音频出错:', err)
       this.state = 'error'
@@ -425,13 +410,14 @@ export class AudioPlayer {
   private storeWindowRefs(audio: HTMLAudioElement, url: string): void {
     ;(window as any)[AudioPlayer.WINDOW_AUDIO_KEY] = audio
     ;(window as any)[AudioPlayer.WINDOW_URL_KEY] = url
-    logger.debug('[AudioPlayer] Stored audio refs in window object')
+    logger.info('[AudioPlayer] ✓ Stored audio in window, paused:', audio.paused)
   }
 
   /**
    * Clear audio references from window object
    */
   private clearWindowRefs(): void {
+    logger.info('[AudioPlayer] ✗ Clearing audio from window')
     ;(window as any)[AudioPlayer.WINDOW_AUDIO_KEY] = null
     ;(window as any)[AudioPlayer.WINDOW_URL_KEY] = null
   }
@@ -459,10 +445,28 @@ export class AudioPlayer {
   }
 
   /**
+   * Static method to play audio globally
+   * Creates a temporary player instance and plays the audio
+   * Automatically stops any currently playing audio first
+   */
+  static async playGlobal(base64Data: string, format?: string): Promise<void> {
+    logger.info('[AudioPlayer] playGlobal called')
+
+    // DON'T call stopGlobalAudio here - let the caller handle it
+    // The caller (AudioInteractionService) should check isPlaying and stop first
+
+    const player = new AudioPlayer()
+    await player.play(base64Data, format)
+  }
+
+  /**
    * Static method to stop any globally playing audio
    */
   static stopGlobalAudio(): void {
-    logger.debug('[AudioPlayer] 🔇 stopGlobalAudio called - stopping all audio')
+    logger.info('[AudioPlayer] stopGlobalAudio called')
+
+    // Update global playing state
+    AudioPlayer.setPlayingState(false)
 
     const audio = (window as any)[
       AudioPlayer.WINDOW_AUDIO_KEY
@@ -471,22 +475,31 @@ export class AudioPlayer {
       AudioPlayer.WINDOW_URL_KEY
     ] as string | null
 
+    const audioExists = audio !== null
+    logger.info('[AudioPlayer] Window check - audio exists:', audioExists)
+
     if (audio) {
-      logger.debug('[AudioPlayer] ✅ Found audio element, stopping playback')
-      audio.pause()
-      audio.currentTime = 0
+      logger.info('[AudioPlayer] Found playing audio, stopping it')
+      try {
+        audio.pause()
+        audio.currentTime = 0
+        audio.src = ''
+        audio.load()
+        logger.info('[AudioPlayer] Audio stopped successfully')
+      } catch (err) {
+        logger.error('[AudioPlayer] Error stopping audio:', err)
+      }
       ;(window as any)[AudioPlayer.WINDOW_AUDIO_KEY] = null
     } else {
-      logger.debug('[AudioPlayer] ⚠️ No audio element found (may not be playing)')
+      logger.info('[AudioPlayer] No playing audio found')
     }
 
-    // Data URIs don't need revoking, just clear the reference
+    // Clear URL reference
     if (url) {
-      logger.debug('[AudioPlayer] ✅ Clearing audio URL reference')
       ;(window as any)[AudioPlayer.WINDOW_URL_KEY] = null
     }
 
-    logger.debug('[AudioPlayer] ✅ stopGlobalAudio completed')
+    logger.info('[AudioPlayer] stopGlobalAudio completed')
   }
 
   /**

@@ -7,7 +7,7 @@ import { useCallback, useRef, useEffect } from 'react'
 import { AudioPlayer } from '../services/AudioPlayer'
 import { useAudioStore } from '@/shared/state/stores/audioStore'
 import { logger } from '@/shared/utils/logger'
-import type { AudioPlayerOptions } from '@/shared/types/audio'
+import type { AudioPlayerOptions } from '../types'
 
 export interface UseAudioPlayerReturn {
   playAudio: (base64: string, format?: string) => Promise<void>
@@ -48,9 +48,11 @@ export function useAudioPlayer(
     }
 
     return () => {
+      logger.debug('[useAudioPlayer] Cleaning up player')
       playerRef.current?.destroy()
+      playerRef.current = null
     }
-  }, [setPlaying, setError, onPlayStart, onPlayEnd])
+  }, []) // ✅ 空依赖数组，只运行一次
 
   // Play audio from base64
   const playAudio = useCallback(

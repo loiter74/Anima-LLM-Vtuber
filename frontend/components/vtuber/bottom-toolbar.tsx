@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -40,13 +40,16 @@ import {
   RefreshCw,
   Bug,
 } from "lucide-react"
-import { useConversationContext } from "@/contexts/conversation-context"
-import { logger, LogLevel } from "@/lib/logger"
-import { getStorage, setStorage } from "@/lib/utils/storage"
+import { useConversation } from "@/features/conversation/hooks/useConversation"
+import { useAudioStore } from "@/shared/state/stores/audioStore"
+import { logger, LogLevel } from "@/shared/utils/logger"
+import { getStorage, setStorage } from "@/shared/utils/storage"
+import { useToast } from "@/components/ui/use-toast"
 
 export function BottomToolbar() {
   const [volume, setVolume] = useState([75])
   const [speechRate, setSpeechRate] = useState([1.0])
+  const { toast } = useToast()
 
   // 日志级别状态
   const [frontendLogLevel, setFrontendLogLevel] = useState<LogLevel>(() => {
@@ -55,31 +58,69 @@ export function BottomToolbar() {
 
   const [backendLogLevel, setBackendLogLevel] = useState("INFO")
 
-  // 使用共享的对话 Context
-  const { 
-    isConnected, 
-    status, 
-    startRecording, 
-    stopRecording 
-  } = useConversationContext()
-  
-  // 麦克风状态：根据录音状态判断
-  const isRecording = status === "listening"
-  const isProcessing = status === "processing" || status === "speaking"
+  // 使用 useConversation hook
+  const {
+    isConnected,
+    status,
+    startRecording,
+    cancelRecording
+  } = useConversation()
 
-  // 切换麦克风
-  const toggleMic = async () => {
-    if (isRecording) {
-      stopRecording()
-    } else {
-      // 🔥🔥🔥 点击麦克风时，立即停止所有正在播放的音频
-      logger.debug('[BottomToolbar] 🎤 麦克风按钮被点击，停止所有音频播放')
-      console.log('[BottomToolbar] 🎤 麦克风按钮被点击，停止所有音频播放')
-      AudioPlayer.stopGlobalAudio()
-      logger.debug('[BottomToolbar] ✅ 音频已停止，开始录音')
-      console.log('[BottomToolbar] ✅ 音频已停止，开始录音')
+  // 直接从 audioStore 获取录音状态（UI直接反映store状态）
+  const isRecording = useAudioStore((state) => state.isRecording)
 
-      await startRecording()
+  // 防抖标记，避免重复点击
+  const isHandlingClickRef = useRef(false)
+
+  // 处理点击麦克风按钮（添加防抖）
+  const handleMicClick = async () => {
+    // 防止重复点击
+    if (isHandlingClickRef.current) {
+      logger.warn('[BottomToolbar] 点击太快，忽略')
+      return
+    }
+
+    isHandlingClickRef.current = true
+    logger.info('[BottomToolbar] 麦克风按钮被点击', { isRecording })
+
+    try {
+      if (isRecording) {
+        // 取消录音
+        logger.info('[BottomToolbar] 取消录音')
+        cancelRecording()
+      } else {
+        // 开始录音
+        AudioPlayer.stopGlobalAudio()
+        logger.info('[BottomToolbar] 开始录音')
+
+        await startRecording()
+        logger.info('[BottomToolbar] ✅ 录音启动成功')
+      }
+    } catch (error) {
+      logger.warn('[BottomToolbar] ⚠️ 操作失败:', error)
+
+      // 显示用户友好的 Toast 提示
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+
+      // 根据错误类型显示不同的提示
+      if (errorMessage.includes('麦克风') || errorMessage.includes('microphone') || errorMessage.includes('麦克风设备')) {
+        toast({
+          title: "未检测到麦克风",
+          description: "请连接麦克风后重试",
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "操作失败",
+          description: errorMessage,
+          variant: "default",
+        })
+      }
+    } finally {
+      // 200ms后允许再次点击（缩短防抖时间）
+      setTimeout(() => {
+        isHandlingClickRef.current = false
+      }, 200)
     }
   }
 
@@ -93,8 +134,8 @@ export function BottomToolbar() {
               variant={isRecording ? "default" : "secondary"}
               size="sm"
               className="h-9 gap-2 px-4"
-              onClick={toggleMic}
-              disabled={!isConnected || isProcessing}
+              onClick={handleMicClick}
+              disabled={!isConnected || status === "processing" || status === "speaking"}
             >
               {isRecording ? (
                 <Mic className="size-4" />
@@ -107,12 +148,12 @@ export function BottomToolbar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {!isConnected 
-              ? "未连接到服务器" 
-              : isProcessing 
-                ? "正在处理中..." 
-                : isRecording 
-                  ? "关闭麦克风" 
+            {!isConnected
+              ? "未连接到服务器"
+              : status === "processing" || status === "speaking"
+                ? "正在处理中..."
+                : isRecording
+                  ? "关闭麦克风"
                   : "开启麦克风"}
           </TooltipContent>
         </Tooltip>
@@ -289,7 +330,6 @@ export function BottomToolbar() {
                     value={backendLogLevel}
                     onValueChange={(value) => {
                       setBackendLogLevel(value)
-                      // 通过 Socket.IO 发送到后端
                       const socket = (window as any).socket
                       if (socket?.connected) {
                         socket.emit('set_log_level', { level: value })

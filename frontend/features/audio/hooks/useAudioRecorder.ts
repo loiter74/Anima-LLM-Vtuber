@@ -7,7 +7,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
 import { useAudioStore } from '@/shared/state/stores/audioStore'
 import { logger } from '@/shared/utils/logger'
-import type { AudioRecorderOptions } from '@/shared/types/audio'
+import type { AudioRecorderOptions } from '../types'
 
 export interface UseAudioRecorderOptions extends AudioRecorderOptions {
   onError?: (error: string) => void

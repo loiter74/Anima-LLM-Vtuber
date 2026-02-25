@@ -4,8 +4,8 @@
  */
 
 import { logger } from '@/shared/utils/logger'
-import { float32ToInt16 } from '@/lib/utils/audio'
-import type { AudioRecorderOptions, AudioDataCallback } from '@/shared/types/audio'
+import { float32ToInt16 } from '../utils/audio'
+import type { AudioRecorderOptions, AudioDataCallback } from '../types'
 
 export class AudioRecorder {
   private audioContext: AudioContext | null = null
@@ -65,10 +65,12 @@ export class AudioRecorder {
       return
     }
 
+    logger.info('[AudioRecorder] 📤 Requesting microphone permission...')
     await this.checkPermission()
     this.onAudioDataCallback = onAudioData
 
     try {
+      logger.info('[AudioRecorder] 🎤 Getting user media...')
       // Get media stream
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -80,7 +82,10 @@ export class AudioRecorder {
         },
       })
 
+      logger.info('[AudioRecorder] ✅ Media stream obtained')
+
       // Create audio context
+      logger.info('[AudioRecorder] 🎛️ Creating audio context and processors...')
       this.audioContext = new AudioContext({
         sampleRate: this.options.sampleRate,
       })
@@ -102,8 +107,9 @@ export class AudioRecorder {
       }
 
       this.isRecording = true
-      logger.debug('[AudioRecorder] ✅ 录音已启动')
+      logger.info('[AudioRecorder] ✅ 录音已启动')
     } catch (err) {
+      logger.warn('[AudioRecorder] ⚠️ Failed to start recording:', err)
       this.cleanup()
       throw this.normalizeError(err)
     }

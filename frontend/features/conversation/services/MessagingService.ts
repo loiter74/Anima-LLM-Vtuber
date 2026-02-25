@@ -23,7 +23,7 @@ export interface MessagingServiceEvents {
 
 export class MessagingService extends EventService<MessagingServiceEvents> {
   private socket: SocketService | null = null
-  private responseTimeoutMs: number = 30000 // 30秒
+  private responseTimeoutMs: number = 120000 // 120秒（2分钟）
   private timeoutId: ReturnType<typeof setTimeout> | null = null
 
   /**
@@ -92,7 +92,7 @@ export class MessagingService extends EventService<MessagingServiceEvents> {
     this.clearResponseTimeout()
 
     this.timeoutId = setTimeout(() => {
-      logger.warn('[MessagingService] 响应超时')
+      logger.debug('[MessagingService] 响应超时（2分钟）')
       this.emit('response:timeout')
     }, this.responseTimeoutMs)
   }

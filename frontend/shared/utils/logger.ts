@@ -1,63 +1,101 @@
 /**
- * Logger Utilities
- * Provides structured logging capabilities
+ * Frontend Logger Utility
+ * Provides dynamic log level control with localStorage persistence
  */
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-
-interface Logger {
-  debug: (...args: unknown[]) => void
-  info: (...args: unknown[]) => void
-  warn: (...args: unknown[]) => void
-  error: (...args: unknown[]) => void
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+  SILENT = 4
 }
 
-class ConsoleLogger implements Logger {
-  private prefix: string
-
-  constructor(prefix: string = '[App]') {
-    this.prefix = prefix
+export class Logger {
+  private static instance: Logger
+  private config: {
+    level: LogLevel
+    enableTimestamp: boolean
   }
 
-  private log(level: LogLevel, ...args: unknown[]): void {
-    const timestamp = new Date().toISOString()
-    const prefix = `${timestamp} ${this.prefix}`
+  static getInstance(): Logger {
+    if (!Logger.instance) {
+      Logger.instance = new Logger()
+    }
+    return Logger.instance
+  }
+
+  // 从 localStorage 读取初始级别
+  constructor() {
+    // 检查是否在浏览器环境（避免 SSR 错误）
+    const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+    const saved = isBrowser ? localStorage.getItem('anima_log_level') : null
+    this.config = {
+      level: saved !== null ? parseInt(saved, 10) : LogLevel.INFO,
+      enableTimestamp: true
+    }
+  }
+
+  // 设置日志级别并持久化
+  setLevel(level: LogLevel): void {
+    this.config.level = level
+    // 检查是否在浏览器环境
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      localStorage.setItem('anima_log_level', level.toString())
+    }
+  }
+
+  // 获取当前日志级别
+  getLevel(): LogLevel {
+    return this.config.level
+  }
+
+  // 日志方法（根据级别过滤）
+  debug(message: string, ...args: any[]): void {
+    this.log(LogLevel.DEBUG, message, args)
+  }
+
+  info(message: string, ...args: any[]): void {
+    this.log(LogLevel.INFO, message, args)
+  }
+
+  warn(message: string, ...args: any[]): void {
+    this.log(LogLevel.WARN, message, args)
+  }
+
+  error(message: string, ...args: any[]): void {
+    this.log(LogLevel.ERROR, message, args)
+  }
+
+  private log(level: LogLevel, message: string, args: any[]): void {
+    if (level < this.config.level) return
+
+    const timestamp = this.config.enableTimestamp
+      ? `[${new Date().toISOString().split('T')[1].split('.')[0]}] `
+      : ''
+
+    const prefix = `[${this.getLevelName(level)}] `
 
     switch (level) {
-      case 'debug':
-        console.debug(prefix, ...args)
+      case LogLevel.DEBUG:
+        console.log(timestamp + prefix + message, ...args)
         break
-      case 'info':
-        console.info(prefix, ...args)
+      case LogLevel.INFO:
+        console.log(timestamp + prefix + message, ...args)
         break
-      case 'warn':
-        console.warn(prefix, ...args)
+      case LogLevel.WARN:
+        console.warn(timestamp + prefix + message, ...args)
         break
-      case 'error':
-        console.error(prefix, ...args)
+      case LogLevel.ERROR:
+        console.error(timestamp + prefix + message, ...args)
         break
     }
   }
 
-  debug(...args: unknown[]): void {
-    this.log('debug', ...args)
-  }
-
-  info(...args: unknown[]): void {
-    this.log('info', ...args)
-  }
-
-  warn(...args: unknown[]): void {
-    this.log('warn', ...args)
-  }
-
-  error(...args: unknown[]): void {
-    this.log('error', ...args)
+  private getLevelName(level: LogLevel): string {
+    return ['DEBUG', 'INFO', 'WARN', 'ERROR', 'SILENT'][level]
   }
 }
 
-export const logger = new ConsoleLogger()
-
-export function createLogger(prefix: string): Logger {
-  return new ConsoleLogger(prefix)
-}
+// 导出单例
+export const logger = Logger.getInstance()

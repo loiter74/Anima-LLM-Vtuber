@@ -50,8 +50,6 @@ export const useConversationStore = create<ConversationState>()(
         const currentTime = getCurrentTime()
         const messageId = generateId()
 
-        console.log(`[conversationStore] addMessage 被调用 - sender: ${sender}, text: "${text}"`)
-
         set((state) => {
           // Check for duplicate messages (React dual-render issue)
           if (state.messages.length > 0) {
@@ -61,12 +59,10 @@ export const useConversationStore = create<ConversationState>()(
               lastMsg.text === text &&
               lastMsg.time === currentTime
             ) {
-              console.log(`[conversationStore] ⚠️ 检测到重复消息，跳过添加`)
               return state // Skip duplicate
             }
           }
 
-          console.log(`[conversationStore] ✅ 添加消息到列表，当前消息数: ${state.messages.length}`)
           return {
             messages: [
               ...state.messages,
@@ -120,7 +116,10 @@ export const useConversationStore = create<ConversationState>()(
     }),
     {
       name: 'conversation-storage',
-      partialize: (state) => ({ messages: state.messages }), // Only persist messages
+      partialize: (state) => ({
+        // 🆕 只持久化这些字段，排除 status、isTyping、currentResponse 等
+        messages: state.messages,
+      }),
     }
   )
 )

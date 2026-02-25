@@ -17,6 +17,9 @@ export function formatTimestamp(timestamp: number): string {
   return `${hours}:${minutes}`
 }
 
+// Alias for formatTimestamp
+export const formatTime = formatTimestamp
+
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp)
   const year = date.getFullYear()

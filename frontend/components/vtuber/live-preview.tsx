@@ -9,18 +9,18 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip"
 import { Maximize2, Minimize2, Video, VideoOff } from "lucide-react"
-import { useConversationContext } from "@/contexts/conversation-context"
+import { useConversationStore } from "@/features/conversation/stores/conversationStore"
 import { useTimer } from "@/hooks/use-timer"
-import { formatTime } from "@/lib/utils/format"
-import { EXPRESSIONS } from "@/lib/constants/status"
+import { formatTime } from "@/shared/utils/format"
+import { EXPRESSIONS } from "@/shared/constants/live2d"
 
 export function LivePreview() {
   const [isLive, setIsLive] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentExpression, setCurrentExpression] = useState("Neutral")
 
-  // 从 conversation context 获取真实的对话状态
-  const { status } = useConversationContext()
+  // 直接从 store 读取状态（避免调用 useConversation）
+  const status = useConversationStore((state) => state.status)
 
   // 根据真实状态判断是否正在说话
   const isSpeaking = status === "speaking"

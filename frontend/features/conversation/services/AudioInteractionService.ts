@@ -154,7 +154,7 @@ export class AudioInteractionService extends EventService<AudioInteractionServic
 
       logger.info('[AudioInteractionService] ✅ 录音已启动')
     } catch (err) {
-      logger.error('[AudioInteractionService] ❌ 录音启动失败:', err)
+      logger.warn('[AudioInteractionService] ⚠️ 录音启动失败:', err)
       const errorMessage = err instanceof Error ? err.message : '无法访问麦克风'
       this.emit('recording:error', errorMessage)
       throw err
@@ -225,15 +225,28 @@ export class AudioInteractionService extends EventService<AudioInteractionServic
    * 播放音频
    */
   async playAudio(base64: string, format: string = 'mp3'): Promise<void> {
-    logger.debug('[AudioInteractionService] 播放音频')
+    logger.info('[AudioInteractionService] 🎵 收到新音频播放请求')
+
+    // 先停止当前播放（如果有）
+    if (AudioPlayer.isPlaying) {
+      logger.info('[AudioInteractionService] 🛑 检测到正在播放，先停止旧音频')
+      AudioPlayer.stopGlobalAudio()
+      this.emit('audio:stopped')
+
+      // 等待一小段时间确保停止完成
+      await new Promise(resolve => setTimeout(resolve, 50))
+      logger.info('[AudioInteractionService] ✅ 旧音频已停止，准备播放新音频')
+    }
+
     this.emit('audio:playing')
 
     try {
       await AudioPlayer.playGlobal(base64, format)
-      // 播放完成会由 AudioPlayer 的回调处理
+      logger.info('[AudioInteractionService] ✅ 音频播放已启动')
     } catch (error) {
-      logger.error('[AudioInteractionService] 音频播放失败:', error)
+      logger.error('[AudioInteractionService] ❌ 音频播放失败:', error)
       this.emit('audio:stopped')
+      throw error
     }
   }
 

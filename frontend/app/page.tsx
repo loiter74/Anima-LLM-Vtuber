@@ -3,34 +3,14 @@
 import { LivePreview } from "@/components/vtuber/live-preview"
 import { ChatPanel } from "@/components/vtuber/chat-panel"
 import { BottomToolbar } from "@/components/vtuber/bottom-toolbar"
-import { ConversationProvider, useConversationContext } from "@/contexts/conversation-context"
+import { useConnectionStore } from "@/features/connection/stores/connectionStore"
 import { Bot, Zap, Loader2 } from "lucide-react"
 
-function ConnectionStatus() {
-  const { isConnected } = useConversationContext()
-  
-  if (isConnected) {
-    return (
-      <div className="flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1">
-        <Zap className="size-3 text-green-500" />
-        <span className="text-xs font-medium text-green-500">
-          Connected
-        </span>
-      </div>
-    )
-  }
-  
-  return (
-    <div className="flex items-center gap-1.5 rounded-full bg-yellow-500/15 px-2.5 py-1">
-      <Loader2 className="size-3 text-yellow-500 animate-spin" />
-      <span className="text-xs font-medium text-yellow-500">
-        Connecting...
-      </span>
-    </div>
-  )
-}
-
 function PageContent() {
+  // 直接从 store 读取连接状态（避免调用 useConversation 导致重复初始化）
+  const status = useConnectionStore((state) => state.status)
+  const isConnected = status === 'connected'
+
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Top navigation bar */}
@@ -49,7 +29,22 @@ function PageContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ConnectionStatus />
+          {/* 直接在这里渲染连接状态（移除 ConnectionStatus 组件） */}
+          {isConnected ? (
+            <div className="flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1">
+              <Zap className="size-3 text-green-500" />
+              <span className="text-xs font-medium text-green-500">
+                Connected
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 rounded-full bg-yellow-500/15 px-2.5 py-1">
+              <Loader2 className="size-3 text-yellow-500 animate-spin" />
+              <span className="text-xs font-medium text-yellow-500">
+                Connecting...
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -73,9 +68,6 @@ function PageContent() {
 }
 
 export default function VTuberConsolePage() {
-  return (
-    <ConversationProvider>
-      <PageContent />
-    </ConversationProvider>
-  )
+  // 移除 ConversationProvider 包装（直接使用 PageContent）
+  return <PageContent />
 }

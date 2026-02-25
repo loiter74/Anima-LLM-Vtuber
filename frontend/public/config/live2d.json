@@ -1,0 +1,16 @@
+{
+  "modelPath": "/live2d/haru/haru_greeter_t03.model3.json",
+  "expressions": {
+    "idle": 0,
+    "listening": 1,
+    "thinking": 2,
+    "speaking": 3,
+    "surprised": 4,
+    "sad": 5
+  },
+  "lipSync": {
+    "enabled": true,
+    "sensitivity": 1.0,
+    "smoothing": 0.5
+  }
+}

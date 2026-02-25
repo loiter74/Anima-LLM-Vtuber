@@ -113,7 +113,9 @@
       "Bash(powershell -Command \"\nif \\(Test-Path ''.\\\\backend.log''\\) { Get-Content ''.\\\\backend.log'' -Tail 30 } else { echo ''No backend.log found'' }\nGet-NetTCPConnection -LocalPort 12394 -ErrorAction SilentlyContinue | Select-Object LocalPort, State\n\")",
       "Bash(powershell -Command \"\nif \\(Test-Path ''.\\\\frontend.log''\\) { Get-Content ''.\\\\frontend.log'' -Tail 15 } else { echo ''No frontend.log yet'' }\nGet-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object LocalPort, State\n\")",
       "Bash(powershell -Command \"\nGet-NetTCPConnection -LocalPort 12394 -ErrorAction SilentlyContinue | Select-Object LocalPort, State\n\")",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(while read:*)",
+      "Bash(head:*)"
     ]
   }
 }

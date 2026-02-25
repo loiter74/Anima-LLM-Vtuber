@@ -28,6 +28,8 @@ pnpm start      # Start production server
 pnpm lint       # Run ESLint
 ```
 
+**Note**: No test framework is currently configured. Use manual testing or Playwright for E2E testing.
+
 ### Startup Scripts
 - `scripts/start.sh` - Unix startup script (starts both backend and frontend)
 - `scripts/start.bat` - Windows batch startup script
@@ -163,6 +165,10 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 **Available Handlers**:
 - `TextHandler` - Emits text chunks via WebSocket
+- `ExpressionHandler` - Handles Live2D character expression events
+  - Maps conversation states to Live2D expressions (idle, listening, thinking, speaking, surprised, sad)
+  - Sends `expression` events via WebSocket to frontend
+  - Located at: `src/anima/handlers/expression_handler.py`
 - `SocketEventAdapter` - Adapts backend events to frontend format
   - Maps event names: `sentence` → `text`, `user-transcript` → `transcript`
   - Adds missing fields for frontend compatibility
@@ -173,6 +179,21 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - `@ProviderRegistry.register_config("llm", "openai")` - registers config class
 - `@ProviderRegistry.register_service("llm", "openai")` - registers service class
 - Supports discriminated unions for type-safe config loading
+
+**7. Live2D Expression System**
+- Frontend feature module at `frontend/features/live2d/`
+- **Backend Components**:
+  - `ExpressionHandler` (`src/anima/handlers/expression_handler.py`) - Sends expression events via WebSocket
+  - Configuration: `config/features/live2d.yaml` - Model path, scale, position, expression mappings
+  - Expression types: `idle`, `listening`, `thinking`, `speaking`, `surprised`, `sad`
+- **Frontend Components**:
+  - `Live2DService` - Manages Live2D model loading and expression control
+  - `LipSyncEngine` - Handles lip-sync animation during audio playback
+  - `useLive2D` hook - React hook for Live2D integration
+  - `Live2DViewer` component - Renders Live2D model in canvas
+- **Event Flow**: Backend emits `expression` event → Frontend `useConversation` receives → `Live2DViewer` updates model
+- **Library**: Uses `pixi-live2d-display` for Live2D model rendering
+- **Model Configuration**: `frontend/public/config/live2d.json` - Live2D model settings
 
 ## Configuration System
 
@@ -267,6 +288,54 @@ User-specific settings are managed separately from project configuration:
 - Loaded automatically at server startup
 - Methods: `get_log_level()`, `set_log_level(level)`, `save()`
 
+### Feature Configuration
+
+Features are configured as separate YAML files under `config/features/`:
+
+**Live2D Configuration** (`config/features/live2d.yaml`):
+```yaml
+enabled: true
+model:
+  path: "/live2d/haru/haru_greeter_t03.model3.json"
+  scale: 0.5
+  position:
+    x: 0
+    y: 0
+expressions:
+  idle: "idle"
+  listening: "listening"
+  thinking: "thinking"
+  speaking: "speaking"
+  surprised: "surprised"
+  sad: "sad"
+lip_sync:
+  enabled: true
+  sensitivity: 1.0
+  smoothing: 0.5
+```
+
+### Adding New UI Components
+
+The project uses **shadcn/ui** for UI components. To add new components:
+
+```bash
+cd frontend
+pnpm dlx shadcn@latest add [component-name]
+```
+
+Components are added to `frontend/components/ui/` and follow the shadcn/ui pattern:
+- Use Radix UI primitives for accessibility
+- Style with Tailwind CSS
+- Import utility `cn()` from `@/shared/utils/cn` for className merging
+
+**Example usage**:
+```tsx
+import { Button } from '@/components/ui/button'
+import { cn } from '@/shared/utils/cn'
+
+<Button className={cn('base-styles', className)} />
+```
+
 ### Adding a New Service Provider
 
 **Step 1: Create config class** (`src/anima/config/providers/llm/my_provider.py`):
@@ -353,11 +422,39 @@ class ConversationResult:
 **Event Types** (`src/anima/core/events.py`):
 - `EventType.SENTENCE` - Text chunk
 - `EventType.AUDIO` - Audio data
+- `EventType.EXPRESSION` - Live2D character expression (idle, listening, thinking, speaking, surprised, sad)
 - `EventType.TOOL_CALL` - Function calling
 - `EventType.CONTROL` - Control signals
 - `EventType.ERROR` - Errors
 
+**Completion Marker**:
+- OutputPipeline sends empty text event when streaming finishes
+- Includes `metadata: {"is_complete": true}` and incrementing `seq` number
+- Frontend uses `lastProcessedSeq` to deduplicate completion markers
+- Format: `{"type": "sentence" / "text", "text": "", "seq": N, "is_complete": true}`
+
 ## Socket.IO Events
+
+### Event Flow Summary
+
+```
+Text Input Flow:
+Client → text_input → InputPipeline (ASR → TextClean) → Agent.chat_stream()
+→ OutputPipeline → EventBus → Handlers → WebSocket → Client
+
+Audio Input Flow (VAD):
+Client → raw_audio_data → VAD (detect speech end) → mic_audio_end
+→ ASR → Agent → OutputPipeline → EventBus → Handlers → WebSocket → Client
+```
+
+### Event Mapping (SocketEventAdapter)
+
+The `SocketEventAdapter` maps backend event names to frontend-expected names:
+- `sentence` → `text`
+- `user-transcript` → `transcript`
+- Other events remain unchanged
+
+Located at: `src/anima/handlers/socket_adapter.py`
 
 **Client → Server:**
 - `connect` / `disconnect`
@@ -376,6 +473,7 @@ class ConversationResult:
 - `sentence` - Streaming text chunks
 - `audio` - Audio chunks
 - `user-transcript` - ASR result
+- `expression` - Live2D expression event (idle, listening, thinking, speaking, surprised, sad)
 - `control` - Control signals (start-mic, stop-mic, interrupt, etc.)
 - `error`
 
@@ -383,6 +481,44 @@ class ConversationResult:
 - `text` - Adapted from `sentence` (frontend expects this)
 - `transcript` - Adapted from `user-transcript`
 - Other events remain unchanged
+
+**Event Adapter Note**: `SocketEventAdapter` maps backend event names to frontend-expected names. Can be disabled by setting `enable_adapter=False` when registering handlers.
+
+## Frontend Architecture Best Practices
+
+**Component Pattern**:
+```tsx
+// ✅ Correct: Use hooks directly in components
+function ChatPanel() {
+  const { isConnected, messages, sendText } = useConversation()
+  // ...
+}
+
+// ❌ Avoid: Don't create unnecessary Context wrappers
+// The architecture uses hooks directly, no Context provider needed
+```
+
+**State Access Pattern**:
+```tsx
+// Option 1: Use useConversation hook (recommended for components)
+import { useConversation } from '@/features/conversation/hooks/useConversation'
+
+// Option 2: Use Zustand store directly (for fine-grained subscriptions)
+import { useConversationStore } from '@/shared/state/stores/conversationStore'
+
+// Only subscribe to specific state to avoid re-renders
+const messages = useConversationStore(state => state.messages)
+```
+
+**Type Usage**:
+```tsx
+// Use shared types for basic data structures
+import type { Message, ConversationStatus } from '@/shared/types'
+
+// Store types are inferred automatically
+import { useConversationStore } from '@/shared/state/stores/conversationStore'
+type Store = ReturnType<typeof useConversationStore.getState>
+```
 
 ## Troubleshooting
 
@@ -446,6 +582,18 @@ class ConversationResult:
 - Audio buffers stored in `audio_buffers: Dict[str, list]` keyed by session_id
 - Used when client sends `mic_audio_data` before `mic_audio_end`
 
+**Audio Processing**:
+- Audio format: Float32 array, normalized to [-1.0, 1.0]
+- Sample rate: 16kHz (required by VAD and ASR)
+- Frontend AudioRecorder applies gain control (default: 50.0)
+- AudioPlayer supports global stop: `AudioPlayer.stopGlobalAudio()` stops all playing audio
+
+**Auto-Interruption**:
+- When VAD detects new speech start, it automatically interrupts ongoing responses
+- Frontend interrupts audio playback when starting new recording
+- Client sends `interrupt_signal` when user clicks interrupt button
+- `ConversationOrchestrator.interrupt()` sets flag that pipelines check
+
 **Async/Await**:
 - Entire backend is async - use `await` for all I/O
 - LLM and TTS return AsyncIterators for streaming
@@ -454,6 +602,31 @@ class ConversationResult:
 - `ConversationOrchestrator.interrupt()` sets `_interrupted` flag
 - Both InputPipeline and OutputPipeline check this flag
 - OutputPipeline breaks its async-for loop when interrupted
+
+**Frontend Architecture**:
+- **No Context Providers**: Components use hooks directly (simpler data flow)
+- **State Management**: Zustand stores with persist middleware for conversation history
+- **Type Inference**: Store types inferred from implementation, not duplicated
+- **Hook Pattern**: `useConversation` provides all conversation functionality
+- **Component Usage**:
+  ```tsx
+  // ✅ Correct: Use hook directly in component
+  function ChatPanel() {
+    const { isConnected, messages, sendText } = useConversation()
+    // ...
+  }
+  ```
+- **Direct Store Access** (for fine-grained subscriptions):
+  ```tsx
+  import { useConversationStore } from '@/shared/state/stores/conversationStore'
+  const messages = useConversationStore(state => state.messages)
+  ```
+
+**Frontend Logging**:
+- Uses custom `logger` from `@/shared/utils/logger`
+- Supports log levels: DEBUG, INFO, WARN, ERROR, SILENT
+- AudioPlayer has cleaned logs (25 essential logs vs 49 before)
+- Check browser console for audio playback errors
 
 **Environment Variables**:
 - Use `${VAR_NAME}` in YAML configs for API keys
@@ -502,20 +675,76 @@ class ConversationResult:
 - Use `logger_manager.set_level("DEBUG")` to change log level at runtime
 - Valid levels: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+**Graceful Shutdown**:
+- Server handles SIGINT (Ctrl+C) and SIGTERM signals
+- `cleanup_all_resources()` stops all orchestrators and closes service contexts
+- Cross-platform signal handling (Windows/Unix)
+- FastAPI lifespan manager ensures proper cleanup on server shutdown
+
 ## Frontend Structure
+
+The frontend follows a **feature-based architecture** with clear separation of concerns:
+
+### Data Flow Pattern
+
+```
+Component → useConversation Hook → Zustand Stores
+```
+
+**Key Design Principle**: No Context wrapper layer - components directly use hooks for state management
+
+### Feature Modules (`frontend/features/`)
+
+**Audio** (`features/audio/`):
+- `services/AudioRecorder.ts` - Handles microphone recording with configurable gain control
+- `services/AudioPlayer.ts` - Manages audio playback with global stop capability (stops all playing audio)
+- `services/VADProcessor.ts` - Client-side Voice Activity Detection (optional)
+- `hooks/useAudioRecorder.ts` - Hook for audio recording functionality
+- `hooks/useAudioPlayer.ts` - Hook for audio playback with callbacks
+
+**Connection** (`features/connection/`):
+- `services/SocketClient.ts` - Low-level Socket.IO wrapper
+- `services/SocketService.ts` - High-level service with event handler management
+- `hooks/useSocket.ts` - Hook for Socket.IO connection management
+
+**Conversation** (`features/conversation/`):
+- `hooks/useConversation.ts` - Core conversation orchestrator (~400 lines)
+  - Manages Socket.IO events: `text`, `audio`, `transcript`, `control`, `error`, `expression`
+  - Coordinates AudioRecorder and AudioPlayer
+  - Handles conversation state and message history
+  - Auto-interrupts on new input
+  - **No Context wrapper** - components call this hook directly
+
+**Live2D** (`features/live2d/`):
+- `services/Live2DService.ts` - Manages Live2D model loading, expression control, and lifecycle
+- `services/LipSyncEngine.ts` - Handles lip-sync animation based on audio playback
+- `hooks/useLive2D.ts` - React hook for Live2D integration
+- `types/index.ts` - TypeScript types for Live2D configuration
+- Components: `Live2DViewer` (`components/vtuber/live2d-viewer.tsx`)
+
+### State Management (`frontend/shared/state/stores/`)
+
+Uses **Zustand** for global state:
+- `audioStore.ts` - Recording/playback state, volume levels, errors
+- `connectionStore.ts` - Socket connection status and session ID
+- `conversationStore.ts` - Messages, current response, typing status
+  - Tracks `lastProcessedSeq` to deduplicate completion markers
+  - Uses persist middleware to save messages to localStorage
+
+**Type Inference**: Store types are inferred from the store itself, not duplicated in separate type files
+
+### Component Structure
 
 - `app/` - Next.js App Router (`page.tsx` is the main entry point)
 - `components/vtuber/` - VTuber-specific components
   - `chat-panel.tsx` - Main chat UI
   - `live-preview.tsx` - Live2D/live video preview
+  - `live2d-viewer.tsx` - Live2D model viewer with expression sync
   - `bottom-toolbar.tsx` - Control toolbar
 - `components/ui/` - shadcn/ui components (Radix UI + Tailwind)
-- `hooks/` - Custom React hooks
-  - `use-conversation.ts` - Core conversation state management (2000+ lines, handles all Socket.IO events)
-  - `use-mobile.ts` - Mobile detection
-  - `use-toast.ts` - Toast notifications
-- `lib/socket.ts` - Socket.IO client singleton (wrapper around socket.io-client)
-- `contexts/` - React Context providers
+- `shared/constants/events.ts` - Centralized Socket.IO event definitions
+- `shared/constants/live2d.ts` - Live2D expression constants
+- `shared/types/` - TypeScript type definitions (only shared types like `Message`, `ConversationStatus`)
 
 **Frontend Development Notes:**
 - Uses pnpm as package manager
@@ -523,6 +752,7 @@ class ConversationResult:
 - React 19 with TypeScript
 - Socket.IO for real-time communication
 - shadcn/ui for component library (Radix UI primitives + Tailwind CSS)
+- **No Context providers** - components use hooks directly for simpler data flow
 
 ## Key Source Directories
 
@@ -557,6 +787,7 @@ src/anima/
 │   ├── base_handler.py     # Base handler class
 │   ├── text_handler.py     # Text output handler
 │   ├── audio_handler.py    # Audio output handler
+│   ├── expression_handler.py  # Live2D expression handler
 │   └── socket_adapter.py   # Socket event adapter
 ├── state/                  # State management
 ├── utils/                  # Utility modules
@@ -565,3 +796,75 @@ src/anima/
 ├── service_context.py      # Service container
 └── socketio_server.py      # Main server entry point
 ```
+
+**Frontend**:
+```
+frontend/
+├── public/
+│   └── config/
+│       └── live2d.json     # Live2D model configuration
+├── features/
+│   ├── audio/              # Audio recording, playback, VAD
+│   ├── connection/         # Socket.IO connection management
+│   ├── conversation/       # Chat state and message processing
+│   └── live2d/             # Live2D model integration
+│       ├── services/       # Live2DService, LipSyncEngine
+│       ├── hooks/          # useLive2D hook
+│       └── types/          # Live2D TypeScript types
+├── components/
+│   ├── ui/                 # shadcn/ui components
+│   ├── vtuber/             # VTuber-specific components
+│   └── layout/             # Layout components
+├── shared/
+│   ├── constants/          # Event definitions, Live2D constants
+│   ├── state/stores/       # Zustand stores
+│   ├── types/              # Shared TypeScript types
+│   └── utils/              # Utility functions
+└── app/                    # Next.js App Router
+```
+```
+
+## Frontend Refactoring History
+
+### 2025-02: Architecture Simplification
+
+**Goal**: Reduce code complexity and improve learnability for frontend newcomers
+
+**Changes**:
+1. **Removed Context Redundancy** (-51 lines)
+   - Deleted `contexts/conversation-context.tsx`
+   - Components now use `useConversation` hook directly
+   - Eliminated unnecessary abstraction layer
+
+2. **Cleaned Debug Logs** (-80 lines)
+   - Removed 24 CHECKPOINT debug logs from `AudioPlayer.ts`
+   - Reduced log count from 49 to 25 (-49%)
+   - Kept only essential error, warning, and status logs
+
+3. **Simplified Type Definitions** (-14 lines)
+   - Removed duplicate `ConversationState` and `ConversationActions` from `shared/types/conversation.ts`
+   - Store types now inferred automatically from Zustand
+   - Single source of truth for type definitions
+
+**Impact**:
+- Net code reduction: -145 lines
+- Files changed: 8 (1 deleted, 7 modified)
+- Architecture: `Component → Hook → Store` (simplified from 3-layer to 2-layer)
+- Build status: ✅ All tests passing, TypeScript no errors
+
+**Before**:
+```
+Component → ConversationContext → useConversation → Zustand Store
+```
+
+**After**:
+```
+Component → useConversation → Zustand Store
+```
+
+**Benefits**:
+- ✅ Easier to understand for newcomers
+- ✅ Less boilerplate code
+- ✅ Clearer data flow
+- ✅ Better TypeScript inference
+- ✅ Cleaner console output

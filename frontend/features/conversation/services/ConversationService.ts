@@ -41,6 +41,7 @@ export class ConversationService extends EventService<ConversationServiceEvents>
   private conversationStore = useConversationStore
   private lastProcessedSeq: number = -1
   private isInitialized: boolean = false
+  private justConnected: boolean = false  // 🆕 标记刚连接的状态（用于忽略初始控制信号）
 
   // Private constructor for singleton
   private constructor() {
@@ -85,6 +86,10 @@ export class ConversationService extends EventService<ConversationServiceEvents>
 
     this.socket = socket
 
+    // 🆕 标记为刚连接（忽略初始控制信号）
+    this.justConnected = true
+    logger.info('[ConversationService] 🔄 标记为刚连接状态，将忽略初始控制信号')
+
     // 设置 Socket 到所有子服务
     this.connectionService.setSocket(socket)
     this.messagingService.setSocket(socket)
@@ -95,6 +100,15 @@ export class ConversationService extends EventService<ConversationServiceEvents>
       this.setupSocketEventHandlers()
       this.isInitialized = true
     }
+
+    // 🆕 500ms 后取消刚连接标记（后端的初始信号应该在 500ms 内发送完毕）
+    setTimeout(() => {
+      this.justConnected = false
+      logger.info('[ConversationService] ✅ 取消刚连接标记，现在接受所有控制信号')
+      // 🆕 确保状态是 idle
+      this.updateStatus('idle')
+      logger.info('[ConversationService] 🔄 初始化完成后强制重置状态为 idle')
+    }, 500)
   }
 
   /**
@@ -122,9 +136,10 @@ export class ConversationService extends EventService<ConversationServiceEvents>
 
     // 响应超时
     this.messagingService.on('response:timeout', () => {
+      logger.debug('[ConversationService] 响应超时，重置状态为 idle')
       this.conversationStore.getState().setStatus('idle')
-      this.conversationStore.getState().setError('响应超时，请重试')
       this.conversationStore.getState().setTyping(false)
+      // 不再设置 error，因为超时可能只是暂时的问题
     })
 
     // 录音开始
@@ -191,7 +206,10 @@ export class ConversationService extends EventService<ConversationServiceEvents>
         this.lastProcessedSeq = data.seq
         state.finishResponse()
         this.emit('response:finished')
+        this.messagingService.clearResponseTimeout() // 清除超时
       } else {
+        // 收到响应文本，清除超时定时器
+        this.messagingService.clearResponseTimeout()
         state.appendToResponse(data.text)
         this.emit('response:appended', data.text)
       }
@@ -212,8 +230,10 @@ export class ConversationService extends EventService<ConversationServiceEvents>
 
         const cleanBase64 = data.audio_data.trim()
         this.audioService.playAudio(cleanBase64, data.format || 'mp3')
+        this.messagingService.clearResponseTimeout() // 收到音频，清除超时
       } else if (data.audio_url) {
         logger.debug('[ConversationService] 收到音频 URL:', data.audio_url)
+        this.messagingService.clearResponseTimeout() // 收到音频 URL，清除超时
       } else {
         logger.warn('[ConversationService] 收到空音频事件，忽略')
       }
@@ -240,6 +260,11 @@ export class ConversationService extends EventService<ConversationServiceEvents>
 
       switch (data.text) {
         case CONTROL_SIGNALS.START_MIC:
+          // 🆕 如果刚连接，忽略后端的 start-mic 信号（防止自动进入 listening 状态）
+          if (this.justConnected) {
+            logger.warn('[ConversationService] ⚠️ 刚连接，忽略后端的 start-mic 信号')
+            return
+          }
           this.updateStatus('listening')
           break
         case CONTROL_SIGNALS.INTERRUPT:

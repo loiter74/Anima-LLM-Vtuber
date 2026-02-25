@@ -18,16 +18,16 @@ import {
   Trash2,
   Loader2
 } from "lucide-react"
-import { logger } from "@/lib/logger"
-import type { ConversationStatus } from "@/shared/types/conversation"
-import { useConversationContext } from "@/contexts/conversation-context"
-import { STATUS_STYLES } from "@/lib/constants/status"
+import { logger } from "@/shared/utils/logger"
+import type { ConversationStatus } from "@/features/conversation/types"
+import { useConversation } from "@/features/conversation/hooks/useConversation"
+import { STATUS_STYLES } from "@/features/conversation/constants/ui"
 
 export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 使用共享的对话 Context
+  // 使用 useConversation hook（移除 Context 冗余层）
   const {
     isConnected,
     status,
@@ -41,7 +41,17 @@ export function ChatPanel() {
     stopRecording,
     interrupt,
     clearHistory,
-  } = useConversationContext()
+  } = useConversation()
+
+  // 🆕 添加实时状态监控（调试用）
+  useEffect(() => {
+    logger.info('[ChatPanel] 状态实时监控', {
+      status,
+      isTyping,
+      inputDisabled: isTyping || status === "processing" || status === "listening",
+      timestamp: new Date().toISOString(),
+    })
+  }, [status, isTyping])
 
   // 发送消息
   const handleSend = useCallback((text: string) => {
