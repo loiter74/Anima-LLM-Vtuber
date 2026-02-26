@@ -12,12 +12,12 @@ import { Maximize2, Minimize2, Video, VideoOff } from "lucide-react"
 import { useConversationStore } from "@/features/conversation/stores/conversationStore"
 import { useTimer } from "@/hooks/use-timer"
 import { formatTime } from "@/shared/utils/format"
-import { EXPRESSIONS } from "@/shared/constants/live2d"
+import { Live2DViewer } from "@/components/vtuber/live2d-viewer"
 
 export function LivePreview() {
   const [isLive, setIsLive] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [currentExpression, setCurrentExpression] = useState("Neutral")
+  const [showLive2D, setShowLive2D] = useState(true)
 
   // 直接从 store 读取状态（避免调用 useConversation）
   const status = useConversationStore((state) => state.status)
@@ -41,7 +41,7 @@ export function LivePreview() {
               Live2D Preview
             </h2>
             <p className="text-xs text-muted-foreground">
-              Expression: {currentExpression}
+              Status: {status}
             </p>
           </div>
         </div>
@@ -59,125 +59,93 @@ export function LivePreview() {
 
       {/* Live2D Canvas Container */}
       <div className="relative flex-1 overflow-hidden bg-foreground/[0.02]">
-        {/*
-          Live2D Integration Point:
-          Mount your Live2D canvas to the div#live2d-canvas below.
-          Example with pixi-live2d-display:
-            const app = new PIXI.Application({ view: document.getElementById('live2d-canvas') })
-        */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          {/* Live2D canvas placeholder */}
-          <div
-            id="live2d-canvas"
-            className="relative flex size-full items-center justify-center"
-          >
-            {/* Ambient background effect */}
-            <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-accent/[0.03]" />
-
-            {/* Placeholder visual when Live2D is not loaded */}
-            <div className="relative flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="absolute -inset-16 rounded-full bg-primary/[0.06] blur-3xl" />
-                <div className="relative flex size-48 items-center justify-center rounded-full border-2 border-dashed border-border bg-card/50">
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      className="size-10 text-muted-foreground/50"
-                      strokeWidth={1.2}
-                    >
-                      <rect x="2" y="3" width="20" height="14" rx="2" />
-                      <path d="M8 21h8" />
-                      <path d="M12 17v4" />
-                      <circle cx="12" cy="10" r="2" />
-                    </svg>
-                    <p className="text-xs font-medium text-muted-foreground/70">
-                      Live2D Canvas
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <p className="text-[11px] text-muted-foreground/50">
-                Mount your Live2D model to <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-foreground/60">#live2d-canvas</code>
-              </p>
+        {showLive2D ? (
+          <Live2DViewer
+            modelPath="/live2d/hiyori/Hiyori.model3.json"
+            scale={0.5}
+            position={{ x: 0, y: 0 }}
+            enabled={isLive}
+            className="w-full h-full"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Live2D 已禁用</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">点击下方按钮启用</p>
             </div>
+          </div>
+        )}
 
-            {/* Status indicators */}
-            {isLive && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-                {/* Speaking indicator */}
-                {isSpeaking && (
-                  <div className="flex items-center gap-0.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className="w-0.5 rounded-full bg-accent animate-pulse"
-                        style={{
-                          height: `${6 + Math.random() * 10}px`,
-                          animationDelay: `${i * 0.08}s`,
-                          animationDuration: `${0.4 + i * 0.08}s`,
-                        }}
-                      />
-                    ))}
-                    <span className="ml-2 text-[10px] font-medium text-muted-foreground">
-                      Speaking...
-                    </span>
-                  </div>
-                )}
+        {/* Status indicators overlay */}
+        {isLive && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none">
+            {/* Speaking indicator */}
+            {isSpeaking && (
+              <div className="flex items-center gap-0.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="w-0.5 rounded-full bg-accent animate-pulse"
+                    style={{
+                      height: `${6 + Math.random() * 10}px`,
+                      animationDelay: `${i * 0.08}s`,
+                      animationDuration: `${0.4 + i * 0.08}s`,
+                    }}
+                  />
+                ))}
+                <span className="ml-2 text-[10px] font-medium text-muted-foreground">
+                  Speaking...
+                </span>
+              </div>
+            )}
 
-                {/* Processing indicator */}
-                {(status === "processing" || status === "idle") && !isSpeaking && (
-                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
-                    <div className="size-1.5 rounded-full bg-yellow-500 animate-ping" />
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      {status === "processing" ? "处理中..." : "待机中"}
-                    </span>
-                  </div>
-                )}
+            {/* Processing indicator */}
+            {(status === "processing" || status === "idle") && !isSpeaking && (
+              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                <div className="size-1.5 rounded-full bg-yellow-500 animate-ping" />
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {status === "processing" ? "处理中..." : "待机中"}
+                </span>
+              </div>
+            )}
 
-                {/* Listening indicator */}
-                {status === "listening" && !isSpeaking && (
-                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
-                    <div className="relative flex size-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
-                    </div>
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      录音中...
-                    </span>
-                  </div>
-                )}
+            {/* Listening indicator */}
+            {status === "listening" && !isSpeaking && (
+              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+                <div className="relative flex size-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  录音中...
+                </span>
+              </div>
+            )}
 
-                {/* Error indicator */}
-                {status === "error" && !isSpeaking && (
-                  <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-destructive/50">
-                    <div className="size-2 rounded-full bg-destructive" />
-                    <span className="text-[10px] font-medium text-destructive">
-                      错误
-                    </span>
-                  </div>
-                )}
+            {/* Error indicator */}
+            {status === "error" && !isSpeaking && (
+              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-destructive/50">
+                <div className="size-2 rounded-full bg-destructive" />
+                <span className="text-[10px] font-medium text-destructive">
+                  错误
+                </span>
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Expression controls */}
+      {/* Control bar */}
       <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
         <div className="flex items-center gap-1.5">
-          {EXPRESSIONS.map((exp) => (
-            <Button
-              key={exp.name}
-              variant={currentExpression === exp.name ? "default" : "secondary"}
-              size="sm"
-              className="h-7 text-xs px-2.5"
-              onClick={() => setCurrentExpression(exp.name)}
-            >
-              {exp.label}
-            </Button>
-          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2.5"
+            onClick={() => setShowLive2D(!showLive2D)}
+          >
+            {showLive2D ? "隐藏 Live2D" : "显示 Live2D"}
+          </Button>
         </div>
         <div className="flex items-center gap-1">
           <Tooltip>

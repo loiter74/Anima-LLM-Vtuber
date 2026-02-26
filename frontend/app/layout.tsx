@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/toaster'
+import Script from 'next/script'
 import './globals.css'
 
 const geist = Geist({ 
@@ -44,6 +45,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}>
+        {/* Live2D Cubism Core - 必须在 pixi-live2d-display 之前加载 */}
+        <Script
+          src="/live2dcubismcore.js"
+          strategy="beforeInteractive"
+        />
+
         {children}
         <Toaster />
         <Analytics />

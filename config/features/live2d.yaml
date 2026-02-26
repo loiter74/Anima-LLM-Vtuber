@@ -1,28 +1,40 @@
 # Live2D 配置文件
-# 定义 Live2D 模型路径和表情映射
+# 基于情感内容的 Live2D 表情控制
 
 enabled: true
 
 # Live2D 模型配置
 model:
-  path: "/live2d/haru/haru_greeter_t03.model3.json"
+  path: "/live2d/hiyori/Hiyori.model3.json"
   scale: 0.5
   position:
     x: 0
     y: 0
 
-# 表情映射配置
-# 将内部状态映射到 Live2D 模型的动作组
-expressions:
-  idle: "idle"           # 空闲状态
-  listening: "listening" # 监听状态
-  thinking: "thinking"   # 思考状态
-  speaking: "speaking"   # 说话状态
-  surprised: "surprised" # 惊讶状态
-  sad: "sad"            # 悲伤状态
+# 表情映射：emotion name → Live2D motion index
+# 根据你的 Live2D 模型调整这些索引
+emotion_map:
+  happy: 3      # 开心、快乐
+  sad: 1        # 难过、悲伤
+  angry: 2      # 生气、愤怒
+  surprised: 4  # 惊讶
+  neutral: 0    # 中性、平静
+  thinking: 5   # 思考、沉思
+
+# 有效表情列表（用于生成提示词）
+valid_emotions:
+  - happy
+  - sad
+  - angry
+  - surprised
+  - neutral
+  - thinking
 
 # 唇同步配置
 lip_sync:
   enabled: true
   sensitivity: 1.0      # 嘴部动作灵敏度 (0.0 - 2.0)
   smoothing: 0.5        # 平滑系数 (0.0 - 1.0)
+
+# 表情提示词模板路径
+prompt_template_path: "config/prompts/live2d_expression.txt"
