@@ -42,6 +42,13 @@ export function useLive2D(options: UseLive2DOptions) {
     onError,
   } = options
 
+  // 提取 lipSyncConfig 的各个值，避免对象引用变化
+  const lipSyncSensitivity = lipSyncConfig.sensitivity ?? 1.0
+  const lipSyncSmoothing = lipSyncConfig.smoothing ?? 0.3
+  const lipSyncMinThreshold = lipSyncConfig.minThreshold ?? 0.05
+  const lipSyncMaxValue = lipSyncConfig.maxValue ?? 1.0
+  const lipSyncUseMouthForm = lipSyncConfig.useMouthForm ?? false
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const serviceRef = useRef<Live2DService | null>(null)
   const lipSyncRef = useRef<LipSyncEngine | null>(null)
@@ -60,19 +67,30 @@ export function useLive2D(options: UseLive2DOptions) {
   const stablePosition = useMemo(() => position, [position.x, position.y])
 
   // 使用 useMemo 创建稳定的 config 对象
+  // 依赖数组使用基本类型值，避免对象引用变化
   const config: Live2DModelConfig = useMemo(() => ({
     path: modelPath,
     scale,
     position: stablePosition,
     lipSync: {
       enabled: lipSyncEnabled,
-      sensitivity: lipSyncConfig.sensitivity ?? 1.0,
-      smoothing: lipSyncConfig.smoothing ?? 0.3,
-      minThreshold: lipSyncConfig.minThreshold ?? 0.05,
-      maxValue: lipSyncConfig.maxValue ?? 1.0,
-      useMouthForm: lipSyncConfig.useMouthForm ?? false,
+      sensitivity: lipSyncSensitivity,
+      smoothing: lipSyncSmoothing,
+      minThreshold: lipSyncMinThreshold,
+      maxValue: lipSyncMaxValue,
+      useMouthForm: lipSyncUseMouthForm,
     },
-  }), [modelPath, scale, stablePosition, lipSyncEnabled, lipSyncConfig])
+  }), [
+    modelPath,
+    scale,
+    stablePosition,
+    lipSyncEnabled,
+    lipSyncSensitivity,
+    lipSyncSmoothing,
+    lipSyncMinThreshold,
+    lipSyncMaxValue,
+    lipSyncUseMouthForm,
+  ])
 
   // 更新 ref 引用
   useEffect(() => {
