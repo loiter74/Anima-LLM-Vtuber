@@ -18,6 +18,14 @@ export interface UseLive2DOptions {
   position?: { x: number; y: number }
   enabled?: boolean
   lipSyncEnabled?: boolean
+  /** 唇同步配置（可选，使用默认值） */
+  lipSyncConfig?: {
+    sensitivity?: number
+    smoothing?: number
+    minThreshold?: number
+    maxValue?: number
+    useMouthForm?: boolean
+  }
   onExpressionChange?: (expression: string) => void
   onError?: (error: Error) => void
 }
@@ -29,6 +37,7 @@ export function useLive2D(options: UseLive2DOptions) {
     position = { x: 0, y: 0 },
     enabled = true,
     lipSyncEnabled = true,
+    lipSyncConfig = {},
     onExpressionChange,
     onError,
   } = options
@@ -55,7 +64,15 @@ export function useLive2D(options: UseLive2DOptions) {
     path: modelPath,
     scale,
     position: stablePosition,
-  }), [modelPath, scale, stablePosition])
+    lipSync: {
+      enabled: lipSyncEnabled,
+      sensitivity: lipSyncConfig.sensitivity ?? 1.0,
+      smoothing: lipSyncConfig.smoothing ?? 0.3,
+      minThreshold: lipSyncConfig.minThreshold ?? 0.05,
+      maxValue: lipSyncConfig.maxValue ?? 1.0,
+      useMouthForm: lipSyncConfig.useMouthForm ?? false,
+    },
+  }), [modelPath, scale, stablePosition, lipSyncEnabled, lipSyncConfig])
 
   // 更新 ref 引用
   useEffect(() => {
@@ -156,10 +173,18 @@ export function useLive2D(options: UseLive2DOptions) {
       audioElementRef.current = audioElement
 
       // 创建唇同步引擎
-      const lipSyncEngine = new LipSyncEngine((value: number) => {
-        // 更新嘴部动作
-        serviceRef.current?.setMouthOpen(value)
-      })
+      const lipSyncEngine = new LipSyncEngine(
+        (value: number) => {
+          // 更新嘴部动作
+          serviceRef.current?.setMouthOpen(value)
+        },
+        {
+          updateInterval: 33, // ~30fps
+          enableSmoothing: true,
+          smoothingFactor: 0.5,
+          volumeMultiplier: 1.0,
+        }
+      )
 
       await lipSyncEngine.connect(audioElement)
       lipSyncRef.current = lipSyncEngine
@@ -208,9 +233,17 @@ export function useLive2D(options: UseLive2DOptions) {
       audio.src = `data:audio/${format};base64,${audioData}`
 
       // 3. 创建唇同步引擎并使用预计算的音量包络
-      const lipSyncEngine = new LipSyncEngine((value: number) => {
-        serviceRef.current?.setMouthOpen(value)
-      })
+      const lipSyncEngine = new LipSyncEngine(
+        (value: number) => {
+          serviceRef.current?.setMouthOpen(value)
+        },
+        {
+          updateInterval: 33, // ~30fps
+          enableSmoothing: true,
+          smoothingFactor: 0.5,
+          volumeMultiplier: 1.2, // 稍微增强嘴部动作
+        }
+      )
 
       // 音频播放时开始口型同步
       audio.addEventListener('play', () => {

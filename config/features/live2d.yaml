@@ -33,8 +33,11 @@ valid_emotions:
 # 唇同步配置
 lip_sync:
   enabled: true
-  sensitivity: 1.0      # 嘴部动作灵敏度 (0.0 - 2.0)
-  smoothing: 0.5        # 平滑系数 (0.0 - 1.0)
+  sensitivity: 1.0      # 嘴部动作灵敏度 (0.5 - 2.0)，默认 1.0
+  smoothing: 0.3        # 平滑系数 (0.0 - 1.0)，避免抖动，默认 0.3
+  min_threshold: 0.05   # 最小音量阈值 (0.0 - 1.0)，低于此值嘴部闭合，默认 0.05
+  max_value: 1.0        # 最大嘴部张开度 (0.0 - 1.0)，默认 1.0
+  use_mouth_form: false # 是否同时控制嘴形参数 (更自然但性能开销略大)
 
 # 表情提示词模板路径
 prompt_template_path: "config/prompts/live2d_expression.txt"

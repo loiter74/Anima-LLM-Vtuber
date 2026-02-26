@@ -25,6 +25,12 @@ export class Live2DService extends EventEmitter {
   private isDestroying: boolean = false
   private destroyPromise: Promise<void> | null = null
 
+  // 唇同步相关
+  private mouthParamIndex: number = -1
+  private formParamIndex: number = -1
+  private currentMouthValue: number = 0
+  private lastMouthUpdateTime: number = 0
+
   constructor(canvas: HTMLCanvasElement, config: Live2DModelConfig) {
     super()
     this.canvas = canvas
@@ -274,20 +280,70 @@ export class Live2DService extends EventEmitter {
   }
 
   setMouthOpen(value: number): void {
-    if (!this.model) return
+    if (!this.model || !this.config.lipSync?.enabled) return
 
     try {
-      // 设置嘴部张开程度 (0-1)
-      // 注意：具体的参数名称取决于 Live2D 模型
       const internalModel = this.model.internalModel
+      if (!internalModel) return
 
-      // 尝试设置嘴部参数（需要根据具体模型调整）
-      if (internalModel && typeof value === 'number') {
-        // 这里是一个简化实现，实际需要根据模型的具体参数来调整
-        // internalModel.coreModel.setParameterValueById('ParamMouthOpenUp', value)
+      const coreModel = internalModel.coreModel
+      if (!coreModel) return
+
+      // 性能优化：限制更新频率为 ~30fps
+      const now = performance.now()
+      if (now - this.lastMouthUpdateTime < 33) {
+        return
+      }
+      this.lastMouthUpdateTime = now
+
+      // 确保值在 [0, 1] 范围内
+      const clampedValue = Math.max(0, Math.min(1, value))
+
+      // 应用阈值过滤（避免噪音触发嘴部动作）
+      const threshold = this.config.lipSync?.minThreshold ?? 0.05
+      const filteredValue = clampedValue > threshold ? clampedValue : 0
+
+      // 应用灵敏度调整
+      const sensitivity = this.config.lipSync?.sensitivity ?? 1.0
+      const scaledValue = Math.min(1, filteredValue * sensitivity)
+
+      // 平滑处理（避免突变）
+      const smoothing = this.config.lipSync?.smoothing ?? 0.3
+      const smoothedValue = this.currentMouthValue * smoothing + scaledValue * (1 - smoothing)
+      this.currentMouthValue = smoothedValue
+
+      // 懒加载并缓存参数索引
+      if (this.mouthParamIndex < 0) {
+        this.mouthParamIndex = coreModel.getParameterIndex('ParamMouthOpenY')
+      }
+
+      if (this.mouthParamIndex >= 0) {
+        // 应用最大值限制
+        const maxValue = this.config.lipSync?.maxValue ?? 1.0
+        const finalValue = Math.min(maxValue, smoothedValue)
+
+        coreModel.setParameterValueByIndex(this.mouthParamIndex, finalValue)
+      }
+
+      // 可选：同时控制嘴形（如果配置启用）
+      if (this.config.lipSync?.useMouthForm) {
+        if (this.formParamIndex < 0) {
+          this.formParamIndex = coreModel.getParameterIndex('ParamMouthForm')
+        }
+
+        if (this.formParamIndex >= 0) {
+          // 嘴形变化幅度较小（30%）
+          coreModel.setParameterValueByIndex(
+            this.formParamIndex,
+            smoothedValue * 0.3
+          )
+        }
       }
     } catch (error) {
-      logger.debug('[Live2DService] 设置嘴部动作失败（可能是模型不支持）:', error)
+      // 只在开发模式下输出详细错误
+      if (process.env.NODE_ENV === 'development') {
+        logger.debug('[Live2DService] 设置嘴部动作失败:', error)
+      }
     }
   }
 

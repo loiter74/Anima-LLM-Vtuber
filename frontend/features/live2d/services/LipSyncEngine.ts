@@ -8,6 +8,17 @@
 
 import { logger } from '@/shared/utils/logger'
 
+export interface LipSyncConfig {
+  /** 更新频率限制（毫秒），默认 33ms (~30fps） */
+  updateInterval?: number
+  /** 是否启用平滑处理，默认 true */
+  enableSmoothing?: boolean
+  /** 平滑系数 (0.0 - 1.0)，默认 0.5 */
+  smoothingFactor?: number
+  /** 音量乘数，默认 1.0 */
+  volumeMultiplier?: number
+}
+
 export class LipSyncEngine {
   private audioContext: AudioContext | null = null
   private analyser: AnalyserNode | null = null
@@ -15,15 +26,24 @@ export class LipSyncEngine {
   private source: MediaElementAudioSourceNode | null = null
   private animationId: number | null = null
   private onUpdate: (value: number) => void
+  private config: LipSyncConfig
 
   // 基于预计算音量的播放
   private volumesAnimationId: number | null = null
   private volumes: number[] = []
   private volumesStartTime: number = 0
   private volumesSampleRate: number = 50 // Hz
+  private lastUpdateTime: number = 0
+  private smoothedValue: number = 0
 
-  constructor(onUpdate: (value: number) => void) {
+  constructor(onUpdate: (value: number) => void, config: LipSyncConfig = {}) {
     this.onUpdate = onUpdate
+    this.config = {
+      updateInterval: config.updateInterval ?? 33,
+      enableSmoothing: config.enableSmoothing ?? true,
+      smoothingFactor: config.smoothingFactor ?? 0.5,
+      volumeMultiplier: config.volumeMultiplier ?? 1.0,
+    }
   }
 
   async connect(audioElement: HTMLAudioElement): Promise<void> {
@@ -91,12 +111,28 @@ export class LipSyncEngine {
         // 播放完成
         this.onUpdate(0)
         this.volumesAnimationId = null
+        this.smoothedValue = 0
         logger.debug('[LipSyncEngine] 预计算音量播放完成')
         return
       }
 
       // 获取当前音量
-      const volume = this.volumes[sampleIndex]
+      let volume = this.volumes[sampleIndex]
+
+      // 应用音量乘数
+      volume = volume * this.config.volumeMultiplier
+
+      // 应用平滑处理
+      if (this.config.enableSmoothing) {
+        this.smoothedValue = this.smoothedValue * this.config.smoothingFactor + volume * (1 - this.config.smoothingFactor)
+        volume = this.smoothedValue
+      } else {
+        this.smoothedValue = volume
+      }
+
+      // 确保值在 [0, 1] 范围内
+      volume = Math.max(0, Math.min(1, volume))
+
       this.onUpdate(volume)
 
       // 继续动画
@@ -114,6 +150,7 @@ export class LipSyncEngine {
       cancelAnimationFrame(this.volumesAnimationId)
       this.volumesAnimationId = null
       this.onUpdate(0)
+      this.smoothedValue = 0
       logger.debug('[LipSyncEngine] 停止预计算音量播放')
     }
   }
@@ -156,6 +193,7 @@ export class LipSyncEngine {
       this.audioContext = null
     }
 
+    this.smoothedValue = 0
     logger.info('[LipSyncEngine] 已断开连接')
   }
 }
