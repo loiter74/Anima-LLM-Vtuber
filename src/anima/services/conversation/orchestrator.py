@@ -12,7 +12,7 @@ import numpy as np
 from anima.eventbus import EventBus, EventRouter, EventPriority
 from anima.core import EventType
 from anima.pipeline import InputPipeline, OutputPipeline
-from anima.pipeline.steps import ASRStep, TextCleanStep
+from anima.pipeline.steps import ASRStep, TextCleanStep, EmotionExtractionStep
 
 if TYPE_CHECKING:
     from anima.services.asr import ASRInterface
@@ -70,21 +70,24 @@ class ConversationOrchestrator:
         agent: Optional["AgentInterface"] = None,
         websocket_send: Optional["WebSocketSend"] = None,
         session_id: Optional[str] = None,
+        live2d_config=None,
     ):
         """
         初始化对话编排器
-        
+
         Args:
             asr_engine: ASR 引擎
             tts_engine: TTS 引擎
             agent: Agent 引擎
             websocket_send: WebSocket 发送函数
             session_id: 会话 ID
+            live2d_config: Live2D 配置（可选）
         """
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
         self.agent = agent
         self.session_id = session_id or "default"
+        self.live2d_config = live2d_config
 
         # 包装 websocket_send（如果提供）以适配前端事件格式
         self.websocket_send = websocket_send
@@ -344,10 +347,21 @@ class ConversationOrchestrator:
                 metadata={"interrupted": True}
             )
 
+        # 提取表情标签（如果 Live2D 配置存在）
+        emotions = []
+        if self.live2d_config and self.live2d_config.enabled:
+            emotion_step = EmotionExtractionStep(
+                valid_emotions=self.live2d_config.valid_emotions
+            )
+            await emotion_step(ctx)
+            emotions = ctx.metadata.get("emotions", [])
+            # response_text 已被清理为不含表情标签的文本
+            response_text = ctx.response
+
         # 如果有 TTS，生成音频
         audio_path = None
         if self.tts_engine and not self._interrupted:
-            audio_path = await self._synthesize_audio(response_text)
+            audio_path = await self._synthesize_audio(response_text, emotions)
 
         # 发送空闲表情
         await self._emit_expression("idle")
@@ -358,30 +372,83 @@ class ConversationOrchestrator:
             audio_path=audio_path,
         )
     
-    async def _synthesize_audio(self, text: str) -> Optional[str]:
+    async def _synthesize_audio(
+        self,
+        text: str,
+        emotions: list = None
+    ) -> Optional[str]:
         """
         使用 TTS 合成音频
-        
+
         Args:
             text: 要合成的文本
-            
+            emotions: 表情标签列表（可选）
+
         Returns:
             音频文件路径或 None
         """
         if not self.tts_engine:
             return None
-        
+
+        if emotions is None:
+            emotions = []
+
         try:
             audio_path = await self.tts_engine.synthesize(text)
             logger.info(f"[{self.session_id}] TTS 完成: {audio_path}")
-            
-            # 发送音频事件
-            await self._emit_event(EventType.AUDIO, {"path": audio_path})
-            
+
+            # 如果有表情标签，发送统一的 audio_with_expression 事件
+            if emotions and self.live2d_config and self.live2d_config.enabled:
+                await self._emit_audio_with_expression(
+                    audio_path=audio_path,
+                    emotions=emotions,
+                    text=text
+                )
+            else:
+                # 否则发送普通的音频事件
+                await self._emit_event(EventType.AUDIO, {"path": audio_path})
+
             return audio_path
         except Exception as e:
             logger.error(f"[{self.session_id}] TTS 合成失败: {e}")
             return None
+
+    async def _emit_audio_with_expression(
+        self,
+        audio_path: str,
+        emotions: list,
+        text: str
+    ) -> None:
+        """
+        发送音频 + 表情统一事件
+
+        Args:
+            audio_path: 音频文件路径
+            emotions: 表情标签列表
+            text: 文本内容
+        """
+        from anima.core.events import EventType
+
+        event_data = {
+            "audio_path": audio_path,
+            "emotions": emotions,
+            "text": text,
+        }
+
+        event = OutputEvent(
+            type=EventType.AUDIO_WITH_EXPRESSION,
+            data=event_data,
+            seq=self._seq_counter,
+            metadata={}
+        )
+
+        await self.event_bus.emit(event)
+        self._seq_counter += 1
+
+        logger.info(
+            f"[{self.session_id}] 发送 audio_with_expression 事件: "
+            f"{len(emotions)} 个表情"
+        )
     
     async def _emit_event(self, event_type: str, data: Any) -> None:
         """

@@ -28,6 +28,17 @@ export interface ConversationServiceEvents {
   'response:finished': void
   'error': string
   'expression': string
+  'audio:with:expression': {
+    audio_data: string
+    format: string
+    volumes: number[]
+    expressions: {
+      segments: Array<{ emotion: string; time: number; duration: number }>
+      total_duration: number
+    }
+    text: string
+    seq: number
+  }
 }
 
 export class ConversationService extends EventService<ConversationServiceEvents> {
@@ -186,6 +197,7 @@ export class ConversationService extends EventService<ConversationServiceEvents>
     this.socket.off('control')
     this.socket.off('error')
     this.socket.off('expression')
+    this.socket.off('audio_with_expression')
 
     logger.info('[ConversationService] ✅ 清理旧的 Socket 监听器')
 
@@ -314,6 +326,41 @@ export class ConversationService extends EventService<ConversationServiceEvents>
       logger.debug(`[ConversationService] 表情事件: ${data.expression}`)
       this.emit('expression', data.expression)
     })
+
+    // Audio + Expression unified events (Live2D emotion-based system)
+    this.socket.on('audio_with_expression', (data: {
+      audio_data: string
+      format: string
+      volumes: number[]
+      expressions: {
+        segments: Array<{ emotion: string; time: number; duration: number }>
+        total_duration: number
+      }
+      text: string
+      seq: number
+    }) => {
+      logger.info('[ConversationService] 收到 audio_with_expression 事件')
+      logger.debug(`  - 音频格式: ${data.format}`)
+      logger.debug(`  - 音量采样: ${data.volumes.length} 个`)
+      logger.debug(`  - 表情片段: ${data.expressions.segments.length} 个`)
+      logger.debug(`  - 总时长: ${data.expressions.total_duration}s`)
+
+      // 触发事件，由组件层处理播放
+      this.emit('audio:with:expression', {
+        audio_data: data.audio_data,
+        format: data.format,
+        volumes: data.volumes,
+        expressions: data.expressions,
+        text: data.text,
+        seq: data.seq,
+      })
+
+      // 更新状态为 speaking
+      this.updateStatus('speaking')
+
+      // 清除超时
+      this.messagingService.clearResponseTimeout()
+    })
   }
 
   /**
@@ -411,6 +458,7 @@ export class ConversationService extends EventService<ConversationServiceEvents>
     this.socket.off('control')
     this.socket.off('error')
     this.socket.off('expression')
+    this.socket.off('audio_with_expression')
   }
 
   /**

@@ -1,8 +1,4 @@
-# ============================================
-# Anima Project Start Script (PowerShell)
-# Enhanced with resource cleanup and graceful shutdown
-# ============================================
-
+# Anima Project Start Script
 param(
     [switch]$SkipBackend,
     [switch]$SkipFrontend,
@@ -10,268 +6,58 @@ param(
     [switch]$Help
 )
 
-# Color output functions
 function Write-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Write-Success { param($msg) Write-Host "[SUCCESS] $msg" -ForegroundColor Green }
 function Write-Warning { param($msg) Write-Host "[WARNING] $msg" -ForegroundColor Yellow }
 function Write-Error { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
-# Store PIDs for tracking
 $script:BackendPid = $null
 $script:FrontendPid = $null
-$script:BackendCmdPid = $null
-$script:FrontendCmdPid = $null
-
-# ============================================
-# Resource Cleanup Functions
-# ============================================
 
 function Stop-ProcessOnPort {
-    param(
-        [int]$Port,
-        [string]$ServiceName,
-        [switch]$Graceful
-    )
-
-    Write-Info "Checking for existing $ServiceName processes on port $Port..."
-
-    # Find processes using the port
-    $netstat = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
-    $pids = @()
-
+    param([int]$Port, [string]$ServiceName)
+    Write-Info "Checking for existing $ServiceName on port ${Port}..."
+    $netstat = netstat -ano | Select-String ":${Port}\s" | Select-String "LISTENING"
+    $processIds = @()
     foreach ($line in $netstat) {
         if ($line -match '\s+(\d+)\s*$') {
-            $pids += [int]$matches[1]
+            $processIds += [int]$matches[1]
         }
     }
-
-    if ($pids.Count -gt 0) {
-        Write-Warning "Found $($pids.Count) process(es) using port ${Port}: $($pids -join ', ')"
-
-        foreach ($processId in $pids) {
+    if ($processIds.Count -gt 0) {
+        $pidList = $processIds -join ', '
+        Write-Warning "Found process on port ${Port}: PID ${pidList}"
+        foreach ($processId in $processIds) {
             try {
-                $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-                if ($process) {
-                    if ($Graceful) {
-                        Write-Info "Attempting graceful shutdown of process ${processId} ($($process.ProcessName))..."
-                        # Send CTRL+C to Windows process
-                        $process.CloseMainWindow() | Out-Null
-                        Start-Sleep -Milliseconds 1500
-
-                        # Check if still running
-                        $stillRunning = Get-Process -Id $processId -ErrorAction SilentlyContinue
-                        if ($stillRunning) {
-                            Write-Warning "Process ${processId} did not close gracefully, forcing..."
-                            Stop-Process -Id $processId -Force
-                        } else {
-                            Write-Success "Process ${processId} closed gracefully"
-                        }
-                    } else {
-                        Write-Info "Force stopping process ${processId} ($($process.ProcessName))..."
-                        Stop-Process -Id $processId -Force
-                    }
-                    Start-Sleep -Milliseconds 500
-                }
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 500
+                Write-Success "Process ${processId} stopped"
             } catch {
-                $errorMsg = $_.Exception.Message
-                Write-Warning "Could not stop process ${processId}: $errorMsg"
+                Write-Warning "Could not stop process ${processId}"
             }
         }
-
-        # Wait for ports to be released
-        $maxWait = 5
-        $waited = 0
-        while ($waited -lt $maxWait) {
-            $stillListening = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
-            if (-not $stillListening) {
-                break
-            }
-            Start-Sleep -Seconds 1
-            $waited++
-        }
-
-        # Final verification
-        $stillListening = netstat -ano | Select-String ":$Port\s" | Select-String "LISTENING"
+        Start-Sleep -Seconds 1
+        $stillListening = netstat -ano | Select-String ":${Port}\s" | Select-String "LISTENING"
         if ($stillListening) {
-            Write-Error "Port $Port is still in use after cleanup. Please manually check processes."
+            Write-Error "Port ${Port} is still in use"
             return $false
         } else {
-            Write-Success "Port $Port released successfully"
+            Write-Success "Port ${Port} released"
         }
     } else {
-        Write-Success "Port $Port is free"
+        Write-Success "Port ${Port} is free"
     }
-
     return $true
 }
-
-function Stop-ProjectProcesses {
-    Write-Info "Checking for existing Anima processes..."
-
-    $stopped = $false
-
-    # Stop Python processes (backend) - more specific matching
-    $pythonProcesses = Get-WmiObject Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.Name -eq "python.exe" -and
-            ($_.CommandLine -like "*socketio_server*" -or $_.CommandLine -like "*anima*")
-        }
-
-    if ($pythonProcesses) {
-        Write-Warning "Found $($pythonProcesses.Count) Anima Python process(es)"
-        foreach ($proc in $pythonProcesses) {
-            Write-Info "Stopping Python process $($proc.ProcessId)..."
-            try {
-                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-                $stopped = $true
-            } catch {
-                Write-Warning "Could not stop process $($proc.ProcessId) - $($_.Exception.Message)"
-            }
-        }
-    }
-
-    # Stop Node.js processes (frontend) - more specific matching
-    $nodeProcesses = Get-WmiObject Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.Name -eq "node.exe" -and
-            ($_.CommandLine -like "*next*" -or $_.CommandLine -like "*anima*" -or $_.CommandLine -like "*3000*")
-        }
-
-    if ($nodeProcesses) {
-        Write-Warning "Found $($nodeProcesses.Count) Anima Node.js process(es)"
-        foreach ($proc in $nodeProcesses) {
-            Write-Info "Stopping Node.js process $($proc.ProcessId)..."
-            try {
-                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-                $stopped = $true
-            } catch {
-                Write-Warning "Could not stop process $($proc.ProcessId) - $($_.Exception.Message)"
-            }
-        }
-    }
-
-    # Stop cmd windows with Anima titles
-    $cmdProcesses = Get-Process cmd -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowTitle -like "*Anima*" }
-
-    if ($cmdProcesses) {
-        Write-Warning "Found $($cmdProcesses.Count) Anima terminal window(s)"
-        foreach ($proc in $cmdProcesses) {
-            Write-Info "Closing terminal window $($proc.Id)..."
-            try {
-                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-                $stopped = $true
-            } catch {
-                Write-Warning "Could not close window $($proc.Id) - $($_.Exception.Message)"
-            }
-        }
-    }
-
-    if ($stopped) {
-        Start-Sleep -Seconds 1
-        Write-Success "All existing Anima processes stopped"
-    } else {
-        Write-Success "No existing Anima processes found"
-    }
-
-    return $true
-}
-
-function Clear-TempFiles {
-    Write-Info "Cleaning up temporary files..."
-
-    $tempPaths = @(
-        "$env:TEMP\anima_*",
-        "$ProjectRoot\.next\cache",
-        "$ProjectRoot\frontend\.next\cache",
-        "$ProjectRoot\src\__pycache__",
-        "$ProjectRoot\logs\*.log"
-    )
-
-    $cleaned = $false
-    foreach ($pattern in $tempPaths) {
-        $items = Get-Item -Path $pattern -ErrorAction SilentlyContinue
-        if ($items) {
-            foreach ($item in $items) {
-                try {
-                    Remove-Item -Path $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-Info "Removed: $($item.FullName)"
-                    $cleaned = $true
-                } catch {
-                    Write-Warning "Could not remove $($item.FullName) - $($_.Exception.Message)"
-                }
-            }
-        }
-    }
-
-    if (-not $cleaned) {
-        Write-Success "No temporary files to clean"
-    } else {
-        Write-Success "Temporary files cleaned up"
-    }
-}
-
-# ============================================
-# Shutdown Handler
-# ============================================
-
-function Invoke-Cleanup {
-    Write-Info "`nInitiating graceful shutdown..."
-
-    # Stop frontend first (it depends on backend)
-    if ($script:FrontendCmdPid) {
-        Write-Info "Stopping frontend (PID: $($script:FrontendCmdPid))..."
-        try {
-            Stop-Process -Id $script:FrontendCmdPid -Force -ErrorAction SilentlyContinue
-        } catch {
-            Write-Warning "Could not stop frontend: $($_.Exception.Message)"
-        }
-    }
-
-    # Stop backend
-    if ($script:BackendCmdPid) {
-        Write-Info "Stopping backend (PID: $($script:BackendCmdPid))..."
-        try {
-            Stop-Process -Id $script:BackendCmdPid -Force -ErrorAction SilentlyContinue
-        } catch {
-            Write-Warning "Could not stop backend: $($_.Exception.Message)"
-        }
-    }
-
-    # Additional cleanup for child processes
-    Stop-ProcessOnPort -Port 3000 -ServiceName "Frontend" -Graceful:$false
-    Stop-ProcessOnPort -Port 12394 -ServiceName "Backend" -Graceful:$false
-
-    Write-Success "All services stopped"
-    exit 0
-}
-
-# Register shutdown handlers
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    Invoke-Cleanup
-}
-trap {
-    Invoke-Cleanup
-}
-
-# ============================================
-# Show Help
-# ============================================
 
 if ($Help) {
     Write-Host @"
 Usage: ./scripts/start.ps1 [Options]
-
 Options:
     -SkipBackend    Skip backend startup
     -SkipFrontend   Skip frontend startup
     -Install        Reinstall dependencies
     -Help           Show help message
-
-Resource Management:
-    - Automatically stops existing processes on startup
-    - Cleans up temporary files and caches
-    - Graceful shutdown on script exit
 "@
     exit 0
 }
@@ -282,89 +68,50 @@ Write-Host "  Anima Project Startup Script" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
 Write-Host ""
 
-# Get project root directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
 Set-Location $ProjectRoot
 
-# Check Python
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Error "Python not found, please install Python first"
+    Write-Error "Python not found"
     exit 1
 }
 
-# Check package manager
 if (Get-Command pnpm -ErrorAction SilentlyContinue) {
     $PkgManager = "pnpm"
 } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
     $PkgManager = "npm"
     Write-Warning "pnpm not found, using npm"
 } else {
-    Write-Error "Node.js not found, please install Node.js first"
+    Write-Error "Node.js not found"
     exit 1
 }
 
 Write-Info "Package manager: $PkgManager"
 Write-Host ""
 
-# ============================================
-# Phase 1: Stop Existing Services
-# ============================================
-
 Write-Host "========================================" -ForegroundColor Yellow
 Write-Host "  Phase 1: Stopping Existing Services" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Yellow
 Write-Host ""
 
-# Stop backend port
 if (-not $SkipBackend) {
-    if (-not (Stop-ProcessOnPort -Port 12394 -ServiceName "Backend" -Graceful:$true)) {
-        Write-Error "Failed to stop existing backend services"
-        exit 1
-    }
+    Stop-ProcessOnPort -Port 12394 -ServiceName "Backend"
 }
-
-# Stop frontend port
 if (-not $SkipFrontend) {
-    if (-not (Stop-ProcessOnPort -Port 3000 -ServiceName "Frontend" -Graceful:$true)) {
-        Write-Error "Failed to stop existing frontend services"
-        exit 1
-    }
+    Stop-ProcessOnPort -Port 3000 -ServiceName "Frontend"
 }
 
-# Stop any remaining project processes
-Stop-ProjectProcesses
-
-Write-Host ""
 Write-Success "All existing services stopped"
 Write-Host ""
 
-# ============================================
-# Phase 2: Clean Temporary Files
-# ============================================
-
-Write-Host "========================================" -ForegroundColor Yellow
-Write-Host "  Phase 2: Cleaning Resources" -ForegroundColor Yellow
-Write-Host "========================================" -ForegroundColor Yellow
-Write-Host ""
-
-Clear-TempFiles
-
-Write-Host ""
-
-# ============================================
-# Phase 3: Install Dependencies (Optional)
-# ============================================
-
 if ($Install) {
     Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "  Phase 3: Installing Dependencies" -ForegroundColor Yellow
+    Write-Host "  Phase 2: Installing Dependencies" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
     Write-Host ""
-
     Write-Info "Installing backend dependencies..."
     pip install -r requirements.txt
-
     Write-Info "Installing frontend dependencies..."
     Set-Location frontend
     & $PkgManager install
@@ -372,61 +119,102 @@ if ($Install) {
     Write-Host ""
 }
 
-# ============================================
-# Phase 4: Start Services
-# ============================================
-
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "  Phase 4: Starting Services" -ForegroundColor Green
+Write-Host "  Phase 3: Starting Services" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-# Start backend
+$env:PYTHONPATH = "$ProjectRoot\src"
+
 if (-not $SkipBackend) {
     Write-Info "Starting backend server (port 12394)..."
 
+    # Set PYTHONPATH environment variable
+    $originalPath = $env:PYTHONPATH
+    $env:PYTHONPATH = "$ProjectRoot\src"
+
     $backendProcess = Start-Process -FilePath "python" `
         -ArgumentList "-m", "anima.socketio_server" `
-        -WorkingDirectory "$ProjectRoot\src" `
-        -PassThru `
-        -WindowStyle Normal
+        -WorkingDirectory "$ProjectRoot" `
+        -WindowStyle Normal `
+        -PassThru
+
+    # Restore original PYTHONPATH
+    $env:PYTHONPATH = $originalPath
 
     $script:BackendPid = $backendProcess.Id
-
-    Write-Success "Backend started: http://localhost:12394 (PID: $($backendProcess.Id))"
+    Write-Success "Backend started (PID: $($backendProcess.Id))"
 
     Write-Info "Waiting for backend to start..."
-    Start-Sleep -Seconds 3
+    $maxWait = 15
+    $waited = 0
+    $backendStarted = $false
 
-    # Verify backend is running
-    $backendRunning = Get-Process -Id $backendProcess.Id -ErrorAction SilentlyContinue
-    if (-not $backendRunning) {
-        Write-Error "Backend failed to start. Check logs for details."
+    while ($waited -lt $maxWait -and -not $backendStarted) {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        Write-Host "." -NoNewline
+
+        $backendListening = netstat -ano | Select-String ":12394.*LISTENING"
+        if ($backendListening) {
+            $backendStarted = $true
+            if ($backendListening -match '\s+(\d+)\s*$') {
+                $actualPid = [int]$matches[1]
+                $script:BackendPid = $actualPid
+            }
+        }
+    }
+    Write-Host ""
+
+    if ($backendStarted) {
+        Write-Success "Backend is listening on port 12394"
+    } else {
+        Write-Error "Backend failed to start"
         exit 1
     }
-} else {
-    Write-Warning "Skipping backend"
 }
 
-# Start frontend
 if (-not $SkipFrontend) {
     Write-Info "Starting frontend dev server..."
-
-    # Disable Turbopack benchmark to avoid warning
     $env:NEXT_PRIVATE_BENCHMARK_ENABLED = "false"
     $env:NODE_OPTIONS = "--no-warnings"
 
-    $frontendCmd = "cd /d `"$ProjectRoot\frontend`" && $PkgManager dev"
+    # 使用 start 命令创建独立窗口，窗口不会自动关闭
     $frontendProcess = Start-Process -FilePath "cmd" `
-        -ArgumentList "/c", $frontendCmd `
-        -PassThru `
-        -WindowStyle Normal
+        -ArgumentList "/c", "start `"Frontend Dev Server`" cmd /k `"cd /d `"$ProjectRoot\frontend`" && $PkgManager dev`"" `
+        -WindowStyle Hidden `
+        -PassThru
 
     $script:FrontendPid = $frontendProcess.Id
+    Write-Success "Frontend started (PID: $($frontendProcess.Id))"
 
-    Write-Success "Frontend started: http://localhost:3000 (PID: $($frontendProcess.Id))"
-} else {
-    Write-Warning "Skipping frontend"
+    Write-Info "Waiting for frontend to start..."
+    $maxWait = 25
+    $waited = 0
+    $frontendStarted = $false
+
+    while ($waited -lt $maxWait -and -not $frontendStarted) {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        Write-Host "." -NoNewline
+
+        $frontendListening = netstat -ano | Select-String ":3000.*LISTENING"
+        if ($frontendListening) {
+            $frontendStarted = $true
+            if ($frontendListening -match '\s+(\d+)\s*$') {
+                $actualPid = [int]$matches[1]
+                $script:FrontendPid = $actualPid
+            }
+        }
+    }
+    Write-Host ""
+
+    if ($frontendStarted) {
+        Write-Success "Frontend is listening on port 3000"
+    } else {
+        Write-Warning "Frontend not yet listening on port 3000"
+        Write-Info "Frontend may still be compiling..."
+    }
 }
 
 Write-Host ""
@@ -435,42 +223,18 @@ Write-Host "  Startup Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-if (-not $SkipBackend) { Write-Host "  Backend: " -NoNewline; Write-Host "http://localhost:12394" -ForegroundColor Cyan }
-if (-not $SkipFrontend) { Write-Host "  Frontend: " -NoNewline; Write-Host "http://localhost:3000" -ForegroundColor Cyan }
-
-Write-Host ""
-Write-Host "  Press Ctrl+C to stop all services" -ForegroundColor Yellow
-Write-Host "  Or run: .\scripts\stop.ps1" -ForegroundColor Gray
-Write-Host ""
-
-# Keep script running to handle shutdown
-try {
-    while ($true) {
-        Start-Sleep -Seconds 1
-
-        # Check if processes are still running
-        if ($script:BackendPid) {
-            $backendRunning = Get-Process -Id $script:BackendPid -ErrorAction SilentlyContinue
-            if (-not $backendRunning) {
-                Write-Warning "Backend process has stopped unexpectedly"
-                $script:BackendPid = $null
-            }
-        }
-
-        if ($script:FrontendPid) {
-            $frontendRunning = Get-Process -Id $script:FrontendPid -ErrorAction SilentlyContinue
-            if (-not $frontendRunning) {
-                Write-Warning "Frontend process has stopped unexpectedly"
-                $script:FrontendPid = $null
-            }
-        }
-
-        # Exit if both stopped
-        if (-not $script:BackendPid -and -not $script:FrontendPid) {
-            Write-Warning "All services have stopped"
-            break
-        }
-    }
-} finally {
-    Invoke-Cleanup
+if (-not $SkipBackend) {
+    Write-Host "  Backend:  " -NoNewline
+    Write-Host "http://localhost:12394" -ForegroundColor Cyan
 }
+if (-not $SkipFrontend) {
+    Write-Host "  Frontend: " -NoNewline
+    Write-Host "http://localhost:3000" -ForegroundColor Cyan
+}
+Write-Host ""
+Write-Host "  Services are running in separate windows." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  To stop services:" -ForegroundColor Yellow
+Write-Host "    1. Press Ctrl+C in each window, OR" -ForegroundColor Gray
+Write-Host "    2. Run: .\scripts\stop.ps1" -ForegroundColor Gray
+Write-Host ""

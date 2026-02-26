@@ -95,11 +95,20 @@ export function useConversation(options: ConversationOptions = {}): UseConversat
       setExpressionState(expr)
     })
 
+    // Audio + Expression 事件（新版 Live2D 系统）
+    const unsubscribeAudioWithExpression = service.on('audio:with:expression', (data) => {
+      // 触发自定义事件，由 Live2D 组件监听并处理
+      // 这样可以避免在 hook 中直接依赖 Live2D 服务
+      const event = new CustomEvent('audio:with:expression', { detail: data })
+      window.dispatchEvent(event)
+    })
+
     // 清理
     return () => {
       unsubscribeStatusChange()
       unsubscribeError()
       unsubscribeExpression()
+      unsubscribeAudioWithExpression()
     }
   }, [socket])
 

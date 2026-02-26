@@ -7,7 +7,18 @@ Socket.IO 服务端实现
 """
 
 import os
+import sys
 from pathlib import Path
+
+# 修复模块导入路径：将 src 目录添加到 Python 路径
+# 这样无论从哪个目录运行，都能正确导入 anima 模块
+# 注意：必须在所有其他导入之前执行
+current_dir = Path(__file__).resolve().parent
+# anima 模块位于 src/anima，所以我们需要将 src 目录加入路径
+src_dir = current_dir.parent  # C:\Users\30262\Project\Anima\src
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 from loguru import logger
 
 # 加载 .env 文件中的环境变量（必须在其他导入之前）
@@ -52,9 +63,12 @@ from anima.services.conversation import (
     SessionManager,
 )
 from anima.handlers import TextHandler, AudioHandler, ExpressionHandler
+from anima.handlers.audio_expression_handler import AudioExpressionHandler
 from anima.eventbus import EventPriority
 from anima.utils.logger_manager import logger_manager
 from anima.config.user_settings import UserSettings
+from anima.config.live2d import get_live2d_config
+from anima.live2d.prompt_builder import EmotionPromptBuilder
 
 # 创建 Socket.IO 服务器
 sio = socketio.AsyncServer(
@@ -200,6 +214,9 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
                 data = message
             await sio.emit(data.get('type', 'message'), data, to=sid)
         
+        # 加载 Live2D 配置
+        live2d_config = get_live2d_config()
+
         # 创建编排器（管线步骤在编排器内部自动组装）
         orchestrator = ConversationOrchestrator(
             asr_engine=ctx.asr_engine,
@@ -207,6 +224,7 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
             agent=ctx.llm_engine,
             websocket_send=websocket_send,
             session_id=sid,
+            live2d_config=live2d_config if live2d_config.enabled else None,
         )
 
         # 创建并注册 TextHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
@@ -219,7 +237,20 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         audio_handler = AudioHandler(websocket_send=orchestrator.websocket_send)
         orchestrator.register_handler("audio", audio_handler, priority=EventPriority.NORMAL)
 
-        # 创建并注册 ExpressionHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
+        # 创建并注册 AudioExpressionHandler（新版，基于情感内容）
+        if live2d_config.enabled:
+            audio_expression_handler = AudioExpressionHandler(
+                websocket_send=orchestrator.websocket_send,
+                sample_rate=50  # 50 Hz
+            )
+            orchestrator.register_handler(
+                "audio_with_expression",
+                audio_expression_handler,
+                priority=EventPriority.NORMAL
+            )
+            logger.info(f"[{sid}] AudioExpressionHandler 已注册到 audio_with_expression 事件")
+
+        # 创建并注册 ExpressionHandler（旧版，基于状态，保留兼容）
         expression_handler = ExpressionHandler(websocket_send=orchestrator.websocket_send)
         orchestrator.register_handler("expression", expression_handler, priority=EventPriority.NORMAL)
 

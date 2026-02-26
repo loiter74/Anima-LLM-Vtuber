@@ -102,29 +102,38 @@ class PersonaConfig(BaseConfig):
         description="网络用语/俚语列表"
     )
 
-    def build_system_prompt(self) -> str:
+    # Live2D 表情提示词（可选）
+    live2d_prompt: Optional[str] = Field(
+        default=None,
+        description="Live2D 表情使用提示词（如果启用）"
+    )
+
+    def build_system_prompt(self, live2d_prompt: Optional[str] = None) -> str:
         """
         构建完整的系统提示词
-        
+
+        Args:
+            live2d_prompt: Live2D 表情提示词（可选，覆盖配置中的值）
+
         Returns:
             str: 完整的系统提示词
         """
         parts = []
-        
+
         # 1. 角色和身份
         parts.append(f"# Role: {self.role}")
         parts.append(f"\n## 核心人设 (Identity)\n{self.identity}")
-        
+
         # 2. 性格特征
         if self.personality.traits:
             parts.append("\n## 性格特征 (Personality Traits)")
             for i, trait in enumerate(self.personality.traits, 1):
                 parts.append(f"{i}. {trait}")
-        
+
         # 3. 说话风格
         if self.speaking_style:
             parts.append(f"\n## 说话风格 (Speaking Style)\n{self.speaking_style}")
-        
+
         # 4. 行为准则
         if self.behavior.forbidden_phrases or self.behavior.response_to_praise:
             parts.append("\n## 行为准则 (Behavior Rules)")
@@ -135,7 +144,7 @@ class PersonaConfig(BaseConfig):
                 parts.append(f"- 面对夸奖：{self.behavior.response_to_praise}")
             if self.behavior.response_to_criticism:
                 parts.append(f"- 面对质疑：{self.behavior.response_to_criticism}")
-        
+
         # 5. Emoji 使用
         if self.emoji_style or self.common_emojis:
             parts.append("\n## Emoji 使用")
@@ -143,12 +152,17 @@ class PersonaConfig(BaseConfig):
                 parts.append(self.emoji_style)
             if self.common_emojis:
                 parts.append(f"常用：{' '.join(self.common_emojis)}")
-        
+
         # 6. 网络用语
         if self.slang_words:
             parts.append(f"\n## 常用网络用语\n{'、'.join(self.slang_words)}")
-        
-        # 7. 对话示例
+
+        # 7. Live2D 表情提示词（如果提供）
+        live2d = live2d_prompt or self.live2d_prompt
+        if live2d:
+            parts.append(f"\n{live2d}")
+
+        # 8. 对话示例
         if self.examples:
             parts.append("\n## 对话示例 (Examples)")
             for ex in self.examples[:5]:  # 最多 5 个示例
@@ -156,7 +170,7 @@ class PersonaConfig(BaseConfig):
                 ai = ex.get("ai", "")
                 if user and ai:
                     parts.append(f"\nUser: {user}\nAI: {ai}")
-        
+
         return "\n".join(parts)
 
     @classmethod

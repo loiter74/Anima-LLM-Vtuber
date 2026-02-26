@@ -17,7 +17,8 @@ class EventType(str, Enum):
     IMAGE = "image"                 # 图片
     GAME_CONTROL = "game_control"   # 游戏控制
     ERROR = "error"                 # 错误
-    EXPRESSION = "expression"       # Live2D 表情
+    EXPRESSION = "expression"       # Live2D 表情（旧版，基于状态）
+    AUDIO_WITH_EXPRESSION = "audio_with_expression"  # 音频 + 表情统一事件（新版，基于情感）
 
 
 class ControlSignal(str, Enum):

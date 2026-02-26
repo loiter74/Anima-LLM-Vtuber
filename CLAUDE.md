@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Additional Documentation
+
+For more detailed information, refer to:
+- **Frontend Architecture**: `docs/frontend/architecture.md` - Detailed frontend architecture overview
+- **Component Guide**: `docs/frontend/component-guide.md` - Complete component usage reference
+- **Feature Modules**: `docs/frontend/feature-modules.md` - Feature module patterns and best practices
+- **API Reference**: `docs/frontend/api-reference.md` - Full API documentation for hooks, services, and types
+
 ## Common Development Commands
 
 ### Backend (Python)
@@ -29,6 +37,26 @@ pnpm lint       # Run ESLint
 ```
 
 **Note**: No test framework is currently configured. Use manual testing or Playwright for E2E testing.
+
+**Test Files** (in project root):
+- `test_expression_events.py` - Test Live2D expression event system
+- `test_expression_simple.py` - Simple expression system test
+- `test-verification.js` - JavaScript verification tests
+- `test-audio-interrupt.md` - Audio interrupt testing guide
+
+### Live2D Model Setup
+- `scripts/download_live2d.ps1` - Download Live2D Haru model (Windows PowerShell)
+- `scripts/download_live2d_model.py` - Download Live2D Haru model (Python, cross-platform)
+
+**Quick setup (Windows PowerShell):**
+```powershell
+.\scripts\download_live2d.ps1
+```
+
+**Quick setup (Unix/macOS):**
+```bash
+python scripts/download_live2d_model.py
+```
 
 ### Startup Scripts
 - `scripts/start.sh` - Unix startup script (starts both backend and frontend)
@@ -130,12 +158,22 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Default steps: `ASRStep` (audio→text) → `TextCleanStep`
 - Each step receives and modifies `PipelineContext`
 
+**EmotionExtractionStep** (`steps/emotion_extraction_step.py`):
+- Extracts emotion tags from LLM response (format: `[emotion]` like `[happy]`, `[sad]`)
+- Cleans text by removing tags before TTS processing
+- Stores extracted emotions in `metadata["emotions"]` as `EmotionTag` objects (with emotion name and position)
+- Stores `metadata["has_emotions"]` boolean flag
+- Configurable via `config/prompts/live2d_expression.txt`
+- Validates extracted emotions against `valid_emotions` list from `Live2DConfig`
+- Example: `"Hello [happy] world!"` → cleaned: `"Hello  world!"`, emotions: `[EmotionTag("happy", 6)]`
+
 **OutputPipeline** (`output_pipeline.py`):
 - Processes Agent streaming response
 - Iterates through `chat_stream()` AsyncIterator
 - Emits `OutputEvent`s to EventBus for each chunk
 - Sends completion marker (empty text event) when streaming finishes
 - Handles interruption via `interrupt()` method
+- **Integration with Live2D**: When Live2D is enabled, coordinates with `EmotionExtractionStep` and `AudioExpressionHandler` to send unified `audio_with_expression` events containing audio, volume envelope, and emotion timeline
 
 **PipelineContext** (`src/anima/core/context.py`):
 - Data carrier passed through pipeline steps
@@ -169,6 +207,13 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
   - Maps conversation states to Live2D expressions (idle, listening, thinking, speaking, surprised, sad)
   - Sends `expression` events via WebSocket to frontend
   - Located at: `src/anima/handlers/expression_handler.py`
+- `AudioExpressionHandler` - Unified handler for audio + expression events
+  - Processes `AUDIO_WITH_EXPRESSION` events
+  - Combines audio data, volume envelope (for lip-sync), and emotion timeline into single WebSocket message
+  - Calculates volume envelope at 50Hz sample rate
+  - Calculates emotion timeline segments from emotion tags
+  - Sends `audio_with_expression` event to frontend
+  - Located at: `src/anima/handlers/audio_expression_handler.py`
 - `SocketEventAdapter` - Adapts backend events to frontend format
   - Maps event names: `sentence` → `text`, `user-transcript` → `transcript`
   - Adds missing fields for frontend compatibility
@@ -184,16 +229,46 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - Frontend feature module at `frontend/features/live2d/`
 - **Backend Components**:
   - `ExpressionHandler` (`src/anima/handlers/expression_handler.py`) - Sends expression events via WebSocket
-  - Configuration: `config/features/live2d.yaml` - Model path, scale, position, expression mappings
-  - Expression types: `idle`, `listening`, `thinking`, `speaking`, `surprised`, `sad`
+  - `AudioExpressionHandler` (`src/anima/handlers/audio_expression_handler.py`) - Unified handler for audio + expression events
+  - **Live2D Module** (`src/anima/live2d/`):
+    - `EmotionExtractor` - Extracts emotion tags from LLM response (format: `[emotion]` like `[happy]`)
+    - `EmotionTimelineCalculator` - Maps emotion tags to time-based expression segments
+    - `AudioAnalyzer` - Computes volume envelope for lip-sync (sample rate: 50Hz)
+    - `EmotionPromptBuilder` - Builds system prompt for LLM to include emotion tags
+  - Configuration: `config/features/live2d.yaml` - Model path, scale, position, emotion_map
+  - Configuration class: `Live2DConfig` (`src/anima/config/live2d.py`) - Python config class with emotion_map, valid_emotions, lip_sync settings
+  - Expression types: `idle`, `listening`, `thinking`, `speaking`, `surprised`, `sad`, `happy`, `neutral`, `angry`
 - **Frontend Components**:
   - `Live2DService` - Manages Live2D model loading and expression control
   - `LipSyncEngine` - Handles lip-sync animation during audio playback
+  - `ExpressionTimeline` - TypeScript class that plays emotion timeline segments synchronized with audio playback using `requestAnimationFrame`
   - `useLive2D` hook - React hook for Live2D integration
   - `Live2DViewer` component - Renders Live2D model in canvas
-- **Event Flow**: Backend emits `expression` event → Frontend `useConversation` receives → `Live2DViewer` updates model
+- **Event Flow**:
+  - Emotion-based: LLM response → `EmotionExtractionStep` → emotion tags (`[happy]`, etc.) → `AudioExpressionHandler` → `audio_with_expression` event → Frontend
+  - State-based: Backend emits `expression` event → Frontend `useConversation` receives → `Live2DViewer` updates model
+- **audio_with_expression Event Structure**:
+  ```json
+  {
+    "type": "audio_with_expression",
+    "audio_data": "base64_encoded_audio",
+    "format": "mp3",
+    "volumes": [0.1, 0.2, ...],  // 50Hz volume envelope for lip-sync
+    "expressions": {
+      "segments": [
+        {"emotion": "happy", "time": 0.0, "duration": 2.5},
+        {"emotion": "neutral", "time": 2.5, "duration": 1.0}
+      ],
+      "total_duration": 3.5
+    },
+    "text": "cleaned response text",
+    "seq": 1
+  }
+  ```
 - **Library**: Uses `pixi-live2d-display` for Live2D model rendering
 - **Model Configuration**: `frontend/public/config/live2d.json` - Live2D model settings
+- **Emotion Mapping**: Maps emotion names to Live2D motion indices (e.g., `happy: 3`, `sad: 1`)
+- **Testing**: Use `test_expression_events.py` or `test_expression_simple.py` to verify expression event system
 
 ## Configuration System
 
@@ -214,6 +289,8 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 **GLM (智谱 AI) Integration:**
 - The project heavily uses GLM services for LLM, ASR, and TTS
 - Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
+  - Handles LLM, ASR, and TTS services for GLM
+  - Integrated via environment variable `GLM_API_KEY`
 - Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
 - **Environment Variable**: `GLM_API_KEY` (checked first) or `LLM_API_KEY` (fallback)
 - API key loaded from `.env` file at project root or system environment variables
@@ -278,6 +355,15 @@ Personas define the AI's character and system prompt:
 - Referenced by `persona` field in config.yaml
 - Built into system prompt via `app_config.get_system_prompt()`
 - Fields: name, description, system_prompt, greeting, etc.
+
+**Live2D Expression Prompts** (`config/prompts/live2d_expression.txt`):
+- Instructions for LLM on how to use emotion tags in responses
+- Defines available emotions: `[happy]`, `[sad]`, `[angry]`, `[surprised]`, `[neutral]`, `[thinking]`
+- Emotion tags use bracket format: `[emotion]` (e.g., `[happy]`)
+- Emotion tags are automatically stripped from text before TTS
+- Example: `"Hello! [happy] Nice to meet you!"` → TTS receives "Hello!  Nice to meet you!"
+- Includes usage guidelines: don't overuse, choose appropriate emotions for context
+- Built into system prompt via `EmotionPromptBuilder` in Live2D module
 
 ### User Settings System
 
@@ -422,6 +508,7 @@ class ConversationResult:
 **Event Types** (`src/anima/core/events.py`):
 - `EventType.SENTENCE` - Text chunk
 - `EventType.AUDIO` - Audio data
+- `EventType.AUDIO_WITH_EXPRESSION` - Combined audio + expression event (Live2D unified event)
 - `EventType.EXPRESSION` - Live2D character expression (idle, listening, thinking, speaking, surprised, sad)
 - `EventType.TOOL_CALL` - Function calling
 - `EventType.CONTROL` - Control signals
@@ -472,6 +559,7 @@ Located at: `src/anima/handlers/socket_adapter.py`
 - `connection-established`
 - `sentence` - Streaming text chunks
 - `audio` - Audio chunks
+- `audio_with_expression` - Unified audio + expression event for Live2D (contains audio_data, volumes, expressions timeline, text)
 - `user-transcript` - ASR result
 - `expression` - Live2D expression event (idle, listening, thinking, speaking, surprised, sad)
 - `control` - Control signals (start-mic, stop-mic, interrupt, etc.)
@@ -551,6 +639,12 @@ type Store = ReturnType<typeof useConversationStore.getState>
 - Check CORS settings in `socketio_server.py`
 - Ensure frontend URL matches allowed origins
 
+**Audio Interrupt Issues**:
+- If audio doesn't stop when interrupted, check browser console for `AudioPlayer` logs
+- The interrupt system relies on window references to track playing audio
+- Common issue: `onplay` event delay may cause `isPlaying` flag to be out of sync
+- Check `AUDIO-INTERRUPT-FIX.md` for detailed debugging steps and expected log patterns
+
 **Silero VAD Model Download Fails**:
 - First run downloads model automatically (~66MB)
 - Check internet connection if model fails to load
@@ -587,6 +681,12 @@ type Store = ReturnType<typeof useConversationStore.getState>
 - Sample rate: 16kHz (required by VAD and ASR)
 - Frontend AudioRecorder applies gain control (default: 50.0)
 - AudioPlayer supports global stop: `AudioPlayer.stopGlobalAudio()` stops all playing audio
+- **Audio Interrupt System**:
+  - When new audio arrives while audio is playing, the system automatically stops old audio
+  - `AudioInteractionService` manages interrupt logic by checking `AudioPlayer.isPlaying` before playback
+  - Uses `window` reference to track global audio state: `AudioPlayer.WINDOW_AUDIO_KEY`
+  - Stop process: `audio.pause()` → `audio.src = ''` → `audio.load()` → clear window reference
+  - See `AUDIO-INTERRUPT-FIX.md` for detailed implementation notes
 
 **Auto-Interruption**:
 - When VAD detects new speech start, it automatically interrupts ongoing responses
@@ -718,6 +818,7 @@ Component → useConversation Hook → Zustand Stores
 **Live2D** (`features/live2d/`):
 - `services/Live2DService.ts` - Manages Live2D model loading, expression control, and lifecycle
 - `services/LipSyncEngine.ts` - Handles lip-sync animation based on audio playback
+- `services/ExpressionTimeline.ts` - Plays emotion timeline segments synchronized with audio playback using `requestAnimationFrame`
 - `hooks/useLive2D.ts` - React hook for Live2D integration
 - `types/index.ts` - TypeScript types for Live2D configuration
 - Components: `Live2DViewer` (`components/vtuber/live2d-viewer.tsx`)
@@ -744,7 +845,7 @@ Uses **Zustand** for global state:
 - `components/ui/` - shadcn/ui components (Radix UI + Tailwind)
 - `shared/constants/events.ts` - Centralized Socket.IO event definitions
 - `shared/constants/live2d.ts` - Live2D expression constants
-- `shared/types/` - TypeScript type definitions (only shared types like `Message`, `ConversationStatus`)
+- `shared/types/` - TypeScript type definitions (only shared types like `Message`, `ConversationStatus`, Live2D types)
 
 **Frontend Development Notes:**
 - Uses pnpm as package manager
@@ -753,6 +854,7 @@ Uses **Zustand** for global state:
 - Socket.IO for real-time communication
 - shadcn/ui for component library (Radix UI primitives + Tailwind CSS)
 - **No Context providers** - components use hooks directly for simpler data flow
+- **Architecture Simplification (2025-02)**: Removed redundant Context layer, components now use hooks directly (`Component → Hook → Store` instead of 3-layer)
 
 ## Key Source Directories
 
@@ -764,6 +866,7 @@ src/anima/
 │   ├── agent.py            # Agent configuration
 │   ├── app.py              # Main AppConfig class
 │   ├── persona.py          # Persona configuration
+│   ├── live2d.py           # Live2D configuration (Live2DConfig, emotion_map, lip_sync)
 │   ├── system.py           # System settings
 │   └── user_settings.py    # User-specific settings (persisted to .user_settings.yaml)
 ├── core/                   # Core data structures
@@ -776,7 +879,7 @@ src/anima/
 ├── pipeline/               # Processing pipelines
 │   ├── input_pipeline.py   # Input processing chain
 │   ├── output_pipeline.py  # Output processing with streaming
-│   └── steps/              # Pipeline steps (ASRStep, TextCleanStep, etc.)
+│   └── steps/              # Pipeline steps (ASRStep, TextCleanStep, EmotionExtractionStep, etc.)
 ├── services/               # Service implementations
 │   ├── llm/                # LLM/Agent services
 │   ├── asr/                # ASR services (faster_whisper, glm, openai, mock)
@@ -787,8 +890,14 @@ src/anima/
 │   ├── base_handler.py     # Base handler class
 │   ├── text_handler.py     # Text output handler
 │   ├── audio_handler.py    # Audio output handler
-│   ├── expression_handler.py  # Live2D expression handler
+│   ├── expression_handler.py  # Live2D expression handler (state-based)
+│   ├── audio_expression_handler.py  # Unified audio + expression handler
 │   └── socket_adapter.py   # Socket event adapter
+├── live2d/                 # Live2D expression system module
+│   ├── emotion_extractor.py      # Extracts [emotion] tags from text
+│   ├── emotion_timeline.py       # Calculates emotion timeline segments
+│   ├── audio_analyzer.py         # Computes volume envelope for lip-sync
+│   └── prompt_builder.py         # Builds emotion prompt for LLM
 ├── state/                  # State management
 ├── utils/                  # Utility modules
 │   ├── logger_manager.py   # Dynamic log level management
@@ -801,14 +910,15 @@ src/anima/
 ```
 frontend/
 ├── public/
-│   └── config/
-│       └── live2d.json     # Live2D model configuration
+│   ├── config/
+│   │   └── live2d.json     # Live2D model configuration
+│   └── live2d/             # Live2D model files (downloaded separately)
 ├── features/
 │   ├── audio/              # Audio recording, playback, VAD
 │   ├── connection/         # Socket.IO connection management
 │   ├── conversation/       # Chat state and message processing
 │   └── live2d/             # Live2D model integration
-│       ├── services/       # Live2DService, LipSyncEngine
+│       ├── services/       # Live2DService, LipSyncEngine, ExpressionTimeline
 │       ├── hooks/          # useLive2D hook
 │       └── types/          # Live2D TypeScript types
 ├── components/
@@ -818,7 +928,7 @@ frontend/
 ├── shared/
 │   ├── constants/          # Event definitions, Live2D constants
 │   ├── state/stores/       # Zustand stores
-│   ├── types/              # Shared TypeScript types
+│   ├── types/              # Shared TypeScript types (Message, ConversationStatus, Live2D types)
 │   └── utils/              # Utility functions
 └── app/                    # Next.js App Router
 ```

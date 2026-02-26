@@ -182,9 +182,13 @@ class ServiceContext:
 
         # 构建系统提示词（优先使用人设系统）
         if app_config:
-            system_prompt = app_config.get_system_prompt()
+            # 获取 Live2D 表情提示词（如果启用）
+            live2d_prompt = self._get_live2d_prompt()
+            system_prompt = app_config.get_system_prompt(live2d_prompt=live2d_prompt)
             persona_name = app_config.persona
             logger.info(f"[{self.session_id}] 使用人设: {persona_name}")
+            if live2d_prompt:
+                logger.info(f"[{self.session_id}] 已添加 Live2D 表情提示词")
         else:
             system_prompt = self._build_system_prompt(agent_config, persona_config)
 
@@ -196,6 +200,32 @@ class ServiceContext:
 
         # 验证创建的 LLM 类型
         logger.info(f"[{self.session_id}] LLM 创建完成: {type(self.llm_engine).__name__}")
+
+    def _get_live2d_prompt(self) -> Optional[str]:
+        """
+        获取 Live2D 表情提示词（如果启用）
+
+        Returns:
+            表情提示词字符串，如果未启用则返回 None
+        """
+        try:
+            from .config.live2d import get_live2d_config
+            from .live2d.prompt_builder import EmotionPromptBuilder
+
+            live2d_config = get_live2d_config()
+
+            if not live2d_config.enabled:
+                return None
+
+            # 使用 EmotionPromptBuilder 生成提示词
+            builder = EmotionPromptBuilder.from_config({
+                "valid_emotions": live2d_config.valid_emotions
+            })
+            return builder.build_prompt()
+
+        except Exception as e:
+            logger.warning(f"获取 Live2D 提示词失败: {e}")
+            return None
 
     def _build_system_prompt(self, agent_config: AgentConfig, persona_config: PersonaConfig) -> str:
         """

@@ -183,7 +183,7 @@ echo.
 REM Start backend
 if "%SKIP_BACKEND%"=="0" (
     echo [INFO] Starting backend server (port 12394)...
-    start "Anima Backend" cmd /k "cd /d "%PROJECT_ROOT%\src" && python -m anima.socketio_server"
+    start "Anima Backend" cmd /k "cd /d "%PROJECT_ROOT%\src" && python anima\socketio_server.py"
     echo [SUCCESS] Backend started: http://localhost:12394
 
     echo [INFO] Waiting for backend to start...

@@ -135,9 +135,14 @@ class AppConfig(BaseConfig):
             self._persona = PersonaConfig.load(self.persona)
         return self._persona
 
-    def get_system_prompt(self) -> str:
-        """获取完整的系统提示词"""
-        return self.get_persona().build_system_prompt()
+    def get_system_prompt(self, live2d_prompt: Optional[str] = None) -> str:
+        """
+        获取完整的系统提示词
+
+        Args:
+            live2d_prompt: Live2D 表情提示词（可选）
+        """
+        return self.get_persona().build_system_prompt(live2d_prompt=live2d_prompt)
 
     @classmethod
     def from_yaml(cls, path: str) -> "AppConfig":
