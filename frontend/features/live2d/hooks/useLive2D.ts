@@ -5,7 +5,7 @@
  * 提供 Live2D 模型加载、表情控制和唇同步功能
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Live2DService } from '../services/Live2DService'
 import { LipSyncEngine } from '../services/LipSyncEngine'
 import { logger } from '@/shared/utils/logger'
@@ -47,6 +47,16 @@ export function useLive2D(options: UseLive2DOptions) {
   const onExpressionChangeRef = useRef(onExpressionChange)
   const onErrorRef = useRef(onError)
 
+  // 使用 useMemo 确保 position 对象引用稳定
+  const stablePosition = useMemo(() => position, [position.x, position.y])
+
+  // 使用 useMemo 创建稳定的 config 对象
+  const config: Live2DModelConfig = useMemo(() => ({
+    path: modelPath,
+    scale,
+    position: stablePosition,
+  }), [modelPath, scale, stablePosition])
+
   // 更新 ref 引用
   useEffect(() => {
     onExpressionChangeRef.current = onExpressionChange
@@ -57,60 +67,73 @@ export function useLive2D(options: UseLive2DOptions) {
   useEffect(() => {
     if (!enabled || !canvasRef.current) return
 
-    const canvas = canvasRef.current
-    const config: Live2DModelConfig = {
-      path: modelPath,
-      scale,
-      position,
-    }
+    let cleanup: (() => void) | null = null
 
-    const service = new Live2DService(canvas, config)
-    serviceRef.current = service
+    const initializeService = async () => {
+      const canvas = canvasRef.current
+      if (!canvas) return
 
-    // 订阅事件
-    service.on('model:loaded', () => {
-      logger.info('[useLive2D] 模型加载成功')
-      setIsLoaded(true)
-      setError(null)
+      const service = new Live2DService(canvas, config)
+      serviceRef.current = service
 
-      // 设置表情映射（基于情感内容）
-      // Haru 模型的 idle 动作组有多个 motion，我们需要映射情感名称到 motion index
-      const emotionMap: Record<string, number> = {
-        neutral: 0,
-        happy: 3,    // 假设 motion 3 是开心的表情
-        sad: 1,      // 假设 motion 1 是难过的表情
-        angry: 2,    // 假设 motion 2 是生气的表情
-        surprised: 4, // 假设 motion 4 是惊讶的表情
-        thinking: 5,  // 假设 motion 5 是思考的表情
+      // 订阅事件
+      service.on('model:loaded', () => {
+        logger.info('[useLive2D] 模型加载成功')
+        setIsLoaded(true)
+        setError(null)
+
+        // 设置表情映射（基于情感内容）
+        // Haru 模型的 idle 动作组有多个 motion，我们需要映射情感名称到 motion index
+        const emotionMap: Record<string, number> = {
+          neutral: 0,
+          happy: 3,    // 假设 motion 3 是开心的表情
+          sad: 1,      // 假设 motion 1 是难过的表情
+          angry: 2,    // 假设 motion 2 是生气的表情
+          surprised: 4, // 假设 motion 4 是惊讶的表情
+          thinking: 5,  // 假设 motion 5 是思考的表情
+        }
+        service.setEmotionMap(emotionMap)
+        logger.info('[useLive2D] 表情映射已设置:', emotionMap)
+      })
+
+      service.on('model:error', (err: Error) => {
+        logger.error('[useLive2D] 模型加载失败:', err)
+        setError(err)
+        setIsLoaded(false)
+        onErrorRef.current?.(err)
+      })
+
+      service.on('expression:change', (expression: string) => {
+        setCurrentExpression(expression)
+        onExpressionChangeRef.current?.(expression)
+      })
+
+      // 加载模型
+      try {
+        await service.loadModel()
+      } catch (err) {
+        logger.error('[useLive2D] 模型加载失败:', err)
       }
-      service.setEmotionMap(emotionMap)
-      logger.info('[useLive2D] 表情映射已设置:', emotionMap)
-    })
-
-    service.on('model:error', (err: Error) => {
-      logger.error('[useLive2D] 模型加载失败:', err)
-      setError(err)
-      setIsLoaded(false)
-      onErrorRef.current?.(err)
-    })
-
-    service.on('expression:change', (expression: string) => {
-      setCurrentExpression(expression)
-      onExpressionChangeRef.current?.(expression)
-    })
-
-    // 加载模型
-    service.loadModel().catch((err) => {
-      logger.error('[useLive2D] 模型加载失败:', err)
-    })
-
-    // 清理
-    return () => {
-      service.destroy()
-      setIsLoaded(false)
-      setCurrentExpression('neutral')
     }
-  }, [modelPath, scale, position, enabled]) // 移除 onExpressionChange 和 onError
+
+    initializeService()
+
+    // 清理函数 - 等待销毁完成
+    cleanup = () => {
+      const service = serviceRef.current
+      if (service) {
+        service.destroy().then(() => {
+          setIsLoaded(false)
+          setCurrentExpression('neutral')
+        })
+      } else {
+        setIsLoaded(false)
+        setCurrentExpression('neutral')
+      }
+    }
+
+    return cleanup
+  }, [config, enabled]) // 只依赖稳定的 config 和 enabled
 
   // 设置表情
   const setExpression = useCallback((expression: string) => {

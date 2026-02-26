@@ -22,6 +22,8 @@ export class Live2DService extends EventEmitter {
   private emotionMap: Record<string, number> = {}
   private currentTimeline: ExpressionTimeline | null = null
   private isInitialized: boolean = false
+  private isDestroying: boolean = false
+  private destroyPromise: Promise<void> | null = null
 
   constructor(canvas: HTMLCanvasElement, config: Live2DModelConfig) {
     super()
@@ -63,6 +65,48 @@ export class Live2DService extends EventEmitter {
     }
   }
 
+  /**
+   * 设置窗口大小调整监听器
+   */
+  private setupResizeListener(): void {
+    if (typeof window === 'undefined') return
+
+    let resizeTimeout: number | null = null
+
+    window.addEventListener('resize', () => {
+      // 防抖处理
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+
+      resizeTimeout = window.setTimeout(() => {
+        this.handleResize()
+      }, 100)
+    })
+  }
+
+  /**
+   * 处理窗口大小变化
+   */
+  private handleResize(): void {
+    if (!this.app || !this.canvas) return
+
+    try {
+      const containerWidth = this.canvas.clientWidth || 800
+      const containerHeight = this.canvas.clientHeight || 600
+
+      // 更新 renderer 尺寸
+      this.app.renderer.resize(containerWidth, containerHeight)
+
+      logger.debug('[Live2DService] 画布尺寸已调整:', {
+        width: containerWidth,
+        height: containerHeight,
+      })
+    } catch (error) {
+      logger.warn('[Live2DService] 调整画布尺寸时出错:', error)
+    }
+  }
+
   private async init(): Promise<void> {
     await this.loadLibraries()
 
@@ -80,7 +124,11 @@ export class Live2DService extends EventEmitter {
           backgroundAlpha: 0,
           autoDensity: true,
           resolution: window.devicePixelRatio || 1,
+          resizeTo: this.canvas, // 自动调整大小到 canvas 元素
         })
+
+        // 设置窗口大小调整监听器
+        this.setupResizeListener()
 
         logger.info('[Live2DService] PIXI 应用已初始化')
       } catch (error) {
@@ -243,18 +291,46 @@ export class Live2DService extends EventEmitter {
     }
   }
 
-  destroy(): void {
+  /**
+   * 销毁 Live2D 服务
+   * 返回 Promise，确保 WebGL 上下文完全释放
+   */
+  async destroy(): Promise<void> {
+    // 防止重复销毁
+    if (this.isDestroying) {
+      return this.destroyPromise
+    }
+
+    this.isDestroying = true
+
+    // 停止时间轴
+    this.stopTimeline()
+
+    // 移除所有事件监听器
+    this.removeAllListeners()
+
+    // 销毁模型
     if (this.model) {
-      this.app?.stage.removeChild(this.model)
-      this.model.destroy()
+      try {
+        this.app?.stage.removeChild(this.model)
+        this.model.destroy()
+      } catch (error) {
+        logger.warn('[Live2DService] 销毁模型时出错（已忽略）:', error)
+      }
       this.model = null
     }
 
+    // 销毁 PIXI 应用
     if (this.app) {
       try {
-        // 安全销毁，处理可能的 resize plugin 错误
+        // 停止 Ticker 防止继续渲染
+        if (this.app.ticker) {
+          this.app.ticker.stop()
+        }
+
+        // 销毁应用（app.destroy 会自动销毁 renderer）
         if (typeof this.app.destroy === 'function') {
-          this.app.destroy(true, { children: true, texture: true })
+          this.app.destroy(true, { children: true, texture: true, baseTexture: true })
         }
       } catch (error) {
         logger.warn('[Live2DService] 销毁 PIXI 应用时出错（已忽略）:', error)
@@ -262,8 +338,17 @@ export class Live2DService extends EventEmitter {
       this.app = null
     }
 
-    this.removeAllListeners()
-    logger.info('[Live2DService] 已销毁')
+    // 等待 WebGL 上下文完全释放
+    this.destroyPromise = new Promise(resolve => {
+      setTimeout(() => {
+        this.isDestroying = false
+        this.destroyPromise = null
+        logger.info('[Live2DService] 已销毁')
+        resolve()
+      }, 150) // 增加到 150ms 确保 WebGL 上下文完全释放
+    })
+
+    return this.destroyPromise
   }
 
   isModelLoaded(): boolean {

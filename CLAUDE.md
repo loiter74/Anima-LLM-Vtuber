@@ -38,15 +38,16 @@ pnpm lint       # Run ESLint
 
 **Note**: No test framework is currently configured. Use manual testing or Playwright for E2E testing.
 
-**Test Files** (in project root):
-- `test_expression_events.py` - Test Live2D expression event system
-- `test_expression_simple.py` - Simple expression system test
-- `test-verification.js` - JavaScript verification tests
-- `test-audio-interrupt.md` - Audio interrupt testing guide
-
 ### Live2D Model Setup
 - `scripts/download_live2d.ps1` - Download Live2D Haru model (Windows PowerShell)
 - `scripts/download_live2d_model.py` - Download Live2D Haru model (Python, cross-platform)
+
+**Note**: The project supports multiple Live2D models:
+- **Hiyori** (recommended) - Official free model, configured in `config/features/live2d.yaml`
+- **Haru** - Alternative model
+- **Epsilon** - Neuro-sama style model
+
+See `docs/NEURO_SAMA_LIVE2D_SETUP.md` for detailed setup instructions.
 
 **Quick setup (Windows PowerShell):**
 ```powershell
@@ -227,6 +228,9 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 **7. Live2D Expression System**
 - Frontend feature module at `frontend/features/live2d/`
+- **Configuration Files** (two separate configs):
+  - **Backend**: `config/features/live2d.yaml` - Model path, scale, position, emotion_map (for emotion-based expressions from LLM)
+  - **Frontend**: `frontend/public/config/live2d.json` - Live2D model settings and motion indices (for state-based expressions)
 - **Backend Components**:
   - `ExpressionHandler` (`src/anima/handlers/expression_handler.py`) - Sends expression events via WebSocket
   - `AudioExpressionHandler` (`src/anima/handlers/audio_expression_handler.py`) - Unified handler for audio + expression events
@@ -235,7 +239,6 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
     - `EmotionTimelineCalculator` - Maps emotion tags to time-based expression segments
     - `AudioAnalyzer` - Computes volume envelope for lip-sync (sample rate: 50Hz)
     - `EmotionPromptBuilder` - Builds system prompt for LLM to include emotion tags
-  - Configuration: `config/features/live2d.yaml` - Model path, scale, position, emotion_map
   - Configuration class: `Live2DConfig` (`src/anima/config/live2d.py`) - Python config class with emotion_map, valid_emotions, lip_sync settings
   - Expression types: `idle`, `listening`, `thinking`, `speaking`, `surprised`, `sad`, `happy`, `neutral`, `angry`
 - **Frontend Components**:
@@ -266,9 +269,10 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
   }
   ```
 - **Library**: Uses `pixi-live2d-display` for Live2D model rendering
-- **Model Configuration**: `frontend/public/config/live2d.json` - Live2D model settings
+- **Model Configuration**:
+  - Backend: `config/features/live2d.yaml` - Controls emotion-based expression mapping from LLM responses
+  - Frontend: `frontend/public/config/live2d.json` - Controls Live2D model motion indices for state-based expressions
 - **Emotion Mapping**: Maps emotion names to Live2D motion indices (e.g., `happy: 3`, `sad: 1`)
-- **Testing**: Use `test_expression_events.py` or `test_expression_simple.py` to verify expression event system
 
 ## Configuration System
 
@@ -643,7 +647,7 @@ type Store = ReturnType<typeof useConversationStore.getState>
 - If audio doesn't stop when interrupted, check browser console for `AudioPlayer` logs
 - The interrupt system relies on window references to track playing audio
 - Common issue: `onplay` event delay may cause `isPlaying` flag to be out of sync
-- Check `AUDIO-INTERRUPT-FIX.md` for detailed debugging steps and expected log patterns
+- Verify `window[AudioPlayer.WINDOW_AUDIO_KEY]` is set when audio plays
 
 **Silero VAD Model Download Fails**:
 - First run downloads model automatically (~66MB)
@@ -680,13 +684,14 @@ type Store = ReturnType<typeof useConversationStore.getState>
 - Audio format: Float32 array, normalized to [-1.0, 1.0]
 - Sample rate: 16kHz (required by VAD and ASR)
 - Frontend AudioRecorder applies gain control (default: 50.0)
-- AudioPlayer supports global stop: `AudioPlayer.stopGlobalAudio()` stops all playing audio
+- **AudioPlayer Global Stop**:
+  - `AudioPlayer.stopGlobalAudio()` stops all playing audio instances
+  - Uses `window[AudioPlayer.WINDOW_AUDIO_KEY]` to track playing audio globally
+  - Critical for interrupt system when new audio arrives
 - **Audio Interrupt System**:
   - When new audio arrives while audio is playing, the system automatically stops old audio
   - `AudioInteractionService` manages interrupt logic by checking `AudioPlayer.isPlaying` before playback
-  - Uses `window` reference to track global audio state: `AudioPlayer.WINDOW_AUDIO_KEY`
   - Stop process: `audio.pause()` → `audio.src = ''` → `audio.load()` → clear window reference
-  - See `AUDIO-INTERRUPT-FIX.md` for detailed implementation notes
 
 **Auto-Interruption**:
 - When VAD detects new speech start, it automatically interrupts ongoing responses
@@ -820,7 +825,7 @@ Component → useConversation Hook → Zustand Stores
 - `services/LipSyncEngine.ts` - Handles lip-sync animation based on audio playback
 - `services/ExpressionTimeline.ts` - Plays emotion timeline segments synchronized with audio playback using `requestAnimationFrame`
 - `hooks/useLive2D.ts` - React hook for Live2D integration
-- `types/index.ts` - TypeScript types for Live2D configuration
+- `types/index.ts` - TypeScript types for Live2D configuration (Live2DConfig, EmotionMap, etc.)
 - Components: `Live2DViewer` (`components/vtuber/live2d-viewer.tsx`)
 
 ### State Management (`frontend/shared/state/stores/`)
