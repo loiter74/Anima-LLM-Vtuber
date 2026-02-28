@@ -290,6 +290,49 @@ export class Live2DService extends EventEmitter {
       // 暴露到 window 对象以便调试
       if (typeof window !== 'undefined') {
         (window as any).__live2dService = this
+
+        // 添加辅助方法来检查模型参数
+      const internalModel = this.model.internalModel
+      if (internalModel?.coreModel) {
+        const coreModel = internalModel.coreModel
+        const paramCount = coreModel.getParameterCount()
+
+        logger.info(`[Live2DService] ====== 模型参数信息 ======`)
+        logger.info(`[Live2DService] 总参数数: ${paramCount}`)
+
+        // 查找所有包含 "Mouth" 的参数
+        const mouthParams: string[] = []
+        for (let i = 0; i < paramCount; i++) {
+          try {
+            // 尝试获取参数值
+            const value = coreModel.getParameterValueByIndex(i)
+
+            // 列出所有参数及其值
+            if (i < 20) {  // 只记录前20个
+              logger.info(`[Live2DService] 参数[${i}]: 值=${value.toFixed(3)}`)
+            }
+          } catch (e) {
+            // 忽略错误
+          }
+        }
+
+        // 手动测试 ParamMouthOpenY
+        try {
+          const mouthIndex = coreModel.getParameterIndex('ParamMouthOpenY')
+          const currentValue = coreModel.getParameterValueByIndex(mouthIndex)
+          logger.info(`[Live2DService] ParamMouthOpenY 找到! 索引=${mouthIndex}, 当前值=${currentValue.toFixed(3)}`)
+
+          // 测试设置参数
+          coreModel.setParameterValueByIndex(mouthIndex, 1.0)
+          const testValue = coreModel.getParameterValueByIndex(mouthIndex)
+          logger.info(`[Live2DService] 测试设置为 1.0 后, 值=${testValue.toFixed(3)}`)
+
+          // 恢复原值
+          coreModel.setParameterValueByIndex(mouthIndex, currentValue)
+        } catch (e) {
+          logger.error('[Live2DService] ParamMouthOpenY 测试失败:', e)
+        }
+      }
       }
 
       // ✅ 在下一帧发出事件，确保 DOM 更新完成
@@ -490,9 +533,14 @@ export class Live2DService extends EventEmitter {
 
         coreModel.setParameterValueByIndex(this.mouthParamIndex, finalValue)
 
-        // 每秒记录一次日志
-        if (now - (this as any).lastLogTime > 1000 || !(this as any).lastLogTime) {
-          logger.debug(`[Live2DService] 嘴部参数设置: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}`)
+        // 频繁记录日志（前10次调用，每次都记录）
+        if (!(this as any).callCount) {
+          (this as any).callCount = 0
+        }
+        (this as any).callCount++
+
+        if ((this as any).callCount <= 10 || now - (this as any).lastLogTime > 1000 || !(this as any).lastLogTime) {
+          logger.info(`[Live2DService] 嘴部参数更新 [${(this as any).callCount}]: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}, 原始值=${value.toFixed(3)}`)
           ;(this as any).lastLogTime = now
         }
       } else {
