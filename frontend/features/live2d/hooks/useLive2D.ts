@@ -321,8 +321,8 @@ export function useLive2D(options: UseLive2DOptions) {
         {
           updateInterval: 33, // ~30fps
           enableSmoothing: true,
-          smoothingFactor: 0.5,
-          volumeMultiplier: 1.2, // 稍微增强嘴部动作
+          smoothingFactor: 0.3, // 降低平滑系数，让反应更快
+          volumeMultiplier: 2.5, // 大幅增强嘴部动作（确保可见）
         }
       )
 

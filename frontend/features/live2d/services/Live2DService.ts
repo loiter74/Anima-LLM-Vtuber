@@ -508,15 +508,18 @@ export class Live2DService extends EventEmitter {
       const clampedValue = Math.max(0, Math.min(1, value))
 
       // 应用阈值过滤（避免噪音触发嘴部动作）
-      const threshold = this.config.lipSync?.minThreshold ?? 0.05
+      // 硬编码更低的阈值，让小声音也能触发
+      const threshold = 0.01  // 降低到 0.01（配置是 0.02）
       const filteredValue = clampedValue > threshold ? clampedValue : 0
 
       // 应用灵敏度调整
-      const sensitivity = this.config.lipSync?.sensitivity ?? 1.0
+      // 硬编码更高的灵敏度，确保可见效果
+      const sensitivity = 2.5  // 提高到 2.5（配置是 2.0）
       const scaledValue = Math.min(1, filteredValue * sensitivity)
 
       // 平滑处理（避免突变）
-      const smoothing = this.config.lipSync?.smoothing ?? 0.3
+      // 降低平滑系数，让反应更快
+      const smoothing = 0.15  // 降低到 0.15（配置是 0.3）
       const smoothedValue = this.currentMouthValue * smoothing + scaledValue * (1 - smoothing)
       this.currentMouthValue = smoothedValue
 
