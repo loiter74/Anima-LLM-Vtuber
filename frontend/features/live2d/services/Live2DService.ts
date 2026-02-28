@@ -381,6 +381,40 @@ export class Live2DService extends EventEmitter {
   }
 
   /**
+   * 手动调整模型位置（相对偏移）
+   * @param offsetX X轴偏移量（像素）
+   * @param offsetY Y轴偏移量（像素）
+   */
+  adjustPosition(offsetX: number, offsetY: number): void {
+    if (!this.model) return
+
+    this.model.x += offsetX
+    this.model.y += offsetY
+
+    logger.info('[Live2DService] 模型位置已调整:', {
+      offset: { x: offsetX, y: offsetY },
+      newPosition: { x: this.model.x, y: this.model.y }
+    })
+
+    this.emit('position:changed', { x: this.model.x, y: this.model.y })
+  }
+
+  /**
+   * 设置模型位置（绝对位置）
+   * @param x X坐标
+   * @param y Y坐标
+   */
+  setPosition(x: number, y: number): void {
+    if (!this.model) return
+
+    this.model.x = x
+    this.model.y = y
+
+    logger.info('[Live2DService] 模型位置已设置:', { x, y })
+    this.emit('position:changed', { x, y })
+  }
+
+  /**
    * 重置到默认表情
    */
   resetExpression(): void {
