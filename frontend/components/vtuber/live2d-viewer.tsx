@@ -35,11 +35,11 @@ export interface Live2DViewerProps {
  *
  * @example
  * ```tsx
- * // 默认 VTuber 头像位置（向下偏移 20%）
+ * // 默认 VTuber 头像位置（向下偏移 40%）
  * <Live2DViewer
  *   modelPath="/live2d/hiyori/Hiyori.model3.json"
  *   enabled={true}
- *   yOffsetPercent={20}
+ *   yOffsetPercent={40}
  * />
  *
  * // 完全居中
@@ -63,7 +63,7 @@ export function Live2DViewer({
   position = { x: 0, y: 0 },
   enabled = true,
   className = '',
-  yOffsetPercent = 20,
+  yOffsetPercent = 40,
   showDebugInfo = false,
 }: Live2DViewerProps) {
   const [debugInfo, setDebugInfo] = useState({

@@ -69,7 +69,7 @@ export function LivePreview() {
             position={STABLE_POSITION}
             enabled={isLive}
             className="w-full h-full"
-            yOffsetPercent={20}
+            yOffsetPercent={40}
             showDebugInfo={false}
           />
         ) : (
