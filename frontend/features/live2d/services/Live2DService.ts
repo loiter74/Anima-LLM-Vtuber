@@ -185,6 +185,12 @@ export class Live2DService extends EventEmitter {
 
       logger.info('[Live2DService] 模型自动缩放完成:', {
         container: { width: containerWidth, height: containerHeight },
+        yOffset: yOffset.toFixed(0),
+        calculated: {
+          centerX: (containerWidth / 2).toFixed(0),
+          centerY: (containerHeight / 2).toFixed(0),
+          finalY: this.model.y.toFixed(0)
+        },
         model: { width: originalWidth, height: originalHeight },
         finalScale: finalScale.toFixed(3),
         position: { x: this.model.x.toFixed(0), y: this.model.y.toFixed(0) }
