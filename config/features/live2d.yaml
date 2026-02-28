@@ -5,7 +5,7 @@ enabled: true
 
 # Live2D 模型配置
 model:
-  path: "/live2d/hiyori/Hiyori.model3.json"
+  path: "/live2d/haru/haru_greeter_t03.model3.json"  # 🔧 默认使用 Haru 模型
   scale: 0.5
   position:
     x: 0
@@ -33,11 +33,11 @@ valid_emotions:
 # 唇同步配置
 lip_sync:
   enabled: true
-  sensitivity: 2.0      # 嘴部动作灵敏度 (0.5 - 2.0)，增加到 2.0 让动作更明显
-  smoothing: 0.3        # 平滑系数 (0.0 - 1.0)，避免抖动，默认 0.3
-  min_threshold: 0.02   # 最小音量阈值 (0.0 - 1.0)，降低阈值让小声音也能触发
-  max_value: 1.0        # 最大嘴部张开度 (0.0 - 1.0)，默认 1.0
-  use_mouth_form: true  # 是否同时控制嘴形参数，启用以获得更自然的唇同步效果
+  sensitivity: 2.0      # 嘴部动作灵敏度
+  smoothing: 0.2        # 平滑系数（降低以更快反应）
+  min_threshold: 0.01   # 最小音量阈值（降低以更敏感）
+  max_value: 1.0        # 最大嘴部张开度
+  use_mouth_form: false # 🔧 Haru 模型不需要 ParamMouthForm
 
 # 表情提示词模板路径
 prompt_template_path: "config/prompts/live2d_expression.txt"

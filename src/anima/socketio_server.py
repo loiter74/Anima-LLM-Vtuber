@@ -62,7 +62,7 @@ from anima.services.conversation import (
     ConversationOrchestrator,
     SessionManager,
 )
-from anima.handlers import TextHandler, AudioHandler, ExpressionHandler
+from anima.handlers import TextHandler
 from anima.handlers.audio_expression_handler import AudioExpressionHandler
 from anima.eventbus import EventPriority
 from anima.utils.logger_manager import logger_manager
@@ -233,11 +233,7 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         orchestrator.register_handler("sentence", text_handler, priority=EventPriority.NORMAL)
         logger.info(f"[{sid}] TextHandler 已注册到 sentence 事件")
 
-        # 创建并注册 AudioHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）
-        audio_handler = AudioHandler(websocket_send=orchestrator.websocket_send)
-        orchestrator.register_handler("audio", audio_handler, priority=EventPriority.NORMAL)
-
-        # 创建并注册 AudioExpressionHandler（新版，基于情感内容）
+        # 创建并注册 AudioExpressionHandler（处理音频 + 表情事件）
         if live2d_config.enabled:
             audio_expression_handler = AudioExpressionHandler(
                 websocket_send=orchestrator.websocket_send,
@@ -249,10 +245,6 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
                 priority=EventPriority.NORMAL
             )
             logger.info(f"[{sid}] AudioExpressionHandler 已注册到 audio_with_expression 事件")
-
-        # 创建并注册 ExpressionHandler（旧版，基于状态，保留兼容）
-        expression_handler = ExpressionHandler(websocket_send=orchestrator.websocket_send)
-        orchestrator.register_handler("expression", expression_handler, priority=EventPriority.NORMAL)
 
         # 启动编排器（将 EventRouter 连接到 EventBus）
         orchestrator.start()

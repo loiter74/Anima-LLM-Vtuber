@@ -16,25 +16,25 @@ if TYPE_CHECKING:
 class EventRouter:
     """
     事件路由器
-    
+
     将 EventBus 中的事件路由到对应的 Handler
-    
+
     特性：
     - 链式调用设计
     - 支持动态注册（setup 后也能添加新 Handler）
     - 异常隔离（单个 Handler 崩溃不影响其他）
     - 优先级支持
     - 真正清除（从 EventBus 取消订阅）
-    
+
     使用示例:
         router = EventRouter(event_bus)
         router.register("sentence", TextHandler(), priority=EventPriority.HIGH)
-        router.register("audio", AudioHandler())
+        router.register("audio_with_expression", AudioExpressionHandler())
         router.setup()  # 连接到 EventBus
-        
+
         # 动态添加（即使 setup 后也能生效）
         router.register("video", VideoHandler())
-        
+
         # 清除所有路由（真正从 EventBus 移除）
         router.clear()
     """

@@ -5,14 +5,14 @@ Handlers 系统
 
 from .base_handler import BaseHandler
 from .text_handler import TextHandler
-from .audio_handler import AudioHandler
-from .expression_handler import ExpressionHandler
+from .audio_expression_handler import AudioExpressionHandler
+from .unified_event_handler import UnifiedEventHandler
 from .socket_adapter import SocketEventAdapter
 
 __all__ = [
     "BaseHandler",
     "TextHandler",
-    "AudioHandler",
-    "ExpressionHandler",
+    "AudioExpressionHandler",
+    "UnifiedEventHandler",
     "SocketEventAdapter",
 ]

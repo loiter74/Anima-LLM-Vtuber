@@ -10,7 +10,7 @@ from loguru import logger
 import numpy as np
 
 from anima.eventbus import EventBus, EventRouter, EventPriority
-from anima.core import EventType
+from anima.core import EventType, OutputEvent
 from anima.pipeline import InputPipeline, OutputPipeline
 from anima.pipeline.steps import ASRStep, TextCleanStep, EmotionExtractionStep
 
@@ -331,6 +331,13 @@ class ConversationOrchestrator:
         # 发送思考表情
         await self._emit_expression("thinking")
 
+        # 如果启用了 Live2D，在消息末尾添加表情标签提醒
+        if self.live2d_config and self.live2d_config.enabled:
+            # 【方案 A】使用强烈的提醒语气
+            emotion_hint = "\n\n【重要】你必须使用表情标签（如 [happy]、[sad]、[angry]、[surprised]、[thinking]、[neutral]）来表达情感！这是强制要求，每条回复必须至少包含 1-2 个表情标签。表情标签会自动从语音中移除，不影响 TTS 发音。示例：你好！[happy] 很高兴见到你！"
+            text = f"{text}{emotion_hint}"
+            logger.info(f"[{self.session_id}] 添加强制表情标签提醒")
+
         # 获取 Agent 响应流
         agent_stream = self.agent.chat_stream(text)
 
@@ -350,13 +357,21 @@ class ConversationOrchestrator:
         # 提取表情标签（如果 Live2D 配置存在）
         emotions = []
         if self.live2d_config and self.live2d_config.enabled:
+            logger.info(f"[{self.session_id}] Live2D 已启用，开始提取表情标签")
+            logger.debug(f"[{self.session_id}] 响应文本: {response_text[:100]}...")
+
             emotion_step = EmotionExtractionStep(
                 valid_emotions=self.live2d_config.valid_emotions
             )
             await emotion_step(ctx)
             emotions = ctx.metadata.get("emotions", [])
+
+            logger.info(f"[{self.session_id}] 提取到 {len(emotions)} 个表情标签: {emotions}")
+
             # response_text 已被清理为不含表情标签的文本
             response_text = ctx.response
+        else:
+            logger.warning(f"[{self.session_id}] Live2D 未启用或配置不存在")
 
         # 如果有 TTS，生成音频
         audio_path = None
@@ -396,9 +411,10 @@ class ConversationOrchestrator:
         try:
             audio_path = await self.tts_engine.synthesize(text)
             logger.info(f"[{self.session_id}] TTS 完成: {audio_path}")
+            logger.info(f"[{self.session_id}] 表情标签数量: {len(emotions)}, 内容: {emotions}")
 
             # 如果有表情标签，发送统一的 audio_with_expression 事件
-            if emotions and self.live2d_config and self.live2d_config.enabled:
+            if self.live2d_config and self.live2d_config.enabled:
                 await self._emit_audio_with_expression(
                     audio_path=audio_path,
                     emotions=emotions,
@@ -406,6 +422,7 @@ class ConversationOrchestrator:
                 )
             else:
                 # 否则发送普通的音频事件
+                logger.warning(f"[{self.session_id}] Live2D 未启用，发送普通音频事件")
                 await self._emit_event(EventType.AUDIO, {"path": audio_path})
 
             return audio_path

@@ -119,6 +119,39 @@ if ($Install) {
     Write-Host ""
 }
 
+# Check and install optional dependencies (pydub for better audio support)
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host "  Phase 2.5: Checking Optional Dependencies" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host ""
+
+$missingDeps = @()
+try {
+    $pydubCheck = python -c "import pydub" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $missingDeps += "pydub"
+    }
+} catch {
+    $missingDeps += "pydub"
+}
+
+if ($missingDeps.Count -gt 0) {
+    Write-Warning "Missing optional dependencies: $($missingDeps -join ', ')"
+    Write-Info "Installing missing dependencies..."
+    foreach ($dep in $missingDeps) {
+        Write-Info "Installing $dep..."
+        pip install $dep
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "$dep installed successfully"
+        } else {
+            Write-Warning "Failed to install $dep (optional, can be ignored)"
+        }
+    }
+} else {
+    Write-Success "All optional dependencies are installed"
+}
+Write-Host ""
+
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  Phase 3: Starting Services" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
@@ -129,18 +162,27 @@ $env:PYTHONPATH = "$ProjectRoot\src"
 if (-not $SkipBackend) {
     Write-Info "Starting backend server (port 12394)..."
 
-    # Set PYTHONPATH environment variable
-    $originalPath = $env:PYTHONPATH
-    $env:PYTHONPATH = "$ProjectRoot\src"
+    # Detect if in virtual environment
+    $pythonExe = "python"
+    if ($env:VIRTUAL_ENV) {
+        $venvPython = Join-Path $env:VIRTUAL_ENV "Scripts\python.exe"
+        if (Test-Path $venvPython) {
+            $pythonExe = $venvPython
+            Write-Info "Using virtual environment Python: $venvPython"
+        }
+    }
 
-    $backendProcess = Start-Process -FilePath "python" `
-        -ArgumentList "-m", "anima.socketio_server" `
-        -WorkingDirectory "$ProjectRoot" `
-        -WindowStyle Normal `
+    # Convert path to absolute path for PYTHONPATH
+    $srcPath = (Resolve-Path "$ProjectRoot\src").Path
+
+    # Create start command with environment variables
+    $startCmd = "cd /d `"$ProjectRoot`" && set PYTHONPATH=$srcPath && `"$pythonExe`" -m anima.socketio_server"
+
+    # Start backend in new window with proper environment
+    $backendProcess = Start-Process -FilePath "cmd" `
+        -ArgumentList "/c", "start `"Anima Backend Server`" cmd /k `"$startCmd`"" `
+        -WindowStyle Hidden `
         -PassThru
-
-    # Restore original PYTHONPATH
-    $env:PYTHONPATH = $originalPath
 
     $script:BackendPid = $backendProcess.Id
     Write-Success "Backend started (PID: $($backendProcess.Id))"
@@ -158,7 +200,8 @@ if (-not $SkipBackend) {
         $backendListening = netstat -ano | Select-String ":12394.*LISTENING"
         if ($backendListening) {
             $backendStarted = $true
-            if ($backendListening -match '\s+(\d+)\s*$') {
+            $backendLine = $backendListening[0].ToString()
+            if ($backendLine -match '\s+(\d+)\s*$') {
                 $actualPid = [int]$matches[1]
                 $script:BackendPid = $actualPid
             }
@@ -201,7 +244,8 @@ if (-not $SkipFrontend) {
         $frontendListening = netstat -ano | Select-String ":3000.*LISTENING"
         if ($frontendListening) {
             $frontendStarted = $true
-            if ($frontendListening -match '\s+(\d+)\s*$') {
+            $frontendLine = $frontendListening[0].ToString()
+            if ($frontendLine -match '\s+(\d+)\s*$') {
                 $actualPid = [int]$matches[1]
                 $script:FrontendPid = $actualPid
             }

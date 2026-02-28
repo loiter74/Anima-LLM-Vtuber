@@ -6,4 +6,7 @@
 export * from './types'
 export * from './services/Live2DService'
 export * from './services/LipSyncEngine'
+export * from './services/AdvancedLipSyncEngine'
+export * from './services/ConfigLoader'
 export * from './hooks/useLive2D'
+export * from './hooks/useLive2DConfig'

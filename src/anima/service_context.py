@@ -189,6 +189,12 @@ class ServiceContext:
             logger.info(f"[{self.session_id}] 使用人设: {persona_name}")
             if live2d_prompt:
                 logger.info(f"[{self.session_id}] 已添加 Live2D 表情提示词")
+                logger.info(f"[{self.session_id}] Live2D 提示词长度: {len(live2d_prompt)} 字符")
+                logger.info(f"[{self.session_id}] Live2D 提示词内容:\n{live2d_prompt}")
+            else:
+                logger.warning(f"[{self.session_id}] Live2D 提示词为空或未生成")
+            logger.info(f"[{self.session_id}] System prompt 总长度: {len(system_prompt)} 字符")
+            logger.info(f"[{self.session_id}] System prompt 前500字符:\n{system_prompt[:500]}...")
         else:
             system_prompt = self._build_system_prompt(agent_config, persona_config)
 

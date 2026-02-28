@@ -80,13 +80,14 @@ class AudioExpressionHandler(BaseHandler):
                 audio_duration=duration
             )
 
-            # 5. 构建表情时间轴数据
+            # 5. 构建表情时间轴数据（包含 intensity）
             expressions_data = {
                 "segments": [
                     {
                         "emotion": seg.emotion,
                         "time": seg.start_time,
-                        "duration": seg.duration
+                        "duration": seg.duration,
+                        "intensity": getattr(seg, 'intensity', 1.0)  # 强度值，默认 1.0
                     }
                     for seg in timeline.segments
                 ],

@@ -1,5 +1,16 @@
 {
-  "modelPath": "/live2d/haru/haru_greeter_t03.model3.json",
+  "enabled": true,
+  "model": {
+    "path": "/live2d/haru/haru_greeter_t03.model3.json",
+    "scale": 0.6,
+    "position": {
+      "x": 0,
+      "y": 0,
+      "yOffsetPercent": 15,
+      "xOffsetPercent": 0,
+      "scaleMultiplier": 0.55
+    }
+  },
   "expressions": {
     "idle": 0,
     "listening": 1,
@@ -10,7 +21,14 @@
   },
   "lipSync": {
     "enabled": true,
-    "sensitivity": 1.0,
-    "smoothing": 0.5
+    "sensitivity": 2.5,
+    "smoothing": 0.3,
+    "minThreshold": 0.02,
+    "maxValue": 1.0,
+    "useMouthForm": false,
+    "curveIntensity": 0.6,
+    "timeCompensationFrames": 2,
+    "enableAdaptiveThreshold": true,
+    "adaptiveWindow": 50
   }
 }

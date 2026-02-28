@@ -14,9 +14,6 @@ import { useTimer } from "@/hooks/use-timer"
 import { formatTime } from "@/shared/utils/format"
 import { Live2DViewer } from "@/components/vtuber/live2d-viewer"
 
-// 创建稳定的 position 对象，避免每次渲染都创建新引用
-const STABLE_POSITION = { x: 0, y: 0 }
-
 export function LivePreview() {
   const [isLive, setIsLive] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -64,12 +61,8 @@ export function LivePreview() {
       <div className="relative flex-1 overflow-hidden bg-foreground/[0.02]">
         {showLive2D ? (
           <Live2DViewer
-            modelPath="/live2d/hiyori/Hiyori.model3.json"
-            scale={1.0}
-            position={STABLE_POSITION}
             enabled={isLive}
             className="w-full h-full"
-            yOffsetPercent={50}
             showDebugInfo={false}
           />
         ) : (

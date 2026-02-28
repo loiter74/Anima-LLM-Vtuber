@@ -14,12 +14,12 @@ export interface Live2DPositionConfig {
 
 /**
  * VTuber 头像默认位置配置
- * 头部显示在画面中上部，身体在下方
+ * 使用居中配置以避免定位问题
  */
 export const DEFAULT_VTUBER_POSITION: Live2DPositionConfig = {
-  yOffsetPercent: 50,  // 向下偏移 50%，让头部在上方
+  yOffsetPercent: 0,   // 居中（修复：之前 50 导致模型在画布下方）
   xOffsetPercent: 0,   // X 轴居中
-  scaleMultiplier: 1.2  // 放大 20%
+  scaleMultiplier: 1.0 // 不放大（避免超出画布）
 }
 
 /**

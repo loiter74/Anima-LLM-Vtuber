@@ -110,7 +110,7 @@ class AudioAnalyzer:
             logger.error(f"[AudioAnalyzer] 分析音频失败: {e}")
             return []
 
-    def _load_audio(self, audio_path: str) -> AudioSegment:
+    def _load_audio(self, audio_path: str) -> "AudioSegment":
         """
         加载音频文件
 

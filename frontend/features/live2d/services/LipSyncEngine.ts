@@ -17,6 +17,8 @@ export interface LipSyncConfig {
   smoothingFactor?: number
   /** 音量乘数，默认 1.0 */
   volumeMultiplier?: number
+  /** 最小音量阈值 (0.0 - 1.0)，低于此值嘴部闭合，默认 0.05 */
+  minThreshold?: number
 }
 
 export class LipSyncEngine {
@@ -43,6 +45,7 @@ export class LipSyncEngine {
       enableSmoothing: config.enableSmoothing ?? true,
       smoothingFactor: config.smoothingFactor ?? 0.5,
       volumeMultiplier: config.volumeMultiplier ?? 1.0,
+      minThreshold: config.minThreshold ?? 0.05,
     }
   }
 
@@ -122,6 +125,11 @@ export class LipSyncEngine {
 
       // 获取当前音量
       let volume = this.volumes[sampleIndex]
+
+      // 应用最小音量阈值：低于阈值时嘴部闭合
+      if (volume < this.config.minThreshold) {
+        volume = 0
+      }
 
       // 应用音量乘数
       volume = volume * this.config.volumeMultiplier

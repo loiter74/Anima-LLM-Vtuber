@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Live2DService } from '../services/Live2DService'
-import { LipSyncEngine } from '../services/LipSyncEngine'
+import { AdvancedLipSyncEngine } from '../services/AdvancedLipSyncEngine'
 import { logger } from '@/shared/utils/logger'
 import type { Live2DModelConfig } from '../types'
 import type { TimelineSegment } from '../services/ExpressionTimeline'
@@ -45,7 +45,7 @@ export function useLive2D(options: UseLive2DOptions) {
   // 提取 lipSyncConfig 的各个值，避免对象引用变化
   const lipSyncSensitivity = lipSyncConfig.sensitivity ?? 1.0
   const lipSyncSmoothing = lipSyncConfig.smoothing ?? 0.3
-  const lipSyncMinThreshold = lipSyncConfig.minThreshold ?? 0.05
+  const lipSyncMinThreshold = lipSyncConfig.minThreshold ?? 0.02
   const lipSyncMaxValue = lipSyncConfig.maxValue ?? 1.0
   const lipSyncUseMouthForm = lipSyncConfig.useMouthForm ?? false
 
@@ -302,27 +302,33 @@ export function useLive2D(options: UseLive2DOptions) {
         currentAudioRef.current = null
       }
 
-      logger.info('[useLive2D] 步骤 1: 播放表情时间轴')
+      logger.info('[useLive2D] 步骤 1: 播放表情时间轴 (临时禁用用于调试)')
       // 1. 播放表情时间轴
-      serviceRef.current.playTimeline(segments, totalDuration)
+      // TODO: 临时禁用表情时间轴，调试模型消失问题
+      // serviceRef.current.playTimeline(segments, totalDuration)
 
       logger.info('[useLive2D] 步骤 2: 创建音频元素')
       // 2. 创建音频元素并播放
       const audio = new Audio()
       audio.src = `data:audio/${format};base64,${audioData}`
 
-      logger.info('[useLive2D] 步骤 3: 创建唇同步引擎')
-      // 3. 创建唇同步引擎并使用预计算的音量包络
-      const lipSyncEngine = new LipSyncEngine(
+      logger.info('[useLive2D] 步骤 3: 创建高级唇同步引擎')
+      // 3. 创建高级唇同步引擎（使用非线性映射、自适应阈值、卡尔曼滤波）
+      const lipSyncEngine = new AdvancedLipSyncEngine(
         (value: number) => {
-          logger.debug(`[useLive2D] 唇同步回调: value=${value.toFixed(3)}`)
+          logger.debug(`[useLive2D] 高级唇同步回调: value=${value.toFixed(3)}`)
           serviceRef.current?.setMouthOpen(value)
         },
         {
-          updateInterval: 33, // ~30fps
+          updateInterval: 33,
           enableSmoothing: true,
-          smoothingFactor: 0.3, // 降低平滑系数，让反应更快
-          volumeMultiplier: 2.5, // 大幅增强嘴部动作（确保可见）
+          smoothingFactor: lipSyncSmoothing,
+          baseVolumeMultiplier: lipSyncSensitivity,
+          minThreshold: lipSyncMinThreshold,
+          curveIntensity: 0.6,           // 非线性曲线强度
+          timeCompensationFrames: 2,      // 2帧时间补偿
+          enableAdaptiveThreshold: true,  // 启用自适应阈值
+          adaptiveWindow: 50,             // 50采样点窗口
         }
       )
 

@@ -33,6 +33,8 @@ export class Live2DService extends EventEmitter {
   private formParamIndex: number = -1
   private currentMouthValue: number = 0
   private lastMouthUpdateTime: number = 0
+  private callCount: number = 0  // 用于日志记录
+  private lastLogTime: number = 0  // 用于日志记录
 
   constructor(canvas: HTMLCanvasElement, config: Live2DModelConfig) {
     super()
@@ -182,6 +184,10 @@ export class Live2DService extends EventEmitter {
       const centerX = containerWidth / 2
       const centerY = containerHeight / 2
 
+      // 🔧 简化：offsetPercent 是相对于容器尺寸的偏移百分比
+      // yOffsetPercent: 0 = 居中
+      // yOffsetPercent: 10 = 向下偏移容器高度的 10%
+      // yOffsetPercent: -10 = 向上偏移容器高度的 10%
       const yOffset = containerHeight * (this.positionConfig.yOffsetPercent / 100)
       const xOffset = containerWidth * (this.positionConfig.xOffsetPercent / 100)
 
@@ -492,34 +498,42 @@ export class Live2DService extends EventEmitter {
 
       // 性能优化：限制更新频率为 ~30fps
       const now = performance.now()
-      if (now - this.lastMouthUpdateTime < 33) {
+      const updateInterval = 33  // ~30fps
+      if (now - this.lastMouthUpdateTime < updateInterval) {
         return
       }
       this.lastMouthUpdateTime = now
 
+      // 🔧 保护：保存当前位置和缩放（防止 update() 改变模型位置）
+      const savedX = this.model.x
+      const savedY = this.model.y
+      const savedScaleX = this.model.scale.x
+      const savedScaleY = this.model.scale.y
+      const savedAnchorX = this.model.anchor.x
+      const savedAnchorY = this.model.anchor.y
+
       // 首次调用时记录日志
-      if (this.mouthParamIndex < 0) {
+      if (!(this as any).hasLoggedFirstCall) {
         logger.info('[Live2DService] ========== setMouthOpen 首次调用 ==========')
         logger.info(`[Live2DService] 输入值: ${value.toFixed(3)}`)
         logger.info(`[Live2DService] lipSync 配置:`, this.config.lipSync)
+        logger.info('[Live2DService] 当前模型位置:', { x: savedX, y: savedY, scale: { x: savedScaleX, y: savedScaleY } })
+        ;(this as any).hasLoggedFirstCall = true
       }
 
       // 确保值在 [0, 1] 范围内
       const clampedValue = Math.max(0, Math.min(1, value))
 
       // 应用阈值过滤（避免噪音触发嘴部动作）
-      // 硬编码更低的阈值，让小声音也能触发
-      const threshold = 0.01  // 降低到 0.01（配置是 0.02）
+      const threshold = this.config.lipSync?.minThreshold ?? 0.02
       const filteredValue = clampedValue > threshold ? clampedValue : 0
 
       // 应用灵敏度调整
-      // 硬编码更高的灵敏度，确保可见效果
-      const sensitivity = 2.5  // 提高到 2.5（配置是 2.0）
+      const sensitivity = this.config.lipSync?.sensitivity ?? 2.0
       const scaledValue = Math.min(1, filteredValue * sensitivity)
 
       // 平滑处理（避免突变）
-      // 降低平滑系数，让反应更快
-      const smoothing = 0.15  // 降低到 0.15（配置是 0.3）
+      const smoothing = this.config.lipSync?.smoothing ?? 0.3
       const smoothedValue = this.currentMouthValue * smoothing + scaledValue * (1 - smoothing)
       this.currentMouthValue = smoothedValue
 
@@ -534,50 +548,68 @@ export class Live2DService extends EventEmitter {
         const maxValue = this.config.lipSync?.maxValue ?? 1.0
         const finalValue = Math.min(maxValue, smoothedValue)
 
+        // 设置参数值
         coreModel.setParameterValueByIndex(this.mouthParamIndex, finalValue)
 
-        // 同时控制 ParamMouthForm（嘴形参数）以增强视觉效果
-        try {
-          if (this.formParamIndex < 0) {
-            this.formParamIndex = coreModel.getParameterIndex('ParamMouthForm')
-            logger.info(`[Live2DService] ParamMouthForm 索引: ${this.formParamIndex}`)
-          }
+        // 🔥 关键：只更新核心模型（cubism4 必需）
+        coreModel.update()
 
-          if (this.formParamIndex >= 0) {
-            // 嘴形参数使用相同的值，但幅度较小（30-50%）
-            coreModel.setParameterValueByIndex(this.formParamIndex, finalValue * 0.4)
-          }
-        } catch (e) {
-          // 忽略 ParamMouthForm 错误
+        // 🔧 保护：恢复位置和缩放（防止 update() 改变模型位置）
+        if (this.model.x !== savedX || this.model.y !== savedY) {
+          logger.warn('[Live2DService] 检测到位置变化，恢复原始位置')
+          this.model.x = savedX
+          this.model.y = savedY
+        }
+        if (this.model.scale.x !== savedScaleX || this.model.scale.y !== savedScaleY) {
+          logger.warn('[Live2DService] 检测到缩放变化，恢复原始缩放')
+          this.model.scale.set(savedScaleX, savedScaleY)
+        }
+        if (this.model.anchor.x !== savedAnchorX || this.model.anchor.y !== savedAnchorY) {
+          logger.warn('[Live2DService] 检测到锚点变化，恢复原始锚点')
+          this.model.anchor.set(savedAnchorX, savedAnchorY)
         }
 
-        // 频繁记录日志（前10次调用，每次都记录）
+        // 同时控制 ParamMouthForm（嘴形参数）以增强视觉效果
+        if (this.config.lipSync?.useMouthForm) {
+          try {
+            if (this.formParamIndex < 0) {
+              this.formParamIndex = coreModel.getParameterIndex('ParamMouthForm')
+              logger.info(`[Live2DService] ParamMouthForm 索引: ${this.formParamIndex}`)
+            }
+
+            if (this.formParamIndex >= 0) {
+              // 嘴形参数使用相同的值，但幅度较小（40%）
+              coreModel.setParameterValueByIndex(this.formParamIndex, finalValue * 0.4)
+              coreModel.update()
+
+              // 🔧 再次保护：确保位置没有被改变
+              if (this.model.x !== savedX || this.model.y !== savedY) {
+                this.model.x = savedX
+                this.model.y = savedY
+              }
+            }
+          } catch (e) {
+            // 忽略 ParamMouthForm 错误
+          }
+        }
+
+        // 记录日志（前10次调用，每秒一次）
         if (!(this as any).callCount) {
           (this as any).callCount = 0
         }
         (this as any).callCount++
 
-        if ((this as any).callCount <= 10 || now - (this as any).lastLogTime > 1000 || !(this as any).lastLogTime) {
-          logger.info(`[Live2DService] 嘴部参数更新 [${(this as any).callCount}]: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}, 原始值=${value.toFixed(3)}, 嘴形=${this.formParamIndex >= 0 ? (finalValue * 0.4).toFixed(3) : 'N/A'}`)
+        if ((this as any).callCount <= 10 || now - ((this as any).lastLogTime || 0) > 1000) {
+          logger.info(
+            `[Live2DService] 嘴部参数更新 [${(this as any).callCount}]: ` +
+            `索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}, ` +
+            `原始值=${value.toFixed(3)}, ` +
+            `嘴形=${this.formParamIndex >= 0 ? (finalValue * 0.4).toFixed(3) : 'N/A'}`
+          )
           ;(this as any).lastLogTime = now
         }
       } else {
         logger.warn('[Live2DService] ParamMouthOpenY 参数未找到！')
-      }
-
-      // 可选：同时控制嘴形（如果配置启用）
-      if (this.config.lipSync?.useMouthForm) {
-        if (this.formParamIndex < 0) {
-          this.formParamIndex = coreModel.getParameterIndex('ParamMouthForm')
-        }
-
-        if (this.formParamIndex >= 0) {
-          // 嘴形变化幅度较小（30%）
-          coreModel.setParameterValueByIndex(
-            this.formParamIndex,
-            smoothedValue * 0.3
-          )
-        }
       }
     } catch (error) {
       logger.error('[Live2DService] 设置嘴部动作失败:', error)

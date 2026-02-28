@@ -9,15 +9,16 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useLive2D } from '@/features/live2d'
+import { useLive2DConfig } from '@/features/live2d/hooks/useLive2DConfig'
 import { logger } from '@/shared/utils/logger'
 
 export interface Live2DViewerProps {
-  modelPath?: string
-  scale?: number
-  position?: { x: number; y: number }
+  modelPath?: string  // 可选，如果不提供则从配置文件读取
+  scale?: number      // 可选，如果不提供则从配置文件读取
+  position?: { x: number; y: number }  // 可选，如果不提供则从配置文件读取
   enabled?: boolean
   className?: string
-  /** Y 轴偏移百分比（0-100），正值向下偏移，默认 50% */
+  /** Y 轴偏移百分比（0-100），正值向下偏移 */
   yOffsetPercent?: number
   /** 是否显示调试信息 */
   showDebugInfo?: boolean
@@ -32,40 +33,39 @@ export interface Live2DViewerProps {
  * - 支持口型同步动画
  * - 可配置的位置偏移
  * - 可选的调试模式
+ * - 从配置文件读取默认配置
  *
  * @example
  * ```tsx
- * // 默认 VTuber 头像位置（向下偏移 50%）
- * <Live2DViewer
- *   modelPath="/live2d/hiyori/Hiyori.model3.json"
- *   enabled={true}
- *   yOffsetPercent={50}
- * />
+ * // 使用配置文件中的默认配置
+ * <Live2DViewer enabled={true} />
  *
- * // 完全居中
+ * // 覆盖部分配置
  * <Live2DViewer
  *   modelPath="/live2d/hiyori/Hiyori.model3.json"
  *   enabled={true}
- *   yOffsetPercent={0}
  * />
  *
  * // 开启调试模式
  * <Live2DViewer
- *   modelPath="/live2d/hiyori/Hiyori.model3.json"
  *   enabled={true}
  *   showDebugInfo={true}
  * />
  * ```
  */
 export function Live2DViewer({
-  modelPath = '/live2d/hiyori/Hiyori.model3.json',
-  scale = 1.0,
-  position = { x: 0, y: 0 },
+  modelPath,
+  scale,
+  position,
   enabled = true,
   className = '',
-  yOffsetPercent = 50,
+  yOffsetPercent,
   showDebugInfo = false,
 }: Live2DViewerProps) {
+  // 加载配置
+  const { config, loading: configLoading } = useLive2DConfig()
+
+  // ❗ 必须在所有 Hooks 调用之后才能进行条件返回
   const [debugInfo, setDebugInfo] = useState({
     containerWidth: 0,
     containerHeight: 0,
@@ -84,11 +84,33 @@ export function Live2DViewer({
     logger.error('[Live2DViewer] 错误:', err)
   }, [])
 
+  // 从配置文件获取默认值，props 可以覆盖
+  const finalModelPath = modelPath ?? config?.model.path ?? '/live2d/haru/haru_greeter_t03.model3.json'
+  const finalScale = scale ?? config?.model.scale ?? 1.0
+  const finalPosition = position ?? {
+    x: config?.model.position?.x ?? 0,
+    y: config?.model.position?.y ?? 0,
+  }
+  const finalYOffsetPercent = yOffsetPercent ?? config?.model.position?.yOffsetPercent ?? 0
+  const finalEnabled = enabled && (config?.enabled ?? true)
+
+  // 使用配置中的唇同步设置（如果可用）
+  const lipSyncConfig = config?.lipSync || {
+    enabled: true,
+    sensitivity: 2.5,
+    smoothing: 0.3,
+    minThreshold: 0.05,
+    maxValue: 1.0,
+    useMouthForm: false,
+  }
+
   const { canvasRef, isLoaded, error } = useLive2D({
-    modelPath,
-    scale,
-    position,
-    enabled,
+    modelPath: finalModelPath,
+    scale: finalScale,
+    position: finalPosition,
+    enabled: finalEnabled,
+    lipSyncEnabled: lipSyncConfig.enabled,
+    lipSyncConfig,
     onExpressionChange: handleExpressionChange,
     onError: handleError,
   })
@@ -117,17 +139,33 @@ export function Live2DViewer({
     }
   }, [showDebugInfo, isLoaded])
 
-  // 应用位置偏移
+  // 应用位置配置（包括缩放）
   useEffect(() => {
-    if (isLoaded && yOffsetPercent !== 0) {
+    if (isLoaded) {
       const service = (window as any).__live2dService
       if (service) {
-        service.setPositionConfig({ yOffsetPercent })
+        service.setPositionConfig({
+          yOffsetPercent: finalYOffsetPercent,
+          xOffsetPercent: config?.model.position?.xOffsetPercent ?? 0,
+          scaleMultiplier: config?.model.position?.scaleMultiplier ?? 1.0,
+        })
       }
     }
-  }, [isLoaded, yOffsetPercent])
+  }, [isLoaded, finalYOffsetPercent, config])
 
-  if (!enabled) {
+  // 配置加载中
+  if (configLoading) {
+    return (
+      <div className={`flex items-center justify-center bg-gray-100 text-gray-500 ${className}`}>
+        <div className="text-center">
+          <p className="text-sm font-medium">正在加载 Live2D 配置...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Live2D 已禁用
+  if (!finalEnabled) {
     return (
       <div className={`flex items-center justify-center bg-gray-100 text-gray-500 ${className}`}>
         <div className="text-center">
@@ -167,7 +205,7 @@ export function Live2DViewer({
         <div className="absolute top-2 left-2 bg-black/80 text-white text-xs font-mono p-3 rounded shadow-lg pointer-events-none">
           <div className="font-bold mb-2">Live2D 调试信息</div>
           <div>容器尺寸: {debugInfo.containerWidth} x {debugInfo.containerHeight}</div>
-          <div>Y 偏移: {yOffsetPercent}%</div>
+          <div>Y 偏移: {finalYOffsetPercent}%</div>
           <div>模型 X: {debugInfo.modelX.toFixed(0)}</div>
           <div>模型 Y: {debugInfo.modelY.toFixed(0)}</div>
           <div className="mt-2 text-yellow-400">

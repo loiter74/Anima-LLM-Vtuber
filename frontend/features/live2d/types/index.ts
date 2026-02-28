@@ -26,13 +26,21 @@ export interface LipSyncConfig {
   useMouthForm?: boolean
 }
 
+export interface Live2DModelPosition {
+  x: number
+  y: number
+  /** Y 轴偏移百分比（0-100），正值向下偏移 */
+  yOffsetPercent?: number
+  /** X 轴偏移百分比（0-100），正值向右偏移 */
+  xOffsetPercent?: number
+  /** 缩放倍数 */
+  scaleMultiplier?: number
+}
+
 export interface Live2DModelConfig {
   path: string
   scale?: number
-  position?: {
-    x: number
-    y: number
-  }
+  position?: Live2DModelPosition
   /** 唇同步配置 */
   lipSync?: LipSyncConfig
 }
