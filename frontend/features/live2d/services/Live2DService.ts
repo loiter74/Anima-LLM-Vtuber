@@ -10,6 +10,7 @@ import { EventEmitter } from 'events'
 import { logger } from '@/shared/utils/logger'
 import type { Live2DExpression, Live2DModelConfig } from '../types'
 import { ExpressionTimeline, type TimelineSegment } from './ExpressionTimeline'
+import { DEFAULT_VTUBER_POSITION, type Live2DPositionConfig } from '../config'
 
 export class Live2DService extends EventEmitter {
   private app: any = null  // PIXI.Application
@@ -25,6 +26,7 @@ export class Live2DService extends EventEmitter {
   private isDestroying: boolean = false
   private destroyPromise: Promise<void> | null = null
   private resizeObserver: ResizeObserver | null = null
+  private positionConfig: Live2DPositionConfig = DEFAULT_VTUBER_POSITION
 
   // 唇同步相关
   private mouthParamIndex: number = -1
@@ -167,9 +169,8 @@ export class Live2DService extends EventEmitter {
       // 使用较大的缩放比例让模型填充更多空间
       const autoScale = Math.max(scaleX, scaleY)
 
-      // 应用初始配置的缩放
-      const baseScale = this.config.scale || 1.0
-      const finalScale = autoScale * baseScale
+      // 应用缩放倍数
+      const finalScale = autoScale * this.positionConfig.scaleMultiplier
 
       // 设置模型缩放
       this.model.scale.set(finalScale)
@@ -177,27 +178,43 @@ export class Live2DService extends EventEmitter {
       // 设置锚点为中心
       this.model.anchor.set(0.5, 0.5)
 
-      // 将模型居中（VTuber 风格：向下偏移，让头部在画面中上部）
-      // Y 轴偏移 = 容器高度 * 0.4（向下移动 40%）
-      const yOffset = containerHeight * 0.4
-      this.model.x = containerWidth / 2
-      this.model.y = containerHeight / 2 + yOffset
+      // 计算位置（中心 + 配置偏移）
+      const centerX = containerWidth / 2
+      const centerY = containerHeight / 2
 
-      logger.info('[Live2DService] 模型自动缩放完成:', {
+      const yOffset = containerHeight * (this.positionConfig.yOffsetPercent / 100)
+      const xOffset = containerWidth * (this.positionConfig.xOffsetPercent / 100)
+
+      this.model.x = centerX + xOffset
+      this.model.y = centerY + yOffset
+
+      logger.info('[Live2DService] 模型位置设置:', {
         container: { width: containerWidth, height: containerHeight },
-        yOffset: yOffset.toFixed(0),
+        config: this.positionConfig,
         calculated: {
-          centerX: (containerWidth / 2).toFixed(0),
-          centerY: (containerHeight / 2).toFixed(0),
-          finalY: this.model.y.toFixed(0)
+          center: { x: centerX, y: centerY },
+          offset: { x: xOffset, y: yOffset },
+          final: { x: this.model.x, y: this.model.y }
         },
-        model: { width: originalWidth, height: originalHeight },
-        finalScale: finalScale.toFixed(3),
-        position: { x: this.model.x.toFixed(0), y: this.model.y.toFixed(0) }
+        finalScale: finalScale.toFixed(3)
       })
     } catch (error) {
-      logger.warn('[Live2DService] 自动缩放模型时出错:', error)
+      logger.warn('[Live2DService] 位置设置失败:', error)
     }
+  }
+
+  /**
+   * 设置位置配置
+   * @param config 位置配置
+   */
+  setPositionConfig(config: Partial<Live2DPositionConfig>): void {
+    this.positionConfig = { ...this.positionConfig, ...config }
+    logger.info('[Live2DService] 位置配置已更新:', this.positionConfig)
+
+    // 重新应用位置
+    const canvasWidth = this.canvas.clientWidth || 800
+    const canvasHeight = this.canvas.clientHeight || 600
+    this.autoScaleModel(canvasWidth, canvasHeight)
   }
 
   private async init(): Promise<void> {
