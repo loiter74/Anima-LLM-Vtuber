@@ -17,9 +17,9 @@ export interface Live2DPositionConfig {
  * 头部显示在画面中上部，身体在下方
  */
 export const DEFAULT_VTUBER_POSITION: Live2DPositionConfig = {
-  yOffsetPercent: 40,  // 向下偏移 40%，让头部在上方
+  yOffsetPercent: 50,  // 向下偏移 50%，让头部在上方
   xOffsetPercent: 0,   // X 轴居中
-  scaleMultiplier: 1.1  // 放大 10%
+  scaleMultiplier: 1.2  // 放大 20%
 }
 
 /**
