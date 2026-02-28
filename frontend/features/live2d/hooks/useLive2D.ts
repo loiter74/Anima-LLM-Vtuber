@@ -53,6 +53,7 @@ export function useLive2D(options: UseLive2DOptions) {
   const serviceRef = useRef<Live2DService | null>(null)
   const lipSyncRef = useRef<LipSyncEngine | null>(null)
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)  // 追踪当前播放的音频
 
   const [isLoaded, setIsLoaded] = useState(false)
   const [currentExpression, setCurrentExpression] = useState('idle')
@@ -291,6 +292,16 @@ export function useLive2D(options: UseLive2DOptions) {
     }
 
     try {
+      logger.info('[useLive2D] 步骤 0: 停止旧的音频播放')
+      // 0. 停止之前正在播放的音频（避免回声）
+      if (currentAudioRef.current) {
+        logger.info('[useLive2D] 停止旧音频，当前 src:', currentAudioRef.current.src.substring(0, 50) + '...')
+        currentAudioRef.current.pause()
+        currentAudioRef.current.currentTime = 0
+        currentAudioRef.current.src = ''
+        currentAudioRef.current = null
+      }
+
       logger.info('[useLive2D] 步骤 1: 播放表情时间轴')
       // 1. 播放表情时间轴
       serviceRef.current.playTimeline(segments, totalDuration)
@@ -341,9 +352,17 @@ export function useLive2D(options: UseLive2DOptions) {
         // 方案 A: 清空表情，让模型自动回到 Idle Motion 状态
         serviceRef.current?.clearExpression()
         logger.info('[useLive2D] 回复结束，已清空表情，模型应回到 Idle Motion 状态')
+
+        // 清理音频引用
+        if (currentAudioRef.current === audio) {
+          currentAudioRef.current = null
+        }
       })
 
       logger.info('[useLive2D] 步骤 5: 调用 audio.play()')
+      // 保存当前音频引用
+      currentAudioRef.current = audio
+
       // 播放音频
       audio.play().then(() => {
         logger.info('[useLive2D] audio.play() Promise resolved')
