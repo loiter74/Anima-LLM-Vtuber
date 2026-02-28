@@ -338,7 +338,9 @@ export function useLive2D(options: UseLive2DOptions) {
         lipSyncEngine.stopVolumes()
         setIsSpeaking(false)
         serviceRef.current?.stopTimeline()
-        serviceRef.current?.setExpression('neutral')
+        // 方案 A: 清空表情，让模型自动回到 Idle Motion 状态
+        serviceRef.current?.clearExpression()
+        logger.info('[useLive2D] 回复结束，已清空表情，模型应回到 Idle Motion 状态')
       })
 
       logger.info('[useLive2D] 步骤 5: 调用 audio.play()')

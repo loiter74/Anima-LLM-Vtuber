@@ -347,6 +347,37 @@ export class Live2DService extends EventEmitter {
 
     // TODO: 如果 Live2D 模型支持强度参数，在这里应用
     // 例如：model.setParameter('ParamEyeLOpen', intensity)
+  }
+
+  /**
+   * 清空当前表情，让模型回到 Idle Motion 控制的默认状态
+   */
+  clearExpression(): void {
+    logger.info('[Live2DService] ========== clearExpression 被调用 ==========')
+    logger.info('[Live2DService] 清空表情，模型应回到 Idle Motion 状态')
+
+    this.currentExpression = 'neutral'
+
+    if (this.model) {
+      try {
+        // 尝试不同的方法来清空表情
+        // 方法 1: 传入 -1 或 undefined 来清空
+        if (typeof this.model.expression === 'function') {
+          // pixi-live2d-display 的 expression() 方法接受索引
+          // 传入无效值或不传参数可能会清空当前表情
+          try {
+            (this.model.expression as any)(-1)  // 尝试传入 -1
+            logger.info('[Live2DService] ✅ 已尝试清空表情（方法 1: expression(-1)）')
+          } catch (e) {
+            // 方法 2: 不做任何操作，让 Expression 自然淡出
+            logger.info('[Live2DService] 表情会自然淡出，让 Idle Motion 接管')
+          }
+        }
+      } catch (error) {
+        logger.warn('[Live2DService] 清空表情时出错（已忽略）:', error)
+      }
+    }
+  }
 
     this.emit('expression:change', emotion, intensity)
   }
@@ -401,11 +432,11 @@ export class Live2DService extends EventEmitter {
   }
 
   /**
-   * 重置到默认表情
+   * 重置到默认表情（清空表情，回到 Idle Motion）
    */
   resetExpression(): void {
     this.stopTimeline()
-    this.setExpression('neutral')
+    this.clearExpression()
   }
 
   setMouthOpen(value: number): void {
