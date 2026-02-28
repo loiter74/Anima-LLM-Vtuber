@@ -379,9 +379,6 @@ export class Live2DService extends EventEmitter {
     }
   }
 
-    this.emit('expression:change', emotion, intensity)
-  }
-
   /**
    * 播放时间轴（支持强度）
    * @param segments 时间轴片段（包含 intensity）
