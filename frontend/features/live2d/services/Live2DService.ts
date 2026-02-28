@@ -174,15 +174,23 @@ export class Live2DService extends EventEmitter {
       // 设置模型缩放
       this.model.scale.set(finalScale)
 
-      // 将模型居中（Live2D 模型的 anchor 默认是 0.5, 0.5，即中心点）
+      // 确保模型的锚点在中心
+      this.model.anchor.set(0.5, 0.5)
+
+      // 将模型居中（anchor 是 0.5, 0.5，所以位置设为中心即可）
       this.model.x = containerWidth / 2
       this.model.y = containerHeight / 2
 
-      logger.info('[Live2DService] 模型自动缩放:', {
+      logger.info('[Live2DService] 模型自动缩放完成:', {
         container: { width: containerWidth, height: containerHeight },
         model: { width: originalWidth, height: originalHeight },
         scales: { x: scaleX.toFixed(3), y: scaleY.toFixed(3), auto: autoScale.toFixed(3), final: finalScale.toFixed(3) },
-        position: { x: this.model.x, y: this.model.y },
+        modelState: {
+          x: this.model.x.toFixed(0),
+          y: this.model.y.toFixed(0),
+          scale: this.model.scale.x.toFixed(3),
+          anchor: { x: this.model.anchor.x, y: this.model.anchor.y }
+        }
       })
     } catch (error) {
       logger.warn('[Live2DService] 自动缩放模型时出错:', error)
@@ -240,32 +248,21 @@ export class Live2DService extends EventEmitter {
         x: this.model.x,
         y: this.model.y,
         scale: this.model.scale.x,
+        anchor: this.model.anchor,
       })
 
-      // 设置缩放和位置
-      if (this.config.scale) {
-        this.model.scale.set(this.config.scale)
-      }
+      // 设置模型的锚点为中心（重要！让缩放和定位从中心开始）
+      this.model.anchor.set(0.5, 0.5)
 
-      if (this.config.position) {
-        this.model.position.set(this.config.position.x, this.config.position.y)
-      }
-
-      // 调试：打印设置后的尺寸
-      logger.info('[Live2DService] 模型设置后:', {
-        x: this.model.x,
-        y: this.model.y,
-        scale: this.model.scale.x,
-        width: this.model.width,
-        height: this.model.height,
-      })
+      // 注意：不在这里设置 config.scale 和 config.position
+      // 让 autoScaleModel 完全控制缩放和位置
 
       // 添加到舞台
       this.app.stage.addChild(this.model)
 
       logger.info('[Live2DService] 模型已添加到舞台')
 
-      // 自动调整模型缩放和位置
+      // 自动调整模型缩放和位置（会设置正确的 scale 和 position）
       const containerWidth = this.canvas.clientWidth || 800
       const containerHeight = this.canvas.clientHeight || 600
       this.autoScaleModel(containerWidth, containerHeight)
