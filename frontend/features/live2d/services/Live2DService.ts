@@ -24,6 +24,7 @@ export class Live2DService extends EventEmitter {
   private isInitialized: boolean = false
   private isDestroying: boolean = false
   private destroyPromise: Promise<void> | null = null
+  private resizeObserver: ResizeObserver | null = null
 
   // 唇同步相关
   private mouthParamIndex: number = -1
@@ -77,6 +78,7 @@ export class Live2DService extends EventEmitter {
   private setupResizeListener(): void {
     if (typeof window === 'undefined') return
 
+    // 监听窗口大小变化
     let resizeTimeout: number | null = null
 
     window.addEventListener('resize', () => {
@@ -89,6 +91,30 @@ export class Live2DService extends EventEmitter {
         this.handleResize()
       }, 100)
     })
+
+    // 使用 ResizeObserver 监听 canvas 元素本身的大小变化
+    // 这对于响应式布局特别重要（当布局变化时容器大小可能改变）
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries {
+          const { width, height } = entry.contentRect
+
+          // 防抖处理
+          if (resizeTimeout) {
+            clearTimeout(resizeTimeout)
+          }
+
+          resizeTimeout = window.setTimeout(() => {
+            this.handleResize()
+          }, 100)
+        }
+      })
+
+      // 开始观察 canvas 元素
+      this.resizeObserver.observe(this.canvas)
+
+      logger.debug('[Live2DService] ResizeObserver 已设置')
+    }
   }
 
   /**
@@ -104,12 +130,61 @@ export class Live2DService extends EventEmitter {
       // 更新 renderer 尺寸
       this.app.renderer.resize(containerWidth, containerHeight)
 
+      // 自动调整模型缩放和位置
+      this.autoScaleModel(containerWidth, containerHeight)
+
       logger.debug('[Live2DService] 画布尺寸已调整:', {
         width: containerWidth,
         height: containerHeight,
       })
     } catch (error) {
       logger.warn('[Live2DService] 调整画布尺寸时出错:', error)
+    }
+  }
+
+  /**
+   * 自动调整模型缩放和位置以适应容器
+   * @param containerWidth 容器宽度
+   * @param containerHeight 容器高度
+   */
+  private autoScaleModel(containerWidth: number, containerHeight: number): void {
+    if (!this.model) return
+
+    try {
+      // 获取模型的原始尺寸（未缩放）
+      const originalModelWidth = this.model.width / this.model.scale.x
+      const originalModelHeight = this.model.height / this.model.scale.y
+
+      // 计算缩放比例（留出 10% 的边距）
+      const padding = 0.1
+      const targetWidth = containerWidth * (1 - padding)
+      const targetHeight = containerHeight * (1 - padding)
+
+      const scaleX = targetWidth / originalModelWidth
+      const scaleY = targetHeight / originalModelHeight
+
+      // 使用较小的缩放比例以确保模型完全可见
+      const autoScale = Math.min(scaleX, scaleY)
+
+      // 应用初始配置的缩放（如果有的话）
+      const baseScale = this.config.scale || 1.0
+      const finalScale = autoScale * baseScale
+
+      // 设置模型缩放
+      this.model.scale.set(finalScale)
+
+      // 将模型居中
+      this.model.x = containerWidth / 2
+      this.model.y = containerHeight / 2
+
+      logger.debug('[Live2DService] 模型自动缩放:', {
+        containerSize: { width: containerWidth, height: containerHeight },
+        originalSize: { width: originalModelWidth, height: originalModelHeight },
+        scale: { x: scaleX, y: scaleY, auto: autoScale, final: finalScale },
+        position: { x: this.model.x, y: this.model.y },
+      })
+    } catch (error) {
+      logger.warn('[Live2DService] 自动缩放模型时出错:', error)
     }
   }
 
@@ -188,7 +263,16 @@ export class Live2DService extends EventEmitter {
       this.app.stage.addChild(this.model)
 
       logger.info('[Live2DService] 模型已添加到舞台')
-      this.emit('model:loaded')
+
+      // 自动调整模型缩放和位置
+      const containerWidth = this.canvas.clientWidth || 800
+      const containerHeight = this.canvas.clientHeight || 600
+      this.autoScaleModel(containerWidth, containerHeight)
+
+      // ✅ 在下一帧发出事件，确保 DOM 更新完成
+      requestAnimationFrame(() => {
+        this.emit('model:loaded')
+      })
     } catch (error) {
       logger.error('[Live2DService] 模型加载失败:', error)
       this.emit('model:error', error)
@@ -206,56 +290,78 @@ export class Live2DService extends EventEmitter {
   }
 
   /**
-   * 设置表情（基于情感内容）
-   * @param emotion 情感名称 (happy, sad, angry, 等)
+   * 设置表情（支持强度）
+   * @param emotion 表情名称
+   * @param intensity 强度值 (0.0 - 1.0)
    */
-  setExpression(emotion: string): void {
-    if (!this.model) {
+  setExpression(emotion: string, intensity: number = 1.0): void {
+    logger.debug(
+      `[Live2DService] 设置表情: ${emotion} (intensity: ${intensity.toFixed(2)})`
+    )
+
+    this.currentExpression = emotion
+
+    // 触发 Live2D 模型的表情动作
+    if (this.model) {
+      // 从 emotionMap 获取 expression index
+      const expressionIndex = this.emotionMap[emotion]
+
+      if (expressionIndex !== undefined) {
+        try {
+          // Live2D 的 expressions 使用 expression() 方法，不是 motion()
+          // expressions 是参数预设，不是动画片段
+          this.model.expression(expressionIndex)
+          logger.info(`[Live2DService] ✅ 触发表情: ${emotion} (expression index: ${expressionIndex})`)
+        } catch (error) {
+          logger.warn(`[Live2DService] 触发表情失败: ${error}`)
+        }
+      } else {
+        logger.warn(`[Live2DService] 未找到表情 "${emotion}" 的 expression index`)
+      }
+    } else {
       logger.warn('[Live2DService] 模型未加载，无法设置表情')
-      return
     }
 
-    logger.debug(`[Live2DService] 设置表情: ${emotion}`)
+    // TODO: 如果 Live2D 模型支持强度参数，在这里应用
+    // 例如：model.setParameter('ParamEyeLOpen', intensity)
 
-    try {
-      // 获取对应的 motion index
-      const motionIndex = this.emotionMap[emotion] ?? 0
-
-      // 播放动作（使用 idle 动作组）
-      this.model.motion('idle', motionIndex)
-
-      this.currentExpression = emotion
-      this.emit('expression:change', emotion)
-    } catch (error) {
-      logger.error(`[Live2DService] 设置表情失败: ${emotion}`, error)
-    }
+    this.emit('expression:change', emotion, intensity)
   }
 
   /**
-   * 播放表情时间轴
-   * @param segments 时间轴片段数组
-   * @param totalDuration 总时长（秒）
+   * 播放时间轴（支持强度）
+   * @param segments 时间轴片段（包含 intensity）
+   * @param totalDuration 总时长
    */
   playTimeline(segments: TimelineSegment[], totalDuration: number): ExpressionTimeline {
+    logger.info(
+      `[Live2DService] 开始播放时间轴: ${segments.length} 个片段, 总时长 ${totalDuration}s`
+    )
+
+    segments.forEach((seg, index) => {
+      const { emotion, time, duration, intensity = 1.0 } = seg  // 默认值 1.0
+
+      logger.debug(
+        `[Live2DService] 片段 ${index + 1}: ${emotion} ` +
+        `(time: ${time.toFixed(2)}s, duration: ${duration.toFixed(2)}s, ` +
+        `intensity: ${intensity.toFixed(2)})`
+      )
+    })
+
     // 停止当前时间轴
     if (this.currentTimeline) {
       this.currentTimeline.stop()
     }
 
-    // 创建新的时间轴
+    // 创建新的时间轴（ExpressionTimeline 会自动处理表情调度）
     this.currentTimeline = new ExpressionTimeline(
       segments,
       totalDuration,
-      (emotion) => this.setExpression(emotion)
+      (emotion, intensity) => this.setExpression(emotion, intensity)
     )
 
     // 开始播放
     this.currentTimeline.play()
-
-    logger.info(
-      `[Live2DService] 开始播放表情时间轴: ${segments.length} 个片段, ` +
-      `总时长 ${totalDuration}s`
-    )
 
     return this.currentTimeline
   }
@@ -361,6 +467,13 @@ export class Live2DService extends EventEmitter {
 
     // 停止时间轴
     this.stopTimeline()
+
+    // 清理 ResizeObserver
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+      logger.debug('[Live2DService] ResizeObserver 已清理')
+    }
 
     // 移除所有事件监听器
     this.removeAllListeners()
