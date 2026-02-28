@@ -25,6 +25,7 @@ export class Live2DService extends EventEmitter {
   private isDestroying: boolean = false
   private destroyPromise: Promise<void> | null = null
   private resizeObserver: ResizeObserver | null = null
+  private userPositionOffset: { x: number; y: number } = { x: 0, y: 0 }  // 用户位置偏移
 
   // 唇同步相关
   private mouthParamIndex: number = -1
@@ -177,14 +178,15 @@ export class Live2DService extends EventEmitter {
       // 确保模型的锚点在中心
       this.model.anchor.set(0.5, 0.5)
 
-      // 将模型居中（anchor 是 0.5, 0.5，所以位置设为中心即可）
-      this.model.x = containerWidth / 2
-      this.model.y = containerHeight / 2
+      // 将模型居中，然后应用用户偏移
+      this.model.x = containerWidth / 2 + this.userPositionOffset.x
+      this.model.y = containerHeight / 2 + this.userPositionOffset.y
 
       logger.info('[Live2DService] 模型自动缩放完成:', {
         container: { width: containerWidth, height: containerHeight },
         model: { width: originalWidth, height: originalHeight },
         scales: { x: scaleX.toFixed(3), y: scaleY.toFixed(3), auto: autoScale.toFixed(3), final: finalScale.toFixed(3) },
+        userOffset: this.userPositionOffset,
         modelState: {
           x: this.model.x.toFixed(0),
           y: this.model.y.toFixed(0),
@@ -388,11 +390,19 @@ export class Live2DService extends EventEmitter {
   adjustPosition(offsetX: number, offsetY: number): void {
     if (!this.model) return
 
-    this.model.x += offsetX
-    this.model.y += offsetY
+    // 更新用户偏移量
+    this.userPositionOffset.x += offsetX
+    this.userPositionOffset.y += offsetY
+
+    // 应用新的位置（中心 + 偏移）
+    const canvasWidth = this.canvas.clientWidth || 800
+    const canvasHeight = this.canvas.clientHeight || 600
+    this.model.x = canvasWidth / 2 + this.userPositionOffset.x
+    this.model.y = canvasHeight / 2 + this.userPositionOffset.y
 
     logger.info('[Live2DService] 模型位置已调整:', {
       offset: { x: offsetX, y: offsetY },
+      totalOffset: this.userPositionOffset,
       newPosition: { x: this.model.x, y: this.model.y }
     })
 
@@ -407,11 +417,44 @@ export class Live2DService extends EventEmitter {
   setPosition(x: number, y: number): void {
     if (!this.model) return
 
+    const canvasWidth = this.canvas.clientWidth || 800
+    const canvasHeight = this.canvas.clientHeight || 600
+
+    // 计算相对于中心的偏移
+    this.userPositionOffset.x = x - canvasWidth / 2
+    this.userPositionOffset.y = y - canvasHeight / 2
+
     this.model.x = x
     this.model.y = y
 
-    logger.info('[Live2DService] 模型位置已设置:', { x, y })
+    logger.info('[Live2DService] 模型位置已设置:', { x, y, offset: this.userPositionOffset })
     this.emit('position:changed', { x, y })
+  }
+
+  /**
+   * 重置模型位置到中心
+   */
+  resetPosition(): void {
+    this.userPositionOffset = { x: 0, y: 0 }
+    const canvasWidth = this.canvas.clientWidth || 800
+    const canvasHeight = this.canvas.clientHeight || 600
+
+    if (this.model) {
+      this.model.x = canvasWidth / 2
+      this.model.y = canvasHeight / 2
+    }
+
+    logger.info('[Live2DService] 模型位置已重置到中心')
+    this.emit('position:changed', { x: canvasWidth / 2, y: canvasHeight / 2 })
+  }
+
+  /**
+   * 设置初始 Y 轴偏移（用于 VTuber 头像布局）
+   * @param offsetY Y轴偏移量（正数向下）
+   */
+  setInitialYOffset(offsetY: number): void {
+    this.userPositionOffset.y = offsetY
+    logger.info('[Live2DService] 设置初始 Y 轴偏移:', { offsetY })
   }
 
   /**

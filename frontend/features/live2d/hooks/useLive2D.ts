@@ -412,5 +412,11 @@ export function useLive2D(options: UseLive2DOptions) {
     setPosition: (x: number, y: number) => {
       serviceRef.current?.setPosition(x, y)
     },
+    resetPosition: () => {
+      serviceRef.current?.resetPosition()
+    },
+    setInitialYOffset: (offsetY: number) => {
+      serviceRef.current?.setInitialYOffset(offsetY)
+    },
   }
 }

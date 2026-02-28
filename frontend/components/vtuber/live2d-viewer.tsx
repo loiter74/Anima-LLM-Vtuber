@@ -81,7 +81,7 @@ export const Live2DViewer = forwardRef<Live2DViewerRef, Live2DViewerProps>(({
     logger.error('[Live2DViewer] 错误:', err)
   }, [])
 
-  const { canvasRef, isLoaded, error, adjustPosition } = useLive2D({
+  const { canvasRef, isLoaded, error, adjustPosition, setInitialYOffset } = useLive2D({
     modelPath,
     scale,
     position,
@@ -96,13 +96,9 @@ export const Live2DViewer = forwardRef<Live2DViewerRef, Live2DViewerProps>(({
       adjustPosition(offsetX, offsetY)
     },
     resetPosition: () => {
-      // 重置位置会触发自动居中
       const service = (window as any).__live2dService
       if (service) {
-        const canvas = canvasRef.current
-        if (canvas) {
-          service.handleResize()
-        }
+        service.resetPosition()
       }
     },
   }))
@@ -111,13 +107,18 @@ export const Live2DViewer = forwardRef<Live2DViewerRef, Live2DViewerProps>(({
   useEffect(() => {
     if (isLoaded && initialYOffset !== 0) {
       const timer = setTimeout(() => {
-        adjustPosition(0, initialYOffset)
+        setInitialYOffset(initialYOffset)
+        // 立即应用位置
+        const service = (window as any).__live2dService
+        if (service && canvasRef.current) {
+          service.handleResize()
+        }
         logger.info(`[Live2DViewer] 应用初始 Y 轴偏移: ${initialYOffset}px`)
       }, 100) // 延迟一点，确保模型已加载
 
       return () => clearTimeout(timer)
     }
-  }, [isLoaded, initialYOffset, adjustPosition])
+  }, [isLoaded, initialYOffset, setInitialYOffset, canvasRef])
 
   const handlePositionAdjust = (offsetX: number, offsetY: number) => {
     adjustPosition(offsetX, offsetY)
@@ -225,8 +226,8 @@ export const Live2DViewer = forwardRef<Live2DViewerRef, Live2DViewerProps>(({
                   className="size-7 p-0"
                   onClick={() => {
                     const service = (window as any).__live2dService
-                    if (service && canvasRef.current) {
-                      service.handleResize()
+                    if (service) {
+                      service.resetPosition()
                     }
                   }}
                   title="重置位置"
