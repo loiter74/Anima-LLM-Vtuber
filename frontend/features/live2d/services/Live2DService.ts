@@ -481,16 +481,6 @@ export class Live2DService extends EventEmitter {
       if (this.mouthParamIndex < 0) {
         this.mouthParamIndex = coreModel.getParameterIndex('ParamMouthOpenY')
         logger.info(`[Live2DService] ParamMouthOpenY 索引: ${this.mouthParamIndex}`)
-
-        // 列出所有可用参数（调试用）
-        const paramCount = coreModel.getParameterCount()
-        logger.info(`[Live2DService] 模型总参数数: ${paramCount}`)
-        const paramNames: string[] = []
-        for (let i = 0; i < Math.min(paramCount, 50); i++) {
-          const name = coreModel.getParameterName(i)
-          if (name) paramNames.push(`[${i}] ${name}`)
-        }
-        logger.info(`[Live2DService] 前 50 个参数: ${paramNames.join(', ')}`)
       }
 
       if (this.mouthParamIndex >= 0) {
