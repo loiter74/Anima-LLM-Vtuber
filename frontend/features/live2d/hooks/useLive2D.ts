@@ -276,22 +276,35 @@ export function useLive2D(options: UseLive2DOptions) {
     totalDuration: number,
     format: string = 'mp3'
   ) => {
+    logger.info('[useLive2D] ========== playAudioWithExpressions 被调用 ==========')
+    logger.info(`[useLive2D] serviceRef.current: ${serviceRef.current ? '存在' : 'null'}`)
+    logger.info(`[useLive2D] isLoaded: ${isLoaded}`)
+    logger.info(`[useLive2D] 音频数据长度: ${audioData.length}`)
+    logger.info(`[useLive2D] 音量采样点数: ${volumes.length}`)
+    logger.info(`[useLive2D] 表情片段数: ${segments.length}`)
+    logger.info(`[useLive2D] 总时长: ${totalDuration}s`)
+    logger.info(`[useLive2D] 格式: ${format}`)
+
     if (!serviceRef.current || !isLoaded) {
       logger.warn('[useLive2D] Live2D 未加载，无法播放')
       return
     }
 
     try {
+      logger.info('[useLive2D] 步骤 1: 播放表情时间轴')
       // 1. 播放表情时间轴
       serviceRef.current.playTimeline(segments, totalDuration)
 
+      logger.info('[useLive2D] 步骤 2: 创建音频元素')
       // 2. 创建音频元素并播放
       const audio = new Audio()
       audio.src = `data:audio/${format};base64,${audioData}`
 
+      logger.info('[useLive2D] 步骤 3: 创建唇同步引擎')
       // 3. 创建唇同步引擎并使用预计算的音量包络
       const lipSyncEngine = new LipSyncEngine(
         (value: number) => {
+          logger.debug(`[useLive2D] 唇同步回调: value=${value.toFixed(3)}`)
           serviceRef.current?.setMouthOpen(value)
         },
         {
@@ -302,23 +315,38 @@ export function useLive2D(options: UseLive2DOptions) {
         }
       )
 
+      logger.info('[useLive2D] 步骤 4: 添加事件监听器')
       // 音频播放时开始口型同步
       audio.addEventListener('play', () => {
+        logger.info('[useLive2D] ========== 音频 play 事件触发 ==========')
+        logger.info(`[useLive2D] 启动唇同步引擎，采样点数: ${volumes.length}`)
         lipSyncEngine.startWithVolumes(volumes, 50) // 50 Hz 采样率
         setIsSpeaking(true)
       })
 
+      audio.addEventListener('playing', () => {
+        logger.info('[useLive2D] ========== 音频 playing 事件触发 ==========')
+      })
+
+      audio.addEventListener('error', (e) => {
+        logger.error('[useLive2D] ========== 音频 error 事件 ==========', e)
+      })
+
       // 音频结束时清理
       audio.addEventListener('ended', () => {
+        logger.info('[useLive2D] ========== 音频 ended 事件触发 ==========')
         lipSyncEngine.stopVolumes()
         setIsSpeaking(false)
         serviceRef.current?.stopTimeline()
         serviceRef.current?.setExpression('neutral')
       })
 
+      logger.info('[useLive2D] 步骤 5: 调用 audio.play()')
       // 播放音频
-      audio.play().catch((error) => {
-        logger.error('[useLive2D] 音频播放失败:', error)
+      audio.play().then(() => {
+        logger.info('[useLive2D] audio.play() Promise resolved')
+      }).catch((error) => {
+        logger.error('[useLive2D] audio.play() Promise rejected:', error)
       })
 
       logger.info('[useLive2D] 开始播放音频 + 表情')

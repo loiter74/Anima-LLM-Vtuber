@@ -318,9 +318,8 @@ export class Live2DService extends EventEmitter {
    * @param intensity 强度值 (0.0 - 1.0)
    */
   setExpression(emotion: string, intensity: number = 1.0): void {
-    logger.debug(
-      `[Live2DService] 设置表情: ${emotion} (intensity: ${intensity.toFixed(2)})`
-    )
+    logger.info(`[Live2DService] ========== setExpression 被调用 ==========`)
+    logger.info(`[Live2DService] 表情: ${emotion}, 强度: ${intensity.toFixed(2)}`)
 
     this.currentExpression = emotion
 
@@ -340,6 +339,7 @@ export class Live2DService extends EventEmitter {
         }
       } else {
         logger.warn(`[Live2DService] 未找到表情 "${emotion}" 的 expression index`)
+        logger.info(`[Live2DService] 当前 emotionMap:`, this.emotionMap)
       }
     } else {
       logger.warn('[Live2DService] 模型未加载，无法设置表情')
@@ -409,6 +409,7 @@ export class Live2DService extends EventEmitter {
   }
 
   setMouthOpen(value: number): void {
+    // 静默返回（减少日志噪音）
     if (!this.model || !this.config.lipSync?.enabled) return
 
     try {
@@ -424,6 +425,13 @@ export class Live2DService extends EventEmitter {
         return
       }
       this.lastMouthUpdateTime = now
+
+      // 首次调用时记录日志
+      if (this.mouthParamIndex < 0) {
+        logger.info('[Live2DService] ========== setMouthOpen 首次调用 ==========')
+        logger.info(`[Live2DService] 输入值: ${value.toFixed(3)}`)
+        logger.info(`[Live2DService] lipSync 配置:`, this.config.lipSync)
+      }
 
       // 确保值在 [0, 1] 范围内
       const clampedValue = Math.max(0, Math.min(1, value))
@@ -444,6 +452,17 @@ export class Live2DService extends EventEmitter {
       // 懒加载并缓存参数索引
       if (this.mouthParamIndex < 0) {
         this.mouthParamIndex = coreModel.getParameterIndex('ParamMouthOpenY')
+        logger.info(`[Live2DService] ParamMouthOpenY 索引: ${this.mouthParamIndex}`)
+
+        // 列出所有可用参数（调试用）
+        const paramCount = coreModel.getParameterCount()
+        logger.info(`[Live2DService] 模型总参数数: ${paramCount}`)
+        const paramNames: string[] = []
+        for (let i = 0; i < Math.min(paramCount, 50); i++) {
+          const name = coreModel.getParameterName(i)
+          if (name) paramNames.push(`[${i}] ${name}`)
+        }
+        logger.info(`[Live2DService] 前 50 个参数: ${paramNames.join(', ')}`)
       }
 
       if (this.mouthParamIndex >= 0) {
@@ -452,6 +471,14 @@ export class Live2DService extends EventEmitter {
         const finalValue = Math.min(maxValue, smoothedValue)
 
         coreModel.setParameterValueByIndex(this.mouthParamIndex, finalValue)
+
+        // 每秒记录一次日志
+        if (now - (this as any).lastLogTime > 1000 || !(this as any).lastLogTime) {
+          logger.debug(`[Live2DService] 嘴部参数设置: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}`)
+          ;(this as any).lastLogTime = now
+        }
+      } else {
+        logger.warn('[Live2DService] ParamMouthOpenY 参数未找到！')
       }
 
       // 可选：同时控制嘴形（如果配置启用）
@@ -469,10 +496,7 @@ export class Live2DService extends EventEmitter {
         }
       }
     } catch (error) {
-      // 只在开发模式下输出详细错误
-      if (process.env.NODE_ENV === 'development') {
-        logger.debug('[Live2DService] 设置嘴部动作失败:', error)
-      }
+      logger.error('[Live2DService] 设置嘴部动作失败:', error)
     }
   }
 

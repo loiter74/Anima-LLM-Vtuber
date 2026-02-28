@@ -84,15 +84,16 @@ export class LipSyncEngine {
    * @param sampleRate 采样率（Hz）
    */
   startWithVolumes(volumes: number[], sampleRate: number = 50): void {
+    logger.info('[LipSyncEngine] ========== startWithVolumes 被调用 ==========')
+    logger.info(`[LipSyncEngine] 采样点数: ${volumes.length}`)
+    logger.info(`[LipSyncEngine] 采样率: ${sampleRate} Hz`)
+    logger.info(`[LipSyncEngine] 音量范围: [${Math.min(...volumes).toFixed(3)}, ${Math.max(...volumes).toFixed(3)}]`)
+
     this.volumes = volumes
     this.volumesSampleRate = sampleRate
     this.volumesStartTime = performance.now()
 
-    logger.debug(
-      `[LipSyncEngine] 开始预计算音量播放: ${volumes.length} 采样点, ` +
-      `${sampleRate} Hz`
-    )
-
+    logger.info('[LipSyncEngine] 开始动画循环')
     this.startVolumesAnimation()
   }
 
@@ -100,6 +101,9 @@ export class LipSyncEngine {
    * 预计算音量的动画循环
    */
   private startVolumesAnimation(): void {
+    let frameCount = 0
+    let lastLogTime = 0
+
     const animate = () => {
       const currentTime = performance.now()
       const elapsed = (currentTime - this.volumesStartTime) / 1000 // 秒
@@ -109,10 +113,10 @@ export class LipSyncEngine {
 
       if (sampleIndex >= this.volumes.length) {
         // 播放完成
+        logger.info('[LipSyncEngine] ========== 预计算音量播放完成 ==========')
         this.onUpdate(0)
         this.volumesAnimationId = null
         this.smoothedValue = 0
-        logger.debug('[LipSyncEngine] 预计算音量播放完成')
         return
       }
 
@@ -132,6 +136,13 @@ export class LipSyncEngine {
 
       // 确保值在 [0, 1] 范围内
       volume = Math.max(0, Math.min(1, volume))
+
+      // 每 60 帧记录一次日志（约 1 秒）
+      frameCount++
+      if (currentTime - lastLogTime > 1000) {
+        logger.debug(`[LipSyncEngine] 帧: ${frameCount}, 索引: ${sampleIndex}/${this.volumes.length}, 音量: ${volume.toFixed(3)}`)
+        lastLogTime = currentTime
+      }
 
       this.onUpdate(volume)
 

@@ -46,17 +46,20 @@ export class ExpressionTimeline {
       return
     }
 
+    logger.info('[ExpressionTimeline] ========== play 被调用 ==========')
+    logger.info(`[ExpressionTimeline] 片段数: ${this.segments.length}`)
+    logger.info(`[ExpressionTimeline] 总时长: ${this.totalDuration}s`)
+    logger.info('[ExpressionTimeline] 片段详情:', this.segments.map((s, i) =>
+      `[${i}] ${s.emotion} @ ${s.time}s for ${s.duration}s (intensity: ${s.intensity})`
+    ))
+
     this.isPlaying = true
     this.startTime = startTime ?? performance.now() / 1000
-
-    logger.debug(
-      `[ExpressionTimeline] 开始播放: ${this.segments.length} 个片段, ` +
-      `总时长 ${this.totalDuration}s`
-    )
 
     // 立即设置第一个表情
     this.updateExpression(0)
 
+    logger.info('[ExpressionTimeline] 开始动画循环')
     // 开始动画循环
     this.startAnimationLoop()
   }
