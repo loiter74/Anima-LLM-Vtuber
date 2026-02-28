@@ -406,17 +406,5 @@ export function useLive2D(options: UseLive2DOptions) {
     connectLipSync,
     disconnectLipSync,
     playAudioWithExpressions,
-    adjustPosition: (offsetX: number, offsetY: number) => {
-      serviceRef.current?.adjustPosition(offsetX, offsetY)
-    },
-    setPosition: (x: number, y: number) => {
-      serviceRef.current?.setPosition(x, y)
-    },
-    resetPosition: () => {
-      serviceRef.current?.resetPosition()
-    },
-    setInitialYOffset: (offsetY: number) => {
-      serviceRef.current?.setInitialYOffset(offsetY)
-    },
   }
 }

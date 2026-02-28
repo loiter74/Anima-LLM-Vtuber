@@ -69,8 +69,6 @@ export function LivePreview() {
             position={STABLE_POSITION}
             enabled={isLive}
             className="w-full h-full"
-            initialYOffset={120}
-            showPositionControls={true}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
