@@ -96,7 +96,7 @@ export class Live2DService extends EventEmitter {
     // 这对于响应式布局特别重要（当布局变化时容器大小可能改变）
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries {
+        for (const entry of entries) {
           const { width, height } = entry.contentRect
 
           // 防抖处理
