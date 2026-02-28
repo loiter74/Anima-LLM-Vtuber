@@ -33,28 +33,28 @@ export function LivePreview() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
-            <Video className="size-4 text-primary-foreground" />
+      {/* Header bar - 响应式优化 */}
+      <div className="flex items-center justify-between border-b border-border px-3 md:px-4 py-2 md:py-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex size-7 md:size-8 items-center justify-center rounded-lg bg-primary">
+            <Video className="size-3.5 md:size-4 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-xs md:text-sm font-semibold text-foreground">
               Live2D Preview
             </h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] md:text-xs text-muted-foreground">
               Status: {status}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2">
           {isLive && (
-            <Badge className="border-none bg-destructive font-mono text-[10px] px-2 py-0.5 text-primary-foreground animate-pulse">
+            <Badge className="border-none bg-destructive font-mono text-[9px] md:text-[10px] px-1.5 md:px-2 py-0.5 text-primary-foreground animate-pulse">
               ACTIVE
             </Badge>
           )}
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-[10px] md:text-xs text-muted-foreground hidden sm:inline">
             {formatTime(elapsedTime)}
           </span>
         </div>
@@ -79,12 +79,12 @@ export function LivePreview() {
           </div>
         )}
 
-        {/* Status indicators overlay */}
+        {/* Status indicators overlay - 响应式优化 */}
         {isLive && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none">
+          <div className="absolute bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none">
             {/* Speaking indicator */}
             {isSpeaking && (
-              <div className="flex items-center gap-0.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+              <div className="flex items-center gap-0.5 rounded-full bg-card/95 backdrop-blur-sm px-2 md:px-3 py-1 md:py-1.5 shadow-md border border-border">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div
                     key={i}
@@ -96,7 +96,7 @@ export function LivePreview() {
                     }}
                   />
                 ))}
-                <span className="ml-2 text-[10px] font-medium text-muted-foreground">
+                <span className="ml-1 md:ml-2 text-[9px] md:text-[10px] font-medium text-muted-foreground">
                   Speaking...
                 </span>
               </div>
@@ -104,9 +104,9 @@ export function LivePreview() {
 
             {/* Processing indicator */}
             {(status === "processing" || status === "idle") && !isSpeaking && (
-              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+              <div className="flex items-center gap-1 md:gap-1.5 rounded-full bg-card/95 backdrop-blur-sm px-2 md:px-3 py-1 md:py-1.5 shadow-md border border-border">
                 <div className="size-1.5 rounded-full bg-yellow-500 animate-ping" />
-                <span className="text-[10px] font-medium text-muted-foreground">
+                <span className="text-[9px] md:text-[10px] font-medium text-muted-foreground">
                   {status === "processing" ? "处理中..." : "待机中"}
                 </span>
               </div>
@@ -114,12 +114,12 @@ export function LivePreview() {
 
             {/* Listening indicator */}
             {status === "listening" && !isSpeaking && (
-              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-border">
+              <div className="flex items-center gap-1 md:gap-1.5 rounded-full bg-card/95 backdrop-blur-sm px-2 md:px-3 py-1 md:py-1.5 shadow-md border border-border">
                 <div className="relative flex size-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
                 </div>
-                <span className="text-[10px] font-medium text-muted-foreground">
+                <span className="text-[9px] md:text-[10px] font-medium text-muted-foreground">
                   录音中...
                 </span>
               </div>
@@ -127,9 +127,9 @@ export function LivePreview() {
 
             {/* Error indicator */}
             {status === "error" && !isSpeaking && (
-              <div className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 shadow-md border border-destructive/50">
+              <div className="flex items-center gap-1 md:gap-1.5 rounded-full bg-card/95 backdrop-blur-sm px-2 md:px-3 py-1 md:py-1.5 shadow-md border border-destructive/50">
                 <div className="size-2 rounded-full bg-destructive" />
-                <span className="text-[10px] font-medium text-destructive">
+                <span className="text-[9px] md:text-[10px] font-medium text-destructive">
                   错误
                 </span>
               </div>
@@ -138,16 +138,17 @@ export function LivePreview() {
         )}
       </div>
 
-      {/* Control bar */}
-      <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
-        <div className="flex items-center gap-1.5">
+      {/* Control bar - 响应式优化 */}
+      <div className="flex items-center justify-between border-t border-border px-3 md:px-4 py-2 md:py-2.5">
+        <div className="flex items-center gap-1 md:gap-1.5">
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs px-2.5"
+            className="h-7 text-[10px] md:text-xs px-1.5 md:px-2.5"
             onClick={() => setShowLive2D(!showLive2D)}
           >
-            {showLive2D ? "隐藏 Live2D" : "显示 Live2D"}
+            {showLive2D ? "隐藏" : "显示"}
+            <span className="hidden sm:inline ml-1">Live2D</span>
           </Button>
         </div>
         <div className="flex items-center gap-1">

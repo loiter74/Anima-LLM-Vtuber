@@ -14,7 +14,7 @@ function PageContent() {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Top navigation bar */}
-      <header className="flex items-center justify-between border-b border-border bg-card px-5 py-2.5">
+      <header className="flex items-center justify-between border-b border-border bg-card px-4 md:px-5 py-2.5">
         <div className="flex items-center gap-3">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
             <Bot className="size-4 text-primary-foreground" />
@@ -48,15 +48,15 @@ function PageContent() {
         </div>
       </header>
 
-      {/* Main content area */}
-      <main className="flex flex-1 overflow-hidden">
+      {/* Main content area - 响应式布局 */}
+      <main className="flex flex-1 overflow-hidden flex-col lg:flex-row">
         {/* Left - Live2D Preview */}
-        <section className="flex-1 border-r border-border bg-card">
+        <section className="flex-1 border-b lg:border-b-0 lg:border-r border-border bg-card min-h-[50vh] lg:min-h-0">
           <LivePreview />
         </section>
 
         {/* Right - Chat Panel */}
-        <aside className="flex w-[380px] shrink-0 flex-col bg-card">
+        <aside className="flex w-full lg:w-[380px] xl:w-[420px] shrink-0 flex-col bg-card h-[50vh] lg:h-auto">
           <ChatPanel />
         </aside>
       </main>

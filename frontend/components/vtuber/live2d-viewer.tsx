@@ -52,7 +52,7 @@ export function Live2DViewer({
     logger.error('[Live2DViewer] 错误:', err)
   }, [])
 
-  const { canvasRef, isLoaded, error } = useLive2D({
+  const { canvasRef, isLoaded, error, currentExpression } = useLive2D({
     modelPath,
     scale,
     position,
@@ -88,18 +88,13 @@ export function Live2DViewer({
       <canvas
         ref={canvasRef}
         className="w-full h-full"
-        style={{ touchAction: 'none', backgroundColor: 'rgba(255, 0, 0, 0.1)' }}
+        style={{ touchAction: 'none' }}
       />
       {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50">
-          <div className="text-white text-sm">正在加载 Live2D 模型...</div>
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="text-foreground text-sm md:text-base">正在加载 Live2D 模型...</div>
         </div>
       )}
-      {/* 调试信息 */}
-      <div className="absolute top-0 left-0 bg-black/70 text-white text-xs p-2 rounded pointer-events-none">
-        <div>Loaded: {isLoaded ? '✓' : '✗'}</div>
-        <div>Error: {error ? error.message : 'None'}</div>
-      </div>
     </div>
   )
 }

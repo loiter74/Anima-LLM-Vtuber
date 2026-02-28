@@ -85,47 +85,47 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Chat header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <MessageSquare className="size-4 text-primary" />
+      {/* Chat header - 响应式优化 */}
+      <div className="flex items-center justify-between border-b border-border px-3 md:px-4 py-2 md:py-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex size-7 md:size-8 items-center justify-center rounded-lg bg-primary/10">
+            <MessageSquare className="size-3.5 md:size-4 text-primary" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-xs md:text-sm font-semibold text-foreground">
               对话
             </h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] md:text-xs text-muted-foreground">
               {messages.length} 条消息
             </p>
           </div>
         </div>
-        
-        {/* 状态和控制 */}
-        <div className="flex items-center gap-2">
-          {/* 状态徽章 */}
-          <Badge 
-            variant="outline" 
-            className={`${statusStyle.bg} ${statusStyle.text} border-0`}
+
+        {/* 状态和控制 - 在小屏幕上简化显示 */}
+        <div className="flex items-center gap-1.5 md:gap-2">
+          {/* 状态徽章 - 在小屏幕上隐藏文本 */}
+          <Badge
+            variant="outline"
+            className={`${statusStyle.bg} ${statusStyle.text} border-0 hidden sm:inline-flex`}
           >
             {statusStyle.label}
           </Badge>
-          
+
           {/* 连接状态 */}
           {isConnected ? (
-            <div className="flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1">
-              <Wifi className="size-3 text-green-500" />
-              <span className="text-xs font-medium text-green-500">已连接</span>
+            <div className="flex items-center gap-1 md:gap-1.5 rounded-full bg-green-500/15 px-1.5 md:px-2.5 py-1">
+              <Wifi className="size-2.5 md:size-3 text-green-500" />
+              <span className="text-[10px] md:text-xs font-medium text-green-500 hidden sm:inline">已连接</span>
             </div>
           ) : (
             <Button
               variant="ghost"
               size="sm"
               onClick={connect}
-              className="flex items-center gap-1.5 rounded-full bg-red-500/15 px-2.5 py-1 hover:bg-red-500/25"
+              className="flex items-center gap-1 md:gap-1.5 rounded-full bg-red-500/15 px-1.5 md:px-2.5 py-1 h-7 md:h-auto hover:bg-red-500/25"
             >
-              <WifiOff className="size-3 text-red-500" />
-              <span className="text-xs font-medium text-red-500">未连接</span>
+              <WifiOff className="size-2.5 md:size-3 text-red-500" />
+              <span className="text-[10px] md:text-xs font-medium text-red-500 hidden sm:inline">未连接</span>
             </Button>
           )}
         </div>
