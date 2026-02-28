@@ -65,7 +65,7 @@ export function LivePreview() {
         {showLive2D ? (
           <Live2DViewer
             modelPath="/live2d/hiyori/Hiyori.model3.json"
-            scale={0.5}
+            scale={1.0}
             position={STABLE_POSITION}
             enabled={isLive}
             className="w-full h-full"

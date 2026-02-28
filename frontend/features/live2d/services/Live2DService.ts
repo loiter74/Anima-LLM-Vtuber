@@ -151,20 +151,21 @@ export class Live2DService extends EventEmitter {
     if (!this.model) return
 
     try {
-      // 获取模型的原始尺寸（未缩放）
-      const originalModelWidth = this.model.width / this.model.scale.x
-      const originalModelHeight = this.model.height / this.model.scale.y
+      // 获取模型的原始尺寸（使用内部模型的尺寸）
+      const internalModel = this.model.internalModel
+      const originalWidth = internalModel?.canvasWidth || this.model.width
+      const originalHeight = internalModel?.canvasHeight || this.model.height
 
-      // 计算缩放比例（留出 10% 的边距）
-      const padding = 0.1
+      // 计算缩放比例（使用更激进的缩放，边距从 10% 减少到 5%）
+      const padding = 0.05
       const targetWidth = containerWidth * (1 - padding)
       const targetHeight = containerHeight * (1 - padding)
 
-      const scaleX = targetWidth / originalModelWidth
-      const scaleY = targetHeight / originalModelHeight
+      const scaleX = targetWidth / originalWidth
+      const scaleY = targetHeight / originalHeight
 
-      // 使用较小的缩放比例以确保模型完全可见
-      const autoScale = Math.min(scaleX, scaleY)
+      // 使用较大的缩放比例让模型填充更多空间
+      const autoScale = Math.max(scaleX, scaleY)
 
       // 应用初始配置的缩放（如果有的话）
       const baseScale = this.config.scale || 1.0
@@ -173,14 +174,14 @@ export class Live2DService extends EventEmitter {
       // 设置模型缩放
       this.model.scale.set(finalScale)
 
-      // 将模型居中
+      // 将模型居中（Live2D 模型的 anchor 默认是 0.5, 0.5，即中心点）
       this.model.x = containerWidth / 2
       this.model.y = containerHeight / 2
 
-      logger.debug('[Live2DService] 模型自动缩放:', {
-        containerSize: { width: containerWidth, height: containerHeight },
-        originalSize: { width: originalModelWidth, height: originalModelHeight },
-        scale: { x: scaleX, y: scaleY, auto: autoScale, final: finalScale },
+      logger.info('[Live2DService] 模型自动缩放:', {
+        container: { width: containerWidth, height: containerHeight },
+        model: { width: originalWidth, height: originalHeight },
+        scales: { x: scaleX.toFixed(3), y: scaleY.toFixed(3), auto: autoScale.toFixed(3), final: finalScale.toFixed(3) },
         position: { x: this.model.x, y: this.model.y },
       })
     } catch (error) {
@@ -268,6 +269,11 @@ export class Live2DService extends EventEmitter {
       const containerWidth = this.canvas.clientWidth || 800
       const containerHeight = this.canvas.clientHeight || 600
       this.autoScaleModel(containerWidth, containerHeight)
+
+      // 暴露到 window 对象以便调试
+      if (typeof window !== 'undefined') {
+        (window as any).__live2dService = this
+      }
 
       // ✅ 在下一帧发出事件，确保 DOM 更新完成
       requestAnimationFrame(() => {

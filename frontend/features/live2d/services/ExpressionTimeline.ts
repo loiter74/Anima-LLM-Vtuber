@@ -12,9 +12,10 @@ export interface TimelineSegment {
   emotion: string
   time: number      // 开始时间（秒）
   duration: number  // 持续时间（秒）
+  intensity: number // 情绪强度 (0.0 - 1.0)，必需字段
 }
 
-type ExpressionCallback = (emotion: string) => void
+type ExpressionCallback = (emotion: string, intensity: number) => void
 
 export class ExpressionTimeline {
   private segments: TimelineSegment[]
@@ -120,10 +121,12 @@ export class ExpressionTimeline {
   private updateExpression(elapsedTime: number): void {
     // 查找当前时间对应的表情
     let targetEmotion = 'neutral'
+    let targetIntensity = 1.0  // 默认强度
 
     for (const segment of this.segments) {
       if (elapsedTime >= segment.time && elapsedTime < segment.time + segment.duration) {
         targetEmotion = segment.emotion
+        targetIntensity = segment.intensity  // 使用强度值
         break
       }
     }
@@ -132,10 +135,10 @@ export class ExpressionTimeline {
     if (targetEmotion !== this.currentEmotion) {
       logger.debug(
         `[ExpressionTimeline] 表情切换: ${this.currentEmotion} -> ${targetEmotion} ` +
-        `(${elapsedTime.toFixed(2)}s)`
+        `(intensity: ${targetIntensity.toFixed(2)})`
       )
       this.currentEmotion = targetEmotion
-      this.onExpressionChange(targetEmotion)
+      this.onExpressionChange(targetEmotion, targetIntensity)  // 传递强度值
     }
   }
 

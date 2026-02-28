@@ -102,43 +102,69 @@ export function useLive2D(options: UseLive2DOptions) {
   useEffect(() => {
     if (!enabled || !canvasRef.current) return
 
+    // 使用 ref 防止多次初始化（在 React StrictMode 或快速 remount 时）
+    const isInitializingRef = { current: false }
     let cleanup: (() => void) | null = null
+    let isCleaningUp = false
 
     const initializeService = async () => {
+      // 防止并发初始化
+      if (isInitializingRef.current) {
+        logger.warn('[useLive2D] 初始化已在进行中，跳过重复初始化')
+        return
+      }
+
+      // 防止在清理后仍然初始化
+      if (isCleaningUp) {
+        logger.debug('[useLive2D] 正在清理，跳过初始化')
+        return
+      }
+
+      isInitializingRef.current = true
+
       const canvas = canvasRef.current
-      if (!canvas) return
+      if (!canvas) {
+        isInitializingRef.current = false
+        return
+      }
+
+      logger.info('[useLive2D] 开始初始化 Live2D 服务')
 
       const service = new Live2DService(canvas, config)
       serviceRef.current = service
 
       // 订阅事件
       service.on('model:loaded', () => {
+        if (isCleaningUp) return
         logger.info('[useLive2D] 模型加载成功')
         setIsLoaded(true)
         setError(null)
 
         // 设置表情映射（基于情感内容）
-        // Haru 模型的 idle 动作组有多个 motion，我们需要映射情感名称到 motion index
+        // Hiyori 模型的表情组有多个 expression，我们需要映射情感名称到 expression index
         const emotionMap: Record<string, number> = {
           neutral: 0,
-          happy: 3,    // 假设 motion 3 是开心的表情
-          sad: 1,      // 假设 motion 1 是难过的表情
-          angry: 2,    // 假设 motion 2 是生气的表情
-          surprised: 4, // 假设 motion 4 是惊讶的表情
-          thinking: 5,  // 假设 motion 5 是思考的表情
+          happy: 3,    // expression 3 是开心的表情
+          sad: 1,      // expression 1 是难过的表情
+          angry: 2,    // expression 2 是生气的表情
+          surprised: 4, // expression 4 是惊讶的表情
+          thinking: 5,  // expression 5 是思考的表情
         }
         service.setEmotionMap(emotionMap)
         logger.info('[useLive2D] 表情映射已设置:', emotionMap)
       })
 
       service.on('model:error', (err: Error) => {
+        if (isCleaningUp) return
         logger.error('[useLive2D] 模型加载失败:', err)
         setError(err)
         setIsLoaded(false)
         onErrorRef.current?.(err)
+        isInitializingRef.current = false
       })
 
       service.on('expression:change', (expression: string) => {
+        if (isCleaningUp) return
         setCurrentExpression(expression)
         onExpressionChangeRef.current?.(expression)
       })
@@ -146,8 +172,15 @@ export function useLive2D(options: UseLive2DOptions) {
       // 加载模型
       try {
         await service.loadModel()
+        if (!isCleaningUp) {
+          logger.info('[useLive2D] Live2D 服务初始化完成')
+        }
+        isInitializingRef.current = false
       } catch (err) {
-        logger.error('[useLive2D] 模型加载失败:', err)
+        if (!isCleaningUp) {
+          logger.error('[useLive2D] 模型加载失败:', err)
+        }
+        isInitializingRef.current = false
       }
     }
 
@@ -155,11 +188,17 @@ export function useLive2D(options: UseLive2DOptions) {
 
     // 清理函数 - 等待销毁完成
     cleanup = () => {
+      isCleaningUp = true
+      isInitializingRef.current = false // 允许新的初始化在清理完成后开始
       const service = serviceRef.current
       if (service) {
+        logger.info('[useLive2D] 正在销毁 Live2D 服务')
         service.destroy().then(() => {
+          if (!isCleaningUp) return
+          logger.info('[useLive2D] Live2D 服务已销毁')
           setIsLoaded(false)
           setCurrentExpression('neutral')
+          serviceRef.current = null
         })
       } else {
         setIsLoaded(false)
@@ -303,21 +342,50 @@ export function useLive2D(options: UseLive2DOptions) {
         seq: number
       }>
 
-      const { audio_data, format, volumes, expressions } = customEvent.detail
+      const { audio_data, format, volumes, expressions, text, seq } = customEvent.detail
 
-      logger.info('[useLive2D] 收到 audio:with:expression 事件')
-      logger.debug(`  - 音频格式: ${format}`)
-      logger.debug(`  - 音量采样: ${volumes.length} 个`)
-      logger.debug(`  - 表情片段: ${expressions.segments.length} 个`)
-      logger.debug(`  - 总时长: ${expressions.total_duration}s`)
+      logger.info(
+        `[useLive2D] 收到 audio_with_expression 事件 (seq: ${seq})`,
+        {
+          format,
+          volumesLength: volumes.length,
+          segmentsCount: expressions.segments.length,
+          totalDuration: expressions.total_duration,
+          textLength: text?.length || 0
+        }
+      )
 
-      // 调用播放方法
+      // 验证 intensity 字段
+      const segmentsWithIntensity = expressions.segments.filter(seg =>
+        'intensity' in seg && typeof seg.intensity === 'number'
+      )
+
+      if (segmentsWithIntensity.length !== expressions.segments.length) {
+        logger.warn(
+          `[useLive2D] 部分 segment 缺少 intensity 字段 ` +
+          `(${segmentsWithIntensity.length}/${expressions.segments.length})`
+        )
+      } else {
+        logger.debug(
+          `[useLive2D] 所有 segment 包含 intensity 字段 (${expressions.segments.length} 个)`
+        )
+      }
+
+      // 播放音频和表情
+      const startTime = performance.now()
+
       playAudioWithExpressions(
         audio_data,
         volumes,
         expressions.segments,
         expressions.total_duration,
         format
+      )
+
+      const endTime = performance.now()
+
+      logger.info(
+        `[useLive2D] 播放完成 (seq: ${seq}, 耗时: ${(endTime - startTime).toFixed(0)}ms)`
       )
     }
 
