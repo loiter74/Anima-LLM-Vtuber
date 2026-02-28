@@ -2,13 +2,144 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**Start everything**: `.\scripts\start.ps1` (Windows) or `./scripts/start.sh` (Unix)
+**Stop everything**: `.\scripts\stop.ps1` (Windows) or `./scripts/stop.sh` (Unix)
+**Backend only**: `python -m anima.socketio_server`
+**Frontend only**: `cd frontend && pnpm dev`
+**Default ports**: Backend `12394`, Frontend `3000`
+**Config file**: `config/config.yaml`
+**Environment**: `.env` for API keys (`GLM_API_KEY`, `LLM_API_KEY`, etc.)
+
+## Architecture Decision Guide
+
+**Quick navigation for common tasks**:
+
+| Question | Solution |
+|----------|----------|
+| Need to modify emotion handling? | Use `UnifiedEventHandler` with plugin architecture |
+| Need simple LLM tag emotions (`[happy]`)? | Use `AudioExpressionHandler` (legacy) |
+| Need to add a new service provider? | See "Adding a New Service Provider" section |
+| Need to debug WebSocket events? | See "Debugging Socket.IO Events" in Quick Workflows |
+| Need to add custom emotion analyzer? | See "Adding a Custom Emotion Analyzer" in Quick Workflows |
+| Need custom timeline strategy? | See "Adding a New Timeline Strategy" in Quick Workflows |
+| Frontend can't connect? | See "Frontend Can't Connect to Backend" in Troubleshooting |
+| Audio/Live2D not working? | Check `config/features/live2d.yaml` and see LIP_SYNC_IMPLEMENTATION.md |
+
 ## Additional Documentation
 
 For more detailed information, refer to:
+- **Documentation Index**: `docs/README.md` - Complete documentation index
+- **Architecture**: `docs/architecture.md` - Complete system architecture (4+1 views documentation)
 - **Frontend Architecture**: `docs/frontend/architecture.md` - Detailed frontend architecture overview
 - **Component Guide**: `docs/frontend/component-guide.md` - Complete component usage reference
 - **Feature Modules**: `docs/frontend/feature-modules.md` - Feature module patterns and best practices
 - **API Reference**: `docs/frontend/api-reference.md` - Full API documentation for hooks, services, and types
+- **Live2D Setup**: `docs/NEURO_SAMA_LIVE2D_SETUP.md` - Live2D model setup guide (Hiyori, Haru, Epsilon)
+- **Lip Sync**: `docs/LIP_SYNC_IMPLEMENTATION.md` - Live2D lip sync feature testing and configuration guide
+
+### Live2D Emotion System (NEW Architecture)
+- **Refactoring Plan**: `docs/REFACTOR_PLAN.md` - Complete refactoring plan and design
+- **Phase 1**: `docs/PHASE1_COMPLETE.md` - Interface definition and implementation
+- **Phase 2**: `docs/PHASE2_COMPLETE.md` - Emotion analyzers enhancement
+- **Phase 3**: `docs/PHASE3_COMPLETE.md` - Timeline strategies enhancement
+- **Phase 4**: `docs/PHASE4_COMPLETE.md` - Unified event handler
+- **Migration Guide**: `docs/REFACTOR_MIGRATION_GUIDE.md` - How to migrate to new architecture
+- **Final Report**: `docs/REFACTOR_FINAL_REPORT.md` - Complete project summary
+
+## Quick Workflows
+
+### Adding a Custom Emotion Analyzer
+```python
+# 1. Create analyzer class in src/anima/live2d/analyzers/my_analyzer.py
+from anima.live2d.analyzers.base import IEmotionAnalyzer, EmotionData
+
+class MyCustomAnalyzer(IEmotionAnalyzer):
+    def extract(self, text: str, context=None) -> EmotionData:
+        # Your emotion extraction logic
+        return EmotionData(emotions=[...], confidence=0.8)
+
+    @property
+    def name(self) -> str:
+        return "my_analyzer"
+
+# 2. Register in factory (or in __init__.py)
+from anima.live2d.factory import EmotionAnalyzerFactory
+EmotionAnalyzerFactory.register("my_analyzer", MyCustomAnalyzer)
+
+# 3. Use in UnifiedEventHandler
+handler = UnifiedEventHandler(
+    websocket_send=ws.send,
+    analyzer_type="my_analyzer"
+)
+```
+
+### Adding a New Timeline Strategy
+```python
+# 1. Create strategy class in src/anima/live2d/strategies/my_strategy.py
+from anima.live2d.strategies.base import ITimelineStrategy, TimelineSegment
+
+class MyCustomStrategy(ITimelineStrategy):
+    def calculate(self, emotions, text, audio_duration, **kwargs):
+        # Your timeline calculation logic
+        return [TimelineSegment(...)]
+
+    @property
+    def name(self) -> str:
+        return "my_strategy"
+
+# 2. Register in factory
+from anima.live2d.factory import TimelineStrategyFactory
+TimelineStrategyFactory.register("my_strategy", MyCustomStrategy)
+
+# 3. Use in UnifiedEventHandler
+handler = UnifiedEventHandler(
+    websocket_send=ws.send,
+    strategy_type="my_strategy"
+)
+```
+
+### Debugging WebSocket Events
+**Backend**:
+```yaml
+# .user_settings.yaml
+log_level: DEBUG
+```
+
+**Frontend**:
+```typescript
+// In browser console
+import { logger } from '@/shared/utils/logger'
+logger.setLogLevel('DEBUG')
+```
+
+**Check event flow**:
+- Backend: Add logging in handlers (`logger.debug(f"[{session_id}] Event: {event.type}")`)
+- Frontend: Check SocketService.ts event handlers
+- Use browser DevTools Network tab to inspect WebSocket frames
+
+## Testing
+
+### Running Tests
+```bash
+# Live2D Emotion System Tests (Phase 1-4)
+python tests/test_phase1_interfaces.py      # Interface tests (5 tests)
+python tests/test_phase2_analyzers.py       # Analyzer tests (13 tests)
+python tests/test_phase3_strategies.py      # Strategy tests (16 tests)
+python tests/test_phase4_unified_handler.py # Unified handler tests (10 tests)
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run with coverage
+python -m pytest tests/ --cov=src/anima/live2d --cov-report=html
+```
+
+**Test Coverage**: Phase 1-4 complete with 44 tests, 100% pass rate
+
+### Usage Examples
+See `examples/phase1_usage_examples.py` for Live2D emotion system usage examples.
 
 ## Common Development Commands
 
@@ -36,7 +167,10 @@ pnpm start      # Start production server
 pnpm lint       # Run ESLint
 ```
 
-**Note**: No test framework is currently configured. Use manual testing or Playwright for E2E testing.
+**Testing**:
+- See "Quick Workflows" → "Testing" section for backend test commands
+- **Frontend**: Manual testing with browser dev tools + console logs
+- **E2E**: Playwright available but not configured yet
 
 ### Live2D Model Setup
 - `scripts/download_live2d.ps1` - Download Live2D Haru model (Windows PowerShell)
@@ -208,17 +342,41 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
   - Maps conversation states to Live2D expressions (idle, listening, thinking, speaking, surprised, sad)
   - Sends `expression` events via WebSocket to frontend
   - Located at: `src/anima/handlers/expression_handler.py`
-- `AudioExpressionHandler` - Unified handler for audio + expression events
+- `AudioExpressionHandler` - Legacy unified handler for audio + expression events
   - Processes `AUDIO_WITH_EXPRESSION` events
   - Combines audio data, volume envelope (for lip-sync), and emotion timeline into single WebSocket message
   - Calculates volume envelope at 50Hz sample rate
   - Calculates emotion timeline segments from emotion tags
   - Sends `audio_with_expression` event to frontend
   - Located at: `src/anima/handlers/audio_expression_handler.py`
+- `UnifiedEventHandler` - **NEW**: Enhanced unified handler using plugin architecture
+  - Supports pluggable emotion analyzers (`llm_tag_analyzer`, `keyword_analyzer`)
+  - Supports pluggable timeline strategies (`position_based`, `duration_based`, `intensity_based`)
+  - Factory-based component creation via `EmotionAnalyzerFactory` and `TimelineStrategyFactory`
+  - Same event format as `AudioExpressionHandler` for frontend compatibility
+  - Located at: `src/anima/handlers/unified_event_handler.py`
 - `SocketEventAdapter` - Adapts backend events to frontend format
   - Maps event names: `sentence` → `text`, `user-transcript` → `transcript`
   - Adds missing fields for frontend compatibility
   - Can be disabled via `enable_adapter=False`
+
+**Handler Selection Guide**:
+
+| Use Case | Recommended Handler | Notes |
+|----------|---------------------|-------|
+| Basic LLM tag emotions | `AudioExpressionHandler` | Original implementation, proven |
+| Multiple emotion sources | `UnifiedEventHandler` | Plugin architecture, supports multiple analyzers |
+| Custom emotion analysis | `UnifiedEventHandler` + custom analyzer | Factory pattern for extensibility |
+| Keyword-based emotions | `UnifiedEventHandler` + `keyword_analyzer` | No LLM tags required, 80+ keywords |
+| Complex timeline strategies | `UnifiedEventHandler` + custom strategy | Duration/intensity-based allocation |
+
+**Legacy vs New Components**:
+
+| Component | Legacy (Still Supported) | New (Plugin-Based) |
+|-----------|-------------------------|-------------------|
+| Emotion Analysis | `EmotionExtractor` | `IEmotionAnalyzer` (LLMTagAnalyzer, KeywordAnalyzer) |
+| Timeline Calculation | `EmotionTimelineCalculator` | `ITimelineStrategy` (PositionBased, DurationBased, IntensityBased) |
+| Handler | `AudioExpressionHandler` | `UnifiedEventHandler` |
 
 **6. Provider Registry (`src/anima/config/core/registry.py`)**
 - Decorator-based plugin system
@@ -229,21 +387,65 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 **7. Live2D Expression System**
 - Frontend feature module at `frontend/features/live2d/`
 - **Configuration Files** (two separate configs):
-  - **Backend**: `config/features/live2d.yaml` - Model path, scale, position, emotion_map (for emotion-based expressions from LLM)
-  - **Frontend**: `frontend/public/config/live2d.json` - Live2D model settings and motion indices (for state-based expressions)
-- **Backend Components**:
-  - `ExpressionHandler` (`src/anima/handlers/expression_handler.py`) - Sends expression events via WebSocket
-  - `AudioExpressionHandler` (`src/anima/handlers/audio_expression_handler.py`) - Unified handler for audio + expression events
-  - **Live2D Module** (`src/anima/live2d/`):
-    - `EmotionExtractor` - Extracts emotion tags from LLM response (format: `[emotion]` like `[happy]`)
-    - `EmotionTimelineCalculator` - Maps emotion tags to time-based expression segments
-    - `AudioAnalyzer` - Computes volume envelope for lip-sync (sample rate: 50Hz)
-    - `EmotionPromptBuilder` - Builds system prompt for LLM to include emotion tags
-  - Configuration class: `Live2DConfig` (`src/anima/config/live2d.py`) - Python config class with emotion_map, valid_emotions, lip_sync settings
-  - Expression types: `idle`, `listening`, `thinking`, `speaking`, `surprised`, `sad`, `happy`, `neutral`, `angry`
+  - **Backend**: `config/features/live2d.yaml` - Model path, scale, position, emotion_map, lip_sync settings
+  - **Frontend**: `frontend/public/config/live2d.json` - Live2D model settings and motion indices
+- **Plugin Architecture** (Phase 1-4 Refactoring, 2026-02-27):
+  - **Analyzers** (`src/anima/live2d/analyzers/`): Extract emotions from text
+    - `llm_tag_analyzer` - Extracts `[happy]`, `[sad]` tags from LLM responses
+    - `keyword_analyzer` - Keyword-based matching (80+ keywords, 6 emotions)
+    - Create custom analyzers via `IEmotionAnalyzer` interface
+  - **Strategies** (`src/anima/live2d/strategies/`): Calculate emotion timelines
+    - `position_based` - Position-based time allocation (original behavior)
+    - `duration_based` - Duration-based allocation with weights
+    - `intensity_based` - Intensity-based allocation with confidence
+    - Create custom strategies via `ITimelineStrategy` interface
+  - **Factory** (`src/anima/live2d/factory.py`): Dynamic component creation
+    - `EmotionAnalyzerFactory.create(name, config)` - Create analyzers
+    - `TimelineStrategyFactory.create(name, config)` - Create strategies
+- **Handlers**:
+  - `AudioExpressionHandler` (legacy) - Original unified audio + expression handler
+  - `UnifiedEventHandler` (new) - Plugin-based handler with configurable analyzers/strategies
+- **Legacy Components** (still supported):
+  - `EmotionExtractor` - Extracts `[emotion]` tags from text
+  - `EmotionTimelineCalculator` - Calculates timeline segments
+  - `AudioAnalyzer` - Computes 50Hz volume envelope for lip-sync
+- **Frontend Components**:
+  - `Live2DService` - Model loading and expression control
+  - `LipSyncEngine` - Lip-sync animation at ~30fps
+  - `ExpressionTimeline` - Emotion timeline playback synchronized with audio
+  - `useLive2D` hook - React hook for Live2D integration
+- **Documentation**:
+  - See "Quick Workflows" → "Adding a Custom Emotion Analyzer" for examples
+  - See `docs/REFACTOR_MIGRATION_GUIDE.md` for migration from legacy to new architecture
+  - See `docs/LIP_SYNC_IMPLEMENTATION.md` for lip sync troubleshooting
+
+**audio_with_expression Event Structure**:
+```json
+{
+  "type": "audio_with_expression",
+  "audio_data": "base64_encoded_audio",
+  "format": "mp3",
+  "volumes": [0.1, 0.2, ...],  // 50Hz volume envelope for lip-sync
+  "expressions": {
+    "segments": [
+      {"emotion": "happy", "time": 0.0, "duration": 2.5},
+      {"emotion": "neutral", "time": 2.5, "duration": 1.0}
+    ],
+    "total_duration": 3.5
+  },
+  "text": "cleaned response text",
+  "seq": 1
+}
+```
 - **Frontend Components**:
   - `Live2DService` - Manages Live2D model loading and expression control
+    - Uses `pixi-live2d-display` library for rendering
+    - Dynamic library imports to avoid SSR issues
+    - Canvas resize handling and window resize listeners
   - `LipSyncEngine` - Handles lip-sync animation during audio playback
+    - Updates mouth parameter at ~30fps using `requestAnimationFrame`
+    - Applies exponential moving average (EMA) for smooth transitions
+    - Configurable sensitivity and smoothing
   - `ExpressionTimeline` - TypeScript class that plays emotion timeline segments synchronized with audio playback using `requestAnimationFrame`
   - `useLive2D` hook - React hook for Live2D integration
   - `Live2DViewer` component - Renders Live2D model in canvas
@@ -274,6 +476,16 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
   - Frontend: `frontend/public/config/live2d.json` - Controls Live2D model motion indices for state-based expressions
 - **Emotion Mapping**: Maps emotion names to Live2D motion indices (e.g., `happy: 3`, `sad: 1`)
 
+**Lip Sync Configuration** (`config/features/live2d.yaml` → `lip_sync`):
+- `enabled` (boolean) - Whether lip sync is enabled
+- `sensitivity` (float, default: 1.0) - Mouth opening sensitivity (0.5 - 2.0)
+- `smoothing` (float, default: 0.5) - Smoothing factor for mouth animation (0.0 - 1.0)
+- `min_threshold` (float, default: 0.05) - Minimum volume threshold to filter background noise
+- `max_value` (float, default: 1.0) - Maximum mouth opening value
+- `use_mouth_form` (boolean, default: false) - Whether to control mouth shape parameter
+
+For troubleshooting lip sync issues, see `docs/LIP_SYNC_IMPLEMENTATION.md`.
+
 ## Configuration System
 
 ### Supported Services
@@ -292,7 +504,8 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 **GLM (智谱 AI) Integration:**
 - The project heavily uses GLM services for LLM, ASR, and TTS
-- Uses `zai-sdk` (custom SDK for GLM APIs) - imported as `from zai`
+- Uses `zai-sdk` (PyPI package `zai-sdk>=0.2.2`) - imported as `from zai`
+  - Provides `ZhipuAiClient` for GLM API access
   - Handles LLM, ASR, and TTS services for GLM
   - Integrated via environment variable `GLM_API_KEY`
 - Configuration files: `config/services/llm/glm.yaml`, `config/services/asr/glm.yaml`, `config/services/tts/glm.yaml`
@@ -464,6 +677,92 @@ llm_config:
 ```yaml
 services:
   agent: my_provider
+```
+
+## Common Development Patterns
+
+### Adding a New Event Type
+
+1. **Add event type to enum** (`src/anima/core/events.py`):
+   ```python
+   class EventType(str, Enum):
+       MY_NEW_EVENT = "my_new_event"
+   ```
+
+2. **Create handler** (`src/anima/handlers/my_handler.py`):
+   ```python
+   from anima.handlers.base_handler import BaseHandler
+
+   class MyHandler(BaseHandler):
+       async def handle(self, event: OutputEvent):
+           # Handle the event
+           await self.send({"type": "my_response", "data": event.data})
+   ```
+
+3. **Register in orchestrator** (`socketio_server.py` or `ConversationOrchestrator._setup_handlers`):
+   ```python
+   orchestrator.register_handler("my_new_event", my_handler, priority=EventPriority.NORMAL)
+   ```
+
+### Adding a New Pipeline Step
+
+1. **Create step class** (`src/anima/pipeline/steps/my_step.py`):
+   ```python
+   from anima.pipeline.base import PipelineStep
+   from anima.core.context import PipelineContext
+
+   class MyStep(PipelineStep):
+       async def process(self, ctx: PipelineContext) -> None:
+           # Process the context
+           ctx.text = ctx.text.upper()
+           # Use ctx.skip_remaining = True to abort pipeline
+   ```
+
+2. **Add to pipeline** (`ConversationOrchestrator._setup_pipelines`):
+   ```python
+   # For InputPipeline
+   self.input_pipeline.add_step(MyStep())
+
+   # For OutputPipeline
+   self.output_pipeline.add_step(MyStep())
+   ```
+
+### Adding a New Frontend Hook
+
+1. **Create hook** (`frontend/features/myfeature/hooks/useMyFeature.ts`):
+   ```typescript
+   import { useMyFeatureStore } from '@/shared/state/stores/myFeatureStore'
+
+   export function useMyFeature() {
+     const state = useMyFeatureStore()
+     return {
+       // Expose state and actions
+       ...state,
+     }
+   }
+   ```
+
+2. **Use in component**:
+   ```typescript
+   import { useMyFeature } from '@/features/myfeature/hooks/useMyFeature'
+
+   function MyComponent() {
+     const { data, action } = useMyFeature()
+     // ...
+   }
+   ```
+
+### Debugging Socket.IO Events
+
+**Backend**: Add logging in handlers
+```python
+logger.debug(f"[{session_id}] Received event: {event.type}, data: {event.data}")
+```
+
+**Frontend**: Use browser console
+```typescript
+// In SocketService.ts
+console.log('[Socket] Event received:', event, data)
 ```
 
 ## Key Data Structures
@@ -692,6 +991,7 @@ type Store = ReturnType<typeof useConversationStore.getState>
   - When new audio arrives while audio is playing, the system automatically stops old audio
   - `AudioInteractionService` manages interrupt logic by checking `AudioPlayer.isPlaying` before playback
   - Stop process: `audio.pause()` → `audio.src = ''` → `audio.load()` → clear window reference
+  - Implemented via commit d895ab2 (2025-02-26)
 
 **Auto-Interruption**:
 - When VAD detects new speech start, it automatically interrupts ongoing responses
@@ -896,13 +1196,24 @@ src/anima/
 │   ├── text_handler.py     # Text output handler
 │   ├── audio_handler.py    # Audio output handler
 │   ├── expression_handler.py  # Live2D expression handler (state-based)
-│   ├── audio_expression_handler.py  # Unified audio + expression handler
+│   ├── audio_expression_handler.py  # Legacy unified audio + expression handler
+│   ├── unified_event_handler.py    # NEW: Enhanced handler using plugin architecture
 │   └── socket_adapter.py   # Socket event adapter
 ├── live2d/                 # Live2D expression system module
-│   ├── emotion_extractor.py      # Extracts [emotion] tags from text
-│   ├── emotion_timeline.py       # Calculates emotion timeline segments
-│   ├── audio_analyzer.py         # Computes volume envelope for lip-sync
-│   └── prompt_builder.py         # Builds emotion prompt for LLM
+│   ├── analyzers/               # Emotion analyzer plugins
+│   │   ├── base.py             # IEmotionAnalyzer interface
+│   │   ├── llm_tag_analyzer.py # LLM tag extraction (supports [happy] tags)
+│   │   └── keyword_analyzer.py # Keyword-based emotion matching
+│   ├── strategies/              # Timeline calculation strategies
+│   │   ├── base.py             # ITimelineStrategy interface
+│   │   ├── position_based.py   # Position-based time allocation
+│   │   ├── duration_based.py   # Duration-based allocation with weights
+│   │   └── intensity_based.py  # Intensity-based allocation
+│   ├── factory.py               # Factory classes for component creation
+│   ├── emotion_extractor.py     # Legacy: Extracts [emotion] tags from text
+│   ├── emotion_timeline.py      # Legacy: Calculates emotion timeline segments
+│   ├── audio_analyzer.py        # Computes volume envelope for lip-sync
+│   └── prompt_builder.py        # Builds emotion prompt for LLM
 ├── state/                  # State management
 ├── utils/                  # Utility modules
 │   ├── logger_manager.py   # Dynamic log level management
