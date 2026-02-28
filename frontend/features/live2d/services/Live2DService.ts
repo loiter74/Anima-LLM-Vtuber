@@ -536,6 +536,21 @@ export class Live2DService extends EventEmitter {
 
         coreModel.setParameterValueByIndex(this.mouthParamIndex, finalValue)
 
+        // 同时控制 ParamMouthForm（嘴形参数）以增强视觉效果
+        try {
+          if (this.formParamIndex < 0) {
+            this.formParamIndex = coreModel.getParameterIndex('ParamMouthForm')
+            logger.info(`[Live2DService] ParamMouthForm 索引: ${this.formParamIndex}`)
+          }
+
+          if (this.formParamIndex >= 0) {
+            // 嘴形参数使用相同的值，但幅度较小（30-50%）
+            coreModel.setParameterValueByIndex(this.formParamIndex, finalValue * 0.4)
+          }
+        } catch (e) {
+          // 忽略 ParamMouthForm 错误
+        }
+
         // 频繁记录日志（前10次调用，每次都记录）
         if (!(this as any).callCount) {
           (this as any).callCount = 0
@@ -543,7 +558,7 @@ export class Live2DService extends EventEmitter {
         (this as any).callCount++
 
         if ((this as any).callCount <= 10 || now - (this as any).lastLogTime > 1000 || !(this as any).lastLogTime) {
-          logger.info(`[Live2DService] 嘴部参数更新 [${(this as any).callCount}]: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}, 原始值=${value.toFixed(3)}`)
+          logger.info(`[Live2DService] 嘴部参数更新 [${(this as any).callCount}]: 索引=${this.mouthParamIndex}, 值=${finalValue.toFixed(3)}, 原始值=${value.toFixed(3)}, 嘴形=${this.formParamIndex >= 0 ? (finalValue * 0.4).toFixed(3) : 'N/A'}`)
           ;(this as any).lastLogTime = now
         }
       } else {
