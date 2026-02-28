@@ -177,9 +177,9 @@ export class Live2DService extends EventEmitter {
       // 设置锚点为中心
       this.model.anchor.set(0.5, 0.5)
 
-      // 将模型居中（VTuber 风格：稍向下偏移，让头部在画面上方）
-      // Y 轴偏移 = 容器高度 * 0.15（向下移动 15%）
-      const yOffset = containerHeight * 0.15
+      // 将模型居中（VTuber 风格：向下偏移，让头部在画面中上部）
+      // Y 轴偏移 = 容器高度 * 0.4（向下移动 40%）
+      const yOffset = containerHeight * 0.4
       this.model.x = containerWidth / 2
       this.model.y = containerHeight / 2 + yOffset
 
