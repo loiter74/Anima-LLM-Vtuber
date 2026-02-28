@@ -171,7 +171,7 @@ export function Live2DViewer({
           <div>模型 X: {debugInfo.modelX.toFixed(0)}</div>
           <div>模型 Y: {debugInfo.modelY.toFixed(0)}</div>
           <div className="mt-2 text-yellow-400">
-            提示: 在控制台输入 window.__live2dService.setPositionConfig({ yOffsetPercent: 30 }) 调整位置
+            提示: 在控制台输入 setPositionConfig 调整位置
           </div>
         </div>
       )}
