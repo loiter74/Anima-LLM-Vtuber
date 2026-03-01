@@ -21,14 +21,18 @@
   },
   "lipSync": {
     "enabled": true,
-    "sensitivity": 2.5,
-    "smoothing": 0.3,
-    "minThreshold": 0.02,
+    "sensitivity": 3.5,
+    "smoothing": 0.25,
+    "minThreshold": 0.01,
     "maxValue": 1.0,
     "useMouthForm": false,
-    "curveIntensity": 0.6,
+    "curveIntensity": 0.5,
     "timeCompensationFrames": 2,
     "enableAdaptiveThreshold": true,
-    "adaptiveWindow": 50
+    "adaptiveWindow": 50,
+    "speechDetectionWindow": 15,
+    "speechThreshold": 0.03,
+    "pauseDetectionWindow": 30,
+    "pauseCloseSpeed": 0.15
   }
 }

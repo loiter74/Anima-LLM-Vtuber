@@ -6,12 +6,18 @@
 """
 
 from .base import IEmotionAnalyzer, EmotionData
-from .llm_tag_analyzer import LLMTagAnalyzer
 from .keyword_analyzer import KeywordAnalyzer
+from .standalone_llm_analyzer import (
+    StandaloneLLMTagAnalyzer,
+    EmotionTag,
+    EmotionExtractionResult
+)
 
 __all__ = [
     "IEmotionAnalyzer",
     "EmotionData",
-    "LLMTagAnalyzer",
     "KeywordAnalyzer",
+    "StandaloneLLMTagAnalyzer",
+    "EmotionTag",
+    "EmotionExtractionResult",
 ]

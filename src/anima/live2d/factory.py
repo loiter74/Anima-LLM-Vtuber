@@ -9,7 +9,7 @@ from typing import Dict, Type, Optional, Any
 from loguru import logger
 
 from .analyzers.base import IEmotionAnalyzer
-from .analyzers.llm_tag_analyzer import LLMTagAnalyzer
+from .analyzers.standalone_llm_analyzer import StandaloneLLMTagAnalyzer
 from .analyzers.keyword_analyzer import KeywordAnalyzer
 from .strategies.base import ITimelineStrategy, TimelineConfig
 from .strategies.position_based import PositionBasedStrategy
@@ -44,7 +44,7 @@ class EmotionAnalyzerFactory:
 
     # 内置分析器注册表
     _analyzers: Dict[str, Type[IEmotionAnalyzer]] = {
-        "llm_tag_analyzer": LLMTagAnalyzer,
+        "llm_tag_analyzer": StandaloneLLMTagAnalyzer,  # 使用独立实现
         "keyword_analyzer": KeywordAnalyzer,
     }
 

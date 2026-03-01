@@ -6,6 +6,36 @@
 
 ## 版本历史
 
+### v0.6.0 (2026-03-01) - 架构清理与优化
+
+**重大更新**：
+
+#### 代码清理
+- 🗑️ **删除**：移除所有 legacy 组件
+  - 删除 `EmotionExtractor` - 已被 `StandaloneLLMTagAnalyzer` 替代
+  - 删除 `EmotionTimelineCalculator` - 已被 `ITimelineStrategy` 插件系统替代
+  - 删除 `AudioExpressionHandler` - 已被 `UnifiedEventHandler` 替代
+  - 删除旧的 `LLMTagAnalyzer` - 依赖 legacy 代码的实现
+- ✨ **新增**：`StandaloneLLMTagAnalyzer` - 完全独立的 LLM 标签分析器
+  - 不依赖任何 legacy 代码
+  - 支持 `extract_legacy()` 和 `extract()` 两种方法
+  - 包含完整的标签提取和文本清理功能
+
+#### 架构优化
+- 🔧 **更新**：所有组件使用新架构
+  - `EmotionExtractionStep` 使用 `StandaloneLLMTagAnalyzer`
+  - `socketio_server.py` 使用 `UnifiedEventHandler`
+  - `EmotionAnalyzerFactory` 注册 `StandaloneLLMTagAnalyzer`
+- 📚 **文档**：更新所有文档反映新架构
+
+#### 清理统计
+- 删除 legacy 文件：4 个
+- 清理 Python 缓存：700+ 目录，100+ .pyc 文件
+- 清理空目录：2 个
+- 清理开发日志：1 个
+
+---
+
 ### v0.5.0 (2026-02-28) - 插件化架构重构
 
 **重大更新**：

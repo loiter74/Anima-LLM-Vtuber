@@ -7,7 +7,11 @@ from typing import List, Optional
 from loguru import logger
 
 from ..base import PipelineStep
-from anima.live2d.emotion_extractor import EmotionExtractor, EmotionTag
+from anima.live2d.analyzers.standalone_llm_analyzer import (
+    StandaloneLLMTagAnalyzer,
+    EmotionTag,
+    EmotionExtractionResult
+)
 
 
 class EmotionExtractionStep(PipelineStep):
@@ -43,7 +47,8 @@ class EmotionExtractionStep(PipelineStep):
         """
         self._valid_emotions = valid_emotions
         self._enabled = enabled
-        self.extractor = EmotionExtractor(valid_emotions=valid_emotions)
+        # 使用新的独立分析器（不依赖 legacy EmotionExtractor）
+        self.extractor = StandaloneLLMTagAnalyzer(valid_emotions=valid_emotions)
 
     @property
     def name(self) -> str:

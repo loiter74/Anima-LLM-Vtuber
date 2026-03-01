@@ -63,7 +63,7 @@ from anima.services.conversation import (
     SessionManager,
 )
 from anima.handlers import TextHandler
-from anima.handlers.audio_expression_handler import AudioExpressionHandler
+from anima.handlers.unified_event_handler import UnifiedEventHandler
 from anima.eventbus import EventPriority
 from anima.utils.logger_manager import logger_manager
 from anima.config.user_settings import UserSettings
@@ -233,18 +233,20 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
         orchestrator.register_handler("sentence", text_handler, priority=EventPriority.NORMAL)
         logger.info(f"[{sid}] TextHandler 已注册到 sentence 事件")
 
-        # 创建并注册 AudioExpressionHandler（处理音频 + 表情事件）
+        # 创建并注册 UnifiedEventHandler（处理音频 + 表情事件）
         if live2d_config.enabled:
-            audio_expression_handler = AudioExpressionHandler(
+            unified_handler = UnifiedEventHandler(
                 websocket_send=orchestrator.websocket_send,
+                analyzer_type="llm_tag_analyzer",  # 使用 LLM 标签分析器
+                strategy_type="position_based",     # 使用基于位置的时间轴策略
                 sample_rate=50  # 50 Hz
             )
             orchestrator.register_handler(
                 "audio_with_expression",
-                audio_expression_handler,
+                unified_handler,
                 priority=EventPriority.NORMAL
             )
-            logger.info(f"[{sid}] AudioExpressionHandler 已注册到 audio_with_expression 事件")
+            logger.info(f"[{sid}] UnifiedEventHandler 已注册到 audio_with_expression 事件")
 
         # 启动编排器（将 EventRouter 连接到 EventBus）
         orchestrator.start()

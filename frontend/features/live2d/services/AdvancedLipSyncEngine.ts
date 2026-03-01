@@ -30,6 +30,14 @@ export interface AdvancedLipSyncConfig {
   enableAdaptiveThreshold?: boolean
   /** 自适应阈值窗口大小（采样点数），默认 50 */
   adaptiveWindow?: number
+  /** 语音检测窗口大小（帧数），默认 15 帧 (~500ms @ 30fps) */
+  speechDetectionWindow?: number
+  /** 语音检测阈值，超过此值认为在说话，默认 0.03 */
+  speechThreshold?: number
+  /** 停顿检测窗口大小（帧数），默认 30 帧 (~1秒 @ 30fps) */
+  pauseDetectionWindow?: number
+  /** 停顿时嘴巴闭合速度 (0.0-1.0)，默认 0.1，越大闭合越快 */
+  pauseCloseSpeed?: number
 }
 
 export class AdvancedLipSyncEngine {
@@ -63,6 +71,15 @@ export class AdvancedLipSyncEngine {
     history: number[]
   }
 
+  // 语音状态检测
+  private speechState: {
+    isSpeaking: boolean
+    isPaused: boolean
+    speechWindow: number[]
+    pauseWindow: number[]
+    mouthValueDuringPause: number
+  }
+
   constructor(onUpdate: (value: number) => void, config: AdvancedLipSyncConfig = {}) {
     this.onUpdate = onUpdate
     this.config = {
@@ -75,6 +92,10 @@ export class AdvancedLipSyncEngine {
       curveIntensity: config.curveIntensity ?? 0.6,
       enableAdaptiveThreshold: config.enableAdaptiveThreshold ?? true,
       adaptiveWindow: config.adaptiveWindow ?? 50,
+      speechDetectionWindow: config.speechDetectionWindow ?? 15,
+      speechThreshold: config.speechThreshold ?? 0.03,
+      pauseDetectionWindow: config.pauseDetectionWindow ?? 30,
+      pauseCloseSpeed: config.pauseCloseSpeed ?? 0.1,
     }
 
     // 初始化卡尔曼滤波器
@@ -90,6 +111,15 @@ export class AdvancedLipSyncEngine {
       current: this.config.minThreshold,
       window: [],
       history: [],
+    }
+
+    // 初始化语音状态
+    this.speechState = {
+      isSpeaking: false,
+      isPaused: false,
+      speechWindow: [],
+      pauseWindow: [],
+      mouthValueDuringPause: 0,
     }
   }
 
@@ -169,6 +199,50 @@ export class AdvancedLipSyncEngine {
     }
   }
 
+  /**
+   * 更新语音状态检测
+   */
+  private updateSpeechState(volume: number): void {
+    // 添加到语音检测窗口
+    this.speechState.speechWindow.push(volume)
+    if (this.speechState.speechWindow.length > this.config.speechDetectionWindow!) {
+      this.speechState.speechWindow.shift()
+    }
+
+    // 计算窗口内的平均音量
+    const avgVolume = this.speechState.speechWindow.reduce((a, b) => a + b, 0) / this.speechState.speechWindow.length
+
+    // 判断是否在说话
+    const wasSpeaking = this.speechState.isSpeaking
+    this.speechState.isSpeaking = avgVolume > this.config.speechThreshold!
+
+    // 状态转换检测
+    if (this.speechState.isSpeaking && !wasSpeaking) {
+      // 从沉默/停顿转为说话：重置停顿窗口
+      this.speechState.isPaused = false
+      this.speechState.pauseWindow = []
+      this.speechState.mouthValueDuringPause = 0
+    } else if (!this.speechState.isSpeaking && wasSpeaking) {
+      // 从说话转为沉默：开始停顿检测
+      this.speechState.isPaused = true
+    }
+
+    // 停顿窗口处理
+    if (this.speechState.isPaused) {
+      this.speechState.pauseWindow.push(volume)
+      if (this.speechState.pauseWindow.length > this.config.pauseDetectionWindow!) {
+        this.speechState.pauseWindow.shift()
+      }
+
+      // 如果停顿窗口内音量持续很低，认为进入沉默状态
+      const pauseAvg = this.speechState.pauseWindow.reduce((a, b) => a + b, 0) / this.speechState.pauseWindow.length
+      if (pauseAvg < this.config.speechThreshold! * 0.5) {
+        // 真正的沉默，不是短暂停顿
+        this.speechState.isPaused = false
+      }
+    }
+  }
+
   async connect(audioElement: HTMLAudioElement): Promise<void> {
     try {
       if (typeof window === 'undefined') {
@@ -224,31 +298,46 @@ export class AdvancedLipSyncEngine {
    * 处理音量值（核心逻辑）
    */
   private processVolume(volume: number): void {
-    // 1. 更新自适应阈值
+    // 1. 更新语音状态检测
+    this.updateSpeechState(volume)
+
+    // 2. 更新自适应阈值
     this.updateAdaptiveThreshold(volume)
 
-    // 2. 应用阈值：低于阈值时设为0
+    // 3. 应用阈值：低于阈值时设为0
     if (volume < this.adaptiveThreshold.current) {
       volume = 0
     }
 
-    // 3. 应用非线性曲线映射
+    // 4. 应用非线性曲线映射
     volume = this.applyNonLinearCurve(volume)
 
-    // 4. 应用基础音量乘数
+    // 5. 应用基础音量乘数
     volume = volume * this.config.baseVolumeMultiplier!
 
-    // 5. 卡尔曼滤波预测和更新
+    // 6. 卡尔曼滤波预测和更新
     if (this.config.enableSmoothing) {
       this.kalmanPredict()
       volume = this.kalmanUpdate(volume)
     }
 
-    // 6. 限制在 [0, 1] 范围
+    // 7. 限制在 [0, 1] 范围
     volume = Math.max(0, Math.min(1, volume))
 
-    // 7. 触发更新
-    this.onUpdate(volume)
+    // 8. 根据语音状态调整嘴巴行为
+    if (this.speechState.isSpeaking) {
+      // 正在说话：正常更新嘴巴
+      this.speechState.mouthValueDuringPause = volume
+      this.onUpdate(volume)
+    } else if (this.speechState.isPaused) {
+      // 短暂停顿：嘴巴逐渐闭合
+      this.speechState.mouthValueDuringPause *= (1 - this.config.pauseCloseSpeed!)
+      this.onUpdate(this.speechState.mouthValueDuringPause)
+    } else {
+      // 沉默状态：嘴巴完全闭合
+      this.speechState.mouthValueDuringPause = 0
+      this.onUpdate(0)
+    }
   }
 
   /**

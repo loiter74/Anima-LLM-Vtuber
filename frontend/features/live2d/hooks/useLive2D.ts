@@ -313,7 +313,7 @@ export function useLive2D(options: UseLive2DOptions) {
       audio.src = `data:audio/${format};base64,${audioData}`
 
       logger.info('[useLive2D] 步骤 3: 创建高级唇同步引擎')
-      // 3. 创建高级唇同步引擎（使用非线性映射、自适应阈值、卡尔曼滤波）
+      // 3. 创建高级唇同步引擎（使用非线性映射、自适应阈值、卡尔曼滤波、语音状态检测）
       const lipSyncEngine = new AdvancedLipSyncEngine(
         (value: number) => {
           logger.debug(`[useLive2D] 高级唇同步回调: value=${value.toFixed(3)}`)
@@ -329,6 +329,10 @@ export function useLive2D(options: UseLive2DOptions) {
           timeCompensationFrames: 2,      // 2帧时间补偿
           enableAdaptiveThreshold: true,  // 启用自适应阈值
           adaptiveWindow: 50,             // 50采样点窗口
+          speechDetectionWindow: 15,      // 15帧语音检测窗口 (~500ms)
+          speechThreshold: 0.03,          // 语音检测阈值
+          pauseDetectionWindow: 30,       // 30帧停顿检测窗口 (~1秒)
+          pauseCloseSpeed: 0.15,          // 停顿时嘴巴闭合速度
         }
       )
 

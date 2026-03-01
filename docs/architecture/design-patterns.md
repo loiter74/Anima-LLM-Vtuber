@@ -1,6 +1,13 @@
 # 设计模式详解
 
 > 🎓 **面试重点** - 本文深入讲解项目中 6 种设计模式的实际应用
+>
+> ⚠️ **注意**：部分示例代码使用旧的组件名称（如 `EmotionExtractor`），这些在 v0.6.0 (2026-03-01) 已被新架构替代。
+> - `EmotionExtractor` → `StandaloneLLMTagAnalyzer`
+> - `EmotionTimelineCalculator` → `ITimelineStrategy` 插件
+> - `AudioExpressionHandler` → `UnifiedEventHandler`
+>
+> 请参考 [CLAUDE.md](../../CLAUDE.md) 了解最新的架构。
 
 ---
 

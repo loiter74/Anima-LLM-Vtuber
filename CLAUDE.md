@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Question | Solution |
 |----------|----------|
 | Need to modify emotion handling? | Use `UnifiedEventHandler` with plugin architecture |
-| Need simple LLM tag emotions (`[happy]`)? | Use `AudioExpressionHandler` (legacy) |
+| Need simple LLM tag emotions (`[happy]`)? | Use `UnifiedEventHandler` with `llm_tag_analyzer` |
 | Need to add a new service provider? | See "Adding a New Service Provider" section |
 | Need to debug WebSocket events? | See "Debugging Socket.IO Events" in Quick Workflows |
 | Need to add custom emotion analyzer? | See "Adding a Custom Emotion Analyzer" in Quick Workflows |
@@ -364,19 +364,20 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 | Use Case | Recommended Handler | Notes |
 |----------|---------------------|-------|
-| Basic LLM tag emotions | `AudioExpressionHandler` | Original implementation, proven |
-| Multiple emotion sources | `UnifiedEventHandler` | Plugin architecture, supports multiple analyzers |
-| Custom emotion analysis | `UnifiedEventHandler` + custom analyzer | Factory pattern for extensibility |
+| All use cases | `UnifiedEventHandler` | Plugin architecture with configurable analyzers/strategies |
+| LLM tag emotions | `UnifiedEventHandler` + `llm_tag_analyzer` | Extracts `[happy]`, `[sad]` tags from LLM responses |
 | Keyword-based emotions | `UnifiedEventHandler` + `keyword_analyzer` | No LLM tags required, 80+ keywords |
+| Custom emotion analysis | `UnifiedEventHandler` + custom analyzer | Factory pattern for extensibility |
 | Complex timeline strategies | `UnifiedEventHandler` + custom strategy | Duration/intensity-based allocation |
 
-**Legacy vs New Components**:
+**Architecture (2026-03 Refactoring)**:
 
-| Component | Legacy (Still Supported) | New (Plugin-Based) |
-|-----------|-------------------------|-------------------|
-| Emotion Analysis | `EmotionExtractor` | `IEmotionAnalyzer` (LLMTagAnalyzer, KeywordAnalyzer) |
-| Timeline Calculation | `EmotionTimelineCalculator` | `ITimelineStrategy` (PositionBased, DurationBased, IntensityBased) |
-| Handler | `AudioExpressionHandler` | `UnifiedEventHandler` |
+| Component Type | Implementation | Location |
+|----------------|----------------|----------|
+| Emotion Analysis | `StandaloneLLMTagAnalyzer`, `KeywordAnalyzer` | `src/anima/live2d/analyzers/` |
+| Timeline Calculation | `PositionBasedStrategy`, `DurationBasedStrategy`, `IntensityBasedStrategy` | `src/anima/live2d/strategies/` |
+| Event Handler | `UnifiedEventHandler` (uses plugins) | `src/anima/handlers/unified_event_handler.py` |
+| Factory System | `EmotionAnalyzerFactory`, `TimelineStrategyFactory` | `src/anima/live2d/factory.py` |
 
 **6. Provider Registry (`src/anima/config/core/registry.py`)**
 - Decorator-based plugin system
@@ -389,29 +390,28 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - **Configuration Files** (two separate configs):
   - **Backend**: `config/features/live2d.yaml` - Model path, scale, position, emotion_map, lip_sync settings
   - **Frontend**: `frontend/public/config/live2d.json` - Live2D model settings and motion indices
-- **Plugin Architecture** (Phase 1-4 Refactoring, 2026-02-27):
+- **Plugin Architecture** (2026-03 Refactoring Complete):
   - **Analyzers** (`src/anima/live2d/analyzers/`): Extract emotions from text
-    - `llm_tag_analyzer` - Extracts `[happy]`, `[sad]` tags from LLM responses
-    - `keyword_analyzer` - Keyword-based matching (80+ keywords, 6 emotions)
+    - `StandaloneLLMTagAnalyzer` - Extracts `[happy]`, `[sad]` tags from LLM responses (independent implementation)
+    - `KeywordAnalyzer` - Keyword-based matching (80+ keywords, 6 emotions)
     - Create custom analyzers via `IEmotionAnalyzer` interface
   - **Strategies** (`src/anima/live2d/strategies/`): Calculate emotion timelines
-    - `position_based` - Position-based time allocation (original behavior)
+    - `position_based` - Position-based time allocation
     - `duration_based` - Duration-based allocation with weights
     - `intensity_based` - Intensity-based allocation with confidence
     - Create custom strategies via `ITimelineStrategy` interface
   - **Factory** (`src/anima/live2d/factory.py`): Dynamic component creation
     - `EmotionAnalyzerFactory.create(name, config)` - Create analyzers
     - `TimelineStrategyFactory.create(name, config)` - Create strategies
-- **Handlers**:
-  - `AudioExpressionHandler` (legacy) - Original unified audio + expression handler
-  - `UnifiedEventHandler` (new) - Plugin-based handler with configurable analyzers/strategies
-- **Legacy Components** (still supported):
-  - `EmotionExtractor` - Extracts `[emotion]` tags from text
-  - `EmotionTimelineCalculator` - Calculates timeline segments
+- **Handler**:
+  - `UnifiedEventHandler` - Plugin-based handler with configurable analyzers/strategies
+- **Utilities**:
   - `AudioAnalyzer` - Computes 50Hz volume envelope for lip-sync
+  - `EmotionPromptBuilder` - Builds emotion prompt for LLM
 - **Frontend Components**:
   - `Live2DService` - Model loading and expression control
-  - `LipSyncEngine` - Lip-sync animation at ~30fps
+  - `LipSyncEngine` - Basic lip-sync animation at ~30fps using EMA smoothing
+  - `AdvancedLipSyncEngine` - **NEW**: Advanced lip-sync with Kalman filtering, adaptive thresholds, speech detection, and time compensation
   - `ExpressionTimeline` - Emotion timeline playback synchronized with audio
   - `useLive2D` hook - React hook for Live2D integration
 - **Documentation**:
@@ -450,7 +450,7 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
   - `useLive2D` hook - React hook for Live2D integration
   - `Live2DViewer` component - Renders Live2D model in canvas
 - **Event Flow**:
-  - Emotion-based: LLM response → `EmotionExtractionStep` → emotion tags (`[happy]`, etc.) → `AudioExpressionHandler` → `audio_with_expression` event → Frontend
+  - Emotion-based: LLM response → `EmotionExtractionStep` → emotion tags (`[happy]`, etc.) → `UnifiedEventHandler` → `audio_with_expression` event → Frontend
   - State-based: Backend emits `expression` event → Frontend `useConversation` receives → `Live2DViewer` updates model
 - **audio_with_expression Event Structure**:
   ```json
@@ -483,6 +483,25 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 - `min_threshold` (float, default: 0.05) - Minimum volume threshold to filter background noise
 - `max_value` (float, default: 1.0) - Maximum mouth opening value
 - `use_mouth_form` (boolean, default: false) - Whether to control mouth shape parameter
+
+**Advanced Lip Sync Configuration** (`AdvancedLipSyncEngine`):
+- `updateInterval` (number, default: 33) - Update frequency limit in ms (~30fps)
+- `enableSmoothing` (boolean, default: true) - Enable Kalman filter smoothing
+- `smoothingFactor` (number, default: 0.3) - Kalman filter smoothing coefficient
+- `baseVolumeMultiplier` (number, default: 2.0) - Base volume multiplier
+- `minThreshold` (number, default: 0.02) - Minimum volume threshold
+- `timeCompensationFrames` (number, default: 2) - Time compensation in frames (~66ms @ 30fps)
+- `curveIntensity` (number, default: 0.6) - Non-linear curve strength (0=linear, 1=fully non-linear)
+- `enableAdaptiveThreshold` (boolean, default: true) - Enable adaptive threshold
+- `adaptiveWindow` (number, default: 50) - Adaptive threshold window size
+- `speechDetectionWindow` (number, default: 15) - Speech detection window in frames (~500ms @ 30fps)
+- `speechThreshold` (number, default: 0.03) - Speech detection threshold
+- `pauseDetectionWindow` (number, default: 30) - Pause detection window in frames (~1s @ 30fps)
+- `pauseCloseSpeed` (number, default: 0.1) - Mouth closing speed during pause
+
+**Lip Sync Engine Selection**:
+- **Basic**: `LipSyncEngine` - Simple EMA-based smoothing, suitable for most cases
+- **Advanced**: `AdvancedLipSyncEngine` - Kalman filtering + speech detection, for production use
 
 For troubleshooting lip sync issues, see `docs/LIP_SYNC_IMPLEMENTATION.md`.
 
@@ -993,6 +1012,15 @@ type Store = ReturnType<typeof useConversationStore.getState>
   - Stop process: `audio.pause()` → `audio.src = ''` → `audio.load()` → clear window reference
   - Implemented via commit d895ab2 (2025-02-26)
 
+**Lip Sync Engine Selection**:
+- **Basic**: `LipSyncEngine` - Simple EMA-based smoothing, suitable for most use cases
+- **Advanced**: `AdvancedLipSyncEngine` (NEW, 2026-02) - Production-ready with:
+  - Kalman filtering for predictive smoothing
+  - Adaptive threshold based on audio characteristics
+  - Speech state detection (speaking/pause/silence)
+  - Time compensation for audio-to-animation delay
+  - Non-linear volume mapping for better sensitivity
+
 **Auto-Interruption**:
 - When VAD detects new speech start, it automatically interrupts ongoing responses
 - Frontend interrupts audio playback when starting new recording
@@ -1122,7 +1150,14 @@ Component → useConversation Hook → Zustand Stores
 
 **Live2D** (`features/live2d/`):
 - `services/Live2DService.ts` - Manages Live2D model loading, expression control, and lifecycle
-- `services/LipSyncEngine.ts` - Handles lip-sync animation based on audio playback
+- `services/LipSyncEngine.ts` - Basic lip-sync animation using exponential moving average (EMA) smoothing
+- `services/AdvancedLipSyncEngine.ts` - Advanced lip-sync with:
+  - **Time Compensation**: Audio-to-mouth animation delay compensation (~66ms)
+  - **Non-linear Volume Mapping**: Logarithmic curve for better sensitivity
+  - **Adaptive Threshold**: Dynamically adjusts silence threshold based on audio
+  - **Kalman Filtering**: Predictive smoothing for natural mouth movement
+  - **Speech State Detection**: Distinguishes between speaking, pause, and silence
+  - **Pause Detection**: Gradual mouth closure during speech pauses (~1 second window)
 - `services/ExpressionTimeline.ts` - Plays emotion timeline segments synchronized with audio playback using `requestAnimationFrame`
 - `hooks/useLive2D.ts` - React hook for Live2D integration
 - `types/index.ts` - TypeScript types for Live2D configuration (Live2DConfig, EmotionMap, etc.)
