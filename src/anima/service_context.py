@@ -287,6 +287,7 @@ class ServiceContext:
         初始化记忆系统
 
         从 config/features/memory.yaml 加载配置
+        支持向量搜索（第二层个性化）
         """
         try:
             from pathlib import Path
@@ -312,11 +313,23 @@ class ServiceContext:
                 "importance_threshold": memory_config['memory']['importance']['threshold']
             }
 
+            # 向量搜索配置（第二层个性化）
+            vector_search_config = memory_config.get('memory', {}).get('vector_search', {})
+            if vector_search_config.get('enabled', False):
+                config['enable_vector_search'] = True
+                config['vector_storage_path'] = vector_search_config.get('storage_path', 'E:/AnimaData/vector_db')
+                config['embedding_model'] = vector_search_config.get('embedding_model', 'paraphrase-multilingual-MiniLM-L12-v2')
+
+                logger.info(f"[{self.session_id}] 向量搜索已启用")
+                logger.info(f"[{self.session_id}] 存储路径: {config['vector_storage_path']}")
+                logger.info(f"[{self.session_id}] 嵌入模型: {config['embedding_model']}")
+
             self.memory_system = MemorySystem(config)
             logger.info(f"[{self.session_id}] ✅ 记忆系统初始化完成")
 
         except Exception as e:
             logger.warning(f"[{self.session_id}] 记忆系统初始化失败: {e}")
+            logger.warning(f"[{self.session_id}] 错误详情: {type(e).__name__}: {str(e)}")
             self.memory_system = None
 
     # ========================================

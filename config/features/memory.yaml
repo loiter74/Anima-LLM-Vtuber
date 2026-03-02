@@ -1,5 +1,5 @@
 # Memory System Configuration
-# 三层记忆系统配置
+# 四层记忆系统配置（已集成向量搜索）
 
 memory:
   enabled: true
@@ -17,6 +17,12 @@ memory:
   importance:
     threshold: 0.7  # 高于此分数才存长期记忆
     base_score: 0.5  # 基础分数
+
+  # Vector search (Layer 2 Personalization)
+  vector_search:
+    enabled: true  # 是否启用向量搜索
+    storage_path: "E:/AnimaData/vector_db"  # E盘存储路径
+    embedding_model: "paraphrase-multilingual-MiniLM-L12-v2"  # 支持中文的嵌入模型
 
 # Note: Knowledge graph is optional and not implemented yet
 # knowledge_graph:
