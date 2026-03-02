@@ -12,6 +12,7 @@ from .services.asr import ASRFactory
 from .services.tts import TTSFactory
 from .services.llm import LLMFactory
 from .services.vad import VADInterface, VADFactory
+from .memory import MemorySystem
 
 
 class ServiceContext:
@@ -36,6 +37,9 @@ class ServiceContext:
         self.tts_engine: Optional[TTSInterface] = None
         self.llm_engine: Optional[LLMInterface] = None
         self.vad_engine: Optional[VADInterface] = None
+
+        # 记忆系统
+        self.memory_system: Optional[MemorySystem] = None
 
         # 会话状态
         self.session_id: Optional[str] = None
@@ -76,6 +80,7 @@ class ServiceContext:
         await self.init_tts(config.tts)
         await self.init_llm(config.agent, config.get_persona(), app_config=config)
         await self.init_vad(config.vad)
+        await self.init_memory()
 
         logger.info(f"[{self.session_id}] 服务加载完成")
 
@@ -277,6 +282,43 @@ class ServiceContext:
             logger.error(f"[{self.session_id}] ❌ VAD 引擎创建失败: {e}")
             self.vad_engine = None
 
+    async def init_memory(self) -> None:
+        """
+        初始化记忆系统
+
+        从 config/features/memory.yaml 加载配置
+        """
+        try:
+            from pathlib import Path
+            import yaml
+
+            memory_config_path = Path(__file__).parent.parent.parent / "config" / "features" / "memory.yaml"
+
+            if not memory_config_path.exists():
+                logger.warning(f"[{self.session_id}] 记忆系统配置文件不存在: {memory_config_path}")
+                return
+
+            with open(memory_config_path, 'r', encoding='utf-8') as f:
+                memory_config = yaml.safe_load(f)
+
+            if not memory_config.get('memory', {}).get('enabled', False):
+                logger.info(f"[{self.session_id}] 记忆系统未启用")
+                return
+
+            # 构建记忆系统配置
+            config = {
+                "short_term_max_turns": memory_config['memory']['short_term']['max_turns'],
+                "long_term_db_path": memory_config['memory']['long_term']['db_path'],
+                "importance_threshold": memory_config['memory']['importance']['threshold']
+            }
+
+            self.memory_system = MemorySystem(config)
+            logger.info(f"[{self.session_id}] ✅ 记忆系统初始化完成")
+
+        except Exception as e:
+            logger.warning(f"[{self.session_id}] 记忆系统初始化失败: {e}")
+            self.memory_system = None
+
     # ========================================
     # 生命周期管理
     # ========================================
@@ -300,6 +342,10 @@ class ServiceContext:
         if self.vad_engine:
             await self.vad_engine.close()
             self.vad_engine = None
+
+        if self.memory_system:
+            self.memory_system.close()
+            self.memory_system = None
 
         logger.info(f"[{self.session_id}] 服务上下文已关闭")
 

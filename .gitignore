@@ -62,3 +62,10 @@ out/
 
 # User settings
 .user_settings.yaml
+
+# Claude Code skills (user-specific)
+.claude/skills/
+
+# Memory system database (user-specific data)
+data/*.db
+data/*.db-*

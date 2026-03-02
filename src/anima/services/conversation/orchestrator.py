@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Optional, Any, Union
 from dataclasses import dataclass, field
 from loguru import logger
 import numpy as np
+from datetime import datetime
+import uuid
 
 from anima.eventbus import EventBus, EventRouter, EventPriority
 from anima.core import EventType, OutputEvent
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from anima.services.llm import AgentInterface
     from anima.handlers import BaseHandler
     from anima.core import WebSocketSend, PipelineContext
+    from anima.memory import MemorySystem
 
 
 @dataclass
@@ -71,6 +74,7 @@ class ConversationOrchestrator:
         websocket_send: Optional["WebSocketSend"] = None,
         session_id: Optional[str] = None,
         live2d_config=None,
+        memory_system: Optional["MemorySystem"] = None,
     ):
         """
         初始化对话编排器
@@ -82,12 +86,14 @@ class ConversationOrchestrator:
             websocket_send: WebSocket 发送函数
             session_id: 会话 ID
             live2d_config: Live2D 配置（可选）
+            memory_system: 记忆系统（可选）
         """
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
         self.agent = agent
         self.session_id = session_id or "default"
         self.live2d_config = live2d_config
+        self.memory_system = memory_system
 
         # 包装 websocket_send（如果提供）以适配前端事件格式
         self.websocket_send = websocket_send
@@ -95,18 +101,18 @@ class ConversationOrchestrator:
             from anima.handlers.socket_adapter import SocketEventAdapter
             adapter = SocketEventAdapter(websocket_send)
             self.websocket_send = adapter.send
-        
+
         # 创建 EventBus 和 EventRouter
         self.event_bus = EventBus()
         self.event_router = EventRouter(self.event_bus)
-        
+
         # 创建输入和输出管线
         self.input_pipeline = InputPipeline(event_bus=self.event_bus)
         self.output_pipeline = OutputPipeline(event_bus=self.event_bus)
-        
+
         # 自动组装默认管线步骤
         self._setup_default_pipeline()
-        
+
         # 状态
         self._is_running = False
         self._interrupted = False
@@ -328,6 +334,28 @@ class ConversationOrchestrator:
 
         logger.info(f"[{self.session_id}] 处理对话: {text[:50]}...")
 
+        # 📚 检索相关记忆（如果记忆系统可用）
+        original_text = text
+        if self.memory_system:
+            try:
+                related_memories = await self.memory_system.retrieve_context(
+                    query=text,
+                    session_id=self.session_id,
+                    max_turns=3
+                )
+
+                if related_memories:
+                    logger.info(f"[{self.session_id}] 检索到 {len(related_memories)} 条相关记忆")
+
+                    # 格式化记忆为上下文
+                    memory_context = self._format_memory_context(related_memories)
+
+                    # 将记忆注入到输入文本中
+                    text = f"[相关的历史对话]\n{memory_context}\n\n[当前对话]\n{text}"
+                    logger.debug(f"[{self.session_id}] 记忆上下文已注入")
+            except Exception as e:
+                logger.warning(f"[{self.session_id}] 记忆检索失败: {e}")
+
         # 发送思考表情
         await self._emit_expression("thinking")
 
@@ -377,6 +405,32 @@ class ConversationOrchestrator:
         audio_path = None
         if self.tts_engine and not self._interrupted:
             audio_path = await self._synthesize_audio(response_text, emotions)
+
+        # 📚 存储对话到记忆系统（如果记忆系统可用）
+        if self.memory_system:
+            try:
+                from anima.memory import MemoryTurn
+
+                # 创建记忆轮次
+                memory_turn = MemoryTurn(
+                    turn_id=str(uuid.uuid4()),
+                    session_id=self.session_id,
+                    timestamp=datetime.now(),
+                    user_input=original_text,
+                    agent_response=response_text,
+                    emotions=emotions,
+                    metadata={
+                        "audio_path": audio_path,
+                        "interrupted": self._interrupted
+                    }
+                )
+
+                # 存储到记忆系统
+                await self.memory_system.store_turn(memory_turn)
+                logger.info(f"[{self.session_id}] 对话已存储到记忆系统 (重要性: {memory_turn.importance:.2f})")
+
+            except Exception as e:
+                logger.warning(f"[{self.session_id}] 记忆存储失败: {e}")
 
         # 发送空闲表情
         await self._emit_expression("idle")
@@ -548,3 +602,27 @@ class ConversationOrchestrator:
     def get_handler_count(self) -> int:
         """获取已注册的 Handler 数量"""
         return self.event_router.handler_count
+
+    def _format_memory_context(self, memories) -> str:
+        """
+        格式化记忆为上下文字符串
+
+        Args:
+            memories: MemoryTurn 列表
+
+        Returns:
+            str: 格式化的记忆上下文
+        """
+        if not memories:
+            return ""
+
+        lines = []
+        for i, mem in enumerate(memories, 1):
+            # 只显示最近几条对话的摘要
+            user_input = mem.user_input[:100] + "..." if len(mem.user_input) > 100 else mem.user_input
+            agent_response = mem.agent_response[:100] + "..." if len(mem.agent_response) > 100 else mem.agent_response
+
+            lines.append(f"{i}. 用户: {user_input}")
+            lines.append(f"   AI: {agent_response}")
+
+        return "\n".join(lines)

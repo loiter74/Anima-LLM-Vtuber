@@ -225,6 +225,7 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
             websocket_send=websocket_send,
             session_id=sid,
             live2d_config=live2d_config if live2d_config.enabled else None,
+            memory_system=ctx.memory_system,
         )
 
         # 创建并注册 TextHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）

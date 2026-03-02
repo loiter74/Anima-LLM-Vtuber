@@ -1,0 +1,23 @@
+# Memory System Configuration
+# 三层记忆系统配置
+
+memory:
+  enabled: true
+
+  # Short-term memory (session-level)
+  short_term:
+    max_turns: 20  # 最大保存轮数
+
+  # Long-term memory (persistent)
+  long_term:
+    backend: "sqlite"  # sqlite (default) | postgresql
+    db_path: "data/memories.db"
+
+  # Importance scoring
+  importance:
+    threshold: 0.7  # 高于此分数才存长期记忆
+    base_score: 0.5  # 基础分数
+
+# Note: Knowledge graph is optional and not implemented yet
+# knowledge_graph:
+#   enabled: false
