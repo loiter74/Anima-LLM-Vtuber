@@ -7,11 +7,7 @@ from typing import List, Optional
 from loguru import logger
 
 from ..base import PipelineStep
-from anima.live2d.analyzers.standalone_llm_analyzer import (
-    StandaloneLLMTagAnalyzer,
-    EmotionTag,
-    EmotionExtractionResult
-)
+from anima.live2d.analyzers.standalone_llm_analyzer import StandaloneLLMTagAnalyzer
 
 
 class EmotionExtractionStep(PipelineStep):
@@ -72,20 +68,27 @@ class EmotionExtractionStep(PipelineStep):
 
         original_text = ctx.response
 
-        # 提取表情标签
-        result = self.extractor.extract(original_text)
+        # 提取表情标签（使用IEmotionAnalyzer接口）
+        emotion_data = self.extractor.extract(original_text)
+
+        # 从metadata中获取cleaned_text（兼容新接口）
+        cleaned_text = emotion_data.metadata.get("cleaned_text", original_text)
+        has_emotions = emotion_data.metadata.get("has_emotions", False)
+
+        # 从timeline中提取EmotionTag列表
+        emotions = emotion_data.timeline
 
         # 更新上下文
-        ctx.response = result.cleaned_text
-        ctx.metadata["emotions"] = result.emotions
-        ctx.metadata["has_emotions"] = result.has_emotions
+        ctx.response = cleaned_text
+        ctx.metadata["emotions"] = emotions
+        ctx.metadata["has_emotions"] = has_emotions
 
-        if result.has_emotions:
+        if has_emotions:
             logger.info(
-                f"[EmotionExtractionStep] 提取了 {len(result.emotions)} 个表情: "
-                f"{[e.emotion for e in result.emotions]}"
+                f"[EmotionExtractionStep] 提取了 {len(emotions)} 个表情: "
+                f"{[e.get('emotion', 'unknown') for e in emotions]}"
             )
             logger.debug(f"[EmotionExtractionStep] 原始文本: {original_text[:100]}...")
-            logger.debug(f"[EmotionExtractionStep] 清理文本: {result.cleaned_text[:100]}...")
+            logger.debug(f"[EmotionExtractionStep] 清理文本: {cleaned_text[:100]}...")
         else:
             logger.debug("[EmotionExtractionStep] 未检测到表情标签")
