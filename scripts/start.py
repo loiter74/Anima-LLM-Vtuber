@@ -156,13 +156,18 @@ class ProcessManager:
 
         try:
             if self.is_windows:
-                # Windows: start in new window
-                subprocess.Popen(
-                    ['cmd', '/c', 'start', 'Anima Backend Server', 'cmd', '/k',
-                     f'cd /d {project_root} && set PYTHONPATH={src_path} && {" ".join(cmd)}'],
+                # Windows: start in background (without new window for debugging)
+                # Use CREATE_NEW_PROCESS_GROUP to avoid being killed when script ends
+                creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP') else 0
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=project_root,
                     env=env,
-                    shell=True
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=creation_flags
                 )
+                self.backend_pid = process.pid
             else:
                 # Unix: start in background
                 process = subprocess.Popen(
@@ -207,14 +212,17 @@ class ProcessManager:
 
         try:
             if self.is_windows:
-                # Windows: start in new window
-                subprocess.Popen(
-                    ['cmd', '/c', 'start', 'Frontend Dev Server', 'cmd', '/k',
-                     f'cd /d {frontend_dir} && {" ".join(cmd)}'],
+                # Windows: start in background
+                creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if hasattr(subprocess, 'CREATE_NEW_PROCESS_GROUP') else 0
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=frontend_dir,
                     env=env,
-                    shell=True,
-                    cwd=frontend_dir
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=creation_flags
                 )
+                self.frontend_pid = process.pid
             else:
                 # Unix: start in background
                 process = subprocess.Popen(
