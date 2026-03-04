@@ -1,0 +1,9 @@
+# Local LoRA LLM Configuration (Auto-generated)
+llm_config:
+  type: local_lora
+  base_model_name: "${ANIMA_BASE_MODEL_PATH}"
+  lora_path: "${ANIMA_LORA_PATH}"
+  device: cuda  # Auto-fallback to CPU
+  max_new_tokens: 512
+  temperature: 0.8
+  top_p: 0.9

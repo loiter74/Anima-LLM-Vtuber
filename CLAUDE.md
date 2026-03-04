@@ -11,6 +11,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Default ports**: Backend `12394`, Frontend `3000`
 **Config file**: `config/config.yaml`
 **Environment**: `.env` for API keys (`GLM_API_KEY`, `LLM_API_KEY`, etc.)
+**Apply enhanced persona**: `python scripts/apply_xiaoya_persona.py`
+**Training guides**: See `docs/training/`
+**Personalization**: See `docs/personalization/`
 
 ## Architecture Decision Guide
 
@@ -24,6 +27,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Need to debug WebSocket events? | See "Debugging Socket.IO Events" in Quick Workflows |
 | Need to add custom emotion analyzer? | See "Adding a Custom Emotion Analyzer" in Quick Workflows |
 | Need custom timeline strategy? | See "Adding a New Timeline Strategy" in Quick Workflows |
+| Want AI personality? | Apply persona: `python scripts/apply_xiaoya_persona.py` (Layer 1) |
+| Want long-term memory? | See `docs/personalization/LAYER2.md` (RAG system) |
+| Want to fine-tune model? | See `docs/training/` (LoRA training guides) |
 | Frontend can't connect? | See "Frontend Can't Connect to Backend" in Troubleshooting |
 | Audio/Live2D not working? | Check `config/features/live2d.yaml` and see LIP_SYNC_IMPLEMENTATION.md |
 
@@ -38,6 +44,8 @@ For more detailed information, refer to:
 - **API Reference**: `docs/frontend/api-reference.md` - Full API documentation for hooks, services, and types
 - **Live2D Setup**: `docs/NEURO_SAMA_LIVE2D_SETUP.md` - Live2D model setup guide (Hiyori, Haru, Epsilon)
 - **Lip Sync**: `docs/LIP_SYNC_IMPLEMENTATION.md` - Live2D lip sync feature testing and configuration guide
+- **Personalization**: `docs/personalization/README.md` - AI personalization system overview
+- **Training**: `docs/training/README.md` - Model training system documentation
 
 ### Live2D Emotion System (NEW Architecture)
 - **Refactoring Plan**: `docs/REFACTOR_PLAN.md` - Complete refactoring plan and design
@@ -175,6 +183,12 @@ pnpm lint       # Run ESLint
 ### Live2D Model Setup
 - `scripts/download_live2d.ps1` - Download Live2D Haru model (Windows PowerShell)
 - `scripts/download_live2d_model.py` - Download Live2D Haru model (Python, cross-platform)
+
+### Training Scripts
+- `scripts/training/quickstart.sh` - Training quick start script
+- `scripts/training/install_wsl_training.sh` - WSL training environment setup
+- `scripts/training/test_training.sh` - Test training setup
+- `scripts/apply_xiaoya_persona.py` - Apply enhanced persona configuration
 
 **Note**: The project supports multiple Live2D models:
 - **Hiyori** (recommended) - Official free model, configured in `config/features/live2d.yaml`
@@ -505,13 +519,137 @@ WebSocket Server → ConversationOrchestrator → Pipeline System → EventBus �
 
 For troubleshooting lip sync issues, see `docs/LIP_SYNC_IMPLEMENTATION.md`.
 
+## AI Personalization System
+
+The project includes a **four-layer personalization architecture** for creating unique AI VTuber personalities with increasing levels of customization:
+
+### Layer 1: Enhanced Persona System (Immediate, 1 hour)
+
+**What it does**: Provides deep personality definitions with distinctive speaking styles, catchphrases, and emotional expression patterns.
+
+**Quick Start**:
+```bash
+# Apply the xiaoya persona (playful, curious VTuber personality)
+python scripts/apply_xiaoya_persona.py
+
+# Restart server
+python -m anima.socketio_server
+```
+
+**Configuration**: `config/personas/xiaoya.yaml`
+- `personality`: Core personality traits
+- `speaking_style`: Speech patterns and tone
+- `catchphrases`: Characteristic phrases
+- `emotional_expression`: Emotion display patterns
+
+**Effect**: AI immediately displays consistent personality comparable to Character.AI
+
+### Layer 2: RAG + Long-term Memory (1-2 days)
+
+**What it does**: AI remembers user preferences, past conversations, and contextually relevant information using vector similarity search.
+
+**Technology Stack**:
+- **ChromaDB**: Vector database for semantic search (data stored in `E:/anima_data/vectordb/`)
+- **Sentence-transformers**: Text embedding models
+- **Hybrid Search**: Combines semantic similarity with keyword matching
+
+**Implementation**: See `docs/personalization/LAYER2.md`
+
+**Effect**: AI recalls previous conversations, remembers user preferences, provides contextually relevant responses
+
+### Layer 3: Local Model Fine-tuning (3-7 days, optional)
+
+**What it does**: Fine-tune base models (Qwen2.5, GLM-4, Llama) with LoRA adapters for highly customized speaking style and domain knowledge.
+
+**Training System**: Located at `src/anima/training/`
+- `dataset/` - Dataset collection and management
+- `models/lora_trainer.py` - LoRA training utilities
+- `evaluation/` - Training metrics and evaluation
+
+**Hardware Requirements**:
+- RTX 5090 D (32GB VRAM) ✅ Perfect for 7B-14B models
+- Storage: ~50-70GB on E drive for models and checkpoints
+
+**Quick Start**:
+```bash
+# Install training dependencies
+pip install -r requirements-training.txt
+
+# Run training scripts
+bash scripts/training/quickstart.sh
+```
+
+**Documentation**: `docs/training/`
+- `QUICKSTART.md` - Training quick start guide
+- `WSL_PYTORCH_INSTALL_GUIDE.md` - WSL + PyTorch environment setup
+- `LORA_TRAINING_SKILL.md` - LoRA training guide
+
+**Effect**: 10-20% improvement in style consistency, domain knowledge integration
+
+### Layer 4: Real-time Enhancement (2-3 days)
+
+**What it does**: Dynamic user profiling and adaptive response styles that learn from user interaction patterns.
+
+**Implementation**: See `docs/personalization/GUIDE.md` (Layer 4)
+
+**Effect**: AI proactively adapts to user communication preferences, becomes more personalized over time
+
+### Using Local LoRA Models
+
+After training a LoRA model, use it as your LLM provider:
+
+```yaml
+# config/services/llm/local_lora.yaml
+llm_config:
+  type: local_lora
+  base_model_name: "Qwen/Qwen2.5-7B-Instruct"  # or local path: "E:/anima_data/models/base_models/Qwen1.5-1.8B-Chat"
+  lora_path: "models/lora/neuro-vtuber-v1"     # or local path: "E:/anima_data/models/checkpoints/neuro-vtuber-v1_20260303_220018"
+  device: cuda
+  max_new_tokens: 512
+  temperature: 0.8
+  top_p: 0.9
+```
+
+**Requirements**:
+```bash
+pip install transformers peft torch
+```
+
+**In config.yaml**:
+```yaml
+services:
+  agent: local_lora
+```
+
+### Documentation Index
+
+**Personalization**:
+- `docs/personalization/README.md` - Overview and quick start
+- `docs/personalization/GUIDE.md` - Complete 4-layer implementation guide
+- `docs/personalization/LAYER2.md` - RAG + memory system details
+- `docs/personalization/FINAL_SUMMARY.md` - Implementation summary
+
+**Training**:
+- `docs/training/README.md` - Training system overview
+- `docs/training/QUICKSTART.md` - Quick start guide
+- `docs/training/WSL_PYTORCH_INSTALL_GUIDE.md` - Environment setup
+- `docs/training/LORA_TRAINING_SKILL.md` - LoRA training guide
+
+### Expected Results by Layer
+
+| Timeline | Layers Active | Effect |
+|----------|---------------|--------|
+| **Immediate** | Layer 1 | Distinctive personality, consistent style (Character.AI level) |
+| **1 week** | Layer 1+2+4 | Remembers preferences, references past conversations |
+| **1 month** | All 4 layers | Highly personalized, proactive adaptation, domain expertise |
+
 ## Configuration System
 
 ### Supported Services
 
 | Type | Providers |
 |------|-----------|
-| LLM | OpenAI, GLM (智谱 AI), Ollama, Mock |
+| LLM | OpenAI, GLM (智谱 AI), Ollama, Local LoRA, Mock |
 | ASR | OpenAI Whisper, GLM ASR, Faster-Whisper, Mock |
 | TTS | OpenAI TTS, GLM TTS, Edge TTS, Mock |
 | VAD | Silero VAD, Mock |
@@ -567,10 +705,16 @@ config/
 │   │   └── mock.yaml
 │   ├── tts/
 │   ├── agent/
+│   │   ├── glm.yaml
+│   │   ├── local_lora.yaml  # Local LoRA model config
+│   │   ├── openai.yaml
+│   │   └── mock.yaml
 │   └── vad/
-└── personas/                # Character/persona configs
-    ├── default.yaml
-    └── neuro-vtuber.yaml
+├── personas/                # Character/persona configs
+│   ├── default.yaml
+│   ├── xiaoya.yaml         # Enhanced persona (playful VTuber)
+│   └── neuro-vtuber.yaml
+└── training/               # Training configurations
 ```
 
 In `config/config.yaml`:
@@ -591,6 +735,14 @@ Personas define the AI's character and system prompt:
 - Referenced by `persona` field in config.yaml
 - Built into system prompt via `app_config.get_system_prompt()`
 - Fields: name, description, system_prompt, greeting, etc.
+
+**Available Personas**:
+- `default` - Basic AI assistant
+- `neuro-vtuber` - VTuber-style personality
+- `xiaoya` - **Enhanced persona** with deep personality definition (playful, curious, slightly tsundere)
+  - See `docs/personalization/README.md` for quick start
+  - Apply via: `python scripts/apply_xiaoya_persona.py`
+  - Includes personality traits, speaking style, catchphrases, emotional expression patterns
 
 **Live2D Expression Prompts** (`config/prompts/live2d_expression.txt`):
 - Instructions for LLM on how to use emotion tags in responses
@@ -657,6 +809,35 @@ import { cn } from '@/shared/utils/cn'
 
 <Button className={cn('base-styles', className)} />
 ```
+
+### Using Local LoRA Models
+
+For fine-tuned models with LoRA adapters, use the built-in `local_lora` provider:
+
+```yaml
+# config/services/llm/local_lora.yaml
+llm_config:
+  type: local_lora
+  base_model_name: "Qwen/Qwen2.5-7B-Instruct"  # HuggingFace model or local path
+  lora_path: "models/lora/neuro-vtuber-v1"     # LoRA adapter path
+  device: cuda                                   # cuda or cpu
+  max_new_tokens: 512
+  temperature: 0.8
+  top_p: 0.9
+```
+
+**Requirements**:
+```bash
+pip install transformers peft torch
+```
+
+**In config.yaml**:
+```yaml
+services:
+  agent: local_lora
+```
+
+See `docs/training/` for guides on training LoRA models.
 
 ### Adding a New Service Provider
 
@@ -1203,8 +1384,15 @@ src/anima/
 ├── config/                  # Configuration system
 │   ├── core/               # Registry, base config classes
 │   ├── providers/          # Provider configs (llm/, asr/, tts/, vad/)
+│   │   └── llm/           # LLM provider configs
+│   │       ├── base.py    # Base LLM config
+│   │       ├── glm.py     # GLM (智谱 AI) config
+│   │       ├── local_lora_llm.py  # Local LoRA model config
+│   │       ├── openai.py  # OpenAI config
+│   │       └── ...
 │   ├── agent.py            # Agent configuration
 │   ├── app.py              # Main AppConfig class
+│   ├── enhanced_persona.py # Enhanced persona builder (Layer 1 personalization)
 │   ├── persona.py          # Persona configuration
 │   ├── live2d.py           # Live2D configuration (Live2DConfig, emotion_map, lip_sync)
 │   ├── system.py           # System settings
@@ -1222,6 +1410,11 @@ src/anima/
 │   └── steps/              # Pipeline steps (ASRStep, TextCleanStep, EmotionExtractionStep, etc.)
 ├── services/               # Service implementations
 │   ├── llm/                # LLM/Agent services
+│   │   └── implementations/
+│   │       ├── local_lora_llm.py  # Local LoRA model service
+│   │       ├── glm_agent.py       # GLM agent
+│   │       ├── openai_agent.py    # OpenAI agent
+│   │       └── ...
 │   ├── asr/                # ASR services (faster_whisper, glm, openai, mock)
 │   ├── tts/                # TTS services
 │   ├── vad/                # VAD services (silero, mock)
@@ -1232,7 +1425,7 @@ src/anima/
 │   ├── audio_handler.py    # Audio output handler
 │   ├── expression_handler.py  # Live2D expression handler (state-based)
 │   ├── audio_expression_handler.py  # Legacy unified audio + expression handler
-│   ├── unified_event_handler.py    # NEW: Enhanced handler using plugin architecture
+│   ├── unified_event_handler.py    # Enhanced handler using plugin architecture
 │   └── socket_adapter.py   # Socket event adapter
 ├── live2d/                 # Live2D expression system module
 │   ├── analyzers/               # Emotion analyzer plugins
@@ -1249,6 +1442,13 @@ src/anima/
 │   ├── emotion_timeline.py      # Legacy: Calculates emotion timeline segments
 │   ├── audio_analyzer.py        # Computes volume envelope for lip-sync
 │   └── prompt_builder.py        # Builds emotion prompt for LLM
+├── training/               # Model training system
+│   ├── dataset/              # Dataset collection and management
+│   │   ├── manager.py        # Dataset manager
+│   │   └── collectors/       # Data collectors (local file, web scraper)
+│   ├── models/              # Training models
+│   │   └── lora_trainer.py   # LoRA training utilities
+│   └── evaluation/          # Training evaluation metrics
 ├── state/                  # State management
 ├── utils/                  # Utility modules
 │   ├── logger_manager.py   # Dynamic log level management

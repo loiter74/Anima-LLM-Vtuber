@@ -3,6 +3,7 @@ param(
     [switch]$SkipBackend,
     [switch]$SkipFrontend,
     [switch]$Install,
+    [switch]$AutoConfig,
     [switch]$Help
 )
 
@@ -57,6 +58,7 @@ Options:
     -SkipBackend    Skip backend startup
     -SkipFrontend   Skip frontend startup
     -Install        Reinstall dependencies
+    -AutoConfig     Auto-configure environment (recommended for first run)
     -Help           Show help message
 "@
     exit 0
@@ -104,6 +106,33 @@ if (-not $SkipFrontend) {
 
 Write-Success "All existing services stopped"
 Write-Host ""
+
+# Auto-configure environment if requested or on first run
+$envFile = Join-Path $ProjectRoot ".env"
+$firstRun = -not (Test-Path $envFile)
+
+if ($AutoConfig -or $firstRun) {
+    Write-Host "========================================" -ForegroundColor Yellow
+    if ($firstRun) {
+        Write-Host "  Phase 1.5: First-Time Setup" -ForegroundColor Yellow
+    } else {
+        Write-Host "  Phase 1.5: Auto Configuration" -ForegroundColor Yellow
+    }
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host ""
+
+    Write-Info "Running auto-configuration..."
+    $srcPath = (Resolve-Path "$ProjectRoot\src").Path
+    $pythonCmd = "import sys; sys.path.insert(0, r'$srcPath'); from anima.utils.auto_config import AutoConfig; ac = AutoConfig(); ac.setup_all()"
+    $autoConfigResult = & python -c $pythonCmd 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Auto-configuration complete"
+    } else {
+        Write-Warning "Auto-configuration had some issues (continuing anyway)"
+    }
+    Write-Host ""
+}
 
 if ($Install) {
     Write-Host "========================================" -ForegroundColor Yellow

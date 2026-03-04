@@ -26,6 +26,12 @@ try:
 except ImportError:
     OpenAILLM = None  # type: ignore
 
+# LocalLoraLLM 需要 transformers 和 peft（可选依赖）
+try:
+    from .local_lora_llm import LocalLoraLLM
+except ImportError:
+    LocalLoraLLM = None  # type: ignore
+
 
 def get_llm_class(provider: str):
     """
@@ -45,6 +51,8 @@ def get_llm_class(provider: str):
         return OllamaLLM
     elif provider == "openai":
         return OpenAILLM
+    elif provider == "local_lora":
+        return LocalLoraLLM
     return None
 
 
@@ -53,5 +61,6 @@ __all__ = [
     "GLMLLM",
     "OpenAILLM",
     "OllamaLLM",
+    "LocalLoraLLM",
     "get_llm_class",
 ]

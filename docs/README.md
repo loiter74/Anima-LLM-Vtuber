@@ -46,9 +46,24 @@
 
 | 文档 | 描述 | 适合人群 |
 |------|------|----------|
-| [快速开始](development/quickstart.md) | 5 分钟运行项目 | 新手 |
+| [快速开始](training/QUICKSTART.md) | 5 分钟运行项目 | 新手 |
 | [配置系统](development/configuration.md) - YAML 配置和 Profile 系统 | 运维 |
 | [添加新服务](development/adding-services.md) | 扩展 ASR/TTS/LLM 服务 | 开发者 |
+
+### 🎓 模型训练
+
+| 文档 | 描述 | 适合人群 |
+|------|------|----------|
+| [训练快速开始](training/QUICKSTART.md) | LoRA 微调快速入门 | 训练新手 |
+| [数据集构建](training/dataset/DATASET_BUILD_COMPLETE.md) | VTuber 角色数据集制作 | 数据工程师 |
+| [B站数据采集](training/bilibili/) | 视频弹幕采集工具 | 数据工程师 |
+| [环境搭建](training/WSL_PYTORCH_INSTALL_GUIDE.md) | WSL + PyTorch 环境配置 | DevOps |
+| [训练系统准备](training/TRAINING_SYSTEM_READY.md) | 训练依赖和配置检查 | 训练师 |
+
+**数据采集专题**：
+- [B站视频采集指南](training/bilibili/BILIBILI_VIDEO_GUIDE.md) - 批量下载视频并提取弹幕
+- [B站合集采集](training/bilibili/BILIBILI_COLLECTION_GUIDE.md) - 从视频合集采集数据
+- [Neuro-sama 视频记录](training/NEURO_SAMA_VIDEOS.md) - 已采集的 VTuber 视频列表
 
 ### 💼 简历素材
 
@@ -68,7 +83,8 @@
 
 - **了解项目** → [项目介绍](overview/intro.md)
 - **准备面试** → [技术亮点](overview/highlights.md) + [设计模式](architecture/design-patterns.md)
-- **开始开发** → [快速开始](development/quickstart.md)
+- **开始开发** → [快速开始](training/QUICKSTART.md)
+- **训练模型** → [训练快速开始](training/QUICKSTART.md)
 - **扩展功能** → [添加新服务](development/adding-services.md)
 - **写简历** → [项目亮点](resume/project-highlights.md)
 
@@ -97,6 +113,6 @@
 
 ---
 
-**最后更新**: 2026-02-28
-**文档版本**: 3.0.0
+**最后更新**: 2026-03-03
+**文档版本**: 3.1.0
 **项目版本**: 1.0.0
