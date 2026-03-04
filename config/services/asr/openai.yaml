@@ -1,5 +1,0 @@
-# OpenAI ASR (Whisper) 配置
-
-type: openai
-api_key: "${OPENAI_API_KEY}"
-model: "whisper-1"

@@ -1,8 +1,0 @@
-# Edge TTS 配置（微软 Edge 语音合成，免费）
-
-type: edge
-voice: "zh-CN-XiaoxiaoNeural"  # 中文女声
-# 其他可用声音:
-# - zh-CN-YunxiNeural (中文男声)
-# - zh-CN-YunyangNeural (中文男声，新闻播报)
-# - en-US-JennyNeural (英文女声)

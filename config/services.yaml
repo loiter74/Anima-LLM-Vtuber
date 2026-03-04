@@ -1,0 +1,151 @@
+# Anima 服务配置统一文件
+# 所有 ASR、TTS、LLM、VAD 服务的配置
+
+# ===========================
+# ASR 语音识别服务
+# ===========================
+
+asr:
+  # Faster-Whisper（开源免费，推荐）
+  faster_whisper:
+    type: faster_whisper
+    model: large-v3  # 推荐: large-v3, large-v2
+    language: zh
+    device: cuda
+    compute_type: float16
+    beam_size: 5
+    vad_filter: false
+    vad_parameters:
+      min_silence_duration_ms: 500
+      speech_pad_ms: 30
+
+  # 智谱 GLM ASR
+  glm:
+    type: glm
+    api_key: "${GLM_API_KEY}"
+    model: "glm-asr-2512"
+    stream: false
+
+  # OpenAI Whisper
+  openai:
+    type: openai
+    api_key: "${OPENAI_API_KEY}"
+    model: "whisper-1"
+
+  # Mock（测试用）
+  mock:
+    type: mock
+
+# ===========================
+# TTS 语音合成服务
+# ===========================
+
+tts:
+  # Edge TTS（微软免费，推荐）
+  edge:
+    type: edge
+    voice: "zh-CN-XiaoxiaoNeural"  # 中文女声
+    # 其他: zh-CN-YunxiNeural(男), zh-CN-YunyangNeural(新闻), en-US-JennyNeural(英)
+
+  # 智谱 GLM TTS
+  glm:
+    type: glm
+    api_key: "${GLM_API_KEY}"
+    model: "glm-tts"
+    voice: "female"  # male / female
+    response_format: "wav"
+    speed: 1.0
+    volume: 1.0
+
+  # OpenAI TTS
+  openai:
+    type: openai
+    api_key: "${OPENAI_API_KEY}"
+    model: "tts-1"
+    voice: "nova"
+    response_format: "mp3"
+    speed: 1.0
+
+  # Mock（测试用）
+  mock:
+    type: mock
+
+# ===========================
+# LLM 大语言模型服务
+# ===========================
+
+llm:
+  # 智谱 GLM（推荐）
+  glm:
+    memory_enabled: true
+    llm_config:
+      type: glm
+      model: "glm-4-flash"  # glm-4-plus / glm-4 / glm-4-flash / glm-5
+      api_key: "${GLM_API_KEY}"
+      temperature: 0.7
+      max_tokens: 4096
+      enable_thinking: false
+      max_retries: 3
+      retry_delay: 1.0
+      timeout: 60
+
+  # OpenAI
+  openai:
+    memory_enabled: true
+    llm_config:
+      type: openai
+      model: "gpt-4o-mini"  # gpt-4o / gpt-4o-mini / gpt-4-turbo
+      api_key: "${OPENAI_API_KEY}"
+      temperature: 0.7
+      max_tokens: 4096
+
+  # Ollama（本地部署）
+  ollama:
+    memory_enabled: true
+    llm_config:
+      type: ollama
+      model: "qwen2.5:1.8b"  # qwen2.5:0.5b / qwen2.5:7b / qwen2.5:14b
+      base_url: "http://localhost:11434"
+      temperature: 0.7
+      max_tokens: 4096
+
+  # Local LoRA（本地微调模型）
+  local_lora:
+    memory_enabled: true
+    llm_config:
+      type: local_lora
+      base_model_name: "${ANIMA_BASE_MODEL_PATH}"
+      lora_path: "${ANIMA_LORA_PATH}"
+      device: cpu  # cuda / cpu
+      max_new_tokens: 512
+      temperature: 0.8
+      top_p: 0.9
+
+  # Mock（测试用）
+  mock:
+    memory_enabled: false
+    llm_config:
+      type: mock
+
+# ===========================
+# VAD 语音活动检测
+# ===========================
+
+vad:
+  # Silero VAD（推荐）
+  silero:
+    type: silero
+    sample_rate: 16000
+    prob_threshold: 0.5
+    db_threshold: -100
+    required_hits: 6
+    required_misses: 10
+    smoothing_window: 5
+
+  # Mock（测试用）
+  mock:
+    type: mock
+    sample_rate: 16000
+    db_threshold: -30.0
+    min_speech_duration: 5
+    min_silence_duration: 15

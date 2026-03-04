@@ -84,18 +84,27 @@ def _load_yaml_file(path: Path) -> Dict[str, Any]:
 def _load_service_config(service_type: str, service_name: str) -> Dict[str, Any]:
     """
     加载单个服务的配置
-    
+
     Args:
         service_type: 服务类型 (asr/tts/llm/vad)
         service_name: 服务名称 (openai/glm/ollama/mock 等)
-    
+
     Returns:
         Dict: 服务配置
     """
+    # 尝试从统一的 services.yaml 加载
+    unified_services_path = CONFIG_DIR / "services.yaml"
+    if unified_services_path.exists():
+        services_data = _load_yaml_file(unified_services_path)
+        if service_type in services_data and service_name in services_data[service_type]:
+            logger.info(f"从 services.yaml 加载服务配置: {service_type}/{service_name}")
+            return services_data[service_type][service_name]
+
+    # 回退到旧的分散配置文件（向后兼容）
     service_path = SERVICES_DIR / service_type / f"{service_name}.yaml"
     if not service_path.exists():
         raise FileNotFoundError(f"服务配置不存在: {service_path}")
-    logger.info(f"加载服务配置: {service_type}/{service_name}")
+    logger.info(f"从分散配置文件加载服务配置: {service_type}/{service_name}")
     return _load_yaml_file(service_path)
 
 
