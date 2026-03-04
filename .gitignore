@@ -69,3 +69,4 @@ out/
 # Memory system database (user-specific data)
 data/*.db
 data/*.db-*memory_db/
+training_data/datasets/raw/
