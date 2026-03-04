@@ -26,7 +26,7 @@ class MemorySystem:
     Example:
         >>> memory = MemorySystem({
         ...     "short_term_max_turns": 20,
-        ...     "long_term_db_path": "data/memories.db",
+        ...     "long_term_db_path": "memory_db/memories.db",
         ...     "importance_threshold": 0.7
         ... })
         >>> turn = MemoryTurn(...)
@@ -54,7 +54,7 @@ class MemorySystem:
         self.short_term = ShortTermMemory(max_turns=max_turns)
 
         # 2. 长期记忆
-        db_path = config.get("long_term_db_path", "data/memories.db")
+        db_path = config.get("long_term_db_path", "memory_db/memories.db")
         self.long_term = LongTermMemory(db_path=db_path)
 
         # 3. 重要性评分器

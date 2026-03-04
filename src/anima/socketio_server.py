@@ -62,13 +62,13 @@ from anima.services.conversation import (
     ConversationOrchestrator,
     SessionManager,
 )
-from anima.handlers import TextHandler
-from anima.handlers.unified_event_handler import UnifiedEventHandler
-from anima.eventbus import EventPriority
+from anima.events.handlers import TextHandler
+from anima.events.handlers.unified_event_handler import UnifiedEventHandler
+from anima.events.core import EventPriority
 from anima.utils.logger_manager import logger_manager
 from anima.config.user_settings import UserSettings
 from anima.config.live2d import get_live2d_config
-from anima.live2d.prompt_builder import EmotionPromptBuilder
+from anima.avatar.prompt_builder import EmotionPromptBuilder
 
 # 创建 Socket.IO 服务器
 sio = socketio.AsyncServer(
@@ -226,6 +226,7 @@ async def get_or_create_orchestrator(sid: str) -> ConversationOrchestrator:
             session_id=sid,
             live2d_config=live2d_config if live2d_config.enabled else None,
             memory_system=ctx.memory_system,
+            local_llm=ctx.local_llm_engine,  # 添加本地LLM（无persona）
         )
 
         # 创建并注册 TextHandler（使用 orchestrator 的 websocket_send，已通过 adapter 包装）

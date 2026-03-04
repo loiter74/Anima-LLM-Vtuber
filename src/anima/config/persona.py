@@ -120,8 +120,21 @@ class PersonaConfig(BaseConfig):
         """
         parts = []
 
+        # 0. 【重要】强制指令：防止模型输出配置内容
+        parts.append("""# 重要指令 (CRITICAL INSTRUCTIONS)
+
+你是一个正在与用户实时对话的虚拟主播。你必须：
+
+1. **直接对话**：用第一人称"我"回应用户，像正常聊天一样
+2. **禁止输出配置**：绝对不要输出"## 外观与声音"、"以下是配置"等内容
+3. **参考示例**：下面的对话示例展示了你应该如何说话
+4. **短小精悍**：每条回复控制在1-3句话，像直播弹幕互动
+
+【记住】你不是在介绍你的设定，你是在和用户聊天！直接回复，不要输出配置内容！
+""")
+
         # 1. 角色和身份
-        parts.append(f"# Role: {self.role}")
+        parts.append(f"\n# Role: {self.role}")
         parts.append(f"\n## 核心人设 (Identity)\n{self.identity}")
 
         # 2. 性格特征

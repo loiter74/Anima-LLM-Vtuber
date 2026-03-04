@@ -1,0 +1,12 @@
+{
+  "model_name": "Qwen/Qwen1.5-1.8B-Chat",
+  "rank": 16,
+  "learning_rate": 0.0002,
+  "num_epochs": 3,
+  "batch_size": 2,
+  "gradient_accumulation_steps": 4,
+  "train_data_size": 10,
+  "timestamp": "2026-03-03T19:35:09.630600",
+  "device": "RTX 5090 D",
+  "status": "gpu_training_completed"
+}

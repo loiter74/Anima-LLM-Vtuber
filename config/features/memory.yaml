@@ -11,7 +11,7 @@ memory:
   # Long-term memory (persistent)
   long_term:
     backend: "sqlite"  # sqlite (default) | postgresql
-    db_path: "data/memories.db"
+    db_path: "memory_db/memories.db"
 
   # Importance scoring
   importance:

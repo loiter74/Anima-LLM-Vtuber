@@ -19,3 +19,12 @@ faster-whisper>=1.0.0
 # 音频处理优化（可选，用于更好的重采样）
 # librosa>=0.10.0
 # resampy>=0.4.0
+
+# Local LLM support (for LocalLoraLLM)
+transformers>=4.36.0
+peft>=0.7.0
+accelerate>=0.25.0
+
+# Memory and embeddings (for vector search)
+sentence-transformers>=2.2.0
+scikit-learn>=1.3.0

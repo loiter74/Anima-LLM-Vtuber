@@ -86,7 +86,7 @@ E:/AnimaData/
 │   └── knowledge_base/     # 知识库向量
 ├── memories/               # 记忆数据库
 │   └── memories.db         # SQLite (已有)
-└── models/                 # 本地模型 (第三层用)
+└── model_ckpt/                 # 本地模型 (第三层用)
     └── (待定)
 ```
 
@@ -124,7 +124,7 @@ pip install qdrant-client sentence-transformers
 
 #### 2. 创建向量存储服务
 
-**文件**: `src/anima/memory/vector_store.py`
+**文件**: `src/anima/memory_db/vector_store.py`
 
 ```python
 """
@@ -168,7 +168,7 @@ class VectorStore:
         )
 
         # 加载嵌入模型（首次会自动下载到E盘）
-        cache_dir = "E:/AnimaData/models/huggingface"
+        cache_dir = "E:/AnimaData/model_ckpt/huggingface"
         self.embedding_model = SentenceTransformer(
             embedding_model,
             cache_folder=cache_dir
@@ -264,7 +264,7 @@ class VectorStore:
 
 #### 3. 集成到记忆系统
 
-修改 `src/anima/memory/memory_system.py`:
+修改 `src/anima/memory_db/memory_system.py`:
 ```python
 from .vector_store import VectorStore
 
@@ -400,7 +400,7 @@ overwrite_cache: true
 preprocessing_num_workers: 16
 
 ### 输出
-output_dir: E:/AnimaData/models/qwen2.5-7b-xiaoya
+output_dir: E:/AnimaData/model_ckpt/qwen2.5-7b-xiaoya
 logging_steps: 10
 save_steps: 100
 plot_loss: true
@@ -434,10 +434,10 @@ llamafactory-cli train llama_factory_config.yaml
 ```bash
 llamafactory-cli export \
     --model_name_or_path Qwen/Qwen2.5-7B-Instruct \
-    --adapter_name_or_path E:/AnimaData/models/qwen2.5-7b-xiaoya \
+    --adapter_name_or_path E:/AnimaData/model_ckpt/qwen2.5-7b-xiaoya \
     --template qwen \
     --finetuning_type lora \
-    --export_dir E:/AnimaData/models/qwen2.5-7b-xiaoya-merged \
+    --export_dir E:/AnimaData/model_ckpt/qwen2.5-7b-xiaoya-merged \
     --export_size 2 \
     --export_device cpu
 ```
@@ -455,8 +455,8 @@ llm_config:
 或使用llama.cpp部署:
 ```bash
 # 转换为GGUF
-quantize E:/AnimaData/models/qwen2.5-7b-xiaoya-merged \
-    E:/AnimaData/models/qwen2.5-7b-xiaoya-Q4_K_M.gguf \
+quantize E:/AnimaData/model_ckpt/qwen2.5-7b-xiaoya-merged \
+    E:/AnimaData/model_ckpt/qwen2.5-7b-xiaoya-Q4_K_M.gguf \
     Q4_K_M
 
 # 运行Ollama
@@ -487,7 +487,7 @@ ollama run qwen-xiaoya
 
 **实现**:
 
-**文件**: `src/anima/memory/user_profile.py`
+**文件**: `src/anima/memory_db/user_profile.py`
 
 ```python
 """

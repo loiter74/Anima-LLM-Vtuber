@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime
 import uuid
 
-from anima.eventbus import EventBus, EventRouter, EventPriority
+from anima.events.core import EventBus, EventRouter, EventPriority
 from anima.core import EventType, OutputEvent
 from anima.pipeline import InputPipeline, OutputPipeline
 from anima.pipeline.steps import ASRStep, TextCleanStep, EmotionExtractionStep
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from anima.services.asr import ASRInterface
     from anima.services.tts import TTSInterface
     from anima.services.llm import AgentInterface
-    from anima.handlers import BaseHandler
+    from anima.events.handlers import BaseHandler
     from anima.core import WebSocketSend, PipelineContext
     from anima.memory import MemorySystem
 
@@ -75,6 +75,7 @@ class ConversationOrchestrator:
         session_id: Optional[str] = None,
         live2d_config=None,
         memory_system: Optional["MemorySystem"] = None,
+        local_llm: Optional["LLMInterface"] = None,
     ):
         """
         初始化对话编排器
@@ -82,11 +83,12 @@ class ConversationOrchestrator:
         Args:
             asr_engine: ASR 引擎
             tts_engine: TTS 引擎
-            agent: Agent 引擎
+            agent: Agent 引擎（底座LLM，如GLM API）
             websocket_send: WebSocket 发送函数
             session_id: 会话 ID
             live2d_config: Live2D 配置（可选）
             memory_system: 记忆系统（可选）
+            local_llm: 本地LLM（用于简单应答，无persona，可选）
         """
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
@@ -94,11 +96,12 @@ class ConversationOrchestrator:
         self.session_id = session_id or "default"
         self.live2d_config = live2d_config
         self.memory_system = memory_system
+        self.local_llm = local_llm
 
         # 包装 websocket_send（如果提供）以适配前端事件格式
         self.websocket_send = websocket_send
         if websocket_send is not None:
-            from anima.handlers.socket_adapter import SocketEventAdapter
+            from anima.events.handlers.socket_adapter import SocketEventAdapter
             adapter = SocketEventAdapter(websocket_send)
             self.websocket_send = adapter.send
 
@@ -124,11 +127,12 @@ class ConversationOrchestrator:
     def _setup_default_pipeline(self) -> None:
         """
         组装默认的管线步骤
-        
-        输入管线：
+
+        新架构（LocalLLM + 底座LLM）：
         1. ASRStep: 处理音频输入，转换为文本
-        2. TextCleanStep: 清洗和规范化文本
-        
+        2. LocalLLMStep: 调用LocalLLM进行简单应答（无persona）
+        3. TextCleanStep: 清洗和规范化文本
+
         输出管线：使用 OutputPipeline 的默认行为
         """
         # 输入管线步骤
@@ -139,7 +143,17 @@ class ConversationOrchestrator:
             )
             self.input_pipeline.add_step(asr_step)
             logger.debug(f"[{self.session_id}] 添加输入步骤: ASRStep")
-        
+
+        # LocalLLM步骤（如果本地LLM可用）
+        if self.local_llm:
+            from anima.pipeline.steps.local_llm_step import LocalLLMStep
+
+            local_llm_step = LocalLLMStep(
+                local_llm=self.local_llm
+            )
+            self.input_pipeline.add_step(local_llm_step)
+            logger.info(f"[{self.session_id}] 添加输入步骤: LocalLLMStep 🤖 (无persona)")
+
         text_clean_step = TextCleanStep()
         self.input_pipeline.add_step(text_clean_step)
         logger.debug(f"[{self.session_id}] 添加输入步骤: TextCleanStep")
@@ -350,8 +364,14 @@ class ConversationOrchestrator:
                     # 格式化记忆为上下文
                     memory_context = self._format_memory_context(related_memories)
 
-                    # 将记忆注入到输入文本中
-                    text = f"[相关的历史对话]\n{memory_context}\n\n[当前对话]\n{text}"
+                    # 将记忆注入到输入文本中，并明确指示LLM使用这些信息
+                    text = f"""【重要提示】以下是与当前对话相关的历史记录，请仔细阅读并参考这些信息来回答用户的问题。如果用户询问相关信息，你必须基于这些历史记录来回答。
+
+[相关历史对话]
+{memory_context}
+
+[当前对话]
+{text}"""
                     logger.debug(f"[{self.session_id}] 记忆上下文已注入")
             except Exception as e:
                 logger.warning(f"[{self.session_id}] 记忆检索失败: {e}")

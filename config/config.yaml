@@ -14,14 +14,15 @@ persona: "neuro-vtuber"
 services:
   asr: faster_whisper   # 开源免费 ASR（faster-whisper）
   tts: edge   # 使用 Edge TTS（微软免费TTS，无配额限制）
-  agent: glm
+  agent: glm  # 底座LLM：GLM API（应用persona，生成最终回复）
+  local_llm: local_lora  # 本地LLM：LocalLoraLLM（简单应答，无persona，保留LoRA效果）
   vad: silero   # vad: silero / mock
 
 # ============================================
 # 系统配置
 # ============================================
 system:
-  host: "localhost"
+  host: "0.0.0.0"
   port: 12394
   debug: true
   log_level: "INFO"

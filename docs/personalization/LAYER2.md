@@ -26,7 +26,7 @@ E:/AnimaData/
 ├── vector_db/           # ChromaDB向量数据库
 │   ├── chroma.sqlite3   # 元数据
 │   └── [collections]/   # 向量数据
-└── models/              # 嵌入模型缓存
+└── model_ckpt/              # 嵌入模型缓存
     └── huggingface/     # sentence-transformers模型
 ```
 

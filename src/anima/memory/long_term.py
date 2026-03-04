@@ -21,13 +21,13 @@ class LongTermMemory:
     - 向量嵌入（可选，暂不实现）
 
     Example:
-        >>> memory = LongTermMemory(db_path="data/memories.db")
+        >>> memory = LongTermMemory(db_path="memory_db/memories.db")
         >>> turn = MemoryTurn(...)
         >>> await memory.store(turn)
         >>> results = await memory.search("你好", top_k=3)
     """
 
-    def __init__(self, db_path: str = "data/memories.db"):
+    def __init__(self, db_path: str = "memory_db/memories.db"):
         """
         初始化长期记忆
 

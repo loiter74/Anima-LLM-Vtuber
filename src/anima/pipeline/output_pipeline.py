@@ -11,7 +11,7 @@ from anima.core import OutputEvent, EventType
 
 if TYPE_CHECKING:
     from anima.core import PipelineContext
-    from anima.eventbus import EventBus
+    from anima.events.core import EventBus
 
 
 class OutputPipeline(BasePipeline):

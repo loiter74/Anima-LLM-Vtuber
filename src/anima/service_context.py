@@ -35,7 +35,8 @@ class ServiceContext:
         # 服务实例
         self.asr_engine: Optional[ASRInterface] = None
         self.tts_engine: Optional[TTSInterface] = None
-        self.llm_engine: Optional[LLMInterface] = None
+        self.llm_engine: Optional[LLMInterface] = None  # 底座LLM（GLM API，应用persona）
+        self.local_llm_engine: Optional[LLMInterface] = None  # 本地LLM（简单应答，无persona）
         self.vad_engine: Optional[VADInterface] = None
 
         # 记忆系统
@@ -79,6 +80,7 @@ class ServiceContext:
         await self.init_asr(config.asr)
         await self.init_tts(config.tts)
         await self.init_llm(config.agent, config.get_persona(), app_config=config)
+        await self.init_local_llm(config.local_llm, app_config=config)
         await self.init_vad(config.vad)
         await self.init_memory()
 
@@ -211,6 +213,32 @@ class ServiceContext:
 
         # 验证创建的 LLM 类型
         logger.info(f"[{self.session_id}] LLM 创建完成: {type(self.llm_engine).__name__}")
+
+    async def init_local_llm(self, llm_config, app_config: AppConfig = None) -> None:
+        """
+        初始化本地LLM服务（用于简单应答，无persona）
+
+        Args:
+            llm_config: LLM配置
+            app_config: 应用配置
+        """
+        if self.local_llm_engine is not None:
+            logger.debug(f"[{self.session_id}] Local LLM 已初始化，跳过")
+            return
+
+        if llm_config is None:
+            logger.info(f"[{self.session_id}] Local LLM 配置为空，跳过初始化")
+            return
+
+        logger.info(f"[{self.session_id}] 初始化本地LLM: {llm_config.type}/{llm_config.model}")
+
+        # 本地LLM不需要系统提示词（清空system prompt）
+        self.local_llm_engine = LLMFactory.create_from_config(
+            config=llm_config,
+            system_prompt=""  # 清空system prompt，只做简单应答
+        )
+
+        logger.info(f"[{self.session_id}] 本地LLM创建完成: {type(self.local_llm_engine).__name__}")
 
     def _get_live2d_prompt(self) -> Optional[str]:
         """

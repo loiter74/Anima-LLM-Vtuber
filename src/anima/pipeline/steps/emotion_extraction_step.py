@@ -7,7 +7,7 @@ from typing import List, Optional
 from loguru import logger
 
 from ..base import PipelineStep
-from anima.live2d.analyzers.standalone_llm_analyzer import StandaloneLLMTagAnalyzer
+from anima.avatar.analyzers.standalone_llm_analyzer import StandaloneLLMTagAnalyzer
 
 
 class EmotionExtractionStep(PipelineStep):

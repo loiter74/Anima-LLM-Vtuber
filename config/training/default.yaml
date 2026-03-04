@@ -1,0 +1,88 @@
+# Anima 训练配置 - 默认配置
+# 适用于 Qwen 1.8B LoRA 微调
+
+# 实验信息
+experiment:
+  name: "neuro-vtuber-v1"
+  description: "Neuro-sama character model v1"
+  tags: ["character", "vtuber", "conversational", "neuro-sama"]
+
+# 模型配置
+model:
+  base_model: "Qwen/Qwen1.5-1.8B-Chat"
+  load_in_8bit: false
+  torch_dtype: "bfloat16"
+  trust_remote_code: true
+
+# LoRA 配置
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.1
+  bias: "none"
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  task_type: "CAUSAL_LM"
+
+# 训练参数
+training:
+  mode: "lora"  # lora, full, qlora
+  num_epochs: 1
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  lr_scheduler_type: "cosine"
+
+  # 保存设置
+  save_steps: 50
+  save_total_limit: 3
+  logging_steps: 1
+  eval_strategy: "no"
+
+  # 优化设置
+  optim: "adamw_torch"
+  bf16: true
+  gradient_checkpointing: true
+
+  # 早停
+  early_stopping: false
+  early_stopping_patience: 3
+
+# 数据配置
+data:
+  train_path: "/mnt/e/anima_data/datasets/processed/train.jsonl"
+  validation_path: "/mnt/e/anima_data/datasets/processed/validation.jsonl"
+  test_path: "/mnt/e/anima_data/datasets/processed/test.jsonl"
+
+  # 数据处理
+  max_length: 384
+  truncation: true
+  padding: "max_length"
+
+  # 数据格式
+  format: "conversation"  # conversation, instruction
+  conversation_template: "qwen"
+
+# 输出配置
+output:
+  checkpoint_dir: "/mnt/e/anima_data/models/checkpoints"
+  log_dir: "/mnt/e/anima_data/logs/training"
+  model_output_dir: "/mnt/e/anima_data/models/production"
+
+# 硬件配置
+hardware:
+  device: "cuda"
+  num_workers: 0
+  pin_memory: false
+
+# 监控配置
+monitoring:
+  report_to: "none"  # none, wandb, tensorboard
+  run_name: null
+
+# 高级配置
+advanced:
+  deepspeed: false
+  fsdp: false
+  megatron_lm: false

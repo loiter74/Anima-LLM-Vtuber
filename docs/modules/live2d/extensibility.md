@@ -436,7 +436,7 @@ class MLEmotionAnalyzer(IEmotionAnalyzer):
 emotion_system:
   analyzer:
     type: "ml_analyzer"
-    model_path: "models/emotion-bert"
+    model_path: "model_ckpt/emotion-bert"
 ```
 
 ### 示例 2: 基于音频特征的时间轴策略

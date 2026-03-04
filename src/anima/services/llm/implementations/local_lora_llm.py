@@ -62,6 +62,11 @@ class LocalLoraLLM(LLMInterface):
             logger.warning(f"[LocalLoraLLM] ⚠️ 设备已自动降级: {self.requested_device} → {self.device}")
             logger.warning(f"[LocalLoraLLM] ⚠️ 性能将受影响，请检查CUDA安装")
 
+        # 🚀 预加载模型（避免首次调用时超时）
+        logger.info(f"[LocalLoraLLM] 🔄 开始预加载模型...")
+        self.load_model()
+        logger.info(f"[LocalLoraLLM] ✅ 模型预加载完成")
+
     def _resolve_device(self, requested_device: str) -> str:
         """
         解析设备，自动降级 CUDA → CPU
@@ -265,7 +270,7 @@ class LocalLoraLLM(LLMInterface):
 
     async def chat(self, text: str) -> str:
         """
-        非流式对话
+        非流式对话（异步）
 
         Args:
             text: 输入文本
@@ -280,31 +285,46 @@ class LocalLoraLLM(LLMInterface):
         # 构造提示词
         prompt = self._format_prompt(text)
 
-        # Tokenize
-        inputs = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=256
-        ).to(self.device)
+        logger.info(f"[LocalLoraLLM] 开始生成回复...")
+        logger.debug(f"[LocalLoraLLM] 输入prompt长度: {len(prompt)} 字符")
 
-        # 生成
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=512,
-                temperature=0.7,
-                top_p=0.9,
-                do_sample=True,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id
+        # 使用线程池执行阻塞的模型生成
+        import asyncio
+
+        def generate_sync():
+            # Tokenize
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=256
+            ).to(self.device)
+
+            # 生成
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=512,
+                    temperature=0.7,
+                    top_p=0.9,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id
+                )
+
+            # 解码
+            response = self.tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
             )
 
-        # 解码
-        response = self.tokenizer.decode(
-            outputs[0][inputs['input_ids'].shape[1]:],
-            skip_special_tokens=True
-        )
+            return response
+
+        # 在线程池中执行阻塞调用
+        response = await asyncio.to_thread(generate_sync)
+
+        logger.info(f"[LocalLoraLLM] ✅ 生成完成")
+        logger.debug(f"[LocalLoraLLM] 输出长度: {len(response)} 字符")
 
         return response
 

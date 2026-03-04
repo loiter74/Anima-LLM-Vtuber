@@ -12,12 +12,14 @@ from .system import SystemConfig
 from .providers.asr import ASRConfig
 from .providers.tts import TTSConfig
 from .providers.vad import VADConfig
+from .providers.llm import LLMConfig
 from .agent import AgentConfig
 from .persona import PersonaConfig
 
 # 创建 TypeAdapter 用于验证 Discriminated Union 类型
 _asr_adapter = TypeAdapter(ASRConfig)
 _tts_adapter = TypeAdapter(TTSConfig)
+_llm_adapter = TypeAdapter(LLMConfig)
 _vad_adapter = TypeAdapter(VADConfig)
 
 # 延迟导入 AgentConfig 的 TypeAdapter（避免循环导入）
@@ -101,7 +103,8 @@ class ServicesConfig(BaseConfig):
     """服务组合配置"""
     asr: str = Field(default="mock", description="ASR 服务名称")
     tts: str = Field(default="mock", description="TTS 服务名称")
-    agent: str = Field(default="mock", description="Agent 服务名称")
+    agent: str = Field(default="mock", description="Agent 服务名称（底座LLM）")
+    local_llm: str = Field(default="local_lora", description="本地LLM服务名称（简单应答，无persona）")
     vad: str = Field(default="mock", description="VAD 服务名称")
 
 
@@ -124,6 +127,7 @@ class AppConfig(BaseConfig):
     asr: Optional[ASRConfig] = Field(default=None)
     tts: Optional[TTSConfig] = Field(default=None)
     agent: Optional[AgentConfig] = Field(default=None)
+    local_llm: Optional[LLMConfig] = Field(default=None, description="本地LLM配置（无persona）")
     vad: Optional[VADConfig] = Field(default=None)
     
     # 私有字段
@@ -180,19 +184,24 @@ class AppConfig(BaseConfig):
         asr_name = services_config.get("asr", "mock")
         tts_name = services_config.get("tts", "mock")
         agent_name = services_config.get("agent", "mock")
+        local_llm_name = services_config.get("local_llm", "local_lora")
         vad_name = services_config.get("vad", "mock")
-        
+
         asr_data = _load_service_config("asr", asr_name)
         tts_data = _load_service_config("tts", tts_name)
         agent_data = _load_service_config("llm", agent_name)
+        local_llm_full = _load_service_config("llm", local_llm_name)
+        # local_llm配置文件包含llm_config嵌套，需要提取
+        local_llm_data = local_llm_full.get("llm_config", local_llm_full)
         vad_data = _load_service_config("vad", vad_name)
-        
+
         # 构建完整配置
         merged = {
             **main_config,
             "asr": asr_data,
             "tts": tts_data,
             "agent": agent_data,
+            "local_llm": local_llm_data,
             "vad": vad_data,
         }
         
@@ -225,13 +234,35 @@ class AppConfig(BaseConfig):
             if self.agent.llm_config:
                 logger.debug(f"Agent LLM 类型: {self.agent.llm_config.type}")
                 logger.debug(f"Agent LLM Config 类: {type(self.agent.llm_config).__name__}")
-                # 检查 API Key 是否保留
-                if hasattr(self.agent.llm_config, 'api_key'):
+
+                # 只对需要 API Key 的 LLM 类型进行检查
+                # 本地模型（local_lora、ollama、mock）不需要 API Key
+                needs_api_key = self.agent.llm_config.type not in ["local_lora", "ollama", "mock"]
+
+                if needs_api_key and hasattr(self.agent.llm_config, 'api_key'):
                     api_key = self.agent.llm_config.api_key
                     if api_key:
                         logger.info(f"[AppConfig] ✅ Agent LLM API Key 已设置: {api_key[:20]}... (长度: {len(api_key)})")
                     else:
-                        logger.error(f"[AppConfig] ⚠️ Agent LLM API Key 为空！类型: {type(api_key)}")
+                        logger.error(f"[AppConfig] ⚠️ Agent LLM API Key 为空！LLM 类型: {self.agent.llm_config.type} 需要 API Key")
+                elif not needs_api_key:
+                    logger.info(f"[AppConfig] ✅ 使用本地 LLM: {self.agent.llm_config.type}（无需 API Key）")
+
+        # 处理 local_llm 配置
+        if self.local_llm:
+            local_llm_dict = self.local_llm.model_dump()
+            logger.debug(f"Local LLM 配置展开前: {local_llm_dict}")
+            local_llm_dict = expand_env_vars(local_llm_dict)
+            logger.debug(f"Local LLM 配置展开后: {local_llm_dict}")
+            self.local_llm = _llm_adapter.validate_python(local_llm_dict)
+
+            # 验证 API Key（本地模型不需要API Key，但检查一下以防万一）
+            if hasattr(self.local_llm, 'api_key'):
+                api_key = self.local_llm.api_key
+                if api_key:
+                    logger.info(f"[AppConfig] ✅ Local LLM API Key 已设置: {api_key[:20]}... (长度: {len(api_key)})")
+                else:
+                    logger.info(f"[AppConfig] ✅ Local LLM 无需 API Key（本地模型）")
 
     def _apply_env_overrides(self) -> None:
         """应用环境变量覆盖"""

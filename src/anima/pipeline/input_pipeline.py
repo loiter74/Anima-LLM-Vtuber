@@ -11,7 +11,7 @@ from .base import BasePipeline, PipelineStepError
 
 if TYPE_CHECKING:
     from anima.core import PipelineContext
-    from anima.eventbus import EventBus
+    from anima.events.core import EventBus
 
 
 class InputPipeline(BasePipeline):
