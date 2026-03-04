@@ -288,9 +288,10 @@ Examples:
 
     # Check package manager
     pkg_manager = None
+    use_shell = platform.system() == "Windows"
     for pm in ['pnpm', 'npm']:
         try:
-            subprocess.run([pm, '--version'], capture_output=True, check=True)
+            subprocess.run([pm, '--version'], capture_output=True, check=True, shell=use_shell)
             pkg_manager = pm
             break
         except (subprocess.CalledProcessError, FileNotFoundError):
