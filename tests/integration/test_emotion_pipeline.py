@@ -28,11 +28,11 @@ class TestEmotion:
         await sio.emit("text_input", {"text": "I am so happy today!", "user_id": "e", "from_name": "E"})
         await asyncio.sleep(30)
         await sio.disconnect()
-        expr = ev.get("expression",[])
-        mot = ev.get("live2d.action",[])
+        expr = ev.get("chat:expression",[])
+        mot = ev.get("chat:live2d_action",[])
         errs = ev.get("error",[])
         em = expr[0].get("emotion","") if expr else ""
         mi = mot[0].get("index",-1) if mot else -1
         print(f"emotion={em} motion={mi} errors={errs}")
-        assert "connection-established" in ev, "connect"
+        assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 from animetta.orchestration.server.stats_api import get_stats_routes
-from animetta.orchestration.graph.stats_store import StatsStore
+from animetta.orchestration.graph.stats_store import StatsStore, get_stats_store
+from animetta.orchestration.graph import stats_store
+from animetta.orchestration.graph.stats_handler import StatsCallbackHandler, KNOWN_NODES
 
 # 确保项目 src 在 path 中
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

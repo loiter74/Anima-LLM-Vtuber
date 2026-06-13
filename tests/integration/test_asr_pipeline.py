@@ -30,5 +30,5 @@ class TestASR:
         await sio.disconnect()
         errs = ev.get("error",[])
         print(f"events={sorted(ev.keys())} errors={errs}")
-        assert "connection-established" in ev, "connect"
+        assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

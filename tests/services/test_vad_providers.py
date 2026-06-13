@@ -3,6 +3,10 @@ from animetta.services.vad import MockVAD
 from animetta.services.vad import VADFactory
 from animetta.services.vad import VADInterface
 from animetta.services.vad import VADState
+from animetta.services.vad import VADResult
+from animetta.services.vad import mock_vad as mv_mod
+from animetta.services.vad import silero_vad as sv_mod
+from animetta.config.providers.vad.mock import MockVADConfig
 """
 Tests for VAD provider implementations.
 
