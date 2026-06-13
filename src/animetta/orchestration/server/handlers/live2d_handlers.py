@@ -46,7 +46,7 @@ class Live2DHandlers:
 
         async def execute_action(action):
             await self.admin.broadcast_to_desktop_clients(
-                "live2d", "live2d.action", {
+                "live2d", "live2d:action", {
                     "action": action.action,
                     "action_id": action.action_id,
                 }
@@ -62,14 +62,14 @@ class Live2DHandlers:
 
         if not self.admin.desktop_manager.register(sid, client_type):
             await self.sio.emit(
-                "error",
+                "system:error",
                 {"type": "error", "message": f"Unknown client type: {client_type}"},
                 to=sid,
             )
             return
 
         await self.sio.emit(
-            "desktop.registered",
+            "desktop:registered",
             {"client_id": sid, "client_type": client_type},
             to=sid,
         )
@@ -88,7 +88,7 @@ class Live2DHandlers:
             duration=duration,
         )
 
-        await self.sio.emit("desktop.action_queued", result, to=sid)
+        await self.sio.emit("desktop:action_queued", result, to=sid)
 
     async def on_desktop_chat_message(self, sid: str, data: dict) -> None:
         """Handle chat message from Electron Chat window."""
@@ -109,7 +109,7 @@ class Live2DHandlers:
                 f"[{sid}] Error processing desktop chat message: {e}"
             )
             await self.sio.emit(
-                "error", {"type": "error", "message": str(e)}, to=sid
+                "system:error", {"type": "error", "message": str(e)}, to=sid
             )
 
     async def on_desktop_voice_start(self, sid: str, data: dict) -> None:

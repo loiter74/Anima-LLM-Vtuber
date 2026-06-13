@@ -77,7 +77,7 @@ async def check_conversation_pipeline() -> CheckResult:
             )
 
         # ── Send test message ─────────────────────────────────────
-        await sio.emit("text_input", {"text": "[inspection] ping", "mode": "text"})
+        await sio.emit("chat:text_input", {"text": "[inspection] ping", "mode": "text"})
         logger.info("[inspection:pipeline] Sent test message, collecting events...")
 
         # ── Wait for pipeline to process ──────────────────────────

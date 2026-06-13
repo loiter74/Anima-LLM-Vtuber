@@ -1,7 +1,7 @@
 {
   "chat": {
     "text": {
-      "name": "chat.text",
+      "name": "chat:text",
       "payload": {
         "text": "string",
         "user_id?": "string",
@@ -9,23 +9,23 @@
       }
     },
     "audio": {
-      "name": "chat.audio",
+      "name": "chat:audio",
       "payload": {
         "audio": "number[]"
       }
     },
     "audio_end": {
-      "name": "chat.audio_end",
+      "name": "chat:audio_end",
       "payload": {}
     },
     "interrupt": {
-      "name": "chat.interrupt",
+      "name": "chat:interrupt",
       "payload": {
         "text?": "string"
       }
     },
     "sentence": {
-      "name": "chat.sentence",
+      "name": "chat:sentence",
       "payload": {
         "text": "string",
         "seq": "number",
@@ -34,7 +34,7 @@
       }
     },
     "control": {
-      "name": "chat.control",
+      "name": "chat:control",
       "payload": {
         "signal?": "string",
         "type?": "string",
@@ -42,18 +42,18 @@
       }
     },
     "transcript": {
-      "name": "chat.transcript",
+      "name": "chat:transcript",
       "payload": {
         "text": "string",
         "is_final": "boolean"
       }
     },
     "stop_audio": {
-      "name": "chat.stop_audio",
+      "name": "chat:stop_audio",
       "payload": {}
     },
     "audio_with_expression": {
-      "name": "chat.audio_with_expression",
+      "name": "chat:audio_with_expression",
       "payload": {
         "audio_data": "string",
         "format": "string",
@@ -61,14 +61,14 @@
       }
     },
     "subtitle_translation": {
-      "name": "chat.subtitle_translation",
+      "name": "chat:subtitle_translation",
       "payload": {
         "translation": "string",
         "target_lang": "string"
       }
     },
     "live2d_action": {
-      "name": "chat.live2d_action",
+      "name": "chat:live2d_action",
       "payload": {
         "type": "string",
         "group": "string",
@@ -76,7 +76,7 @@
       }
     },
     "expression": {
-      "name": "chat.expression",
+      "name": "chat:expression",
       "payload": {
         "emotion": "string"
       }
@@ -84,69 +84,69 @@
   },
   "history": {
     "list": {
-      "name": "history.list",
+      "name": "history:list",
       "payload": {}
     },
     "fetch": {
-      "name": "history.fetch",
+      "name": "history:fetch",
       "payload": {
         "history_uid?": "string"
       }
     },
     "clear": {
-      "name": "history.clear",
+      "name": "history:clear",
       "payload": {}
     },
     "create": {
-      "name": "history.create",
+      "name": "history:create",
       "payload": {}
     }
   },
   "config": {
     "switch": {
-      "name": "config.switch",
+      "name": "config:switch",
       "payload": {
         "config_name": "string"
       }
     },
     "log_level": {
-      "name": "config.log_level",
+      "name": "config:log_level",
       "payload": {
         "level": "string"
       }
     },
     "get": {
-      "name": "config.get",
+      "name": "config:get",
       "payload": {}
     },
     "switched": {
-      "name": "config.switched",
+      "name": "config:switched",
       "payload": {
         "config_name": "string"
       }
     },
     "log_level_changed": {
-      "name": "config.log_level_changed",
+      "name": "config:log_level_changed",
       "payload": {
         "level": "string"
       }
     },
     "data": {
-      "name": "config.data",
+      "name": "config:data",
       "payload": {}
     },
     "heartbeat_ack": {
-      "name": "config.heartbeat_ack",
+      "name": "config:heartbeat_ack",
       "payload": {}
     }
   },
   "system": {
     "heartbeat": {
-      "name": "system.heartbeat",
+      "name": "system:heartbeat",
       "payload": {}
     },
     "connection_established": {
-      "name": "system.connection_established",
+      "name": "system:connection_established",
       "payload": {
         "message": "string",
         "sid": "string",
@@ -154,7 +154,7 @@
       }
     },
     "model_status": {
-      "name": "system.model_status",
+      "name": "system:model_status",
       "payload": {
         "model_name": "string",
         "status": "string",
@@ -162,7 +162,7 @@
       }
     },
     "error": {
-      "name": "system.error",
+      "name": "system:error",
       "payload": {
         "type": "string",
         "message": "string"
@@ -171,58 +171,58 @@
   },
   "desktop": {
     "register": {
-      "name": "desktop.register",
+      "name": "desktop:register",
       "payload": {
         "client_type": "string"
       }
     },
     "live2d_action": {
-      "name": "desktop.live2d_action",
+      "name": "desktop:live2d_action",
       "payload": {}
     },
     "chat_message": {
-      "name": "desktop.chat_message",
+      "name": "desktop:chat_message",
       "payload": {}
     },
     "voice_start": {
-      "name": "desktop.voice_start",
+      "name": "desktop:voice_start",
       "payload": {}
     },
     "voice_stop": {
-      "name": "desktop.voice_stop",
+      "name": "desktop:voice_stop",
       "payload": {}
     }
   },
   "bilibili": {
     "connect": {
-      "name": "bilibili.connect",
+      "name": "bilibili:connect",
       "payload": {
         "room_id": "number"
       }
     },
     "disconnect": {
-      "name": "bilibili.disconnect",
+      "name": "bilibili:disconnect",
       "payload": {}
     },
     "update_room": {
-      "name": "bilibili.update_room",
+      "name": "bilibili:update_room",
       "payload": {
         "room_id": "number"
       }
     },
     "danmaku": {
-      "name": "bilibili.danmaku",
+      "name": "bilibili:danmaku",
       "payload": {}
     },
     "danmaku_status": {
-      "name": "bilibili.danmaku_status",
+      "name": "bilibili:danmaku_status",
       "payload": {
         "connected": "boolean",
         "message": "string"
       }
     },
     "danmaku_ai_reply": {
-      "name": "bilibili.danmaku_ai_reply",
+      "name": "bilibili:danmaku_ai_reply",
       "payload": {
         "danmaku_text": "string",
         "reply_text": "string",
@@ -234,15 +234,15 @@
   },
   "minecraft": {
     "start": {
-      "name": "minecraft.start",
+      "name": "minecraft:start",
       "payload": {}
     },
     "stop": {
-      "name": "minecraft.stop",
+      "name": "minecraft:stop",
       "payload": {}
     },
     "status": {
-      "name": "minecraft.status",
+      "name": "minecraft:status",
       "payload": {
         "connected": "boolean",
         "username?": "string",
@@ -252,14 +252,14 @@
   },
   "translation": {
     "configure": {
-      "name": "translation.configure",
+      "name": "translation:configure",
       "payload": {
         "enabled": "boolean",
         "target_language": "string"
       }
     },
     "status": {
-      "name": "translation.status",
+      "name": "translation:status",
       "payload": {
         "target_language": "string",
         "enabled": "boolean"
@@ -268,17 +268,17 @@
   },
   "persona": {
     "list": {
-      "name": "persona.list",
+      "name": "persona:list",
       "payload": {}
     },
     "set": {
-      "name": "persona.set",
+      "name": "persona:set",
       "payload": {
         "persona_name": "string"
       }
     },
     "set_mode": {
-      "name": "persona.set_mode",
+      "name": "persona:set_mode",
       "payload": {
         "mode": "string"
       }
@@ -286,24 +286,24 @@
   },
   "memory": {
     "organize": {
-      "name": "memory.organize",
+      "name": "memory:organize",
       "payload": {}
     },
     "list_pages": {
-      "name": "memory.list_pages",
+      "name": "memory:list_pages",
       "payload": {
         "session_id": "string"
       }
     },
     "organize_progress": {
-      "name": "memory.organize_progress",
+      "name": "memory:organize_progress",
       "payload": {
         "text": "string",
         "progress": "number"
       }
     },
     "organize_result": {
-      "name": "memory.organize_result",
+      "name": "memory:organize_result",
       "payload": {
         "status": "string",
         "message": "string"
@@ -312,7 +312,7 @@
   },
   "sing": {
     "process": {
-      "name": "sing.process",
+      "name": "sing:process",
       "payload": {
         "url?": "string",
         "file?": "string",
@@ -320,21 +320,21 @@
       }
     },
     "confirm_lyrics": {
-      "name": "sing.confirm_lyrics",
+      "name": "sing:confirm_lyrics",
       "payload": {
         "ass_content": "string"
       }
     },
     "cancel": {
-      "name": "sing.cancel",
+      "name": "sing:cancel",
       "payload": {}
     },
     "subtitle_sync": {
-      "name": "sing.subtitle_sync",
+      "name": "sing:subtitle_sync",
       "payload": {}
     },
     "progress": {
-      "name": "sing.progress",
+      "name": "sing:progress",
       "payload": {
         "stage": "string",
         "progress": "number",
@@ -342,7 +342,7 @@
       }
     },
     "complete": {
-      "name": "sing.complete",
+      "name": "sing:complete",
       "payload": {
         "audio_url": "string",
         "subtitle_url": "string",
@@ -355,19 +355,19 @@
       }
     },
     "error": {
-      "name": "sing.error",
+      "name": "sing:error",
       "payload": {
         "error": "string"
       }
     },
     "lyrics_ready": {
-      "name": "sing.lyrics_ready",
+      "name": "sing:lyrics_ready",
       "payload": {
         "message": "string"
       }
     },
     "subtitle_line": {
-      "name": "sing.subtitle_line",
+      "name": "sing:subtitle_line",
       "payload": {
         "text": "string",
         "translation": "string",
@@ -378,23 +378,23 @@
   },
   "meme": {
     "add": {
-      "name": "meme.add",
+      "name": "meme:add",
       "payload": {}
     },
     "list": {
-      "name": "meme.list",
+      "name": "meme:list",
       "payload": {}
     },
     "review": {
-      "name": "meme.review",
+      "name": "meme:review",
       "payload": {}
     },
     "dataset": {
-      "name": "meme.dataset",
+      "name": "meme:dataset",
       "payload": {}
     },
     "collect": {
-      "name": "meme.collect",
+      "name": "meme:collect",
       "payload": {}
     }
   }

@@ -60,7 +60,7 @@ class PersonaHandlers(BaseSocketHandler):
         if not persona_name:
             logger.warning(f"[{sid}] 切换人设失败: 人设名称为空")
             await self.sio.emit(
-                "error",
+                "system:error",
                 {"type": "error", "message": "persona_name is required"},
                 to=sid,
             )
@@ -74,7 +74,7 @@ class PersonaHandlers(BaseSocketHandler):
             ctx = self.session_manager.get_context(sid)
             if not ctx:
                 await self.sio.emit(
-                    "error",
+                    "system:error",
                     {"type": "error", "message": "会话未初始化"},
                     to=sid,
                 )
@@ -83,7 +83,7 @@ class PersonaHandlers(BaseSocketHandler):
             new_persona = PersonaConfig.load(persona_name)
             if not new_persona:
                 await self.sio.emit(
-                    "error",
+                    "system:error",
                     {"type": "error", "message": f"无法加载人设: {persona_name}"},
                     to=sid,
                 )
@@ -120,7 +120,7 @@ class PersonaHandlers(BaseSocketHandler):
 
             logger.info(f"[{sid}] 人设切换完成: {persona_name}")
             await self.sio.emit(
-                "persona_updated",
+                "persona:updated",
                 {"persona_name": persona_name},
                 to=sid,
             )
@@ -128,7 +128,7 @@ class PersonaHandlers(BaseSocketHandler):
         except Exception as e:
             logger.error(f"[{sid}] 切换人设失败: {e}", exc_info=True)
             await self.sio.emit(
-                "error", {"type": "error", "message": str(e)}, to=sid
+                "system:error", {"type": "error", "message": str(e)}, to=sid
             )
 
     async def on_set_personality_mode(self, sid: str, data: dict) -> None:
@@ -137,7 +137,7 @@ class PersonaHandlers(BaseSocketHandler):
         if not mode:
             logger.warning(f"[{sid}] 设置个性模式失败: mode 为空")
             await self.sio.emit(
-                "error", {"type": "error", "message": "mode is required"}, to=sid
+                "system:error", {"type": "error", "message": "mode is required"}, to=sid
             )
             return
 
@@ -152,11 +152,11 @@ class PersonaHandlers(BaseSocketHandler):
                 orchestrator._personality_mode["mode"] = mode
                 logger.info(f"[{sid}] 编排器已更新个性模式")
 
-            await self.sio.emit("personality_updated", {"mode": mode}, to=sid)
+            await self.sio.emit("persona:personality_updated", {"mode": mode}, to=sid)
             logger.info(f"[{sid}] 个性模式已设置: {mode}")
 
         except Exception as e:
             logger.error(f"[{sid}] 设置个性模式失败: {e}", exc_info=True)
             await self.sio.emit(
-                "error", {"type": "error", "message": str(e)}, to=sid
+                "system:error", {"type": "error", "message": str(e)}, to=sid
             )
