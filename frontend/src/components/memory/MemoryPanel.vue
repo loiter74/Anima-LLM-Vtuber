@@ -50,7 +50,7 @@ onMounted(() => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Header -->
-    <div class="flex items-center px-3 py-2 border-b border-c-border/40 shrink-0">
+    <div class="flex items-center px-4 py-3 border-b border-c-border/40 shrink-0">
       <span class="text-xs font-medium flex items-center gap-1.5 flex-1">
         <span>📖</span>
         <span>记忆浏览</span>
@@ -72,7 +72,7 @@ onMounted(() => {
 
     <template v-if="!collapsed">
       <!-- Filter bar -->
-      <div class="px-3 pt-2 pb-1.5 border-b border-c-border/20 space-y-1.5 shrink-0">
+      <div class="px-4 pt-3 pb-2 border-b border-c-border/20 space-y-2 shrink-0">
         <div class="flex gap-1 flex-wrap">
           <button
             v-for="opt in typeOptions"
@@ -105,7 +105,7 @@ onMounted(() => {
       </div>
 
       <!-- Page list -->
-      <div class="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+      <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         <!-- Loading -->
         <div v-if="store.loading" class="flex items-center justify-center py-8">
           <span class="text-xs text-c-text-dim animate-pulse">加载 wiki 页面...</span>
@@ -153,7 +153,7 @@ onMounted(() => {
       </div>
 
       <!-- Quick add meme -->
-      <div class="px-3 py-1.5 border-t border-c-border/20 shrink-0">
+      <div class="px-4 py-2 border-t border-c-border/20 shrink-0">
         <div class="flex gap-1">
           <input
             v-model="memeText"
@@ -174,7 +174,7 @@ onMounted(() => {
       </div>
 
       <!-- Footer -->
-      <div class="px-3 py-2 border-t border-c-border/20 shrink-0">
+      <div class="px-4 py-2 border-t border-c-border/20 shrink-0">
         <p class="text-9px text-c-text-muted text-center">
           {{ store.filteredPages.length }} 个页面
         </p>

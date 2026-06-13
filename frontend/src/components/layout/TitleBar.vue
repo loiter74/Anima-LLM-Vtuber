@@ -30,58 +30,168 @@ function goTo(name: string) {
 </script>
 
 <template>
-    <div class="relative flex items-center justify-between h-12 select-none z-50 border border-c-border rounded-lg max-w-[720px] mx-auto px-4">
-    <div class="absolute inset-0 bg-c-surface/85 backdrop-blur-[16px]" />
-    <div class="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-c-accent/20 to-transparent" />
-
-    <div class="relative flex items-center justify-between w-full">
-      <!-- Left: traffic lights + brand -->
-      <div class="flex items-center gap-2 min-w-0 shrink-0">
-        <span class="w-[10px] h-[10px] rounded-full bg-c-error shrink-0" />
-        <span class="w-[10px] h-[10px] rounded-full bg-c-warning shrink-0" />
-        <span class="w-[10px] h-[10px] rounded-full bg-c-success shrink-0" />
-        <span class="text-base font-bold text-c-text tracking-wide ml-2 font-quicksand truncate">Anima</span>
+  <header class="titlebar">
+    <!-- Left: traffic lights + brand -->
+    <div class="titlebar-left">
+      <div class="traffic-lights">
+        <span class="close"></span>
+        <span class="minimize"></span>
+        <span class="maximize"></span>
       </div>
+      <div class="brand">Anima<span class="brand-dot">.</span></div>
+    </div>
 
-      <!-- Center: nav buttons -->
-      <div class="flex items-center gap-1 sm:gap-3 min-w-0 overflow-hidden">
-        <button
-          @click="goTo('music')"
-          aria-label="音乐制作"
-          class="px-2 sm:px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap"
-          :class="route.name === 'music'
-            ? 'text-c-accent bg-c-accent-soft'
-            : 'bg-transparent text-c-text-dim hover:bg-white/4'"
-        >
-          音乐制作
-        </button>
-        <button
-          @click="goTo('meme-review')"
-          aria-label="梗筛选"
-          class="px-2 sm:px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap"
-          :class="route.name === 'meme-review'
-            ? 'text-c-accent bg-c-accent-soft'
-            : 'bg-transparent text-c-text-dim hover:bg-white/4'"
-        >
-          梗筛选
-        </button>
-        <button
-          @click="goTo('dashboard')"
-          :aria-label="route.name === 'dashboard' ? '返回聊天' : '仪表盘'"
-          class="px-2 sm:px-3 py-1.5 text-xs rounded-md transition-colors whitespace-nowrap"
-          :class="route.name === 'dashboard'
-            ? 'text-c-accent bg-c-accent-soft'
-            : 'bg-transparent text-c-text-dim hover:bg-white/4'"
-        >
-          {{ route.name === 'dashboard' ? 'Chat' : 'Dashboard' }}
-        </button>
-      </div>
+    <!-- Center: nav buttons -->
+    <div class="titlebar-center">
+      <button
+        @click="goTo('music')"
+        class="nav-btn"
+        :class="{ active: route.name === 'music' }"
+      >
+        Music
+      </button>
+      <button
+        @click="goTo('meme-review')"
+        class="nav-btn"
+        :class="{ active: route.name === 'meme-review' }"
+      >
+        Meme
+      </button>
+      <button
+        @click="goTo('dashboard')"
+        class="nav-btn"
+        :class="{ active: route.name === 'dashboard' }"
+      >
+        {{ route.name === 'dashboard' ? 'Chat' : 'Dashboard' }}
+      </button>
+    </div>
 
-      <!-- Right: connection status -->
-      <div class="flex items-center gap-2">
-        <span class="w-[7px] h-[7px] rounded-full" :class="statusColors[store.status]" />
-        <span class="text-10px text-c-text-dim whitespace-nowrap">{{ statusLabels[store.status] }}</span>
+    <!-- Right: connection status -->
+    <div class="titlebar-right">
+      <div class="status-indicator">
+        <span class="status-dot" :class="statusColors[store.status]"></span>
+        <span class="status-text">{{ statusLabels[store.status] }}</span>
       </div>
     </div>
-  </div>
+  </header>
 </template>
+
+<style scoped>
+.titlebar {
+  position: relative;
+  z-index: 100;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--s-4);
+  background: rgba(26, 16, 40, 0.80);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--c-border);
+  user-select: none;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.traffic-lights {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.traffic-lights span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: opacity var(--d-fast);
+  flex-shrink: 0;
+}
+
+.traffic-lights span:hover {
+  opacity: 0.8;
+}
+
+.traffic-lights .close {
+  background: #ff5f57;
+}
+
+.traffic-lights .minimize {
+  background: #febc2e;
+}
+
+.traffic-lights .maximize {
+  background: #28c840;
+}
+
+.brand {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-left: var(--s-3);
+  color: var(--c-text);
+}
+
+.brand-dot {
+  color: var(--c-accent);
+}
+
+.titlebar-center {
+  display: flex;
+  gap: var(--s-1);
+}
+
+.nav-btn {
+  padding: var(--s-1_5) var(--s-3);
+  font-size: 12px;
+  color: var(--c-text-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all var(--d-base) var(--ease-out-expo);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.nav-btn:hover {
+  color: var(--c-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-btn.active {
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text {
+  font-size: 10px;
+  color: var(--c-text-dim);
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+</style>

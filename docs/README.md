@@ -56,14 +56,21 @@ src/animetta/
 ## 快速开始
 
 ```bash
-# 启动项目
-python scripts/start.py
-
 # 配置 API Key
-echo "GLM_API_KEY=your_key" > .env
+cp .env.example .env
+# 编辑 .env 填入你的 API Key
 
-# 停止项目
-python scripts/stop.py
+# Docker 启动 (推荐)
+docker compose up -d --build
+
+# 检查健康状态
+curl -s http://localhost/health
+
+# 查看日志
+docker compose logs -f animetta
+
+# 停止服务
+docker compose down
 ```
 
 ---

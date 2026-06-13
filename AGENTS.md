@@ -73,26 +73,45 @@ AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + S
 - **每次测试前必须重新获取数据** — 禁止使用上一次 playwright 的缓存结果，必须重新捕获页面
 - **QA 测试流程**：`qa` skill → Playwright 页面捕获（全新获取）→ 发现/修复问题
 
-### 服务启动（6 步轮询协议）
+### 服务启动（Docker 启动协议）
 
-> **核心原则**：成功判定 = 端口监听 + API 返回 200，**不依赖进程退出**。
+> **核心原则**：成功判定 = 容器健康检查通过 + API 返回 200，**不依赖进程退出**。
 > 禁止在主 agent 启动服务 — 会卡住无法校验。所有启动操作必须通过 `task()` 子 agent 执行。
 
 | 步骤 | 操作 | 判定标准 |
 |------|------|----------|
-| **1. 清理端口** | `netstat -ano \| findstr :12394` → 若有残留进程则 `taskkill /PID xxx /F` | 端口 12394 无占用 |
-| **2. 启动后端** | 子 agent 内 `python scripts/start.py --no-frontend &`（后台运行） | 进程启动无报错 |
-| **3. 轮询后端** | `curl -s http://localhost:12394/health` 每 3 秒一次，最多 20 次（60 秒） | HTTP 200 + 响应体含 `"status":"ok"` |
-| **4. 启动前端** | 子 agent 内 `python scripts/start.py --no-backend &`（后台运行） | 进程启动无报错 |
-| **5. 轮询前端** | `curl -s http://localhost:3000` 每 3 秒一次，最多 20 次（60 秒） | HTTP 200 |
-| **6. 报告成功** | 子 agent 输出 `[OK] Backend 12394 + Frontend 3000 both healthy` | 两个端口均就绪 |
+| **1. 清理容器** | `docker compose down` 停止并移除旧容器 | 容器已清理 |
+| **2. 构建镜像** | `docker compose build` 或 `docker compose -f docker-compose.cpu.yml build`（CPU 模式） | 构建成功无报错 |
+| **3. 启动服务** | `docker compose up -d` 或 `docker compose -f docker-compose.cpu.yml up -d`（CPU 模式） | 容器启动成功 |
+| **4. 轮询健康** | `curl -s http://localhost/health` 每 5 秒一次，最多 24 次（120 秒） | HTTP 200 + 响应体含 `"status":"ok"` |
+| **5. 验证前端** | `curl -s http://localhost` 每 5 秒一次，最多 12 次（60 秒） | HTTP 200 |
+| **6. 报告成功** | 子 agent 输出 `[OK] Docker container healthy, frontend accessible on port 80` | 服务完全就绪 |
 
 **关键约束**：
 - 每步失败即停，不得跳过轮询直接假设成功
-- 后端启动后 **必须用 curl 轮询**，不能只检查进程是否存在（端口可能还没监听）
-- 前端启动后同样必须 curl 验证
-- 日志中不允许出现任何 Traceback 或 ERROR 级别日志
-- 代码变更后 **必须完整走一遍 6 步协议**，确保服务可用
+- 启动后 **必须用 curl 轮询健康检查**，不能只检查容器状态（服务可能还没就绪）
+- 前端通过 nginx 反向代理在 80 端口提供服务
+- 日志中不允许出现任何 Traceback 或 ERROR 级别日志（使用 `docker compose logs` 检查）
+- 代码变更后 **必须完整走一遍 Docker 启动协议**，确保服务可用
+
+**Docker 模式选择**：
+- **GPU 模式**（默认）：`docker compose up -d --build` — 需要 NVIDIA GPU + nvidia-container-toolkit
+- **CPU 模式**：`docker compose -f docker-compose.cpu.yml up -d --build` — 无 GPU 环境
+
+**常用 Docker 命令**：
+```bash
+# 查看日志
+docker compose logs -f animetta
+
+# 进入容器
+docker compose exec animetta bash
+
+# 重启服务
+docker compose restart animetta
+
+# 停止服务
+docker compose down
+```
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -104,7 +123,8 @@ AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + S
 - ❌ Pydantic V2 only — `class Config:` is forbidden
 - ❌ Never start backend in main agent — spawn sub-agent via `task()`, or agent will hang
 - ❌ Never reuse previous Playwright/QA results — always re-capture fresh test data
-- ❌ Never skip the 6-step start protocol after code changes — curl-polling is mandatory, not optional
+- ❌ Never skip the Docker startup protocol after code changes — curl-polling is mandatory, not optional
+- ❌ Never assume process exit = service ready — port listening + HTTP 200 is the only valid success signal
 - ❌ Never assume process exit = service ready — port listening + HTTP 200 is the only valid success signal
 
 ## DEPRECATED
@@ -117,11 +137,14 @@ AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + S
 ## COMMANDS
 
 ```bash
-# Start all services
-python scripts/start.py
+# Docker (recommended)
+docker compose up -d --build              # GPU mode
+docker compose -f docker-compose.cpu.yml up -d --build  # CPU mode
+docker compose down                       # Stop
+docker compose logs -f animetta           # Logs
 
-# Backend only
-python -m animetta.socketio_server
+# Backend only (local)
+PYTHONPATH=src python -m animetta.core.socketio_server
 
 # Tests
 PYTHONPATH=src python -m pytest tests/ -v
@@ -259,7 +282,7 @@ When the user says "add a `<NewSomething>` component":
    `colors_and_type.css` AND `frontend/uno.config.ts → theme.colors`. Document
    the role in the appropriate spec file.
 5. 启动测试步骤时，要使用qa skill，并使用playwright技能进行页面捕获，在测试前不可以使用上一次playwright的结果，必须重新获取测试数据
-6. 启动服务需要单开子agent 使用script/start.py 同时启动前后端，保证无任何报错信息出现在日志中
+6. 启动服务需要单开子agent 使用 Docker 启动协议（docker compose up -d --build），保证无任何报错信息出现在日志中
 7. 要及时定期检查子agent是否卡住，如果卡住要自行解决。
 
 

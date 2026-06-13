@@ -34,7 +34,7 @@ function sendMessage(): void {
 
 <template>
   <div
-    class="border border-c-border rounded-xl bg-c-panel flex gap-2.5 items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
+    class="border border-c-border rounded-lg bg-c-panel flex gap-2.5 items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
     :class="isMobile
       ? 'px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'
       : 'pl-4 pr-3 py-3 max-w-[520px] mx-auto'"

@@ -63,10 +63,10 @@ export default defineConfig({
     'gradient-accent': 'bg-gradient-to-br from-c-accent to-c-accent-hover',
     'gradient-accent-soft': 'bg-gradient-to-br from-c-accent/20 to-c-blue/20',
     // 动画
-    'animate-fade-in': 'animate-[fadeIn_0.3s_ease]',
-    'animate-slide-up': 'animate-[slideUp_0.3s_ease]',
-    'animate-slide-in-right': 'animate-[slideInRight_0.3s_cubic-bezier(0.16,1,0.3,1)]',
-    'animate-slide-out-right': 'animate-[slideOutRight_0.25s_ease-in]',
+    'animate-fade-in': 'animate-[fadeIn_var(--d-base)_var(--ease-out-expo)]',
+    'animate-slide-up': 'animate-[slideUp_var(--d-slow)_var(--ease-out-expo)]',
+    'animate-slide-in-right': 'animate-[slideInRight_var(--d-slow)_var(--ease-out-expo)]',
+    'animate-slide-out-right': 'animate-[slideOutRight_var(--d-slow)_var(--ease-out-expo)]',
     // Mobile utilities
     'touch-manipulation': '[touch-action:manipulation]',
     'safe-bottom': 'pb-[env(safe-area-inset-bottom)]',

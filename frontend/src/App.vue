@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import TitleBar from '@/components/layout/TitleBar.vue'
 import { useSocket } from '@/composables/useSocket'
 import { useMobile } from '@/composables/useMobile'
 
@@ -41,7 +40,6 @@ onMounted(() => {
       :style="bgStyle"
     />
     <div class="relative flex flex-col h-full" style="z-index: 1">
-      <TitleBar v-if="!isMobile" />
       <router-view />
     </div>
   </div>

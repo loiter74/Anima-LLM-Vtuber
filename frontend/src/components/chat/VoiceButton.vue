@@ -26,7 +26,7 @@ const volumePercent = computed(() => Math.min(100, Math.round(volume.value * 500
       class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-1 bg-c-bg rounded-full overflow-hidden"
     >
       <div
-        class="h-full bg-c-success rounded-full transition-all duration-75"
+        class="h-full bg-c-success rounded-full transition-all duration-150"
         :style="{ width: volumePercent + '%' }"
       />
     </div>

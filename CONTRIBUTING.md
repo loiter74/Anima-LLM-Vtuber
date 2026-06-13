@@ -7,13 +7,18 @@
 git clone https://github.com/loiter74/animetta.git
 cd animetta
 
-# Backend
-pip install -r requirements.txt
+# Copy env template
 cp .env.example .env
 # Edit .env with your API keys
 
-# Run
-python scripts/start.py --backend-only
+# Docker (Recommended)
+docker compose up -d --build
+
+# Or CPU-only
+docker compose -f docker-compose.cpu.yml up -d --build
+
+# Check health
+curl -s http://localhost/health
 ```
 
 ## Project Structure

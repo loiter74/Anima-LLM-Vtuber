@@ -49,7 +49,7 @@ const overallPct = computed(() => {
     <!-- Overall progress bar -->
     <div class="flex-1 h-1.5 rounded-full bg-c-accent/20 overflow-hidden">
       <div
-        class="h-full bg-c-accent rounded-full transition-all duration-500"
+        class="h-full bg-c-accent rounded-full transition-all duration-300"
         :style="{ width: `${overallPct}%` }"
       />
     </div>

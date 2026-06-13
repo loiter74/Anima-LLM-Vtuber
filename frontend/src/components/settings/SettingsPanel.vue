@@ -108,34 +108,34 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Section tabs -->
-    <div class="flex gap-1 px-3 pt-3 pb-2 border-b border-c-border/40 shrink-0">
+    <div class="flex gap-1.5 px-4 py-3 border-b border-c-border/40 shrink-0">
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'status' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'status'"
       >📊 状态</button>
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'background' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'background'"
       >🖼️ 背景</button>
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'controls' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'controls'"
       >🎮 控制</button>
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'live' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'live'"
       >📡 直播</button>
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'subtitle' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'subtitle'"
       >📝 字幕</button>
       <button
-        class="px-2.5 py-1 rounded-lg text-10px font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'theme' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
         @click="activeSection = 'theme'"
       >🎨 主题</button>

@@ -20,7 +20,7 @@ watch(
 <template>
   <div class="flex flex-col h-full">
     <!-- Header with connection status -->
-    <div class="flex items-center gap-2 px-4 py-2.5 border-b border-c-border/60 shrink-0">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-c-border/60 shrink-0">
       <span class="text-sm font-medium text-c-text">📺 直播弹幕</span>
       <div class="flex-1" />
       <div class="flex items-center gap-1.5">
@@ -37,7 +37,7 @@ watch(
     <!-- Danmaku stream with pop-in animation -->
     <div
       ref="containerRef"
-      class="flex-1 overflow-y-auto px-3 py-2 scroll-smooth"
+      class="flex-1 overflow-y-auto px-4 py-3 scroll-smooth"
     >
       <div
         v-for="(msg, i) in store.messages"
@@ -63,7 +63,7 @@ watch(
     </div>
 
     <!-- Message count -->
-    <div class="px-3 py-1 border-t border-c-border/30 text-10px text-c-text-muted text-center shrink-0">
+    <div class="px-4 py-2 border-t border-c-border/30 text-10px text-c-text-muted text-center shrink-0">
       共 {{ store.messageCount }} 条弹幕
     </div>
   </div>

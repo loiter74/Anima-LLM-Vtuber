@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animetta - Memory Cards with Send & Delete</title>
+  <style>
+    :root {
+      --c-bg: #1a1028;
+      --c-surface: #241538;
+      --c-panel: #2d1b45;
+      --c-card: #36205a;
+      --c-text: #e8e0f0;
+      --c-text-dim: #9b8bb0;
+      --c-text-muted: #6b5a80;
+      --c-accent: #e879a8;
+      --c-accent-hover: #f090c0;
+      --c-accent-soft: rgba(232, 121, 168, 0.15);
+      --c-blue: #7c8cf5;
+      --c-success: #4ade80;
+      --c-warning: #fbbf24;
+      --c-error: #f87171;
+      --c-border: rgba(255, 255, 255, 0.08);
+      --c-border-accent: rgba(232, 121, 168, 0.30);
+      --c-user-bubble: rgba(124, 140, 245, 0.20);
+      --c-ai-bubble: rgba(232, 121, 168, 0.15);
+      --c-gold: #f5c872;
+      --r-sm: 6px;
+      --r-md: 8px;
+      --r-lg: 12px;
+      --r-xl: 16px;
+      --r-2xl: 20px;
+      --s-1: 4px;
+      --s-2: 8px;
+      --s-3: 12px;
+      --s-4: 16px;
+      --s-5: 20px;
+      --s-6: 24px;
+      --d-fast: 150ms;
+      --d-base: 200ms;
+      --d-slow: 300ms;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans SC", sans-serif;
+      background: var(--c-bg);
+      color: var(--c-text);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+      background:
+        radial-gradient(ellipse at 80% 20%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%),
+        var(--c-bg);
+    }
+
+    /* TitleBar */
+    .titlebar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 var(--s-4);
+      background: rgba(26, 16, 40, 0.80);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--c-border);
+      z-index: 100;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: var(--s-2);
+    }
+
+    .traffic-lights span {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .traffic-lights .close { background: #ff5f57; }
+    .traffic-lights .minimize { background: #febc2e; }
+    .traffic-lights .maximize { background: #28c840; }
+
+    .brand {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-left: var(--s-3);
+    }
+
+    .brand-dot { color: var(--c-accent); }
+
+    .titlebar-center {
+      display: flex;
+      gap: var(--s-1);
+    }
+
+    .nav-btn {
+      padding: var(--s-1_5) var(--s-3);
+      font-size: 12px;
+      color: var(--c-text-dim);
+      background: transparent;
+      border: none;
+      border-radius: var(--r-md);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+    }
+
+    .nav-btn:hover {
+      color: var(--c-text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .nav-btn.active {
+      color: var(--c-accent);
+      background: var(--c-accent-soft);
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--c-success);
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+    }
+
+    .status-text {
+      font-size: 10px;
+      color: var(--c-text-dim);
+      font-family: monospace;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      padding: var(--s-3);
+      gap: var(--s-3);
+    }
+
+    /* Expand Button */
+    .expand-btn {
+      position: absolute;
+      top: var(--s-3);
+      left: var(--s-3);
+      width: 40px;
+      height: 40px;
+      border-radius: var(--r-lg);
+      background: rgba(36, 21, 56, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--c-border);
+      color: var(--c-text-dim);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--d-base) var(--ease-out-expo);
+      z-index: 50;
+    }
+
+    .expand-btn:hover {
+      color: var(--c-accent);
+      background: rgba(36, 21, 56, 0.95);
+      border-color: var(--c-border-accent);
+    }
+
+    .expand-btn.visible {
+      display: flex;
+    }
+
+    /* Drawer - Left Side */
+    .drawer {
+      position: absolute;
+      top: var(--s-3);
+      left: var(--s-3);
+      bottom: var(--s-3);
+      width: 280px;
+      background: rgba(36, 21, 56, 0.90);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-2xl);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      z-index: 50;
+    }
+
+    .drawer.collapsed {
+      transform: translateX(-120%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Drawer Header */
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--s-3) var(--s-4);
+      border-bottom: 1px solid var(--c-border);
+      flex-shrink: 0;
+    }
+
+    .drawer-title {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--c-text-muted);
+      font-weight: 600;
+    }
+
+    .collapse-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--r-md);
+      background: rgba(26, 16, 40, 0.50);
+      border: none;
+      color: var(--c-text-dim);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--d-base) var(--ease-out-expo);
+    }
+
+    .collapse-btn:hover {
+      color: var(--c-text);
+      background: rgba(26, 16, 40, 0.70);
+    }
+
+    /* Drawer Content - Split into top and bottom */
+    .drawer-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Top Section - Controls */
+    .drawer-top {
+      flex-shrink: 0;
+      padding: var(--s-3);
+      display: flex;
+      flex-direction: column;
+      gap: var(--s-3);
+      overflow-y: auto;
+    }
+
+    /* Persona Card - Compact */
+    .persona-mini {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: var(--s-3);
+      background: rgba(232, 121, 168, 0.06);
+      border: 1px solid var(--c-border-accent);
+      border-radius: var(--r-lg);
+    }
+
+    .persona-mini-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e879a8, #b14f7e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .persona-mini-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .persona-mini-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--c-text);
+    }
+
+    .persona-mini-status {
+      font-size: 10px;
+      color: var(--c-text-dim);
+    }
+
+    .persona-mini-desc {
+      font-size: 10px;
+      color: var(--c-text-muted);
+      line-height: 1.4;
+      margin-top: var(--s-1);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Controls Section */
+    .controls-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s-3);
+    }
+
+    .section-title {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--c-text-muted);
+      font-weight: 600;
+    }
+
+    /* Volume Row */
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+    }
+
+    .control-icon {
+      font-size: 16px;
+      width: 24px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .control-label {
+      font-size: 13px;
+      color: var(--c-text-dim);
+      flex: 1;
+    }
+
+    .volume-slider {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.06);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--c-accent);
+      cursor: pointer;
+    }
+
+    .volume-value {
+      font-size: 12px;
+      color: var(--c-accent);
+      font-weight: 500;
+      width: 35px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* Toggle Rows */
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+    }
+
+    .toggle-switch {
+      width: 40px;
+      height: 22px;
+      border-radius: 11px;
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
+      position: relative;
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      flex-shrink: 0;
+    }
+
+    .toggle-switch.active {
+      background: var(--c-accent);
+      border-color: var(--c-accent);
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: white;
+      transition: all var(--d-base) var(--ease-out-expo);
+    }
+
+    .toggle-switch.active::after {
+      transform: translateX(18px);
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--c-border);
+    }
+
+    /* Quick Stats */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--s-2);
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--s-2);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: var(--r-md);
+    }
+
+    .stat-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--c-text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+      font-size: 9px;
+      color: var(--c-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Bottom Section - Memory Cards */
+    .drawer-bottom {
+      flex: 1;
+      min-height: 0;
+      border-top: 1px solid var(--c-border);
+      padding: var(--s-3);
+      background: rgba(26, 16, 40, 0.30);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .memory-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--s-2);
+      flex-shrink: 0;
+    }
+
+    .memory-title {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--c-text-muted);
+      font-weight: 600;
+    }
+
+    .memory-count {
+      font-size: 10px;
+      color: var(--c-text-muted);
+    }
+
+    /* Memory Cards Grid - 2 columns */
+    .memory-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--s-2);
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .memory-grid::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .memory-grid::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .memory-grid::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.10);
+      border-radius: 2px;
+    }
+
+    /* Memory Card */
+    .memory-card {
+      background: rgba(45, 27, 69, 0.60);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-md);
+      padding: var(--s-2) var(--s-3);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .memory-card:hover {
+      background: rgba(45, 27, 69, 0.80);
+      border-color: var(--c-border-accent);
+    }
+
+    /* Card Priority Indicator */
+    .memory-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+    }
+
+    .memory-card.high::before {
+      background: var(--c-accent);
+    }
+
+    .memory-card.medium::before {
+      background: var(--c-gold);
+    }
+
+    .memory-card.low::before {
+      background: var(--c-blue);
+    }
+
+    /* Card Content */
+    .card-content {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .card-main {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--c-text);
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-desc {
+      font-size: 9px;
+      color: var(--c-text-muted);
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Card Actions - Show on hover */
+    .card-actions {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--s-1);
+      padding-right: var(--s-2);
+      opacity: 0;
+      transition: opacity var(--d-fast) var(--ease-out-expo);
+    }
+
+    .memory-card:hover .card-actions {
+      opacity: 1;
+    }
+
+    .card-action-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--d-fast) var(--ease-out-expo);
+      font-size: 10px;
+    }
+
+    .card-action-btn.send {
+      background: var(--c-accent);
+      color: white;
+    }
+
+    .card-action-btn.send:hover {
+      background: var(--c-accent-hover);
+      transform: scale(1.1);
+    }
+
+    .card-action-btn.delete {
+      background: var(--c-error);
+      color: white;
+    }
+
+    .card-action-btn.delete:hover {
+      background: #e05555;
+      transform: scale(1.1);
+    }
+
+    /* Card States */
+    .memory-card.sending {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .memory-card.sent {
+      opacity: 0.4;
+      transform: scale(0.95);
+    }
+
+    .memory-card.deleting {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+
+    /* Sent Indicator */
+    .sent-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 10px;
+      color: var(--c-success);
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity var(--d-fast) var(--ease-out-expo);
+    }
+
+    .memory-card.sent .sent-indicator {
+      opacity: 1;
+    }
+
+    /* Center Stage */
+    .stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(26, 16, 40, 0.30);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-2xl);
+      position: relative;
+    }
+
+    .stage-placeholder {
+      text-align: center;
+      color: var(--c-text-muted);
+    }
+
+    .stage-placeholder .icon {
+      font-size: 64px;
+      margin-bottom: var(--s-4);
+      opacity: 0.5;
+    }
+
+    .stage-placeholder .text {
+      font-size: 14px;
+    }
+
+    /* Right Panel */
+    .panel {
+      width: 380px;
+      background: rgba(36, 21, 56, 0.85);
+      backdrop-filter: blur(40px);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-2xl);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      padding: var(--s-3) var(--s-4);
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .panel-tabs {
+      display: flex;
+      gap: var(--s-1);
+      flex: 1;
+    }
+
+    .panel-tab {
+      padding: var(--s-1_5) var(--s-3);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--c-text-dim);
+      background: rgba(26, 16, 40, 0.40);
+      border: none;
+      border-radius: var(--r-lg);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      white-space: nowrap;
+    }
+
+    .panel-tab:hover {
+      color: var(--c-text);
+      background: rgba(45, 27, 69, 0.60);
+    }
+
+    .panel-tab.active {
+      color: var(--c-accent);
+      background: var(--c-accent-soft);
+    }
+
+    .panel-collapse {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(26, 16, 40, 0.40);
+      border: none;
+      border-radius: var(--r-lg);
+      color: var(--c-text-dim);
+      cursor: pointer;
+    }
+
+    .panel-content {
+      flex: 1;
+      padding: var(--s-4);
+      overflow-y: auto;
+    }
+
+    /* Messages */
+    .message {
+      display: flex;
+      align-items: flex-end;
+      gap: var(--s-2);
+      margin-bottom: var(--s-3);
+    }
+
+    .message.user {
+      justify-content: flex-end;
+    }
+
+    .message-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e879a8, #b14f7e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .message-content {
+      max-width: 75%;
+    }
+
+    .message-bubble {
+      padding: var(--s-3) var(--s-4);
+      font-size: 14px;
+      line-height: 1.5;
+      border-radius: var(--r-2xl);
+    }
+
+    .message-bubble.ai {
+      background: var(--c-ai-bubble);
+      border: 1px solid var(--c-border-accent);
+      border-bottom-left-radius: var(--r-sm);
+    }
+
+    .message-bubble.user {
+      background: var(--c-user-bubble);
+      border: 1px solid rgba(124, 140, 245, 0.30);
+      border-bottom-right-radius: var(--r-sm);
+    }
+
+    .message-time {
+      font-size: 10px;
+      color: var(--c-text-muted);
+      font-family: monospace;
+      margin-top: var(--s-1);
+    }
+
+    .message.user .message-time {
+      text-align: right;
+    }
+
+    /* InputBar */
+    .input-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: var(--s-3) var(--s-4);
+      margin: var(--s-3);
+      background: var(--c-panel);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-lg);
+      transition: all var(--d-base) var(--ease-out-expo);
+    }
+
+    .input-bar:focus-within {
+      border-color: var(--c-border-accent);
+      box-shadow: 0 0 0 3px var(--c-accent-soft);
+    }
+
+    .input-field {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--c-text);
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .input-field::placeholder {
+      color: var(--c-text-muted);
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .btn-voice {
+      background: rgba(232, 121, 168, 0.10);
+      border: 1px solid var(--c-border-accent);
+      color: var(--c-accent);
+    }
+
+    .btn-send {
+      background: var(--c-accent);
+      color: white;
+    }
+
+    /* Design Label */
+    .design-label {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(26, 16, 40, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-xl);
+      padding: var(--s-4);
+      font-size: 11px;
+      color: var(--c-text-dim);
+      max-width: 280px;
+      z-index: 200;
+    }
+
+    .design-label h3 {
+      font-size: 12px;
+      color: var(--c-accent);
+      margin-bottom: var(--s-2);
+      font-weight: 600;
+    }
+
+    .design-label ul {
+      list-style: none;
+    }
+
+    .design-label li {
+      margin-bottom: var(--s-1);
+    }
+
+    .design-label code {
+      font-family: monospace;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- TitleBar -->
+    <div class="titlebar">
+      <div class="titlebar-left">
+        <div class="traffic-lights">
+          <span class="close"></span>
+          <span class="minimize"></span>
+          <span class="maximize"></span>
+        </div>
+        <div class="brand">Anima<span class="brand-dot">.</span></div>
+      </div>
+      <div class="titlebar-center">
+        <button class="nav-btn">Music</button>
+        <button class="nav-btn">Meme</button>
+        <button class="nav-btn active">Dashboard</button>
+      </div>
+      <div class="titlebar-right">
+        <span class="status-dot"></span>
+        <span class="status-text">Connected</span>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Expand Button -->
+      <button class="expand-btn" id="expandBtn" onclick="toggleDrawer()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
+
+      <!-- Left Drawer -->
+      <div class="drawer" id="drawer">
+        <!-- Header -->
+        <div class="drawer-header">
+          <div class="drawer-title">Controls & Memory</div>
+          <button class="collapse-btn" onclick="toggleDrawer()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Body: Top Controls + Bottom Memory -->
+        <div class="drawer-body">
+          <!-- Top Section: Controls -->
+          <div class="drawer-top">
+            <!-- Persona Mini -->
+            <div class="persona-mini">
+              <div class="persona-mini-avatar">A</div>
+              <div class="persona-mini-info">
+                <div class="persona-mini-name">Anima</div>
+                <div class="persona-mini-status">Active Session</div>
+                <div class="persona-mini-desc">Friendly AI companion who loves to chat about tech, design, and creative projects.</div>
+              </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls-section">
+              <div class="section-title">Quick Controls</div>
+
+              <!-- Voice Volume -->
+              <div class="volume-row">
+                <span class="control-icon">🔊</span>
+                <span class="control-label">Voice</span>
+                <input type="range" class="volume-slider" min="0" max="100" value="70">
+                <span class="volume-value">70%</span>
+              </div>
+
+              <!-- Mic Toggle -->
+              <div class="control-row">
+                <span class="control-icon">🎤</span>
+                <span class="control-label">Microphone</span>
+                <div class="toggle-switch active"></div>
+              </div>
+
+              <!-- Auto Memory Toggle -->
+              <div class="control-row">
+                <span class="control-icon">🧠</span>
+                <span class="control-label">Auto Memory</span>
+                <div class="toggle-switch"></div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Quick Stats -->
+            <div class="stats-row">
+              <div class="stat-item">
+                <div class="stat-value">47</div>
+                <div class="stat-label">Messages</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">128</div>
+                <div class="stat-label">Atoms</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">230ms</div>
+                <div class="stat-label">Latency</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Topics</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Section: Memory Cards -->
+          <div class="drawer-bottom">
+            <div class="memory-header">
+              <div class="memory-title">Memory Topics</div>
+              <div class="memory-count" id="memoryCount">6 items</div>
+            </div>
+
+            <!-- Memory Cards Grid -->
+            <div class="memory-grid" id="memoryGrid">
+              <!-- Card 1 -->
+              <div class="memory-card high" data-topic="Tell me about the Vue frontend redesign with 3-column layout">
+                <div class="card-content">
+                  <div class="card-main">Vue Frontend</div>
+                  <div class="card-desc">3-column layout</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+
+              <!-- Card 2 -->
+              <div class="memory-card high" data-topic="How did we set up Docker deployment?">
+                <div class="card-content">
+                  <div class="card-main">Docker Deploy</div>
+                  <div class="card-desc">Container setup</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+
+              <!-- Card 3 -->
+              <div class="memory-card medium" data-topic="Explain the design system token alignment">
+                <div class="card-content">
+                  <div class="card-main">Design System</div>
+                  <div class="card-desc">Token alignment</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+
+              <!-- Card 4 -->
+              <div class="memory-card medium" data-topic="What animation tokens did we unify?">
+                <div class="card-content">
+                  <div class="card-main">Animation</div>
+                  <div class="card-desc">Duration & easing</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+
+              <!-- Card 5 -->
+              <div class="memory-card low" data-topic="Show me the Persona Card component design">
+                <div class="card-content">
+                  <div class="card-main">Persona Card</div>
+                  <div class="card-desc">Avatar & traits</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+
+              <!-- Card 6 -->
+              <div class="memory-card low" data-topic="How do the Quick Controls work?">
+                <div class="card-content">
+                  <div class="card-main">Quick Controls</div>
+                  <div class="card-desc">Toggles & sliders</div>
+                </div>
+                <div class="card-actions">
+                  <button class="card-action-btn send" onclick="sendTopic(this)" title="Send topic">▶</button>
+                  <button class="card-action-btn delete" onclick="deleteCard(this)" title="Delete">✕</button>
+                </div>
+                <div class="sent-indicator">Sent</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Stage -->
+      <div class="stage">
+        <div class="stage-placeholder">
+          <div class="icon">🎭</div>
+          <div class="text">Live2D Model Stage</div>
+        </div>
+      </div>
+
+      <!-- Right Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-tabs">
+            <button class="panel-tab active">💬 Chat</button>
+            <button class="panel-tab">📺 Live</button>
+            <button class="panel-tab">🧠 Memory</button>
+            <button class="panel-tab">🎭 Persona</button>
+            <button class="panel-tab">🎵 Music</button>
+            <button class="panel-tab">⚙️ Settings</button>
+          </div>
+          <button class="panel-collapse">◀</button>
+        </div>
+
+        <div class="panel-content">
+          <div class="message">
+            <div class="message-avatar">A</div>
+            <div class="message-content">
+              <div class="message-bubble ai">
+                Hello! I'm Anima, your AI companion. How can I help you today?
+              </div>
+              <div class="message-time">14:30</div>
+            </div>
+          </div>
+
+          <div class="message user">
+            <div class="message-content">
+              <div class="message-bubble user">
+                Hi Anima! Can you help me with my project?
+              </div>
+              <div class="message-time">14:31</div>
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="message-avatar">A</div>
+            <div class="message-content">
+              <div class="message-bubble ai">
+                Of course! I'd be happy to help. What kind of project are you working on?
+              </div>
+              <div class="message-time">14:31</div>
+            </div>
+          </div>
+
+          <div class="message user">
+            <div class="message-content">
+              <div class="message-bubble user">
+                I'm building a VTuber application with Live2D support
+              </div>
+              <div class="message-time">14:32</div>
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="message-avatar">A</div>
+            <div class="message-content">
+              <div class="message-bubble ai">
+                That sounds exciting! Live2D is great for creating animated characters. Are you using PixiJS for rendering?
+              </div>
+              <div class="message-time">14:32</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-bar">
+          <input type="text" class="input-field" placeholder="Type a message...">
+          <button class="btn-icon btn-voice">🎤</button>
+          <button class="btn-icon btn-send">➤</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Design Label -->
+    <div class="design-label">
+      <h3>Controls</h3>
+      <ul>
+        <li>🔊 Voice: Volume slider</li>
+        <li>🎤 Microphone: On/Off toggle</li>
+        <li>🧠 Auto Memory: Auto extract topics</li>
+        <li>Memory cards: Hover for actions</li>
+        <li>▶ Send topic, ✕ Delete card</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    let isDrawerOpen = true;
+
+    function toggleDrawer() {
+      const drawer = document.getElementById('drawer');
+      const expandBtn = document.getElementById('expandBtn');
+
+      isDrawerOpen = !isDrawerOpen;
+
+      if (isDrawerOpen) {
+        drawer.classList.remove('collapsed');
+        expandBtn.classList.remove('visible');
+      } else {
+        drawer.classList.add('collapsed');
+        expandBtn.classList.add('visible');
+      }
+    }
+
+    // Send topic
+    function sendTopic(btn) {
+      const card = btn.closest('.memory-card');
+      const topic = card.dataset.topic;
+      
+      // Add sending state
+      card.classList.add('sending');
+      
+      // Simulate sending (in real app, this would send to chat)
+      setTimeout(() => {
+        card.classList.remove('sending');
+        card.classList.add('sent');
+        
+        // Show sent indicator
+        card.querySelector('.sent-indicator').style.opacity = '1';
+        
+        // Reset after 2 seconds
+        setTimeout(() => {
+          card.classList.remove('sent');
+          card.querySelector('.sent-indicator').style.opacity = '0';
+        }, 2000);
+      }, 500);
+    }
+
+    // Delete card
+    function deleteCard(btn) {
+      const card = btn.closest('.memory-card');
+      
+      // Add deleting animation
+      card.classList.add('deleting');
+      
+      // Remove after animation
+      setTimeout(() => {
+        card.remove();
+        updateCount();
+      }, 300);
+    }
+
+    // Update count
+    function updateCount() {
+      const count = document.querySelectorAll('.memory-card').length;
+      document.getElementById('memoryCount').textContent = count + ' items';
+    }
+
+    // Initialize
+    document.getElementById('expandBtn').classList.remove('visible');
+  </script>
+</body>
+</html>

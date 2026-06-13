@@ -69,9 +69,4 @@ const displayText = computed(() => {
 .streaming-text span {
   animation: charFadeIn 0.15s ease both;
 }
-
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
 </style>

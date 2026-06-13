@@ -48,7 +48,7 @@ const voteGlowClass = computed(() => {
             <path d="M18 2a16 16 0 1 1 0 32 16 16 0 1 1 0-32" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3" />
             <path d="M18 2a16 16 0 1 1 0 32 16 16 0 1 1 0-32" fill="none" stroke="currentColor" stroke-width="3"
               stroke-dasharray="100" :stroke-dashoffset="100 - fitScore * 100"
-              class="text-c-accent transition-all duration-500"
+              class="text-c-accent transition-all duration-300"
               stroke-linecap="round" />
           </svg>
           <span>{{ fitPercent }}</span>
@@ -76,8 +76,8 @@ const voteGlowClass = computed(() => {
 </template>
 
 <style scoped>
-.chat-msg-enter-active { animation: msgIn 0.35s ease-out; }
-.chat-msg-leave-active { animation: msgIn 0.25s ease-in reverse; }
+.chat-msg-enter-active { animation: msgIn 0.35s var(--ease-out-expo); }
+.chat-msg-leave-active { animation: msgIn 0.25s var(--ease-out-expo) reverse; }
 @keyframes msgIn {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }

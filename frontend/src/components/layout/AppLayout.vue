@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import Live2DRenderer from '@/components/live2d/Live2DRenderer.vue'
 import SceneEffects from '@/components/shared/SceneEffects.vue'
+import TitleBar from '@/components/layout/TitleBar.vue'
+import LeftDrawer from '@/components/layout/LeftDrawer.vue'
 import InteractivePanel from '@/components/layout/InteractivePanel.vue'
 import { useMobile } from '@/composables/useMobile'
 
@@ -18,42 +20,107 @@ function handlePopoutClosed(): void {
 </script>
 
 <template>
-  <!-- Desktop layout: absolute layers -->
-  <div v-if="!isMobile" class="flex-1 relative overflow-hidden">
-    <!-- Layer 0: Live2D Scene (full viewport) -->
-    <div
-      v-if="!live2dPopout"
-      class="absolute inset-0 z-0"
-    >
-      <Live2DRenderer />
+  <div class="app-container">
+    <!-- TitleBar -->
+    <TitleBar />
+
+    <!-- Desktop layout -->
+    <div v-if="!isMobile" class="main-content">
+      <!-- Left Drawer: Floating collapsible -->
+      <LeftDrawer />
+
+      <!-- Center Stage: Live2D (full width) -->
+      <div class="stage">
+        <Live2DRenderer />
+        <SceneEffects class="stage-effects" />
+      </div>
+
+      <!-- Right Panel: Interactive (fixed width) -->
+      <InteractivePanel
+        :live2d-popout="live2dPopout"
+        @popout="handlePopout"
+        @popout-closed="handlePopoutClosed"
+      />
     </div>
 
-    <!-- Layer 1: Scene Effects (particles, glows) -->
-    <SceneEffects v-if="!live2dPopout" class="z-10" />
+    <!-- Mobile layout -->
+    <div v-else class="mobile-content">
+      <!-- Live2D: compact top area -->
+      <div class="mobile-stage">
+        <Live2DRenderer />
+      </div>
 
-    <!-- Layer 2: Interactive Panel (floating right side) -->
-    <InteractivePanel
-      :class="live2dPopout ? 'w-full' : ''"
-      @popout="handlePopout"
-      @popout-closed="handlePopoutClosed"
-      :live2d-popout="live2dPopout"
-    />
-  </div>
-
-  <!-- Mobile layout: vertical column -->
-  <div v-else class="flex-1 flex flex-col overflow-hidden">
-    <!-- Live2D: compact top area (35vh) -->
-    <div v-if="!live2dPopout" class="h-[35vh] shrink-0 relative">
-      <Live2DRenderer />
+      <!-- Interactive Panel: fills remaining space -->
+      <InteractivePanel
+        class="mobile-panel"
+        :live2d-popout="live2dPopout"
+        :is-mobile="true"
+        @popout="handlePopout"
+        @popout-closed="handlePopoutClosed"
+      />
     </div>
-
-    <!-- Interactive Panel: fills remaining space below -->
-    <InteractivePanel
-      class="flex-1 min-h-0"
-      :live2d-popout="live2dPopout"
-      :is-mobile="true"
-      @popout="handlePopout"
-      @popout-closed="handlePopoutClosed"
-    />
   </div>
 </template>
+
+<style scoped>
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%),
+    var(--c-bg);
+}
+
+/* Desktop layout: floating drawer + stage + right panel */
+.main-content {
+  flex: 1;
+  display: flex;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--s-3);
+  gap: var(--s-3);
+}
+
+/* Center Stage: fills available space */
+.stage {
+  flex: 1;
+  position: relative;
+  background: rgba(26, 16, 40, 0.30);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-effects {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Mobile layout */
+.mobile-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-stage {
+  height: 35vh;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mobile-panel {
+  flex: 1;
+  min-height: 0;
+}
+</style>

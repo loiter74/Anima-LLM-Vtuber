@@ -131,22 +131,14 @@ function triggerCollect() {
 </template>
 
 <style scoped>
-.panel-enter-active { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.panel-leave-active { animation: slideOutRight 0.25s ease-in; }
+.panel-enter-active { animation: slideInRight 0.3s var(--ease-out-expo); }
+.panel-leave-active { animation: slideOutRight 0.25s var(--ease-out-expo); }
 
-.card-enter-active { animation: cardIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.card-leave-active { animation: cardOut 0.2s ease-in; }
-.pop-enter-active { animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.pop-leave-active { animation: popOut 0.15s ease-in; }
+.card-enter-active { animation: cardIn 0.3s var(--ease-out-expo); }
+.card-leave-active { animation: cardOut 0.2s var(--ease-out-expo); }
+.pop-enter-active { animation: popIn 0.25s var(--ease-back-soft); }
+.pop-leave-active { animation: popOut 0.15s var(--ease-out-expo); }
 
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes slideOutRight {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(100%); }
-}
 @keyframes cardIn {
   from { opacity: 0; transform: translateX(30px); }
   to { opacity: 1; transform: translateX(0); }

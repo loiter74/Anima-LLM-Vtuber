@@ -241,7 +241,7 @@ onUnmounted(() => {
   animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .subtitle-leave-active {
-  animation: fadeOut 0.3s ease-in;
+  animation: fadeOut 0.3s var(--ease-out-expo);
 }
 
 @keyframes popIn {

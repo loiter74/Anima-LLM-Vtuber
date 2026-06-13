@@ -2,20 +2,26 @@ FROM python:3.12-slim-bookworm AS builder
 
 WORKDIR /app
 
-# Install build deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install build deps with apt cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+# pip wheel cache persisted across builds via BuildKit cache mount
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user -r requirements.txt
 
 FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# Runtime deps only (no gcc)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Runtime deps only (no gcc) — use apt cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 

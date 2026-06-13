@@ -15,21 +15,32 @@ Animetta is a configurable AI virtual companion / VTuber framework with Live2D a
 ## Commands
 
 ### Running the Application
+
+#### Docker (Recommended)
 ```bash
-# Start all services (backend + web app)
-python scripts/start.py
+# GPU deployment (default)
+docker compose up -d --build
 
-# Start with options
-python scripts/start.py --backend-only   # Backend only (port 12394)
-python scripts/start.py --no-backend     # Skip backend
-python scripts/start.py --no-app         # Skip frontend
-python scripts/start.py --install        # Reinstall dependencies
+# CPU-only (no GPU)
+docker compose -f docker-compose.cpu.yml up -d --build
 
-# Stop all services
-python scripts/stop.py
+# Check health
+curl -s http://localhost/health
 
-# Run backend directly
+# View logs
+docker compose logs -f animetta
+
+# Stop
+docker compose down
+```
+
+#### Local Development (Alternative)
+```bash
+# Backend only
 PYTHONPATH=src python -m animetta.core.socketio_server
+
+# Frontend only (from frontend/)
+cd frontend && pnpm dev
 ```
 
 ### Docker (Production)

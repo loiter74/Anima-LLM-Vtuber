@@ -46,7 +46,7 @@ useDanmaku()
 <template>
   <!-- ========== MOBILE LAYOUT ========== -->
   <div v-if="isMobile" class="flex flex-col h-full pointer-events-none">
-    <!-- Mobile: panel content (fills space between Live2D and bottom nav) -->
+    <!-- Mobile: panel content -->
     <div class="flex-1 overflow-hidden relative pointer-events-auto">
       <Transition name="fade" mode="out-in">
         <ChatPanel v-if="activeTab === 'chat'" key="chat" />
@@ -75,142 +75,161 @@ useDanmaku()
     </nav>
   </div>
 
-  <!-- ========== DESKTOP LAYOUT (unchanged) ========== -->
-  <div v-else class="absolute inset-y-0 right-0 z-20 flex pointer-events-none">
-    <!-- Collapse trigger (visible when collapsed) -->
-      <button
-        v-if="isCollapsed"
-        class="pointer-events-auto w-12 flex flex-col items-center pt-4 gap-3
-               bg-c-bg/60 backdrop-blur-xl border border-c-border/30 rounded-l-2xl
-               text-c-text-dim hover:text-c-accent hover:bg-c-bg/80 transition-colors"
-        aria-label="展开侧边栏"
-        @click="isCollapsed = false"
-      >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M5 12h14M12 5l7 7-7 7" />
-      </svg>
-      <span class="text-10px writing-mode-vertical">{{ desktopTabLabels[activeTab] }}</span>
-    </button>
-
-    <!-- Main panel -->
-    <Transition name="slide">
-      <div
-        v-if="!isCollapsed"
-        class="pointer-events-auto flex flex-col glass-strong m-3 ml-0 w-[420px] min-w-[320px] max-w-[480px] interactive-panel"
-        :class="live2dPopout ? '!w-full !max-w-none !m-0 rounded-none' : ''"
-      >
-        <!-- Header: Tabs + Collapse -->
-        <div class="flex items-center border-b border-c-border px-4 py-3 shrink-0">
-          <!-- Tab buttons -->
-          <div class="flex gap-1.5 flex-1">
-            <button
-              v-for="tab in (['chat', 'live', 'memory', 'personality', 'singing', 'settings'] as const)"
-              :key="tab"
-              :aria-label="desktopTabLabels[tab]"
-              class="px-3.5 py-2 rounded-lg text-11px font-medium transition-all"
-              :class="activeTab === tab
-                ? 'bg-c-accent/20 text-c-accent'
-                : 'bg-c-bg/40 text-c-text-dim hover:text-c-text hover:bg-c-panel/50'"
-              @click="activeTab = tab"
-            >
-              {{ desktopTabLabels[tab] }}
-            </button>
-          </div>
-
-          <!-- PopOut button (when Live2D is embedded) -->
-          <PopOutButton
-            v-if="!live2dPopout"
-            class="mr-1"
-            @popout="emit('popout')"
-          />
-
-          <!-- Collapse button -->
-          <button
-            class="w-7 h-7 flex items-center justify-center rounded-lg
-                   bg-c-bg/40 text-c-text-dim hover:text-c-text hover:bg-c-bg/60 transition-colors"
-            aria-label="收起侧边栏"
-            @click="isCollapsed = true"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Tab content -->
-        <div class="flex-1 overflow-hidden relative">
-          <Transition name="fade" mode="out-in">
-            <ChatPanel v-if="activeTab === 'chat'" key="chat" />
-            <LiveChatPanel v-else-if="activeTab === 'live'" key="live" />
-            <MemoryPanel v-else-if="activeTab === 'memory'" key="memory" />
-            <PersonalityPanel v-else-if="activeTab === 'personality'" key="personality" />
-            <MusicCard v-else-if="activeTab === 'singing'" key="singing" />
-            <SettingsPanel v-else key="settings" />
-          </Transition>
-        </div>
+  <!-- ========== DESKTOP LAYOUT ========== -->
+  <div v-else class="panel-container">
+    <!-- Header: Tabs + Collapse -->
+    <div class="panel-header">
+      <div class="panel-tabs">
+        <button
+          v-for="tab in (['chat', 'live', 'memory', 'personality', 'singing', 'settings'] as const)"
+          :key="tab"
+          :aria-label="desktopTabLabels[tab]"
+          class="panel-tab"
+          :class="{ active: activeTab === tab }"
+          @click="activeTab = tab"
+        >
+          {{ desktopTabLabels[tab] }}
+        </button>
       </div>
-    </Transition>
 
-    <!-- Popout closed indicator -->
-    <div
-      v-if="live2dPopout && isCollapsed"
-      class="pointer-events-auto absolute top-4 left-3"
-    >
+      <!-- PopOut button -->
+      <PopOutButton
+        v-if="!live2dPopout"
+        class="mr-1"
+        @popout="emit('popout')"
+      />
+
+      <!-- Collapse button -->
       <button
-        class="btn-ghost text-xs flex items-center gap-1 px-3 py-2 glass"
-        @click="emit('popoutClosed')"
+        class="panel-collapse"
+        aria-label="收起侧边栏"
+        @click="isCollapsed = true"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
-        收回 Live2D
       </button>
+    </div>
+
+    <!-- Tab content -->
+    <div class="panel-content">
+      <Transition name="fade" mode="out-in">
+        <ChatPanel v-if="activeTab === 'chat'" key="chat" />
+        <LiveChatPanel v-else-if="activeTab === 'live'" key="live" />
+        <MemoryPanel v-else-if="activeTab === 'memory'" key="memory" />
+        <PersonalityPanel v-else-if="activeTab === 'personality'" key="personality" />
+        <MusicCard v-else-if="activeTab === 'singing'" key="singing" />
+        <SettingsPanel v-else key="settings" />
+      </Transition>
     </div>
   </div>
 </template>
 
 <style scoped>
-.slide-enter-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.slide-leave-active {
-  transition: all 0.25s ease-in;
-}
-.slide-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-.slide-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
+/* Desktop Panel Container */
+.panel-container {
+  background: rgba(36, 21, 56, 0.85);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: var(--s-1);
+  flex: 1;
+  overflow-x: auto;
+}
+
+.panel-tab {
+  padding: var(--s-1_5) var(--s-3);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-text-dim);
+  background: rgba(26, 16, 40, 0.40);
+  border: none;
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: all var(--d-base) var(--ease-out-expo);
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.panel-tab:hover {
+  color: var(--c-text);
+  background: rgba(45, 27, 69, 0.60);
+}
+
+.panel-tab.active {
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+.panel-collapse {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 16, 40, 0.40);
+  border: none;
+  border-radius: var(--r-lg);
+  color: var(--c-text-dim);
+  cursor: pointer;
+  transition: all var(--d-base) var(--ease-out-expo);
+  flex-shrink: 0;
+}
+
+.panel-collapse:hover {
+  color: var(--c-text);
+  background: rgba(26, 16, 40, 0.60);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Transitions */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
 
-.writing-mode-vertical {
-  writing-mode: vertical-rl;
+/* Scrollbar */
+.panel-content::-webkit-scrollbar {
+  width: 6px;
 }
 
-/* Mobile slide-up transition */
-.slide-up-enter-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+.panel-content::-webkit-scrollbar-track {
+  background: transparent;
 }
-.slide-up-leave-active {
-  transition: all 0.25s ease-in;
+
+.panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
 }
-.slide-up-enter-from {
-  transform: translateY(100%);
-  opacity: 0;
-}
-.slide-up-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
+
+.panel-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 </style>

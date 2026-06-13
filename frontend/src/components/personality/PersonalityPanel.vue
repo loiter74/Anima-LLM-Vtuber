@@ -114,7 +114,7 @@ function toggleMode(): void {
 <template>
   <div class="flex flex-col h-full">
     <!-- Header -->
-    <div class="flex items-center gap-1.5 px-3 py-1.5 border-b border-c-border/60 shrink-0">
+    <div class="flex items-center gap-2 px-4 py-3 border-b border-c-border/60 shrink-0">
       <span class="text-sm">🎭</span>
       <span class="text-sm font-medium text-c-text">人格配置</span>
       <div class="flex-1" />
@@ -270,7 +270,7 @@ function toggleMode(): void {
               <span class="text-xs text-c-text-dim w-8 shrink-0">{{ dim.label }}</span>
               <div class="flex-1 h-1.5 rounded-full bg-c-bg/80 overflow-hidden">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
+                  class="h-full rounded-full transition-all duration-300"
                   :style="{ width: dim.val + '%', background: dim.color }"
                 />
               </div>
