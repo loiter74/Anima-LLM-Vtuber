@@ -67,6 +67,7 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   }
 
   function submitReview(memeId: string, status: 'good' | 'bad') {
+    if (!sock) return
     sock.emit(Events.MEME.REVIEW, { meme_id: memeId, status })
     sock.once(Events.MEME.REVIEW, (data: { ok: boolean; feedback?: string; error?: string }) => {
       if (data.ok) {
@@ -104,6 +105,7 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   }
 
   function exportDataset() {
+    if (!sock) return
     sock.emit(Events.MEME.DATASET, {})
     sock.once(Events.MEME.DATASET, (data: { memes: any[]; error?: string }) => {
       if (data.error) {

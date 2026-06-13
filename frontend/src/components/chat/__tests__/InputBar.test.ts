@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import InputBar from '@/components/chat/InputBar.vue'
 
-function createWrapper(sendText: ReturnType<typeof vi.fn> = vi.fn()) {
+function createWrapper(sendText: (text: string) => void = vi.fn()) {
   return mount(InputBar, {
     props: { sendText },
     global: {

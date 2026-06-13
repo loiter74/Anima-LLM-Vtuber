@@ -218,4 +218,159 @@ def find_files(base: Path, globs: list[str]) -> list[Path]:
     return sorted(set(files))
 
 
-def migrate_source_file(filepath: Path, dry_run: bool
+
+def migrate_source_file(filepath: Path, dry_run: bool = False) -> int:
+    """Migrate event names in a single source file. Returns count of replacements."""
+    try:
+        content = filepath.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"  [SKIP] {filepath}: {e}")
+        return 0
+
+    original = content
+    total_replacements = 0
+
+    for old_name, new_name in ALL_MAPPINGS.items():
+        for pattern, replacement in build_patterns(old_name):
+            new_content, n = pattern.subn(replacement, content)
+            if n > 0:
+                total_replacements += n
+                content = new_content
+
+    if total_replacements == 0:
+        return 0
+
+    rel = filepath.relative_to(Path.cwd()) if filepath.is_absolute() else filepath
+    if dry_run:
+        print(f"  [DRY-RUN] {rel}: {total_replacements} replacement(s)")
+    else:
+        filepath.write_text(content, encoding="utf-8")
+        print(f"  [OK] {rel}: {total_replacements} replacement(s)")
+
+    return total_replacements
+
+
+def migrate_json_config(filepath: Path, dry_run: bool = False) -> int:
+    """
+    Migrate the JSON config file: replace dot with colon in all 'name' fields.
+
+    This is JSON-aware (preserves formatting, indentation, key order).
+    """
+    try:
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"  [SKIP] {filepath}: {e}")
+        return 0
+
+    total_replacements = 0
+
+    def _walk(obj):
+        nonlocal total_replacements
+        if isinstance(obj, dict):
+            for key, val in obj.items():
+                if key == "name" and isinstance(val, str):
+                    if "." in val and ":" not in val:
+                        old_val = val
+                        new_val = val.replace(".", ":", 1)
+                        obj[key] = new_val
+                        total_replacements += 1
+                        if dry_run:
+                            print(f"    {old_val} -> {new_val}")
+                else:
+                    _walk(val)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+
+    _walk(data)
+
+    if total_replacements == 0:
+        return 0
+
+    rel = filepath.relative_to(Path.cwd()) if filepath.is_absolute() else filepath
+    if dry_run:
+        print(f"  [DRY-RUN] {rel}: {total_replacements} name field(s)")
+    else:
+        filepath.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"  [OK] {rel}: {total_replacements} name field(s)")
+
+    return total_replacements
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Migrate Socket.IO event names to domain:action convention"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview changes without writing files",
+    )
+    args = parser.parse_args()
+
+    project_root = Path(__file__).resolve().parent.parent
+    backend_dir = project_root / "src" / "animetta"
+    frontend_dir = project_root / "frontend" / "src"
+    json_config = project_root / "config" / "socket-events.json"
+
+    dry_run = args.dry_run
+    mode_label = "DRY-RUN" if dry_run else "EXECUTE"
+
+    print("=" * 60)
+    print(f" Socket.IO Event Name Migration  [{mode_label}]")
+    print("=" * 60)
+    print(f" Event mappings loaded: {len(ALL_MAPPINGS)}")
+    print(f"   (JSON auto-generated: {len(JSON_MAPPINGS)}, "
+          f"manual: {len(EVENT_MAPPING)})")
+    print()
+
+    total_files_changed = 0
+    total_replacements = 0
+
+    # --- Phase 1: JSON Config ---
+    print("[1/3] Migrating JSON config...")
+    if json_config.exists():
+        n = migrate_json_config(json_config, dry_run=dry_run)
+        if n > 0:
+            total_files_changed += 1
+            total_replacements += n
+    else:
+        print(f"  [SKIP] {json_config} not found")
+    print()
+
+    # --- Phase 2: Backend .py files ---
+    print("[2/3] Migrating backend Python files...")
+    backend_files = find_files(backend_dir, BACKEND_GLOBS)
+    for f in backend_files:
+        n = migrate_source_file(f, dry_run=dry_run)
+        if n > 0:
+            total_files_changed += 1
+            total_replacements += n
+    print()
+
+    # --- Phase 3: Frontend .ts/.vue files ---
+    print("[3/3] Migrating frontend TypeScript/Vue files...")
+    frontend_files = find_files(frontend_dir, FRONTEND_GLOBS)
+    for f in frontend_files:
+        n = migrate_source_file(f, dry_run=dry_run)
+        if n > 0:
+            total_files_changed += 1
+            total_replacements += n
+    print()
+
+    # --- Summary ---
+    print("=" * 60)
+    print(f" Migration complete: {total_files_changed} file(s) changed, "
+          f"{total_replacements} replacement(s)")
+    if dry_run:
+        print(" (Dry-run mode -- no files were modified)")
+    print("=" * 60)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

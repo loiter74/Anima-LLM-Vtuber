@@ -67,7 +67,7 @@ const chartOptions = {
       },
       pointLabels: {
         color: 'rgba(255, 255, 255, 0.5)',
-        font: { size: 11, weight: '500' as const },
+        font: { size: 11, weight: 500 },
       },
     },
   },

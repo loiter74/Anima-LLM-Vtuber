@@ -76,6 +76,7 @@ export function useSocket() {
         subtitle_url: data.subtitle_url || '',
         tts_audio_url: data.tts_audio_url || '',
         vocals_url: data.vocals_url || '',
+        original_url: data.original_url || '',
         video_title: data.video_title || '',
         duration: data.duration,
         lyrics: data.lyrics || [],

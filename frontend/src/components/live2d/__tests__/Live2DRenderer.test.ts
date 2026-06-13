@@ -39,8 +39,8 @@ function createWrapper() {
       stubs: {
         SubtitleOverlay: true,
       },
-      attachTo: document.body,
     },
+    attachTo: document.body,
   })
 }
 
