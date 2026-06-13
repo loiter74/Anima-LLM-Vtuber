@@ -19,7 +19,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 RVC_PATHS = [
     Path(os.environ.get("RVC_PATH", "")),
-    Path("C:/Users/30262/RVC20240604Nvidia"),
     Path.home() / "RVC20240604Nvidia",
 ]
 
