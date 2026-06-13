@@ -128,6 +128,7 @@ useDanmaku()
 <style scoped>
 /* Desktop Panel Container */
 .panel-container {
+  width: 380px;
   background: rgba(36, 21, 56, 0.85);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
@@ -136,13 +137,14 @@ useDanmaku()
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .panel-header {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-4);
+  padding: var(--s-4) var(--s-5);
   border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }

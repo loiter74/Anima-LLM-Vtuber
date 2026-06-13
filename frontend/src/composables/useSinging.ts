@@ -1,4 +1,5 @@
 import { getSocket } from './useSocket'
+import { Events } from '@/constants/socket-events'
 import { useSingingStore } from '@/stores/singing'
 
 export function useSinging() {
@@ -12,20 +13,20 @@ export function useSinging() {
       store.setError('Cannot connect to server')
       return
     }
-    socket.emit('sing:process', { url, auto_confirm: autoConfirm })
+    socket.emit(Events.SING.PROCESS, { url, auto_confirm: autoConfirm })
   }
 
   function confirmLyrics(assContent: string) {
     const socket = getSocket()
     if (socket?.connected) {
-      socket.emit('sing:confirm_lyrics', { ass_content: assContent })
+      socket.emit(Events.SING.CONFIRM_LYRICS, { ass_content: assContent })
     }
   }
 
   function cancel() {
     const socket = getSocket()
     if (socket?.connected) {
-      socket.emit('sing:cancel', {})
+      socket.emit(Events.SING.CANCEL, {})
     }
   }
 

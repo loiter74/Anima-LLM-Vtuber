@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 export interface MinecraftStatus {
   connected: boolean
@@ -28,8 +29,8 @@ export const useMinecraftStore = defineStore('minecraft', () => {
       else if (data.connected) error.value = ''
     }
 
-    socket.on('minecraft.status', handler)
-    cleanup = () => socket.off('minecraft.status', handler)
+    socket.on(Events.MINECRAFT.STATUS, handler)
+    cleanup = () => socket.off(Events.MINECRAFT.STATUS, handler)
   }
 
   function teardownListener(): void {
@@ -41,13 +42,13 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     if (!socket) return
     isConnecting.value = true
     error.value = ''
-    socket.emit('minecraft.start', {})
+    socket.emit(Events.MINECRAFT.START, {})
   }
 
   function stop(): void {
     const socket = getSocket()
     if (!socket) return
-    socket.emit('minecraft.stop')
+    socket.emit(Events.MINECRAFT.STOP)
   }
 
   return {

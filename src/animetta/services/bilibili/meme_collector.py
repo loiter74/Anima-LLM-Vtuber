@@ -12,8 +12,8 @@ import logging
 from collections import Counter
 from typing import Any
 
-from .api import fetch_comments, fetch_live_danmaku, fetch_trending_videos
-from .models import CollectedComment, CollectedVideo, MemeCandidate
+from .api import fetch_comments, fetch_live_danmaku, fetch_trending_videos, fetch_video_danmaku
+from .models import CollectedComment, CollectedDanmaku, CollectedVideo, MemeCandidate
 from .text_utils import STOPWORDS, extract_title_phrases, parse_tags
 
 logger = logging.getLogger(__name__)
@@ -130,6 +130,103 @@ class MemeCollector:
             return []
         except Exception as e:
             logger.error("[MemeCollector] Collection failed: %s", e, exc_info=True)
+            return []
+
+    async def collect_danmaku_for_training(
+        self,
+        max_danmaku: int = 1000,
+        min_length: int = 5,
+        max_length: int = 20,
+        meme_keywords: list[str] | None = None,
+    ) -> list[CollectedDanmaku]:
+        """Collect danmaku specifically for training data.
+
+        This method focuses on collecting high-quality danmaku for training purposes,
+        with filtering for length, meme keywords, and originality.
+
+        Args:
+            max_danmaku: Maximum number of danmaku to collect.
+            min_length: Minimum character length for danmaku.
+            max_length: Maximum character length for danmaku.
+            meme_keywords: Optional list of meme keywords to filter by.
+
+        Returns:
+            List of CollectedDanmaku filtered for training quality.
+        """
+        logger.info(
+            "[MemeCollector] Starting danmaku collection for training "
+            "(max_danmaku=%d, length=%d-%d, keywords=%s)",
+            max_danmaku, min_length, max_length, meme_keywords,
+        )
+
+        try:
+            return await asyncio.wait_for(
+                self._collect_danmaku_impl(max_danmaku, min_length, max_length, meme_keywords),
+                timeout=self._request_timeout,
+            )
+        except TimeoutError:
+            logger.warning(
+                "[MemeCollector] Danmaku collection timed out after %ds — "
+                "returning partial results",
+                self._request_timeout,
+            )
+            return []
+        except Exception as e:
+            logger.error("[MemeCollector] Danmaku collection failed: %s", e, exc_info=True)
+            return []
+
+    async def _collect_danmaku_impl(
+        self,
+        max_danmaku: int,
+        min_length: int,
+        max_length: int,
+        meme_keywords: list[str] | None,
+    ) -> list[CollectedDanmaku]:
+        """Internal danmaku collection implementation."""
+        try:
+            # Phase 1: Fetch trending videos
+            videos = await self._fetch_trending_videos()
+            if not videos:
+                logger.info("[MemeCollector] No trending videos found for danmaku collection")
+                return []
+
+            logger.info("[MemeCollector] Fetched %d videos for danmaku collection", len(videos))
+
+            # Phase 2: Collect danmaku from videos in parallel
+            all_danmaku: list[CollectedDanmaku] = []
+            semaphore = asyncio.Semaphore(self._concurrency)
+
+            async def fetch_one(video: CollectedVideo) -> list[CollectedDanmaku]:
+                async with semaphore:
+                    await asyncio.sleep(self._request_delay)
+                    return await self._fetch_video_danmaku(video)
+
+            results = await asyncio.gather(
+                *[fetch_one(v) for v in videos],
+                return_exceptions=True,
+            )
+
+            for r in results:
+                if isinstance(r, BaseException):
+                    logger.warning("[MemeCollector] Danmaku fetch error: %s", r)
+                    continue
+                all_danmaku.extend(r)
+
+            logger.info("[MemeCollector] Collected %d raw danmaku", len(all_danmaku))
+
+            # Phase 3: Filter danmaku for training quality
+            filtered_danmaku = self._filter_danmaku_for_training(
+                all_danmaku, min_length, max_length, meme_keywords, max_danmaku,
+            )
+
+            logger.info(
+                "[MemeCollector] Filtered to %d danmaku for training",
+                len(filtered_danmaku),
+            )
+            return filtered_danmaku
+
+        except Exception as e:
+            logger.error("[MemeCollector] Danmaku collection failed: %s", e, exc_info=True)
             return []
 
     async def _collect_impl(self) -> list[MemeCandidate]:
@@ -351,6 +448,117 @@ class MemeCollector:
                 )
 
         return phrases
+
+    # ── Video danmaku collection for training ───────────────────────────
+
+    async def _fetch_video_danmaku(self, video: CollectedVideo) -> list[CollectedDanmaku]:
+        """Fetch danmaku from a single video for training data.
+
+        Args:
+            video: CollectedVideo to fetch danmaku from.
+
+        Returns:
+            List of CollectedDanmaku from the video.
+        """
+        try:
+            raw_danmaku = await fetch_video_danmaku(
+                bvid=video.bvid,
+                max_count=100,
+                timeout=self._comment_timeout,
+            )
+
+            return [
+                CollectedDanmaku(
+                    content=d.get("content", ""),
+                    source_video=video.bvid,
+                    source_type="video",
+                    likes=d.get("likes", 0),
+                    publish_time=d.get("publish_time", ""),
+                    mode=d.get("mode", 1),
+                    color=d.get("color", 16777215),
+                )
+                for d in raw_danmaku
+                if d.get("content")
+            ]
+
+        except Exception as e:
+            logger.warning("[MemeCollector] Failed to fetch danmaku for %s: %s", video.bvid, e)
+            return []
+
+    def _filter_danmaku_for_training(
+        self,
+        danmaku_list: list[CollectedDanmaku],
+        min_length: int,
+        max_length: int,
+        meme_keywords: list[str] | None,
+        max_count: int,
+    ) -> list[CollectedDanmaku]:
+        """Filter danmaku for training quality.
+
+        Filters based on:
+        1. Length (5-20 characters)
+        2. Meme keywords (if provided)
+        3. Originality (remove duplicates)
+        4. Quality score (likes, mode, etc.)
+
+        Args:
+            danmaku_list: Raw danmaku list.
+            min_length: Minimum character length.
+            max_length: Maximum character length.
+            meme_keywords: Optional list of meme keywords.
+            max_count: Maximum number to return.
+
+        Returns:
+            Filtered list of CollectedDanmaku.
+        """
+        # Step 1: Filter by length
+        length_filtered = [
+            d for d in danmaku_list
+            if min_length <= len(d.content) <= max_length
+        ]
+
+        # Step 2: Filter by meme keywords if provided
+        if meme_keywords:
+            keyword_filtered = []
+            for d in length_filtered:
+                content_lower = d.content.lower()
+                for keyword in meme_keywords:
+                    if keyword.lower() in content_lower:
+                        d.is_meme = True
+                        d.meme_type = keyword
+                        keyword_filtered.append(d)
+                        break
+            length_filtered = keyword_filtered
+
+        # Step 3: Remove duplicates (keep first occurrence)
+        seen_content: set[str] = set()
+        unique_danmaku = []
+        for d in length_filtered:
+            if d.content not in seen_content:
+                seen_content.add(d.content)
+                unique_danmaku.append(d)
+
+        # Step 4: Calculate quality score and sort
+        for d in unique_danmaku:
+            score = 0.0
+            # Higher score for scroll danmaku (mode 1-3)
+            if d.mode in (1, 2, 3):
+                score += 0.3
+            # Higher score for more likes
+            if d.likes > 0:
+                score += min(d.likes / 100.0, 0.4)
+            # Higher score for meme keywords
+            if d.is_meme:
+                score += 0.3
+            # Higher score for reasonable length
+            if 8 <= len(d.content) <= 15:
+                score += 0.2
+            d.quality_score = min(score, 1.0)
+
+        # Sort by quality score (descending)
+        unique_danmaku.sort(key=lambda x: x.quality_score, reverse=True)
+
+        return unique_danmaku[:max_count]
 
     # ── Meme identification ─────────────────────────────────────────────
 

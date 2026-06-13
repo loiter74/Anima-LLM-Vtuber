@@ -13,6 +13,8 @@ from typing import Any
 
 from loguru import logger
 
+from animetta.orchestration.socket_events import EVENTS
+
 
 class ModelLoadState(Enum):
     """Lifecycle state of a single model."""
@@ -284,7 +286,7 @@ class ModelLoadingManager:
             payload["error"] = error
 
         try:
-            asyncio.ensure_future(self._socketio.emit("model_status", payload))
+            asyncio.ensure_future(self._socketio.emit(EVENTS["system"]["model_status"]["name"], payload))
         except Exception as exc:
             # Socket.IO failures should never crash the loader.
             logger.debug(f"Failed to emit model_status for '{name}': {exc}")

@@ -29,6 +29,12 @@ FROM python:3.12-slim-bookworm AS python-builder
 
 WORKDIR /build
 
+# Disable proxy during build to avoid SOCKS dependency issues
+ENV HTTP_PROXY=
+ENV HTTPS_PROXY=
+ENV http_proxy=
+ENV https_proxy=
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

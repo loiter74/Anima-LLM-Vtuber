@@ -114,7 +114,7 @@ function toggleMode(): void {
 <template>
   <div class="flex flex-col h-full">
     <!-- Header -->
-    <div class="flex items-center gap-2 px-4 py-3 border-b border-c-border/60 shrink-0">
+    <div class="flex items-center gap-2 px-5 py-4 border-b border-c-border/60 shrink-0">
       <span class="text-sm">🎭</span>
       <span class="text-sm font-medium text-c-text">人格配置</span>
       <div class="flex-1" />
@@ -132,7 +132,7 @@ function toggleMode(): void {
       </button>
     </div>
 
-    <div v-show="!collapsed" class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <div v-show="!collapsed" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <!-- Current mode badge -->
       <div>
         <label class="text-xs font-medium text-c-text-dim uppercase tracking-wider mb-2 block">当前模式</label>

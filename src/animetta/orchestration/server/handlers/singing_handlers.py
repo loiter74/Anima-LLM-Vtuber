@@ -10,6 +10,7 @@ import yaml
 from loguru import logger
 
 from .base_handler import BaseSocketHandler
+from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -49,13 +50,13 @@ class SingingHandlers(BaseSocketHandler):
 
         if not url and not file_data and not local_path:
             await self.sio.emit(
-                "sing:error", {"error": "URL, file upload, or local path is required"}, to=sid
+                EVENTS["sing"]["error"]["name"], {"error": "URL, file upload, or local path is required"}, to=sid
             )
             return
 
         if self._pipeline is not None:
             await self.sio.emit(
-                "sing:error", {"error": "A pipeline is already running"}, to=sid
+                EVENTS["sing"]["error"]["name"], {"error": "A pipeline is already running"}, to=sid
             )
             return
 
@@ -84,7 +85,7 @@ class SingingHandlers(BaseSocketHandler):
             elif local_path:
                 # Direct local file (server-side path)
                 if not os.path.isfile(local_path):
-                    await self.sio.emit("sing:error", {"error": f"File not found: {local_path}"}, to=sid)
+                    await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": f"File not found: {local_path}"}, to=sid)
                     self._pipeline = None
                     return
                 asyncio.ensure_future(
@@ -97,7 +98,7 @@ class SingingHandlers(BaseSocketHandler):
 
         except Exception as e:
             logger.error(f"sing:process error: {e}", exc_info=True)
-            await self.sio.emit("sing:error", {"error": str(e)}, to=sid)
+            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": str(e)}, to=sid)
             self._pipeline = None
 
     async def _save_uploaded_file(self, file_data: str, file_name: str) -> str:
@@ -113,14 +114,14 @@ class SingingHandlers(BaseSocketHandler):
 
     async def _emit_progress(self, sid: str, progress) -> None:
         """Emit progress event to client."""
-        await self.sio.emit("sing:progress", {
+        await self.sio.emit(EVENTS["sing"]["progress"]["name"], {
             "stage": progress.stage.value,
             "progress": progress.progress,
             "message": progress.message,
         }, to=sid)
 
         if progress.stage.value == "waiting_lyrics":
-            await self.sio.emit("sing:lyrics_ready", {
+            await self.sio.emit(EVENTS["sing"]["lyrics_ready"]["name"], {
                 "message": progress.message,
             }, to=sid)
 
@@ -142,7 +143,7 @@ class SingingHandlers(BaseSocketHandler):
                     url, auto_confirm_lyrics=auto_confirm
                 )
 
-            await self.sio.emit("sing:complete", {
+            await self.sio.emit(EVENTS["sing"]["complete"]["name"], {
                 "audio_url": f"/api/singing/audio/{os.path.basename(result.audio_path)}",
                 "original_url": f"/api/singing/audio/{os.path.basename(result.original_audio_path)}",
                 "vocals_url": f"/api/singing/audio/{os.path.basename(result.vocals_path)}",
@@ -168,10 +169,10 @@ class SingingHandlers(BaseSocketHandler):
                 ],
             }, to=sid)
         except asyncio.CancelledError:
-            await self.sio.emit("sing:error", {"error": "Cancelled"}, to=sid)
+            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": "Cancelled"}, to=sid)
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
-            await self.sio.emit("sing:error", {"error": str(e)}, to=sid)
+            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": str(e)}, to=sid)
         finally:
             self._pipeline = None
 
@@ -194,7 +195,7 @@ class SingingHandlers(BaseSocketHandler):
         """
         text = data.get("text", "")
         translation = data.get("translation", "")
-        await self.sio.emit("sing:subtitle_line", {
+        await self.sio.emit(EVENTS["sing"]["subtitle_line"]["name"], {
             "text": text,
             "translation": translation,
             "lang": "zh",

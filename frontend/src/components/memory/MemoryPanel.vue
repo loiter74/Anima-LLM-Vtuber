@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useMemoryStore } from '@/stores/memory'
 import { getSocket } from '@/composables/useSocket'
 import type { WikiPageEntry } from '@/stores/memory'
+import { Events } from '@/constants/socket-events'
 
 const store = useMemoryStore()
 
@@ -15,7 +16,7 @@ function addMeme(): void {
   if (!text) return
   const socket = getSocket()
   if (!socket) return
-  socket.emit('meme_add', { text, source: 'user' }, () => {
+  socket.emit(Events.MEME.ADD, { text, source: 'user' }, () => {
     memeText.value = ''
     store.fetchWikiPages(sessionId.value)
   })
@@ -50,7 +51,7 @@ onMounted(() => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Header -->
-    <div class="flex items-center px-4 py-3 border-b border-c-border/40 shrink-0">
+    <div class="flex items-center px-5 py-4 border-b border-c-border/40 shrink-0">
       <span class="text-xs font-medium flex items-center gap-1.5 flex-1">
         <span>📖</span>
         <span>记忆浏览</span>
@@ -105,7 +106,7 @@ onMounted(() => {
       </div>
 
       <!-- Page list -->
-      <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-2">
         <!-- Loading -->
         <div v-if="store.loading" class="flex items-center justify-center py-8">
           <span class="text-xs text-c-text-dim animate-pulse">加载 wiki 页面...</span>

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from ...socket_events import EVENTS
+
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
@@ -41,7 +43,7 @@ class MinecraftHandlers:
             bridge = get_bridge()
             if bridge is None:
                 await self.sio.emit(
-                    "minecraft.status",
+                    EVENTS["minecraft"]["status"]["name"],
                     {"connected": False, "error": "Bridge initialization failed"},
                     to=sid,
                 )
@@ -50,14 +52,14 @@ class MinecraftHandlers:
             await bridge.start()
             logger.info("[Minecraft] Bot started successfully")
             await self.sio.emit(
-                "minecraft.status",
+                EVENTS["minecraft"]["status"]["name"],
                 {"connected": True, "username": config.bot.username},
                 to=sid,
             )
         except Exception as e:
             logger.error(f"[Minecraft] Failed to start: {e}")
             await self.sio.emit(
-                "minecraft.status",
+                EVENTS["minecraft"]["status"]["name"],
                 {"connected": False, "error": str(e)},
                 to=sid,
             )
@@ -78,21 +80,21 @@ class MinecraftHandlers:
 
             logger.info("[Minecraft] Bot stopped")
             await self.sio.emit(
-                "minecraft.status",
+                EVENTS["minecraft"]["status"]["name"],
                 {"connected": False},
                 to=sid,
             )
         except ImportError:
             logger.warning("[Minecraft] Minecraft tools not installed")
             await self.sio.emit(
-                "minecraft.status",
+                EVENTS["minecraft"]["status"]["name"],
                 {"connected": False, "error": "Minecraft tools not installed"},
                 to=sid,
             )
         except Exception as e:
             logger.error(f"[Minecraft] Failed to stop: {e}")
             await self.sio.emit(
-                "minecraft.status",
+                EVENTS["minecraft"]["status"]["name"],
                 {"connected": False, "error": str(e)},
                 to=sid,
             )

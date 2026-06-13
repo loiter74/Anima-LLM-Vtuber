@@ -49,7 +49,7 @@ watch(() => store.memoryOrganizing, (organizing) => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Compact toolbar -->
-    <div class="flex items-center gap-2 px-4 py-3 border-b border-c-border/60 text-xs shrink-0">
+    <div class="flex items-center gap-2 px-5 py-4 border-b border-c-border/60 text-xs shrink-0">
       <!-- Memory organize -->
       <button
         class="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
@@ -80,7 +80,7 @@ watch(() => store.memoryOrganizing, (organizing) => {
     <!-- Memory progress bar with stage detail -->
     <div
       v-if="memoryProgress"
-      class="px-4 py-3 bg-c-card/60 border-b border-c-border/40 space-y-2 animate-fade-in shrink-0"
+      class="px-5 py-4 bg-c-card/60 border-b border-c-border/40 space-y-2 animate-fade-in shrink-0"
     >
       <div class="flex items-center gap-2 text-xs">
         <span class="animate-pulse">🧠</span>

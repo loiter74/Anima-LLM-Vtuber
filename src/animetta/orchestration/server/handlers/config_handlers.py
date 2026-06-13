@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from .base_handler import BaseSocketHandler
+from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -44,9 +45,9 @@ class ConfigHandlers(BaseSocketHandler):
                 del self.session_manager.orchestrators[sid]
 
             await self.sio.emit(
-                "config-switched",
+                EVENTS["config"]["switched"]["name"],
                 {
-                    "type": "config-switched",
+                    "type": EVENTS["config"]["switched"]["name"],
                     "message": f"Switched to config: {config_name}",
                 },
                 to=sid,
@@ -54,7 +55,7 @@ class ConfigHandlers(BaseSocketHandler):
 
         except Exception as e:
             logger.error(f"[{sid}] Error switching config: {e}")
-            await self.sio.emit("error", {"type": "error", "message": str(e)}, to=sid)
+            await self.sio.emit(EVENTS["system"]["error"]["name"], {"type": EVENTS["system"]["error"]["name"], "message": str(e)}, to=sid)
 
     async def on_set_log_level(self, sid: str, data: dict) -> None:
         """Set backend log level."""
@@ -68,9 +69,9 @@ class ConfigHandlers(BaseSocketHandler):
             self.user_settings.set_log_level(level)
 
         await self.sio.emit(
-            "log_level_changed",
+            EVENTS["config"]["log_level_changed"]["name"],
             {
-                "type": "log_level_changed",
+                "type": EVENTS["config"]["log_level_changed"]["name"],
                 "success": success,
                 "level": logger_manager.get_level(),
                 "message": f"Log level set to {logger_manager.get_level()}"
@@ -138,13 +139,13 @@ class ConfigHandlers(BaseSocketHandler):
             },
             "available_personas": available_personas,
         }
-        await self.sio.emit("config_data", config_data, to=sid)
+        await self.sio.emit(EVENTS["config"]["data"]["name"], config_data, to=sid)
 
     # ── Heartbeat ──────────────────────────────────────────────────────
 
     async def on_heartbeat(self, sid: str, data: dict) -> None:
         """Heartbeat check."""
-        await self.sio.emit("heartbeat-ack", {}, to=sid)
+        await self.sio.emit(EVENTS["config"]["heartbeat_ack"]["name"], {}, to=sid)
 
     # ── Translation events ────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ class ConfigHandlers(BaseSocketHandler):
                 f"[{sid}] Translation target language updated to: {target_language}"
             )
             await self.sio.emit(
-                "translation.status",
+                EVENTS["translation"]["status"]["name"],
                 {
                     "target_language": translation_state.target_language,
                     "enabled": translation_state.enabled,
@@ -166,7 +167,7 @@ class ConfigHandlers(BaseSocketHandler):
             )
         else:
             await self.sio.emit(
-                "translation.status",
+                EVENTS["translation"]["status"]["name"],
                 {
                     "target_language": translation_state.target_language,
                     "enabled": translation_state.enabled,

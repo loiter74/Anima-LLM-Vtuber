@@ -91,6 +91,35 @@ class CollectedComment:
 
 
 @dataclass
+class CollectedDanmaku:
+    """Raw danmaku (弹幕) data collected from B站 videos."""
+    content: str
+    source_video: str = ""  # BV ID
+    source_type: str = "video"  # video, live, comment
+    likes: int = 0
+    publish_time: str = ""
+    mode: int = 1  # 1=scroll, 4=bottom, 5=top, etc.
+    color: int = 16777215  # RGB color
+    is_meme: bool = False
+    meme_type: str = ""  # 热梗, 搞笑, 情感, etc.
+    quality_score: float = 0.0  # 0.0-1.0
+
+    def to_dict(self) -> dict:
+        return {
+            "content": self.content,
+            "source_video": self.source_video,
+            "source_type": self.source_type,
+            "likes": self.likes,
+            "publish_time": self.publish_time,
+            "mode": self.mode,
+            "color": self.color,
+            "is_meme": self.is_meme,
+            "meme_type": self.meme_type,
+            "quality_score": self.quality_score,
+        }
+
+
+@dataclass
 class MemeCandidate:
     """Meme candidate identified from B站 content before cognitive analysis.
 

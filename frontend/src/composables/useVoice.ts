@@ -1,5 +1,6 @@
 import { ref, onUnmounted } from 'vue'
 import { getSocket } from './useSocket'
+import { Events } from '@/constants/socket-events'
 
 export function useVoice() {
   const isRecording = ref(false)
@@ -65,7 +66,7 @@ export function useVoice() {
           const chunk = resampleBuffer.splice(0, CHUNK_SIZE)
           chunkCount++
           if (socket?.connected) {
-            socket.emit('raw_audio_data', { audio: chunk })
+            socket.emit(Events.CHAT.AUDIO, { audio: chunk })
           }
         }
       }
@@ -101,7 +102,7 @@ export function useVoice() {
     // Signal end of audio input
     const socket = getSocket()
     if (socket?.connected) {
-      socket.emit('mic_audio_end', {})
+      socket.emit(Events.CHAT.AUDIO_END, {})
     }
   }
 

@@ -3,6 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMemeReviewStore } from '@/stores/memeReview'
 import MemeCard from '@/components/meme/MemeCard.vue'
+import { Events } from '@/constants/socket-events'
 
 const store = useMemeReviewStore()
 const router = useRouter()
@@ -22,8 +23,8 @@ function triggerCollect() {
   if (!store.socket) return
   collecting.value = true
   collectResult.value = ''
-  store.socket.emit('meme:collect', {})
-  store.socket.once('meme:collect', (data: { ok: boolean; count?: number; error?: string }) => {
+  store.socket.emit(Events.MEME.COLLECT, {})
+  store.socket.once(Events.MEME.COLLECT, (data: { ok: boolean; count?: number; error?: string }) => {
     collecting.value = false
     if (data.ok) {
       collectResult.value = `采集完成，新增 ${data.count ?? 0} 个梗候选`

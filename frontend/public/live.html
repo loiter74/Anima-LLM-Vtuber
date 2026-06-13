@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1920">
+  <title>AI Live Stream</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Live2D Cubism Core (MUST load before pixi-live2d-display) -->
+  <script src="/live2d/live2dcubismcore.min.js"></script>
+
+  <!-- PixiJS -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+
+  <!-- Pixi Live2D Display (after Cubism Core and PixiJS) -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
+
+  <!-- Socket.IO Client -->
+  <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+
+  <style>
+    /* ============================================
+       RESET & BASE
+       ============================================ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      /* Color Tokens */
+      --bg-primary: #0a0a0f;
+      --bg-surface: rgba(255, 255, 255, 0.03);
+      --bg-glass: rgba(10, 10, 15, 0.65);
+      --bg-glass-hover: rgba(10, 10, 15, 0.75);
+      --text-primary: #f0f0f5;
+      --text-secondary: rgba(240, 240, 245, 0.6);
+      --text-muted: rgba(240, 240, 245, 0.35);
+      --accent: #e879a8;
+      --accent-soft: rgba(232, 121, 168, 0.15);
+      --border: rgba(255, 255, 255, 0.06);
+      --border-subtle: rgba(255, 255, 255, 0.03);
+      --glow: rgba(232, 121, 168, 0.2);
+      --success: #4ade80;
+      --error: #f87171;
+
+      /* Typography */
+      --font-sans: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', monospace;
+
+      /* Spacing */
+      --space-xs: 8px;
+      --space-sm: 12px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+
+      /* Radius */
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+
+      /* Transitions */
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+      --duration-fast: 150ms;
+      --duration-base: 250ms;
+      --duration-slow: 400ms;
+    }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ============================================
+       AMBIENT BACKGROUND
+       ============================================ */
+    .ambient-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .ambient-bg::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: -20%;
+      width: 140%;
+      height: 140%;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(124, 140, 245, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(110, 231, 183, 0.04) 0%, transparent 50%);
+      animation: ambientDrift 20s ease-in-out infinite;
+    }
+
+    .ambient-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      opacity: 0.4;
+      mix-blend-mode: overlay;
+    }
+
+    @keyframes ambientDrift {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-2%, 1%) rotate(0.5deg); }
+      66% { transform: translate(1%, -1%) rotate(-0.3deg); }
+    }
+
+    .bg-image {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background-size: cover;
+      background-position: center;
+      opacity: 0.9;
+    }
+
+    .bg-vignette {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background:
+        radial-gradient(ellipse at center, transparent 30%, rgba(10, 10, 15, 0.4) 100%),
+        linear-gradient(to bottom, transparent 60%, rgba(10, 10, 15, 0.6) 100%);
+    }
+
+    /* ============================================
+       LIVE2D LAYER
+       ============================================ */
+    .live2d-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+    }
+
+    #live2dCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Loading State */
+    .live2d-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      z-index: 11;
+      pointer-events: none;
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.02em;
+    }
+
+    /* Error State */
+    .live2d-error {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 11;
+      background: rgba(10, 10, 15, 0.8);
+    }
+
+    .error-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(248, 113, 113, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      color: var(--error);
+    }
+
+    .error-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .retry-btn {
+      padding: 12px 32px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(232, 121, 168, 0.2);
+      border-radius: var(--radius-md);
+      color: var(--accent);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--duration-fast) ease;
+    }
+
+    .retry-btn:hover {
+      background: rgba(232, 121, 168, 0.25);
+    }
+
+    /* ============================================
+       DANMAKU FLOATING PANEL
+       ============================================ */
+    .danmaku-panel {
+      position: absolute;
+      top: var(--space-xl);
+      left: var(--space-xl);
+      z-index: 20;
+      width: 380px;
+      max-height: 650px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(40px) saturate(1.2);
+      -webkit-backdrop-filter: blur(40px) saturate(1.2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      transition: all var(--duration-slow) var(--ease-out-expo);
+      box-shadow:
+        0 0 0 1px var(--border-subtle),
+        0 4px 24px rgba(0, 0, 0, 0.2),
+        0 12px 48px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .danmaku-panel:hover {
+      background: var(--bg-glass-hover);
+      border-color: rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 8px 32px rgba(0, 0, 0, 0.25),
+        0 16px 64px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .danmaku-panel.collapsed {
+      width: 140px;
+      max-height: 56px;
+      border-radius: var(--radius-lg);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-md) var(--space-lg);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--duration-fast) ease;
+    }
+
+    .panel-header:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .panel-header:active {
+      transform: scale(0.98);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: all var(--duration-base) ease;
+    }
+
+    .status-dot.connected {
+      background: var(--success);
+      box-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+      animation: statusPulse 2s ease-in-out infinite;
+    }
+
+    .status-dot.error {
+      background: var(--error);
+      box-shadow: 0 0 12px rgba(248, 113, 113, 0.5);
+    }
+
+    @keyframes statusPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .title-text {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .message-count {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px 10px;
+      border-radius: 100px;
+      letter-spacing: 0.02em;
+    }
+
+    .toggle-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all var(--duration-fast) ease;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+    }
+
+    .toggle-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .danmaku-panel.collapsed .panel-header {
+      padding: var(--space-md) var(--space-md);
+    }
+
+    .danmaku-panel.collapsed .message-count,
+    .danmaku-panel.collapsed .status-dot {
+      display: none;
+    }
+
+    .danmaku-list {
+      max-height: 550px;
+      overflow-y: auto;
+      padding: 0 var(--space-lg) var(--space-md);
+      scroll-behavior: smooth;
+    }
+
+    .danmaku-panel.collapsed .danmaku-list {
+      display: none;
+    }
+
+    .danmaku-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .danmaku-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .danmaku-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+    }
+
+    .danmaku-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .danmaku-item {
+      padding: var(--space-sm) 0;
+      border-bottom: 1px solid var(--border-subtle);
+      animation: itemSlideIn var(--duration-slow) var(--ease-out-expo) both;
+    }
+
+    .danmaku-item:last-child {
+      border-bottom: none;
+    }
+
+    .danmaku-item .item-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      margin-bottom: 4px;
+    }
+
+    .danmaku-item .username {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+
+    .danmaku-item .timestamp {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .danmaku-item .message {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1.5;
+      letter-spacing: -0.01em;
+    }
+
+    @keyframes itemSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .danmaku-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-2xl) var(--space-lg);
+      gap: var(--space-sm);
+    }
+
+    .danmaku-empty .empty-icon {
+      font-size: 28px;
+      opacity: 0.2;
+    }
+
+    .danmaku-empty .empty-text {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .danmaku-item:hover {
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    /* ============================================
+       DEBUG PANEL (Dev Only)
+       ============================================ */
+    .debug-panel {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      z-index: 100;
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      max-width: 320px;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+
+    .debug-panel h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
+      letter-spacing: 0.02em;
+    }
+
+    .debug-panel .status-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .debug-panel .status-row:last-child {
+      border-bottom: none;
+    }
+
+    .debug-panel .status-label {
+      color: var(--text-muted);
+    }
+
+    .debug-panel .status-value {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .debug-panel .status-value.ok {
+      color: var(--success);
+    }
+
+    .debug-panel .status-value.error {
+      color: var(--error);
+    }
+
+    /* Preview Controls */
+    .preview-controls {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: var(--space-sm);
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-md);
+    }
+
+    .preview-controls button {
+      padding: var(--space-sm) var(--space-lg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--duration-fast) ease;
+    }
+
+    .preview-controls button:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-primary);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .preview-controls button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(232, 121, 168, 0.2);
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Ambient Background -->
+  <div class="ambient-bg"></div>
+
+  <!-- Background Image -->
+  <div class="bg-image" id="bgImage"></div>
+  <div class="bg-vignette"></div>
+
+  <!-- Live2D Layer -->
+  <div class="live2d-layer">
+    <canvas id="live2dCanvas"></canvas>
+
+    <!-- Loading State -->
+    <div class="live2d-loading" id="live2dLoading">
+      <div class="loading-spinner"></div>
+      <span class="loading-text">Loading Live2D Model...</span>
+    </div>
+
+    <!-- Error State -->
+    <div class="live2d-error" id="live2dError">
+      <div class="error-icon">!</div>
+      <span class="error-text" id="errorText">Failed to load Live2D model</span>
+      <button class="retry-btn" onclick="retryLoadModel()">Retry</button>
+    </div>
+  </div>
+
+  <!-- Danmaku Floating Panel -->
+  <div class="danmaku-panel" id="danmakuPanel">
+    <div class="panel-header" onclick="togglePanel()">
+      <div class="panel-title">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="title-text">Danmaku</span>
+      </div>
+      <span class="message-count" id="messageCount">0</span>
+      <button class="toggle-btn" id="toggleBtn" aria-label="Toggle danmaku panel">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="danmaku-list" id="danmakuList">
+      <div class="danmaku-empty" id="emptyState">
+        <span class="empty-icon">...</span>
+        <span class="empty-text">Waiting for danmaku...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug Panel -->
+  <div class="debug-panel" id="debugPanel">
+    <h4>System Status</h4>
+    <div class="status-row">
+      <span class="status-label">Live2D</span>
+      <span class="status-value" id="statusLive2D">Loading...</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">WebSocket</span>
+      <span class="status-value" id="statusWS">Disconnected</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Danmaku</span>
+      <span class="status-value" id="statusDanmaku">0 messages</span>
+    </div>
+  </div>
+
+  <!-- Preview Controls -->
+  <div class="preview-controls">
+    <button onclick="togglePanel()">Toggle Panel</button>
+    <button onclick="toggleDebug()">Toggle Debug</button>
+    <button onclick="addSampleDanmaku()">Add One</button>
+    <button onclick="loadPresetDanmaku(20)">Load 20</button>
+    <button onclick="loadConversationPreset()">Load Chat</button>
+  </div>
+
+  <script>
+    // ============================================
+    // CONFIGURATION
+    // ============================================
+    const CONFIG = {
+      // Live2D model path
+      modelPath: '/live2d/hiyori/Hiyori.model3.json',
+      // WebSocket URL - empty = same origin
+      wsUrl: '',
+      // Max danmaku messages to keep
+      maxDanmaku: 500,
+      // Reconnection settings
+      reconnectDelay: 3000,
+      reconnectMaxAttempts: 10
+    };
+
+    // ============================================
+    // STATE
+    // ============================================
+    const state = {
+      isCollapsed: false,
+      danmakuCount: 0,
+      wsConnected: false,
+      wsReconnectAttempts: 0,
+      live2dLoaded: false,
+      pixiApp: null,
+      live2dModel: null,
+      socket: null
+    };
+
+    // ============================================
+    // BACKGROUND IMAGE
+    // ============================================
+    function loadBackground() {
+      const params = new URLSearchParams(window.location.search);
+      const bgFile = params.get('bg');
+
+      if (bgFile) {
+        const bgImage = document.getElementById('bgImage');
+        // Try vertical folder first, then backgrounds root
+        bgImage.style.backgroundImage = `url(backgrounds/vertical/${bgFile}), url(backgrounds/${bgFile})`;
+        bgImage.style.backgroundSize = 'cover';
+        bgImage.style.backgroundPosition = 'center';
+      }
+    }
+
+    // ============================================
+    // LIVE2D INITIALIZATION
+    // ============================================
+    async function initLive2D() {
+      const canvas = document.getElementById('live2dCanvas');
+      const loadingEl = document.getElementById('live2dLoading');
+      const errorEl = document.getElementById('live2dError');
+
+      try {
+        // Update status
+        updateStatus('statusLive2D', 'Initializing...', '');
+
+        // Check if PIXI and Live2D are available
+        if (typeof PIXI === 'undefined') {
+          throw new Error('PixiJS not loaded');
+        }
+
+        // Create PIXI Application
+        state.pixiApp = new PIXI.Application({
+          view: canvas,
+          width: 1080,
+          height: 1920,
+          backgroundColor: 0x000000,
+          backgroundAlpha: 0,
+          resizeTo: canvas.parentElement
+        });
+
+        // Load model
+        updateStatus('statusLive2D', 'Loading model...', '');
+
+        // Check which Live2D API is available
+        let Live2DModel;
+        if (PIXI.live2d && PIXI.live2d.Live2DModel) {
+          Live2DModel = PIXI.live2d.Live2DModel;
+        } else if (typeof Live2DModel !== 'undefined') {
+          // Global Live2DModel from CDN
+          Live2DModel = window.Live2DModel;
+        } else {
+          throw new Error('Live2D SDK not loaded. Check cubism4.min.js and index.min.js');
+        }
+
+        const model = await Live2DModel.from(CONFIG.modelPath, {
+          autoInteract: false,
+          autoUpdate: true
+        });
+
+        state.live2dModel = model;
+
+        // Center and scale model
+        const scaleX = (1080 * 0.8) / model.width;
+        const scaleY = (1920 * 0.8) / model.height;
+        const scale = Math.min(scaleX, scaleY);
+
+        model.scale.set(scale);
+        model.anchor.set(0.5, 0.5);
+        model.x = 1080 / 2;
+        model.y = 1920 / 2;
+
+        // Add to stage
+        state.pixiApp.stage.addChild(model);
+
+        // Hide loading
+        loadingEl.style.display = 'none';
+        state.live2dLoaded = true;
+        updateStatus('statusLive2D', 'Loaded', 'ok');
+
+        console.log('[Live2D] Model loaded successfully');
+
+      } catch (error) {
+        console.error('[Live2D] Failed to load:', error);
+
+        // Show error
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'flex';
+        document.getElementById('errorText').textContent =
+          `Failed to load Live2D model: ${error.message}`;
+
+        updateStatus('statusLive2D', 'Error', 'error');
+      }
+    }
+
+    function retryLoadModel() {
+      const loadingEl = document.getElementById('live2dLoading');
+      const errorEl = document.getElementById('live2dError');
+
+      loadingEl.style.display = 'flex';
+      errorEl.style.display = 'none';
+
+      initLive2D();
+    }
+
+    // ============================================
+    // WEBSOCKET CONNECTION
+    // ============================================
+    function initWebSocket() {
+      const wsUrl = CONFIG.wsUrl || window.location.origin;
+
+      updateStatus('statusWS', 'Connecting...', '');
+
+      state.socket = io(wsUrl, {
+        path: '/socket.io/',
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: CONFIG.reconnectDelay,
+        reconnectionAttempts: CONFIG.reconnectMaxAttempts,
+        timeout: 30000
+      });
+
+      // Connection events
+      state.socket.on('connect', () => {
+        state.wsConnected = true;
+        state.wsReconnectAttempts = 0;
+        updateConnectionStatus(true);
+        updateStatus('statusWS', 'Connected', 'ok');
+        console.log('[WS] Connected');
+      });
+
+      state.socket.on('disconnect', () => {
+        state.wsConnected = false;
+        updateConnectionStatus(false);
+        updateStatus('statusWS', 'Disconnected', 'error');
+        console.log('[WS] Disconnected');
+      });
+
+      state.socket.on('connect_error', (error) => {
+        state.wsReconnectAttempts++;
+        updateStatus('statusWS', `Error (${state.wsReconnectAttempts})`, 'error');
+        console.error('[WS] Connection error:', error.message);
+      });
+
+      // Danmaku events
+      state.socket.on('danmaku', (data) => {
+        addDanmaku(data);
+      });
+
+      // Live2D action events
+      state.socket.on('live2d.action', (data) => {
+        if (state.live2dModel) {
+          executeLive2DAction(data);
+        }
+      });
+    }
+
+    function updateConnectionStatus(connected) {
+      const dot = document.getElementById('statusDot');
+      dot.className = 'status-dot' + (connected ? ' connected' : '');
+    }
+
+    // ============================================
+    // LIVE2D ACTIONS
+    // ============================================
+    function executeLive2DAction(action) {
+      if (!state.live2dModel) return;
+
+      switch (action.type) {
+        case 'expression':
+          state.live2dModel.expression(action.name);
+          break;
+        case 'motion':
+          state.live2dModel.motion(action.group, action.index);
+          break;
+      }
+    }
+
+    // ============================================
+    // DANMAKU MANAGEMENT
+    // ============================================
+    function addDanmaku(data) {
+      const list = document.getElementById('danmakuList');
+      const emptyState = document.getElementById('emptyState');
+
+      // Hide empty state
+      if (emptyState) {
+        emptyState.style.display = 'none';
+      }
+
+      // Create item
+      const item = document.createElement('div');
+      item.className = 'danmaku-item';
+
+      const now = new Date();
+      const time = data.timestamp ||
+        now.getHours().toString().padStart(2, '0') + ':' +
+        now.getMinutes().toString().padStart(2, '0');
+
+      item.innerHTML = `
+        <div class="item-header">
+          <span class="username">${escapeHtml(data.user_name || 'Anonymous')}</span>
+          <span class="timestamp">${time}</span>
+        </div>
+        <div class="message">${escapeHtml(data.text || '')}</div>
+      `;
+
+      // Insert at end
+      list.appendChild(item);
+
+      // Scroll to bottom
+      list.scrollTop = list.scrollHeight;
+
+      // Update count
+      state.danmakuCount++;
+      document.getElementById('messageCount').textContent = state.danmakuCount;
+      document.getElementById('statusDanmaku').textContent = `${state.danmakuCount} messages`;
+
+      // Remove old items
+      const items = list.querySelectorAll('.danmaku-item');
+      if (items.length > CONFIG.maxDanmaku) {
+        items[0].remove();
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ============================================
+    // PRESET DANMAKU DATA
+    // ============================================
+    const presetDanmakuData = {
+      users: [
+        { name: 'Sakura', color: '#e879a8' },
+        { name: 'Yuki', color: '#7c8cf5' },
+        { name: 'Hana', color: '#6ee7b7' },
+        { name: 'Ren', color: '#f5c872' },
+        { name: 'Aoi', color: '#60a5fa' },
+        { name: 'Kai', color: '#f87171' },
+        { name: 'Mio', color: '#a78bfa' },
+        { name: 'Sora', color: '#34d399' },
+        { name: 'Luna', color: '#fbbf24' },
+        { name: 'Riku', color: '#fb923c' },
+        { name: '小明', color: '#e879a8' },
+        { name: '樱花酱', color: '#f472b6' },
+        { name: '路人甲', color: '#9ca3af' },
+        { name: '大佬乙', color: '#fbbf24' },
+        { name: '萌新三', color: '#34d399' }
+      ],
+      messages: {
+        greeting: [
+          '大家好！', 'Hello!', 'Hi~', '晚上好', '早上好',
+          '下午好', '来了来了', '刚进直播间', '第一次来'
+        ],
+        praise: [
+          '好可爱！', '太厉害了', '666666', 'Amazing!', 'Kawaii!',
+          '绝了', '无敌', '太强了', '好棒', '真不错',
+          '爱了爱了', '关注了', '已关注', '三连了'
+        ],
+        question: [
+          '这是AI吗？', '怎么做到的？', '用的什么技术？',
+          '可以互动吗？', '能聊天吗？', '今天直播多久？',
+          '可以点歌吗？', '有教程吗？', '这是什么软件？'
+        ],
+        interaction: [
+          '加油！', '继续继续', '不要停', '再来一个',
+          '唱首歌吧', '跳个舞', '转个圈', '笑一个',
+          '说句话', '打个招呼', '比个心'
+        ],
+        emoji: [
+          '❤️', '🎉', '✨', '👏', '🔥', '💯', '⭐',
+          '😍', '🥰', '😂', '🤣', '👍', '💖', '🌟'
+        ],
+        bilibili: [
+          '你币没了', '下次一定', 'awsl', 'xswl', 'yyds',
+          '破防了', '蚌埠住了', '典中典', '孝死了', '急了急了'
+        ]
+      }
+    };
+
+    // Generate a random preset danmaku
+    function getRandomPresetDanmaku() {
+      const user = presetDanmakuData.users[Math.floor(Math.random() * presetDanmakuData.users.length)];
+      const categories = Object.keys(presetDanmakuData.messages);
+      const category = categories[Math.floor(Math.random() * categories.length)];
+      const messages = presetDanmakuData.messages[category];
+      const text = messages[Math.floor(Math.random() * messages.length)];
+
+      return {
+        user_name: user.name,
+        text: text,
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      };
+    }
+
+    // Add a single sample danmaku
+    function addSampleDanmaku() {
+      addDanmaku(getRandomPresetDanmaku());
+    }
+
+    // Load batch preset danmaku
+    function loadPresetDanmaku(count = 20) {
+      const interval = setInterval(() => {
+        if (count <= 0) {
+          clearInterval(interval);
+          return;
+        }
+        addDanmaku(getRandomPresetDanmaku());
+        count--;
+      }, 150);
+    }
+
+    // Load initial conversation-like danmaku
+    function loadConversationPreset() {
+      const conversation = [
+        { user_name: 'Sakura', text: '大家好！今天心情不错~', delay: 0 },
+        { user_name: 'Yuki', text: '晚上好！', delay: 200 },
+        { user_name: 'Hana', text: '来了来了', delay: 400 },
+        { user_name: 'Ren', text: '这是AI吗？好厉害', delay: 600 },
+        { user_name: 'Aoi', text: '第一次来直播间', delay: 800 },
+        { user_name: 'Kai', text: '666666', delay: 1000 },
+        { user_name: 'Mio', text: '好可爱！', delay: 1200 },
+        { user_name: 'Sora', text: '可以互动吗？', delay: 1400 },
+        { user_name: '小明', text: '关注了关注了', delay: 1600 },
+        { user_name: '樱花酱', text: '已三连 ❤️', delay: 1800 },
+        { user_name: '路人甲', text: '怎么做到的？', delay: 2000 },
+        { user_name: 'Luna', text: '太厉害了 ✨', delay: 2200 },
+        { user_name: 'Riku', text: '唱首歌吧', delay: 2400 },
+        { user_name: '大佬乙', text: 'yyds', delay: 2600 },
+        { user_name: '萌新三', text: '第一次看AI直播', delay: 2800 },
+        { user_name: 'Sakura', text: '今天直播多久？', delay: 3000 },
+        { user_name: 'Yuki', text: '继续继续！', delay: 3200 },
+        { user_name: 'Hana', text: '👏👏👏', delay: 3400 },
+        { user_name: 'Ren', text: '破防了', delay: 3600 },
+        { user_name: 'Aoi', text: '爱了爱了 💖', delay: 3800 }
+      ];
+
+      conversation.forEach(msg => {
+        setTimeout(() => addDanmaku(msg), msg.delay);
+      });
+    }
+
+    // ============================================
+    // PANEL TOGGLE
+    // ============================================
+    function togglePanel() {
+      const panel = document.getElementById('danmakuPanel');
+      const icon = document.getElementById('toggleBtn');
+
+      state.isCollapsed = !state.isCollapsed;
+
+      if (state.isCollapsed) {
+        panel.classList.add('collapsed');
+        icon.querySelector('svg path').setAttribute('d', 'M3 7.5L6 4.5L9 7.5');
+      } else {
+        panel.classList.remove('collapsed');
+        icon.querySelector('svg path').setAttribute('d', 'M3 4.5L6 7.5L9 4.5');
+      }
+    }
+
+    // ============================================
+    // DEBUG PANEL
+    // ============================================
+    let debugVisible = true;
+
+    function toggleDebug() {
+      debugVisible = !debugVisible;
+      document.getElementById('debugPanel').style.display = debugVisible ? 'block' : 'none';
+    }
+
+    function updateStatus(elementId, text, status) {
+      const el = document.getElementById(elementId);
+      el.textContent = text;
+      el.className = 'status-value' + (status ? ` ${status}` : '');
+    }
+
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // Load background
+      loadBackground();
+
+      // Initialize Live2D
+      initLive2D();
+
+      // Initialize WebSocket
+      initWebSocket();
+
+      // Load preset danmaku after a short delay
+      setTimeout(() => {
+        // Load conversation preset for demo
+        loadConversationPreset();
+      }, 500);
+    });
+  </script>
+</body>
+</html>

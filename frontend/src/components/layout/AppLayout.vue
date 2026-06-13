@@ -81,8 +81,8 @@ function handlePopoutClosed(): void {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  padding: var(--s-3);
-  gap: var(--s-3);
+  padding: var(--s-4);
+  gap: var(--s-4);
 }
 
 /* Center Stage: fills available space */

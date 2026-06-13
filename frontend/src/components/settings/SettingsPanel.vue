@@ -6,6 +6,7 @@ import { useSubtitleStore } from '@/stores/subtitle'
 import { useMinecraftStore } from '@/stores/minecraft'
 import type { SubtitleDisplayMode, SubtitleFontSize } from '@/stores/subtitle'
 import BackgroundSettings from './BackgroundSettings.vue'
+import { Events } from '@/constants/socket-events'
 
 const danmakuStore = useDanmakuStore()
 const subtitleStore = useSubtitleStore()
@@ -48,13 +49,13 @@ function handleBilibiliConnect(): void {
   }
   roomError.value = ''
   danmakuStore.setConnecting(true)
-  socket.emit('bilibili.connect', { room_id: roomInput.value })
+  socket.emit(Events.BILIBILI.CONNECT, { room_id: roomInput.value })
 }
 
 function handleBilibiliDisconnect(): void {
   const socket = getSocket()
   if (!socket) return
-  socket.emit('bilibili.disconnect')
+  socket.emit(Events.BILIBILI.DISCONNECT)
 }
 
 const activeSection = ref<'status' | 'background' | 'controls' | 'live' | 'subtitle' | 'theme'>('status')
@@ -94,9 +95,9 @@ onMounted(() => {
     loading.value = false
   }
 
-  socket.on('config_data', handler)
-  cleanup = () => socket.off('config_data', handler)
-  socket.emit('get_config', {})
+  socket.on(Events.CONFIG.DATA, handler)
+  cleanup = () => socket.off(Events.CONFIG.DATA, handler)
+  socket.emit(Events.CONFIG.GET, {})
 })
 
 onUnmounted(() => {
@@ -108,7 +109,7 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-col h-full">
     <!-- Section tabs -->
-    <div class="flex gap-1.5 px-4 py-3 border-b border-c-border/40 shrink-0">
+    <div class="flex gap-1.5 px-5 py-4 border-b border-c-border/40 shrink-0">
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
         :class="activeSection === 'status' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
@@ -142,7 +143,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Status section -->
-    <div v-if="activeSection === 'status'" class="flex-1 overflow-y-auto px-4 py-3">
+    <div v-if="activeSection === 'status'" class="flex-1 overflow-y-auto px-5 py-4">
       <div v-if="loading" class="flex items-center justify-center py-8">
         <span class="text-sm text-c-text-dim animate-pulse">加载配置...</span>
       </div>
@@ -187,12 +188,12 @@ onUnmounted(() => {
     </div>
 
     <!-- Background section -->
-    <div v-if="activeSection === 'background'" class="flex-1 overflow-y-auto px-4 py-3">
+    <div v-if="activeSection === 'background'" class="flex-1 overflow-y-auto px-5 py-4">
       <BackgroundSettings />
     </div>
 
     <!-- Controls section -->
-    <div v-if="activeSection === 'controls'" class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <div v-if="activeSection === 'controls'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">Live2D</h3>
       <button
         class="w-full px-3 py-2.5 rounded-xl bg-c-card/50 text-xs text-c-text hover:bg-c-card transition-colors flex items-center gap-2"
@@ -244,7 +245,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Live streaming section -->
-    <div v-if="activeSection === 'live'" class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <div v-if="activeSection === 'live'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <div>
         <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">Bilibili 直播</h3>
         <p class="text-10px text-c-text-muted mb-3">连接 Bilibili 直播间并接收实时弹幕</p>
@@ -311,7 +312,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Subtitle section -->
-    <div v-if="activeSection === 'subtitle'" class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <div v-if="activeSection === 'subtitle'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <div>
         <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">📝 字幕设置</h3>
         <p class="text-10px text-c-text-muted mb-3">在 Live2D 画布底部显示 AI 回复字幕，支持双语展示</p>
@@ -398,7 +399,7 @@ onUnmounted(() => {
               const lang = (e.target as HTMLSelectElement).value
               subtitleStore.setTargetLanguage(lang)
               const socket = getSocket()
-              if (socket) socket.emit('translation.configure', { target_language: lang })
+              if (socket) socket.emit(Events.TRANSLATION.CONFIGURE, { target_language: lang })
             }"
           >
             <option value="English">English (英语)</option>
@@ -415,7 +416,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Theme section -->
-    <div v-if="activeSection === 'theme'" class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <div v-if="activeSection === 'theme'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <div class="mb-5">
         <h3 class="text-xs font-medium text-c-text-dim uppercase tracking-wider mb-3">外观模式</h3>
         <div class="grid grid-cols-2 gap-3">

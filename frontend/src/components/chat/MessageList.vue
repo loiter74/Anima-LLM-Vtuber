@@ -28,7 +28,7 @@ watch(() => store.lastMessage?.text, scrollToBottom)
 <template>
   <div
     ref="listRef"
-    class="overflow-y-auto px-4 py-3"
+    class="overflow-y-auto px-5 py-4"
     :class="$attrs.class"
     @scroll="handleScroll"
   >

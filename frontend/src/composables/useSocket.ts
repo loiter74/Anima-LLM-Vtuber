@@ -6,6 +6,7 @@ import { useSingingStore } from '@/stores/singing'
 import type { ModelStatusPayload } from '@/types/model-loading'
 import type { ConnectionStatus } from '@/types/socket-events'
 import type { PipelineStage, SongResult } from '@/types/singing'
+import { Events } from '@/constants/socket-events'
 
 // Connect via same-origin (nginx in Docker, Vite proxy in dev) to avoid
 // CORS + WSL2 WebSocket relay issues. Set VITE_API_URL to override (e.g. ngrok).
@@ -55,7 +56,7 @@ export function useSocket() {
 
     // Listen for model loading status
     const modelStore = useModelLoadingStore()
-    socket.on('model_status', (payload: ModelStatusPayload) => {
+    socket.on(Events.SYSTEM.MODEL_STATUS, (payload: ModelStatusPayload) => {
       modelStore.updateModelStatus(payload)
     })
 
@@ -66,10 +67,10 @@ export function useSocket() {
 
     // Register singing event listeners globally (survive tab switches)
     const singStore = useSingingStore()
-    socket.on('sing:progress', (data: any) => {
+    socket.on(Events.SING.PROGRESS, (data: any) => {
       singStore.setProgress(data.stage, data.progress, data.message || '')
     })
-    socket.on('sing:complete', (data: any) => {
+    socket.on(Events.SING.COMPLETE, (data: any) => {
       singStore.setResult({
         audio_url: data.audio_url,
         subtitle_url: data.subtitle_url || '',
@@ -81,10 +82,10 @@ export function useSocket() {
         volumes: data.volumes || [],
       })
     })
-    socket.on('sing:error', (data: any) => {
+    socket.on(Events.SING.ERROR, (data: any) => {
       singStore.setError(data.error)
     })
-    socket.on('sing:lyrics_ready', (data: any) => {
+    socket.on(Events.SING.LYRICS_READY, (data: any) => {
       singStore.setProgress('waiting_lyrics' as PipelineStage, 0, data.message || 'Lyrics ready')
     })
 

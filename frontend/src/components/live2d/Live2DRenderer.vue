@@ -123,17 +123,6 @@ function toggleLive2D(): void {
       </div>
     </div>
 
-    <!-- Reset button (always on top when model loaded, desktop only) -->
-    <button
-      v-if="live2d.isLoaded.value && !isMobile"
-      class="absolute top-2 left-2 z-50 px-2.5 py-1 rounded-lg bg-c-bg/60 backdrop-blur-sm text-11px text-c-text-dim hover:text-c-accent hover:bg-c-bg/80 transition-colors border border-c-border/30"
-      title="复位位置和缩放"
-      aria-label="复位 Live2D 位置和缩放"
-      @click.stop="live2d.resetView()"
-    >
-      ↺ 复位
-    </button>
-
     <!-- Dragging indicator -->
     <div
       v-if="live2d.isDragging.value"

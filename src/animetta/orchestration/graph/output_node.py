@@ -12,6 +12,7 @@ from loguru import logger
 from .state import AgentState
 from .translation_state import translation_state
 from animetta.avatar.analyzers.audio import AudioAnalyzer
+from animetta.orchestration.socket_events import EVENTS
 
 
 def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
@@ -43,7 +44,7 @@ async def output_node(
     to = channel_id or session_id
 
     # Send conversation-start signal
-    await sio.emit("control", {"signal": "conversation-start"}, to=to)
+    await sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-start"}, to=to)
 
     # Store conversation in memory system
     await _store_conversation_to_memory(state=state, config=config)
@@ -57,10 +58,10 @@ async def output_node(
             "seq": 0,
             "lang": translation_state.source_language.lower()[:2],
         }
-        await sio.emit("sentence", sentence_payload, to=to)
+        await sio.emit(EVENTS["chat"]["sentence"]["name"], sentence_payload, to=to)
         logger.info(f"[{session_id}] [OutputNode] ✅ Sent text response")
 
-        await sio.emit("sentence", {"text": "", "is_complete": True}, to=to)
+        await sio.emit(EVENTS["chat"]["sentence"]["name"], {"text": "", "is_complete": True}, to=to)
         logger.debug(f"[{session_id}] [OutputNode] ✅ Sent stream end marker")
 
         # ── 2. Run translation in background (non-blocking) ──
@@ -82,7 +83,7 @@ async def output_node(
                             translation = translated.strip()
                             target_lang = translation_state.target_language.lower()[:2]
                             # Emit a subtitle.translate event with the translation
-                            await sio.emit("subtitle.translation", {
+                            await sio.emit(EVENTS["chat"]["subtitle_translation"]["name"], {
                                 "translation": translation,
                                 "target_lang": target_lang,
                             }, to=to)
@@ -95,7 +96,7 @@ async def output_node(
     # Send emotion event — also send motion command to frontend
     emotion = state.get("emotion")
     if emotion:
-        await sio.emit("expression", {"emotion": emotion}, to=to)
+        await sio.emit(EVENTS["chat"]["expression"]["name"], {"emotion": emotion}, to=to)
         logger.debug(f"[{session_id}] [OutputNode] Sent emotion: {emotion}")
 
         # Map emotion to Live2D motion command (for models like Hiyori without expression files)
@@ -109,7 +110,7 @@ async def output_node(
         }
         motion_idx = EMOTION_MOTION_MAP.get(emotion)
         if motion_idx is not None:
-            await sio.emit("live2d.action", {
+            await sio.emit(EVENTS["chat"]["live2d_action"]["name"], {
                 "type": "motion",
                 "group": "Idle",
                 "index": motion_idx,
@@ -161,14 +162,14 @@ async def output_node(
                 payload = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
-                await sio.emit("audio_with_expression", payload, to=to)
+                await sio.emit(EVENTS["chat"]["audio_with_expression"]["name"], payload, to=to)
                 logger.info(f"[{session_id}] [OutputNode] ✅ Sent audio data (volumes: {len(volumes)} samples)")
 
         except Exception as e:
             logger.error(f"[{session_id}] [OutputNode] Audio processing failed: {e}")
 
     # Send conversation-end signal
-    await sio.emit("control", {"signal": "conversation-end"}, to=to)
+    await sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-end"}, to=to)
 
     logger.info(f"[{session_id}] [OutputNode] Distribution complete")
     return {}

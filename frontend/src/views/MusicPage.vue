@@ -6,6 +6,7 @@ import PlaybackControls from '@/components/singing/PlaybackControls.vue'
 import ProcessTimeline from '@/components/singing/ProcessTimeline.vue'
 import WaveformDisplay from '@/components/singing/WaveformDisplay.vue'
 import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 const store = useSingingStore()
 const { process, cancel } = useSinging()
@@ -55,7 +56,7 @@ function handleTimeupdate(time: number) {
       if (socket?.connected) {
         const line = store.result.lyrics[idx]
         if (line) {
-          socket.emit('sing:subtitle_sync', {
+          socket.emit(Events.SING.SUBTITLE_SYNC, {
             index: idx,
             text: line.text,
             translation: line.translation || '',

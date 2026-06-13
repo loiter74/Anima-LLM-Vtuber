@@ -2,6 +2,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import type { LlmChunk, Transcript } from '@/types/chat'
 import { getSocket } from './useSocket'
+import { Events } from '@/constants/socket-events'
 
 export function useChat() {
   const store = useChatStore()
@@ -64,22 +65,22 @@ export function useChat() {
       store.memoryOrganizing = false
     }
 
-    socket.on('sentence', _onSentence)
-    socket.on('control', _onControl)
-    socket.on('transcript', _onTranscript)
-    socket.on('memory.organize.progress', _onMemProgress)
-    socket.on('memory.organize.result', _onMemResult)
+    socket.on(Events.CHAT.SENTENCE, _onSentence)
+    socket.on(Events.CHAT.CONTROL, _onControl)
+    socket.on(Events.CHAT.TRANSCRIPT, _onTranscript)
+    socket.on(Events.MEMORY.ORGANIZE_PROGRESS, _onMemProgress)
+    socket.on(Events.MEMORY.ORGANIZE_RESULT, _onMemResult)
   })
 
   onUnmounted(() => {
     const socket = getSocket()
     if (!socket) return
     // Only remove OUR callbacks, not other components' listeners
-    if (_onSentence) socket.off('sentence', _onSentence)
-    if (_onControl) socket.off('control', _onControl)
-    if (_onTranscript) socket.off('transcript', _onTranscript)
-    if (_onMemProgress) socket.off('memory.organize.progress', _onMemProgress)
-    if (_onMemResult) socket.off('memory.organize.result', _onMemResult)
+    if (_onSentence) socket.off(Events.CHAT.SENTENCE, _onSentence)
+    if (_onControl) socket.off(Events.CHAT.CONTROL, _onControl)
+    if (_onTranscript) socket.off(Events.CHAT.TRANSCRIPT, _onTranscript)
+    if (_onMemProgress) socket.off(Events.MEMORY.ORGANIZE_PROGRESS, _onMemProgress)
+    if (_onMemResult) socket.off(Events.MEMORY.ORGANIZE_RESULT, _onMemResult)
   })
 
   async function sendText(text: string): Promise<void> {
@@ -89,7 +90,7 @@ export function useChat() {
     store.createMessage('user', text, 'text')
     store.isTyping = true
 
-    socket.emit('text_input', { text })
+    socket.emit(Events.CHAT.TEXT, { text })
   }
 
   async function sendInterrupt(): Promise<void> {
@@ -101,16 +102,16 @@ export function useChat() {
     if (!socket) return
 
     store.memoryOrganizing = true
-    socket.emit('memory_organize', {})
+    socket.emit(Events.MEMORY.ORGANIZE, {})
 
     // Listen for result to reset state and refresh memory list
     const onResult = (_data: any) => {
       console.log('[useChat] memory.organize.result received, refreshing wiki pages')
       store.memoryOrganizing = false
-      socket.off('memory.organize.result', onResult)
-      socket.emit('get_wiki_pages', { session_id: 'default' })
+      socket.off(Events.MEMORY.ORGANIZE_RESULT, onResult)
+      socket.emit(Events.MEMORY.LIST_PAGES, { session_id: 'default' })
     }
-    socket.on('memory.organize.result', onResult)
+    socket.on(Events.MEMORY.ORGANIZE_RESULT, onResult)
   }
 
   return {

@@ -21,27 +21,48 @@ def _import_bilibili_api(*modules: str) -> dict[str, Any]:
     """Lazy-import bilibili_api submodules. Caches results after first call.
 
     Args:
-        *modules: Module names to import (e.g., 'live', 'hot', 'comment', 'search', 'sync').
+        *modules: Module names to import (e.g., 'live', 'hot', 'comment', 'search', 'sync', 'video').
 
     Returns:
         Dict mapping module name → module object.
     """
     global _IMPORT_ERROR, _LAZY_CACHE
-    if _IMPORT_ERROR is not None:
-        raise _IMPORT_ERROR
 
     result: dict[str, Any] = {}
     try:
         import bilibili_api  # noqa: F401
         for name in modules:
             if name not in _LAZY_CACHE:
-                _LAZY_CACHE[name] = __import__(f"bilibili_api.{name}", fromlist=[name])
+                try:
+                    # Try direct import first
+                    module = __import__(f"bilibili_api.{name}", fromlist=[name])
+                    _LAZY_CACHE[name] = module
+                except ImportError as e:
+                    logger.warning("[bilibili.api] Failed to import bilibili_api.%s: %s", name, e)
+                    raise
             result[name] = _LAZY_CACHE[name]
     except ImportError as e:
         _IMPORT_ERROR = e
         raise
 
     return result
+
+
+def _get_bilibili_module(name: str) -> Any:
+    """Get a bilibili_api module by name.
+    
+    Args:
+        name: Module name (e.g., 'hot', 'sync', 'video').
+        
+    Returns:
+        Module object.
+    """
+    try:
+        import bilibili_api
+        return getattr(bilibili_api, name)
+    except (ImportError, AttributeError) as e:
+        logger.warning("[bilibili.api] Failed to get bilibili_api.%s: %s", name, e)
+        raise ImportError(f"Failed to import bilibili_api.{name}: {e}")
 
 
 async def fetch_live_danmaku(
@@ -64,7 +85,9 @@ async def fetch_live_danmaku(
         List of danmaku text strings. Empty list on error.
     """
     try:
-        modules = _import_bilibili_api("live", "sync")
+        import bilibili_api
+        live_module = bilibili_api.live
+        sync_func = bilibili_api.sync
     except ImportError:
         logger.warning("[bilibili.api] bilibili-api-python not installed, skipping live danmaku fetch")
         return []
@@ -74,7 +97,7 @@ async def fetch_live_danmaku(
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
-                lambda: modules["sync"].sync(modules["live"].get_danmaku(
+                lambda: sync_func(live_module.get_danmaku(
                     room_id=room_id,
                     page_index=1,
                 )),
@@ -121,7 +144,9 @@ async def fetch_trending_videos(
         List of raw video dicts from bilibili_api.
     """
     try:
-        modules = _import_bilibili_api("hot", "sync")
+        import bilibili_api
+        hot_module = bilibili_api.hot
+        sync_func = bilibili_api.sync
     except ImportError:
         logger.warning("[bilibili.api] bilibili-api-python not installed, skipping trending videos")
         return []
@@ -133,7 +158,7 @@ async def fetch_trending_videos(
     try:
         hot_result = await loop.run_in_executor(
             None,
-            lambda: modules["sync"].sync(modules["hot"].get_hot_videos()),
+            lambda: sync_func(hot_module.get_hot_videos()),
         )
         if hot_result and "list" in hot_result:
             items = hot_result.get("list", [])
@@ -145,10 +170,10 @@ async def fetch_trending_videos(
     # Fallback to search
     if not videos and search_keyword:
         try:
-            modules_search = _import_bilibili_api("search", "sync")
+            search_module = bilibili_api.search
             result = await loop.run_in_executor(
                 None,
-                lambda: modules_search["sync"].sync(modules_search["search"].search(
+                lambda: sync_func(search_module.search(
                     keyword=search_keyword,
                     page=1,
                 )),
@@ -181,7 +206,9 @@ async def fetch_comments(
         List of raw comment dicts.
     """
     try:
-        modules = _import_bilibili_api("comment", "sync")
+        import bilibili_api
+        comment_module = bilibili_api.comment
+        sync_func = bilibili_api.sync
     except ImportError:
         logger.warning("[bilibili.api] bilibili-api-python not installed, skipping comments")
         return []
@@ -191,10 +218,10 @@ async def fetch_comments(
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
-                lambda: modules["sync"].sync(modules["comment"].get_comments(
+                lambda: sync_func(comment_module.get_comments(
                     oid=bvid,
-                    type_=modules["comment"].CommentResourceType.VIDEO,
-                    order=modules["comment"].OrderType.LIKE,
+                    type_=comment_module.CommentResourceType.VIDEO,
+                    order=comment_module.OrderType.LIKE,
                     page_index=1,
                 )),
             ),
@@ -227,4 +254,103 @@ async def fetch_comments(
         return []
     except Exception as e:
         logger.debug("[bilibili.api] Comment fetch failed for %s: %s", bvid, e)
+
+
+async def fetch_video_danmaku(
+    bvid: str,
+    max_count: int = 100,
+    timeout: float = 15.0,
+) -> list[dict]:
+    """Fetch danmaku (弹幕) from a Bilibili video.
+
+    Uses bilibili-api-python's video module to get danmaku for a specific video.
+
+    Args:
+        bvid: Bilibili video BV ID.
+        max_count: Maximum number of danmaku to return.
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        List of danmaku dicts with keys: content, likes, publish_time, mode, color.
+    """
+    try:
+        import bilibili_api
+        video_module = bilibili_api.video
+        sync_func = bilibili_api.sync
+    except ImportError:
+        logger.warning("[bilibili.api] bilibili-api-python not installed, skipping video danmaku")
+        return []
+
+    try:
+        loop = asyncio.get_event_loop()
+        
+        # First get video info to extract cid
+        video_info = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: sync_func(video_module.Video(bvid=bvid).get_info()),
+            ),
+            timeout=timeout,
+        )
+        
+        if not video_info or "cid" not in video_info:
+            logger.warning("[bilibili.api] Could not get video info for %s", bvid)
+            return []
+        
+        cid = video_info["cid"]
+        
+        # Then fetch danmaku using cid
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: sync_func(video_module.Video(bvid=bvid).get_danmakus()),
+            ),
+            timeout=timeout,
+        )
+
+        if not result:
+            return []
+
+        danmaku_list: list[dict] = []
+        for d in result[:max_count]:
+            try:
+                # Handle Danmaku objects from bilibili-api-python
+                if hasattr(d, 'text'):
+                    content = d.text
+                    likes = 0  # Danmaku objects don't have likes
+                    publish_time = str(d.send_time) if hasattr(d, 'send_time') else ""
+                    mode = d.mode if hasattr(d, 'mode') else 1
+                    color = d.color if hasattr(d, 'color') else 16777215
+                elif isinstance(d, dict):
+                    content = d.get("text", d.get("content", d.get("msg", "")))
+                    likes = d.get("likes", 0)
+                    publish_time = d.get("ctime", d.get("time", ""))
+                    mode = d.get("mode", 1)
+                    color = d.get("color", 16777215)
+                else:
+                    # Handle other objects
+                    content = str(d)
+                    likes = 0
+                    publish_time = ""
+                    mode = 1
+                    color = 16777215
+                
+                if content:
+                    danmaku_list.append({
+                        "content": str(content)[:200],
+                        "likes": likes,
+                        "publish_time": str(publish_time),
+                        "mode": mode,
+                        "color": color,
+                    })
+            except Exception:
+                continue
+
+        return danmaku_list
+
+    except TimeoutError:
+        logger.warning("[bilibili.api] Video danmaku fetch timed out for BV %s (%.1fs)", bvid, timeout)
+        return []
+    except Exception as e:
+        logger.debug("[bilibili.api] Video danmaku fetch failed for %s: %s", bvid, e)
         return []

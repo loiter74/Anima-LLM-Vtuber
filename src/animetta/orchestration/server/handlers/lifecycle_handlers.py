@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from .base_handler import BaseSocketHandler
+from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -53,7 +54,7 @@ class LifecycleHandlers(BaseSocketHandler):
         )
 
         await self.sio.emit(
-            "connection-established",
+            EVENTS["system"]["connection_established"]["name"],
             {
                 "message": "Connection successful",
                 "sid": sid,
@@ -73,7 +74,7 @@ class LifecycleHandlers(BaseSocketHandler):
 
         if not is_electron:
             await self.sio.emit(
-                "control", {"type": "control", "text": "start-mic"}, to=sid
+                EVENTS["chat"]["control"]["name"], {"type": "control", "text": "start-mic"}, to=sid
             )
             print(f"[OK] Sent start-mic signal to client {sid}")
 

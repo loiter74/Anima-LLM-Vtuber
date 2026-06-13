@@ -1,7 +1,7 @@
-import { createRouter, createMemoryHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
-  history: createMemoryHistory(),
+  history: createWebHistory(),
   routes: [
     {
       path: '/',
@@ -22,6 +22,11 @@ const router = createRouter({
       path: '/music',
       name: 'music',
       component: () => import('../views/MusicPage.vue'),
+    },
+    {
+      path: '/live-stream',
+      name: 'live-stream',
+      component: () => import('../views/LiveStreamPage.vue'),
     },
   ],
 })

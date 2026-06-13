@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import PersonaCard from './PersonaCard.vue'
 import QuickControls from './QuickControls.vue'
 import SessionStats from './SessionStats.vue'
+import MemoryCards from './MemoryCards.vue'
 
 const isCollapsed = ref(false)
 
@@ -30,7 +31,7 @@ function toggleDrawer() {
   >
     <!-- Header -->
     <div class="drawer-header">
-      <div class="drawer-title">Quick Controls</div>
+      <div class="drawer-title">Controls & Memory</div>
       <button class="collapse-btn" @click="toggleDrawer">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M15 18l-6-6 6-6"/>
@@ -38,12 +39,23 @@ function toggleDrawer() {
       </button>
     </div>
 
-    <!-- Content -->
-    <div class="drawer-content">
-      <PersonaCard />
-      <QuickControls />
-      <div class="divider"></div>
-      <SessionStats />
+    <!-- Body: Top Controls + Bottom Memory -->
+    <div class="drawer-body">
+      <!-- Top Section: Controls -->
+      <div class="drawer-top">
+        <PersonaCard />
+        <QuickControls />
+        <div class="divider"></div>
+        <SessionStats />
+      </div>
+
+      <!-- Bottom Section: Memory Cards -->
+      <div class="drawer-bottom">
+        <div class="memory-header">
+          <div class="memory-title">Memory Topics</div>
+        </div>
+        <MemoryCards />
+      </div>
     </div>
   </aside>
 </template>
@@ -52,8 +64,8 @@ function toggleDrawer() {
 /* Expand Button */
 .expand-btn {
   position: absolute;
-  top: var(--s-3);
-  left: var(--s-3);
+  top: var(--s-4);
+  left: var(--s-4);
   width: 40px;
   height: 40px;
   border-radius: var(--r-lg);
@@ -79,10 +91,10 @@ function toggleDrawer() {
 /* Drawer */
 .drawer {
   position: absolute;
-  top: var(--s-3);
-  left: var(--s-3);
-  bottom: var(--s-3);
-  width: 260px;
+  top: var(--s-4);
+  left: var(--s-4);
+  bottom: var(--s-4);
+  width: 300px;
   background: rgba(36, 21, 56, 0.90);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
@@ -107,7 +119,7 @@ function toggleDrawer() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s-4);
+  padding: var(--s-4) var(--s-5);
   border-bottom: 1px solid var(--c-border);
   flex-shrink: 0;
 }
@@ -139,14 +151,51 @@ function toggleDrawer() {
   background: rgba(26, 16, 40, 0.70);
 }
 
-/* Content */
-.drawer-content {
+/* Body: Split into top and bottom */
+.drawer-body {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Top Section - Controls */
+.drawer-top {
+  flex-shrink: 0;
   padding: var(--s-4);
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+  overflow-y: auto;
+}
+
+/* Bottom Section - Memory Cards */
+.drawer-bottom {
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--c-border);
+  padding: var(--s-4);
+  background: rgba(26, 16, 40, 0.30);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s-2);
+  flex-shrink: 0;
+}
+
+.memory-title {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+  font-weight: 600;
 }
 
 /* Divider */
@@ -157,20 +206,24 @@ function toggleDrawer() {
 }
 
 /* Scrollbar */
-.drawer-content::-webkit-scrollbar {
+.drawer-top::-webkit-scrollbar,
+.drawer-bottom::-webkit-scrollbar {
   width: 6px;
 }
 
-.drawer-content::-webkit-scrollbar-track {
+.drawer-top::-webkit-scrollbar-track,
+.drawer-bottom::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.drawer-content::-webkit-scrollbar-thumb {
+.drawer-top::-webkit-scrollbar-thumb,
+.drawer-bottom::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.10);
   border-radius: 3px;
 }
 
-.drawer-content::-webkit-scrollbar-thumb:hover {
+.drawer-top::-webkit-scrollbar-thumb:hover,
+.drawer-bottom::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 </style>

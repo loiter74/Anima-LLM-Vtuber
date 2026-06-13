@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
 import type { Live2DAction } from '@/types/live2d'
 import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 // ===== Public exports for backward compatibility =====
 export { MODEL_PATH } from './useLive2DModel'
@@ -97,11 +98,11 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
     const socket = getSocket()
     if (!socket) return
 
-    socket.on('live2d.action', (data: unknown) => {
+    socket.on(Events.CHAT.LIVE2D_ACTION, (data: unknown) => {
       executeAction(data as Live2DAction)
     })
 
-    socket.on('audio_with_expression', (data: unknown) => {
+    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, (data: unknown) => {
       const d = data as any
       if (d.use_parameter_mapping && d.expressions?.frames) {
         playParameterTimeline(d)
@@ -110,7 +111,7 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
       }
     })
 
-    socket.on('stop_audio', () => {
+    socket.on(Events.CHAT.STOP_AUDIO, () => {
       stopAudio()
     })
   }
@@ -118,9 +119,9 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
   function teardownSocketListeners(): void {
     const socket = getSocket()
     if (!socket) return
-    socket.off('live2d.action')
-    socket.off('audio_with_expression')
-    socket.off('stop_audio')
+    socket.off(Events.CHAT.LIVE2D_ACTION)
+    socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION)
+    socket.off(Events.CHAT.STOP_AUDIO)
   }
 
   // ===== Destroy =====

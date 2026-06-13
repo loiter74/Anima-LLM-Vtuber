@@ -1,0 +1,123 @@
+{
+  "users": [
+    { "name": "Sakura", "color": "#e879a8" },
+    { "name": "Yuki", "color": "#7c8cf5" },
+    { "name": "Hana", "color": "#6ee7b7" },
+    { "name": "Ren", "color": "#f5c872" },
+    { "name": "Aoi", "color": "#60a5fa" },
+    { "name": "Kai", "color": "#f87171" },
+    { "name": "Mio", "color": "#a78bfa" },
+    { "name": "Sora", "color": "#34d399" },
+    { "name": "Luna", "color": "#fbbf24" },
+    { "name": "Riku", "color": "#fb923c" },
+    { "name": "小明", "color": "#e879a8" },
+    { "name": "樱花酱", "color": "#f472b6" },
+    { "name": "路人甲", "color": "#9ca3af" },
+    { "name": "大佬乙", "color": "#fbbf24" },
+    { "name": "萌新三", "color": "#34d399" }
+  ],
+  "messages": {
+    "greeting": [
+      "大家好！",
+      "Hello!",
+      "Hi~",
+      "晚上好",
+      "早上好",
+      "下午好",
+      "来了来了",
+      "刚进直播间",
+      "第一次来"
+    ],
+    "praise": [
+      "好可爱！",
+      "太厉害了",
+      "666666",
+      "Amazing!",
+      "Kawaii!",
+      "绝了",
+      "无敌",
+      "太强了",
+      "好棒",
+      "真不错",
+      "爱了爱了",
+      "关注了",
+      "已关注",
+      "三连了"
+    ],
+    "question": [
+      "这是AI吗？",
+      "怎么做到的？",
+      "用的什么技术？",
+      "可以互动吗？",
+      "能聊天吗？",
+      "今天直播多久？",
+      "可以点歌吗？",
+      "有教程吗？",
+      "这是什么软件？"
+    ],
+    "interaction": [
+      "加油！",
+      "继续继续",
+      "不要停",
+      "再来一个",
+      "唱首歌吧",
+      "跳个舞",
+      "转个圈",
+      "笑一个",
+      "说句话",
+      "打个招呼",
+      "比个心"
+    ],
+    "emoji": [
+      "❤️",
+      "🎉",
+      "✨",
+      "👏",
+      "🔥",
+      "💯",
+      "⭐",
+      "😍",
+      "🥰",
+      "😂",
+      "🤣",
+      "👍",
+      "💖",
+      "🌟"
+    ],
+    "bilibili": [
+      "你币没了",
+      "下次一定",
+      "awsl",
+      "xswl",
+      "yyds",
+      "破防了",
+      "蚌埠住了",
+      "典中典",
+      "孝死了",
+      "急了急了"
+    ]
+  },
+  "conversations": [
+    [
+      { "user": "Sakura", "text": "大家好！今天心情不错~", "delay": 0 },
+      { "user": "Yuki", "text": "晚上好！", "delay": 200 },
+      { "user": "Hana", "text": "来了来了", "delay": 400 },
+      { "user": "Ren", "text": "这是AI吗？好厉害", "delay": 600 },
+      { "user": "Aoi", "text": "第一次来直播间", "delay": 800 }
+    ],
+    [
+      { "user": "Kai", "text": "666666", "delay": 0 },
+      { "user": "Mio", "text": "好可爱！", "delay": 200 },
+      { "user": "Sora", "text": "可以互动吗？", "delay": 400 },
+      { "user": "小明", "text": "关注了关注了", "delay": 600 },
+      { "user": "樱花酱", "text": "已三连 ❤️", "delay": 800 }
+    ],
+    [
+      { "user": "路人甲", "text": "怎么做到的？", "delay": 0 },
+      { "user": "Luna", "text": "太厉害了 ✨", "delay": 200 },
+      { "user": "Riku", "text": "唱首歌吧", "delay": 400 },
+      { "user": "大佬乙", "text": "yyds", "delay": 600 },
+      { "user": "萌新三", "text": "第一次看AI直播", "delay": 800 }
+    ]
+  ]
+}

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 export const usePersonalityStore = defineStore('personality', () => {
   const currentMode = ref<'default' | 'streaming'>('default')
@@ -20,7 +21,7 @@ export const usePersonalityStore = defineStore('personality', () => {
     const socket = getSocket()
     if (!socket) return
 
-    socket.emit('get_available_personas', {}, (response: { personas: string[] }) => {
+    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[] }) => {
       availablePersonas.value = response.personas ?? []
     })
   }
@@ -42,7 +43,7 @@ export const usePersonalityStore = defineStore('personality', () => {
           reject(new Error('操作超时'))
         }, 5000)
 
-        socket.emit('set_persona', { persona_name: name }, (response: { error?: string }) => {
+        socket.emit(Events.PERSONA.SET, { persona_name: name }, (response: { error?: string }) => {
           clearTimeout(timeout)
           if (response?.error) {
             reject(new Error(response.error))
@@ -78,7 +79,7 @@ export const usePersonalityStore = defineStore('personality', () => {
           reject(new Error('操作超时'))
         }, 5000)
 
-        socket.emit('set_personality_mode', { mode }, (response: { error?: string }) => {
+        socket.emit(Events.PERSONA.SET_MODE, { mode }, (response: { error?: string }) => {
           clearTimeout(timeout)
           if (response?.error) {
             reject(new Error(response.error))

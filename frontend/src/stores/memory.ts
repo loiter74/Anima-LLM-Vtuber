@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 /** Wiki 页面条目（匹配 backend on_get_wiki_pages 返回） */
 export interface WikiPageEntry {
@@ -52,7 +53,7 @@ export const useMemoryStore = defineStore('memory', () => {
     if (!socket) return
 
     loading.value = true
-    socket.emit('get_wiki_pages', { session_id: sessionId }, (response: { pages: WikiPageEntry[] }) => {
+    socket.emit(Events.MEMORY.LIST_PAGES, { session_id: sessionId }, (response: { pages: WikiPageEntry[] }) => {
       console.log('[MemoryStore] get_wiki_pages response:', response?.pages?.length, 'pages')
       wikiPages.value = response.pages ?? []
       loading.value = false

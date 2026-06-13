@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from ..socket_events import EVENTS
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -19,6 +20,7 @@ from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
+
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -260,21 +262,21 @@ class RouteHandlers:
             )
             mem = getattr(ctx, "memory_system", None)
             if not mem:
-                await self.sio.emit("memory.organize.result",
+                await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
                     {"status": "error", "message": "Memory system not available"}, to=sid)
                 return
 
-            await self.sio.emit("memory.organize.progress",
+            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
                 {"text": "Running metabolism tick...", "progress": 30}, to=sid)
             await mem._run_metabolism_tick()
 
-            await self.sio.emit("memory.organize.progress",
+            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
                 {"text": "Compiling RAW → EPISODIC...", "progress": 60}, to=sid)
 
-            await self.sio.emit("memory.organize.result",
+            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
                 {"status": "ok", "message": "Memory organized"}, to=sid)
         except Exception as e:
-            await self.sio.emit("memory.organize.result",
+            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
                 {"status": "error", "message": str(e)}, to=sid)
 
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
@@ -336,60 +338,60 @@ def register_routes(
     sio.on("disconnect", handlers.on_disconnect)
 
     # Conversation events
-    sio.on("text_input", handlers.on_text_input)
-    sio.on("raw_audio_data", handlers.on_raw_audio_data)
-    sio.on("mic_audio_end", handlers.on_mic_audio_end)
-    sio.on("interrupt_signal", handlers.on_interrupt_signal)
+    sio.on(EVENTS.get("chat", {}).get("text", {}).get("name", "chat.text"), handlers.on_text_input)
+    sio.on(EVENTS.get("chat", {}).get("audio", {}).get("name", "chat.audio"), handlers.on_raw_audio_data)
+    sio.on(EVENTS.get("chat", {}).get("audio_end", {}).get("name", "chat.audio_end"), handlers.on_mic_audio_end)
+    sio.on(EVENTS.get("chat", {}).get("interrupt", {}).get("name", "chat.interrupt"), handlers.on_interrupt_signal)
 
     # History events
-    sio.on("fetch_history_list", handlers.on_fetch_history_list)
-    sio.on("fetch_history", handlers.on_fetch_history)
-    sio.on("clear_history", handlers.on_clear_history)
-    sio.on("create_new_history", handlers.on_create_new_history)
+    sio.on(EVENTS.get("history", {}).get("list", {}).get("name", "history.list"), handlers.on_fetch_history_list)
+    sio.on(EVENTS.get("history", {}).get("fetch", {}).get("name", "history.fetch"), handlers.on_fetch_history)
+    sio.on(EVENTS.get("history", {}).get("clear", {}).get("name", "history.clear"), handlers.on_clear_history)
+    sio.on(EVENTS.get("history", {}).get("create", {}).get("name", "history.create"), handlers.on_create_new_history)
 
     # Config events
-    sio.on("switch_config", handlers.on_switch_config)
-    sio.on("set_log_level", handlers.on_set_log_level)
-    sio.on("get_config", handlers.on_get_config)
+    sio.on(EVENTS.get("config", {}).get("switch", {}).get("name", "config.switch"), handlers.on_switch_config)
+    sio.on(EVENTS.get("config", {}).get("log_level", {}).get("name", "config.log_level"), handlers.on_set_log_level)
+    sio.on(EVENTS.get("config", {}).get("get", {}).get("name", "config.get"), handlers.on_get_config)
 
     # Heartbeat
-    sio.on("heartbeat", handlers.on_heartbeat)
+    sio.on(EVENTS.get("system", {}).get("heartbeat", {}).get("name", "system.heartbeat"), handlers.on_heartbeat)
 
     # Desktop client events
-    sio.on("desktop_register", handlers.on_desktop_register)
-    sio.on("desktop_live2d_action", handlers.on_desktop_live2d_action)
-    sio.on("desktop_chat_message", handlers.on_desktop_chat_message)
-    sio.on("desktop_voice_start", handlers.on_desktop_voice_start)
-    sio.on("desktop_voice_stop", handlers.on_desktop_voice_stop)
+    sio.on(EVENTS.get("desktop", {}).get("register", {}).get("name", "desktop.register"), handlers.on_desktop_register)
+    sio.on(EVENTS.get("desktop", {}).get("live2d_action", {}).get("name", "desktop.live2d_action"), handlers.on_desktop_live2d_action)
+    sio.on(EVENTS.get("desktop", {}).get("chat_message", {}).get("name", "desktop.chat_message"), handlers.on_desktop_chat_message)
+    sio.on(EVENTS.get("desktop", {}).get("voice_start", {}).get("name", "desktop.voice_start"), handlers.on_desktop_voice_start)
+    sio.on(EVENTS.get("desktop", {}).get("voice_stop", {}).get("name", "desktop.voice_stop"), handlers.on_desktop_voice_stop)
 
     # Bilibili frontend control events
-    sio.on("bilibili.connect", handlers.on_bilibili_connect)
-    sio.on("bilibili.disconnect", handlers.on_bilibili_disconnect)
-    sio.on("bilibili.update_room", handlers.on_bilibili_update_room)
+    sio.on(EVENTS.get("bilibili", {}).get("connect", {}).get("name", "bilibili.connect"), handlers.on_bilibili_connect)
+    sio.on(EVENTS.get("bilibili", {}).get("disconnect", {}).get("name", "bilibili.disconnect"), handlers.on_bilibili_disconnect)
+    sio.on(EVENTS.get("bilibili", {}).get("update_room", {}).get("name", "bilibili.update_room"), handlers.on_bilibili_update_room)
 
     # Minecraft bot control events
-    sio.on("minecraft.start", handlers.on_minecraft_start)
-    sio.on("minecraft.stop", handlers.on_minecraft_stop)
+    sio.on(EVENTS.get("minecraft", {}).get("start", {}).get("name", "minecraft.start"), handlers.on_minecraft_start)
+    sio.on(EVENTS.get("minecraft", {}).get("stop", {}).get("name", "minecraft.stop"), handlers.on_minecraft_stop)
 
     # Translation configuration events
-    sio.on("translation.configure", handlers.on_translation_configure)
+    sio.on(EVENTS.get("translation", {}).get("configure", {}).get("name", "translation.configure"), handlers.on_translation_configure)
 
     # Persona runtime switching
-    sio.on("get_available_personas", handlers.on_get_available_personas)
-    sio.on("set_persona", handlers.on_set_persona)
+    sio.on(EVENTS.get("persona", {}).get("list", {}).get("name", "persona.list"), handlers.on_get_available_personas)
+    sio.on(EVENTS.get("persona", {}).get("set", {}).get("name", "persona.set"), handlers.on_set_persona)
 
     # Personality mode runtime switching
-    sio.on("set_personality_mode", handlers.on_set_personality_mode)
+    sio.on(EVENTS.get("persona", {}).get("set_mode", {}).get("name", "persona.set_mode"), handlers.on_set_personality_mode)
 
     # Singing module events
-    sio.on("sing:process", handlers.on_sing_process)
-    sio.on("sing:confirm_lyrics", handlers.on_sing_confirm_lyrics)
-    sio.on("sing:cancel", handlers.on_sing_cancel)
-    sio.on("sing:subtitle_sync", handlers.on_sing_subtitle_sync)
+    sio.on(EVENTS.get("sing", {}).get("process", {}).get("name", "sing.process"), handlers.on_sing_process)
+    sio.on(EVENTS.get("sing", {}).get("confirm_lyrics", {}).get("name", "sing.confirm_lyrics"), handlers.on_sing_confirm_lyrics)
+    sio.on(EVENTS.get("sing", {}).get("cancel", {}).get("name", "sing.cancel"), handlers.on_sing_cancel)
+    sio.on(EVENTS.get("sing", {}).get("subtitle_sync", {}).get("name", "sing.subtitle_sync"), handlers.on_sing_subtitle_sync)
 
     # Memory: wiki pages (legacy compat — delegates to V2)
-    sio.on("memory_organize", handlers.on_memory_organize)
-    sio.on("get_wiki_pages", handlers.on_get_wiki_pages)
+    sio.on(EVENTS.get("memory", {}).get("organize", {}).get("name", "memory.organize"), handlers.on_memory_organize)
+    sio.on(EVENTS.get("memory", {}).get("list_pages", {}).get("name", "memory.list_pages"), handlers.on_get_wiki_pages)
 
     logger.info("WebSocket routes registered")
     return handlers

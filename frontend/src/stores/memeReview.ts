@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 export interface MemeItem {
   id: string
@@ -39,9 +40,9 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
     loading.value = true
     memes.value = []
     currentIndex.value = 0
-    sock.emit('meme:list', { source_platform: sourcePlatform, limit: 50 })
+    sock.emit(Events.MEME.LIST, { source_platform: sourcePlatform, limit: 50 })
 
-    sock.once('meme:list', (data: { memes: MemeItem[]; error?: string }) => {
+    sock.once(Events.MEME.LIST, (data: { memes: MemeItem[]; error?: string }) => {
       loading.value = false
       if (data.error) {
         console.warn('[memeReview]', data.error)
@@ -66,8 +67,8 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   }
 
   function submitReview(memeId: string, status: 'good' | 'bad') {
-    sock.emit('meme:review', { meme_id: memeId, status })
-    sock.once('meme:review', (data: { ok: boolean; feedback?: string; error?: string }) => {
+    sock.emit(Events.MEME.REVIEW, { meme_id: memeId, status })
+    sock.once(Events.MEME.REVIEW, (data: { ok: boolean; feedback?: string; error?: string }) => {
       if (data.ok) {
         if (status === 'good') goodCount.value++
         else badCount.value++
@@ -103,8 +104,8 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   }
 
   function exportDataset() {
-    sock.emit('meme:dataset', {})
-    sock.once('meme:dataset', (data: { memes: any[]; error?: string }) => {
+    sock.emit(Events.MEME.DATASET, {})
+    sock.once(Events.MEME.DATASET, (data: { memes: any[]; error?: string }) => {
       if (data.error) {
         console.warn('[memeReview] Export error:', data.error)
         return

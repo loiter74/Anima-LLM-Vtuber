@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 from animetta.services.bilibili import DanmakuService
+from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -87,7 +88,7 @@ class BilibiliHandlers:
     async def _emit_bilibili_status(self, connected: bool, message: str) -> None:
         """Emit Bilibili connection status to all clients."""
         await self.sio.emit(
-            "danmaku.status",
+            EVENTS["bilibili"]["danmaku_status"]["name"],
             {"connected": connected, "message": message},
         )
 
@@ -96,7 +97,7 @@ class BilibiliHandlers:
     async def _process_danmaku(self, msg) -> None:
         """Process a danmaku message in the main event loop."""
         # 1. Broadcast raw danmaku to all clients
-        await self.sio.emit("danmaku", msg.to_dict())
+        await self.sio.emit(EVENTS["bilibili"]["danmaku"]["name"], msg.to_dict())
 
         # 2. Process with AI (use a dedicated "bilibili" session)
         try:
@@ -108,13 +109,13 @@ class BilibiliHandlers:
                 user_id=str(msg.user_id),
                 user_name=msg.user_name,
                 channel_id="bilibili",
-                source="danmaku",
+                source=EVENTS["bilibili"]["danmaku"]["name"],
             )
 
             reply_text = result.get("response_text", "")
 
             # Broadcast conversation-start
-            await self.sio.emit("control", {"signal": "conversation-start"})
+            await self.sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-start"})
 
             # Broadcast text response via sentence events
             if reply_text:
@@ -123,9 +124,9 @@ class BilibiliHandlers:
                     "seq": 0,
                     "lang": translation_state.source_language.lower()[:2],
                 }
-                await self.sio.emit("sentence", sentence_payload)
+                await self.sio.emit(EVENTS["chat"]["sentence"]["name"], sentence_payload)
                 await self.sio.emit(
-                    "sentence", {"text": "", "is_complete": True}
+                    EVENTS["chat"]["sentence"]["name"], {"text": "", "is_complete": True}
                 )
 
                 # ── Run translation in background (non-blocking) ──
@@ -156,7 +157,7 @@ class BilibiliHandlers:
                                         translation_state.target_language.lower()[:2]
                                     )
                                     await self.sio.emit(
-                                        "subtitle.translation",
+                                        EVENTS["chat"]["subtitle_translation"]["name"],
                                         {
                                             "translation": t,
                                             "target_lang": t_lang,
@@ -176,7 +177,7 @@ class BilibiliHandlers:
             # Broadcast emotion
             emotion = result.get("emotion")
             if emotion:
-                await self.sio.emit("expression", {"emotion": emotion})
+                await self.sio.emit(EVENTS["chat"]["expression"]["name"], {"emotion": emotion})
 
             # Broadcast audio
             tts_audio = result.get("tts_audio")
@@ -184,7 +185,7 @@ class BilibiliHandlers:
                 await self._broadcast_danmaku_audio(tts_audio)
 
             # Broadcast conversation-end
-            await self.sio.emit("control", {"signal": "conversation-end"})
+            await self.sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-end"})
 
             # Also emit danmaku.ai_reply for the chat message integration
             if reply_text:
@@ -198,7 +199,7 @@ class BilibiliHandlers:
                     character_name = persona.name
 
                 await self.sio.emit(
-                    "danmaku.ai_reply",
+                    EVENTS["bilibili"]["danmaku_ai_reply"]["name"],
                     {
                         "danmaku_text": msg.text,
                         "reply_text": reply_text,
@@ -256,7 +257,7 @@ class BilibiliHandlers:
                 payload = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
-                await self.sio.emit("audio_with_expression", payload)
+                await self.sio.emit(EVENTS["chat"]["audio_with_expression"]["name"], payload)
 
         except Exception as e:
             logger.error(f"[Bilibili] Audio broadcasting failed: {e}")
@@ -268,7 +269,7 @@ class BilibiliHandlers:
         room_id = data.get("room_id")
         if not room_id or not isinstance(room_id, int) or room_id <= 0:
             await self.sio.emit(
-                "danmaku.status",
+                EVENTS["bilibili"]["danmaku_status"]["name"],
                 {"connected": False, "message": "Invalid room ID"},
                 to=sid,
             )
@@ -282,7 +283,7 @@ class BilibiliHandlers:
         except Exception as e:
             logger.error(f"[Bilibili] Error connecting to room {room_id}: {e}")
             await self.sio.emit(
-                "danmaku.status",
+                EVENTS["bilibili"]["danmaku_status"]["name"],
                 {"connected": False, "message": str(e)},
                 to=sid,
             )
@@ -292,7 +293,7 @@ class BilibiliHandlers:
         logger.info("[Bilibili] Frontend requested disconnect")
         self.stop_bilibili()
         await self.sio.emit(
-            "danmaku.status",
+            EVENTS["bilibili"]["danmaku_status"]["name"],
             {"connected": False, "message": "Disconnected by user"},
         )
 
@@ -301,7 +302,7 @@ class BilibiliHandlers:
         room_id = data.get("room_id")
         if not room_id or not isinstance(room_id, int) or room_id <= 0:
             await self.sio.emit(
-                "danmaku.status",
+                EVENTS["bilibili"]["danmaku_status"]["name"],
                 {"connected": False, "message": "Invalid room ID"},
                 to=sid,
             )
@@ -313,7 +314,7 @@ class BilibiliHandlers:
             )
             self.start_bilibili(room_id=room_id)
             await self.sio.emit(
-                "danmaku.status",
+                EVENTS["bilibili"]["danmaku_status"]["name"],
                 {"connected": True, "message": f"Connected to room {room_id}"},
             )
         except Exception as e:
@@ -321,7 +322,7 @@ class BilibiliHandlers:
                 f"[Bilibili] Error updating room to {room_id}: {e}"
             )
             await self.sio.emit(
-                "danmaku.status",
+                EVENTS["bilibili"]["danmaku_status"]["name"],
                 {"connected": False, "message": str(e)},
                 to=sid,
             )

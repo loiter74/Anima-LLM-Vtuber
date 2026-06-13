@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from ...socket_events import EVENTS
+
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
@@ -67,7 +69,7 @@ class ChatHandlers:
                 error_msg = result["error"]
                 logger.error(f"[{sid}] process_text returned error: {error_msg}")
                 await self.sio.emit(
-                    "error", {"type": "error", "message": error_msg}, to=sid
+                    EVENTS["system"]["error"]["name"], {"type": "error", "message": error_msg}, to=sid
                 )
 
         except Exception as e:
@@ -82,7 +84,7 @@ class ChatHandlers:
             except Exception as metric_err:
                 logger.debug(f"[ChatHandlers] OTel websocket_errors metric failed: {metric_err}")
             await self.sio.emit(
-                "error", {"type": "error", "message": str(e)}, to=sid
+                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )
 
     # ── Audio / VAD ───────────────────────────────────────────────────
@@ -123,7 +125,7 @@ class ChatHandlers:
         except Exception as e:
             logger.error(f"[{sid}] Error processing audio: {e}")
             await self.sio.emit(
-                "error", {"type": "error", "message": str(e)}, to=sid
+                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )
 
     # ── Interrupt ─────────────────────────────────────────────────────
@@ -140,10 +142,10 @@ class ChatHandlers:
         interrupt_handler = get_interrupt_handler()
         interrupt_handler.set_interrupt(sid)
 
-        await self.sio.emit("stop_audio", {}, to=sid)
+        await self.sio.emit(EVENTS["chat"]["stop_audio"]["name"], {}, to=sid)
 
         await self.sio.emit(
-            "control", {"type": "control", "text": "interrupted"}, to=sid
+            EVENTS["chat"]["control"]["name"], {"type": "control", "text": "interrupted"}, to=sid
         )
 
     # ── History ────────────────────────────────────────────────────────
@@ -159,8 +161,8 @@ class ChatHandlers:
         messages = []
 
         await self.sio.emit(
-            "history-data",
-            {"type": "history-data", "messages": messages},
+            EVENTS["history"]["list"]["name"],
+            {"type": EVENTS["history"]["list"]["name"], "messages": messages},
             to=sid,
         )
 
@@ -174,7 +176,7 @@ class ChatHandlers:
             logger.info(f"[{sid}] Conversation history cleared")
 
             await self.sio.emit(
-                "history-cleared", {"type": "history-cleared"}, to=sid
+                EVENTS["history"]["clear"]["name"], {"type": EVENTS["history"]["clear"]["name"]}, to=sid
             )
 
     async def on_create_new_history(self, sid: str, data: dict) -> None:
@@ -182,7 +184,7 @@ class ChatHandlers:
         logger.info(f"[{sid}] Creating new conversation history")
 
         await self.sio.emit(
-            "new-history-created",
-            {"type": "new-history-created", "history_uid": "new_history_001"},
+            EVENTS["history"]["create"]["name"],
+            {"type": EVENTS["history"]["create"]["name"], "history_uid": "new_history_001"},
             to=sid,
         )

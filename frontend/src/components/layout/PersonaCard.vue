@@ -9,6 +9,9 @@ const personaName = computed(() => {
 })
 
 const personaTraits = ['friendly', 'curious', 'helpful', 'creative']
+
+// Description for the persona (hardcoded for now, can be fetched from config later)
+const personaDesc = 'Friendly AI companion who loves to chat about tech, design, and creative projects.'
 </script>
 
 <template>
@@ -20,6 +23,7 @@ const personaTraits = ['friendly', 'curious', 'helpful', 'creative']
       <div class="persona-info">
         <div class="persona-name">{{ personaName }}</div>
         <div class="persona-subtitle">AI Virtual Companion</div>
+        <div class="persona-desc">{{ personaDesc }}</div>
       </div>
     </div>
     <div class="persona-traits">
@@ -83,6 +87,17 @@ const personaTraits = ['friendly', 'curious', 'helpful', 'creative']
   font-size: 11px;
   color: var(--c-text-dim);
   margin-top: 2px;
+}
+
+.persona-desc {
+  font-size: 10px;
+  color: var(--c-text-muted);
+  line-height: 1.4;
+  margin-top: var(--s-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .persona-traits {

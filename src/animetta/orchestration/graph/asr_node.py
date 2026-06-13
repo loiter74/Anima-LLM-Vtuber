@@ -8,6 +8,7 @@ from loguru import logger
 
 from .node_error import log_node_error
 from .state import AgentState
+from animetta.orchestration.socket_events import EVENTS
 
 
 def _get_service_context(config: RunnableConfig | None) -> Any | None:
@@ -59,7 +60,7 @@ async def asr_node(
         try:
             sio = config.get("configurable", {}).get("socketio") if config else None
             if sio:
-                await sio.emit("transcript", {"text": text, "is_final": True}, to=session_id)
+                await sio.emit(EVENTS["chat"]["transcript"]["name"], {"text": text, "is_final": True}, to=session_id)
         except Exception:
             logger.debug(f"[{session_id}] [ASRNode] Failed to emit transcript")
 

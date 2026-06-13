@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { getSocket } from './useSocket'
+import { Events } from '@/constants/socket-events'
 import type { SentenceEvent } from '@/types/socket-events'
 
 export function useSubtitle() {
@@ -169,24 +170,24 @@ export function useSubtitle() {
       cancelHide() // singing mode: don't auto-hide
     }
 
-    socket.on('sentence', _onSentence)
-    socket.on('control', _onControl)
-    socket.on('stop_audio', _onStopAudio)
-    socket.on('subtitle.translation', _onSubtitleTranslation)
-    socket.on('audio_with_expression', _onAudioWithExpression)
-    socket.on('sing:subtitle_line', _onSingSubtitle)
+    socket.on(Events.CHAT.SENTENCE, _onSentence)
+    socket.on(Events.CHAT.CONTROL, _onControl)
+    socket.on(Events.CHAT.STOP_AUDIO, _onStopAudio)
+    socket.on(Events.CHAT.SUBTITLE_TRANSLATION, _onSubtitleTranslation)
+    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, _onAudioWithExpression)
+    socket.on(Events.SING.SUBTITLE_LINE, _onSingSubtitle)
   })
 
   onUnmounted(() => {
     const socket = getSocket()
     if (!socket) return
     // Only remove OUR callbacks, not other components' listeners
-    if (_onSentence) socket.off('sentence', _onSentence)
-    if (_onControl) socket.off('control', _onControl)
-    if (_onStopAudio) socket.off('stop_audio', _onStopAudio)
-    if (_onSubtitleTranslation) socket.off('subtitle.translation', _onSubtitleTranslation)
-    if (_onAudioWithExpression) socket.off('audio_with_expression', _onAudioWithExpression)
-    if (_onSingSubtitle) socket.off('sing:subtitle_line', _onSingSubtitle)
+    if (_onSentence) socket.off(Events.CHAT.SENTENCE, _onSentence)
+    if (_onControl) socket.off(Events.CHAT.CONTROL, _onControl)
+    if (_onStopAudio) socket.off(Events.CHAT.STOP_AUDIO, _onStopAudio)
+    if (_onSubtitleTranslation) socket.off(Events.CHAT.SUBTITLE_TRANSLATION, _onSubtitleTranslation)
+    if (_onAudioWithExpression) socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, _onAudioWithExpression)
+    if (_onSingSubtitle) socket.off(Events.SING.SUBTITLE_LINE, _onSingSubtitle)
     if (hideTimeout) clearTimeout(hideTimeout)
   })
 

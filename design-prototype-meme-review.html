@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animetta - Meme Review Design</title>
+  <style>
+    :root {
+      --c-bg: #1a1028;
+      --c-surface: #241538;
+      --c-panel: #2d1b45;
+      --c-card: #36205a;
+      --c-text: #e8e0f0;
+      --c-text-dim: #9b8bb0;
+      --c-text-muted: #6b5a80;
+      --c-accent: #e879a8;
+      --c-accent-hover: #f090c0;
+      --c-accent-soft: rgba(232, 121, 168, 0.15);
+      --c-blue: #7c8cf5;
+      --c-success: #4ade80;
+      --c-warning: #fbbf24;
+      --c-error: #f87171;
+      --c-gold: #f5c872;
+      --c-border: rgba(255, 255, 255, 0.08);
+      --c-border-accent: rgba(232, 121, 168, 0.30);
+      --r-sm: 6px;
+      --r-md: 8px;
+      --r-lg: 12px;
+      --r-xl: 16px;
+      --r-2xl: 20px;
+      --s-1: 4px;
+      --s-2: 8px;
+      --s-3: 12px;
+      --s-4: 16px;
+      --s-5: 20px;
+      --s-6: 24px;
+      --d-fast: 150ms;
+      --d-base: 200ms;
+      --d-slow: 300ms;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans SC", sans-serif;
+      background: var(--c-bg);
+      color: var(--c-text);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      height: 100vh;
+      background:
+        radial-gradient(ellipse at 80% 20%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%),
+        var(--c-bg);
+    }
+
+    /* Background overlay */
+    .bg-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.50);
+      backdrop-filter: blur(8px);
+      z-index: 40;
+    }
+
+    /* Panel - Slide from right */
+    .meme-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 440px;
+      background: rgba(36, 21, 56, 0.95);
+      backdrop-filter: blur(40px);
+      border-left: 1px solid var(--c-border);
+      display: flex;
+      flex-direction: column;
+      z-index: 50;
+      box-shadow: -20px 0 60px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Header */
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--s-4) var(--s-5);
+      border-bottom: 1px solid var(--c-border);
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+    }
+
+    .panel-title-icon {
+      font-size: 18px;
+    }
+
+    .panel-title-text {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--c-text);
+    }
+
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+    }
+
+    .collect-btn {
+      padding: var(--s-1_5) var(--s-3);
+      font-size: 12px;
+      font-weight: 500;
+      background: linear-gradient(135deg, var(--c-accent), var(--c-accent-hover));
+      color: white;
+      border: none;
+      border-radius: var(--r-lg);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      box-shadow: 0 4px 12px rgba(232, 121, 168, 0.3);
+    }
+
+    .collect-btn:hover {
+      box-shadow: 0 4px 20px rgba(232, 121, 168, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .collect-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .close-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-lg);
+      color: var(--c-text-dim);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      font-size: 14px;
+    }
+
+    .close-btn:hover {
+      color: var(--c-text);
+      background: rgba(255, 255, 255, 0.10);
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--s-2) var(--s-5);
+      border-bottom: 1px solid var(--c-border);
+      flex-shrink: 0;
+    }
+
+    .stats-progress {
+      font-size: 12px;
+      color: var(--c-text-dim);
+    }
+
+    .stats-counts {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      font-size: 12px;
+    }
+
+    .stat-good {
+      color: var(--c-success);
+    }
+
+    .stat-bad {
+      color: var(--c-error);
+    }
+
+    .progress-bar {
+      height: 3px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: var(--s-1);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--c-accent), var(--c-accent-hover));
+      border-radius: 2px;
+      transition: width var(--d-slow) var(--ease-out-expo);
+    }
+
+    /* Content */
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--s-4) var(--s-5);
+    }
+
+    /* Meme Card */
+    .meme-card {
+      background: rgba(45, 27, 69, 0.60);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-xl);
+      padding: var(--s-4);
+      margin-bottom: var(--s-3);
+      transition: all var(--d-base) var(--ease-out-expo);
+    }
+
+    .meme-card:hover {
+      border-color: var(--c-border-accent);
+    }
+
+    .meme-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--s-3);
+    }
+
+    .meme-source {
+      font-size: 11px;
+      color: var(--c-text-muted);
+      display: flex;
+      align-items: center;
+      gap: var(--s-1);
+    }
+
+    .meme-time {
+      font-size: 10px;
+      color: var(--c-text-muted);
+      font-family: monospace;
+    }
+
+    .meme-content {
+      font-size: 14px;
+      color: var(--c-text);
+      line-height: 1.5;
+      margin-bottom: var(--s-3);
+    }
+
+    .meme-actions {
+      display: flex;
+      gap: var(--s-2);
+    }
+
+    .meme-btn {
+      flex: 1;
+      padding: var(--s-2) var(--s-3);
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-lg);
+      cursor: pointer;
+      transition: all var(--d-base) var(--ease-out-expo);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--s-1);
+    }
+
+    .meme-btn.accept {
+      background: rgba(74, 222, 128, 0.10);
+      color: var(--c-success);
+      border-color: rgba(74, 222, 128, 0.30);
+    }
+
+    .meme-btn.accept:hover {
+      background: rgba(74, 222, 128, 0.20);
+    }
+
+    .meme-btn.reject {
+      background: rgba(248, 113, 113, 0.10);
+      color: var(--c-error);
+      border-color: rgba(248, 113, 113, 0.30);
+    }
+
+    .meme-btn.reject:hover {
+      background: rgba(248, 113, 113, 0.20);
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: var(--s-3);
+      color: var(--c-text-muted);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      opacity: 0.5;
+    }
+
+    .empty-text {
+      font-size: 14px;
+    }
+
+    .empty-hint {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Background overlay -->
+    <div class="bg-overlay"></div>
+
+    <!-- Meme Review Panel -->
+    <div class="meme-panel">
+      <!-- Header -->
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-title-icon">🔍</span>
+          <span class="panel-title-text">梗筛选器</span>
+        </div>
+        <div class="panel-actions">
+          <button class="collect-btn">🔥 采集热梗</button>
+          <button class="close-btn">✕</button>
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stats-progress">3 / 10</div>
+        <div class="stats-counts">
+          <span class="stat-good">👍 2</span>
+          <span>|</span>
+          <span class="stat-bad">👎 1</span>
+        </div>
+        <div class="progress-bar" style="width: 100%;">
+          <div class="progress-fill" style="width: 30%;"></div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="panel-content">
+        <!-- Meme Card 1 -->
+        <div class="meme-card">
+          <div class="meme-header">
+            <div class="meme-source">
+              <span>📱</span>
+              <span>微博</span>
+            </div>
+            <div class="meme-time">2h ago</div>
+          </div>
+          <div class="meme-content">
+            当AI开始写代码，程序员就开始写诗了
+          </div>
+          <div class="meme-actions">
+            <button class="meme-btn accept">
+              <span>👍</span>
+              <span>保留</span>
+            </button>
+            <button class="meme-btn reject">
+              <span>👎</span>
+              <span>跳过</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Meme Card 2 -->
+        <div class="meme-card">
+          <div class="meme-header">
+            <div class="meme-source">
+              <span>💬</span>
+              <span>抖音</span>
+            </div>
+            <div class="meme-time">5h ago</div>
+          </div>
+          <div class="meme-content">
+            这个bug我修了三天，最后发现是少了一个分号
+          </div>
+          <div class="meme-actions">
+            <button class="meme-btn accept">
+              <span>👍</span>
+              <span>保留</span>
+            </button>
+            <button class="meme-btn reject">
+              <span>👎</span>
+              <span>跳过</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Meme Card 3 -->
+        <div class="meme-card">
+          <div class="meme-header">
+            <div class="meme-source">
+              <span>🐦</span>
+              <span>Twitter</span>
+            </div>
+            <div class="meme-time">1d ago</div>
+          </div>
+          <div class="meme-content">
+            前端：这个需求很简单<br>
+            后端：这个需求很简单<br>
+            测试：你们俩在说什么？
+          </div>
+          <div class="meme-actions">
+            <button class="meme-btn accept">
+              <span>👍</span>
+              <span>保留</span>
+            </button>
+            <button class="meme-btn reject">
+              <span>👎</span>
+              <span>跳过</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

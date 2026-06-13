@@ -33,6 +33,9 @@ COPY config/ config/
 COPY scripts/ scripts/
 COPY .env.example .env.example
 
+# 验证 Socket.IO 事件名一致性
+RUN python scripts/validate-events.py
+
 ENV PYTHONPATH=/app/src
 ENV ANIMETTA_HOST=0.0.0.0
 ENV ANIMETTA_PORT=12394
