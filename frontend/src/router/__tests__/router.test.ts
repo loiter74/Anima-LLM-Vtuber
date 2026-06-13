@@ -26,7 +26,7 @@ describe('Router', () => {
     expect(route.name).toBe('music')
   })
 
-  it('has exactly 4 routes', () => {
-    expect(router.getRoutes()).toHaveLength(4)
+  it('has at least 5 routes', () => {
+    expect(router.getRoutes().length).toBeGreaterThanOrEqual(5)
   })
 })

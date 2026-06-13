@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import AppLayout from '@/components/layout/AppLayout.vue'
 
 // Mock useDanmaku to avoid socket initialization
@@ -10,7 +11,9 @@ vi.mock('@/composables/useDanmaku', () => ({
 function createWrapper() {
   return mount(AppLayout, {
     global: {
+      plugins: [createPinia()],
       stubs: {
+        TitleBar: true,
         Live2DRenderer: true,
         SceneEffects: true,
         InteractivePanel: true,
@@ -40,8 +43,11 @@ describe('AppLayout', () => {
 
   it('has Live2DRenderer visible by default (not popout)', () => {
     const wrapper = createWrapper()
-    const rendererDiv = wrapper.find('.z-0')
-    expect(rendererDiv.exists()).toBe(true)
+    // Live2DRenderer renders inside .stage div when not popped out
+    const stageDiv = wrapper.find('.stage')
+    expect(stageDiv.exists()).toBe(true)
+    const renderer = stageDiv.findComponent({ name: 'Live2DRenderer' })
+    expect(renderer.exists()).toBe(true)
   })
 
   it('passes live2dPopout prop to InteractivePanel', () => {
