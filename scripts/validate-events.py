@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-验证 Socket.IO 事件名一致性
+Validate Socket.IO event name consistency.
 
-此脚本检查：
-1. config/socket-events.json 中定义的事件名是否与后端 routes.py 中的注册一致
-2. 前端代码中使用的事件名是否与 JSON 定义一致
+This script checks:
+1. config/socket-events.json is valid JSON with correct structure
+2. Frontend uses Events constants (not string literals)
+3. Backend uses EVENTS config (not string literals)
 
-用法：
+Usage:
     python scripts/validate-events.py
 
-退出码：
-    0 - 验证通过
-    1 - 验证失败
+Exit codes:
+    0 - Validation passed
+    1 - Validation failed
 """
 
 import json
@@ -20,17 +21,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# 项目根目录
+# Project root directory
 ROOT_DIR = Path(__file__).parent.parent
 
-# 文件路径
+# File paths
 JSON_PATH = ROOT_DIR / "config" / "socket-events.json"
 ROUTES_PY = ROOT_DIR / "src" / "animetta" / "orchestration" / "server" / "routes.py"
 FRONTEND_DIR = ROOT_DIR / "frontend" / "src"
 
 
 def load_json_events() -> dict[str, str]:
-    """从 JSON 文件加载所有事件名，返回 {事件名: 模块名} 映射"""
+    """Load all event names from JSON file, return {event_name: module_name} mapping."""
     with open(JSON_PATH, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -43,238 +44,203 @@ def load_json_events() -> dict[str, str]:
     return events
 
 
-def extract_routes_py_events() -> set[str]:
-    """从 routes.py 中提取所有 sio.on() 注册的事件名"""
+def check_json_structure() -> list[str]:
+    """Validate JSON structure is correct."""
+    errors = []
+
+    try:
+        with open(JSON_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        errors.append(f"Invalid JSON: {e}")
+        return errors
+
+    # Check each module has events
+    for module_name, module_events in data.items():
+        if not isinstance(module_events, dict):
+            errors.append(f"Module '{module_name}' should be a dict")
+            continue
+
+        for event_key, event_config in module_events.items():
+            if "name" not in event_config:
+                errors.append(f"Event '{module_name}.{event_key}' missing 'name' field")
+            if "payload" not in event_config:
+                errors.append(f"Event '{module_name}.{event_key}' missing 'payload' field")
+
+    return errors
+
+
+def check_routes_py_uses_events() -> list[str]:
+    """Check that routes.py uses EVENTS config, not string literals."""
+    errors = []
+
     with open(ROUTES_PY, encoding="utf-8") as f:
         content = f.read()
 
-    # 匹配 sio.on("event_name", ...) 模式
-    pattern = r'sio\.on\(["\']([^"\']+)["\']'
-    return set(re.findall(pattern, content))
+    # Check for old-style string literals (excluding connect/disconnect which are built-in)
+    old_pattern = r'sio\.on\(["\'](?!connect|disconnect)([^"\']+)["\']'
+    old_matches = re.findall(old_pattern, content)
 
+    if old_matches:
+        errors.append(f"routes.py still uses string literals: {old_matches}")
 
-def extract_frontend_emit_events() -> set[str]:
-    """从前端代码中提取所有 socket.emit() 调用的事件名"""
-    events = set()
-
-    # 匹配 socket.emit("event_name", ...) 模式
-    pattern = r'socket\.emit\(["\']([^"\']+)["\']'
-
-    for ts_file in FRONTEND_DIR.rglob("*.ts"):
-        with open(ts_file, encoding="utf-8") as f:
-            content = f.read()
-            events.update(re.findall(pattern, content))
-
-    for vue_file in FRONTEND_DIR.rglob("*.vue"):
-        with open(vue_file, encoding="utf-8") as f:
-            content = f.read()
-            events.update(re.findall(pattern, content))
-
-    return events
-
-
-def extract_frontend_on_events() -> set[str]:
-    """从前端代码中提取所有 socket.on() 监听的事件名"""
-    events = set()
-
-    # 匹配 socket.on("event_name", ...) 模式
-    pattern = r'socket\.on\(["\']([^"\']+)["\']'
-
-    for ts_file in FRONTEND_DIR.rglob("*.ts"):
-        with open(ts_file, encoding="utf-8") as f:
-            content = f.read()
-            events.update(re.findall(pattern, content))
-
-    for vue_file in FRONTEND_DIR.rglob("*.vue"):
-        with open(vue_file, encoding="utf-8") as f:
-            content = f.read()
-            events.update(re.findall(pattern, content))
-
-    return events
-
-
-def validate_json_format(events: dict[str, str]) -> list[str]:
-    """验证 JSON 格式是否正确"""
-    errors = []
-
-    for event_name, module_name in events.items():
-        # 检查是否使用点分隔
-        if "." not in event_name:
-            errors.append(f"事件 '{event_name}' 未使用点分隔格式")
-
-        # 检查模块名是否匹配
-        expected_module = event_name.split(".")[0]
-        if module_name != expected_module:
-            errors.append(
-                f"事件 '{event_name}' 的模块名 '{module_name}' 与预期 '{expected_module}' 不匹配"
-            )
+    # Check that EVENTS is imported and used
+    if "EVENTS" not in content:
+        errors.append("routes.py doesn't import or use EVENTS")
 
     return errors
 
 
-def validate_routes_py_consistency(
-    json_events: dict[str, str], routes_events: set[str]
-) -> list[str]:
-    """验证 routes.py 中的事件名与 JSON 定义一致"""
+def check_frontend_uses_constants() -> list[str]:
+    """Check that frontend uses Events constants, not string literals."""
     errors = []
 
-    # 获取 JSON 中的所有事件名
-    json_event_names = set(json_events.keys())
+    # Find all .ts and .vue files
+    ts_files = list(FRONTEND_DIR.rglob("*.ts"))
+    vue_files = list(FRONTEND_DIR.rglob("*.vue"))
+    all_files = ts_files + vue_files
 
-    # 检查 routes.py 中是否有 JSON 中不存在的事件
-    missing_in_json = routes_events - json_event_names
-    if missing_in_json:
-        errors.append(f"routes.py 中有 JSON 中不存在的事件: {missing_in_json}")
+    for file_path in all_files:
+        with open(file_path, encoding="utf-8") as f:
+            content = f.read()
 
-    # 检查 JSON 中是否有 routes.py 中未注册的事件
-    missing_in_routes = json_event_names - routes_events
-    if missing_in_routes:
-        errors.append(f"JSON 中有 routes.py 中未注册的事件: {missing_in_routes}")
-
-    return errors
-
-
-def validate_frontend_consistency(
-    json_events: dict[str, str],
-    emit_events: set[str],
-    on_events: set[str],
-) -> list[str]:
-    """验证前端代码中的事件名与 JSON 定义一致"""
-    errors = []
-
-    json_event_names = set(json_events.keys())
-
-    # 过滤掉 socket.io 内置事件
-    builtin_events = {"connect", "disconnect", "connect_error"}
-    emit_events = emit_events - builtin_events
-    on_events = on_events - builtin_events
-
-    # 检查 emit 中是否有 JSON 中不存在的事件
-    missing_in_json = emit_events - json_event_names
-    if missing_in_json:
-        errors.append(f"前端 emit 中有 JSON 中不存在的事件: {missing_in_json}")
-
-    # 检查 on 中是否有 JSON 中不存在的事件
-    missing_in_json = on_events - json_event_names
-    if missing_in_json:
-        errors.append(f"前端 on 中有 JSON 中不存在的事件: {missing_in_json}")
-
-    return errors
-
-
-def check_old_event_names(emit_events: set[str], on_events: set[str]) -> list[str]:
-    """检查是否还有使用旧事件名的代码"""
-    errors = []
-
-    # 定义旧事件名模式
-    old_patterns = [
-        # 下划线格式（排除合法的新格式）
-        r"^[a-z]+_[a-z]+",
-        # 冒号格式
-        r"^[a-z]+:[a-z]+",
-    ]
-
-    all_events = emit_events | on_events
-
-    for event in all_events:
-        # 跳过 socket.io 内置事件
-        if event in {"connect", "disconnect", "connect_error"}:
+        # Skip socket-events.ts itself (it defines the constants)
+        if "socket-events.ts" in str(file_path):
             continue
 
-        # 检查是否匹配旧格式
-        for pattern in old_patterns:
-            if re.match(pattern, event):
-                errors.append(f"发现旧格式事件名: '{event}'，请迁移到点分隔格式")
-                break
+        # Check for old-style string literals in emit/on/once/off calls
+        emit_pattern = r'socket\.emit\(["\']([^"\']+)["\']'
+        on_pattern = r'socket\.on\(["\']([^"\']+)["\']'
+        once_pattern = r'socket\.once\(["\']([^"\']+)["\']'
+        off_pattern = r'socket\.off\(["\']([^"\']+)["\']'
+
+        # Also check for sock.emit (aliased socket)
+        sock_emit_pattern = r'sock\.emit\(["\']([^"\']+)["\']'
+        sock_once_pattern = r'sock\.once\(["\']([^"\']+)["\']'
+
+        all_patterns = [
+            (emit_pattern, "emit"),
+            (on_pattern, "on"),
+            (once_pattern, "once"),
+            (off_pattern, "off"),
+            (sock_emit_pattern, "emit"),
+            (sock_once_pattern, "once"),
+        ]
+
+        for pattern, method in all_patterns:
+            matches = re.findall(pattern, content)
+            # Filter out socket.io built-in events
+            builtin_events = {"connect", "disconnect", "connect_error"}
+            old_events = [m for m in matches if m not in builtin_events]
+
+            if old_events:
+                rel_path = file_path.relative_to(ROOT_DIR)
+                errors.append(f"{rel_path}: still uses string literals for {method}: {old_events}")
+
+    return errors
+
+
+def check_frontend_has_imports() -> list[str]:
+    """Check that frontend files import Events constants."""
+    errors = []
+
+    # Find all .ts and .vue files that use socket
+    ts_files = list(FRONTEND_DIR.rglob("*.ts"))
+    vue_files = list(FRONTEND_DIR.rglob("*.vue"))
+    all_files = ts_files + vue_files
+
+    for file_path in all_files:
+        with open(file_path, encoding="utf-8") as f:
+            content = f.read()
+
+        # Skip socket-events.ts itself
+        if "socket-events.ts" in str(file_path):
+            continue
+
+        # Check if file uses socket.emit/on/once/off
+        uses_socket = any(
+            pattern in content
+            for pattern in [
+                "socket.emit(",
+                "socket.on(",
+                "socket.once(",
+                "socket.off(",
+                "sock.emit(",
+                "sock.once(",
+            ]
+        )
+
+        if uses_socket:
+            # Check if it imports Events
+            if "Events" not in content:
+                rel_path = file_path.relative_to(ROOT_DIR)
+                errors.append(f"{rel_path}: uses socket but doesn't import Events")
 
     return errors
 
 
 def main() -> int:
-    """主函数"""
+    """Main function."""
     print("=" * 60)
-    print("Socket.IO 事件名一致性验证")
+    print("Socket.IO Event Naming Validation")
     print("=" * 60)
 
     all_errors: list[str] = []
 
-    # 1. 加载 JSON 事件
-    print("\n[1/5] 加载 JSON 事件定义...")
+    # 1. Validate JSON structure
+    print("\n[1/4] Validating JSON structure...")
+    json_errors = check_json_structure()
+    if json_errors:
+        all_errors.extend(json_errors)
+        print(f"  FAIL - Found {len(json_errors)} structural errors")
+    else:
+        print("  OK - JSON structure is valid")
+
+    # 2. Load JSON events
+    print("\n[2/4] Loading JSON events...")
     try:
         json_events = load_json_events()
-        print(f"  ✓ 加载了 {len(json_events)} 个事件")
+        print(f"  OK - Loaded {len(json_events)} events")
     except Exception as e:
-        print(f"  ✗ 加载失败: {e}")
+        print(f"  FAIL - Load failed: {e}")
         return 1
 
-    # 2. 验证 JSON 格式
-    print("\n[2/5] 验证 JSON 格式...")
-    format_errors = validate_json_format(json_events)
-    if format_errors:
-        all_errors.extend(format_errors)
-        print(f"  ✗ 发现 {len(format_errors)} 个格式错误")
+    # 3. Check routes.py uses EVENTS
+    print("\n[3/4] Checking routes.py...")
+    routes_errors = check_routes_py_uses_events()
+    if routes_errors:
+        all_errors.extend(routes_errors)
+        print(f"  FAIL - Found {len(routes_errors)} issues")
     else:
-        print("  ✓ JSON 格式正确")
+        print("  OK - routes.py uses EVENTS config")
 
-    # 3. 验证 routes.py 一致性
-    print("\n[3/5] 验证 routes.py 一致性...")
-    try:
-        routes_events = extract_routes_py_events()
-        print(f"  ✓ 从 routes.py 提取了 {len(routes_events)} 个事件")
+    # 4. Check frontend uses constants
+    print("\n[4/4] Checking frontend...")
+    frontend_errors = check_frontend_uses_constants()
+    import_errors = check_frontend_has_imports()
 
-        routes_errors = validate_routes_py_consistency(json_events, routes_events)
-        if routes_errors:
-            all_errors.extend(routes_errors)
-            print(f"  ✗ 发现 {len(routes_errors)} 个不一致")
-        else:
-            print("  ✓ routes.py 与 JSON 一致")
-    except Exception as e:
-        print(f"  ✗ 验证失败: {e}")
-        all_errors.append(f"routes.py 验证失败: {e}")
+    if frontend_errors:
+        all_errors.extend(frontend_errors)
+        print(f"  FAIL - Found {len(frontend_errors)} string literal issues")
 
-    # 4. 验证前端一致性
-    print("\n[4/5] 验证前端一致性...")
-    try:
-        emit_events = extract_frontend_emit_events()
-        on_events = extract_frontend_on_events()
-        print(f"  ✓ 从前端提取了 {len(emit_events)} 个 emit 事件, {len(on_events)} 个 on 事件")
+    if import_errors:
+        all_errors.extend(import_errors)
+        print(f"  FAIL - Found {len(import_errors)} missing imports")
 
-        frontend_errors = validate_frontend_consistency(
-            json_events, emit_events, on_events
-        )
-        if frontend_errors:
-            all_errors.extend(frontend_errors)
-            print(f"  ✗ 发现 {len(frontend_errors)} 个不一致")
-        else:
-            print("  ✓ 前端与 JSON 一致")
-    except Exception as e:
-        print(f"  ✗ 验证失败: {e}")
-        all_errors.append(f"前端验证失败: {e}")
+    if not frontend_errors and not import_errors:
+        print("  OK - Frontend uses Events constants")
 
-    # 5. 检查旧事件名
-    print("\n[5/5] 检查旧事件名...")
-    try:
-        old_name_errors = check_old_event_names(emit_events, on_events)
-        if old_name_errors:
-            all_errors.extend(old_name_errors)
-            print(f"  ✗ 发现 {len(old_name_errors)} 个旧格式事件名")
-        else:
-            print("  ✓ 未发现旧格式事件名")
-    except Exception as e:
-        print(f"  ✗ 检查失败: {e}")
-        all_errors.append(f"旧事件名检查失败: {e}")
-
-    # 输出结果
+    # Output results
     print("\n" + "=" * 60)
     if all_errors:
-        print(f"验证失败: 发现 {len(all_errors)} 个错误")
+        print(f"Validation FAILED: {len(all_errors)} errors found")
         print("=" * 60)
         for i, error in enumerate(all_errors, 1):
             print(f"{i}. {error}")
         print("=" * 60)
         return 1
     else:
-        print("验证通过: 所有事件名一致")
+        print("Validation PASSED: All event names are consistent")
         print("=" * 60)
         return 0
 

@@ -8,6 +8,7 @@ import { useChat } from '@/composables/useChat'
 import { useChatStore } from '@/stores/chat'
 import { getSocket } from '@/composables/useSocket'
 import { useMobile } from '@/composables/useMobile'
+import { Events } from '@/constants/socket-events'
 
 const { sendText, sendInterrupt, organizeMemory } = useChat()
 const store = useChatStore()
@@ -21,7 +22,7 @@ const memoryProgressPercent = ref(0)
 onMounted(() => {
   const socket = getSocket()
   if (!socket) return
-  socket.on('memory.organize.progress', (data: any) => {
+  socket.on(Events.MEMORY.ORGANIZE_PROGRESS, (data: any) => {
     memoryProgress.value = data.text || ''
     memoryProgressPercent.value = data.progress || 0
   })
@@ -30,7 +31,7 @@ onMounted(() => {
 onUnmounted(() => {
   const socket = getSocket()
   if (!socket) return
-  socket.off('memory.organize.progress')
+  socket.off(Events.MEMORY.ORGANIZE_PROGRESS)
 })
 
 async function handleMemoryOrganize(): Promise<void> {
