@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 """Tests for WebSocketServer — server init, routes, lifecycle, and prewarm."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from animetta.core.model_loading_manager import ModelLoadingManager
 
+import pytest
 
+from animetta.orchestration.server.websocket import WebSocketServer, create_server
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ class TestWebSocketServerInit:
                 engineio_logger=False,
                 ping_timeout=120,
                 ping_interval=30,
+                max_http_buffer_size=10000000,
             )
 
     def test_init_stores_config(self):
@@ -173,7 +175,7 @@ class TestPrewarmServices:
     @pytest.mark.asyncio
     async def test_prewarm_services_with_config(self, websocket_server):
         """prewarm_services initializes ServicePool when config is set."""
-        with patch("animetta.core.service_pool.ServicePool") as mock_pool:
+        with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
             mock_pool.init = AsyncMock()
 
             await websocket_server.prewarm_services()
@@ -196,7 +198,7 @@ class TestPrewarmServices:
 
             server = WebSocketServer(config=None)
 
-            with patch("animetta.core.service_pool.ServicePool") as mock_pool:
+        with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
                 await server.prewarm_services()
                 mock_pool.init.assert_not_called()
 

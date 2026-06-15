@@ -1,10 +1,19 @@
 from __future__ import annotations
+
 """Tests for Live2DActionQueue enqueue/dequeue and all overflow/replace policies."""
 
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from animetta.services.live2d.action_queue import Live2DActionQueue
+from unittest.mock import AsyncMock
+
+import pytest
+
+from animetta.services.live2d.action_queue import (
+    ActionMessage,
+    Live2DActionMutex,
+    Live2DActionQueue,
+    OverflowPolicy,
+    QueuePolicy,
+)
 
 
 class TestActionMessage:

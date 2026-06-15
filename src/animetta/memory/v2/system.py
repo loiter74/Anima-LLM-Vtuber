@@ -15,9 +15,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from animetta.memory.v2.atom import Layer, MemoryAtom, Relation, RelationType
+from animetta.memory.v2.character_filter import CharacterMemoryFilter
 from animetta.memory.v2.compile import COMPILE_TRIGGERS, CompileEngine
 from animetta.memory.v2.emotion_field import EmotionalField, VADVector
-from animetta.memory.v2.character_filter import CharacterMemoryFilter
 from animetta.memory.v2.metabolism import MetabolismScheduler
 from animetta.memory.v2.reconsolidation import get_reconsolidation_client
 from animetta.memory.v2.search import MemorySearch

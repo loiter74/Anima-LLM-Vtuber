@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import math
 import random
+
 import pytest
 
 # Import the module under test
 from evaluations.rag.metrics import (
-    recall_at_k,
-    precision_at_k,
+    bootstrap_ci,
+    chunk_diversity,
+    latency_percentiles,
     mrr,
     ndcg_at_k,
-    latency_percentiles,
-    chunk_diversity,
-    bootstrap_ci,
+    precision_at_k,
+    recall_at_k,
 )
 
 # ── Shared Test Data ────────────────────────────────────────────────────

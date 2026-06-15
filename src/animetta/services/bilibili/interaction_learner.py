@@ -9,11 +9,36 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from . import api
-from .models import DanmakuMessage, InteractionPattern, LivestreamStrategy
+from .models import DanmakuMessage, LivestreamStrategy
+
+# ── Wiki data models (local definitions for strategy storage) ──────────
+
+
+class PageType(Enum):
+    """Wiki page type classification."""
+    CONCEPT = "concept"
+    ENTITY = "entity"
+    SOURCE = "source"
+    SYNTHESIS = "synthesis"
+
+
+@dataclass
+class WikiPage:
+    """A page in the wiki knowledge base."""
+    title: str = ""
+    page_type: PageType = PageType.CONCEPT
+    path: str = ""
+    content: str = ""
+    tags: list[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
 
 logger = logging.getLogger(__name__)
 

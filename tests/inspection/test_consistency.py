@@ -13,10 +13,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.orchestration.graph.stats_store import StatsStore
-from animetta.inspection.checks.consistency import has_trace_in_last, chroma_responds, check_data_consistency, log_file_stale
-from animetta.inspection.models import CheckResult
 
+from animetta.inspection.checks.consistency import (
+    check_data_consistency,
+    chroma_responds,
+    has_trace_in_last,
+    log_file_stale,
+)
 
 # ─────────────────────────────────────────────────────────────
 # Helpers

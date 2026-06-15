@@ -12,9 +12,20 @@ Architecture:
 """
 
 # Core
+# Composite configs
+from .agent import AgentConfig
+from .app import AppConfig
 from .core.base import BaseConfig
 from .core.mixins import ApiKeyMixin, DeviceMixin, ModelMixin, TemperatureMixin
 from .core.registry import ProviderRegistry
+from .persona import (
+    BehaviorRules,
+    MBTIDimensionDelta,
+    MBTIDimensions,
+    MBTIProfile,
+    PersonaConfig,
+    PersonalityTraits,
+)
 
 # Providers - ASR
 from .providers.asr import (
@@ -27,6 +38,9 @@ from .providers.asr import (
     OpenAIASRConfig,
 )
 
+# Providers - Bilibili
+from .providers.bilibili import BilibiliConfig
+
 # Providers - LLM
 from .providers.llm import (
     DeepSeekLLMConfig,
@@ -37,6 +51,14 @@ from .providers.llm import (
     MockLLMConfig,
     OllamaLLMConfig,
     OpenAILLMConfig,
+)
+
+# Providers - Separation
+from .providers.separation import (
+    DemucsSeparationConfig,
+    MockSeparationConfig,
+    SeparationBaseConfig,
+    SeparationConfig,
 )
 
 # Providers - TTS
@@ -68,29 +90,6 @@ from .providers.vc import (
     RVCConfig,
     VCBaseConfig,
     VCConfig,
-)
-
-# Providers - Separation
-from .providers.separation import (
-    DemucsSeparationConfig,
-    MockSeparationConfig,
-    SeparationBaseConfig,
-    SeparationConfig,
-)
-
-# Providers - Bilibili
-from .providers.bilibili import BilibiliConfig
-
-# Composite configs
-from .agent import AgentConfig
-from .app import AppConfig
-from .persona import (
-    BehaviorRules,
-    MBTIDimensionDelta,
-    MBTIDimensions,
-    MBTIProfile,
-    PersonaConfig,
-    PersonalityTraits,
 )
 from .system import SystemConfig
 

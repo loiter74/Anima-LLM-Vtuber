@@ -165,7 +165,7 @@ class KeywordAnalyzer(IEmotionAnalyzer):
             primary = self._extract_primary(scores)
 
             # Build timeline (keyword analysis does not provide time info)
-            timeline = []
+            timeline: list[dict[str, Any]] = []
 
             # Statistics
             metadata = {

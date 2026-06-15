@@ -1,20 +1,15 @@
 from __future__ import annotations
+
 """
 Tests for AudioAnalyzer — volume envelope computation for lip sync.
 """
 
 import math
-import os
 import struct
 import wave
-import tempfile
-from pathlib import Path
 
-import pytest
 from animetta.avatar.analyzers.audio import AudioAnalyzer, compute_volume_envelope
 from animetta.orchestration.graph.output_node import _compute_volumes, _trim_leading_silence
-
-
 
 # ============================================================
 # helpers
@@ -56,7 +51,6 @@ def _create_wav_with_leading_silence(path: str, silence_sec: float = 0.3,
                                       duration_sec: float = 1.0,
                                       sample_rate: int = 16000) -> str:
     """Create a WAV file with leading silence followed by sine wave."""
-    import array
     silence_samples = int(sample_rate * silence_sec)
     tone_samples = int(sample_rate * duration_sec)
     samples = [0] * silence_samples

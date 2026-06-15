@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Tests for Redis-backed LangGraph checkpoint saver.
 
 Requires a running Redis instance on localhost:6379 for the persistence test.
@@ -6,8 +7,8 @@ The fallback test runs without Redis.
 """
 
 import pytest
-from animetta.core.redis_checkpoint import AsyncRedisSaver
 
+from animetta.core.redis_checkpoint import AsyncRedisSaver
 
 # ── Test 3.6: session persistence across checkpointer re-creation ─
 

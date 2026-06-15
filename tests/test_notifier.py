@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 from animetta.notifier.manager import NotifierManager
+
 """Tests for Notifier — Alert webhook relay (Discord / Feishu / Email)."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
-from animetta.notifier.base import get_notifier_registry
-
-
+from animetta.notifier.base import NotifierBase, get_notifier_registry
+from animetta.notifier.discord import DiscordNotifier
+from animetta.notifier.email import _render_email
+from animetta.notifier.feishu import _build_card, _generate_sign
+from animetta.notifier.manager import Alert, parse_alertmanager_payload
 
 # ── Sample Alertmanager payload ───────────────────────────────────
 

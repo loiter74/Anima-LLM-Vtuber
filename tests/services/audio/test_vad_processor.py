@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 from animetta.services.vad import VADInterface
+
 """Tests for VADAudioProcessor — chunk buffering, callbacks, timeout."""
 
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.services.vad import VADState, VADFactory
-from animetta.services.audio.vad_audio_processor import VADAudioProcessor
 
+from animetta.services.audio.vad_audio_processor import VADAudioProcessor
+from animetta.services.vad import VADState
+from animetta.services.vad.interface import VADResult
 
 
 @pytest.fixture
@@ -154,9 +156,8 @@ class TestVADAudioProcessor:
         on_start, on_end = mock_callbacks
         mock_vad.detect_speech.return_value = _active_result(is_speech_start=True)
 
-        with patch.object(processor, "_max_audio_duration", 0.001):
-            with patch("time.time", side_effect=[100.0, 100.002]):
-                await processor.process_chunk([0.1] * 160)  # 10ms of audio
+        with patch.object(processor, "_max_audio_duration", 0.001), patch("time.time", side_effect=[100.0, 100.002]):
+            await processor.process_chunk([0.1] * 160)  # 10ms of audio
 
         on_start.assert_awaited_once()
         on_end.assert_awaited_once()

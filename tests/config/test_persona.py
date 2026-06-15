@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 from animetta.config.persona import PersonaConfig
-from animetta.config.persona.base import PersonalityTraits, BehaviorRules
+from animetta.config.persona.base import BehaviorRules, PersonalityTraits
+
 """Tests for PersonaConfig (config/persona/base.py)"""
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 
 import pytest
-import yaml
 
 # Ensure src/ is on the Python path
 _src_path = str(Path(__file__).resolve().parent.parent.parent / "src")

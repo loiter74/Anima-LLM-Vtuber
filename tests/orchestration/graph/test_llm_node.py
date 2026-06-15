@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 """Tests for LLM reasoning node — tool-calling and streaming paths."""
 
 import asyncio
-import pytest
-from animetta.orchestration.graph import llm_node
-from animetta.orchestration.graph.state import create_initial_state
 from unittest.mock import AsyncMock, MagicMock
-from langgraph.types import RunnableConfig
-from animetta.orchestration.graph.node_error import log_node_error
 
+import pytest
+from langgraph.types import RunnableConfig
+
+from animetta.orchestration.graph import llm_node
+from animetta.orchestration.graph.llm_node import FALLBACK_RESPONSE
+from animetta.orchestration.graph.state import create_initial_state
 
 
 def _make_config(service_context=None, enable_tools=False, chat_model=None):

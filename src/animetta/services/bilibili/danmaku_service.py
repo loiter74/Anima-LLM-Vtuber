@@ -18,13 +18,11 @@ Usage:
 import asyncio
 import contextlib
 import threading
-import time
 from collections.abc import Callable
-from typing import Any
 
 from loguru import logger
 
-from .models import DanmakuMessage, DanmakuReply
+from .models import DanmakuMessage
 
 
 class DanmakuService:

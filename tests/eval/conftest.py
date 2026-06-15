@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Eval-specific fixtures for RAG evaluation tests.
 
 Fixtures here are reusable across test modules in tests/eval/.

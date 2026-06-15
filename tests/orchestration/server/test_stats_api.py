@@ -1,14 +1,14 @@
 from __future__ import annotations
+
 """Tests for stats API endpoints — health check, overview, nodes, traces."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from starlette.testclient import TestClient
+import pytest
 from starlette.applications import Starlette
-from animetta.orchestration.server.stats_api import get_stats_routes
-from animetta.orchestration.graph.stats_store import StatsStore
+from starlette.testclient import TestClient
 
+from animetta.orchestration.server.stats_api import get_stats_routes
 
 # ── Helpers ────────────────────────────────────────────────────────
 

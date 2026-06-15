@@ -19,7 +19,7 @@ try:
     _HAS_OPENAI = True
 except ImportError:
     _HAS_OPENAI = False
-    AsyncOpenAI = None  # type: ignore[assignment]
+    AsyncOpenAI = None  # type: ignore[assignment, misc]
 
 
 @dataclass

@@ -83,7 +83,7 @@ class DurationBasedStrategy(ITimelineStrategy):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **kwargs
+        **_kwargs
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -356,8 +356,8 @@ class DurationBasedStrategy(ITimelineStrategy):
                 "average_duration": 0.0
             }
 
-        emotion_counts = {}
-        emotion_durations = {}
+        emotion_counts: dict[str, int] = {}
+        emotion_durations: dict[str, float] = {}
 
         for seg in segments:
             emotion_counts[seg.emotion] = emotion_counts.get(seg.emotion, 0) + 1

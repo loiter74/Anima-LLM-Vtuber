@@ -1,10 +1,15 @@
 from __future__ import annotations
+
 """Tests for context.py — attach/detach_trace_context with OTel."""
 
-from unittest.mock import MagicMock, patch
-
-import pytest
 from opentelemetry import trace as otel_trace
+
+from animetta.tracing.context import (
+    _make_otel_span_context,
+    _uuid_to_otel_trace_id,
+    attach_trace_context,
+    detach_trace_context,
+)
 
 
 class TestTraceContext:

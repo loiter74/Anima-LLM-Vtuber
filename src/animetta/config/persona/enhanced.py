@@ -447,11 +447,11 @@ class EnhancedPersonaBuilder:
             EnhancedPersonaBuilder: Persona builder instance
         """
         if personas_dir is None:
-            personas_dir = Path(__file__).parent.parent.parent.parent / "config" / "personas"
+            personas_path = Path(__file__).parent.parent.parent.parent / "config" / "personas"
         else:
-            personas_dir = Path(personas_dir)
+            personas_path = Path(personas_dir)
 
-        persona_path = personas_dir / f"{persona_name}.yaml"
+        persona_path = personas_path / f"{persona_name}.yaml"
 
         return cls(str(persona_path))
 

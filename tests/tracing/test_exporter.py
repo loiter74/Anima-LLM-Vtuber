@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 """Tests for StatsSpanExporter — OTel span → StatsStore mapping."""
 
-import pytest
-from animetta.tracing.exporter import StatsSpanExporter
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExportResult
-from opentelemetry.trace import SpanContext, SpanKind, TraceFlags, Status, StatusCode
-from animetta.orchestration.graph.stats_store import StatsStore
+from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
+
+from animetta.tracing.exporter import StatsSpanExporter, _format_span_id, _format_trace_id
 
 
 @pytest.fixture
@@ -185,7 +186,8 @@ class TestStatsSpanExporter:
     @pytest.mark.asyncio
     async def test_write_span_error_status_includes_description(self, exporter, mock_store):
         """Error status with description should pass output_summary."""
-        from opentelemetry.trace import Status, StatusCode as SC
+        from opentelemetry.trace import Status
+        from opentelemetry.trace import StatusCode as SC
         span = _make_otel_span(
             name="fail",
             status_code=StatusCode.ERROR,

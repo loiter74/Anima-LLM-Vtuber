@@ -104,9 +104,9 @@ class TestRAGQuality:
         subset = _load_dataset(n=20)
 
         # ── Detect embedding model availability ──
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
+        import importlib.util
+
+        if importlib.util.find_spec("sentence_transformers") is None:
             pytest.skip("sentence-transformers not installed — skipping slow RAG test")
 
         # ── Create temp workspace ──

@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 """Tests for ModelLoadingManager — centralized model lifecycle."""
 
 import asyncio
+import contextlib
 
 import pytest
+
 from animetta.core.model_loading_manager import ModelLoadingManager, ModelLoadState, ModelSlot
-
-
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ class TestRegisterAndGet:
     @pytest.mark.asyncio
     async def test_register_async_loader_not_loaded(self, manager):
         """Async loader should NOT be called during registration."""
-        result = manager.register(
+        manager.register(
             "async_model",
             lambda: "ignored",  # not actually co-routine
             service_name="Async Service",
@@ -354,10 +355,8 @@ class TestWaitAll:
         def fail():
             raise RuntimeError("fail")
 
-        try:
-            manager.register("bad", fail)
-        except RuntimeError:
-            pass  # sync error is expected
+        with contextlib.suppress(RuntimeError):
+            manager.register("bad", fail)  # sync error is expected
 
         result = await manager.wait_all()
         assert result is False
@@ -383,7 +382,7 @@ class TestSocketIOIntegration:
 
         mock_sio.emit.assert_called()
         call_args = mock_sio.emit.call_args_list[0][0]
-        assert call_args[0] == "model_status"
+        assert call_args[0] == "system:model_status"
         assert call_args[1]["name"] == "test_model"
         assert call_args[1]["status"] == "loaded"
 
@@ -397,14 +396,12 @@ class TestSocketIOIntegration:
         def fail():
             raise RuntimeError("boom")
 
-        try:
+        with contextlib.suppress(RuntimeError):
             mgr.register("bad_model", fail)
-        except RuntimeError:
-            pass
 
         mock_sio.emit.assert_called()
         call_args = mock_sio.emit.call_args_list[0][0]
-        assert call_args[0] == "model_status"
+        assert call_args[0] == "system:model_status"
         assert call_args[1]["name"] == "bad_model"
         assert call_args[1]["status"] == "error"
         assert "boom" in call_args[1]["error"]

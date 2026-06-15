@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from animetta.config.persona import PersonaConfig
+
 """Tests for MBTI Pydantic models (config/persona/base.py)"""
 
 import sys
@@ -13,13 +15,11 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
 from animetta.config.persona import (
-    MBTIDimensions,
     MBTIDimensionDelta,
+    MBTIDimensions,
     MBTIProfile,
     PersonalityTraits,
-    PersonaConfig,
 )
-
 
 # ═══════════════════════════════════════════════════════════════
 # Test MBTIDimensions

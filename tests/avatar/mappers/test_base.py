@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 """
 Tests for mapper base — ParameterState, ExpressionFrame, IEmotionParamMapper.
 """
 
-import pytest
 from abc import ABC
-from animetta.avatar.mappers.base import ParameterState, ExpressionFrame, IEmotionParamMapper
 
+import pytest
 
+from animetta.avatar.mappers.base import ExpressionFrame, IEmotionParamMapper, ParameterState
 
 # ============================================================
 # ParameterState

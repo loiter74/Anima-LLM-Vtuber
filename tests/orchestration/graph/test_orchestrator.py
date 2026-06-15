@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
+
 """Tests for LangGraph orchestrator — initialization and input processing."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 
 
 @pytest.fixture

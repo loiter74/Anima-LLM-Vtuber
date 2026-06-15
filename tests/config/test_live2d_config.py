@@ -1,13 +1,18 @@
 from __future__ import annotations
-from animetta.config.live2d import Live2DConfig, Live2DModelConfig, Live2DLipSyncConfig, reset_live2d_config, get_live2d_config
+
+from animetta.config.live2d import (
+    Live2DConfig,
+    Live2DLipSyncConfig,
+    Live2DModelConfig,
+    get_live2d_config,
+    reset_live2d_config,
+)
+
 """Tests for Live2D config (config/live2d.py)"""
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
-
-import pytest
-import yaml
+from unittest.mock import mock_open, patch
 
 # Ensure src/ is on the Python path
 _src_path = str(Path(__file__).resolve().parent.parent.parent / "src")

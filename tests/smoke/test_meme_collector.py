@@ -4,7 +4,6 @@ These tests verify that the meme module can be imported and its API surface
 works correctly. They do NOT call Bilibili or LLM APIs.
 """
 
-import pytest
 
 
 # ── Module imports ──────────────────────────────────────────────────
@@ -21,8 +20,8 @@ def test_meme_module_imports():
 def test_bilibili_collector_imports():
     """BilibiliMemeCollector and MemeCandidateRaw should be importable."""
     from animetta.services.bilibili import (
-        MemeCollector,
         MemeCandidate,
+        MemeCollector,
     )
 
     assert MemeCollector is not None

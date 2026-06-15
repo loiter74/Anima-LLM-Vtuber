@@ -328,10 +328,7 @@ class MemeCollector:
 
                 # Hot API uses "desc", search API uses "description"
                 description = item.get("desc", item.get("description", ""))
-                if isinstance(description, str):
-                    description = description[:200]
-                else:
-                    description = ""
+                description = description[:200] if isinstance(description, str) else ""
 
                 # Hot API uses stat.view, search API uses play
                 stat = item.get("stat")

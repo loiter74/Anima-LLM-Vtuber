@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from animetta.tools import MCPManager
-from animetta.tools.mcp_bridge import MCPClient
+from animetta.tools.mcp_bridge import MCPClient, _parse_type, mcp_tool_to_langchain
+
 """Tests for MCP bridge graceful degradation when Docker is unavailable."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 
 class TestMCPClient:
@@ -209,7 +212,7 @@ class TestMCPToolToLangChain:
         assert "echoed: hello" in result
 
 
-class TestMCPManager:
+class TestMCPManagerAdvanced:
     """Additional MCPManager tests."""
 
     def test_build_docker_command_with_mount_edge_cases(self):
@@ -266,10 +269,10 @@ class TestMCPManager:
 
     def test_parse_type_all_types(self):
 
-        assert _parse_type("string") == str
-        assert _parse_type("integer") == int
-        assert _parse_type("number") == float
-        assert _parse_type("boolean") == bool
-        assert _parse_type("array") == list
-        assert _parse_type("object") == dict
-        assert _parse_type("unknown") == str  # fallback
+        assert _parse_type("string") is str
+        assert _parse_type("integer") is int
+        assert _parse_type("number") is float
+        assert _parse_type("boolean") is bool
+        assert _parse_type("array") is list
+        assert _parse_type("object") is dict
+        assert _parse_type("unknown") is str  # fallback

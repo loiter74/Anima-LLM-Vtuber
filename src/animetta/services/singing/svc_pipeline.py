@@ -313,7 +313,7 @@ class SVCPipeline(SingingService):
             return ""
 
         # Concatenate lyrics into text
-        full_text = " ".join(l.text for l in lyric_lines if l.text.strip())
+        full_text = " ".join(line.text for line in lyric_lines if line.text.strip())
         if not full_text:
             logger.warning("No lyrics text for TTS generation")
             return ""

@@ -162,17 +162,16 @@ class MockLLM(LLMInterface):
         Args:
             heard_response: Partial response heard by the user
         """
-        if heard_response:
+        if heard_response and self.history and self.history[-1].get("role") == "user":
             # Save partial response to history
-            if self.history and self.history[-1].get("role") == "user":
-                self.history.append({
-                    "role": "assistant",
-                    "content": heard_response
-                })
-                self.history.append({
-                    "role": "system",
-                    "content": "[用户打断了对话]"
-                })
+            self.history.append({
+                "role": "assistant",
+                "content": heard_response
+            })
+            self.history.append({
+                "role": "system",
+                "content": "[用户打断了对话]"
+            })
 
     def set_memory_from_history(
         self,

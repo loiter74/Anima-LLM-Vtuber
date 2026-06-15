@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 """Tests for LoggerManager configuration and singleton behavior."""
 
-import pytest
-import sys
-from unittest.mock import patch, MagicMock
-from animetta.utils.logger_manager import LoggerManager
+from unittest.mock import patch
+
+from animetta.utils.logger_manager import LoggerManager, logger_manager
 
 
 class TestLoggerManagerBasic:
@@ -77,11 +77,10 @@ class TestLoggerManagerInstantiation:
     """LoggerManager __init__ behavior."""
 
     def test_init_sets_up_handler(self):
-        with patch("anima.utils.logger_manager.logger.remove") as mock_remove:
-            with patch("anima.utils.logger_manager.logger.add") as mock_add:
-                mock_add.return_value = 123
-                mgr = LoggerManager()
-                mock_remove.assert_called_once()
-                mock_add.assert_called_once()
-                assert mgr._handler_id == 123
-                assert mgr._current_level == "INFO"
+        with patch("animetta.utils.logger_manager.logger.remove") as mock_remove, patch("animetta.utils.logger_manager.logger.add") as mock_add:
+            mock_add.return_value = 123
+            mgr = LoggerManager()
+            mock_remove.assert_called_once()
+            mock_add.assert_called_once()
+            assert mgr._handler_id == 123
+            assert mgr._current_level == "INFO"

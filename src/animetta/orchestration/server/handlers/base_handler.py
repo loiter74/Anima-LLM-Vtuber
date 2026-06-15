@@ -8,6 +8,7 @@ broadcast_to_desktop_clients, etc.).
 
 import json
 from typing import TYPE_CHECKING
+
 from animetta.config.app import AppConfig
 from animetta.config.live2d import get_live2d_config
 

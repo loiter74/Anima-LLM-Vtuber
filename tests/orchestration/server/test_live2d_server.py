@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 """Tests for Live2DManager — action enqueue lifecycle, callback propagation, stop/resume cycle."""
 
 import asyncio
-import pytest
-from animetta.orchestration.server.live2d import Live2DManager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from animetta.orchestration.server.live2d import Live2DManager
+from animetta.services.live2d.action_queue import QueuePolicy
 
 # ── Fixtures ────────────────────────────────────────────────────────
 

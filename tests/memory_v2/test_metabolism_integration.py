@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 """Tests for MetabolismScheduler integration with LivingMemorySystem."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from animetta.memory.v2.atom import MemoryAtom, Layer
+import pytest
+
+from animetta.memory.v2.atom import Layer, MemoryAtom
 from animetta.memory.v2.metabolism import MetabolismScheduler
 from animetta.memory.v2.system import LivingMemorySystem
 
@@ -19,11 +21,11 @@ class TestMetabolismIntegration:
         # Create atoms with varying confidence
         await system.store.create(MemoryAtom(
             id="high", layer=Layer.RAW, content="important",
-            occurred_at=datetime.now(timezone.utc), confidence=0.9, salience=0.9,
+            occurred_at=datetime.now(UTC), confidence=0.9, salience=0.9,
         ))
         await system.store.create(MemoryAtom(
             id="low", layer=Layer.RAW, content="trivial",
-            occurred_at=datetime.now(timezone.utc), confidence=0.1, salience=0.1,
+            occurred_at=datetime.now(UTC), confidence=0.1, salience=0.1,
         ))
 
         # Run tick
@@ -43,14 +45,14 @@ class TestMetabolismIntegration:
         # Create a very low salience atom
         await system.store.create(MemoryAtom(
             id="doomed", layer=Layer.RAW, content="very old and trivial",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             confidence=0.01, salience=0.01,
         ))
 
         # Run tick with forced low threshold
         count = await system.store.count_active()
         threshold = MetabolismScheduler.adaptive_threshold(count)
-        archived = await system.store.archive_below_threshold(threshold)
+        await system.store.archive_below_threshold(threshold)
 
         doomed = await system.store.get("doomed")
         assert doomed.is_archived
@@ -81,7 +83,7 @@ class TestMetabolismIntegration:
             await system.store.create(MemoryAtom(
                 id=f"raw-{uuid.uuid4().hex[:8]}",
                 layer=Layer.RAW, content=f"用户第{i}次对话",
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 confidence=0.7, salience=0.7,
             ))
 

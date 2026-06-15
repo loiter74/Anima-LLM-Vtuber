@@ -41,10 +41,10 @@ def get_python_repl_tool() -> Any:
             except Exception as e:
                 return f"Python execution error: {str(e)}"
 
-        return StructuredTool.from_coro(
+        return StructuredTool.from_function(
             name="python_repl",
             description="Safely execute Python code and return the result. Suitable for mathematical calculations, data processing, algorithm verification, etc.",
-            func=python_exec,
+            coroutine=python_exec,
             args_schema=PythonInput,
         )
 

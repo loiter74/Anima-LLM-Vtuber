@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from animetta.core.service_pool import ServicePool
+
 """Tests for ServicePool — globally shared LLM/TTS/ASR engine pool.
 
 ServicePool is a class-level singleton that holds one instance each of
@@ -10,8 +12,6 @@ to avoid hitting real external services.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-
 
 # ── Fixtures ────────────────────────────────────────────────────────
 
@@ -277,10 +277,9 @@ class TestInit:
     async def test_closes_memory_system(
         self, MockServiceContext, mock_llm, mock_tts, mock_asr
     ):
-        """Memory system (per-session) is stopped and closed during init."""
+        """Memory system (per-session) is shut down during init."""
         mock_memory = MagicMock()
-        mock_memory.stop = AsyncMock()
-        mock_memory.close = MagicMock()
+        mock_memory.shutdown = AsyncMock()
         mock_ctx = _mock_context_base(
             mock_llm, mock_tts, mock_asr, memory_system=mock_memory
         )
@@ -288,8 +287,7 @@ class TestInit:
 
         await ServicePool.init(MagicMock())
 
-        mock_memory.stop.assert_awaited_once()
-        mock_memory.close.assert_called_once()
+        mock_memory.shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")

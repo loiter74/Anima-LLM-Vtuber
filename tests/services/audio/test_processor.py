@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 """Tests for AudioProcessorInterface — abstract contract enforcement and subclass compliance."""
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock
-from animetta.services.audio.vad_audio_processor import VADAudioProcessor
-from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
-from animetta.services.audio.processor import AudioProcessorInterface
+from unittest.mock import MagicMock
 
+import pytest
+
+from animetta.services.audio.processor import AudioProcessorInterface
+from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
+from animetta.services.audio.vad_audio_processor import VADAudioProcessor
 
 # ── AudioProcessorInterface — ABC Enforcement ────────────────────────
 

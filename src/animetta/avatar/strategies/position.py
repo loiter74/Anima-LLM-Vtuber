@@ -65,7 +65,7 @@ class PositionBasedStrategy(ITimelineStrategy):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **kwargs
+        **_kwargs
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -177,8 +177,8 @@ class PositionBasedStrategy(ITimelineStrategy):
     def _calculate_intensity(
         self,
         emotion: str,
-        index: int,
-        total_emotions: int
+        _index: int,
+        _total_emotions: int
     ) -> float:
         """
         Calculate emotion intensity
@@ -311,7 +311,7 @@ class PositionBasedStrategy(ITimelineStrategy):
                 "average_duration": 0.0
             }
 
-        emotion_counts = {}
+        emotion_counts: dict[str, int] = {}
         for seg in segments:
             emotion_counts[seg.emotion] = emotion_counts.get(seg.emotion, 0) + 1
 

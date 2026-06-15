@@ -277,20 +277,27 @@ class FunASRASR(ASRInterface):
         logger.debug("FunASR ASR resources released")
 
     @classmethod
+    def _get(cls, config, key, default):
+        """Get value from config object or dict."""
+        if isinstance(config, dict):
+            return config.get(key, default)
+        return getattr(config, key, default)
+
+    @classmethod
     def from_config(cls, config, **kwargs):
         """Create instance from configuration"""
         return cls(
-            model=getattr(config, "model", "paraformer-zh"),
-            language=getattr(config, "language", "zh"),
-            device=getattr(config, "device", "cuda"),
-            ncpu=getattr(config, "ncpu", 4),
-            vad_model=getattr(config, "vad_model", "fsmn-vad"),
-            punc_model=getattr(config, "punc_model", "ct-punc"),
-            spk_model=getattr(config, "spk_model", None),
-            chunk_size=getattr(config, "chunk_size", [0, 10, 5]),
-            hotword=getattr(config, "hotword", None),
-            model_hub=getattr(config, "model_hub", "ms"),
-            disable_update=getattr(config, "disable_update", True),
+            model=cls._get(config, "model", "paraformer-zh"),
+            language=cls._get(config, "language", "zh"),
+            device=cls._get(config, "device", "cuda"),
+            ncpu=cls._get(config, "ncpu", 4),
+            vad_model=cls._get(config, "vad_model", "fsmn-vad"),
+            punc_model=cls._get(config, "punc_model", "ct-punc"),
+            spk_model=cls._get(config, "spk_model", None),
+            chunk_size=cls._get(config, "chunk_size", [0, 10, 5]),
+            hotword=cls._get(config, "hotword", None),
+            model_hub=cls._get(config, "model_hub", "ms"),
+            disable_update=cls._get(config, "disable_update", True),
         )
 
     async def preload(self) -> None:

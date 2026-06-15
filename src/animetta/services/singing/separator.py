@@ -30,18 +30,13 @@ class BaseSeparator(ABC):
 class DemucsSeparator(BaseSeparator):
     """Separate vocals from backing track using Demucs."""
 
-    def __init__(self, model: str = "htdemucs", output_dir: str = "./data/singing/separated"):
-        super().__init__(output_dir)
-        self.model = model
-
     def __init__(
         self,
         model: str = "htdemucs",
         output_dir: str = "./data/singing/separated",
     ):
+        super().__init__(output_dir)
         self.model = model
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def separate(self, audio_path: str) -> tuple[str, str]:
         """Separate audio into vocals and backing track.

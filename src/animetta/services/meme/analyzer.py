@@ -9,9 +9,90 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ── Data models ────────────────────────────────────────────────────────
+
+
+class CognitiveAnalysis(dict):
+    """Structured cognitive analysis result for a meme candidate.
+
+    Subclasses dict so that ``isinstance(result, dict)`` remains True
+    while allowing attribute-style access (``result.humor_mechanism``).
+    """
+
+    def __init__(
+        self,
+        *,
+        humor_mechanism: str = "",
+        context_trigger: str = "",
+        emotional_tone: str = "",
+        persona_fit_score: float = 0.0,
+        usage_example: str = "",
+        source_url: str = "",
+    ) -> None:
+        super().__init__(
+            humor_mechanism=humor_mechanism,
+            context_trigger=context_trigger,
+            emotional_tone=emotional_tone,
+            persona_fit_score=persona_fit_score,
+            usage_example=usage_example,
+            source_url=source_url,
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
+
+
+@dataclass
+class Meme:
+    """A meme entry stored in the MemePool."""
+
+    id: str = ""
+    text: str = ""
+    context_hint: str = ""
+    confidence: float = 0.0
+    tags: list[str] = field(default_factory=list)
+    cognitive_analysis: CognitiveAnalysis | None = None
+    source_platform: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
+class MemePool:
+    """Pool for storing and retrieving memes."""
+
+    def __init__(self, store: Any | None = None) -> None:
+        self.store = store
+
+    def add_from_candidate(
+        self,
+        text: str,
+        context_hint: str = "",
+        confidence: float = 0.0,
+        tags: list[str] | None = None,
+    ) -> Meme | None:
+        """Create and store a Meme from a candidate string."""
+        meme = Meme(
+            id=f"meme_{hash(text) & 0xFFFFFFFF:08x}",
+            text=text,
+            context_hint=context_hint,
+            confidence=confidence,
+            tags=tags or [],
+        )
+        if self.store is not None:
+            self.store.update(meme)
+        return meme
 
 
 
@@ -241,8 +322,8 @@ class MemeCognitiveAnalyzer:
         """Validate that all required fields are present."""
         if not data:
             return False
-        for field in REQUIRED_FIELDS:
-            if field not in data:
+        for required_field in REQUIRED_FIELDS:
+            if required_field not in data:
                 return False
         # Validate persona_fit_score range
         try:

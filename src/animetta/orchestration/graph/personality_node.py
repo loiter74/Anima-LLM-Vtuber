@@ -47,10 +47,7 @@ async def personality_node(
 
     # Determine mood
     emotion = state.get("emotion") or metadata.get("emotion")
-    if emotion and emotion in MOOD_ORDER:
-        personality_mood = emotion
-    else:
-        personality_mood = current_mood  # keep existing
+    personality_mood = emotion if emotion and emotion in MOOD_ORDER else current_mood
 
     # Build personality overlay instruction
     overlay_parts = []

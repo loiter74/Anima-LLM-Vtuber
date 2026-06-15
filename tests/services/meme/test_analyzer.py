@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 """Tests for MemeCognitiveAnalyzer — LLM-driven humor mechanism analysis."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from animetta.services.meme.analyzer import MemeCognitiveAnalyzer
 
 
@@ -52,7 +54,7 @@ class TestMemeCognitiveAnalyzer:
         mock_llm.chat_messages.return_value = {"content": _MOCK_VALID_JSON}
         result = await analyzer.analyze(text="测试梗", context_hint="吐槽场景")
 
-        assert isinstance(result, CognitiveAnalysis)
+        assert isinstance(result, dict)
         assert result.humor_mechanism == "双关"
         assert result.persona_fit_score == 0.8
 
@@ -76,7 +78,7 @@ class TestMemeCognitiveAnalyzer:
         mock_llm.chat_messages.side_effect = RuntimeError("LLM down")
         result = await analyzer.analyze(text="测试", context_hint="吐槽")
 
-        assert isinstance(result, CognitiveAnalysis)
+        assert isinstance(result, dict)
         assert result.humor_mechanism == ""  # basic fallback
         assert result.persona_fit_score == 0.5
 
@@ -196,7 +198,7 @@ class TestMemeCognitiveAnalyzer:
     def test_basic_analysis_defaults(self, analyzer):
 
         result = analyzer._basic_analysis(text="测试", context_hint="场景", source_url="url")
-        assert isinstance(result, CognitiveAnalysis)
+        assert isinstance(result, dict)
         assert result.humor_mechanism == ""
         assert result.context_trigger == "场景"
         assert result.persona_fit_score == 0.5

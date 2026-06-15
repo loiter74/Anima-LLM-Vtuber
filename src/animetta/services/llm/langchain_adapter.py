@@ -161,14 +161,14 @@ class LLMChatModelAdapter(BaseChatModel):
 
 def create_chat_model_from_service(
     llm_service: LLMInterface,
-    enable_tooling: bool = False,
+    _enable_tooling: bool = False,
 ) -> BaseChatModel:
     """
     Create a LangChain ChatModel from an existing LLM service
 
     Args:
         llm_service: Existing LLM service instance
-        enable_tooling: Whether to enable tool call support (placeholder; actual handling by llm_node.py)
+        _enable_tooling: Whether to enable tool call support (placeholder; actual handling by llm_node.py)
 
     Returns:
         BaseChatModel: LangChain ChatModel instance

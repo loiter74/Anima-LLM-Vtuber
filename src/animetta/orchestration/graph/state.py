@@ -49,6 +49,13 @@ class AgentState(TypedDict):
     # Performance timing (collected at runtime for analysis)
     _timings: list[dict[str, Any]]
 
+    # Memory Evolution
+    fuzzy_memories: list[dict[str, Any]]
+    injection_tier: int
+    user_query_depth: int
+    meme_candidates: list[dict[str, Any]]
+    meme_injected: bool
+
     # Personality
     personality_mode: str              # 'default' | 'streaming' | 'mood_xxx'
     personality_mood: str | None    # current mood override
@@ -90,6 +97,13 @@ def create_initial_state(
         "should_retry": False,
         "retry_count": 0,
         "_timings": [],
+        # Memory Evolution
+        "fuzzy_memories": [],
+        "injection_tier": 1,
+        "user_query_depth": 0,
+        "meme_candidates": [],
+        "meme_injected": False,
+        # Personality
         "personality_mode": "default",
         "personality_mood": None,
     }

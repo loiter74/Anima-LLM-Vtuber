@@ -5,11 +5,17 @@ LLM service factory - automatically creates LLM service instances based on confi
 from __future__ import annotations
 
 from loguru import logger
+
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm import (
+    GLMLLMConfig,
+    MockLLMConfig,
+    OllamaLLMConfig,
+    OpenAILLMConfig,
+)
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import LLMInterface
-from animetta.config.providers.llm import MockLLMConfig, OpenAILLMConfig, DeepSeekLLMConfig, OllamaLLMConfig, LocalLoraLLMConfig
 
 
 class LLMFactory:

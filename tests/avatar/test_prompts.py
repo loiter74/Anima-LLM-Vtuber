@@ -1,15 +1,15 @@
 from __future__ import annotations
+
 from animetta.avatar.prompts import EmotionPromptBuilder, load_prompt_template
+
 """
 Tests for EmotionPromptBuilder — emotion tag usage guide generation.
 """
 
-import pytest
-from pathlib import Path
-import tempfile
 import os
+import tempfile
 
-
+import pytest
 
 # ============================================================
 # EmotionPromptBuilder

@@ -316,17 +316,17 @@ class PersonaConfig(BaseConfig):
 
         import yaml
 
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Persona configuration file not found: {path}")
+        yaml_path = Path(path)
+        if not yaml_path.exists():
+            raise FileNotFoundError(f"Persona configuration file not found: {yaml_path}")
 
-        with open(path, encoding='utf-8') as f:
+        with open(yaml_path, encoding='utf-8') as f:
             data = yaml.safe_load(f)
 
         return cls(**data)
 
     @classmethod
-    def load(cls, name: str = "default", personas_dir: str = None) -> "PersonaConfig":
+    def load(cls, name: str = "default", personas_dir: str | None = None) -> "PersonaConfig":
         """
         Load persona by name
 
@@ -341,12 +341,12 @@ class PersonaConfig(BaseConfig):
 
         if personas_dir is None:
             # Default path
-            personas_dir = Path(__file__).parent.parent.parent.parent.parent / "config" / "personas"
+            personas_path = Path(__file__).parent.parent.parent.parent.parent / "config" / "personas"
         else:
-            personas_dir = Path(personas_dir)
+            personas_path = Path(personas_dir)
 
         # Attempt to load
-        yaml_path = personas_dir / f"{name}.yaml"
+        yaml_path = personas_path / f"{name}.yaml"
         if yaml_path.exists():
             return cls.from_yaml(str(yaml_path))
 

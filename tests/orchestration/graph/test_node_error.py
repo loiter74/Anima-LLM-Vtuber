@@ -1,15 +1,14 @@
 from __future__ import annotations
+
 """Tests for node_error shared error logging utility."""
 
-import json
 import uuid
-import pytest_asyncio
-from animetta.orchestration.graph import tts_node
-from animetta.orchestration.graph import asr_node
-from animetta.orchestration.graph import llm_node
-from animetta.orchestration.graph.stats_store import StatsStore
-from animetta.orchestration.graph.node_error import log_node_error
 
+import pytest_asyncio
+
+from animetta.orchestration.graph import stats_store as ss
+from animetta.orchestration.graph.node_error import VALID_ERROR_TYPES, log_node_error
+from animetta.orchestration.graph.stats_store import StatsStore
 
 
 class TestLogNodeError:
@@ -120,6 +119,6 @@ class TestLogNodeError:
     async def test_validation_set_matches_spec(self):
         """VALID_ERROR_TYPES should contain exactly the 4 expected values."""
 
-        assert VALID_ERROR_TYPES == frozenset({
+        assert frozenset({
             "timeout", "rate_limit", "network_error", "invalid_response",
-        })
+        }) == VALID_ERROR_TYPES

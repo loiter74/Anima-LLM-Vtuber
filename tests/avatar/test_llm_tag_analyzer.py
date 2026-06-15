@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 from animetta.avatar.analyzers.base import EmotionData
-from animetta.avatar.analyzers.llm_tag import StandaloneLLMTagAnalyzer, EmotionExtractionResult
+from animetta.avatar.analyzers.llm_tag import EmotionExtractionResult, StandaloneLLMTagAnalyzer
+
 """
 Tests for StandaloneLLMTagAnalyzer — emotion tag extraction from LLM text.
 """
 
-import pytest
-from unittest.mock import patch
 
+import pytest
 
 
 class TestStandaloneLLMTagAnalyzerInit:

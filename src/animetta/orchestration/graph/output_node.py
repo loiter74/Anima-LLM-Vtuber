@@ -9,10 +9,11 @@ from typing import Any
 from langgraph.types import RunnableConfig
 from loguru import logger
 
-from .state import AgentState
-from .translation_state import translation_state
 from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.orchestration.socket_events import EVENTS
+
+from .state import AgentState
+from .translation_state import translation_state
 
 
 def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
@@ -100,7 +101,7 @@ async def output_node(
         logger.debug(f"[{session_id}] [OutputNode] Sent emotion: {emotion}")
 
         # Map emotion to Live2D motion command (for models like Hiyori without expression files)
-        EMOTION_MOTION_MAP = {
+        emotion_motion_map = {
             "happy": 3,
             "sad": 1,
             "angry": 2,
@@ -108,7 +109,7 @@ async def output_node(
             "neutral": 0,
             "thinking": 5,
         }
-        motion_idx = EMOTION_MOTION_MAP.get(emotion)
+        motion_idx = emotion_motion_map.get(emotion)
         if motion_idx is not None:
             await sio.emit(EVENTS["chat"]["live2d_action"]["name"], {
                 "type": "motion",

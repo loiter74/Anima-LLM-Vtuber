@@ -1,12 +1,17 @@
 from __future__ import annotations
+
 """Tests for VisemeLipSync — FFT analysis, viseme→mouth mapping, SimpleLipSync fallback, factory."""
+
 
 import numpy as np
 import pytest
-from animetta.services.live2d.viseme_sync import VisemeConfig, VisemeLipSync, SimpleLipSync, create_lip_sync_engine
-from unittest.mock import MagicMock, patch
-from animetta.services.live2d.viseme_sync import VisemeConfig
 
+from animetta.services.live2d.viseme_sync import (
+    SimpleLipSync,
+    VisemeConfig,
+    VisemeLipSync,
+    create_lip_sync_engine,
+)
 
 # ── Fixtures ────────────────────────────────────────────────────────
 
@@ -208,7 +213,6 @@ class TestProcessAudio:
 
     def test_voice_energy_scales_mouth_open(self, viseme_sync, sine_audio):
         """Higher voice_energy produces larger mouth_open."""
-        is_smooth = viseme_sync.config.smoothing == 1.0
         # Since smoothing blends across calls, reset between tests
         viseme_sync.reset()
         result_low = viseme_sync.process_audio(sine_audio, voice_energy=0.3)

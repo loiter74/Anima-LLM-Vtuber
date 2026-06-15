@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 """Tests for MemorySearch emotion-biased ranking."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from animetta.memory.v2.atom import MemoryAtom, Layer
+from animetta.memory.v2.atom import Layer, MemoryAtom
 from animetta.memory.v2.emotion_field import VAD_MAP
 from animetta.memory.v2.search import MemorySearch
 
@@ -14,13 +15,13 @@ class TestSearchScoring:
         atoms = [
             MemoryAtom(
                 id="happy_mem", layer=Layer.SEMANTIC, content="咖啡很好喝",
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 emotion_valence=0.8, emotion_arousal=0.6, emotion_dominance=0.7,
                 confidence=0.8, salience=0.8,
             ),
             MemoryAtom(
                 id="sad_mem", layer=Layer.SEMANTIC, content="咖啡很苦",
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 emotion_valence=-0.8, emotion_arousal=0.3, emotion_dominance=-0.5,
                 confidence=0.8, salience=0.8,
             ),

@@ -66,6 +66,9 @@ def expand_env_vars(value):
     return value
 
 
+# Avoid duplicate loading
+_env_file_loaded = False
+
 def _load_env_file() -> None:
     """
     Load .env file into environment variables
@@ -77,10 +80,10 @@ def _load_env_file() -> None:
 
     Ensures ${VAR} syntax is correctly expanded in YAML configuration.
     """
-    # Avoid duplicate loading
-    if hasattr(_load_env_file, '_loaded'):
+    global _env_file_loaded
+    if _env_file_loaded:
         return
-    _load_env_file._loaded = True
+    _env_file_loaded = True
 
     # Search paths (by priority)
     search_paths = [
@@ -109,8 +112,8 @@ CONFIG_DIR = Path(__file__).parent.parent.parent.parent / "config"
 SERVICES_DIR = CONFIG_DIR / "services"
 
 # Config cache (avoid duplicate loading and logging)
-_services_yaml_cache = None
-_services_config_logged = set()
+_services_yaml_cache: dict[str, Any] | None = None
+_services_config_logged: set[str] = set()
 
 
 def _load_yaml_file(path: Path) -> dict[str, Any]:
@@ -233,11 +236,11 @@ class AppConfig(BaseConfig):
         # Load .env file into environment variables (so ${VAR} syntax works)
         _load_env_file()
 
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {path}")
+        yaml_path = Path(path)
+        if not yaml_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {yaml_path}")
 
-        main_config = _load_yaml_file(path)
+        main_config = _load_yaml_file(yaml_path)
         config = cls._load_services_mode(main_config)
 
         # Expand environment variables
@@ -289,7 +292,7 @@ class AppConfig(BaseConfig):
             "agent": agent_data,
             "local_llm": local_llm_data,
             "vad": vad_data,
-            "bilibili": bilibili_data,
+            "bilibili": bilibili_data if bilibili_data and isinstance(bilibili_data, dict) and {"enabled", "room_id", "sessdata"} & set(bilibili_data) else None,
         }
 
         return cls(**merged)
@@ -313,7 +316,7 @@ class AppConfig(BaseConfig):
             if val is None:
                 continue
             d = expand_env_vars(val.model_dump())
-            if use_adapter:
+            if use_adapter and adapter is not None:
                 setattr(self, label, adapter.validate_python(d))
             else:
                 setattr(self, label, AgentConfig.model_validate(d))
@@ -361,13 +364,15 @@ class AppConfig(BaseConfig):
                 setattr(target, field, os.getenv(env_var))
 
         # System configuration
-        if os.getenv("ANIMETTA_HOST"):
-            self.system.host = os.getenv("ANIMETTA_HOST")
-        if os.getenv("ANIMETTA_PORT"):
+        host = os.getenv("ANIMETTA_HOST")
+        if host:
+            self.system.host = host
+        port_str = os.getenv("ANIMETTA_PORT")
+        if port_str:
             with contextlib.suppress(ValueError):
-                self.system.port = int(os.getenv("ANIMETTA_PORT"))
+                self.system.port = int(port_str)
 
-    def validate(self) -> None:
+    def validate_config(self) -> None:
         """Validate configuration — verify required providers are available."""
         from animetta.config.core.registry import ProviderRegistry
 
@@ -406,24 +411,24 @@ class AppConfig(BaseConfig):
         3. Default path ./config/config.yaml
         """
         if config_path:
-            path = config_path
+            resolved_path: str | None = config_path
         elif os.getenv("ANIMETTA_CONFIG"):
-            path = os.getenv("ANIMETTA_CONFIG")
+            resolved_path = os.getenv("ANIMETTA_CONFIG")
         else:
             default_paths = [
                 Path("config/config.yaml"),
                 Path("config.yaml"),
                 Path(__file__).parent.parent.parent.parent / "config" / "config.yaml",
             ]
-            path = None
+            resolved_path = None
             for p in default_paths:
                 if p.exists():
-                    path = str(p)
+                    resolved_path = str(p)
                     break
 
-        if path and Path(path).exists():
-            logger.debug(f"Loading config from file: {path}")
-            return cls.from_yaml(path)
+        if resolved_path and Path(resolved_path).exists():
+            logger.debug(f"Loading config from file: {resolved_path}")
+            return cls.from_yaml(resolved_path)
 
         raise FileNotFoundError(
             "Configuration file not found. Please create config/config.yaml or set the ANIMETTA_CONFIG environment variable"

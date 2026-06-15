@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 """Tests for translation runtime configuration state."""
 
 import pytest
-from animetta.orchestration.graph.translation_state import TranslationState
 
+from animetta.orchestration.graph.translation_state import TranslationState, translation_state
 
 
 class TestTranslationStateInit:
@@ -155,5 +156,8 @@ class TestTranslationStateSingleton:
 
     def test_singleton_is_same_object(self):
         """Repeated imports return the same singleton."""
+
+        from animetta.orchestration.graph.translation_state import translation_state as ts1
+        from animetta.orchestration.graph.translation_state import translation_state as ts2
 
         assert ts1 is ts2

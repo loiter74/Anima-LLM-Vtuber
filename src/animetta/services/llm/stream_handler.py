@@ -7,6 +7,7 @@ Extracted from openai_llm.py to separate streaming concerns from
 core LLM implementation.
 """
 
+import contextlib
 import time as time_module
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
@@ -67,10 +68,9 @@ class OpenAIStreamHandler:
                     yield content
                 # Final chunk may contain usage info
                 if hasattr(chunk, "usage") and chunk.usage:
-                    try:
+                    with contextlib.suppress(AttributeError):
+                        # Mock response objects (e.g. async generators) may not support attribute assignment
                         response._usage = chunk.usage
-                    except AttributeError:
-                        pass  # Mock response objects (e.g. async generators) may not support attribute assignment
 
             # OTel metrics: record usage from stream
             duration_s = time_module.perf_counter() - t_start

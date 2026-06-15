@@ -1,20 +1,22 @@
 from __future__ import annotations
+
 """Pipeline Stats 自动化测试
 
 覆盖：StatsStore CRUD、StatsCallbackHandler 采集、Stats API 端到端
 """
 
 import asyncio
+import sys
+import uuid
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
-import uuid
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
-from animetta.orchestration.server.stats_api import get_stats_routes
-from animetta.orchestration.graph.stats_store import StatsStore, get_stats_store
+
 from animetta.orchestration.graph import stats_store
-from animetta.orchestration.graph.stats_handler import StatsCallbackHandler, KNOWN_NODES
+from animetta.orchestration.graph.stats_handler import KNOWN_NODES, StatsCallbackHandler
+from animetta.orchestration.graph.stats_store import StatsStore, get_stats_store
+from animetta.orchestration.server.stats_api import get_stats_routes
 
 # 确保项目 src 在 path 中
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -274,7 +276,6 @@ class TestStatsAPI:
         import httpx
         from starlette.applications import Starlette
         from starlette.routing import Mount
-        import socketio
 
         # 重置单例
         stats_store._store = None

@@ -10,6 +10,8 @@ import os
 
 import httpx
 
+from animetta.notifier.base import NotifierBase, register_notifier
+
 logger = logging.getLogger(__name__)
 
 SEVERITY_COLORS = {

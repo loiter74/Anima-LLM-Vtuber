@@ -2,56 +2,24 @@
 
 import datetime
 from pathlib import Path
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from typing import Any
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 
 import socketio
 from loguru import logger
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from starlette.applications import Starlette
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from starlette.responses import FileResponse, JSONResponse, Response
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from starlette.routing import Mount, Route
+
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_pool import ServicePool
 from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from .lifecycle import LifecycleManager
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from .live2d import Live2DManager
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from .routes import RouteHandlers, register_routes
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from .session import SessionManager
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 from .stats_api import get_stats_routes, set_model_manager
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.service_pool import ServicePool
-from animetta.tracing.bootstrap import init_tracing
 
 
 class WebSocketServer:
@@ -90,11 +58,11 @@ class WebSocketServer:
 
         # Singing media file serving (audio + subtitles)
         import mimetypes
-        _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+        project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 
         async def serve_singing_audio(request):
             filename = request.path_params.get("filename", "")
-            filepath = _PROJECT_ROOT / "data" / "singing" / "outputs" / filename
+            filepath = project_root / "data" / "singing" / "outputs" / filename
             if not filepath.is_file():
                 return Response("Not found", status_code=404)
             mime, _ = mimetypes.guess_type(filename)

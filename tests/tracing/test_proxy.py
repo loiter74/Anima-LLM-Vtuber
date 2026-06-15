@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 """Tests for TracingProxy — dynamic OTel span creation around service calls."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
+import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
+
 from animetta.tracing.proxy import TracingProxy
 
 

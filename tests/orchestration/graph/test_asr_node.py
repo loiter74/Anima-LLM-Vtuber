@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 """Tests for ASR (speech recognition) node."""
 
 import pytest
-from animetta.orchestration.graph import asr_node
-from animetta.orchestration.graph.state import create_initial_state
 from langgraph.types import RunnableConfig
 
+from animetta.orchestration.graph import asr_node
+from animetta.orchestration.graph.state import create_initial_state
 
 
 class TestAsrNode:
@@ -150,7 +151,7 @@ class TestAsrNode:
 
         assert result["user_text"] == "mock transcription text"
         mock_sio.emit.assert_awaited_once_with(
-            "transcript",
+            "chat:transcript",
             {"text": "mock transcription text", "is_final": True},
             to="test_session",
         )

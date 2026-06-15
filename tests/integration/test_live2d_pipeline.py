@@ -1,6 +1,12 @@
 """Integration: Live2D viseme — audio + volume envelope for mouth sync."""
 
-import asyncio, subprocess, sys, time, socketio, pytest
+import asyncio
+import subprocess
+import sys
+import time
+
+import pytest
+import socketio
 
 PORT, URL = 12394, "http://localhost:12394"
 
@@ -11,12 +17,15 @@ def server():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
     t0 = time.time()
     while time.time() - t0 < 30:
-        if "Application startup complete" in (p.stdout.readline() or ""): break
+        if "Application startup complete" in (p.stdout.readline() or ""):
+            break
     time.sleep(8)
     yield p
     p.terminate()
-    try: p.wait(timeout=5)
-    except subprocess.TimeoutExpired: p.kill()
+    try:
+        p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        p.kill()
 
 class TestLive2D:
     @pytest.mark.asyncio
@@ -31,7 +40,7 @@ class TestLive2D:
         audio = ev.get("audio_with_expression",[])
         visemes = ev.get("viseme",[]) or ev.get("live2d.viseme",[])
         has_vol = any(isinstance(a,dict) and a.get("volumes") for a in audio)
-        has_viseme = len(visemes) > 0
+        len(visemes) > 0
         errs = ev.get("error",[])
         vcount = len(audio[0].get("volumes",[])) if has_vol and audio else 0
         vc = len(visemes)

@@ -378,6 +378,14 @@ system:
 - **TypeScript**: vue-tsc strict checking, UnoCSS for styling
 - **Async-first**: All service methods are async. Use `asyncio_mode = "auto"` in tests.
 
+## Health Stack
+
+- typecheck: mypy src/ --ignore-missing-imports
+- lint: ruff check src/ tests/
+- test: PYTHONPATH=src python -m pytest tests/
+- deadcode: vulture --min-confidence 80 src/animetta/core src/animetta/config src/animetta/memory src/animetta/avatar src/animetta/utils src/animetta/notifier src/animetta/inspection
+- frontend_typecheck: cd frontend && npx vue-tsc --noEmit
+
 ## Related Documentation
 
 - [AGENTS.md](AGENTS.md) — Detailed "where to look" guide for different tasks

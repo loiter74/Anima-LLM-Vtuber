@@ -5,7 +5,7 @@ Falls back to MemorySaver if Redis is unavailable.
 """
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -49,7 +49,7 @@ class AsyncRedisSaver(BaseCheckpointSaver):
         return json.dumps(obj, default=str, ensure_ascii=False)
 
     @staticmethod
-    def _deserialize(data: bytes) -> dict:
+    def _deserialize(data: bytes) -> Any:
         return json.loads(data)
 
     def _make_key(self, thread_id: str) -> str:
@@ -124,10 +124,11 @@ class AsyncRedisSaver(BaseCheckpointSaver):
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: list,
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
         task_path: str = "",
     ) -> None:
+        _ = (task_id, task_path)  # signature compliance, params unused
         thread_id: str = config["configurable"]["thread_id"]
         writes_key = self._make_writes_key(thread_id)
         try:
@@ -139,11 +140,12 @@ class AsyncRedisSaver(BaseCheckpointSaver):
         self,
         config: RunnableConfig | None,
         *,
-        filter: dict | None = None,
+        filter: dict[str, Any] | None = None,
         before: RunnableConfig | None = None,
         limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """Return matching checkpoints (minimal implementation)."""
+        _ = (filter, before, limit)  # signature compliance, params unused
         if config:
             tup = await self.aget_tuple(config)
             if tup:

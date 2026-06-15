@@ -1,7 +1,5 @@
 """Tests for KnowledgeBoundaries model and PersonaConfig integration."""
 
-import pytest
-import yaml
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 

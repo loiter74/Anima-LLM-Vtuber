@@ -9,8 +9,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from ..graph.stats_store import get_stats_store
 from ...inspection.checks import check_all_components
+from ..graph.stats_store import get_stats_store
 
 # ── Module-level references for health check enrichment ──────
 _model_manager: Any | None = None

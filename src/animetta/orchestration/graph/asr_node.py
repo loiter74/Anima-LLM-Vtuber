@@ -6,9 +6,10 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import RunnableConfig
 from loguru import logger
 
+from animetta.orchestration.socket_events import EVENTS
+
 from .node_error import log_node_error
 from .state import AgentState
-from animetta.orchestration.socket_events import EVENTS
 
 
 def _get_service_context(config: RunnableConfig | None) -> Any | None:

@@ -1,10 +1,18 @@
 from __future__ import annotations
-from animetta.services.tts import EdgeTTS
-from animetta.services.tts import GLMTTS
-from animetta.services.tts import KokoroTTS
-from animetta.services.tts import MockTTS
-from animetta.services.tts import TTSFactory
-from animetta.services.tts import TTSInterface
+
+from animetta.services.tts import (
+    GLMTTS,
+    ChatTTSTTS,
+    EdgeTTS,
+    GPTSoVITSTTS,
+    KokoroTTS,
+    MockTTS,
+    Qwen3TTSTTS,
+    TTSFactory,
+    TTSInterface,
+    VibeVoiceTTS,
+)
+
 """Tests for TTS service providers.
 
 Covers every provider under src/anima/services/speech/tts/:
@@ -18,9 +26,6 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.tracing.proxy import TracingProxy
-
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Fixtures: fake external modules (lazy-loaded by providers)
@@ -353,7 +358,8 @@ class TestGPTSoVITSTTS:
 
     @pytest.mark.asyncio
     async def test_synthesize_with_output_path(self):
-        import tempfile, os
+        import os
+        import tempfile
 
         tts = GPTSoVITSTTS(base_url="http://localhost:9880")
         mock_client = AsyncMock()
@@ -507,7 +513,8 @@ class TestVibeVoiceTTS:
 
     @pytest.mark.asyncio
     async def test_remote_with_output_path(self):
-        import tempfile, os
+        import os
+        import tempfile
 
         tts = VibeVoiceTTS(mode="remote", base_url="http://localhost:8765")
         mock_client = AsyncMock()
@@ -704,7 +711,7 @@ class TestTTSFactory:
         mock_tts = AsyncMock()
         MockProxy.return_value = mock_tts
 
-        tts = TTSFactory.create("mock")
+        TTSFactory.create("mock")
         MockProxy.assert_called_once()
 
     @pytest.mark.asyncio
@@ -715,7 +722,7 @@ class TestTTSFactory:
         mock_tts = AsyncMock()
         MockProxy.return_value = mock_tts
 
-        tts = TTSFactory.create("edge", voice="zh-CN-XiaoxiaoNeural")
+        TTSFactory.create("edge", voice="zh-CN-XiaoxiaoNeural")
         MockProxy.assert_called_once()
 
     @pytest.mark.asyncio
@@ -726,7 +733,7 @@ class TestTTSFactory:
         mock_tts = AsyncMock()
         MockProxy.return_value = mock_tts
 
-        tts = TTSFactory.create("glm", api_key="test-key")
+        TTSFactory.create("glm", api_key="test-key")
         MockProxy.assert_called_once()
 
     @pytest.mark.asyncio
@@ -747,20 +754,19 @@ class TestTTSFactory:
                 assert isinstance(result, AsyncMock) or True  # fallback happened
 
     @patch("animetta.services.tts.factory.ProviderRegistry")
-    def test_get_available_providers(self, MockRegistry):
+    def test_get_available_configs(self, MockRegistry):
 
         MockRegistry.list_services.return_value = {"mock", "edge", "glm"}
-        providers = TTSFactory.get_available_providers()
+        providers = TTSFactory.get_available_configs()
         assert isinstance(providers, list)
 
     def test_create_unknown_provider_returns_mock(self):
         """Factory falls back to MockTTS for unknown provider names."""
 
         # When _build_config returns None, MockTTS is returned directly
-        with patch.object(TTSFactory, "_build_config", return_value=None):
-            with patch("animetta.services.tts.factory.MockTTS") as MockMockTTS:
-                mock_instance = AsyncMock()
-                MockMockTTS.return_value = mock_instance
+        with patch.object(TTSFactory, "_build_config", return_value=None), patch("animetta.services.tts.factory.MockTTS") as MockMockTTS:
+            mock_instance = AsyncMock()
+            MockMockTTS.return_value = mock_instance
 
-                result = TTSFactory.create("nonexistent_provider")
-                MockMockTTS.assert_called_once()
+            TTSFactory.create("nonexistent_provider")
+            MockMockTTS.assert_called_once()

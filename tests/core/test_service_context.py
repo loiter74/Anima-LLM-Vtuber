@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from animetta.core.service_context import ServiceContext
+
 """Tests for ServiceContext — core service container.
 
 Tests cover:
@@ -14,13 +16,9 @@ Tests cover:
 """
 
 import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.orchestration.server.session import SessionManager
-
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Fixtures
@@ -441,7 +439,7 @@ class TestServiceContextInitTTS:
     async def test_calls_model_dump(self, ctx, mock_tts_config, engine_without_preload):
         """Uses model_dump() when available (Pydantic v2 path)."""
         with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine_without_preload) as mock_create:
+                   return_value=engine_without_preload):
             await ctx.init_tts(mock_tts_config)
 
         mock_tts_config.model_dump.assert_called_once_with(exclude={"type"})

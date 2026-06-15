@@ -1,17 +1,27 @@
 from __future__ import annotations
+
 from animetta.orchestration.graph.state import AgentState
+
 """Tests for LangGraph state graph builder — node registration, routing, and compilation."""
 
 from typing import Any
 from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
-from animetta.orchestration.graph.builder import build_graph, route_input, should_use_tools, create_default_graph, set_external_checkpointer, get_external_checkpointer, visualize_graph, print_graph_structure
-from animetta.orchestration.graph.state import create_initial_state
 from langgraph.graph import StateGraph as RealStateGraph
 
 import animetta.orchestration.graph.builder as builder_mod
-
+from animetta.orchestration.graph.builder import (
+    build_graph,
+    create_default_graph,
+    get_external_checkpointer,
+    print_graph_structure,
+    route_input,
+    set_external_checkpointer,
+    should_use_tools,
+    visualize_graph,
+)
+from animetta.orchestration.graph.state import create_initial_state
 
 # ── Fixtures ────────────────────────────────────────────────
 
@@ -339,4 +349,4 @@ class TestPrintGraphStructure:
             print_graph_structure(mock_graph)
 
         mock_graph.get_graph.assert_called_once()
-        mock_logger.info.assert_any_call(str("mock ascii art"))
+        mock_logger.info.assert_any_call("mock ascii art")

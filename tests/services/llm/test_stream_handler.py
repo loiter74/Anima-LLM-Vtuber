@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 """Tests for OpenAIStreamHandler — streaming buffer, chunk accumulation, completion detection."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from animetta.services.llm.stream_handler import OpenAIStreamHandler
 
 
 @pytest.fixture

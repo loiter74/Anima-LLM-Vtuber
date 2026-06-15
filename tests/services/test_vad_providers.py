@@ -1,12 +1,10 @@
 from __future__ import annotations
-from animetta.services.vad import MockVAD
-from animetta.services.vad import VADFactory
-from animetta.services.vad import VADInterface
-from animetta.services.vad import VADState
-from animetta.services.vad import VADResult
+
+from animetta.config.providers.vad.mock import MockVADConfig
+from animetta.services.vad import MockVAD, VADFactory, VADInterface, VADResult, VADState
 from animetta.services.vad import mock_vad as mv_mod
 from animetta.services.vad import silero_vad as sv_mod
-from animetta.config.providers.vad.mock import MockVADConfig
+
 """
 Tests for VAD provider implementations.
 
@@ -24,7 +22,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from animetta.services.vad import SileroVAD, MockVAD, VADFactory, VADInterface
+
+from animetta.services.vad import SileroVAD
 
 # ── Module-level sys.modules injection ──────────────────────────────
 # SileroVAD._load_vad_model() imports `from silero_vad import load_silero_vad`
@@ -330,19 +329,18 @@ class TestSileroVAD:
 
     def test_from_config_returns_instance(self, mock_model):
         """from_config should return a SileroVAD instance with correct params."""
-        with patch("silero_vad.load_silero_vad", return_value=mock_model):
-            with patch.object(
-                SileroVAD, "from_config", wraps=_ORIGINAL_SILERO_FROM_CONFIG
-            ):
-                config = MagicMock()
-                config.sample_rate = 16000
-                config.prob_threshold = 0.2
-                config.db_threshold = -100
-                config.required_hits = 5
-                config.required_misses = 2
-                config.smoothing_window = 12
+        with patch("silero_vad.load_silero_vad", return_value=mock_model), patch.object(
+            SileroVAD, "from_config", wraps=_ORIGINAL_SILERO_FROM_CONFIG
+        ):
+            config = MagicMock()
+            config.sample_rate = 16000
+            config.prob_threshold = 0.2
+            config.db_threshold = -100
+            config.required_hits = 5
+            config.required_misses = 2
+            config.smoothing_window = 12
 
-                instance = SileroVAD.from_config(config)
+            instance = SileroVAD.from_config(config)
 
         assert isinstance(instance, SileroVAD)
         assert instance.sample_rate == 16000
@@ -502,8 +500,8 @@ class TestVADFactory:
         result = VADFactory.create("unknown_provider")
         assert isinstance(result, MockVAD)
 
-    def test_get_available_providers(self):
-        """get_available_providers should contain 'mock' and 'silero'."""
-        providers = VADFactory.get_available_providers()
+    def test_get_available_configs(self):
+        """get_available_configs should contain 'mock' and 'silero'."""
+        providers = VADFactory.get_available_configs()
         assert "mock" in providers
         assert "silero" in providers

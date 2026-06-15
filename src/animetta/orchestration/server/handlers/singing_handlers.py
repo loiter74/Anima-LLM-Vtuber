@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 import yaml
 from loguru import logger
 
-from .base_handler import BaseSocketHandler
 from ...socket_events import EVENTS
+from .base_handler import BaseSocketHandler
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -160,12 +160,12 @@ class SingingHandlers(BaseSocketHandler):
                 "volumes": result.volumes,  # lip sync envelope from vocals track
                 "lyrics": [
                     {
-                        "text": l.text,
-                        "translation": l.translation,
-                        "start_ms": l.start_ms,
-                        "end_ms": l.end_ms,
+                        "text": line.text,
+                        "translation": line.translation,
+                        "start_ms": line.start_ms,
+                        "end_ms": line.end_ms,
                     }
-                    for l in result.lyrics
+                    for line in result.lyrics
                 ],
             }, to=sid)
         except asyncio.CancelledError:

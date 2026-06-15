@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 from animetta.services.bilibili import DanmakuBuffer, DanmakuPhrase
+
 """Tests for DanmakuBuffer — real-time danmaku accumulation and hot phrase extraction."""
 
 import time
-
-import pytest
 
 
 class TestDanmakuPhrase:
@@ -201,7 +201,7 @@ class TestDanmakuBuffer:
         # Fill buffer
         b.add("AAAA")
         b.add("AAAA")
-        stats_before = b.get_stats()
+        b.get_stats()
         # Evict one entry by adding new unique content
         b.add("BBBB")
         # "AAAA" -> 6 chars. N-grams: "AA", "AAAA", etc.

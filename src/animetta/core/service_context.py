@@ -3,27 +3,32 @@ Service context - core service container
 """
 
 from __future__ import annotations
-from animetta.config.app import AppConfig
-from animetta.config.agent import AgentConfig
-from animetta.services.asr import ASRInterface, ASRFactory
-from animetta.config.providers.asr import ASRConfig
-from animetta.services.tts import TTSInterface, TTSFactory
-from animetta.config.providers.tts import TTSConfig
-from animetta.services.llm import LLMInterface, LLMFactory
-from animetta.services.vad import VADInterface, VADFactory
-from animetta.config.providers.vad import VADConfig
-from animetta.services.audio.processor import AudioProcessorInterface
-from animetta.avatar.prompts import EmotionPromptBuilder
-from animetta.avatar.factory import EmotionAnalyzerFactory
-from animetta.config.live2d import get_live2d_config
-from animetta.memory.v2.system import LivingMemorySystem
 
 import asyncio
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from animetta.avatar.factory import EmotionAnalyzerFactory
+from animetta.avatar.prompts import EmotionPromptBuilder
+from animetta.config.agent import AgentConfig
+from animetta.config.app import AppConfig
+from animetta.config.live2d import get_live2d_config
+from animetta.config.persona.base import PersonaConfig
+from animetta.config.providers.asr import ASRConfig
+from animetta.config.providers.tts import TTSConfig
+from animetta.config.providers.vad import VADConfig
+from animetta.core.model_loading_manager import ModelLoadingManager
+from animetta.services.asr import ASRFactory, ASRInterface
+from animetta.services.audio.processor import AudioProcessorInterface
+from animetta.services.llm import LLMFactory, LLMInterface
+from animetta.services.tts import TTSFactory, TTSInterface
+from animetta.services.vad import VADFactory, VADInterface
 from animetta.utils.service_availability import get_availability_summary
+
+if TYPE_CHECKING:
+    from animetta.memory.v2.system import LivingMemorySystem
 
 
 class ServiceContext:
@@ -42,7 +47,7 @@ class ServiceContext:
 
         # Memory system
         self.audio_processor: AudioProcessorInterface | None = None
-        self.memory_system: MemorySystem | None = None
+        self.memory_system: LivingMemorySystem | None = None
 
         # Session state
         self.session_id: str | None = None
@@ -53,7 +58,7 @@ class ServiceContext:
         self.send_text: Callable | None = None
 
         # Emotion analyzer
-        self.emotion_analyzer = None
+        self.emotion_analyzer: Any = None
 
     def __str__(self) -> str:
         return (
@@ -75,7 +80,8 @@ class ServiceContext:
 
         await self.init_asr(config.asr)
         await self.init_tts(config.tts)
-        await self.init_llm(config.agent, config.get_persona(), app_config=config)
+        if config.agent is not None:
+            await self.init_llm(config.agent, config.get_persona(), app_config=config)
         await self.init_local_llm(config.local_llm, app_config=config)
         await self.init_vad(config.vad)
         await self.init_audio_processor()
@@ -287,9 +293,9 @@ class ServiceContext:
             if hasattr(self.vad_engine, 'prob_threshold'):
                 logger.info(f"[{self.session_id}] VAD config: "
                            f"prob_threshold={self.vad_engine.prob_threshold}, "
-                           f"db_threshold={self.vad_engine.db_threshold}, "
-                           f"required_hits={self.vad_engine.required_hits}, "
-                           f"required_misses={self.vad_engine.required_misses}")
+                           f"db_threshold={getattr(self.vad_engine, 'db_threshold', 'N/A')}, "
+                           f"required_hits={getattr(self.vad_engine, 'required_hits', 'N/A')}, "
+                           f"required_misses={getattr(self.vad_engine, 'required_misses', 'N/A')}")
         except Exception as e:
             logger.error(f"[{self.session_id}] VAD engine creation failed: {e}")
             self.vad_engine = None

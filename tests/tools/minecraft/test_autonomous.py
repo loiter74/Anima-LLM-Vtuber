@@ -1,15 +1,15 @@
 from __future__ import annotations
-from animetta.tools.minecraft.autonomous import AutonomousLoop
-from animetta.tools.minecraft.autonomous import CooldownTracker
+
+from animetta.tools.minecraft.autonomous import AutonomousLoop, CooldownTracker
 from animetta.tools.minecraft.bridge import MinecraftBridge
-from animetta.tools.minecraft.world_state import WorldState
+from animetta.tools.minecraft.rules_engine import BuildPlanStep, BuildTarget
+from animetta.tools.minecraft.world_state import Entity, WorldState
+
 """Tests for AutonomousLoop — perception→decision→execution cycle."""
 
 import asyncio
 import time
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Helpers ──
 
@@ -317,12 +317,11 @@ class TestAutonomousLoopEvaluate:
         state = self._make_state(health=20.0, time="day", x=10, z=10)
 
         loop._cooldown.reset("explore")
-        with patch("random.random", return_value=1.0):  # suppress chat random
-            with patch("random.randint", return_value=5):
-                action, params = loop._evaluate(state)
-                assert action == loop.ACTION_EXPLORE
-                assert "x" in params
-                assert "z" in params
+        with patch("random.random", return_value=1.0), patch("random.randint", return_value=5):  # suppress chat random
+            action, params = loop._evaluate(state)
+            assert action == loop.ACTION_EXPLORE
+            assert "x" in params
+            assert "z" in params
 
 
 class TestAutonomousLoopExecute:

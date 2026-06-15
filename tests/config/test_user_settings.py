@@ -1,13 +1,12 @@
 from __future__ import annotations
+
 from animetta.config.user import UserSettings
+
 """Tests for UserSettings (config.user.py)"""
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
-
-import pytest
-import yaml
+from unittest.mock import mock_open, patch
 
 # Ensure src/ is on the Python path
 _src_path = str(Path(__file__).resolve().parent.parent.parent / "src")

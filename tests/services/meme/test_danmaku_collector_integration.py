@@ -1,5 +1,7 @@
 from __future__ import annotations
-from animetta.services.bilibili import DanmakuBuffer, MemeCollector, CollectedVideo
+
+from animetta.services.bilibili import CollectedVideo, DanmakuBuffer, MemeCollector
+
 """Integration tests for BilibiliMemeCollector danmaku data source.
 
 Tests the interaction between DanmakuBuffer and BilibiliMemeCollector

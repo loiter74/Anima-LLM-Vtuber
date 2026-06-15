@@ -175,8 +175,6 @@ def create_default_graph(
 def visualize_graph(graph: StateGraph, output_path: str = "graph.png") -> None:
     """Visualize the state graph (requires graphviz)"""
     try:
-        from IPython.display import Image, display
-
         img_data = graph.get_graph().draw_mermaid_png()
 
         with open(output_path, "wb") as f:

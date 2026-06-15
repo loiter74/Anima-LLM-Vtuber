@@ -7,13 +7,28 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.inspection.checks.health import ComponentCheck, check_all_components, _probe_chroma, _probe_llm_available, _probe_asr_available, _probe_memory_read, _probe_stats_store, _probe_metrics_endpoint, STATS_STORE_TIMEOUT, CHROMA_TIMEOUT, LLM_TIMEOUT, TTS_TIMEOUT, ASR_TIMEOUT, MEMORY_TIMEOUT, METRICS_TIMEOUT, _run_single_probe, COMPONENT_CHECKS, _probe_tts_available
-from animetta.inspection.checks.metrics import check_metrics_pipeline
-from animetta.inspection.checks.consistency import chroma_responds
+
+from animetta.inspection.checks.health import (
+    ASR_TIMEOUT,
+    CHROMA_TIMEOUT,
+    COMPONENT_CHECKS,
+    LLM_TIMEOUT,
+    MEMORY_TIMEOUT,
+    METRICS_TIMEOUT,
+    STATS_STORE_TIMEOUT,
+    TTS_TIMEOUT,
+    ComponentCheck,
+    _probe_asr_available,
+    _probe_chroma,
+    _probe_llm_available,
+    _probe_memory_read,
+    _probe_metrics_endpoint,
+    _probe_stats_store,
+    _probe_tts_available,
+    _run_single_probe,
+    check_all_components,
+)
 from animetta.inspection.models import CheckResult
-from animetta.orchestration.graph.stats_store import StatsStore
-
-
 
 # ── Helpers ─────────────────────────────────────────────────
 
@@ -33,7 +48,7 @@ def _make_chromadb_mock(list_collections_ret=None, list_collections_raises=None)
     mock_chromadb = MagicMock()
     mock_chromadb.PersistentClient = MagicMock(return_value=mock_client)
 
-    mock_settings = MagicMock()
+    MagicMock()
     mock_settings_module = MagicMock()
     mock_settings_module.Settings = MagicMock(return_value=MagicMock())
     mock_chromadb.config = mock_settings_module
@@ -425,7 +440,7 @@ class TestProbeMetricsEndpoint:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_timeout_returns_false(self):
-        mock_aiohttp, _ = _make_aiohttp_mock(get_raises=asyncio.TimeoutError())
+        mock_aiohttp, _ = _make_aiohttp_mock(get_raises=TimeoutError())
         with patch.dict(sys.modules, {"aiohttp": mock_aiohttp}):
             result = await _probe_metrics_endpoint()
             assert result is False

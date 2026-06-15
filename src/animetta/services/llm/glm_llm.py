@@ -287,10 +287,9 @@ class GLMLLM(LLMInterface):
         return self._conversation_history.copy()
 
     def handle_interrupt(self, heard_response: str = "") -> None:
-        if heard_response and self._conversation_history:
-            if self._conversation_history[-1].get("role") == "user":
-                self._conversation_history.append({"role": "assistant", "content": heard_response})
-                self._conversation_history.append({"role": "system", "content": "[用户打断了对话]"})
+        if heard_response and self._conversation_history and self._conversation_history[-1].get("role") == "user":
+            self._conversation_history.append({"role": "assistant", "content": heard_response})
+            self._conversation_history.append({"role": "system", "content": "[用户打断了对话]"})
         logger.info(f"[GLM] Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}...")
 
     @property

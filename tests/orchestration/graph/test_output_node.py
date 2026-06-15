@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 """Tests for output distribution node — Socket.IO + memory storage."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from animetta.orchestration.graph import output_node
-from animetta.orchestration.graph.state import create_initial_state
-from unittest.mock import AsyncMock, MagicMock, patch
 from langgraph.types import RunnableConfig
 
+from animetta.orchestration.graph import output_node
+from animetta.orchestration.graph.state import create_initial_state
 
 
 class TestOutputNode:
@@ -36,7 +38,7 @@ class TestOutputNode:
         # Check control signals
         control_calls = [
             c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "control"
+            if c[0][0] == "chat:control"
         ]
         signals = [c[0][1]["signal"] for c in control_calls]
         assert "conversation-start" in signals
@@ -56,7 +58,7 @@ class TestOutputNode:
 
         sentence_calls = [
             c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "sentence"
+            if c[0][0] == "chat:sentence"
         ]
         assert len(sentence_calls) >= 1
         # First sentence call should have the text
@@ -77,23 +79,23 @@ class TestOutputNode:
 
         expr_calls = [
             c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "expression"
+            if c[0][0] == "chat:expression"
         ]
         assert len(expr_calls) >= 1
         assert expr_calls[0][0][1]["emotion"] == "happy"
 
         action_calls = [
             c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "live2d.action"
+            if c[0][0] == "chat:live2d_action"
         ]
         assert len(action_calls) >= 1
         assert action_calls[0][0][1]["index"] == 3  # happy -> 3
 
     @pytest.mark.asyncio
     async def test_memory_storage_called(self, mock_socketio, mock_service_context):
-        """Memory system store_turn should be called with conversation data."""
+        """Memory system encode should be called with conversation data."""
 
-        mock_service_context.memory_system.store_turn = AsyncMock()
+        mock_service_context.memory_system.encode = AsyncMock()
 
         state = create_initial_state(
             session_id="test",
@@ -109,7 +111,7 @@ class TestOutputNode:
         await output_node(state, config)
 
         # Verify memory storage was called
-        mock_service_context.memory_system.store_turn.assert_called_once()
-        call_arg = mock_service_context.memory_system.store_turn.call_args[0][0]
-        assert call_arg.user_input == "Hi there"
-        assert call_arg.agent_response == "Hello Alice!"
+        mock_service_context.memory_system.encode.assert_called_once()
+        call_kwargs = mock_service_context.memory_system.encode.call_args
+        assert call_kwargs.kwargs["user_input"] == "Hi there"
+        assert call_kwargs.kwargs["agent_response"] == "Hello Alice!"

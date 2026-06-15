@@ -96,8 +96,8 @@ class PersonaHandlers(BaseSocketHandler):
             if ctx.llm_engine and ctx.config:
                 live2d_prompt = None
                 try:
-                    from animetta.config.live2d import get_live2d_config
                     from animetta.avatar.prompts import EmotionPromptBuilder
+                    from animetta.config.live2d import get_live2d_config
 
                     live2d_cfg = get_live2d_config()
                     if live2d_cfg and live2d_cfg.enabled:

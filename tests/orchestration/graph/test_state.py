@@ -1,16 +1,20 @@
 from __future__ import annotations
+
 from animetta.orchestration.graph.state import AgentState
+
 """Tests for LangGraph state definition and helpers."""
 
-from typing import Annotated
 
-import pytest
-from animetta.orchestration.graph.state import create_user_message, create_ai_message, create_system_message, log_timing, AgentState, create_initial_state
-from animetta.orchestration.graph.state import create_initial_state
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
 
-
+from animetta.orchestration.graph.state import (
+    create_ai_message,
+    create_initial_state,
+    create_system_message,
+    create_user_message,
+    log_timing,
+)
 
 # ── AgentState TypedDict ────────────────────────────────────────────────
 
@@ -37,6 +41,7 @@ class TestAgentStateKeys:
             "response_chunks",
             "tts_audio",
             "emotion",
+            "emotion_vad",
             # Control
             "control_signal",
             # Metadata

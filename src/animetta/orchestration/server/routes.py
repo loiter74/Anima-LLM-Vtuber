@@ -21,7 +21,6 @@ from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
 
-
 if TYPE_CHECKING:
     from socketio import AsyncServer
 

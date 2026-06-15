@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 """Tests for MemoryAtom unified model."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from animetta.memory.v2.atom import MemoryAtom, Layer, Relation, RelationType
+from animetta.memory.v2.atom import Layer, MemoryAtom, Relation, RelationType
 
 
 class TestMemoryAtom:
@@ -12,7 +13,7 @@ class TestMemoryAtom:
             id="atom-001",
             layer=Layer.RAW,
             content="用户说今天喝了拿铁",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
         )
         assert atom.layer == Layer.RAW
         assert atom.version == 1
@@ -28,8 +29,8 @@ class TestMemoryAtom:
         assert Layer.RAW < Layer.EPISODIC < Layer.SEMANTIC < Layer.EMERGENT
 
     def test_bi_temporal_rewritten_different(self):
-        occurred = datetime(2026, 5, 30, tzinfo=timezone.utc)
-        rewritten = datetime(2026, 5, 31, tzinfo=timezone.utc)
+        occurred = datetime(2026, 5, 30, tzinfo=UTC)
+        rewritten = datetime(2026, 5, 31, tzinfo=UTC)
         atom = MemoryAtom(
             id="a1", layer=Layer.SEMANTIC, content="知识",
             occurred_at=occurred, rewritten_at=rewritten, version=3,
@@ -42,7 +43,7 @@ class TestMemoryAtom:
     def test_emotion_vector_defaults(self):
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="test",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
         )
         assert atom.emotion_valence == 0.0
         assert atom.emotion_arousal == 0.0
@@ -54,7 +55,7 @@ class TestMemoryAtom:
         assert r.source_id == "a1"
 
     def test_is_recalled_false_when_not_recalled(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="new",
             occurred_at=now,
@@ -88,8 +89,8 @@ class TestAtomEdgeCases:
 
     def test_rewritten_at_never_before_occurred(self):
         """rewritten_at should never be earlier than occurred_at."""
-        occurred = datetime(2026, 5, 30, tzinfo=timezone.utc)
-        rewritten = datetime(2026, 5, 29, tzinfo=timezone.utc)
+        occurred = datetime(2026, 5, 30, tzinfo=UTC)
+        rewritten = datetime(2026, 5, 29, tzinfo=UTC)
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="test",
             occurred_at=occurred, rewritten_at=rewritten,
@@ -100,7 +101,7 @@ class TestAtomEdgeCases:
         """New atom has empty version chain."""
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="test",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
         )
         assert atom.version_chain == []
         assert atom.version == 1
@@ -109,7 +110,7 @@ class TestAtomEdgeCases:
         """VAD values should typically be in [-1, 1] range."""
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="test",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             emotion_valence=0.5, emotion_arousal=0.8, emotion_dominance=0.3,
         )
         assert -1.0 <= atom.emotion_valence <= 1.0
@@ -127,6 +128,6 @@ class TestAtomEdgeCases:
     def test_recall_age_none_when_not_accessed(self):
         atom = MemoryAtom(
             id="a1", layer=Layer.RAW, content="test",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
         )
         assert atom.recall_age_hours is None

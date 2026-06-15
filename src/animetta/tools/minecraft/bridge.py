@@ -21,6 +21,7 @@ import os
 from loguru import logger
 
 from animetta.utils.service_availability import is_service_available
+
 from .config import MinecraftConfig
 
 

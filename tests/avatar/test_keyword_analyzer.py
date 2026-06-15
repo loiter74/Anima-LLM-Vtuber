@@ -1,13 +1,13 @@
 from __future__ import annotations
+
 from animetta.avatar.analyzers.base import EmotionData
 from animetta.avatar.analyzers.keyword import KeywordAnalyzer
+
 """
 Tests for KeywordAnalyzer — emotion detection via Chinese keyword matching.
 """
 
 import pytest
-
-
 
 # ============================================================
 # Initialization

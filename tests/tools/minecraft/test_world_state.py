@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from animetta.tools.minecraft.world_state import WorldState
+
 """Tests for WorldState model parsing and analysis methods.
 
 Note: Integration-style tests already exist in test_minecraft_autonomous.py.

@@ -50,10 +50,10 @@ def _import_bilibili_api(*modules: str) -> dict[str, Any]:
 
 def _get_bilibili_module(name: str) -> Any:
     """Get a bilibili_api module by name.
-    
+
     Args:
         name: Module name (e.g., 'hot', 'sync', 'video').
-        
+
     Returns:
         Module object.
     """
@@ -283,7 +283,7 @@ async def fetch_video_danmaku(
 
     try:
         loop = asyncio.get_event_loop()
-        
+
         # First get video info to extract cid
         video_info = await asyncio.wait_for(
             loop.run_in_executor(
@@ -292,14 +292,12 @@ async def fetch_video_danmaku(
             ),
             timeout=timeout,
         )
-        
+
         if not video_info or "cid" not in video_info:
             logger.warning("[bilibili.api] Could not get video info for %s", bvid)
             return []
-        
-        cid = video_info["cid"]
-        
-        # Then fetch danmaku using cid
+
+        # Then fetch danmaku
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
@@ -334,7 +332,7 @@ async def fetch_video_danmaku(
                     publish_time = ""
                     mode = 1
                     color = 16777215
-                
+
                 if content:
                     danmaku_list.append({
                         "content": str(content)[:200],

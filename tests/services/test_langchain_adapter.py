@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from animetta.services.llm import LLMInterface
+
 """Tests for LangChain ChatModel adapter.
 
 Covers ``create_chat_model_from_service`` and ``LLMChatModelAdapter``
@@ -7,13 +9,16 @@ which wrap existing LLMInterface implementations as LangChain's
 ``BaseChatModel`` for tool binding and streaming compatibility.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatResult
-from animetta.tracing.proxy import TracingProxy
 
+from animetta.services.llm.langchain_adapter import (
+    LLMChatModelAdapter,
+    create_chat_model_from_service,
+)
 
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers
@@ -324,7 +329,7 @@ class TestLLMChatModelAdapterFullFlow:
     async def test_create_bind_generate(self):
 
         mock_svc = _make_llm_service_mock()
-        chat_model = create_chat_model_from_service(mock_svc, enable_tooling=True)
+        chat_model = create_chat_model_from_service(mock_svc, _enable_tooling=True)
 
         tool = MagicMock()
         tool.name = "web_search"

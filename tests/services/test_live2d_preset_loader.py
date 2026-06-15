@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 """Tests for PresetLoader YAML loading and action creation."""
+
+import os
+import tempfile
 
 import pytest
 import yaml
-import os
-import tempfile
-from unittest.mock import patch, MagicMock, mock_open
-from animetta.services.live2d.preset_loader import PresetLoader
+
+from animetta.services.live2d.preset_loader import PresetLoader, get_preset_loader
 
 
 def _make_sample_presets() -> dict:
@@ -170,7 +172,10 @@ class TestPresetLoaderCreateActions:
 
     def test_create_emote_action_single_action_via_custom_preset(self):
         """When emote has only one action, return a simple ActionMessage."""
-        import tempfile, os, yaml
+        import os
+        import tempfile
+
+        import yaml
 
         # Create a preset with expression-only (no params)
         presets = {

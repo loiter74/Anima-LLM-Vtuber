@@ -1,14 +1,14 @@
 from __future__ import annotations
+
 """Tests for AsyncScheduler — periodic task execution, lifecycle, metrics, timeout."""
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from animetta.orchestration.graph.scheduler import AsyncScheduler
 
-
+from animetta.orchestration.graph.scheduler import AsyncScheduler, ScheduledTask, TaskMetrics
 
 # ── Fixtures ────────────────────────────────────────────────
 
@@ -528,7 +528,6 @@ class TestEdgeCases:
             await asyncio.sleep(0.2)
             scheduler.remove_task("re")
             await asyncio.sleep(0.1)
-            prev_count = execution_count
             scheduler.add_task("re", fn, interval=0.05, timeout=5)
             await asyncio.wait_for(barrier.wait(), timeout=5)
             assert execution_count >= 2

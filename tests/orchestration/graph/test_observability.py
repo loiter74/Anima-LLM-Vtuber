@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Tests for observability manager — singleton, config loading, LangSmith/LangFuse init."""
 
 import os
@@ -7,10 +8,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from animetta.orchestration.graph.observability import ObservabilityManager
 import yaml
 
-
+from animetta.orchestration.graph.observability import ObservabilityManager, get_observability
 
 # ── Fixtures ────────────────────────────────────────────────
 
@@ -397,7 +397,7 @@ class TestInitialize:
             patch("animetta.orchestration.graph.observability.open", MagicMock()),
             patch("animetta.orchestration.graph.observability.yaml.safe_load", return_value=config),
             patch("langfuse.langchain.CallbackHandler"),
-            patch("langfuse.Langfuse") as mock_client,
+            patch("langfuse.Langfuse"),
             patch.dict(os.environ, {}, clear=True),
         ):
             manager.initialize("/fake/path.yaml")

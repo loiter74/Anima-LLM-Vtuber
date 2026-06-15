@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 """Tests for heuristic semantic phrase extraction with jieba + TF-IDF."""
 
 from unittest.mock import patch
 
-import pytest
+from animetta.services.bilibili.meme_collector import MemeCollector as Collector
+from animetta.services.bilibili.models import CollectedVideo
 
 
 class TestExtractSemanticPhrases:
@@ -14,8 +16,11 @@ class TestExtractSemanticPhrases:
 
         texts = [
             "这个视频真的太搞笑了",
-            "笑死我了这个梗",
-            "这个梗绝绝子",
+            "笑死我了这个搞笑视频",
+            "这个搞笑梗绝绝子",
+            "搞笑视频真的太好看了",
+            "这个视频的搞笑情节让我笑了很久",
+            "每次看这个搞笑视频都会笑",
         ]
 
         phrases = Collector._extract_semantic_phrases(texts, top_k=10)
@@ -87,7 +92,6 @@ class TestExtractSemanticPhrases:
         candidates = c._heuristic_identify(videos, {}, danmaku)
 
         # Should include danmaku-derived candidates
-        danmaku_tags = [cc for cc in candidates if "danmaku" in (cc.tags or [])]
         # At least attempt extraction (may or may not find depending on content)
         assert len(candidates) >= 0
 

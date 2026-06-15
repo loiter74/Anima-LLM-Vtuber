@@ -112,11 +112,16 @@ async def calculator(expression: str) -> str:
         import operator as op
         operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.Pow: op.pow, ast.USub: op.neg}
         def eval_node(n):
-            if isinstance(n, ast.Constant): return n.value
-            elif isinstance(n, ast.BinOp): return operators[type(n.op)](eval_node(n.left), eval_node(n.right))
-            elif isinstance(n, ast.UnaryOp): return operators[type(n.op)](eval_node(n.operand))
-            elif isinstance(n, ast.Expression): return eval_node(n.body)
-            else: raise TypeError(f"Unsupported: {type(n)}")
+            if isinstance(n, ast.Constant):
+                return n.value
+            elif isinstance(n, ast.BinOp):
+                return operators[type(n.op)](eval_node(n.left), eval_node(n.right))
+            elif isinstance(n, ast.UnaryOp):
+                return operators[type(n.op)](eval_node(n.operand))
+            elif isinstance(n, ast.Expression):
+                return eval_node(n.body)
+            else:
+                raise TypeError(f"Unsupported: {type(n)}")
         tree = ast.parse(expression, mode='eval')
         result = eval_node(tree)
         return f"Result: {expression} = {result}"

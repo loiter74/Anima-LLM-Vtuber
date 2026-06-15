@@ -100,8 +100,7 @@ class RVCVC(VCInterface):
         # ── sys.path isolation ──────────────────────────────────────
         sys.path.insert(0, RVC_PROJECT_ROOT)
         try:
-            from configs.config import Config as _RVCConfigCls  # noqa: F811
-            from infer.lib.rtrvc import RVC as _RVCModel
+            from infer.lib.rtrvc import RVC
         except ImportError as e:
             if RVC_PROJECT_ROOT in sys.path:
                 sys.path.remove(RVC_PROJECT_ROOT)
@@ -150,7 +149,7 @@ class RVCVC(VCInterface):
         # n_cpu=1 is critical: prevents multiprocessing queue usage
         # and makes the blocking call safely wrappable in asyncio.to_thread()
         try:
-            self._rvc = _RVCModel(
+            self._rvc = RVC(
                 key=self.key,
                 formant=self.formant,
                 pth_path=self.model_path,

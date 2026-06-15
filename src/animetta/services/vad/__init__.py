@@ -8,7 +8,6 @@ from .interface import VADInterface, VADResult, VADState
 
 # Import implementations to trigger ProviderRegistry registration
 try:
-    from . import mock_vad, silero_vad
     from .mock_vad import MockVAD
     from .silero_vad import SileroStateMachine, SileroVAD
 except ImportError:

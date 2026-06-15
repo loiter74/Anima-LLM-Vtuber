@@ -1,8 +1,19 @@
 from __future__ import annotations
+
 """Tests for built-in tools (calculator, get_current_time, load_tools_from_config)."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+
+from animetta.tools.base import (
+    calculator,
+    create_tool_registry,
+    get_builtin_tools,
+    get_current_time,
+    get_tools_map,
+    load_tools_from_config,
+)
 
 
 class TestCalculator:

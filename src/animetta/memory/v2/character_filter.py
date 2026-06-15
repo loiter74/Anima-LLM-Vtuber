@@ -7,7 +7,6 @@ and re-ranks by MBTI personality preference.
 from __future__ import annotations
 
 from animetta.memory.v2.atom import Layer, MemoryAtom
-from animetta.memory.v2.emotion_field import VADVector
 
 
 class CharacterMemoryFilter:

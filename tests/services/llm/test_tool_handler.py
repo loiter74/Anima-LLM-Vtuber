@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Tests for OpenAIToolHandler — tool call parsing, tool result formatting."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,10 +8,11 @@ import pytest
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    SystemMessage,
     ToolMessage,
 )
 from langchain_core.tools import tool
+
+from animetta.services.llm.tool_handler import OpenAIToolHandler
 
 
 @pytest.fixture

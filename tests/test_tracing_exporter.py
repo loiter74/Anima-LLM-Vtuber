@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 """Tests for StatsSpanExporter — OTel → StatsStore bridge."""
 
-import pytest
-from animetta.tracing.exporter import StatsSpanExporter
-from unittest.mock import AsyncMock, MagicMock, patch
+import contextlib
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from opentelemetry.sdk.trace import ReadableSpan
-from opentelemetry.trace import SpanContext, SpanKind, TraceFlags, Status, StatusCode
-from animetta.orchestration.graph.stats_store import StatsStore
+from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
+
+from animetta.tracing.exporter import StatsSpanExporter
 
 
 @pytest.fixture
@@ -84,10 +86,8 @@ class TestStatsSpanExporter:
         exporter.export([span])
         # Force async flush
         import asyncio
-        try:
+        with contextlib.suppress(RuntimeError):
             asyncio.get_running_loop()
-        except RuntimeError:
-            pass
 
     def test_export_error_span(self, exporter, mock_store):
         """Spans with ERROR status should set status='error'."""

@@ -1,10 +1,17 @@
 from __future__ import annotations
+
 """Tests for BilibiliMemeCollector — scraped data parsing, LLM identification."""
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.services.bilibili import MemeCollector, CollectedVideo, CollectedComment, MemeCandidate
+
+from animetta.services.bilibili import (
+    CollectedComment,
+    CollectedVideo,
+    MemeCandidate,
+    MemeCollector,
+)
 
 
 @pytest.fixture
@@ -210,7 +217,7 @@ class TestBilibiliMemeCollector:
     async def test_fetch_trending_videos_no_bilibili_api(self, mock_llm):
         """If bilibili-api is not installed, returns empty list."""
 
-        c = MemeCollector(llm_client=mock_llm)
+        MemeCollector(llm_client=mock_llm)
         with patch.dict("sys.modules", {"bilibili_api": None}):
             pass  # can't actually remove it cleanly, but test gracefully handles
 

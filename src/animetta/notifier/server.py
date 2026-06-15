@@ -24,19 +24,14 @@ _manager: NotifierManager | None = None
 def _get_manager() -> NotifierManager:
     global _manager
     if _manager is None:
+        import contextlib
         # Import plugins so they self-register
-        try:
+        with contextlib.suppress(ImportError):
             import animetta.notifier.discord  # noqa: F401
-        except ImportError:
-            pass
-        try:
+        with contextlib.suppress(ImportError):
             import animetta.notifier.feishu  # noqa: F401
-        except ImportError:
-            pass
-        try:
+        with contextlib.suppress(ImportError):
             import animetta.notifier.email  # noqa: F401
-        except ImportError:
-            pass
         _manager = NotifierManager()
     return _manager
 

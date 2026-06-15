@@ -253,7 +253,7 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
 
     def _count_emotions(self, result: EmotionExtractionResult) -> dict[str, int]:
         """Count occurrences of each emotion"""
-        counts = {}
+        counts: dict[str, int] = {}
         for emotion_tag in result.emotions:
             emotion = emotion_tag.emotion
             counts[emotion] = counts.get(emotion, 0) + 1

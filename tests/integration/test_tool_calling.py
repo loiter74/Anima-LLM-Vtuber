@@ -1,6 +1,12 @@
 """Integration: tool calling — calculator + get_current_time."""
 
-import asyncio, subprocess, sys, time, socketio, pytest
+import asyncio
+import subprocess
+import sys
+import time
+
+import pytest
+import socketio
 
 PORT, URL = 12394, "http://localhost:12394"
 
@@ -11,12 +17,15 @@ def server():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
     t0 = time.time()
     while time.time() - t0 < 30:
-        if "Application startup complete" in (p.stdout.readline() or ""): break
+        if "Application startup complete" in (p.stdout.readline() or ""):
+            break
     time.sleep(8)
     yield p
     p.terminate()
-    try: p.wait(timeout=5)
-    except subprocess.TimeoutExpired: p.kill()
+    try:
+        p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        p.kill()
 
 class TestTools:
     @pytest.mark.asyncio

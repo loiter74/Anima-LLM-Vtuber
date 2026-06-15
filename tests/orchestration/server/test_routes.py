@@ -1,14 +1,14 @@
 from __future__ import annotations
+
 """Tests for WebSocket route handlers — event dispatch and registration."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+
 from animetta.orchestration.server.desktop import DesktopClientManager
 from animetta.orchestration.server.live2d import Live2DManager
-from unittest.mock import AsyncMock, MagicMock, patch
-from animetta.orchestration.server.session import SessionManager
-from animetta.orchestration.server.routes import RouteHandlers
-
-
+from animetta.orchestration.server.routes import RouteHandlers, register_routes
 
 # ── Helper fixture ─────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ class TestRouteHandlersDispatch:
 
         await handlers.on_text_input("sid1", {"text": "hello"})
 
-        mock_socketio.emit.assert_any_call("error", {
+        mock_socketio.emit.assert_any_call("system:error", {
             "type": "error",
             "message": "test error",
         }, to="sid1")
@@ -199,9 +199,11 @@ class TestRouteHandlersDispatch:
         """on_interrupt_signal calls interrupt handler and emits stop/control events."""
         mock_interrupt = MagicMock()
         mock_interrupt_handler = MagicMock(return_value=mock_interrupt)
+        # get_interrupt_handler is used as bare name in chat_handlers without import
         monkeypatch.setattr(
-            "animetta.orchestration.graph.interrupt_handler.get_interrupt_handler",
+            "animetta.orchestration.server.handlers.chat_handlers.get_interrupt_handler",
             mock_interrupt_handler,
+            raising=False,
         )
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -209,8 +211,8 @@ class TestRouteHandlersDispatch:
         await handlers.on_interrupt_signal("sid1", {"text": "stop please"})
 
         mock_interrupt.set_interrupt.assert_called_once_with("sid1")
-        mock_socketio.emit.assert_any_call("stop_audio", {}, to="sid1")
-        mock_socketio.emit.assert_any_call("control", {
+        mock_socketio.emit.assert_any_call("chat:stop_audio", {}, to="sid1")
+        mock_socketio.emit.assert_any_call("chat:control", {
             "type": "control",
             "text": "interrupted",
         }, to="sid1")
@@ -260,13 +262,13 @@ class TestRouteHandlersConnection:
         # Check emitted event structure without asserting exact time
         found = False
         for call_args in mock_socketio.emit.call_args_list:
-            if call_args[0][0] == "connection-established":
+            if call_args[0][0] == "system:connection_established":
                 data = call_args[0][1]
                 assert data["message"] == "Connection successful"
                 assert data["sid"] == "sid1"
                 assert isinstance(data["server_time"], float)
                 found = True
-        assert found, "connection-established event was not emitted"
+        assert found, "system:connection_established event was not emitted"
 
     @pytest.mark.asyncio
     async def test_on_connect_electron_no_start_mic(
@@ -280,7 +282,7 @@ class TestRouteHandlersConnection:
 
         # Check no control event with start-mic
         for call_args in mock_socketio.emit.call_args_list:
-            if call_args[0][0] == "control":
+            if call_args[0][0] == "chat:control":
                 assert call_args[0][1].get("text") != "start-mic"
 
     @pytest.mark.asyncio
@@ -326,7 +328,7 @@ class TestRegisterRoutes:
         register_routes(mock_socketio, mock_session_manager)
 
         events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
-        for event in ("text_input", "raw_audio_data", "mic_audio_end", "interrupt_signal"):
+        for event in ("chat:text", "chat:audio", "chat:audio_end", "chat:interrupt"):
             assert event in events_bound, f"{event} should be registered"
 
     def test_register_routes_binds_desktop_events(
@@ -336,7 +338,7 @@ class TestRegisterRoutes:
         register_routes(mock_socketio, mock_session_manager)
 
         events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
-        for event in ("desktop_register", "desktop_live2d_action", "desktop_chat_message"):
+        for event in ("desktop:register", "desktop:live2d_action", "desktop:chat_message"):
             assert event in events_bound, f"{event} should be registered"
 
     def test_register_routes_returns_route_handlers(

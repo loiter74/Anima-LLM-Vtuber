@@ -257,9 +257,6 @@ class FasterWhisperASR(ASRInterface):
             # Resample to 16kHz (if needed)
             if audio_segment.frame_rate != 16000:
                 # Simple resampling method (can use librosa or resampy for better results)
-                import fractions
-
-                from pydub.utils import make_chunks
                 ratio = 16000 / audio_segment.frame_rate
                 target_length = int(len(samples) * ratio)
                 samples = np.interp(

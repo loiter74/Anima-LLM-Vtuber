@@ -13,16 +13,21 @@ class RVCBridge:
     def __init__(self, rvc_path="", python_exe="", model_name="kikiV1.pth",
                  index_path="logs/kikiV1.index", f0_method="rmvpe", f0_up_key=0,
                  index_rate=0.75, filter_radius=3, rms_mix_rate=0.25, protect=0.33,
-                 manage_server=False):
+                 _manage_server=False):
         self.rvc_path = Path(rvc_path or self.DEFAULT_RVC_PATH)
         self.python_exe = python_exe or str(self.rvc_path / "runtime" / "python.exe")
-        self.model_name = model_name; self.index_path = index_path
-        self.f0_method = f0_method; self.f0_up_key = f0_up_key
-        self.index_rate = index_rate; self.filter_radius = filter_radius
-        self.rms_mix_rate = rms_mix_rate; self.protect = protect
+        self.model_name = model_name
+        self.index_path = index_path
+        self.f0_method = f0_method
+        self.f0_up_key = f0_up_key
+        self.index_rate = index_rate
+        self.filter_radius = filter_radius
+        self.rms_mix_rate = rms_mix_rate
+        self.protect = protect
 
     async def convert(self, source_audio_path, output_path, pitch_adjust=0):
-        out = Path(output_path); out.parent.mkdir(parents=True, exist_ok=True)
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
         wrapper = self.rvc_path / "tools" / "rvc_convert_wrapper.py"
         cmd = [self.python_exe, str(wrapper),
                "--input_path", os.path.abspath(source_audio_path),
@@ -34,7 +39,8 @@ class RVCBridge:
                "--rms_mix_rate", str(self.rms_mix_rate),
                "--protect", str(self.protect)]
         logger.info(f"RVC: {source_audio_path} model={self.model_name}")
-        env = os.environ.copy(); env["PYTHONIOENCODING"] = "utf-8"
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
         proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=str(self.rvc_path), env=env)
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=1200)
@@ -42,7 +48,8 @@ class RVCBridge:
             raise RuntimeError(f"RVC failed: {stderr.decode('utf-8','replace')[:1500]}")
         actual = out.with_suffix(".wav")
         if actual.exists() and actual.stat().st_size > 1000:
-            logger.info(f"RVC done: {actual}"); return str(actual)
+            logger.info(f"RVC done: {actual}")
+            return str(actual)
         raise RuntimeError(f"RVC output not found: {actual}")
 
     async def close(self): pass

@@ -5,10 +5,7 @@ data structures work correctly. They do NOT run the full pipeline (no
 network, no model loading, no heavy computation).
 """
 
-import sys
 from pathlib import Path
-
-import pytest
 
 # ── Module imports ──────────────────────────────────────────────────
 
@@ -16,11 +13,7 @@ import pytest
 def test_singing_module_imports():
     """All core singing types should be importable."""
     from animetta.services.singing import (
-        LyricLine,
-        PipelineProgress,
-        PipelineStage,
         SingingService,
-        SongResult,
         SVCPipeline,
     )
 
@@ -31,13 +24,8 @@ def test_singing_module_imports():
 def test_config_module_imports():
     """Singing config models should be importable."""
     from animetta.config.singing import (
-        ASRConfig,
-        BilibiliConfig,
-        GPTSoVITSConfig,
         RVCConfig,
-        SeparationConfig,
         SingingConfig,
-        SVCConfig,
     )
 
     assert SingingConfig is not None

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Tests for socketio_server module — server entry point.
 
@@ -10,13 +11,9 @@ public/private function in isolation.
 
 import argparse
 import sys
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from animetta.core.redis_checkpoint import AsyncRedisSaver
-from animetta.utils.logger_manager import LoggerManager
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 

@@ -114,7 +114,7 @@ class StatsSpanExporter(SpanExporter):
         """No-op — StatsStore handles its own lifecycle."""
         pass
 
-    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+    def force_flush(self, _timeout_millis: int = 30_000) -> bool:
         """No-op — spans are written immediately after batch export."""
         return True
 

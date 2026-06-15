@@ -6,10 +6,9 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.inspection.checks.pipeline import check_conversation_pipeline, EXPECTED_EVENTS
+
+from animetta.inspection.checks.pipeline import EXPECTED_EVENTS, check_conversation_pipeline
 from animetta.inspection.models import CheckResult
-
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -93,7 +92,7 @@ class TestSuccessfulPipeline:
         # Verify the test message was emitted
         mock_client.emit.assert_called_once()
         call_args = mock_client.emit.call_args
-        assert call_args[0][0] == "text_input"
+        assert call_args[0][0] == "chat:text_input"
         assert call_args[0][1]["text"] == "[inspection] ping"
         assert call_args[0][1]["mode"] == "text"
 
@@ -136,7 +135,7 @@ class TestConnectionTimeout:
     async def test_connect_timeout_returns_failed(self):
         """Returns CheckResult.failed when socketio.connect times out."""
         mock_client = _create_mock_client(
-            connect_side_effect=asyncio.TimeoutError(),
+            connect_side_effect=TimeoutError(),
         )
 
         with patch(
@@ -156,7 +155,7 @@ class TestConnectionTimeout:
         """Returns CheckResult.failed when asyncio.wait_for hits timeout."""
         mock_client = _create_mock_client()
         # Simulate wait_for timing out (connect never completes)
-        timeout_error = asyncio.TimeoutError()
+        timeout_error = TimeoutError()
 
         with (
             patch(

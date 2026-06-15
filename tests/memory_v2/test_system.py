@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 """Integration tests for LivingMemorySystem."""
 
 import pytest
 
-from animetta.memory.v2.system import LivingMemorySystem, RecallResult
-from animetta.memory.v2.emotion_field import VAD_MAP
 from animetta.memory.v2.atom import Layer
+from animetta.memory.v2.emotion_field import VAD_MAP
+from animetta.memory.v2.system import LivingMemorySystem, RecallResult
 
 
 @pytest.fixture

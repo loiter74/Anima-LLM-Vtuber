@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 """Tests for EmotionalField VAD vector model."""
 
 import math
 
-from animetta.memory.v2.emotion_field import EmotionalField, VAD_MAP, VADVector
+from animetta.memory.v2.emotion_field import VAD_MAP, EmotionalField, VADVector
 
 
 class TestVADMap:

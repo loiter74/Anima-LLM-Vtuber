@@ -1,19 +1,20 @@
 from __future__ import annotations
+
 """Tests for ReconsolidationClient and LLM-driven reconsolidation."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from unittest.mock import patch
 
+import pytest
+
+from animetta.memory.v2.atom import Layer, MemoryAtom
+from animetta.memory.v2.emotion_field import VAD_MAP
 from animetta.memory.v2.reconsolidation import (
     ReconsolidationClient,
-    ReconsolidationOutput,
-    set_reconsolidation_client,
     get_reconsolidation_client,
+    set_reconsolidation_client,
 )
 from animetta.memory.v2.system import LivingMemorySystem
-from animetta.memory.v2.emotion_field import VAD_MAP, VADVector
-from animetta.memory.v2.atom import MemoryAtom, Layer
 
 
 class TestReconsolidationClient:
@@ -52,7 +53,7 @@ class TestReconsolidationIntegration:
 
         atom = MemoryAtom(
             id="r1", layer=Layer.RAW, content="用户喜欢咖啡",
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             confidence=0.7,
             emotion_valence=0.5, emotion_arousal=0.3, emotion_dominance=0.1,
         )
@@ -113,7 +114,7 @@ class TestReconsolidationEdgeCases:
         system = LivingMemorySystem(db_path=":memory:")
         await system.initialize()
         atom = MemoryAtom(id="r2", layer=Layer.RAW, content="test",
-                          occurred_at=datetime.now(timezone.utc), confidence=0.7)
+                          occurred_at=datetime.now(UTC), confidence=0.7)
         # Reconsolidate without LLM — should use metadata fallback
         await system._reconsolidate_atom(atom, VAD_MAP["happy"], "query")
         assert atom.version >= 2  # Metadata fallback still increments version

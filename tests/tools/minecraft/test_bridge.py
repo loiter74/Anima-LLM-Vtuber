@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 from animetta.tools.minecraft.bridge import MinecraftBridge
+
 """Tests for MinecraftBridge — subprocess lifecycle and JSON-RPC communication."""
 
-import json
 import asyncio
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ── Fixtures ──
 
@@ -91,7 +93,8 @@ class TestMinecraftBridgeStart:
         result = await bridge.start()
         assert result is True
 
-    async def test_start_successful(self, mock_config, mock_process):
+    @patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True)
+    async def test_start_successful(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
         with patch("os.path.exists", return_value=True), \
@@ -103,7 +106,8 @@ class TestMinecraftBridgeStart:
         assert bridge.is_running is True
         assert bridge._process is mock_process
 
-    async def test_start_login_timeout_still_succeeds(self, mock_config, mock_process):
+    @patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True)
+    async def test_start_login_timeout_still_succeeds(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
         with patch("os.path.exists", return_value=True), \
@@ -338,7 +342,6 @@ class TestMinecraftBridgeStop:
         bridge._running = True
         bridge._process = mock_process
 
-        import subprocess
         mock_process.terminate.side_effect = ProcessLookupError
 
         await bridge.stop()

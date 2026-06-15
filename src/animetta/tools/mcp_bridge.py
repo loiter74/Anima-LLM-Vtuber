@@ -7,6 +7,7 @@ Supports three transport modes:
 - streamable_http: Streamable HTTP (MCP new standard)
 """
 
+import contextlib
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -87,11 +88,9 @@ class MCPClient:
     async def disconnect(self):
         """Disconnect"""
         if self._exit_stack:
-            try:
-                await self._exit_stack.aclose()
-            except RuntimeError:
+            with contextlib.suppress(RuntimeError):
                 # anyio cancel scope cross-task issue (Python 3.13 + anyio compat)
-                pass
+                await self._exit_stack.aclose()
             self._exit_stack = None
             self.session = None
             logger.info(f"[MCP:{self.name}] Disconnected")
@@ -140,7 +139,7 @@ def mcp_tool_to_langchain(client: MCPClient, tool_info: Any) -> Any:
     for prop_name, prop_info in schema.get("properties", {}).items():
         fields[prop_name] = (_parse_type(prop_info.get("type", "string")), ...)
 
-    InputModel = create_model(f"{tool_name}_Input", **fields)
+    input_model = create_model(f"{tool_name}_Input", **fields)  # type: ignore[call-overload]
 
     async def execute(**kwargs):
         result = await client.call_tool(tool_name, kwargs)
@@ -156,9 +155,9 @@ def mcp_tool_to_langchain(client: MCPClient, tool_info: Any) -> Any:
     return StructuredTool(
         name=tool_name,
         description=description,
-        func=lambda **kw: "",
+        func=lambda **_kw: "",
         coroutine=execute,
-        args_schema=InputModel,
+        args_schema=input_model,
     )
 
 

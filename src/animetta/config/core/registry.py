@@ -191,15 +191,19 @@ class ProviderRegistry:
     # ==================== Lifecycle ====================
 
     @classmethod
-    def clear(cls, category: str | None = None):
+    def clear(cls, category: str | None = None, *, clear_services: bool = False):
         """Clear registration data (mainly for testing).
 
         Args:
             category: Category to clear. If None, clears all.
+            clear_services: If True, also clear registered services. Default False
+                (clear only affects configs, preserving service registrations).
         """
         if category:
             cls._configs.pop(category, None)
-            cls._services.pop(category, None)
+            if clear_services:
+                cls._services.pop(category, None)
         else:
             cls._configs.clear()
-            cls._services.clear()
+            if clear_services:
+                cls._services.clear()

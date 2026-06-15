@@ -8,7 +8,7 @@ from loguru import logger
 
 from .checks.health import refresh_llm_connectivity_cache
 from .inspector import run_full_inspection
-from .reporter import store_report, send_alert
+from .reporter import send_alert, store_report
 
 
 class InspectionScheduler:

@@ -329,21 +329,20 @@ class OpenAILLM(LLMInterface):
         Args:
             heard_response: Partial response heard by the user
         """
-        if heard_response:
+        if heard_response and self.history and self.history[-1].get("role") == "user":
             # Save partial response to history
-            if self.history and self.history[-1].get("role") == "user":
-                # Get the last user input
-                self.history[-1].get("content", "")
-                # Add partial AI response
-                self.history.append({
-                    "role": "assistant",
-                    "content": heard_response
-                })
-                # Add interruption marker
-                self.history.append({
-                    "role": "system",
-                    "content": "[user interrupted the conversation]"
-                })
+            # Get the last user input
+            self.history[-1].get("content", "")
+            # Add partial AI response
+            self.history.append({
+                "role": "assistant",
+                "content": heard_response
+            })
+            # Add interruption marker
+            self.history.append({
+                "role": "system",
+                "content": "[user interrupted the conversation]"
+            })
 
         logger.info(f"Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}...")
 

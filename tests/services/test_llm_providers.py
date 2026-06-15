@@ -1,11 +1,23 @@
 from __future__ import annotations
-from animetta.services.llm import GLMLLM
-from animetta.services.llm import LLMFactory
-from animetta.services.llm import LLMInterface
-from animetta.services.llm import LocalLoraLLM
-from animetta.services.llm import MockLLM
-from animetta.services.llm import OllamaLLM
-from animetta.services.llm import OpenAILLM
+
+from animetta.config.providers.llm import (
+    DeepSeekLLMConfig,
+    GLMLLMConfig,
+    LocalLoraLLMConfig,
+    MockLLMConfig,
+    OllamaLLMConfig,
+    OpenAILLMConfig,
+)
+from animetta.services.llm import (
+    GLMLLM,
+    LLMFactory,
+    LLMInterface,
+    LocalLoraLLM,
+    MockLLM,
+    OllamaLLM,
+    OpenAILLM,
+)
+
 """
 Tests for LLM provider implementations.
 
@@ -21,12 +33,9 @@ Covers:
 - LLMFactory.create_from_config creates correct type based on config type
 """
 
-from typing import AsyncIterator, List, Dict, Any
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -321,7 +330,7 @@ class TestOpenAILLM:
 
         with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
             instance = OpenAILLM(api_key="key", model="gpt-4")
-        mock.assert_called_once_with(api_key="key")
+        mock.assert_called_once_with(api_key="key", http_client=ANY)
         assert instance.client is not None
 
     def test_constructor_with_base_url(self):
@@ -330,7 +339,7 @@ class TestOpenAILLM:
         with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
             OpenAILLM(api_key="key", model="gpt-4", base_url="https://custom.example.com")
         mock.assert_called_once_with(
-            api_key="key", base_url="https://custom.example.com"
+            api_key="key", http_client=ANY, base_url="https://custom.example.com"
         )
 
     @pytest.mark.asyncio
@@ -673,8 +682,6 @@ class TestLocalLoraLLM:
             mock_tokenizer_instance.return_value = mock_inputs
 
             mock_model = MagicMock()
-            from peft import PeftModel
-            mock_peft_model = MagicMock()
             mock_model.generate.return_value = [[101, 102, 103]]
             mock_tokenizer_instance.decode.return_value = "Mocked local response"
 
@@ -809,9 +816,9 @@ class TestLLMFactory:
         assert isinstance(config, MockLLMConfig)
 
     @patch("animetta.services.llm.factory.ProviderRegistry.list_services")
-    def test_get_available_providers(self, mock_list_services):
-        """get_available_providers should return list from registry."""
+    def test_get_available_configs(self, mock_list_services):
+        """get_available_configs should return list from registry."""
 
         mock_list_services.return_value = ["mock", "openai", "glm"]
-        providers = LLMFactory.get_available_providers()
+        providers = LLMFactory.get_available_configs()
         assert providers == ["mock", "openai", "glm"]

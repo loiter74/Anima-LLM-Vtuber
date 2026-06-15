@@ -14,7 +14,7 @@ class Live2DModelConfig(BaseModel):
     """Live2D model configuration"""
     path: str = Field(default="/live2d/haru/haru_greeter_t03.model3.json", description="Model file path")
     scale: float = Field(default=0.5, description="Model scale ratio")
-    position: dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0}, description="Model position (x, y)")
+    position: dict[str, float] = Field(default_factory=lambda: {"x": 0.0, "y": 0.0}, description="Model position (x, y)")
 
 
 class Live2DLipSyncConfig(BaseModel):
@@ -77,12 +77,12 @@ class Live2DConfig(BaseConfig):
             Live2DConfig instance
         """
         import yaml
-        path = Path(path)
-        if not path.exists():
-            logger.warning(f"Live2D config file not found: {path}, using default config")
+        config_path = Path(path)
+        if not config_path.exists():
+            logger.warning(f"Live2D config file not found: {config_path}, using default config")
             return cls()
 
-        with open(path, encoding='utf-8') as f:
+        with open(config_path, encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
 
         return cls(**data)

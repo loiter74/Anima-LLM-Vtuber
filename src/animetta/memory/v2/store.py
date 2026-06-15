@@ -112,6 +112,7 @@ class AtomStore:
             self._conn = None
 
     def _create_tables(self) -> None:
+        assert self._conn is not None
         self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS memory_atoms (
                 id TEXT PRIMARY KEY,
@@ -166,6 +167,7 @@ class AtomStore:
     # ── CRUD ──
 
     async def create(self, atom: MemoryAtom) -> str:
+        assert self._conn is not None
         self._conn.execute("""
             INSERT INTO memory_atoms (id, layer, content, summary, occurred_at,
                 rewritten_at, version, version_chain, confidence, salience,
@@ -175,7 +177,8 @@ class AtomStore:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             atom.id, atom.layer.value, atom.content, atom.summary,
-            atom.occurred_at.isoformat(), atom.rewritten_at.isoformat(),
+            atom.occurred_at.isoformat(),
+            atom.rewritten_at.isoformat() if atom.rewritten_at else atom.occurred_at.isoformat(),
             atom.version, json.dumps(atom.version_chain),
             atom.confidence, atom.salience, atom.retrieval_count,
             atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
@@ -197,6 +200,7 @@ class AtomStore:
         return atom.id
 
     async def get(self, atom_id: str) -> MemoryAtom | None:
+        assert self._conn is not None
         row = self._conn.execute(
             "SELECT * FROM memory_atoms WHERE id = ?", (atom_id,)
         ).fetchone()
@@ -205,6 +209,7 @@ class AtomStore:
         return self._row_to_atom(row)
 
     async def update(self, atom: MemoryAtom) -> None:
+        assert self._conn is not None
         self._conn.execute("""
             UPDATE memory_atoms SET content=?, summary=?, rewritten_at=?,
                 version=?, version_chain=?, confidence=?, salience=?,
@@ -213,7 +218,8 @@ class AtomStore:
                 forget_at=?, is_archived=?, relations=?, tags=?, source_ids=?
             WHERE id=?
         """, (
-            atom.content, atom.summary, atom.rewritten_at.isoformat(),
+            atom.content, atom.summary,
+            atom.rewritten_at.isoformat() if atom.rewritten_at else atom.occurred_at.isoformat(),
             atom.version, json.dumps(atom.version_chain),
             atom.confidence, atom.salience, atom.retrieval_count,
             atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
@@ -243,13 +249,15 @@ class AtomStore:
         if old is None:
             raise ValueError(f"Atom {atom_id} not found")
 
+        assert self._conn is not None
+
         # Save old version to history
         self._conn.execute("""
             INSERT OR REPLACE INTO memory_versions (atom_id, version, content, summary,
                 rewritten_at, emotion_valence, emotion_arousal, emotion_dominance)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (atom_id, old.version, old.content, old.summary,
-              old.rewritten_at.isoformat(),
+              old.rewritten_at.isoformat() if old.rewritten_at else old.occurred_at.isoformat(),
               old.emotion_valence, old.emotion_arousal, old.emotion_dominance))
 
         # Update with new version
@@ -269,6 +277,7 @@ class AtomStore:
 
     async def get_all_active(self, limit: int = 1000) -> list[MemoryAtom]:
         """Get all non-archived atoms, ordered by salience descending."""
+        assert self._conn is not None
         rows = self._conn.execute(
             "SELECT * FROM memory_atoms WHERE is_archived = 0 "
             "ORDER BY salience DESC LIMIT ?",
@@ -277,6 +286,7 @@ class AtomStore:
         return [self._row_to_atom(r) for r in rows]
 
     async def update_salience(self, atom_id: str, salience: float) -> None:
+        assert self._conn is not None
         self._conn.execute(
             "UPDATE memory_atoms SET salience = ? WHERE id = ?",
             (salience, atom_id),
@@ -285,6 +295,7 @@ class AtomStore:
 
     async def archive_below_threshold(self, threshold: float) -> int:
         """Archive all atoms with salience below threshold. Returns count."""
+        assert self._conn is not None
         cursor = self._conn.execute(
             "UPDATE memory_atoms SET is_archived = 1 "
             "WHERE is_archived = 0 AND salience < ?",
@@ -294,6 +305,7 @@ class AtomStore:
         return cursor.rowcount
 
     async def count_active(self) -> int:
+        assert self._conn is not None
         row = self._conn.execute(
             "SELECT COUNT(*) as cnt FROM memory_atoms WHERE is_archived = 0"
         ).fetchone()
@@ -301,6 +313,7 @@ class AtomStore:
 
     async def search_fts(self, query: str, limit: int = 50) -> list[MemoryAtom]:
         """Full-text search via FTS5. Falls back to LIKE for CJK."""
+        assert self._conn is not None
         # For CJK text — FTS5 can't tokenize, use LIKE instead
         if any('\u4e00' <= c <= '\u9fff' for c in query):
             rows = self._conn.execute(
@@ -345,9 +358,9 @@ class AtomStore:
         # Fetch atoms not yet loaded (from vector search only)
         for atom_id in scores:
             if atom_id not in results:
-                atom = await self.get(atom_id)
-                if atom and not atom.is_archived:
-                    results[atom_id] = atom
+                fetched = await self.get(atom_id)
+                if fetched is not None and not fetched.is_archived:
+                    results[atom_id] = fetched
 
         # Sort by combined score
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)

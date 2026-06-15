@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Tests for GLM message format converter.
 
 Covers conversion between LangChain message types and the GLM API
@@ -6,9 +7,8 @@ format used by Zhipu AI's chat completion endpoint.
 """
 
 import json
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
-import pytest
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -16,7 +16,10 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-
+from animetta.services.llm.glm_message_converter import (
+    GLMMessageConverter,
+    GLMToolConverter,
+)
 
 # ═══════════════════════════════════════════════════════════════════════
 # GLMMessageConverter

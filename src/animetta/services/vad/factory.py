@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from animetta.config.core.registry import ProviderRegistry
 
 """
@@ -7,15 +8,11 @@ VAD Factory - Create VAD instances based on configuration
 
 
 from loguru import logger
-from animetta.config.core.registry import ProviderRegistry
+
+from animetta.tracing.proxy import TracingProxy
 
 from .interface import VADInterface
-from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.vad import MockVADConfig, SileroVADConfig
-from animetta.config.core.registry import ProviderRegistry
 from .mock_vad import MockVAD
-from animetta.config.core.registry import ProviderRegistry
-from animetta.tracing.proxy import TracingProxy
 
 
 class VADFactory:

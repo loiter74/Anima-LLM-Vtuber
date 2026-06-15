@@ -1,6 +1,5 @@
 """Tests for Mixin composition in provider config base classes."""
 
-import pytest
 
 
 class TestMixinComposition:

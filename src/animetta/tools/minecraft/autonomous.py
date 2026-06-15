@@ -248,6 +248,8 @@ class AutonomousLoop:
 
     async def _execute(self, action: str, params: dict | None, state: WorldState):
         """Execute the decided action with timeout"""
+        if params is None:
+            return
         timeout = 30.0
         try:
             if action == self.ACTION_SURVIVE:
@@ -336,7 +338,7 @@ class AutonomousLoop:
         self._current_step = step_idx + 1
 
         # Trigger chat
-        if self._current_step >= len(self._rules.rules.building.build_plan):
+        if self._rules.rules.building and self._current_step >= len(self._rules.rules.building.build_plan):
             chat_msg = self._rules.get_chat_message("building_complete")
             if chat_msg:
                 await self._bridge.send_command("chat", {"message": chat_msg}, timeout=5.0)

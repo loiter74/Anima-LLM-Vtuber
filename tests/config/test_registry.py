@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 from animetta.config.core.registry import ProviderRegistry
+
 """Tests for ProviderRegistry (config/core/registry.py)"""
 
 import sys
+import types
 from pathlib import Path
-from typing import Literal, Optional, Type
-from unittest.mock import MagicMock, patch
+from typing import Literal
 
 import pytest
+
 from animetta.config.core.base import ProviderConfig
-from pydantic import Field
 
 # Ensure src/ is on the Python path
 _src_path = str(Path(__file__).resolve().parent.parent.parent / "src")
@@ -27,13 +29,21 @@ def registry():
     """Fixture providing a clean ProviderRegistry state for each test.
 
     Saves and restores the original class-level dicts so tests never leak state.
+    Seeds known service categories so tests can register services directly.
     """
     saved = {
         "_configs": ProviderRegistry._configs,
         "_services": ProviderRegistry._services,
     }
     ProviderRegistry._configs = {}
-    ProviderRegistry._services = {}
+    ProviderRegistry._services = {
+        "llm": {},
+        "asr": {},
+        "tts": {},
+        "vad": {},
+        "separation": {},
+        "vc": {},
+    }
     yield ProviderRegistry
     ProviderRegistry._configs = saved["_configs"]
     ProviderRegistry._services = saved["_services"]
@@ -67,7 +77,7 @@ class MockServiceWithFromConfig:
         self.kwargs = kwargs
 
     @classmethod
-    def from_config(cls, config: ProviderConfig, **extra_kwargs) -> "MockServiceWithFromConfig":
+    def from_config(cls, config: ProviderConfig, **extra_kwargs) -> MockServiceWithFromConfig:
         return cls(config=config, **extra_kwargs)
 
 
@@ -373,10 +383,11 @@ class TestCreateUnionType:
         origin = typing.get_origin(result)
         assert origin is typing.Annotated
 
-        # The first arg should be a Union containing our config classes
+        # The first arg should be a Union containing our config classes.
+        # In Python 3.13+, `X | Y` produces types.UnionType instead of typing.Union.
         args = typing.get_args(result)
         union_type = args[0]
-        assert typing.get_origin(union_type) is typing.Union
+        assert typing.get_origin(union_type) in (typing.Union, types.UnionType)
 
         union_args = typing.get_args(union_type)
         assert OpenAICfg in union_args

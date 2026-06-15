@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from .base_handler import BaseSocketHandler
 from ...socket_events import EVENTS
+from .base_handler import BaseSocketHandler
 
 if TYPE_CHECKING:
     from socketio import AsyncServer

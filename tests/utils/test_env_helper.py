@@ -1,11 +1,13 @@
 from __future__ import annotations
-from animetta.utils.env_helper import EnvHelper
+
+from animetta.utils.env_helper import EnvHelper, Environment, detect_env, get_data_dir, resolve_path
+
 """Tests for EnvHelper platform detection and path conversion."""
 
-import pytest
-import platform
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestEnvHelperDetection:
@@ -22,32 +24,28 @@ class TestEnvHelperDetection:
             assert env == Environment.MACOS
 
     def test_detect_linux(self):
-        with patch("platform.system", return_value="Linux"):
-            with patch.object(EnvHelper, "_check_wsl", return_value=Environment.LINUX):
-                env = EnvHelper.detect_environment()
-                assert env == Environment.LINUX
+        with patch("platform.system", return_value="Linux"), patch.object(EnvHelper, "_check_wsl", return_value=Environment.LINUX):
+            env = EnvHelper.detect_environment()
+            assert env == Environment.LINUX
 
     def test_detect_wsl_by_proc_version(self):
-        with patch("platform.system", return_value="Linux"):
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("builtins.open", MagicMock()):
-                    with patch.object(Path, "open", MagicMock()):
-                        # We need to mock /proc/version read
-                        mock_file = MagicMock()
-                        mock_file.__enter__.return_value.read.return_value = "Linux ... microsoft ... WSL2"
-                        with patch("builtins.open", return_value=mock_file):
-                            env = EnvHelper.detect_environment()
-                            assert env == Environment.WSL
+        with patch("platform.system", return_value="Linux"), patch("pathlib.Path.exists", return_value=True), patch("builtins.open", MagicMock()), patch.object(Path, "open", MagicMock()):
+            # We need to mock /proc/version read
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = "Linux ... microsoft ... WSL2"
+            with patch("builtins.open", return_value=mock_file):
+                env = EnvHelper.detect_environment()
+                assert env == Environment.WSL
 
     def test_detect_wsl_by_env_var(self):
-        with patch("platform.system", return_value="Linux"):
-            with patch("pathlib.Path.exists", return_value=False):
-                with patch("os.getenv", side_effect=lambda k, d=None: "Ubuntu" if k == "WSL_DISTRO_NAME" else d):
-                    env = EnvHelper.detect_environment()
-                    assert env == Environment.WSL
+        with patch("platform.system", return_value="Linux"), patch("pathlib.Path.exists", return_value=False), patch("os.getenv", side_effect=lambda k, d=None: "Ubuntu" if k == "WSL_DISTRO_NAME" else d):
+            env = EnvHelper.detect_environment()
+            assert env == Environment.WSL
 
 
 import sys
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperPathConversion:
     """Windows-WSL path conversion tests."""
@@ -78,36 +76,36 @@ class TestEnvHelperPathConversion:
 
 
 import sys as _sys
+
+
 @pytest.mark.skipif(_sys.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperResolvePath:
     """Cross-environment path resolution tests."""
 
     def test_resolve_no_conversion_needed(self):
-        with patch("os.path.expandvars", side_effect=lambda x: x):
-            with patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS):
-                result = EnvHelper.resolve_model_path("C:/data", env=Environment.WINDOWS)
-                assert result == "C:/data"
+        with patch("os.path.expandvars", side_effect=lambda x: x), patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS):
+            result = EnvHelper.resolve_model_path("C:/data", env=Environment.WINDOWS)
+            assert result == "C:/data"
 
     def test_resolve_windows_to_wsl(self):
-        with patch("os.path.expandvars", side_effect=lambda x: x):
-            with patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS):
-                result = EnvHelper.resolve_model_path("E:/anima_data", env=Environment.WSL)
-                assert result == "/mnt/e/anima_data"
+        with patch("os.path.expandvars", side_effect=lambda x: x), patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS):
+            result = EnvHelper.resolve_model_path("E:/anima_data", env=Environment.WSL)
+            assert result == "/mnt/e/anima_data"
 
     def test_resolve_wsl_to_windows(self):
-        with patch("os.path.expandvars", side_effect=lambda x: x):
-            with patch.object(EnvHelper, "detect_environment", return_value=Environment.WSL):
-                result = EnvHelper.resolve_model_path("/mnt/e/anima_data", env=Environment.WINDOWS)
-                assert result == "E:/anima_data"
+        with patch("os.path.expandvars", side_effect=lambda x: x), patch.object(EnvHelper, "detect_environment", return_value=Environment.WSL):
+            result = EnvHelper.resolve_model_path("/mnt/e/anima_data", env=Environment.WINDOWS)
+            assert result == "E:/anima_data"
 
     def test_resolve_expand_vars(self):
-        with patch("os.path.expandvars", side_effect=lambda x: x.replace("$HOME", "/home/user")):
-            with patch.object(EnvHelper, "detect_environment", return_value=Environment.LINUX):
-                result = EnvHelper.resolve_model_path("$HOME/data")
-                assert result == "/home/user/data"
+        with patch("os.path.expandvars", side_effect=lambda x: x.replace("$HOME", "/home/user")), patch.object(EnvHelper, "detect_environment", return_value=Environment.LINUX):
+            result = EnvHelper.resolve_model_path("$HOME/data")
+            assert result == "/home/user/data"
 
 
 import sys as _sys2
+
+
 @pytest.mark.skipif(_sys2.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperGetDataDir:
     """Data directory detection tests."""
@@ -135,11 +133,13 @@ class TestEnvHelperGetDataDir:
 
 
 import sys as _sys3
+
+
 @pytest.mark.skipif(_sys3.platform != "linux", reason="WSL tests only run on Linux")
 class TestDefaultModelConfig:
     """Default model config generation."""
 
-    @patch("anima.utils.env_helper.EnvHelper.get_data_dir", return_value=Path("/data"))
+    @patch("animetta.utils.env_helper.EnvHelper.get_data_dir", return_value=Path("/data"))
     def test_default_model_config(self, mock_get_data_dir):
         config = EnvHelper.get_default_model_config()
         assert "ANIMA_DATA_DIR" in config
@@ -153,8 +153,8 @@ class TestDefaultModelConfig:
 class TestSetupEnvFile:
     """.env file generation tests."""
 
-    @patch("anima.utils.env_helper.EnvHelper.detect_environment", return_value="windows")
-    @patch("anima.utils.env_helper.EnvHelper.get_default_model_config")
+    @patch("animetta.utils.env_helper.EnvHelper.detect_environment", return_value="windows")
+    @patch("animetta.utils.env_helper.EnvHelper.get_default_model_config")
     def test_setup_env_file_creates(self, mock_config, mock_detect, tmp_path):
         mock_config.return_value = {
             "ANIMA_DATA_DIR": "/data",
@@ -173,15 +173,15 @@ class TestConvenienceFunctions:
     """Module-level convenience functions."""
 
     def test_detect_env(self):
-        with patch("anima.utils.env_helper.EnvHelper.detect_environment", return_value="linux"):
+        with patch("animetta.utils.env_helper.EnvHelper.detect_environment", return_value="linux"):
             assert detect_env() == "linux"
 
     def test_get_data_dir_convenience(self):
-        with patch("anima.utils.env_helper.EnvHelper.get_data_dir", return_value=Path("/data")):
+        with patch("animetta.utils.env_helper.EnvHelper.get_data_dir", return_value=Path("/data")):
             assert get_data_dir() == Path("/data")
 
     def test_resolve_path_convenience(self):
-        with patch("anima.utils.env_helper.EnvHelper.resolve_model_path", return_value="/resolved/path"):
+        with patch("animetta.utils.env_helper.EnvHelper.resolve_model_path", return_value="/resolved/path"):
             assert resolve_path("/some/path") == "/resolved/path"
 
 

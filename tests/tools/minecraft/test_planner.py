@@ -1,11 +1,19 @@
 from __future__ import annotations
-from animetta.tools.minecraft.planner import MinecraftPlanner
+
+from animetta.tools.minecraft.planner import (
+    MinecraftPlanner,
+    ModeSelector,
+    Plan,
+    PlannerError,
+    PlanStep,
+)
+
 """Tests for MinecraftPlanner — task decomposition and plan step generation."""
 
 import json
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 
 # ── Fixtures ──
 
@@ -148,7 +156,7 @@ class TestMinecraftPlannerPlan:
         mock_llm.chat.return_value = response
 
         context = {"inventory": {}}
-        result = await planner.plan("gather wood", context)
+        await planner.plan("gather wood", context)
 
         call_args = mock_llm.chat.call_args[1]
         user_msg = call_args["messages"][1]["content"]

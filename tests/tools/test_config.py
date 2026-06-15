@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 """Tests for tool configuration loading and validation."""
 
-import pytest
-import yaml
-import tempfile
 import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+import tempfile
+
+import yaml
+
+from animetta.tools.config import _get_default_config, load_tools_config, validate_tools_config
 
 
 class TestLoadToolsConfig:

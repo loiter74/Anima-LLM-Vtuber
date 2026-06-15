@@ -1,16 +1,22 @@
 from __future__ import annotations
+
 from animetta.config.core.registry import ProviderRegistry
 from animetta.config.persona import PersonaConfig
+
 """Tests for AppConfig - application configuration loading."""
 
 import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
 
 import pytest
-from animetta.config.app import AppConfig, ServicesConfig, expand_env_vars, _load_env_file, _load_service_config
 
-
+from animetta.config.app import (
+    AppConfig,
+    ServicesConfig,
+    _load_env_file,
+    _load_service_config,
+    expand_env_vars,
+)
 
 # =============================================================================
 # Autouse Fixtures
@@ -22,15 +28,14 @@ def clean_config_globals():
     """Clean module-level state between tests to avoid cross-test pollution.
 
     Resets:
-        _load_env_file._loaded flag (idempotency)
+        _env_file_loaded (idempotency flag for _load_env_file)
         _services_yaml_cache (unified yaml cache)
         _services_config_logged (logged service set)
         expand_env_vars.replace_var attrs (GLM_API_KEY logging)
     """
     import animetta.config.app as app_module
 
-    if hasattr(app_module._load_env_file, "_loaded"):
-        delattr(app_module._load_env_file, "_loaded")
+    app_module._env_file_loaded = False
     app_module._services_yaml_cache = None
     app_module._services_config_logged = set()
 
@@ -833,7 +838,7 @@ class TestValidate:
             config.services = ServicesConfig(
                 asr="mock", tts="mock", agent="mock", vad="mock"
             )
-            config.validate()
+            config.validate_config()
             mock_logger_warning.assert_not_called()
 
     def test_warning_for_unregistered_providers(self):
@@ -847,7 +852,7 @@ class TestValidate:
             config.services = ServicesConfig(
                 asr="unknown_asr", tts="unknown_tts", agent="unknown_agent", vad="nope"
             )
-            config.validate()
+            config.validate_config()
             assert mock_logger_warning.call_count >= 3
 
     def test_handles_partially_registered_providers(self):
@@ -864,7 +869,7 @@ class TestValidate:
             config.services = ServicesConfig(
                 asr="whisper", tts="unknown_tts", agent="openai", vad="silero",
             )
-            config.validate()
+            config.validate_config()
             warning_messages = [c[0][0] for c in mock_logger_warning.call_args_list]
             assert any("TTS provider" in m for m in warning_messages)
             assert not any("ASR provider" in m for m in warning_messages)
@@ -881,7 +886,7 @@ class TestValidate:
             config.services = ServicesConfig(
                 asr="mock", tts="mock", agent="mock", vad="completely_fake_vad"
             )
-            config.validate()
+            config.validate_config()
             warning_messages = [c[0][0] for c in mock_logger_warning.call_args_list]
             vad_warnings = [m for m in warning_messages if "VAD" in m]
             assert len(vad_warnings) == 0

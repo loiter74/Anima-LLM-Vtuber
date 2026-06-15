@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 """Tests for CompileEngine layer progression."""
 
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from animetta.memory.v2.atom import MemoryAtom, Layer, RelationType
-from animetta.memory.v2.compile import CompileEngine, COMPILE_TRIGGERS, CompileTrigger
+import pytest
+
+from animetta.memory.v2.atom import Layer, MemoryAtom, RelationType
+from animetta.memory.v2.compile import COMPILE_TRIGGERS, CompileEngine
 
 
 def make_atom(layer: Layer, content: str, hours_ago: float = 2.0) -> MemoryAtom:
@@ -13,7 +15,7 @@ def make_atom(layer: Layer, content: str, hours_ago: float = 2.0) -> MemoryAtom:
         id=f"{layer.name}-{content[:8]}",
         layer=layer,
         content=content,
-        occurred_at=datetime.now(timezone.utc) - timedelta(hours=hours_ago),
+        occurred_at=datetime.now(UTC) - timedelta(hours=hours_ago),
         confidence=0.7,
     )
 
@@ -134,7 +136,7 @@ class TestCompileTriggers:
 def asyncio_run(coro):
     import asyncio
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
     # Already in event loop — create new one in thread

@@ -17,12 +17,12 @@ from loguru import logger
 
 from animetta.config.app import AppConfig
 from animetta.config.user import UserSettings
-from animetta.utils.logger_manager import logger_manager
-from animetta.orchestration.server.websocket import WebSocketServer, create_server
 from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
 from animetta.orchestration.graph.builder import set_external_checkpointer
+from animetta.orchestration.server.websocket import WebSocketServer, create_server
 from animetta.tracing.bootstrap import init_tracing
+from animetta.utils.logger_manager import logger_manager
 
 # Load environment variables from .env file (must be before other imports)
 try:
@@ -78,10 +78,7 @@ def init_config(config_path: str = None) -> None:
     """
     global global_config
 
-    if config_path:
-        global_config = AppConfig.from_yaml(config_path)
-    else:
-        global_config = AppConfig.load()
+    global_config = AppConfig.from_yaml(config_path) if config_path else AppConfig.load()
 
     logger.info(f"Configuration loaded: {global_config.system.host}:{global_config.system.port}")
 
@@ -226,21 +223,22 @@ def _wrap_with_frontend_serving(app):
         Wrapped ASGI app with frontend serving
     """
     import mimetypes
+
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import FileResponse
 
     # Resolve frontend/dist path (project_root/frontend/dist)
-    _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-    _FRONTEND_DIST = _PROJECT_ROOT / "frontend" / "dist"
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    frontend_dist = project_root / "frontend" / "dist"
 
-    if not _FRONTEND_DIST.is_dir():
-        logger.warning(f"[Frontend] frontend/dist not found: {_FRONTEND_DIST}")
+    if not frontend_dist.is_dir():
+        logger.warning(f"[Frontend] frontend/dist not found: {frontend_dist}")
         logger.warning("[Frontend] Static file serving disabled — run 'npm run build' in frontend/")
         return app
 
-    logger.info(f"[Frontend] Serving static files from: {_FRONTEND_DIST}")
+    logger.info(f"[Frontend] Serving static files from: {frontend_dist}")
 
-    _INDEX_HTML = _FRONTEND_DIST / "index.html"
+    index_html = frontend_dist / "index.html"
 
     class FrontendServingMiddleware(BaseHTTPMiddleware):
         """Middleware that serves frontend static files for SPA deployment.
@@ -258,7 +256,7 @@ def _wrap_with_frontend_serving(app):
                 return await call_next(request)
 
             # Try to serve exact file match from frontend/dist
-            file_path = _FRONTEND_DIST / path.lstrip("/")
+            file_path = frontend_dist / path.lstrip("/")
             if file_path.is_file():
                 mime_type, _ = mimetypes.guess_type(str(file_path))
                 return FileResponse(
@@ -268,8 +266,8 @@ def _wrap_with_frontend_serving(app):
 
             # SPA fallback: serve index.html for all non-API, non-file routes
             # This enables client-side routing (Vue Router history mode)
-            if _INDEX_HTML.is_file():
-                return FileResponse(str(_INDEX_HTML), media_type="text/html")
+            if index_html.is_file():
+                return FileResponse(str(index_html), media_type="text/html")
 
             # No frontend built — fall through to backend
             return await call_next(request)

@@ -12,20 +12,40 @@ __author__ = "Animetta Team"
 
 # Lazy imports to avoid ImportError when dependencies are not installed
 # (e.g., during package installation or when running scripts that don't need all modules)
-def __getattr__(name):
-    if name in ("AgentConfig", "AppConfig", "ASRConfig", "LLMConfig", 
-                "PersonaConfig", "SystemConfig", "TTSConfig"):
-        from .config import (
-            AgentConfig, AppConfig, ASRConfig, LLMConfig,
-            PersonaConfig, SystemConfig, TTSConfig,
-        )
-        return locals()[name]
-    elif name == "ServiceContext":
+def __getattr__(name: str):
+    if name == "AgentConfig":
+        from .config import AgentConfig
+        return AgentConfig
+    if name == "AppConfig":
+        from .config import AppConfig
+        return AppConfig
+    if name == "ASRConfig":
+        from .config import ASRConfig
+        return ASRConfig
+    if name == "LLMConfig":
+        from .config import LLMConfig
+        return LLMConfig
+    if name == "PersonaConfig":
+        from .config import PersonaConfig
+        return PersonaConfig
+    if name == "SystemConfig":
+        from .config import SystemConfig
+        return SystemConfig
+    if name == "TTSConfig":
+        from .config import TTSConfig
+        return TTSConfig
+    if name == "ServiceContext":
         from .core.service_context import ServiceContext
         return ServiceContext
-    elif name in ("ASRInterface", "LLMInterface", "TTSInterface"):
-        from .services import ASRInterface, LLMInterface, TTSInterface
-        return locals()[name]
+    if name == "ASRInterface":
+        from .services import ASRInterface
+        return ASRInterface
+    if name == "LLMInterface":
+        from .services import LLMInterface
+        return LLMInterface
+    if name == "TTSInterface":
+        from .services import TTSInterface
+        return TTSInterface
     raise AttributeError(f"module 'animetta' has no attribute {name!r}")
 
 __all__ = [

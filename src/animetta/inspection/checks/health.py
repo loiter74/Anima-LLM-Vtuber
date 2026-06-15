@@ -179,18 +179,17 @@ async def _probe_metrics_endpoint() -> bool:
 
     try:
         url = "http://localhost:12394/metrics"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=METRICS_TIMEOUT)) as resp:
-                if resp.status != 200:
-                    logger.warning(f"[health/metrics] unexpected status {resp.status}")
-                    return False
-                text = await resp.text()
-                # Check for expected counter patterns
-                expected_patterns = ["anima_", "http_request", "process_"]
-                found = any(pattern in text for pattern in expected_patterns)
-                if not found:
-                    logger.debug("[health/metrics] no expected metric patterns, but endpoint OK")
-                return True
+        async with aiohttp.ClientSession() as session, session.get(url, timeout=aiohttp.ClientTimeout(total=METRICS_TIMEOUT)) as resp:
+            if resp.status != 200:
+                logger.warning(f"[health/metrics] unexpected status {resp.status}")
+                return False
+            text = await resp.text()
+            # Check for expected counter patterns
+            expected_patterns = ["anima_", "http_request", "process_"]
+            found = any(pattern in text for pattern in expected_patterns)
+            if not found:
+                logger.debug("[health/metrics] no expected metric patterns, but endpoint OK")
+            return True
     except aiohttp.ClientConnectorError:
         logger.debug("[health/metrics] metrics endpoint not reachable — not configured")
         return True
@@ -208,17 +207,12 @@ async def _probe_llm_connectivity() -> bool:
     Reads from module-level cache populated by ServiceContext at startup
     and refreshed periodically by the inspection scheduler.
     """
-    import time as time_mod
 
     status = _llm_connectivity_cache.get("ok")
     if status is None:
         logger.debug("[health/llm_connectivity] probe not yet executed — returning pending")
         return True  # Not a failure—just hasn't run yet
-    if status is True:
-        return True
-    # Cache has ok=False — record the error in the check result
-    # We return False so the caller creates a CheckResult.failed()
-    return False
+    return status is True
 
 
 # ── Check registry ──────────────────────────────────────────

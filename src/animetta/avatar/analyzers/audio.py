@@ -9,7 +9,6 @@ from loguru import logger
 
 try:
     from pydub import AudioSegment
-    from pydub.utils import mediainfo
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False

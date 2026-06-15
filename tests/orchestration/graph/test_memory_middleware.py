@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from animetta.orchestration.graph.memory_middleware import MemoryMiddleware
+
 """Tests for MemoryMiddleware — memory injection before/after LLM."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 class TestMemoryMiddleware:

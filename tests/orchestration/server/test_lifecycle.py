@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 """Tests for LifecycleManager — signal handlers, cleanup callbacks, shutdown flag."""
 
-import signal
 import asyncio
-import pytest
+import signal
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from animetta.orchestration.server.lifecycle import LifecycleManager
-
-
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -85,7 +86,9 @@ class TestRegisterCleanupCallback:
 
     def test_register_adds_callback(self, lifecycle):
         """register_cleanup_callback appends to callbacks list."""
-        cb = lambda: None
+
+        def cb():
+            return None
         lifecycle.register_cleanup_callback(cb)
         assert cb in lifecycle._cleanup_callbacks
         assert len(lifecycle._cleanup_callbacks) == 1

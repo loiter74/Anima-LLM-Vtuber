@@ -1,11 +1,18 @@
 from __future__ import annotations
+
 """Tests for BilibiliInteractionLearner — danmaku processing, pattern analysis."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.services.bilibili import InteractionLearner, InteractionPattern, LivestreamStrategy, DanmakuMessage
+
+from animetta.services.bilibili import (
+    DanmakuMessage,
+    InteractionLearner,
+    InteractionPattern,
+    LivestreamStrategy,
+)
 
 
 @pytest.fixture
@@ -153,7 +160,7 @@ class TestBilibiliInteractionLearner:
     async def test_collect_danmaku_no_bilibili_api(self, mock_llm):
         """If bilibili_api is not importable, returns empty list."""
 
-        learner = InteractionLearner(llm_client=mock_llm)
+        InteractionLearner(llm_client=mock_llm)
 
         import sys
 

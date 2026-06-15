@@ -1,19 +1,21 @@
 from __future__ import annotations
+
 from animetta.config.core.registry import ProviderRegistry
-from animetta.services.llm import LLMFactory
-from animetta.services.llm import MockLLM
-from animetta.services.vad import MockVAD
-from animetta.services.vad import VADFactory
+from animetta.orchestration.graph.output_node import output_node
+from animetta.services.llm import LLMFactory, MockLLM
+from animetta.services.vad import MockVAD, VADFactory
+
 """
 主链路 Bug 修复自动化测试
 
 覆盖：VAD/LLM 服务注册与降级、output_node 事件推送
 """
 
-import pytest
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # 确保项目 src 在 path 中
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -108,7 +110,7 @@ class TestOutputNodeExpression:
         # 验证 expression 事件被发送
         expression_calls = [
             c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "expression"
+            if c.args[0] == "chat:expression"
         ]
         assert len(expression_calls) == 1, f"expression 事件未发送, calls: {mock_sio.emit.call_args_list}"
         payload = expression_calls[0].args[1]
@@ -154,7 +156,7 @@ class TestOutputNodeVolumes:
         # 验证 audio_with_expression 包含 volumes
         audio_calls = [
             c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "audio_with_expression"
+            if c.args[0] == "chat:audio_with_expression"
         ]
         assert len(audio_calls) == 1, "audio_with_expression 事件未发送"
         payload = audio_calls[0].args[1]
@@ -191,7 +193,7 @@ class TestOutputNodeControlSignals:
 
         control_calls = [
             c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "control"
+            if c.args[0] == "chat:control"
         ]
 
         signals = [c.args[1]["signal"] for c in control_calls]

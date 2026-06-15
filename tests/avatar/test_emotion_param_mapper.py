@@ -1,14 +1,16 @@
 from __future__ import annotations
-from animetta.avatar.mappers.emotion_param_mapper import EmotionParamMapper, DEFAULT_EMOTION_MAPPINGS
+
 from animetta.avatar.mappers.base import ExpressionFrame
+from animetta.avatar.mappers.emotion_param_mapper import (
+    DEFAULT_EMOTION_MAPPINGS,
+    EmotionParamMapper,
+)
+
 """
 Tests for EmotionParamMapper — emotion to Live2D parameter mapping.
 """
 
-import pytest
 from unittest.mock import patch
-
-
 
 # ============================================================
 # Initialization

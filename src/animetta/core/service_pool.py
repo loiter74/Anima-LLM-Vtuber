@@ -28,6 +28,7 @@ class ServicePool:
     _tts: Any | None = None
     _asr: Any | None = None
     _ready: bool = False
+    _ctx: Any | None = None
 
     # ── Lifecycle ──────────────────────────────────────────
 
@@ -69,8 +70,7 @@ class ServicePool:
             await ctx.vad_engine.close()
             ctx.vad_engine = None
         if ctx.memory_system is not None:
-            await ctx.memory_system.stop()
-            ctx.memory_system.close()
+            await ctx.memory_system.shutdown()
             ctx.memory_system = None
         if ctx.emotion_analyzer is not None:
             ctx.emotion_analyzer = None

@@ -154,7 +154,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     def on_chain_start(
         self, serialized: dict[str, Any], inputs: dict[str, Any], *,
-        run_id: Any, parent_run_id: Any = None, **kwargs: Any
+        run_id: Any, _parent_run_id: Any = None, **kwargs: Any
     ) -> None:
         # Guard: LangGraph internal chains may pass None serialized/inputs
         if not serialized or not isinstance(serialized, dict):

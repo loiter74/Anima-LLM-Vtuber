@@ -1,24 +1,24 @@
 # ANIMETTA PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-06-03
-**Commit:** 1435204
+**Generated:** 2026-06-15
+**Commit:** 10735c3
 **Branch:** main
 
 > Primary knowledge base: [CLAUDE.md](CLAUDE.md). This AGENTS.md is the quick-reference map.
-> Sub-AGENTS.md: [src/animetta/](src/animetta/AGENTS.md) · [orchestration/](src/animetta/orchestration/AGENTS.md) · [services/](src/animetta/services/AGENTS.md) · [memory/](src/animetta/memory/AGENTS.md) · [config/](src/animetta/config/AGENTS.md) · [tools/](src/animetta/tools/AGENTS.md) · [avatar/](src/animetta/avatar/AGENTS.md) · [inspection/](src/animetta/inspection/AGENTS.md) · [frontend/](frontend/AGENTS.md) · [design-system/](design-system/AGENTS.md) · [evaluations/](evaluations/AGENTS.md)
+> Sub-AGENTS.md: [src/animetta/](src/animetta/AGENTS.md) · [src/animetta/core/](src/animetta/core/AGENTS.md) · [orchestration/](src/animetta/orchestration/AGENTS.md) · [orchestration/graph/](src/animetta/orchestration/graph/AGENTS.md) · [services/](src/animetta/services/AGENTS.md) · [memory/](src/animetta/memory/AGENTS.md) · [config/](src/animetta/config/AGENTS.md) · [tools/](src/animetta/tools/AGENTS.md) · [tools/minecraft/](src/animetta/tools/minecraft/AGENTS.md) · [avatar/](src/animetta/avatar/AGENTS.md) · [inspection/](src/animetta/inspection/AGENTS.md) · [frontend/](frontend/AGENTS.md) · [design-system/](design-system/AGENTS.md) · [evaluations/](evaluations/AGENTS.md) · [tests/](tests/AGENTS.md) · [docs/adrs/](docs/adrs/AGENTS.md)
 
 ## OVERVIEW
 
-AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + Socket.IO) + Vue 3 Electron frontend + Live2D avatar.
+AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph + Socket.IO ASGI**, not FastAPI despite legacy docs) + Vue 3 Electron frontend + Live2D avatar.
 
 ## STRUCTURE
 
 ```
 ./
-├── src/animetta/              # Python backend (~423 files, 30K+ lines)
-│   ├── core/               # Entry point + service container (6 files)
+├── src/animetta/              # Python backend (~409 files, 37K+ lines Python + 11K TS/Vue)
+│   ├── core/               # Entry + service container (socketio_server, service_pool, model_loading_manager, redis_checkpoint)
 │   ├── orchestration/      # LangGraph state graph + WebSocket server
-│   ├── services/           # LLM / ASR / TTS / VAD / Singing / Meme implementations
+│   ├── services/           # LLM / ASR / TTS / VAD / Singing / Meme / Live2D / Bilibili
 │   ├── memory/             # V2 atom-based memory (Chroma + SQLite FTS5)
 │   ├── config/             # Pydantic configs + @ProviderRegistry
 │   ├── avatar/             # Live2D emotion/expression analysis
@@ -27,11 +27,11 @@ AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + S
 │   ├── notifier/           # Alert channels (Discord, Feishu, Email)
 │   ├── inspection/         # Health/telemetry background checks
 │   └── utils/              # Helpers
-├── frontend/               # Vue 3 + TypeScript + Vite (UnoCSS, Pinia, pixi.js)
+├── frontend/               # Vue 3 + TypeScript + Vite (UnoCSS, Pinia, pixi.js, Electron)
 ├── config/                 # YAML config files (personas, services, tools, singing)
-├── tests/                  # pytest suite (120 files)
-├── docs/                   # ADRs, plans, benchmarks
-├── scripts/                # start.py, stop.py, benchmarks, model downloads (29 files)
+├── tests/                  # pytest suite (120 files, asyncio_mode=auto)
+├── docs/                   # ADRs (11), plans, benchmarks, AIRI Stage UI Kit (16MB ⚠️)
+├── scripts/                # anima_cli (RVC training), bench (39KB), validate-events
 ├── design-system/          # Visual design spec (HTML spec sheets from uno.config.ts)
 ├── evaluations/            # Standalone RAG evaluation framework (Python)
 ├── observability/          # Docker-compose for Grafana/Prometheus/Tempo/Loki/OTel stack
@@ -48,7 +48,7 @@ AI virtual companion / VTuber framework. Python backend (FastAPI + LangGraph + S
 | Add graph node | `src/animetta/orchestration/graph/` | Follow node pattern in `__init__.py` |
 | Add tool | `src/animetta/tools/base.py` or `custom_tools.py` | Use `@tool` decorator |
 | Add persona | `config/personas/` + `src/animetta/config/persona/` | YAML + Pydantic |
-| Fix WebSocket route | `src/animetta/orchestration/server/routes.py` | **395 lines - known hotspot** |
+| Fix WebSocket route | `src/animetta/orchestration/server/routes.py` | **386 lines - known hotspot** |
 | Change memory behavior | `src/animetta/memory/v2/` | Atom-based V2 architecture, see ADR-005 |
 | Fix Live2D expression | `src/animetta/avatar/` + `frontend/src/components/live2d/` | |
 | Add singing feature | `src/animetta/services/singing/` | RVC/SVC pipeline + mixer |
@@ -125,14 +125,13 @@ docker compose down
 - ❌ Never reuse previous Playwright/QA results — always re-capture fresh test data
 - ❌ Never skip the Docker startup protocol after code changes — curl-polling is mandatory, not optional
 - ❌ Never assume process exit = service ready — port listening + HTTP 200 is the only valid success signal
-- ❌ Never assume process exit = service ready — port listening + HTTP 200 is the only valid success signal
 
 ## DEPRECATED
 
-| Item | Location | Replacement |
-|------|----------|-------------|
-| `--mode` flag | `scripts/start.py` | No effect, prints warning |
-| `--no-app` flag | `scripts/start.py` | Use `--no-frontend` |
+| Item | Location | Notes |
+|------|----------|-------|
+| `scripts/start.py` | **REMOVED** — references are stale | Use `python -m animetta.core.socketio_server` directly |
+| `--mode` / `--no-app` flags | (were in scripts/start.py) | No effect; file is gone |
 
 ## COMMANDS
 
@@ -202,11 +201,11 @@ When delegating an implementation task (always use `deep` or `unspecified-high`)
 ## NOTES
 
 - `orchestration/server/routes.py` at 386 lines is a known hotspot — thin dispatch preferred
-- Backend coverage at ~70%, targeting 70%. Frontend test coverage: 0% (being set up).
-- 5 ADRs in `docs/adrs/`: LangGraph, Hybrid Search, Plugin Architecture, Streaming, Wiki Memory
+- Backend coverage at ~70%, targeting 70%. Frontend has 20 vitest test files (happy-dom env, `src/**/*.test.ts`).
+- 11 ADRs in `docs/adrs/`: LangGraph, Hybrid Search, Plugin Architecture, Streaming, Wiki Memory, +6 more (see [docs/adrs/AGENTS.md](docs/adrs/AGENTS.md))
 - Two runtime data directories: `data/` (chroma_db, stats) + `memory_db/` (wiki, chroma, sqlite, raw) — designed split
 - TTS has 9 providers with core/contrib layering (see services/AGENTS.md)
-- `tools/minecraft/bot/` is a Node.js package embedded in the Python tree — cross-language hybrid
+- `tools/minecraft/bot/` is a Node.js package embedded in the Python tree — cross-language hybrid (see [tools/minecraft/AGENTS.md](src/animetta/tools/minecraft/AGENTS.md))
 - Frontend runs as Vite dev server (port 3000); Electron builder not yet configured
 - Notifier has 3 channels: Discord, Feishu, Email
 - Inspection scheduler runs background health checks every N hours, results in StatsStore

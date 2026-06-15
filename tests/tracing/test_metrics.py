@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 """Tests for metrics.py — OTel MeterProvider initialization and instruments."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import animetta.tracing.metrics as metrics_mod
 
 
 class TestInitMetrics:

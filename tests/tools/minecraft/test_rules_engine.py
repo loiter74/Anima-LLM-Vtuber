@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 from animetta.tools.minecraft.rules_engine import RulesEngine
+
 """Tests for RulesEngine action validation and rule querying.
 
 Note: Integration-style tests (file I/O) already exist in test_minecraft_autonomous.py.
 These tests focus on mocking file I/O for isolated unit tests of the engine logic.
 """
 
-import pytest
-import yaml
 import os
 import tempfile
-from unittest.mock import patch, MagicMock
+
+import pytest
+import yaml
 
 
 def _make_rules_yaml(overrides: dict = None) -> dict:

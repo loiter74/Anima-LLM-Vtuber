@@ -1,9 +1,13 @@
 from __future__ import annotations
-from animetta.services.asr import ASRFactory
-from animetta.services.asr import ASRInterface
-from animetta.services.asr import FasterWhisperASR
-from animetta.services.asr import FunASRASR
-from animetta.services.asr import GLMASR
+
+from animetta.config.providers.asr import (
+    FasterWhisperASRConfig,
+    FunASRConfig,
+    GLMASRConfig,
+    MockASRConfig,
+)
+from animetta.services.asr import GLMASR, ASRFactory, ASRInterface, FasterWhisperASR, FunASRASR
+
 """
 Tests for ASR provider implementations.
 
@@ -20,9 +24,9 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
-from animetta.services.asr import MockASR, ASRFactory, ASRInterface, FasterWhisperASR, FunASRASR, GLMASR
+
+from animetta.services.asr import MockASR
 
 # ── Module-level sys.modules injection ──────────────────────────────
 # External packages imported INSIDE methods (lazy imports). We inject
@@ -504,7 +508,7 @@ class TestASRFactory:
         config = ASRFactory._build_config("nonexistent", {})
         assert config is None
 
-    def test_get_available_providers(self):
-        """get_available_providers should return a list of provider names."""
-        providers = ASRFactory.get_available_providers()
+    def test_get_available_configs(self):
+        """get_available_configs should return a list of provider names."""
+        providers = ASRFactory.get_available_configs()
         assert isinstance(providers, list)

@@ -1,14 +1,14 @@
 from __future__ import annotations
+
 """Tests for AsyncRedisSaver — Redis-backed LangGraph checkpoint persistence."""
 
 import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from animetta.core.redis_checkpoint import AsyncRedisSaver
 from langgraph.checkpoint.base import CheckpointTuple
 
-
+from animetta.core.redis_checkpoint import AsyncRedisSaver
 
 # ── Fixtures ───────────────────────────────────────────────────────
 

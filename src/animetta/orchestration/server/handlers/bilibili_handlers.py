@@ -10,7 +10,9 @@ import time
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
 from animetta.services.bilibili import DanmakuService
+
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:

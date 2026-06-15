@@ -112,7 +112,7 @@ async def main():
 
         try:
             await asyncio.wait_for(complete.wait(), timeout=args.timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print(f"  [WARN] Timed out after {args.timeout}s")
 
     await sio.disconnect()

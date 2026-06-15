@@ -1,7 +1,17 @@
 from __future__ import annotations
+
 """Tests for custom_tools module (url_preview, send_email, image_gen)."""
 
 import pytest
+
+import animetta.tools.custom_tools as custom_tools
+from animetta.tools.custom_tools import (
+    CUSTOM_TOOLS,
+    get_custom_tools,
+    image_gen,
+    send_email,
+    url_preview,
+)
 
 
 class TestCustomToolsModule:

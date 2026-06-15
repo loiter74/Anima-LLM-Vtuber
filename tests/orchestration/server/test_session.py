@@ -1,12 +1,12 @@
 from __future__ import annotations
+
 """Tests for SessionManager — context, orchestrator, audio processor lifecycle."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from animetta.orchestration.server.session import SessionManager
-from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
-
-
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ class TestGetOrCreateContext:
             )
 
             config = MagicMock()
-            ctx = await session_manager.get_or_create_context("sid2", config, MagicMock())
+            await session_manager.get_or_create_context("sid2", config, MagicMock())
 
             mock_ctx.load_from_config.assert_called_once()
             mock_ctx.load_cache.assert_not_called()
@@ -183,12 +183,10 @@ class TestGetOrCreateOrchestrator:
     async def test_creates_new_orchestrator(self, session_manager, monkeypatch):
         """get_or_create_orchestrator creates a LangGraphOrchestrator."""
         mock_orch = MagicMock()
-        mock_factory = MagicMock()
-        mock_factory.create = AsyncMock(return_value=mock_orch)
 
         monkeypatch.setattr(
-            "animetta.orchestration.graph.orchestrator.LangGraphOrchestratorFactory",
-            mock_factory,
+            "animetta.orchestration.graph.orchestrator.LangGraphOrchestrator.create",
+            AsyncMock(return_value=mock_orch),
         )
         monkeypatch.setattr(
             "animetta.orchestration.server.session.SessionManager._load_tools_config",
@@ -220,12 +218,11 @@ class TestGetOrCreateOrchestrator:
     async def test_orchestrator_lock_prevents_duplicates(self, session_manager, monkeypatch):
         """The orchestrator lock ensures only one is created per sid."""
         mock_orch = MagicMock()
-        mock_factory = MagicMock()
-        mock_factory.create = AsyncMock(return_value=mock_orch)
+        create_mock = AsyncMock(return_value=mock_orch)
 
         monkeypatch.setattr(
-            "animetta.orchestration.graph.orchestrator.LangGraphOrchestratorFactory",
-            mock_factory,
+            "animetta.orchestration.graph.orchestrator.LangGraphOrchestrator.create",
+            create_mock,
         )
         monkeypatch.setattr(
             "animetta.orchestration.server.session.SessionManager._load_tools_config",
@@ -244,7 +241,7 @@ class TestGetOrCreateOrchestrator:
         )
 
         assert orch1 is orch2
-        assert mock_factory.create.call_count == 1
+        assert create_mock.call_count == 1
 
     def test_get_orchestrator_returns_none_for_missing(self, session_manager):
         """get_orchestrator returns None for unknown sid."""

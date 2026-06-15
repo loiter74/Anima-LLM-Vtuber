@@ -167,7 +167,7 @@ class ITimelineStrategy(ABC):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **kwargs
+        **_kwargs
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline

@@ -1,6 +1,5 @@
 """Tests for CharacterMemoryFilter — boundary filtering and MBTI ranking."""
 
-import pytest
 from datetime import UTC, datetime
 
 from animetta.memory.v2.atom import Layer, MemoryAtom

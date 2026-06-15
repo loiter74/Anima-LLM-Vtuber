@@ -1,15 +1,16 @@
 from __future__ import annotations
+
 """Tests for BilibiliDanmakuService — connect/disconnect/reconnect lifecycle.
 
 Uses @patch + sys.modules manipulation to mock bilibili_api at module level.
 """
 
-import asyncio
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from animetta.services.bilibili import DanmakuService, DanmakuMessage, DanmakuReply
+
+from animetta.services.bilibili import DanmakuMessage, DanmakuReply, DanmakuService
 
 pytestmark = pytest.mark.slow
 
@@ -125,7 +126,7 @@ class TestBilibiliDanmakuService:
 
     def test_start_creates_thread(self, service):
         """start() should create and start a daemon thread."""
-        with patch.object(service, "_run_event_loop") as mock_run:
+        with patch.object(service, "_run_event_loop"):
             service.start()
             assert service._running is True
             assert service._thread is not None
@@ -135,7 +136,7 @@ class TestBilibiliDanmakuService:
 
     def test_start_idempotent(self, service):
         """Calling start() twice should not create a second thread."""
-        with patch.object(service, "_run_event_loop") as mock_run:
+        with patch.object(service, "_run_event_loop"):
             service.start()
             thread_id = id(service._thread)
             service.start()  # second call — warning, no-op
@@ -193,9 +194,8 @@ class TestBilibiliDanmakuService:
         with patch.object(service, "_connect_and_listen", side_effect=ConnectionError("fail")):
             # Set max_retries to 2 so it doesn't loop forever
             service.max_retries = 2
-            with patch.object(service, "_notify_status") as mock_notify:
-                with patch("asyncio.sleep", AsyncMock()):
-                    await service._run()
+            with patch.object(service, "_notify_status"), patch("asyncio.sleep", AsyncMock()):
+                await service._run()
 
         # After 2 retries, delay should be: 1.0 * 2 * 2 = 4.0
         assert service._reconnect_delay == 4.0
@@ -206,9 +206,8 @@ class TestBilibiliDanmakuService:
         service._running = True
         service._reconnect_delay = 8.0
 
-        with patch.object(service, "_connect_and_listen", AsyncMock()):
-            with patch("asyncio.sleep", AsyncMock()):
-                await service._run()
+        with patch.object(service, "_connect_and_listen", AsyncMock()), patch("asyncio.sleep", AsyncMock()):
+            await service._run()
 
         assert service._reconnect_delay == 1.0
 
@@ -218,10 +217,8 @@ class TestBilibiliDanmakuService:
         service._running = True
         service.max_retries = 1
 
-        with patch.object(service, "_connect_and_listen", side_effect=ConnectionError("fail")):
-            with patch.object(service, "_notify_status") as mock_notify:
-                with patch("asyncio.sleep", AsyncMock()):
-                    await service._run()
+        with patch.object(service, "_connect_and_listen", side_effect=ConnectionError("fail")), patch.object(service, "_notify_status") as mock_notify, patch("asyncio.sleep", AsyncMock()):
+            await service._run()
 
         # Should have notified about max retries
         mock_notify.assert_any_call(False, "Max retries reached: fail")

@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 """Tests for Live2DManager — action queue, policy, callback execution, lazy init."""
 
-import pytest
-from animetta.orchestration.server.live2d import Live2DManager
 from unittest.mock import AsyncMock, MagicMock, patch
-from animetta.services.live2d.action_queue import Live2DActionQueue
 
+import pytest
 
+from animetta.orchestration.server.live2d import Live2DManager
+from animetta.services.live2d.action_queue import QueuePolicy
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ class TestLive2DManagerInit:
 
     def test_is_initialized_true_after_access(self, live2d_manager):
         """is_initialized returns True after accessing action_queue."""
-        with patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with patch("animetta.orchestration.server.live2d.Live2DActionQueue") as mock_q:
             mock_q.return_value = MagicMock()
             _ = live2d_manager.action_queue
             assert live2d_manager.is_initialized() is True
@@ -70,7 +71,7 @@ class TestLazyInit:
 
     def test_action_queue_lazy_init(self, live2d_manager):
         """action_queue lazily creates Live2DActionQueue on first access."""
-        with patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with patch("animetta.orchestration.server.live2d.Live2DActionQueue") as mock_q:
             mock_instance = MagicMock()
             mock_q.return_value = mock_instance
 
@@ -81,7 +82,7 @@ class TestLazyInit:
 
     def test_action_queue_caches_instance(self, live2d_manager):
         """Second access returns the same cached instance."""
-        with patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with patch("animetta.orchestration.server.live2d.Live2DActionQueue") as mock_q:
             mock_q.return_value = MagicMock(name="cq")
 
             q1 = live2d_manager.action_queue
@@ -200,7 +201,7 @@ class TestEnqueueAction:
     @pytest.mark.asyncio
     async def test_enqueue_triggers_lazy_init(self, live2d_manager, mock_action_message):
         """enqueue_action triggers lazy initialization of action_queue."""
-        with patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with patch("animetta.orchestration.server.live2d.Live2DActionQueue") as mock_q:
             mock_instance = MagicMock()
             mock_instance.enqueue = AsyncMock(return_value={"ok": True})
             mock_q.return_value = mock_instance
@@ -215,7 +216,7 @@ class TestEnqueueAction:
     @pytest.mark.asyncio
     async def test_enqueue_default_policy_is_append(self, live2d_manager, mock_action_message):
         """Default queue policy is 'append'."""
-        with patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with patch("animetta.orchestration.server.live2d.Live2DActionQueue") as mock_q:
             mock_instance = MagicMock()
             mock_instance.enqueue = AsyncMock(return_value={"ok": True})
             mock_q.return_value = mock_instance
