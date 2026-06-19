@@ -27,6 +27,15 @@ tts:
     type: mock
 
 llm:
+  mimo:
+    memory_enabled: true
+    llm_config:
+      type: openai
+      api_key: tp-cnw2lg3ag0pm5au71lp3e34xmg2d1mct7dprkc3pzpmbuxhx
+      model: mimo-v2.5-pro
+      base_url: https://token-plan-cn.xiaomimimo.com/v1
+      temperature: 0.7
+      max_tokens: 4096
   deepseek:
     memory_enabled: true
     llm_config:

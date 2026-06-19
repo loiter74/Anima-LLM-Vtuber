@@ -14,7 +14,8 @@ persona: "soujuurou"
 services:
   asr: mock  # 使用 mock ASR（funasr 未安装）
   tts: kusajuro_vc   # 草十郎 Qwen TTS 声音克隆
-  agent: deepseek  # 底座LLM：DeepSeek V4（OpenAI API 兼容）
+  agent: mimo  # 底座LLM：小米 MiMo Pro 2
+  # agent: deepseek  # 备选：DeepSeek V4
   # local_llm: local_lora  # 本地LLM：LocalLoraLLM（简单应答，无persona，保留LoRA效果）- 已禁用
   vad: silero   # vad: silero / mock
 
