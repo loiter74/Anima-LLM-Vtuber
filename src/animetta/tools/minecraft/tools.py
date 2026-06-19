@@ -63,7 +63,7 @@ def get_minecraft_tools() -> list[Any]:
     Returns:
         List of LangChain tool objects
     """
-    return [mc_goto, mc_mine, mc_build, mc_attack, mc_chat, mc_status, mc_goal, mc_stop, mc_collect]
+    return [mc_goto, mc_mine, mc_build, mc_attack, mc_chat, mc_status, mc_goal, mc_stop, mc_collect, mc_craft, mc_smelt, mc_recipes]
 
 
 # Import asyncio for bridge initialization
@@ -215,3 +215,36 @@ async def mc_collect(block_type: str, count: int = 1) -> str:
         count: Number of blocks to collect (default: 1)
     """
     return await _send("collect", {"block_type": block_type, "count": min(count, 64)})
+
+
+@tool
+async def mc_craft(recipe: str, count: int = 1) -> str:
+    """Craft items in Minecraft. Requires sufficient materials in inventory.
+
+    Args:
+        recipe: Item name to craft (e.g. 'oak_planks', 'stick', 'stone_pickaxe', 'crafting_table')
+        count: Number of items to craft (default: 1, max: 64)
+    """
+    return await _send("craft", {"recipe": recipe, "count": min(count, 64)})
+
+
+@tool
+async def mc_smelt(item: str, fuel: str, count: int = 1) -> str:
+    """Smelt items in a furnace. Requires a furnace nearby and fuel in inventory.
+
+    Args:
+        item: Item to smelt (e.g. 'iron_ore', 'sand', 'raw_iron')
+        fuel: Fuel to use (e.g. 'coal', 'oak_log', 'charcoal')
+        count: Number of items to smelt (default: 1, max: 64)
+    """
+    return await _send("smelt", {"item": item, "fuel": fuel, "count": min(count, 64)})
+
+
+@tool
+async def mc_recipes(item: str) -> str:
+    """Query crafting recipes for an item. Shows required materials.
+
+    Args:
+        item: Item name to query (e.g. 'stone_pickaxe', 'furnace', 'iron_ingot')
+    """
+    return await _send("recipes", {"item": item})

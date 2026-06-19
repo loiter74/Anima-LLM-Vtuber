@@ -5,21 +5,12 @@
  * - planner: autonomous plan execution with state transitions
  * - rule: passive, waits for Python commands (existing behavior)
  */
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-
-const { 
-    StateTransition,
-    BotStateMachine,
-    NestedStateMachine
-} = require('mineflayer-statemachine');
 
 // ── Mode management ──
 let currentMode = 'rule';     // 'planner' | 'rule'
 let plan = [];               // Current plan steps
 let planStep = 0;            // Current step index
 let planStepStatus = {};     // Per-step status tracking
-let stateMachine = null;
 let onPlanComplete = null;   // Callback when plan finishes
 
 export function getMode() { return currentMode; }

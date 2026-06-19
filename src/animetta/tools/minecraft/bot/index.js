@@ -55,6 +55,232 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
 
+// ── Core action functions (single source of truth) ──
+
+async function _goto(x, y, z) {
+  await setupMovements();
+  await bot.pathfinder.goto(new GoalBlock(Math.floor(x), Math.floor(y), Math.floor(z)));
+  return `Moved to (${x}, ${y}, ${z})`;
+}
+
+async function _explore_for_block(block_type, max_distance = 64, max_attempts = 5) {
+  const mcData = await getMcData();
+  const blockInfo = mcData.blocksByName[block_type];
+  if (!blockInfo) throw new Error(`Unknown block: ${block_type}`);
+  
+  for (let i = 0; i < max_attempts; i++) {
+    // Check if block is already nearby
+    const block = bot.findBlock({ matching: blockInfo.id, maxDistance: max_distance });
+    if (block) {
+      return `Found ${block_type} at (${block.position.x}, ${block.position.y}, ${block.position.z})`;
+    }
+    
+    // Random walk
+    const dx = Math.floor(Math.random() * 20) - 10;
+    const dz = Math.floor(Math.random() * 20) - 10;
+    const targetX = bot.entity.position.x + dx;
+    const targetZ = bot.entity.position.z + dz;
+    
+    try {
+      await bot.pathfinder.goto(new GoalBlock(targetX, bot.entity.position.y, targetZ));
+    } catch (e) {
+      // Ignore pathfinding errors
+    }
+    
+    // Wait a bit for blocks to load
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  throw new Error(`Could not find ${block_type} after ${max_attempts} exploration attempts`);
+}
+
+async function _mine(block_type, count = 1) {
+  const mcData = await setupMovements();
+  const bi = mcData.blocksByName[block_type];
+  if (!bi) throw new Error(`Unknown block: ${block_type}`);
+  
+  let mined = 0;
+  for (let i = 0; i < count; i++) {
+    let b = bot.findBlock({ matching: bi.id, maxDistance: 10 });
+    
+    // If not found nearby, explore
+    if (!b) {
+      try {
+        await _explore_for_block(block_type, 32, 5);
+        b = bot.findBlock({ matching: bi.id, maxDistance: 32 });
+      } catch (e) {
+        // Exploration failed, try one more time
+      }
+    }
+    
+    if (!b) throw new Error(`No more ${block_type}, mined ${mined}`);
+    await bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z));
+    await bot.dig(b);
+    mined++;
+  }
+  return `Mined ${mined} ${block_type}`;
+}
+
+async function _place(block_type, x, y, z) {
+  await setupMovements();
+  const ref = bot.blockAt(new Vec3(x, y - 1, z));
+  if (!ref || ref.name === 'air') throw new Error('No solid block below');
+  const item = bot.inventory.items().find(i => i.name === block_type);
+  if (!item) throw new Error(`No ${block_type} in inventory`);
+  await bot.equip(item, 'hand');
+  await bot.pathfinder.goto(new GoalBlock(x + 1, y, z));
+  await bot.placeBlock(ref, new Vec3(0, 1, 0));
+  return `Placed ${block_type} at (${x}, ${y}, ${z})`;
+}
+
+const HOSTILE_NAMES = ['zombie', 'skeleton', 'spider', 'creeper', 'witch', 'enderman', 'wither_skeleton'];
+
+async function _attack(target = 'nearest_hostile') {
+  await setupMovements();
+  let entity;
+  if (target === 'nearest_hostile') {
+    entity = bot.nearestEntity(e => {
+      const n = (e.name || '').toLowerCase();
+      return HOSTILE_NAMES.some(h => n.includes(h));
+    });
+  } else if (target === 'nearest_player') {
+    entity = bot.nearestEntity(e => e.type === 'player');
+  } else {
+    entity = bot.nearestEntity(e => e.name === target || (e.displayName && String(e.displayName) === target));
+  }
+  if (!entity) throw new Error(`Target not found: ${target}`);
+  await bot.pvp?.attack(entity);
+  return `Attacked ${entity.name || target}`;
+}
+
+async function _collect(block_type, count = 1) {
+  await setupMovements();
+  const collectBlock = await import('mineflayer-collectblock');
+  if (!bot.collectBlock) bot.loadPlugin(collectBlock.default || collectBlock);
+  await bot.collectBlock.collect(b => b.name === block_type, { maxCount: count });
+  return `Collected ${count} ${block_type}`;
+}
+
+async function _smart_goto(target_or_x, y, z) {
+  await setupMovements();
+  let targetPos;
+  if (typeof target_or_x === 'string') {
+    const mcData = await getMcData();
+    const blockInfo = mcData.blocksByName?.[target_or_x];
+    if (blockInfo) {
+      const block = bot.findBlock({ matching: blockInfo.id, maxDistance: 64 });
+      if (block) targetPos = block.position;
+    }
+    if (!targetPos) {
+      const entity = bot.nearestEntity(e => e.name?.toLowerCase().includes(target_or_x.toLowerCase()));
+      if (entity) targetPos = entity.position;
+    }
+    if (!targetPos) throw new Error(`Cannot find target: ${target_or_x}`);
+  } else {
+    targetPos = new Vec3(Math.floor(target_or_x || 0), Math.floor(y || 65), Math.floor(z || 0));
+  }
+  await bot.pathfinder.goto(new GoalBlock(targetPos.x, targetPos.y, targetPos.z));
+  return `Navigated to (${targetPos.x}, ${targetPos.y}, ${targetPos.z})`;
+}
+
+async function _smart_build(block_type, x, y, z, blueprint = 'platform') {
+  await setupMovements();
+  if (blueprint === 'platform') {
+    const bx = Math.floor(x) - 1, bz = Math.floor(z) - 1, by = Math.floor(y) - 1;
+    let placed = 0;
+    for (let dx = 0; dx < 3; dx++) {
+      for (let dz = 0; dz < 3; dz++) {
+        const pp = new Vec3(bx + dx, by, bz + dz);
+        const b = bot.blockAt(pp);
+        if (b && b.name === 'air') {
+          await bot.pathfinder.goto(new GoalBlock(pp.x, pp.y + 1, pp.z));
+          const ref = bot.blockAt(pp.offset(0, -1, 0));
+          if (ref && ref.name !== 'air') {
+            await bot.placeBlock(ref, new Vec3(0, 1, 0));
+            placed++;
+          }
+        }
+      }
+    }
+    return `Built ${placed} blocks`;
+  }
+  throw new Error(`Unknown blueprint: ${blueprint}`);
+}
+
+async function _craft(recipe, count = 1) {
+  const mcData = await getMcData();
+  const item = mcData.itemsByName[recipe];
+  if (!item) throw new Error(`Unknown item: ${recipe}`);
+  
+  // Try to find recipe
+  let recipes = bot.recipesFor(item.id, null, count, null) || [];
+  
+  // If no recipe found, try with crafting table
+  if (recipes.length === 0) {
+    const craftingTable = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 32 });
+    if (craftingTable) {
+      recipes = bot.recipesFor(item.id, null, count, craftingTable) || [];
+    }
+  }
+  
+  // If still no recipe, try to craft anyway (some items work without explicit recipe)
+  if (recipes.length === 0) {
+    // Try to craft with empty recipe (some items like oak_planks work this way)
+    try {
+      await bot.craft(bot.recipesFor(item.id, null, count, null)[0], count, null);
+      return `Crafted ${count} ${recipe}`;
+    } catch (e) {
+      throw new Error(`No recipe for ${recipe}: ${e.message}`);
+    }
+  }
+  
+  await bot.craft(recipes[0], count, null);
+  return `Crafted ${count} ${recipe}`;
+}
+
+async function _smelt(item, fuel, count = 1) {
+  const mcData = await getMcData();
+  const furnaceBlock = bot.findBlock({ matching: mcData.blocksByName.furnace.id, maxDistance: 32 });
+  if (!furnaceBlock) throw new Error('No furnace nearby');
+  const furnace = await bot.openFurnace(furnaceBlock);
+  const inputItem = mcData.itemsByName[item];
+  const fuelItem = mcData.itemsByName[fuel];
+  if (!inputItem) throw new Error(`Unknown item: ${item}`);
+  if (!fuelItem) throw new Error(`Unknown fuel: ${fuel}`);
+  await furnace.putInput(inputItem.id, null, count);
+  await furnace.putFuel(fuelItem.id, null, Math.ceil(count / 8));
+  return `Smelting ${count} ${item} with ${fuel}`;
+}
+
+async function _recipes(item) {
+  const mcData = await getMcData();
+  const itemInfo = mcData.itemsByName[item];
+  if (!itemInfo) throw new Error(`Unknown item: ${item}`);
+  
+  // Try to find recipes with crafting table
+  let recipes = bot.recipesFor(itemInfo.id, null, 1, null) || [];
+  
+  // If no recipes found, try with crafting table
+  if (recipes.length === 0) {
+    const craftingTable = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 32 });
+    if (craftingTable) {
+      recipes = bot.recipesFor(itemInfo.id, null, 1, craftingTable) || [];
+    }
+  }
+  
+  if (recipes.length === 0) return `No recipes for ${item}`;
+  return recipes.map(r => {
+    const ingredients = (r.ingredients || []).map(i => {
+      if (typeof i === 'object') {
+        return i.name || `item(${i.id})`;
+      }
+      const b = mcData.blocks[i] || mcData.items[i];
+      return b ? b.name : `unknown(${i})`;
+    });
+    return `${item}: ${ingredients.join(' + ')}`;
+  }).join('\n');
+}
+
 // --- JSON line protocol helpers ---
 function sendResponse(id, status, result) {
   const msg = { id, status, result };
@@ -165,6 +391,8 @@ function startPlanLoop() {
         case 'mine': result = await handleMineInternal(params); break;
         case 'place': result = await handlePlaceInternal(params); break;
         case 'smart_build': result = await handleSmartBuildInt(params); break;
+        case 'craft': result = await _craft(params.recipe, params.count || 1); break;
+        case 'smelt': result = await _smelt(params.item, params.fuel, params.count || 1); break;
         case 'chat': result = await handleChatInternal(params); break;
         case 'attack': result = await handleAttackInternal(params); break;
         default:
@@ -194,7 +422,19 @@ const DEFAULT_TIMEOUT = 60000; // 60s default timeout
 const rl = createInterface({ input: stdin, terminal: false });
 
 rl.on('line', async (line) => {
-  if (busy) return;
+  if (busy) {
+    // Parse the command to get the id, then return error
+    try {
+      const trimmed = line.trim();
+      if (trimmed) {
+        const cmd = JSON.parse(trimmed);
+        sendResponse(cmd.id, 'error', 'Bot busy, command rejected');
+      }
+    } catch (e) {
+      // Ignore parse errors for busy rejection
+    }
+    return;
+  }
   busy = true;
   try {
     const trimmed = line.trim();
@@ -228,6 +468,9 @@ async function handleCommand(cmd) {
     case 'setgoal':     handler = handleSetGoal(id, params); break;
     case 'stop':        handler = handleStop(id, params); break;
     case 'collect':     handler = handleCollect(id, params); break;
+    case 'craft':       handler = handleCraft(id, params); break;
+    case 'smelt':       handler = handleSmelt(id, params); break;
+    case 'recipes':     handler = handleRecipes(id, params); break;
     case 'set_mode':    handler = handleSetMode(id, params); break;
     case 'plan_status': handler = handlePlanStatus(id, params); break;
     default:
@@ -246,116 +489,46 @@ async function handleCommand(cmd) {
   }
 }
 
-// --- Action handlers ---
+// --- Action handlers (thin wrappers using core functions) ---
 
 async function handleGoto(id, params) {
-  const { x, y, z } = params;
-  await setupMovements();
-  await bot.pathfinder.goto(new GoalBlock(Math.floor(x), Math.floor(y), Math.floor(z)));
-  sendResponse(id, 'success', `Moved to (${x}, ${y}, ${z})`);
+  try {
+    const result = await _goto(params.x, params.y, params.z);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
 }
 
 async function handleMine(id, params) {
-  const { block_type, count = 1 } = params;
-  const mcData = await setupMovements();
-
-  const blockInfo = mcData.blocksByName[block_type];
-  if (!blockInfo) {
-    sendResponse(id, 'error', `Unknown block type: ${block_type}`);
-    return;
+  try {
+    const result = await _mine(params.block_type, params.count || 1);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
   }
-
-  let mined = 0;
-  for (let i = 0; i < count; i++) {
-    const block = bot.findBlock({
-      matching: blockInfo.id,
-      maxDistance: 10,
-    });
-
-    if (!block) {
-      const msg = mined > 0
-        ? `No more ${block_type} found within 10 blocks, mined ${mined}`
-        : `No ${block_type} found within 10 blocks`;
-      sendResponse(id, 'error', msg);
-      return;
-    }
-
-    // Approach the block from the direction we came
-    const pos = block.position;
-    const dx = Math.sign(Math.round(bot.entity.position.x) - pos.x) || 1;
-    const dz = Math.sign(Math.round(bot.entity.position.z) - pos.z) || 1;
-    await bot.pathfinder.goto(new GoalBlock(pos.x + dx, pos.y, pos.z + dz));
-
-    await bot.dig(block);
-    mined++;
-  }
-
-  sendResponse(id, 'success', `Mined ${mined} ${block_type} block(s)`);
 }
 
 async function handlePlace(id, params) {
-  const { block_type, x, y, z } = params;
-  await setupMovements();
-
-  const targetPos = new Vec3(x, y, z);
-  const blockBelow = bot.blockAt(new Vec3(x, y - 1, z));
-
-  if (!blockBelow || blockBelow.name === 'air') {
-    sendResponse(id, 'error', 'No solid block below target position');
-    return;
+  try {
+    const result = await _place(params.block_type, params.x, params.y, params.z);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
   }
-
-  const item = bot.inventory.items().find((i) => i.name === block_type);
-  if (!item) {
-    sendResponse(id, 'error', `No ${block_type} in inventory`);
-    return;
-  }
-
-  await bot.equip(item, 'hand');
-
-  // Approach near the target
-  await bot.pathfinder.goto(new GoalBlock(x + 1, y, z));
-
-  // Place against the top face of the block below
-  await bot.placeBlock(blockBelow, new Vec3(0, 1, 0));
-  sendResponse(id, 'success', `Placed ${block_type} at (${x}, ${y}, ${z})`);
 }
 
 async function handleAttack(id, params) {
-  const { target } = params;
-  await setupMovements();
-
-  let entity;
-  if (target === 'nearest_hostile') {
-    entity = bot.nearestEntity((e) => e.type === 'mob');
-  } else if (target === 'nearest_player') {
-    entity = bot.nearestEntity((e) => e.type === 'player');
-  } else {
-    // Match by entity name or custom display name
-    entity = bot.nearestEntity(
-      (e) => e.name === target || (e.displayName && String(e.displayName) === target)
-    );
+  try {
+    const result = await _attack(params.target || 'nearest_hostile');
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
   }
-
-  if (!entity) {
-    sendResponse(id, 'error', `Target not found: ${target}`);
-    return;
-  }
-
-  const ePos = entity.position;
-  await bot.pathfinder.goto(new GoalBlock(
-    Math.floor(ePos.x),
-    Math.floor(ePos.y),
-    Math.floor(ePos.z)
-  ));
-
-  bot.attack(entity);
-  sendResponse(id, 'success', `Attacked ${entity.name || target}`);
 }
 
 async function handleChat(id, params) {
-  const { message } = params;
-  bot.chat(message);
+  bot.chat(params.message);
   sendResponse(id, 'success', 'Chat message sent');
 }
 
@@ -369,13 +542,11 @@ async function handleStatus(id, _params) {
   const timeOfDay = bot.time?.timeOfDay ?? 0;
   const timeLabel = timeOfDay < 6000 ? 'morning' : timeOfDay < 12000 ? 'afternoon' : 'night';
 
-  // Count inventory items
   const inventory = {};
   for (const item of bot.inventory.items()) {
     inventory[item.name] = (inventory[item.name] || 0) + item.count;
   }
 
-  // Find nearby entities
   const nearbyEntities = {};
   if (bot.entity) {
     const radius = 16;
@@ -429,33 +600,11 @@ async function handleStop(id, _params) {
 }
 
 async function handleCollect(id, params) {
-  const { block_type, count = 1 } = params;
-  await setupMovements();
-
-  // Dynamic import mineflayer-collectblock
-  let collectBlock;
   try {
-    const mod = await import('mineflayer-collectblock');
-    collectBlock = mod.default || mod;
-    bot.loadPlugin(collectBlock);
-  } catch {
-    // Fallback: use mine + pickup logic
-    sendResponse(id, 'error', 'mineflayer-collectblock not installed, use mine action instead');
-    return;
-  }
-
-  const mcData = await getMcData();
-  const blockInfo = mcData.blocksByName[block_type];
-  if (!blockInfo) {
-    sendResponse(id, 'error', `Unknown block type: ${block_type}`);
-    return;
-  }
-
-  try {
-    await bot.collectBlock.collect(b => b.name === block_type, { maxCount: count });
-    sendResponse(id, 'success', `Collected ${count} ${block_type}(s)`);
+    const result = await _collect(params.block_type, params.count || 1);
+    sendResponse(id, 'success', result);
   } catch (err) {
-    sendResponse(id, 'error', `Collection failed: ${err.message}`);
+    sendResponse(id, 'error', err.message);
   }
 }
 
@@ -478,6 +627,33 @@ async function handleSetMode(id, params) {
     sendResponse(id, 'success', result);
   } else {
     sendResponse(id, 'error', `Unknown mode: ${mode}`);
+  }
+}
+
+async function handleCraft(id, params) {
+  try {
+    const result = await _craft(params.recipe, params.count || 1);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleSmelt(id, params) {
+  try {
+    const result = await _smelt(params.item, params.fuel, params.count || 1);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleRecipes(id, params) {
+  try {
+    const result = await _recipes(params.item);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
   }
 }
 
@@ -539,62 +715,37 @@ async function handleSmartBuild(id, params) {
     sendResponse(id, 'error', `Unknown blueprint: ${blueprint}`);
   }
 }
-
-// ── Internal wrappers for plan executor ──
+// ── Internal wrappers for plan executor (thin wrappers using core functions) ──
 
 async function handleGotoInternal(params) {
-  const { x, y, z } = params;
-  await setupMovements();
-  await bot.pathfinder.goto(new GoalBlock(Math.floor(x), Math.floor(y), Math.floor(z)));
-  return `Moved to (${x}, ${y}, ${z})`;
+  return _goto(params.x, params.y, params.z);
 }
 
-async function handleSmartGotoInt(params) { return handleGotoInternal(params); }
+async function handleSmartGotoInt(params) {
+  return _smart_goto(params.target || params.x, params.y, params.z);
+}
+
 async function handleMineInternal(params) {
-  const { block_type, count = 1 } = params;
-  const mcData = await setupMovements();
-  const bi = mcData.blocksByName[block_type];
-  if (!bi) throw new Error(`Unknown block: ${block_type}`);
-  for (let i = 0; i < count; i++) {
-    const b = bot.findBlock({ matching: bi.id, maxDistance: 10 });
-    if (!b) throw new Error(`No more ${block_type}`);
-    await bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z));
-    await bot.dig(b);
-  }
-  return `Mined ${count} ${block_type}`;
+  return _mine(params.block_type, params.count || 1);
 }
+
 async function handlePlaceInternal(params) {
-  const { block_type, x, y, z } = params;
-  await setupMovements();
-  const ref = bot.blockAt(new Vec3(x, y - 1, z));
-  if (!ref || ref.name === 'air') throw new Error('No solid block below');
-  await bot.pathfinder.goto(new GoalBlock(x, y, z));
-  await bot.placeBlock(ref, new Vec3(0, 1, 0));
-  return `Placed ${block_type}`;
+  return _place(params.block_type, params.x, params.y, params.z);
 }
-async function handleSmartBuildInt(params) { return handleSmartBuild('plan', params); }
+
+async function handleSmartBuildInt(params) {
+  return _smart_build(params.block_type, params.x, params.y, params.z, params.blueprint);
+}
 
 async function handleChatInternal(params) {
   bot.chat(params.message);
   return 'Chat sent';
 }
+
 async function handleAttackInternal(params) {
-  const t = params.target || 'nearest_hostile';
-  const e = bot.nearestEntity(e => {
-    const n = (e.name || '').toLowerCase();
-    return t === 'nearest_hostile'
-      ? ['zombie', 'skeleton', 'spider', 'creeper'].some(h => n.includes(h))
-      : n.includes(t.toLowerCase());
-  });
-  if (!e) throw new Error(`No target: ${t}`);
-  await bot.pvp?.attack(e);
-  return `Attacked ${e.name || t}`;
+  return _attack(params.target || 'nearest_hostile');
 }
+
 async function handleCollectInternal(params) {
-  const { block_type, count = 1 } = params;
-  await setupMovements();
-  const mod = await import('mineflayer-collectblock');
-  bot.loadPlugin(mod.default || mod);
-  await bot.collectBlock.collect(b => b.name === block_type, { maxCount: count });
-  return `Collected ${count} ${block_type}`;
+  return _collect(params.block_type, params.count || 1);
 }

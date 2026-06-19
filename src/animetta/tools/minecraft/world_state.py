@@ -99,7 +99,7 @@ class WorldState:
                     name = val.get("name", "unknown")
                 elif isinstance(val, (int, float)):
                     count = int(val)
-                    dist = 10.0  # default close distance for count-only
+                    dist = 50.0  # default far distance for count-only (conservative)
                 else:
                     continue
                 if count > 0:

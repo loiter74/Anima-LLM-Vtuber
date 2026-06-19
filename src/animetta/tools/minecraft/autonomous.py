@@ -64,13 +64,20 @@ class AutonomousLoop:
     ACTION_EXPLORE = "explore"
     ACTION_IDLE = "idle"
 
-    def __init__(self, bridge: "MinecraftBridge", rules: RulesEngine | None = None):
+    def __init__(self, bridge: "MinecraftBridge", rules: RulesEngine | None = None,
+                 skill_library=None, planner=None, config=None):
         self._bridge = bridge
         self._rules = rules or RulesEngine()
         self._running = False
         self._paused = False
         self._loop_task: asyncio.Task | None = None
         self._cooldown = CooldownTracker(default_cooldown=30.0)
+        
+        # Voyager-style components
+        self._skill_library = skill_library
+        self._planner = planner
+        self._config = config or {}
+        self._llm_available = planner is not None
 
         # Collect-build state
         self._build_site: dict | None = None  # {"x", "y", "z"}
@@ -157,14 +164,7 @@ class AutonomousLoop:
         status = await self._bridge.send_command("status", timeout=10.0)
         state = WorldState.from_status(status)
 
-        # 0. Immediate threat interrupt — skip normal evaluation
-        if state.get_threat_level() >= 2 and state.nearest_threat_distance < 15:
-            logger.info(f"[AutonomousLoop] Threat interrupt! {state.hostile_count} hostiles nearby")
-            await self._bridge.send_command("attack", {"target": "nearest_hostile"}, timeout=10.0)
-            self._cooldown.mark_executed("survive")
-            return
-
-        # 2. Evaluate and decide
+        # 2. Evaluate and decide (threat detection is in _evaluate)
         action, params = self._evaluate(state)
 
         if action == self.ACTION_IDLE:
@@ -179,7 +179,7 @@ class AutonomousLoop:
     # ── Evaluation & Decision ──
 
     def _evaluate(self, state: WorldState) -> tuple[str, dict | None]:
-        """Priority-based decision engine"""
+        """Priority-based decision engine with LLM fallback"""
 
         # === SURVIVAL (always #1) ===
         # Threat check
@@ -196,6 +196,17 @@ class AutonomousLoop:
             dist = state.distance_to(self._base_pos["x"], self._base_pos["y"], self._base_pos["z"])
             if dist > 5:
                 return (self.ACTION_SURVIVE, {"reason": "night_return", "base": self._base_pos})
+
+        # === LLM DECISION (if available) ===
+        if self._llm_available and self._skill_library:
+            try:
+                # This would be async in real implementation
+                # skills = await self._skill_library.search_skills(state.current_goal)
+                # action, params = await self._llm_decide(state, skills)
+                # return (action, params)
+                pass  # Placeholder for LLM integration
+            except Exception as e:
+                logger.warning(f"[AutonomousLoop] LLM decision failed: {e}, falling back to rules")
 
         # === MAINTENANCE (building progress) ===
         if self._rules.rules.building and self._current_step < len(self._rules.rules.building.build_plan):
