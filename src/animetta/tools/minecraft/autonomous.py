@@ -24,10 +24,15 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from .rules_engine import RulesEngine
+from .skill_extractor import SkillExtractor
+from .skill_validator import SkillValidator
+from .trace_recorder import TraceRecorder
 from .world_state import WorldState
 
 if TYPE_CHECKING:
     from .bridge import MinecraftBridge
+    from .skill_library import SkillLibrary
+    from .trace_recorder import TaskTrace
 
 
 # ── Cooldown tracker ──
@@ -63,21 +68,34 @@ class AutonomousLoop:
     ACTION_CHAT = "chat"
     ACTION_EXPLORE = "explore"
     ACTION_IDLE = "idle"
+    ACTION_EXECUTE_SKILL = "execute_skill"
 
     def __init__(self, bridge: "MinecraftBridge", rules: RulesEngine | None = None,
-                 skill_library=None, planner=None, config=None):
+                 skill_library: "SkillLibrary | None" = None, planner=None, config=None,
+                 trace_recorder: TraceRecorder | None = None,
+                 skill_extractor: SkillExtractor | None = None,
+                 skill_validator: SkillValidator | None = None,
+                 cleanup_chance: float = 0.05):
         self._bridge = bridge
         self._rules = rules or RulesEngine()
         self._running = False
         self._paused = False
         self._loop_task: asyncio.Task | None = None
         self._cooldown = CooldownTracker(default_cooldown=30.0)
-        
+
         # Voyager-style components
         self._skill_library = skill_library
         self._planner = planner
         self._config = config or {}
         self._llm_available = planner is not None
+
+        # Trace & skill-learning components
+        self._trace_recorder = trace_recorder
+        self._skill_extractor = skill_extractor
+        self._skill_validator = skill_validator
+
+        # Auto-cleanup probability (per tick)
+        self._cleanup_chance = cleanup_chance
 
         # Collect-build state
         self._build_site: dict | None = None  # {"x", "y", "z"}
@@ -165,7 +183,7 @@ class AutonomousLoop:
         state = WorldState.from_status(status)
 
         # 2. Evaluate and decide (threat detection is in _evaluate)
-        action, params = self._evaluate(state)
+        action, params = await self._evaluate(state)
 
         if action == self.ACTION_IDLE:
             return
@@ -176,9 +194,13 @@ class AutonomousLoop:
         # 4. Mark cooldown
         self._cooldown.mark_executed(action)
 
+        # 5. Auto-cleanup low-quality skills (probabilistic)
+        if self._skill_library and random.random() < self._cleanup_chance:
+            asyncio.create_task(self._skill_library.cleanup())
+
     # ── Evaluation & Decision ──
 
-    def _evaluate(self, state: WorldState) -> tuple[str, dict | None]:
+    async def _evaluate(self, state: WorldState) -> tuple[str, dict | None]:
         """Priority-based decision engine with LLM fallback"""
 
         # === SURVIVAL (always #1) ===
@@ -197,16 +219,19 @@ class AutonomousLoop:
             if dist > 5:
                 return (self.ACTION_SURVIVE, {"reason": "night_return", "base": self._base_pos})
 
-        # === LLM DECISION (if available) ===
-        if self._llm_available and self._skill_library:
-            try:
-                # This would be async in real implementation
-                # skills = await self._skill_library.search_skills(state.current_goal)
-                # action, params = await self._llm_decide(state, skills)
-                # return (action, params)
-                pass  # Placeholder for LLM integration
-            except Exception as e:
-                logger.warning(f"[AutonomousLoop] LLM decision failed: {e}, falling back to rules")
+        # === SKILL LIBRARY MATCHING ===
+        if self._skill_library:
+            matching = await self._skill_library.match_skills({
+                "health": state.health,
+                "food": state.food,
+                "is_day": state.is_day,
+                "is_night": state.is_night,
+                "is_raining": state.is_raining,
+                "inventory": state.inventory,
+                "threat_level": state.get_threat_level(),
+            })
+            if matching:
+                return (self.ACTION_EXECUTE_SKILL, {"skill_id": matching[0].id})
 
         # === MAINTENANCE (building progress) ===
         if self._rules.rules.building and self._current_step < len(self._rules.rules.building.build_plan):
@@ -258,10 +283,21 @@ class AutonomousLoop:
     # ── Execution ──
 
     async def _execute(self, action: str, params: dict | None, state: WorldState):
-        """Execute the decided action with timeout"""
+        """Execute the decided action with timeout and optional trace recording."""
         if params is None:
             return
         timeout = 30.0
+
+        # ── Trace: start recording ──
+        recorder = self._trace_recorder
+        state_before: dict = {}
+        action_start: float = 0.0
+        if recorder:
+            state_before = self._world_state_to_dict(state)
+            recorder.start_trace(f"{action}: {params}")
+            action_start = time.monotonic()
+
+        success = False
         try:
             if action == self.ACTION_SURVIVE:
                 await self._execute_survive(params, state)
@@ -273,12 +309,40 @@ class AutonomousLoop:
                 await self._execute_chat(params)
             elif action == self.ACTION_EXPLORE:
                 await self._execute_explore(params, timeout)
+            elif action == self.ACTION_EXECUTE_SKILL:
+                await self._execute_skill(params, state)
+            success = True
 
         except TimeoutError:
             logger.warning(f"[AutonomousLoop] Action '{action}' timed out")
             self._cooldown.reset(action)
         except Exception as e:
             logger.error(f"[AutonomousLoop] Action '{action}' failed: {e}")
+
+        # ── Trace: record action and end trace ──
+        if recorder:
+            duration = time.monotonic() - action_start
+            try:
+                status = await self._bridge.send_command("status", timeout=5.0)
+                state_after = self._world_state_to_dict(WorldState.from_status(status))
+            except Exception:
+                state_after = state_before
+
+            recorder.record_action(
+                action=action,
+                params=params,
+                result="success" if success else "error",
+                state_before=state_before,
+                state_after=state_after,
+                duration=duration,
+                error=None if success else "action failed",
+            )
+            trace = recorder.end_trace("success" if success else "failed")
+            asyncio.create_task(recorder.save_trace(trace))
+
+            # Trigger skill extraction on success
+            if success and self._skill_extractor:
+                asyncio.create_task(self._trigger_skill_extraction(trace, state))
 
     # ── Survival Actions ──
 
@@ -397,3 +461,95 @@ class AutonomousLoop:
         await self._bridge.send_command("goto", {
             "x": tx, "y": 65, "z": tz
         }, timeout=timeout)
+
+    # ── Skill Execution ──
+
+    async def _execute_skill(self, params: dict, state: WorldState):
+        """Execute a skill from the SkillLibrary with success/failure tracking."""
+        skill_id = params.get("skill_id")
+        if not (self._skill_library and skill_id):
+            return
+
+        context = {
+            "health": state.health,
+            "food": state.food,
+            "is_day": state.is_day,
+            "is_night": state.is_night,
+            "inventory": state.inventory,
+        }
+        result = await self._skill_library.execute_skill_by_id(skill_id, self._bridge, context)
+
+        # Track success/failure in the library
+        if result.success:
+            await self._skill_library.update_success(skill_id)
+            logger.info(f"[AutonomousLoop] Skill {skill_id} succeeded ({result.duration:.1f}s)")
+        else:
+            await self._skill_library.update_failure(skill_id)
+            logger.warning(f"[AutonomousLoop] Skill {skill_id} failed: {result.reason}")
+
+    # ── Helpers ──
+
+    @staticmethod
+    def _world_state_to_dict(state: WorldState) -> dict:
+        """Convert a WorldState to a plain dict for trace recording."""
+        return {
+            "x": state.x,
+            "y": state.y,
+            "z": state.z,
+            "health": state.health,
+            "food": state.food,
+            "is_day": state.is_day,
+            "is_night": state.is_night,
+            "is_raining": state.is_raining,
+            "inventory": state.inventory,
+            "player_count": state.player_count,
+            "threat_level": state.get_threat_level(),
+        }
+
+    async def _trigger_skill_extraction(self, trace: "TaskTrace", state: WorldState) -> None:
+        """Extract and store a new skill from a successful trace.
+
+        Validates the extracted skill before adding it to the library.
+        Runs as a background task to avoid blocking the main loop.
+        """
+        extractor = self._skill_extractor
+        library = self._skill_library
+        if not extractor or not library:
+            return
+
+        context = {
+            "health": state.health,
+            "food": state.food,
+            "is_day": state.is_day,
+            "is_night": state.is_night,
+            "inventory": state.inventory,
+        }
+
+        try:
+            skill = await extractor.extract(trace, context)
+            if skill is None:
+                return
+
+            # Validate before saving
+            if self._skill_validator:
+                validation = self._skill_validator.validate(skill, context)
+                if not validation.passed:
+                    logger.warning(
+                        f"[AutonomousLoop] Extracted skill '{skill.name}' failed validation: "
+                        f"{validation.failures}"
+                    )
+                    return
+                if validation.warnings:
+                    logger.info(
+                        f"[AutonomousLoop] Skill '{skill.name}' validation warnings: "
+                        f"{validation.warnings}"
+                    )
+
+            added = await library.add_learned(skill)
+            if added:
+                logger.info(f"[AutonomousLoop] New skill learned: '{skill.name}' ({skill.id})")
+            else:
+                logger.debug(f"[AutonomousLoop] Skill '{skill.name}' rejected (duplicate)")
+
+        except Exception as e:
+            logger.error(f"[AutonomousLoop] Skill extraction failed: {type(e).__name__}: {e}")

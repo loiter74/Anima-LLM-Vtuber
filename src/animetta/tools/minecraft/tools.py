@@ -33,7 +33,20 @@ def init_bridge(config: dict | None = None):
         logger.info("[MinecraftTools] Minecraft gameplay is disabled in config")
         return
 
-    _bridge = MinecraftBridge(mc_config, autonomous=mc_config.autonomous)
+    # Try to get ServicePool for LLM-powered learning loop
+    service_pool_ref = None
+    try:
+        from animetta.core.service_pool import ServicePool
+        if ServicePool._ready:
+            service_pool_ref = ServicePool
+    except Exception:
+        pass
+
+    _bridge = MinecraftBridge(
+        mc_config,
+        autonomous=mc_config.autonomous,
+        service_pool=service_pool_ref,
+    )
 
     try:
         loop = asyncio.get_running_loop()

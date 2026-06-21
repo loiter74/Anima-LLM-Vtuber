@@ -17,6 +17,7 @@ import asyncio
 import contextlib
 import json
 import os
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -24,11 +25,19 @@ from animetta.utils.service_availability import is_service_available
 
 from .config import MinecraftConfig
 
+if TYPE_CHECKING:
+    pass  # ServicePool is accessed as a class, not imported for type checking
+
 
 class MinecraftBridge:
     """Manages the Mineflayer bot subprocess with optional autonomous behavior"""
 
-    def __init__(self, config: MinecraftConfig, autonomous: bool = False):
+    def __init__(
+        self,
+        config: MinecraftConfig,
+        autonomous: bool = False,
+        service_pool: Any | None = None,
+    ):
         self.config = config
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future] = {}
@@ -41,6 +50,7 @@ class MinecraftBridge:
         # Autonomous behavior loop (lazy init)
         self._autonomous_loop = None
         self._autonomous_enabled = autonomous
+        self._service_pool = service_pool
 
     async def start(self) -> bool:
         """Start the Mineflayer bot subprocess"""
@@ -216,11 +226,51 @@ class MinecraftBridge:
             logger.debug(f"[MinecraftBridge] stderr reader stopped: {e}")
 
     async def _start_autonomous(self):
-        """Start the autonomous behavior loop"""
+        """Start the autonomous behavior loop with learning components."""
         from .autonomous import AutonomousLoop
-        self._autonomous_loop = AutonomousLoop(self)
+        from .skill_library import SkillLibrary
+        from .skill_validator import SkillValidator
+        from .trace_recorder import TraceRecorder
+
+        # Check if we can wire the full learning loop
+        llm_service = None
+        if self._service_pool is not None:
+            try:
+                llm_service = getattr(self._service_pool, '_llm', None)
+            except Exception:
+                logger.warning("[MinecraftBridge] Could not get LLM service from ServicePool")
+
+        if llm_service:
+            from .skill_extractor import SkillExtractor
+
+            # Full learning loop
+            library = SkillLibrary(db_path="data/mc_skills.db")
+            await library.init_db()
+            await library.load_predefined_skills()
+
+            extractor = SkillExtractor(llm_service=llm_service, skill_library=library)
+            validator = SkillValidator()
+            recorder = TraceRecorder(output_dir="data/mc_traces")
+
+            self._autonomous_loop = AutonomousLoop(
+                self,
+                skill_library=library,
+                skill_extractor=extractor,
+                skill_validator=validator,
+                trace_recorder=recorder,
+            )
+            logger.info("[MinecraftBridge] Autonomous loop started WITH learning components")
+        else:
+            # Graceful degradation: pure rule-based loop
+            if self._service_pool is not None:
+                logger.warning(
+                    "[MinecraftBridge] ServicePool available but no LLM service — "
+                    "running without learning"
+                )
+            self._autonomous_loop = AutonomousLoop(self)
+            logger.info("[MinecraftBridge] Autonomous loop started (no learning — rule-based only)")
+
         await self._autonomous_loop.start()
-        logger.info("[MinecraftBridge] Autonomous behavior loop started")
 
     async def _stop_autonomous(self):
         """Stop the autonomous behavior loop"""

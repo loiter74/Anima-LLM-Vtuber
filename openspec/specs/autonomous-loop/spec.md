@@ -1,15 +1,12 @@
-# autonomous-loop Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change minecraft-ai-autonomous-builder. Update Purpose after archive.
-## Requirements
 ### Requirement: Autonomous decision loop
-系统 SHALL 实现一个自主决策循环，作为 LLM 规划不可用时的后备行为模式。当 Bot 无活跃 LLM 指令且 planner 未执行时，定期评估环境并选择下一行为。
+系统 SHALL 实现一个自主决策循环，作为 LLM 规划不可用时的后备行为模式。当 Bot 无活跃 LLM 指令且 planner 未执行时，定期评估环境并选择下一行为。当学习组件可用时，循环 SHALL 包含技能匹配、轨迹记录和技能提取。
 
 #### Scenario: Loop triggers at idle
 - **WHEN** Bot 完成上一个动作且无 LLM 指令排队
 - **AND** 当前模式不是 planner 模式
-- **THEN** 自主循环 SHALL 在 5-10 秒内触发一次评估
+- **THEN** 自主循环 SHALL 在 3-8 秒内触发一次评估
 
 #### Scenario: LLM instruction preempts autonomous loop
 - **WHEN** LLM 发送新指令（set_mode: planner）
@@ -26,8 +23,24 @@ TBD - created by archiving change minecraft-ai-autonomous-builder. Update Purpos
 - **THEN** 系统 SHALL 标记超时并重置 Bot 状态
 - **AND** 触发新的评估
 
+#### Scenario: Skill matching in evaluate
+- **WHEN** skill_library is available and match_skills() returns a matching skill
+- **THEN** _evaluate() SHALL return ACTION_EXECUTE_SKILL with the skill_id
+- **AND** this SHALL take priority over maintenance, chat, and explore actions
+
+#### Scenario: Trace recording in execute
+- **WHEN** trace_recorder is available and an action executes
+- **THEN** the system SHALL call recorder.start_trace() before execution
+- **AND** recorder.record_action() with state_before/state_after after execution
+- **AND** recorder.end_trace() with success/failure status
+
+#### Scenario: Skill extraction on success
+- **WHEN** an action succeeds AND skill_extractor is available
+- **THEN** the system SHALL trigger _trigger_skill_extraction() as an async background task
+- **AND** the extractor SHALL check for duplicates before calling the LLM
+
 ### Requirement: Behavior priority system
-系统 SHALL 支持基于优先级的决策，高优先级行为打断低优先级。
+系统 SHALL 支持基于优先级的决策，高优先级行为打断低优先级。当学习组件可用时，技能匹配 SHALL 在生存检查之后、维护检查之前执行。
 
 #### Scenario: Survival overrides building
 - **WHEN** Bot 血量低于 safety.auto_heal_threshold
@@ -38,10 +51,7 @@ TBD - created by archiving change minecraft-ai-autonomous-builder. Update Purpos
 - **WHEN** 游戏时间为夜晚且 rules.md 中 return_to_base_at_night 为 true
 - **THEN** Bot SHALL 停止户外活动并返回基地
 
-### Requirement: Behavior cooldown
-系统 SHALL 对每个行为类型实施冷却，防止重复执行同一行为。
-
-#### Scenario: Cooldown prevents spam
-- **WHEN** Bot 刚完成"聊天"行为不到 30 秒
-- **THEN** 下次评估 SHOULD 跳过聊天行为
-
+#### Scenario: Skill match overrides maintenance
+- **WHEN** skill_library returns a matching skill for current context
+- **AND** no survival action is needed
+- **THEN** the skill SHALL be executed before any maintenance, chat, or explore action
