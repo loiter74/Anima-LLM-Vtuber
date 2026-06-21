@@ -28,7 +28,7 @@ Verify: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-s
 # 1. Clone and configure
 git clone https://github.com/loiter74/animetta.git && cd animetta
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys. Do not commit real credentials.
 
 # 2. Build and start (GPU)
 docker compose up -d --build
@@ -76,6 +76,7 @@ Set in `.env` or pass via `docker compose`:
 
 | Variable | Default | Description |
 |---|---|---|
+| `MIMO_API_KEY` | — | Mimo provider API key |
 | `GLM_API_KEY` | — | Zhipu AI API key |
 | `OPENAI_API_KEY` | — | OpenAI/DeepSeek API key |
 | `OPENAI_BASE_URL` | — | Custom OpenAI-compatible endpoint |

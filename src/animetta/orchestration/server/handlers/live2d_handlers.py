@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from ...socket_events import EVENTS
+
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
@@ -62,14 +64,14 @@ class Live2DHandlers:
 
         if not self.admin.desktop_manager.register(sid, client_type):
             await self.sio.emit(
-                "system:error",
+                EVENTS["system"]["error"]["name"],
                 {"type": "error", "message": f"Unknown client type: {client_type}"},
                 to=sid,
             )
             return
 
         await self.sio.emit(
-            "desktop:registered",
+            EVENTS["desktop"]["registered"]["name"],
             {"client_id": sid, "client_type": client_type},
             to=sid,
         )
@@ -88,7 +90,7 @@ class Live2DHandlers:
             duration=duration,
         )
 
-        await self.sio.emit("desktop:action_queued", result, to=sid)
+        await self.sio.emit(EVENTS["desktop"]["action_queued"]["name"], result, to=sid)
 
     async def on_desktop_chat_message(self, sid: str, data: dict) -> None:
         """Handle chat message from Electron Chat window."""
@@ -109,15 +111,15 @@ class Live2DHandlers:
                 f"[{sid}] Error processing desktop chat message: {e}"
             )
             await self.sio.emit(
-                "system:error", {"type": "error", "message": str(e)}, to=sid
+                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )
 
     async def on_desktop_voice_start(self, sid: str, data: dict) -> None:
         """Start voice input."""
         logger.info("[Desktop][Chat] Voice input started")
-        await self.sio.emit("desktop.voice_started", {}, to=sid)
+        await self.sio.emit(EVENTS["desktop"]["voice_started"]["name"], {}, to=sid)
 
     async def on_desktop_voice_stop(self, sid: str, data: dict) -> None:
         """Stop voice input."""
         logger.info("[Desktop][Chat] Voice input stopped")
-        await self.sio.emit("desktop.voice_stopped", {}, to=sid)
+        await self.sio.emit(EVENTS["desktop"]["voice_stopped"]["name"], {}, to=sid)

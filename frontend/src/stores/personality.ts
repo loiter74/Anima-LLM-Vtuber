@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
 
@@ -17,12 +17,39 @@ export const usePersonalityStore = defineStore('personality', () => {
   const personaError = ref<string | null>(null)
   const modeLoading = ref(false)
 
+  // Listen for persona:updated events to get MBTI data
+  function setupListeners(): void {
+    const socket = getSocket()
+    if (!socket) return
+
+    socket.on(Events.PERSONA.UPDATED, (data: { persona_name: string; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
+      if (data.mbti) {
+        mbtiType.value = data.mbti.type
+        mbtiDimensions.value = data.mbti.dimensions
+      } else {
+        mbtiType.value = null
+        mbtiDimensions.value = null
+      }
+    })
+  }
+
+  function cleanupListeners(): void {
+    const socket = getSocket()
+    if (!socket) return
+    socket.off(Events.PERSONA.UPDATED)
+  }
+
   async function fetchAvailablePersonas(): Promise<void> {
     const socket = getSocket()
     if (!socket) return
 
-    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[] }) => {
+    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[]; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
       availablePersonas.value = response.personas ?? []
+      // Also update MBTI data from initial fetch
+      if (response.mbti) {
+        mbtiType.value = response.mbti.type
+        mbtiDimensions.value = response.mbti.dimensions
+      }
     })
   }
 
@@ -114,6 +141,9 @@ export const usePersonalityStore = defineStore('personality', () => {
     mbtiDimensions.value = dimensions
   }
 
+  // Auto-setup listeners when store is created
+  setupListeners()
+
   return {
     currentMode,
     currentMood,
@@ -132,5 +162,7 @@ export const usePersonalityStore = defineStore('personality', () => {
     setMemoryInfluence,
     setMbtiType,
     setMbtiDimensions,
+    setupListeners,
+    cleanupListeners,
   }
 })

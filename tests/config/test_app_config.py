@@ -558,6 +558,59 @@ class TestFromYaml:
     @patch("animetta.config.app._load_service_config")
     @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
+    def test_env_override_service_selection(
+        self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
+    ):
+        """ANIMETTA_* service env vars override config.yaml service names before loading."""
+        mock_exists.return_value = True
+        mock_load_yaml.return_value = {
+            "persona": "default",
+            "services": {
+                "asr": "mock",
+                "tts": "alice_vc",
+                "agent": "mimo",
+                "vad": "silero",
+            },
+            "system": {"host": "localhost", "port": 12394},
+        }
+
+        def load_service_side(service_type, service_name):
+            configs = {
+                ("asr", "mock"): {"type": "mock"},
+                ("tts", "mock"): {"type": "mock"},
+                ("llm", "mock"): {
+                    "memory_enabled": False,
+                    "llm_config": {"type": "mock"},
+                },
+                ("vad", "mock"): {"type": "mock"},
+            }
+            return configs[(service_type, service_name)]
+
+        mock_load_service.side_effect = load_service_side
+
+        with patch.dict(
+            os.environ,
+            {
+                "ANIMETTA_ASR": "mock",
+                "ANIMETTA_TTS": "mock",
+                "ANIMETTA_LLM": "mock",
+                "ANIMETTA_VAD": "mock",
+            },
+            clear=False,
+        ):
+            config = AppConfig.from_yaml("/fake/path.yaml")
+
+        assert config.services.asr == "mock"
+        assert config.services.tts == "mock"
+        assert config.services.agent == "mock"
+        assert config.services.vad == "mock"
+        assert config.agent is not None
+        assert config.agent.llm_config.type == "mock"
+
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
+    @patch("pathlib.Path.exists")
     def test_env_override_asr_tts_api_key(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
     ):

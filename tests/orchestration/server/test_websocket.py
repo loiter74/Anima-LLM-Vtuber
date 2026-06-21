@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from starlette.testclient import TestClient
 
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
 
@@ -85,6 +86,57 @@ class TestWebSocketServerInit:
         """get_app returns the Starlette ASGI app."""
         app = websocket_server.get_app()
         assert app is websocket_server.asgi_app
+
+
+# ── WebSocketServer — Singing media routes ─────────────────────────
+
+
+class TestSingingMediaRoutes:
+    """Lightweight HTTP route probes for singing media endpoints."""
+
+    @staticmethod
+    def _server_with_real_routes():
+        with (
+            patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm,
+            patch("animetta.orchestration.server.websocket.SessionManager") as mock_sessions,
+            patch("animetta.orchestration.server.websocket.DesktopClientManager") as mock_desktop,
+            patch("animetta.orchestration.server.websocket.Live2DManager") as mock_live2d,
+            patch("animetta.orchestration.server.websocket.LifecycleManager") as mock_lifecycle,
+        ):
+            mock_mlm.return_value = MagicMock()
+            mock_sessions.return_value = MagicMock()
+            mock_desktop.return_value = MagicMock()
+            mock_live2d.return_value = MagicMock()
+            mock_lifecycle.return_value = MagicMock()
+            return WebSocketServer(config=None)
+
+    def test_singing_recent_returns_empty_list_when_no_outputs(self):
+        """GET /api/singing/recent returns [] instead of raising when output dir is absent."""
+        server = self._server_with_real_routes()
+
+        with TestClient(server.get_app()) as client:
+            response = client.get("/api/singing/recent")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_singing_subtitle_missing_file_returns_404(self):
+        """GET /api/singing/subtitle/{filename} returns 404 for missing files."""
+        server = self._server_with_real_routes()
+
+        with TestClient(server.get_app()) as client:
+            response = client.get("/api/singing/subtitle/missing.ass")
+
+        assert response.status_code == 404
+
+    def test_singing_audio_missing_file_returns_404(self):
+        """GET /api/singing/audio/{filename} returns 404 for missing files."""
+        server = self._server_with_real_routes()
+
+        with TestClient(server.get_app()) as client:
+            response = client.get("/api/singing/audio/missing.wav")
+
+        assert response.status_code == 404
 
 
 # ── WebSocketServer — set_config ────────────────────────────────────

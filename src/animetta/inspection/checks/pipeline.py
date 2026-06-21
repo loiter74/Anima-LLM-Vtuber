@@ -25,6 +25,7 @@ from ..models import CheckResult
 BACKEND_URL = "http://localhost:12394"
 CONNECTION_TIMEOUT = 5.0  # seconds
 COLLECTION_DURATION = 5.0  # seconds — events arrive as soon as LLM+TTS finish
+_MIN_DURATION_MS = 0.1
 
 # Verified against actual codebase emit() calls (see module docstring).
 # These are the core events a text-mode conversation pipeline must produce.
@@ -33,6 +34,10 @@ EXPECTED_EVENTS: frozenset[str] = frozenset({
     "audio_with_expression", # TTS audio data (output_node.py:163)
     "sentence",              # LLM text response (output_node.py:59,62)
 })
+
+
+def _duration_ms_since(start_time: float) -> float:
+    return round(max((time.perf_counter() - start_time) * 1000, _MIN_DURATION_MS), 1)
 
 
 # ── Public API ───────────────────────────────────────────────────────
@@ -68,16 +73,15 @@ async def check_conversation_pipeline() -> CheckResult:
             )
             logger.info("[inspection:pipeline] Connected to backend")
         except TimeoutError:
-            duration_ms = (time.perf_counter() - start_time) * 1000
             logger.error("[inspection:pipeline] Connection timed out")
             return CheckResult.failed(
                 name="pipeline/conversation",
-                duration_ms=round(duration_ms, 1),
+                duration_ms=_duration_ms_since(start_time),
                 error=f"Connection to {BACKEND_URL} timed out after {CONNECTION_TIMEOUT}s",
             )
 
         # ── Send test message ─────────────────────────────────────
-        await sio.emit("chat:text_input", {"text": "[inspection] ping", "mode": "text"})
+        await sio.emit("chat:text", {"text": "[inspection] ping", "mode": "text"})
         logger.info("[inspection:pipeline] Sent test message, collecting events...")
 
         # ── Wait for pipeline to process ──────────────────────────
@@ -89,7 +93,7 @@ async def check_conversation_pipeline() -> CheckResult:
 
         # ── Evaluate results ──────────────────────────────────────
         missing = EXPECTED_EVENTS - received_events
-        duration_ms = (time.perf_counter() - start_time) * 1000
+        duration_ms = _duration_ms_since(start_time)
 
         if not missing:
             logger.info(
@@ -98,7 +102,7 @@ async def check_conversation_pipeline() -> CheckResult:
             )
             return CheckResult.passed(
                 name="pipeline/conversation",
-                duration_ms=round(duration_ms, 1),
+                duration_ms=duration_ms,
                 received=sorted(received_events),
                 missing=[],
             )
@@ -109,18 +113,17 @@ async def check_conversation_pipeline() -> CheckResult:
         )
         return CheckResult.failed(
             name="pipeline/conversation",
-            duration_ms=round(duration_ms, 1),
+            duration_ms=duration_ms,
             error=f"Missing expected events: {sorted(missing)}",
             received=sorted(received_events),
             missing=sorted(missing),
         )
 
     except Exception as exc:
-        duration_ms = (time.perf_counter() - start_time) * 1000
         logger.error(f"[inspection:pipeline] Unexpected error: {exc}")
         return CheckResult.failed(
             name="pipeline/conversation",
-            duration_ms=round(duration_ms, 1),
+            duration_ms=_duration_ms_since(start_time),
             error=f"Exception during pipeline check: {exc}",
             received=sorted(received_events),
             missing=sorted(EXPECTED_EVENTS - received_events),

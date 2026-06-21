@@ -128,7 +128,7 @@ useDanmaku()
 <style scoped>
 /* Desktop Panel Container */
 .panel-container {
-  width: 380px;
+  width: 340px;
   background: rgba(36, 21, 56, 0.85);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);

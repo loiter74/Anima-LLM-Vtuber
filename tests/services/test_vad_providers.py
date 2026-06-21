@@ -455,6 +455,23 @@ class TestVADFactory:
         assert result.min_speech_duration == 10
         assert result.min_silence_duration == 20
 
+    def test_mock_vad_from_config(self):
+        """MockVAD should support ProviderRegistry construction from config."""
+        config = MockVADConfig(
+            sample_rate=8000,
+            db_threshold=-22.0,
+            min_speech_duration=3,
+            min_silence_duration=9,
+        )
+
+        result = MockVAD.from_config(config)
+
+        assert isinstance(result, MockVAD)
+        assert result.sample_rate == 8000
+        assert result.db_threshold == -22.0
+        assert result.min_speech_duration == 3
+        assert result.min_silence_duration == 9
+
     def test_create_silero(self):
         """create('silero') should return a SileroVAD instance."""
         mock_instance = MagicMock()

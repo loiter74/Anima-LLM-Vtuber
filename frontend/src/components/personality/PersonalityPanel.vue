@@ -87,10 +87,10 @@ const computedMbtiType = computed(() => {
 const dimensions = computed(() => {
   const d = store.mbtiDimensions ?? { ei: 50, sn: 50, tf: 50, jp: 50 }
   return [
-    { label: 'E/I', val: d.ei, color: '#a882ff' },
-    { label: 'S/N', val: d.sn, color: '#5dade2' },
-    { label: 'T/F', val: d.tf, color: '#f39c12' },
-    { label: 'J/P', val: d.jp, color: '#2ecc71' },
+    { label: 'E/I', val: d.ei, color: '#a882ff', left: '内向 I', right: '外向 E' },
+    { label: 'S/N', val: d.sn, color: '#5dade2', left: '实感 S', right: '直觉 N' },
+    { label: 'T/F', val: d.tf, color: '#f39c12', left: '共情 F', right: '理性 T' },
+    { label: 'J/P', val: d.jp, color: '#2ecc71', left: '随性 P', right: '计划 J' },
   ]
 })
 
@@ -266,15 +266,21 @@ function toggleMode(): void {
 
           <!-- Dimension bars -->
           <div class="bg-c-card/80 rounded-xl px-3 py-2.5 space-y-2.5">
-            <div v-for="dim in dimensions" :key="dim.label" class="flex items-center gap-2">
-              <span class="text-xs text-c-text-dim w-8 shrink-0">{{ dim.label }}</span>
-              <div class="flex-1 h-1.5 rounded-full bg-c-bg/80 overflow-hidden">
-                <div
-                  class="h-full rounded-full transition-all duration-300"
-                  :style="{ width: dim.val + '%', background: dim.color }"
-                />
+            <div v-for="dim in dimensions" :key="dim.label" class="space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-10px text-c-text-muted">{{ dim.left }}</span>
+                <span class="text-xs font-medium text-c-text-dim">{{ dim.label }}</span>
+                <span class="text-10px text-c-text-muted">{{ dim.right }}</span>
               </div>
-              <span class="text-xs tabular-nums text-c-text-dim w-6 text-right shrink-0">{{ dim.val }}</span>
+              <div class="flex items-center gap-2">
+                <div class="flex-1 h-1.5 rounded-full bg-c-bg/80 overflow-hidden">
+                  <div
+                    class="h-full rounded-full transition-all duration-300"
+                    :style="{ width: dim.val + '%', background: dim.color }"
+                  />
+                </div>
+                <span class="text-xs tabular-nums text-c-text-dim w-6 text-right shrink-0">{{ dim.val }}</span>
+              </div>
             </div>
           </div>
         </div>

@@ -131,6 +131,11 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
     return data or {}
 
 
+def _env_override(name: str, current: str | None) -> str | None:
+    value = os.getenv(name)
+    return value if value else current
+
+
 def _load_service_config(service_type: str, service_name: str) -> dict[str, Any]:
     """
     Load configuration for a single service
@@ -258,11 +263,20 @@ class AppConfig(BaseConfig):
         services_config = main_config.get("services", {})
 
         # Load each service configuration
-        asr_name = services_config.get("asr", "mock")
-        tts_name = services_config.get("tts", "mock")
-        agent_name = services_config.get("agent", "mock")
-        local_llm_name = services_config.get("local_llm")  # None if not specified
-        vad_name = services_config.get("vad", "mock")
+        asr_name = _env_override("ANIMETTA_ASR", services_config.get("asr", "mock"))
+        tts_name = _env_override("ANIMETTA_TTS", services_config.get("tts", "mock"))
+        agent_name = _env_override("ANIMETTA_LLM", services_config.get("agent", "mock"))
+        local_llm_name = _env_override("ANIMETTA_LOCAL_LLM", services_config.get("local_llm"))
+        vad_name = _env_override("ANIMETTA_VAD", services_config.get("vad", "mock"))
+
+        services_config = {
+            **services_config,
+            "asr": asr_name,
+            "tts": tts_name,
+            "agent": agent_name,
+            "local_llm": local_llm_name,
+            "vad": vad_name,
+        }
 
         asr_data = _load_service_config("asr", asr_name)
         tts_data = _load_service_config("tts", tts_name)
@@ -285,6 +299,7 @@ class AppConfig(BaseConfig):
         # Strip keys that aren't Pydantic fields
         known_fields = {"persona", "services", "system", "asr", "tts", "agent", "local_llm", "vad", "bilibili"}
         filtered = {k: v for k, v in main_config.items() if k in known_fields}
+        filtered["services"] = services_config
         merged = {
             **filtered,
             "asr": asr_data,

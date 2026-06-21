@@ -134,7 +134,8 @@ class TestMinecraftBridgeStart:
         mock_loop = MagicMock()
         mock_loop.start = AsyncMock()
 
-        with patch("os.path.exists", return_value=True), \
+        with patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True), \
+             patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
              patch("asyncio.wait_for", new=AsyncMock(return_value=None)), \
              patch("animetta.tools.minecraft.autonomous.AutonomousLoop", return_value=mock_loop):

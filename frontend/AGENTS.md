@@ -73,6 +73,14 @@ frontend/
 - **IPC**: Use Electron IPC for main↔renderer communication.
 - **Build status**: Electron builder not yet configured — runs as Vite dev server (port 3000). No `electron.vite.config.ts` on disk.
 
+## STYLE CONVENTIONS
+
+- **UnoCSS first**: All new components use UnoCSS utility classes. CSS variables (`var(--c-*)`) are reserved as token definitions (in `themes.css`), not for direct use in component `<style>` blocks.
+- **Style reference**: See `STYLE_GUIDE.md` for the complete CSS variable → UnoCSS mapping table, component template, and code review checklist.
+- **No new hex colors**: Always use design tokens (`text-c-accent`, not `color: #e879a8`).
+- **Rounded corners**: Default is `rounded-xl` (12px). No 90-degree corners except the window itself.
+- **Motion**: Use `duration-150` (fast), `duration-200` (base), or `duration-300` (slow). Max 300ms.
+
 ## ANTI-PATTERNS
 
 - ❌ Never mutate Live2D model position directly — use `centerModel()` only

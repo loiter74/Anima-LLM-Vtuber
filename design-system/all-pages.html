@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Animetta — All Pages Prototype</title>
+<link rel="icon" href="assets/favicon.svg" />
+<link rel="stylesheet" href="colors_and_type.css" />
+<style>
+  /* ── Base ── */
+  body.ds-page { padding: 0; margin: 0; }
+  .demo-wrap {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 40px 32px 64px;
+  }
+  .demo-section {
+    margin-bottom: 60px;
+  }
+  .demo-section h2 {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--c-text);
+  }
+  .demo-section .desc {
+    font-size: var(--fs-sm);
+    color: var(--c-text-dim);
+    margin-bottom: 24px;
+  }
+
+  /* ── App Window ── */
+  .app {
+    position: relative;
+    height: 760px;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--c-border-accent);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    background-image: url("assets/backgrounds/sakura-night.png");
+    background-size: cover;
+    background-position: center;
+    background-color: var(--c-bg);
+  }
+  .app::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 100% at 50% 100%, rgba(26,16,40,0.6), transparent 70%),
+      linear-gradient(180deg, rgba(26,16,40,0.30) 0%, transparent 30%, rgba(26,16,40,0.45) 100%);
+    pointer-events: none;
+  }
+
+  /* ── Title Bar ── */
+  .tb {
+    position: relative;
+    z-index: 4;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    background: rgba(26,16,40,0.55);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .tb .traffic { display: flex; gap: 8px; }
+  .tb .traffic span { width: 11px; height: 11px; border-radius: 50%; }
+  .tb .traffic .c { background: #f87171; }
+  .tb .traffic .m { background: #fbbf24; }
+  .tb .traffic .x { background: #4ade80; }
+  .tb .brand {
+    font-size: var(--fs-sm); font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--c-text);
+  }
+  .tb .brand .dot { color: var(--c-accent); }
+  .tb nav { display: flex; gap: 4px; margin-left: 8px; }
+  .tb nav button {
+    padding: 6px 12px;
+    font-size: var(--fs-xs);
+    color: var(--c-text-dim);
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all var(--d-base) var(--ease-out-expo);
+  }
+  .tb nav button:hover { color: var(--c-text); background: rgba(255,255,255,0.04); }
+  .tb nav button.active { color: var(--c-accent); background: var(--c-accent-soft); }
+
+  /* ── Chat Layout ── */
+  .chat-layout {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 280px 1fr 380px;
+    height: calc(760px - 44px);
+  }
+
+  /* ── Left Drawer ── */
+  .drawer {
+    position: relative;
+    padding: 20px 18px;
+    overflow-y: auto;
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--c-border);
+  }
+  .drawer h4 {
+    margin: 0 0 12px;
+    font-size: var(--fs-9);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--c-text-muted);
+  }
+  .drawer .persona {
+    padding: 14px 16px;
+    border-radius: var(--r-xl);
+    background: rgba(232,121,168,0.08);
+    border: 1px solid var(--c-border-accent);
+    margin-bottom: 18px;
+  }
+  .drawer .persona .row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .drawer .persona .av {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e879a8, #b14f7e);
+    display: grid; place-items: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .drawer .persona .nm { font-size: var(--fs-sm); font-weight: 600; color: var(--c-text); }
+  .drawer .persona .sub { font-size: var(--fs-9); color: var(--c-text-dim); letter-spacing: 0.06em; margin-top: 2px; }
+
+  /* ── Center Stage ── */
+  .stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stage .live2d-placeholder {
+    width: 200px;
+    height: 300px;
+    border-radius: var(--r-2xl);
+    background: rgba(232,121,168,0.08);
+    border: 1px dashed var(--c-border-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-muted);
+    font-size: var(--fs-sm);
+  }
+
+  /* ── Right Panel ── */
+  .right-panel {
+    position: relative;
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .panel-tab {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--c-text-dim);
+    background: rgba(26,16,40,0.40);
+    border: none;
+    border-radius: var(--r-lg);
+    cursor: pointer;
+    transition: all var(--d-base) var(--ease-out-expo);
+    font-family: inherit;
+  }
+  .panel-tab:hover {
+    color: var(--c-text);
+    background: rgba(45,27,69,0.60);
+  }
+  .panel-tab.active {
+    color: var(--c-accent);
+    background: var(--c-accent-soft);
+  }
+
+  /* ── Chat Panel ── */
+  .chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px;
+  }
+  .msg {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+  }
+  .msg.user { flex-direction: row-reverse; }
+  .msg .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .msg.user .avatar { background: var(--c-blue-soft); }
+  .msg.ai .avatar { background: var(--c-accent-soft); }
+  .msg .bubble {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: var(--r-xl);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+  }
+  .msg.user .bubble {
+    background: var(--c-user-bubble);
+    color: var(--c-text);
+    border-bottom-right-radius: var(--r-sm);
+  }
+  .msg.ai .bubble {
+    background: var(--c-ai-bubble);
+    color: var(--c-text);
+    border-bottom-left-radius: var(--r-sm);
+  }
+  .chat-input {
+    padding: 12px 18px;
+    border-top: 1px solid var(--c-border);
+    display: flex;
+    gap: 8px;
+  }
+  .chat-input input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--c-text);
+    font-size: var(--fs-xs);
+    font-family: inherit;
+    outline: none;
+  }
+  .chat-input input:focus { border-color: var(--c-accent); }
+  .chat-input button {
+    padding: 10px 16px;
+    border-radius: var(--r-lg);
+    border: none;
+    background: var(--c-accent);
+    color: #fff;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ── Dashboard Layout ── */
+  .dashboard-layout {
+    position: relative;
+    z-index: 2;
+    height: calc(760px - 44px);
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .dashboard-card {
+    background: rgba(36,21,56,0.70);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-2xl);
+    padding: 20px;
+    min-height: 150px;
+  }
+  .dashboard-card.full { grid-column: span 2; }
+  .dashboard-card h3 {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+    margin-bottom: 12px;
+  }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .kpi-item {
+    text-align: center;
+  }
+  .kpi-value {
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    color: var(--c-accent);
+    font-family: var(--font-mono);
+  }
+  .kpi-label {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── Live Stream Layout ── */
+  .livestream-layout {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    height: calc(760px - 44px);
+  }
+  .livestream-main {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .livestream-video {
+    width: 80%;
+    height: 80%;
+    border-radius: var(--r-2xl);
+    background: rgba(232,121,168,0.08);
+    border: 1px dashed var(--c-border-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-muted);
+  }
+  .livestream-chat {
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+  }
+  .livestream-chat-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--c-border);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+  }
+  .livestream-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .danmaku {
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border-radius: var(--r-lg);
+    background: rgba(255,255,255,0.03);
+  }
+  .danmaku .user {
+    font-size: var(--fs-9);
+    color: var(--c-accent);
+    font-weight: 600;
+  }
+  .danmaku .text {
+    font-size: var(--fs-xs);
+    color: var(--c-text);
+    margin-top: 2px;
+  }
+
+  /* ── Memory Panel ── */
+  .memory-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .memory-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .memory-header h3 {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+    flex: 1;
+  }
+  .memory-filters {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    padding: 4px 10px;
+    border-radius: var(--r-full);
+    font-size: var(--fs-9);
+    cursor: pointer;
+    border: 1px solid var(--c-border);
+    background: transparent;
+    color: var(--c-text-dim);
+  }
+  .chip.active {
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+  }
+  .memory-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .memory-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: var(--r-lg);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--c-border);
+    cursor: pointer;
+  }
+  .memory-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+  .memory-item-title {
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    color: var(--c-text);
+    margin-bottom: 4px;
+  }
+  .memory-item-preview {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    line-height: 1.4;
+  }
+
+  /* ── Personality Panel ── */
+  .personality-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .persona-selector {
+    margin-bottom: 20px;
+  }
+  .persona-selector label {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .persona-selector select {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--c-text);
+    font-size: var(--fs-xs);
+    font-family: inherit;
+  }
+  .mbti-section {
+    margin-top: 20px;
+  }
+  .mbti-section h4 {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .mbti-type {
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    color: var(--c-accent);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .mbti-bar {
+    margin-bottom: 12px;
+  }
+  .mbti-bar-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    margin-bottom: 4px;
+  }
+  .mbti-bar-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+  .mbti-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+
+  /* ── Settings Panel ── */
+  .settings-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .setting-group {
+    margin-bottom: 24px;
+  }
+  .setting-group h4 {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .setting-label {
+    font-size: var(--fs-xs);
+    color: var(--c-text);
+  }
+  .setting-desc {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    margin-top: 2px;
+  }
+
+  /* ── Music Panel ── */
+  .music-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .music-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-xl);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .music-card-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+    margin-bottom: 8px;
+  }
+  .music-card-meta {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    margin-bottom: 12px;
+  }
+  .music-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    margin-bottom: 12px;
+  }
+  .music-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--c-accent);
+    width: 35%;
+  }
+  .music-controls {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+  }
+  .music-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--c-border);
+    background: transparent;
+    color: var(--c-text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .music-btn.play {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+    color: #fff;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body class="ds-page">
+<div class="demo-wrap">
+
+  <!-- ── Page 1: Chat Page ── -->
+  <div class="demo-section">
+    <h2>Page 1: Chat Page</h2>
+    <p class="desc">主聊天界面 — 左侧抽屉 + 中间 Live2D + 右侧面板（6 个 Tab）</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="chat-layout">
+        <!-- Left Drawer -->
+        <div class="drawer">
+          <h4>Persona</h4>
+          <div class="persona">
+            <div class="row">
+              <div class="av">有</div>
+              <div>
+                <div class="nm">久遠寺有珠</div>
+                <div class="sub">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+          <h4>Quick Controls</h4>
+          <div style="font-size: var(--fs-9); color: var(--c-text-muted);">Voice · Mic · Memory</div>
+          <h4 style="margin-top: 20px;">Memory Topics</h4>
+          <div style="font-size: var(--fs-9); color: var(--c-text-muted);">6 topics loaded</div>
+        </div>
+
+        <!-- Center Stage -->
+        <div class="stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+          <div class="panel-header">
+            <button class="panel-tab active">💬 聊天</button>
+            <button class="panel-tab">📺 直播</button>
+            <button class="panel-tab">🧠 记忆</button>
+            <button class="panel-tab">🎭 人格</button>
+            <button class="panel-tab">🎵 音乐</button>
+            <button class="panel-tab">⚙️ 设置</button>
+          </div>
+
+          <!-- Chat Tab -->
+          <div class="chat-panel">
+            <div class="chat-messages">
+              <div class="msg user">
+                <div class="avatar"></div>
+                <div class="bubble">你好，有珠！</div>
+              </div>
+              <div class="msg ai">
+                <div class="avatar"></div>
+                <div class="bubble">……你好。有什么事吗？</div>
+              </div>
+              <div class="msg user">
+                <div class="avatar"></div>
+                <div class="bubble">今天天气真好啊</div>
+              </div>
+              <div class="msg ai">
+                <div class="avatar"></div>
+                <div class="bubble">……嗯。但是，我不太在意天气。</div>
+              </div>
+            </div>
+            <div class="chat-input">
+              <input type="text" placeholder="输入消息...">
+              <button>发送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 2: Dashboard Page ── -->
+  <div class="demo-section">
+    <h2>Page 2: Dashboard Page</h2>
+    <p class="desc">仪表盘 — 统计数据、KPI 卡片、图表</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button>Chat</button>
+          <button class="active">Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="dashboard-layout">
+        <div class="dashboard-grid">
+          <!-- KPI Cards -->
+          <div class="dashboard-card full">
+            <h3>Key Metrics</h3>
+            <div class="kpi-row">
+              <div class="kpi-item">
+                <div class="kpi-value">1,247</div>
+                <div class="kpi-label">Messages</div>
+              </div>
+              <div class="kpi-item">
+                <div class="kpi-value">23.4s</div>
+                <div class="kpi-label">Avg Latency</div>
+              </div>
+              <div class="kpi-item">
+                <div class="kpi-value">98.2%</div>
+                <div class="kpi-label">Success Rate</div>
+              </div>
+              <div class="kpi-item">
+                <div class="kpi-value">45.2K</div>
+                <div class="kpi-label">Tokens Used</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Latency -->
+          <div class="dashboard-card">
+            <h3>Latency Breakdown</h3>
+            <div style="font-size: var(--fs-9); color: var(--c-text-muted);">LLM: 18.2s · TTS: 3.1s · ASR: 2.1s</div>
+          </div>
+
+          <!-- Token Usage -->
+          <div class="dashboard-card">
+            <h3>Token Usage</h3>
+            <div style="font-size: var(--fs-9); color: var(--c-text-muted);">Input: 32.1K · Output: 13.1K</div>
+          </div>
+
+          <!-- Error Rate -->
+          <div class="dashboard-card">
+            <h3>Error Rate</h3>
+            <div style="font-size: var(--fs-9); color: var(--c-text-muted);">1.8% · 23 errors in 24h</div>
+          </div>
+
+          <!-- Session Timeline -->
+          <div class="dashboard-card">
+            <h3>Session Timeline</h3>
+            <div style="font-size: var(--fs-9); color: var(--c-text-muted);">Current: 2h 34m · Peak: 6h 12m</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 3: Live Stream Page ── -->
+  <div class="demo-section">
+    <h2>Page 3: Live Stream Page</h2>
+    <p class="desc">直播页面 — 视频流 + 弹幕聊天</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button>Chat</button>
+          <button>Dashboard</button>
+          <button class="active">Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="livestream-layout">
+        <!-- Video Area -->
+        <div class="livestream-main">
+          <div class="livestream-video">Live Stream</div>
+        </div>
+
+        <!-- Chat Sidebar -->
+        <div class="livestream-chat">
+          <div class="livestream-chat-header">📺 Live Chat</div>
+          <div class="livestream-messages">
+            <div class="danmaku">
+              <div class="user">User1</div>
+              <div class="text">有珠好可爱！</div>
+            </div>
+            <div class="danmaku">
+              <div class="user">User2</div>
+              <div class="text">今天唱什么歌？</div>
+            </div>
+            <div class="danmaku">
+              <div class="user">User3</div>
+              <div class="text">魔法使的夜yyds</div>
+            </div>
+            <div class="danmaku">
+              <div class="user">User4</div>
+              <div class="text">青子在哪里？</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 4: Memory Panel ── -->
+  <div class="demo-section">
+    <h2>Page 4: Memory Panel (Right Panel Tab)</h2>
+    <p class="desc">记忆面板 — 筛选、搜索、记忆列表</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="chat-layout">
+        <div class="drawer">
+          <h4>Persona</h4>
+          <div class="persona">
+            <div class="row">
+              <div class="av">有</div>
+              <div>
+                <div class="nm">久遠寺有珠</div>
+                <div class="sub">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <div class="right-panel">
+          <div class="panel-header">
+            <button class="panel-tab">💬 聊天</button>
+            <button class="panel-tab">📺 直播</button>
+            <button class="panel-tab active">🧠 记忆</button>
+            <button class="panel-tab">🎭 人格</button>
+            <button class="panel-tab">🎵 音乐</button>
+            <button class="panel-tab">⚙️ 设置</button>
+          </div>
+
+          <div class="memory-panel">
+            <div class="memory-header">
+              <span>📖</span>
+              <h3>记忆浏览</h3>
+            </div>
+            <div class="memory-filters">
+              <div class="chip active">全部</div>
+              <div class="chip">实体</div>
+              <div class="chip">概念</div>
+              <div class="chip">合成</div>
+              <div class="chip">来源</div>
+            </div>
+            <div class="memory-list">
+              <div class="memory-item">
+                <div class="memory-item-title">用户偏好：喜欢甜食</div>
+                <div class="memory-item-preview">用户经常提到喜欢甜食，尤其是蛋糕和巧克力...</div>
+              </div>
+              <div class="memory-item">
+                <div class="memory-item-title">苍崎青子</div>
+                <div class="memory-item-preview">用户的朋友，同居者。是第一位朋友...</div>
+              </div>
+              <div class="memory-item">
+                <div class="memory-item-title">魔女身份认同</div>
+                <div class="memory-item-preview">用户认同自己作为魔女的身份...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 5: Personality Panel ── -->
+  <div class="demo-section">
+    <h2>Page 5: Personality Panel (Right Panel Tab)</h2>
+    <p class="desc">人格面板 — 人格选择、MBTI 显示</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="chat-layout">
+        <div class="drawer">
+          <h4>Persona</h4>
+          <div class="persona">
+            <div class="row">
+              <div class="av">有</div>
+              <div>
+                <div class="nm">久遠寺有珠</div>
+                <div class="sub">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <div class="right-panel">
+          <div class="panel-header">
+            <button class="panel-tab">💬 聊天</button>
+            <button class="panel-tab">📺 直播</button>
+            <button class="panel-tab">🧠 记忆</button>
+            <button class="panel-tab active">🎭 人格</button>
+            <button class="panel-tab">🎵 音乐</button>
+            <button class="panel-tab">⚙️ 设置</button>
+          </div>
+
+          <div class="personality-panel">
+            <div class="persona-selector">
+              <label>角色人设</label>
+              <select>
+                <option>久遠寺有珠</option>
+                <option>苍崎青子</option>
+                <option>静希草十郎</option>
+              </select>
+            </div>
+
+            <div class="mbti-section">
+              <h4>MBTI 人格</h4>
+              <div class="mbti-type">INTJ</div>
+
+              <div class="mbti-bar">
+                <div class="mbti-bar-header">
+                  <span>内向 I</span>
+                  <span>E/I</span>
+                  <span>外向 E</span>
+                </div>
+                <div class="mbti-bar-track">
+                  <div class="mbti-bar-fill" style="width: 22%; background: var(--c-accent);"></div>
+                </div>
+              </div>
+
+              <div class="mbti-bar">
+                <div class="mbti-bar-header">
+                  <span>实感 S</span>
+                  <span>S/N</span>
+                  <span>直觉 N</span>
+                </div>
+                <div class="mbti-bar-track">
+                  <div class="mbti-bar-fill" style="width: 65%; background: var(--c-blue);"></div>
+                </div>
+              </div>
+
+              <div class="mbti-bar">
+                <div class="mbti-bar-header">
+                  <span>共情 F</span>
+                  <span>T/F</span>
+                  <span>理性 T</span>
+                </div>
+                <div class="mbti-bar-track">
+                  <div class="mbti-bar-fill" style="width: 58%; background: var(--c-gold);"></div>
+                </div>
+              </div>
+
+              <div class="mbti-bar">
+                <div class="mbti-bar-header">
+                  <span>随性 P</span>
+                  <span>J/P</span>
+                  <span>计划 J</span>
+                </div>
+                <div class="mbti-bar-track">
+                  <div class="mbti-bar-fill" style="width: 68%; background: var(--c-success);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 6: Settings Panel ── -->
+  <div class="demo-section">
+    <h2>Page 6: Settings Panel (Right Panel Tab)</h2>
+    <p class="desc">设置面板 — 服务配置、背景设置</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="chat-layout">
+        <div class="drawer">
+          <h4>Persona</h4>
+          <div class="persona">
+            <div class="row">
+              <div class="av">有</div>
+              <div>
+                <div class="nm">久遠寺有珠</div>
+                <div class="sub">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <div class="right-panel">
+          <div class="panel-header">
+            <button class="panel-tab">💬 聊天</button>
+            <button class="panel-tab">📺 直播</button>
+            <button class="panel-tab">🧠 记忆</button>
+            <button class="panel-tab">🎭 人格</button>
+            <button class="panel-tab">🎵 音乐</button>
+            <button class="panel-tab active">⚙️ 设置</button>
+          </div>
+
+          <div class="settings-panel">
+            <div class="setting-group">
+              <h4>LLM Provider</h4>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Model</div>
+                  <div class="setting-desc">DeepSeek V4 Pro</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4>TTS Provider</h4>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Voice</div>
+                  <div class="setting-desc">Qwen3 Alice Voice Clone</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4>Background</h4>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Current</div>
+                  <div class="setting-desc">Sakura Night</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <h4>Audio</h4>
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">Volume</div>
+                  <div class="setting-desc">80%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page 7: Music Panel ── -->
+  <div class="demo-section">
+    <h2>Page 7: Music Panel (Right Panel Tab)</h2>
+    <p class="desc">音乐面板 — 歌曲列表、播放控制</p>
+
+    <div class="app">
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Dashboard</button>
+          <button>Live</button>
+          <button>Meme</button>
+          <button>Music</button>
+        </nav>
+      </div>
+
+      <div class="chat-layout">
+        <div class="drawer">
+          <h4>Persona</h4>
+          <div class="persona">
+            <div class="row">
+              <div class="av">有</div>
+              <div>
+                <div class="nm">久遠寺有珠</div>
+                <div class="sub">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <div class="right-panel">
+          <div class="panel-header">
+            <button class="panel-tab">💬 聊天</button>
+            <button class="panel-tab">📺 直播</button>
+            <button class="panel-tab">🧠 记忆</button>
+            <button class="panel-tab">🎭 人格</button>
+            <button class="panel-tab active">🎵 音乐</button>
+            <button class="panel-tab">⚙️ 设置</button>
+          </div>
+
+          <div class="music-panel">
+            <div class="music-card">
+              <div class="music-card-title">London Bridge</div>
+              <div class="music-card-meta">3:24 · Alice's Theme</div>
+              <div class="music-progress">
+                <div class="music-progress-fill"></div>
+              </div>
+              <div class="music-controls">
+                <button class="music-btn">⏮</button>
+                <button class="music-btn play">▶</button>
+                <button class="music-btn">⏭</button>
+              </div>
+            </div>
+
+            <div class="music-card">
+              <div class="music-card-title">Witch's Waltz</div>
+              <div class="music-card-meta">4:12 · Mahoyo OST</div>
+              <div class="music-progress">
+                <div class="music-progress-fill" style="width: 0%;"></div>
+              </div>
+              <div class="music-controls">
+                <button class="music-btn">⏮</button>
+                <button class="music-btn">▶</button>
+                <button class="music-btn">⏭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

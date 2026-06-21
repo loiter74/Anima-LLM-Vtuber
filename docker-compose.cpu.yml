@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   animetta:
     build:
@@ -13,6 +11,10 @@ services:
       - ANIMETTA_PORT=12394
       - ANIMETTA_LOG_LEVEL=${ANIMETTA_LOG_LEVEL:-INFO}
       - ANIMETTA_DEVICE=cpu
+      - ANIMETTA_ASR=${ANIMETTA_ASR:-mock}
+      - ANIMETTA_TTS=${ANIMETTA_TTS:-mock}
+      - ANIMETTA_LLM=${ANIMETTA_LLM:-mock}
+      - ANIMETTA_VAD=${ANIMETTA_VAD:-mock}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}

@@ -36,7 +36,8 @@ async function getMcData() {
     const mod = await import('minecraft-data');
     _mcDataLoader = mod.default;
   }
-  return _mcDataLoader(bot.version);
+  _mcDataCache = _mcDataLoader(bot.version);
+  return _mcDataCache;
 }
 
 async function setupMovements() {
@@ -75,14 +76,18 @@ async function _explore_for_block(block_type, max_distance = 64, max_attempts = 
       return `Found ${block_type} at (${block.position.x}, ${block.position.y}, ${block.position.z})`;
     }
     
-    // Random walk
+    // Random walk with timeout
     const dx = Math.floor(Math.random() * 20) - 10;
     const dz = Math.floor(Math.random() * 20) - 10;
     const targetX = bot.entity.position.x + dx;
     const targetZ = bot.entity.position.z + dz;
     
     try {
-      await bot.pathfinder.goto(new GoalBlock(targetX, bot.entity.position.y, targetZ));
+      await withTimeout(
+        bot.pathfinder.goto(new GoalBlock(targetX, bot.entity.position.y, targetZ)),
+        10000,  // 10 second timeout for exploration
+        'explore walk'
+      );
     } catch (e) {
       // Ignore pathfinding errors
     }
@@ -114,7 +119,18 @@ async function _mine(block_type, count = 1) {
     }
     
     if (!b) throw new Error(`No more ${block_type}, mined ${mined}`);
-    await bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z));
+    
+    // Navigate with timeout
+    try {
+      await withTimeout(
+        bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z)),
+        15000,
+        'navigate to mine'
+      );
+    } catch (e) {
+      // Navigation failed, try to dig from current position
+    }
+    
     await bot.dig(b);
     mined++;
   }
@@ -155,10 +171,44 @@ async function _attack(target = 'nearest_hostile') {
 
 async function _collect(block_type, count = 1) {
   await setupMovements();
-  const collectBlock = await import('mineflayer-collectblock');
-  if (!bot.collectBlock) bot.loadPlugin(collectBlock.default || collectBlock);
-  await bot.collectBlock.collect(b => b.name === block_type, { maxCount: count });
-  return `Collected ${count} ${block_type}`;
+  const mcData = await getMcData();
+  const bi = mcData.blocksByName[block_type];
+  if (!bi) throw new Error(`Unknown block: ${block_type}`);
+  
+  let collected = 0;
+  for (let i = 0; i < count; i++) {
+    // Find block
+    let block = bot.findBlock({ matching: bi.id, maxDistance: 32 });
+    
+    // If not found, explore
+    if (!block) {
+      try {
+        await _explore_for_block(block_type, 32, 3);
+        block = bot.findBlock({ matching: bi.id, maxDistance: 32 });
+      } catch (e) {
+        // Exploration failed
+      }
+    }
+    
+    if (!block) throw new Error(`No more ${block_type} nearby, collected ${collected}`);
+    
+    // Navigate to block with timeout
+    try {
+      await withTimeout(
+        bot.pathfinder.goto(new GoalBlock(block.position.x, block.position.y + 1, block.position.z)),
+        15000,  // 15 second timeout for navigation
+        'navigate to block'
+      );
+    } catch (e) {
+      // Navigation failed, try to dig from current position
+      console.log('Navigation failed, trying to dig from current position');
+    }
+    
+    // Dig block
+    await bot.dig(block);
+    collected++;
+  }
+  return `Collected ${collected} ${block_type}`;
 }
 
 async function _smart_goto(target_or_x, y, z) {
@@ -209,34 +259,163 @@ async function _smart_build(block_type, x, y, z, blueprint = 'platform') {
 
 async function _craft(recipe, count = 1) {
   const mcData = await getMcData();
+
+  // Look up item by name
   const item = mcData.itemsByName[recipe];
-  if (!item) throw new Error(`Unknown item: ${recipe}`);
-  
-  // Try to find recipe
-  let recipes = bot.recipesFor(item.id, null, count, null) || [];
-  
-  // If no recipe found, try with crafting table
-  if (recipes.length === 0) {
-    const craftingTable = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 32 });
-    if (craftingTable) {
-      recipes = bot.recipesFor(item.id, null, count, craftingTable) || [];
+  if (!item) {
+    throw new Error(`Item not found: ${recipe}`);
+  }
+
+  // Find recipes from minecraft-data (server may not send recipes)
+  const recipes = [];
+  for (const [key, recipeArray] of Object.entries(mcData.recipes)) {
+    for (const r of recipeArray) {
+      if (r.result && r.result.id === item.id) {
+        recipes.push(r);
+      }
     }
   }
   
-  // If still no recipe, try to craft anyway (some items work without explicit recipe)
   if (recipes.length === 0) {
-    // Try to craft with empty recipe (some items like oak_planks work this way)
+    throw new Error(`No recipes found for: ${recipe}`);
+  }
+
+  // Try each recipe
+  for (const recipeObj of recipes) {
     try {
-      await bot.craft(bot.recipesFor(item.id, null, count, null)[0], count, null);
-      return `Crafted ${count} ${recipe}`;
+      // Check if player has enough materials
+      const missing = _checkCraftMaterials(recipeObj, count);
+      if (missing.length > 0) {
+        continue; // Try next recipe variant
+      }
+      
+      // Use manual crafting (window API)
+      const result = await _manualCraft(recipeObj, item.name, count);
+      if (result) {
+        return result;
+      }
     } catch (e) {
-      throw new Error(`No recipe for ${recipe}: ${e.message}`);
+      // Try next recipe variant
+      continue;
+    }
+  }
+
+  throw new Error(`Failed to craft ${recipe} - missing materials or no valid recipe`);
+}
+
+async function _manualCraft(recipeObj, itemName, count) {
+  // Manual crafting using window API
+  // This works even when server doesn't send recipes
+  
+  const mcData = await getMcData();
+  
+  // Get required materials from recipe
+  const required = {};
+  if (recipeObj.inShape) {
+    for (const row of recipeObj.inShape) {
+      for (const cell of row) {
+        const cellId = typeof cell === 'number' ? cell : (cell && cell.id);
+        if (cellId && cellId !== -1) {
+          const name = (mcData.items[cellId] || mcData.blocks[cellId] || {}).name;
+          if (name) {
+            required[name] = (required[name] || 0) + 1;
+          }
+        }
+      }
     }
   }
   
-  await bot.craft(recipes[0], count, null);
-  return `Crafted ${count} ${recipe}`;
+  // Check if we have all materials
+  const inventory = {};
+  for (const item of bot.inventory.items()) {
+    inventory[item.name] = (inventory[item.name] || 0) + item.count;
+  }
+  
+  for (const [name, needed] of Object.entries(required)) {
+    if ((inventory[name] || 0) < needed * count) {
+      return null; // Not enough materials
+    }
+  }
+  
+  // Place materials in crafting grid (3x3)
+  const window = bot.inventory;
+  const craftingSlots = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // 3x3 grid
+  
+  let slotIndex = 0;
+  for (const [name, needed] of Object.entries(required)) {
+    const item = bot.inventory.items().find(i => i.name === name);
+    if (item && slotIndex < craftingSlots.length) {
+      // Place 'needed' items in consecutive slots
+      for (let i = 0; i < needed && slotIndex < craftingSlots.length; i++) {
+        await bot.moveSlotItem(item.slot, craftingSlots[slotIndex]);
+        slotIndex++;
+      }
+    }
+  }
+  
+  // Wait for crafting result
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Check if we have a result
+  const result = window.slots[0];
+  if (result && result.name === itemName) {
+    // Click to craft
+    await bot.clickWindow(0, 0, 0);
+    return `Crafted ${count} ${itemName}`;
+  }
+  
+  return null;
 }
+
+function _checkCraftMaterials(recipeObj, count) {
+  const missing = [];
+  const inventory = {};
+  for (const item of bot.inventory.items()) {
+    inventory[item.name] = (inventory[item.name] || 0) + item.count;
+  }
+
+  // Collect required ingredients from inShape and ingredients
+  const required = {};
+  const addIngredient = (id, qty) => {
+    const mcData = _mcDataCache;
+    const name = (mcData.items[id] || mcData.blocks[id] || {}).name || `item(${id})`;
+    required[name] = (required[name] || 0) + qty;
+  };
+
+  if (recipeObj.inShape) {
+    for (const row of recipeObj.inShape) {
+      for (const cell of row) {
+        // Handle both formats: plain number or object with id
+        const cellId = typeof cell === 'number' ? cell : (cell && cell.id);
+        if (cellId !== null && cellId !== undefined && cellId !== -1) {
+          addIngredient(cellId, 1);
+        }
+      }
+    }
+  }
+  if (recipeObj.ingredients) {
+    for (const ing of recipeObj.ingredients) {
+      // Handle both formats: plain number or object with id
+      const ingId = typeof ing === 'number' ? ing : (ing && ing.id);
+      if (ingId !== null && ingId !== undefined && ingId !== -1) {
+        addIngredient(ingId, 1);
+      }
+    }
+  }
+
+  // Scale by count and compare
+  for (const [name, needed] of Object.entries(required)) {
+    const have = inventory[name] || 0;
+    const totalNeeded = needed * count;
+    if (have < totalNeeded) {
+      missing.push(`${name} (need ${totalNeeded}, have ${have})`);
+    }
+  }
+  return missing;
+}
+
+// Cache for _checkCraftMaterials (set during getMcData calls)
+let _mcDataCache = null;
 
 async function _smelt(item, fuel, count = 1) {
   const mcData = await getMcData();

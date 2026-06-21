@@ -92,7 +92,7 @@ class TestSuccessfulPipeline:
         # Verify the test message was emitted
         mock_client.emit.assert_called_once()
         call_args = mock_client.emit.call_args
-        assert call_args[0][0] == "chat:text_input"
+        assert call_args[0][0] == "chat:text"
         assert call_args[0][1]["text"] == "[inspection] ping"
         assert call_args[0][1]["mode"] == "text"
 

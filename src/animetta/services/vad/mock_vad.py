@@ -48,6 +48,16 @@ class MockVAD(VADInterface):
 
         logger.info(f"Mock VAD initialized: db_threshold={db_threshold}")
 
+    @classmethod
+    def from_config(cls, config, **kwargs) -> MockVAD:
+        """Create MockVAD from provider config."""
+        return cls(
+            sample_rate=getattr(config, "sample_rate", 16000),
+            db_threshold=getattr(config, "db_threshold", -30.0),
+            min_speech_duration=getattr(config, "min_speech_duration", 5),
+            min_silence_duration=getattr(config, "min_silence_duration", 15),
+        )
+
     def _calculate_db(self, audio_data: np.ndarray) -> float:
         """Calculate audio decibel value"""
         rms = np.sqrt(np.mean(np.square(audio_data)))

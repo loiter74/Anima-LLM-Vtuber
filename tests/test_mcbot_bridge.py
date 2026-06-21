@@ -2,9 +2,10 @@
 Tests for MC Bot bridge and IPC communication
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
+
+import pytest
 
 
 @pytest.fixture
@@ -35,22 +36,22 @@ def mock_status():
 
 class TestBridgeCommands:
     """Test bridge command sending"""
-    
+
     async def test_send_command_success(self, mock_bridge):
         """Command returns success response"""
         result = await mock_bridge.send_command("goto", {"x": 100, "y": 65, "z": 200})
         assert result["status"] == "success"
-    
+
     async def test_send_command_timeout(self, mock_bridge):
         """Command timeout returns error"""
-        mock_bridge.send_command = AsyncMock(side_effect=asyncio.TimeoutError())
+        mock_bridge.send_command = AsyncMock(side_effect=TimeoutError())
         with pytest.raises(asyncio.TimeoutError):
             await mock_bridge.send_command("goto", {"x": 100, "y": 65, "z": 200}, timeout=1.0)
 
 
 class TestBusyHandling:
     """Test busy command rejection"""
-    
+
     async def test_busy_returns_error(self):
         """When bot is busy, second command should return error"""
         # This tests the Node.js side behavior
@@ -60,7 +61,7 @@ class TestBusyHandling:
 
 class TestCommandConsistency:
     """Test IPC and Plan mode consistency"""
-    
+
     async def test_attack_consistent(self):
         """Attack behavior should be consistent across IPC and Plan modes"""
         # Both should use the same HOSTILE_NAMES list

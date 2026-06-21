@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useChat } from '@/composables/useChat'
+import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 
 /** Priority level determines the top-bar color */
 type Priority = 'high' | 'medium' | 'low'
@@ -12,28 +14,65 @@ interface MemoryTopic {
   priority: Priority
 }
 
-/**
- * Mock data — replace with backend fetch once the memory API is ready.
- * Each card represents a topic the AI has learned about.
- */
-const topics = ref<MemoryTopic[]>([
-  { id: '1', main: 'Vue Frontend', desc: '3-column layout', priority: 'high' },
-  { id: '2', main: 'Docker Deploy', desc: 'Container setup', priority: 'high' },
-  { id: '3', main: 'Design System', desc: 'Token alignment', priority: 'medium' },
-  { id: '4', main: 'Animation', desc: 'Duration & easing', priority: 'medium' },
-  { id: '5', main: 'Persona Card', desc: 'Avatar & traits', priority: 'low' },
-  { id: '6', main: 'Quick Controls', desc: 'Toggles & sliders', priority: 'low' },
-])
+/** Map memory page_type to priority */
+function pageTypeToPriority(pageType: string): Priority {
+  const map: Record<string, Priority> = {
+    entity: 'high',
+    concept: 'medium',
+    synthesis: 'medium',
+    source: 'low',
+  }
+  return map[pageType] || 'low'
+}
+
+const topics = ref<MemoryTopic[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 
 const { sendText } = useChat()
 
+/** Fetch memory topics from backend */
+async function fetchTopics() {
+  const socket = getSocket()
+  if (!socket) return
+
+  loading.value = true
+  error.value = null
+
+  try {
+    const response = await new Promise<{ pages: Array<{ path: string; title: string; content: string; page_type: string; tags: string[]; updated_at: string }>; error?: string }>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Request timeout')), 10000)
+
+      socket.emit(Events.MEMORY.LIST_PAGES, { session_id: 'default' }, (res: { pages: Array<{ path: string; title: string; content: string; page_type: string; tags: string[]; updated_at: string }>; error?: string }) => {
+        clearTimeout(timeout)
+        resolve(res)
+      })
+    })
+
+    if (response.error) {
+      error.value = response.error
+      return
+    }
+
+    topics.value = (response.pages || []).map(page => ({
+      id: page.path,
+      main: page.title || 'Untitled',
+      desc: page.content?.substring(0, 60) || '',
+      priority: pageTypeToPriority(page.page_type),
+    }))
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load topics'
+  } finally {
+    loading.value = false
+  }
+}
+
 /** Send card topic as chat message */
 function handleSend(topic: MemoryTopic) {
-  // TODO: wire up to backend memory context once API is ready
   sendText(`Tell me about ${topic.main}`)
 }
 
-/** Remove card with exit animation */
+/** Remove card with exit animation (local only for now) */
 function handleDelete(id: string) {
   topics.value = topics.value.filter(t => t.id !== id)
 }
@@ -47,11 +86,33 @@ function priorityColor(priority: Priority): string {
   }
   return map[priority]
 }
+
+/** Fetch topics on mount */
+onMounted(() => {
+  fetchTopics()
+})
 </script>
 
 <template>
   <div class="memory-cards">
-    <div class="cards-grid">
+    <!-- Loading state -->
+    <div v-if="loading" class="cards-loading">
+      <span class="loading-text">Loading topics...</span>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="error" class="cards-error">
+      <span class="error-text">{{ error }}</span>
+      <button class="retry-btn" @click="fetchTopics">Retry</button>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="topics.length === 0" class="cards-empty">
+      <span class="empty-text">No memory topics yet</span>
+    </div>
+
+    <!-- Cards grid -->
+    <div v-else class="cards-grid">
       <TransitionGroup name="card">
         <div
           v-for="topic in topics"
@@ -100,6 +161,42 @@ function priorityColor(priority: Priority): string {
 <style scoped>
 .memory-cards {
   width: 100%;
+}
+
+/* ---- Loading/Error/Empty states ---- */
+.cards-loading,
+.cards-error,
+.cards-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  gap: 12px;
+}
+
+.loading-text,
+.error-text,
+.empty-text {
+  font-size: 12px;
+  color: var(--c-text-muted, rgba(255, 255, 255, 0.45));
+  text-align: center;
+}
+
+.retry-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-sm, 6px);
+  background: var(--c-accent-soft, rgba(232, 121, 168, 0.15));
+  color: var(--c-accent, #e879a8);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--d-fast, 150ms) ease;
+}
+
+.retry-btn:hover {
+  background: var(--c-accent, #e879a8);
+  color: #fff;
 }
 
 /* ---- 2-column grid ---- */

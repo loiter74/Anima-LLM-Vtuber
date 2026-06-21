@@ -191,6 +191,25 @@
     "voice_stop": {
       "name": "desktop:voice_stop",
       "payload": {}
+    },
+    "registered": {
+      "name": "desktop:registered",
+      "payload": {
+        "client_id": "string",
+        "client_type": "string"
+      }
+    },
+    "action_queued": {
+      "name": "desktop:action_queued",
+      "payload": {}
+    },
+    "voice_started": {
+      "name": "desktop:voice_started",
+      "payload": {}
+    },
+    "voice_stopped": {
+      "name": "desktop:voice_stopped",
+      "payload": {}
     }
   },
   "bilibili": {
@@ -281,6 +300,19 @@
       "name": "persona:set_mode",
       "payload": {
         "mode": "string"
+      }
+    },
+    "updated": {
+      "name": "persona:updated",
+      "payload": {
+        "persona_name": "string",
+        "display_name": "string"
+      }
+    },
+    "personality_updated": {
+      "name": "persona:personality_updated",
+      "payload": {
+        "persona_name": "string"
       }
     }
   },

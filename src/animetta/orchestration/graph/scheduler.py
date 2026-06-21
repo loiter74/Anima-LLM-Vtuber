@@ -27,6 +27,12 @@ import contextlib
 
 from loguru import logger
 
+_MIN_DURATION_SECONDS = 1e-9
+
+
+def _elapsed_since(start: float) -> float:
+    return max(time.monotonic() - start, _MIN_DURATION_SECONDS)
+
 
 @dataclass
 class TaskMetrics:
@@ -211,7 +217,7 @@ class AsyncScheduler:
 
         try:
             await asyncio.wait_for(task.func(), timeout=task.timeout)
-            elapsed = time.monotonic() - start
+            elapsed = _elapsed_since(start)
             task.metrics.last_run = time.time()
             task.metrics.last_duration = elapsed
             task.metrics.success_count += 1
@@ -220,7 +226,7 @@ class AsyncScheduler:
                 f"(success={task.metrics.success_count}, failure={task.metrics.failure_count})"
             )
         except TimeoutError:
-            elapsed = time.monotonic() - start
+            elapsed = _elapsed_since(start)
             logger.warning(
                 f"[Scheduler] Task '{task.name}' timed out after {elapsed:.1f}s "
                 f"(timeout={task.timeout}s)"

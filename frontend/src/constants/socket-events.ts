@@ -76,6 +76,10 @@ export const Events = {
     CHAT_MESSAGE: socketEvents.desktop.chat_message.name,
     VOICE_START: socketEvents.desktop.voice_start.name,
     VOICE_STOP: socketEvents.desktop.voice_stop.name,
+    REGISTERED: socketEvents.desktop.registered.name,
+    ACTION_QUEUED: socketEvents.desktop.action_queued.name,
+    VOICE_STARTED: socketEvents.desktop.voice_started.name,
+    VOICE_STOPPED: socketEvents.desktop.voice_stopped.name,
   },
   BILIBILI: {
     CONNECT: socketEvents.bilibili.connect.name,
@@ -98,6 +102,8 @@ export const Events = {
     LIST: socketEvents.persona.list.name,
     SET: socketEvents.persona.set.name,
     SET_MODE: socketEvents.persona.set_mode.name,
+    UPDATED: socketEvents.persona.updated.name,
+    PERSONALITY_UPDATED: socketEvents.persona.personality_updated.name,
   },
   MEMORY: {
     ORGANIZE: socketEvents.memory.organize.name,

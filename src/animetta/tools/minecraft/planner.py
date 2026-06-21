@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
+from .skill_library import SkillLibrary
+
 # ── Data models ──
 
 @dataclass
@@ -86,8 +88,9 @@ class PlannerError(Exception):
 class MinecraftPlanner:
     """LLM-powered Minecraft task planner"""
 
-    def __init__(self, llm_service=None):
+    def __init__(self, llm_service=None, skill_library: SkillLibrary | None = None):
         self._llm = llm_service
+        self._skill_library = skill_library
         self._last_plan: Plan | None = None
 
     def set_llm(self, llm_service):
@@ -110,6 +113,22 @@ class MinecraftPlanner:
         """
         if not self._llm:
             raise PlannerError("No LLM service configured")
+
+        # Try SkillLibrary first — skip LLM if a matching skill exists
+        if self._skill_library:
+            skills = await self._skill_library.search_skills(goal, limit=3)
+            if skills:
+                best_skill = skills[0]
+                plan = Plan(
+                    goal=goal,
+                    steps=[PlanStep(action=s.name, params=s.params) for s in best_skill.steps],
+                )
+                self._last_plan = plan
+                logger.info(
+                    f"[MinecraftPlanner] SkillLibrary match: '{best_skill.name}' "
+                    f"→ {len(plan.steps)} steps for '{goal}'"
+                )
+                return plan
 
         # Build context string
         ctx_str = ""
@@ -222,8 +241,11 @@ class MinecraftPlanner:
 class ModeSelector:
     """Decides whether to use planner or rule mode based on context"""
 
-    def __init__(self, planner: MinecraftPlanner):
+    def __init__(self, planner: MinecraftPlanner, skill_library: SkillLibrary | None = None):
         self._planner = planner
+        # Inject skill_library into the planner if provided and not already set
+        if skill_library is not None and planner._skill_library is None:
+            planner._skill_library = skill_library
         self._has_goal = False
         self._goal: str | None = None
 

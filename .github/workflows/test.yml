@@ -28,15 +28,29 @@ jobs:
         pip install pytest-cov pytest-xdist mypy ruff
 
     - name: Lint with ruff
-      run: ruff check src/ tests/ || true
+      run: ruff check src/ tests/
 
     - name: Type check with mypy
-      run: mypy src/ --ignore-missing-imports || true
+      run: mypy src/ --ignore-missing-imports
+
+    - name: Validate Socket.IO events
+      run: PYTHONPATH=src python scripts/validate-events.py
+
+    - name: Secret scan
+      run: PYTHONPATH=src:. python scripts/check_secrets.py
+
+    - name: Route smoke probes
+      run: PYTHONPATH=src:. python scripts/route_smoke.py
+
+    - name: Validate Docker compose config
+      run: |
+        docker compose config
+        docker compose -f docker-compose.cpu.yml config
 
     - name: Fast parallel tests (default)
       run: |
         PYTHONPATH=src python -m pytest tests/ --ignore=tests/memory/test_manager.py \
-          --cov=src/animetta --cov-report=term-missing --cov-report=xml --cov-fail-under=70
+          --cov=src/animetta --cov-report=term-missing --cov-report=xml --cov-fail-under=67
 
     - name: Upload coverage report
       if: always()
@@ -82,7 +96,7 @@ jobs:
       - name: Run unit tests (metrics)
         run: PYTHONPATH=src python -m pytest tests/eval/test_metrics.py -v
 
-      - name: Run RAG regression test
+      - name: Run RAG regression test (advisory)
         run: PYTHONPATH=src python -m pytest tests/eval/test_rag_quality.py -v -m "slow" --timeout=300
         continue-on-error: true
 

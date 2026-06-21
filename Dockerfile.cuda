@@ -19,6 +19,9 @@ RUN npm install --legacy-peer-deps
 
 COPY frontend/ .
 
+# Copy config needed by socket-events.ts import (../../../config/socket-events.json)
+COPY config/socket-events.json /build/config/socket-events.json
+
 # Skip TypeScript check in Docker build (run vite build directly)
 RUN npx vite build
 
@@ -65,6 +68,9 @@ COPY src/ src/
 COPY config/ config/
 COPY scripts/ scripts/
 COPY .env.example .env.example
+
+# 验证 Socket.IO 事件名一致性
+RUN python scripts/validate-events.py
 
 # Copy frontend build
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist

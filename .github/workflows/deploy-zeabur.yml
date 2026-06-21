@@ -45,8 +45,16 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python -m pytest tests/ -v --tb=short -q || true
-        continue-on-error: true  # Don't block deploy on test failures
+          python -m pytest tests/ -v --tb=short -q
+
+      - name: Required deployment health gates
+        env:
+          PYTHONPATH: src:.
+        run: |
+          python scripts/check_secrets.py
+          python scripts/validate-events.py
+          python scripts/route_smoke.py
+          docker compose config
 
   # ── Deploy Job ────────────────────────────────────────────────────
   deploy:

@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>记忆图谱 — Animetta Design</title>
+<link rel="icon" href="assets/favicon.svg" />
+<link rel="stylesheet" href="colors_and_type.css" />
+<style>
+  /* ── Layout ── */
+  body.ds-page { padding: 0; }
+  .demo-wrap {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 40px 32px 64px;
+  }
+  .demo-section {
+    margin-bottom: 60px;
+  }
+  .demo-section h2 {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--c-text);
+  }
+  .demo-section .desc {
+    font-size: var(--fs-sm);
+    color: var(--c-text-dim);
+    margin-bottom: 24px;
+  }
+
+  /* ── App Window (Full Page) ── */
+  .app-full {
+    position: relative;
+    height: 760px;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--c-border-accent);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    background-image: url("assets/backgrounds/sakura-night.png");
+    background-size: cover;
+    background-position: center;
+    background-color: var(--c-bg);
+  }
+  .app-full::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 100% at 50% 100%, rgba(26,16,40,0.6), transparent 70%),
+      linear-gradient(180deg, rgba(26,16,40,0.30) 0%, transparent 30%, rgba(26,16,40,0.45) 100%);
+    pointer-events: none;
+  }
+
+  /* ── Title Bar ── */
+  .tb {
+    position: relative;
+    z-index: 4;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    background: rgba(26,16,40,0.55);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .tb .traffic { display: flex; gap: 8px; }
+  .tb .traffic span { width: 11px; height: 11px; border-radius: 50%; }
+  .tb .traffic .c { background: #f87171; }
+  .tb .traffic .m { background: #fbbf24; }
+  .tb .traffic .x { background: #4ade80; }
+  .tb .brand {
+    font-size: var(--fs-sm); font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--c-text);
+  }
+  .tb .brand .dot { color: var(--c-accent); }
+  .tb nav { display: flex; gap: 4px; margin-left: 8px; }
+  .tb nav button {
+    padding: 6px 12px;
+    font-size: var(--fs-xs);
+    color: var(--c-text-dim);
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all var(--d-base) var(--ease-out-expo);
+  }
+  .tb nav button:hover { color: var(--c-text); background: rgba(255,255,255,0.04); }
+  .tb nav button.active { color: var(--c-accent); background: var(--c-accent-soft); }
+
+  /* ── Full Page Layout ── */
+  .full-layout {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    height: calc(760px - 44px);
+  }
+
+  /* ── Full Page Sidebar ── */
+  .full-sidebar {
+    position: relative;
+    padding: 20px 18px;
+    overflow-y: auto;
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--c-border);
+  }
+  .full-sidebar h3 {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── Full Page Graph ── */
+  .full-graph {
+    position: relative;
+    overflow: hidden;
+  }
+  .full-graph canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── Sidebar App Window ── */
+  .app-sidebar {
+    position: relative;
+    height: 760px;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--c-border-accent);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    background-image: url("assets/backgrounds/sakura-night.png");
+    background-size: cover;
+    background-position: center;
+    background-color: var(--c-bg);
+  }
+  .app-sidebar::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 100% at 50% 100%, rgba(26,16,40,0.6), transparent 70%),
+      linear-gradient(180deg, rgba(26,16,40,0.30) 0%, transparent 30%, rgba(26,16,40,0.45) 100%);
+    pointer-events: none;
+  }
+
+  /* ── Sidebar Layout (3-column) ── */
+  .sidebar-layout {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    height: calc(760px - 44px);
+  }
+
+  /* ── Left Drawer ── */
+  .left-drawer {
+    position: relative;
+    padding: 20px 18px;
+    overflow-y: auto;
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--c-border);
+  }
+  .left-drawer h4 {
+    margin: 0 0 12px;
+    font-size: var(--fs-9);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--c-text-muted);
+  }
+
+  /* ── Center Stage ── */
+  .center-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .center-stage .live2d-placeholder {
+    width: 200px;
+    height: 300px;
+    border-radius: var(--r-2xl);
+    background: rgba(232,121,168,0.08);
+    border: 1px dashed var(--c-border-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-muted);
+    font-size: var(--fs-sm);
+  }
+
+  /* ── Right Panel (Memory Graph Sidebar) ── */
+  .right-panel {
+    position: relative;
+    background: rgba(26,16,40,0.45);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Memory Panel ── */
+  .memory-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .memory-panel-header {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .memory-panel-header h3 {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+    flex: 1;
+  }
+  .memory-panel-header .badge {
+    font-size: var(--fs-9);
+    padding: 2px 8px;
+    border-radius: var(--r-full);
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+  }
+
+  /* ── Filter Chips ── */
+  .filter-bar {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    padding: 4px 10px;
+    border-radius: var(--r-full);
+    font-size: var(--fs-9);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--d-fast) var(--ease-out-expo);
+    border: 1px solid var(--c-border);
+    background: transparent;
+    color: var(--c-text-dim);
+  }
+  .chip:hover {
+    border-color: var(--c-accent);
+    color: var(--c-text);
+  }
+  .chip.active {
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+  }
+
+  /* ── Search ── */
+  .search-bar {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--c-text);
+    font-size: var(--fs-xs);
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--d-fast) var(--ease-out-expo);
+  }
+  .search-input:focus {
+    border-color: var(--c-accent);
+  }
+  .search-input::placeholder {
+    color: var(--c-text-muted);
+  }
+
+  /* ── Mini Graph (Sidebar) ── */
+  .mini-graph {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 200px;
+  }
+  .mini-graph canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── Memory List (Sidebar) ── */
+  .memory-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 12px;
+    border-top: 1px solid var(--c-border);
+  }
+  .memory-item {
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    border-radius: var(--r-lg);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--d-fast) var(--ease-out-expo);
+  }
+  .memory-item:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: var(--c-border);
+  }
+  .memory-item.selected {
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent);
+  }
+  .memory-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .memory-item-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+  .memory-item-icon.source { background: rgba(107,114,128,0.2); }
+  .memory-item-icon.entity { background: rgba(124,140,245,0.2); }
+  .memory-item-icon.concept { background: rgba(245,200,114,0.2); }
+  .memory-item-icon.synthesis { background: rgba(168,130,255,0.2); }
+  .memory-item-title {
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    color: var(--c-text);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .memory-item-time {
+    font-size: 9px;
+    color: var(--c-text-muted);
+  }
+  .memory-item-preview {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(26,16,40,0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    font-size: var(--fs-9);
+    z-index: 10;
+  }
+  .legend h4 {
+    font-size: var(--fs-9);
+    font-weight: 600;
+    color: var(--c-text);
+    margin-bottom: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    color: var(--c-text-dim);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .legend-line {
+    width: 20px;
+    height: 2px;
+    border-radius: 1px;
+  }
+
+  /* ── Detail Panel (Full Page) ── */
+  .detail-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    background: rgba(26,16,40,0.90);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-2xl);
+    padding: 20px;
+    display: none;
+    box-shadow: var(--shadow-panel);
+    z-index: 20;
+  }
+  .detail-panel.visible { display: block; }
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .detail-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .detail-icon.source { background: rgba(107,114,128,0.2); }
+  .detail-icon.entity { background: rgba(124,140,245,0.2); }
+  .detail-icon.concept { background: rgba(245,200,114,0.2); }
+  .detail-icon.synthesis { background: rgba(168,130,255,0.2); }
+  .detail-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-text);
+  }
+  .detail-type {
+    font-size: var(--fs-9);
+    color: var(--c-text-dim);
+    margin-top: 2px;
+  }
+  .detail-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--r-md);
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: var(--c-text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all var(--d-fast) var(--ease-out-expo);
+  }
+  .detail-close:hover {
+    background: rgba(255,255,255,0.12);
+    color: var(--c-text);
+  }
+  .detail-content {
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    color: var(--c-text-dim);
+    margin-bottom: 16px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  .detail-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--c-border);
+  }
+  .meta-item { font-size: var(--fs-9); }
+  .meta-label { color: var(--c-text-muted); margin-bottom: 2px; }
+  .meta-value { color: var(--c-text); font-weight: 500; font-family: var(--font-mono); }
+
+  /* ── Stats Bar ── */
+  .stats-bar {
+    padding: 10px 18px;
+    border-top: 1px solid var(--c-border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--c-text-muted);
+    letter-spacing: 0.06em;
+    font-family: var(--font-mono);
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+</style>
+</head>
+<body class="ds-page">
+<div class="demo-wrap">
+
+  <!-- ── Section 1: Full Page Version ── -->
+  <div class="demo-section">
+    <h2>Version 1: 全页面视图</h2>
+    <p class="desc">独立的记忆图谱页面，左侧列表 + 右侧图谱</p>
+
+    <div class="app-full">
+      <!-- Title Bar -->
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button>Chat</button>
+          <button>Live2D</button>
+          <button class="active">记忆图谱</button>
+          <button>Settings</button>
+        </nav>
+      </div>
+
+      <!-- Full Page Layout -->
+      <div class="full-layout">
+        <!-- Sidebar -->
+        <div class="full-sidebar">
+          <h3>📖 记忆图谱</h3>
+
+          <!-- Filters -->
+          <div class="filter-bar" style="padding: 0; margin-bottom: 12px;">
+            <div class="chip active">全部</div>
+            <div class="chip">📄 来源</div>
+            <div class="chip">🏷️ 实体</div>
+            <div class="chip">💡 概念</div>
+            <div class="chip">🔮 合成</div>
+          </div>
+
+          <!-- Search -->
+          <div style="margin-bottom: 16px;">
+            <input type="text" class="search-input" placeholder="搜索记忆...">
+          </div>
+
+          <!-- Memory List -->
+          <div id="fullMemoryList">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Graph -->
+        <div class="full-graph">
+          <canvas id="fullCanvas"></canvas>
+
+          <!-- Legend -->
+          <div class="legend">
+            <h4>图例</h4>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #6b7280"></div>
+              <span>来源 (RAW)</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #7c8cf5"></div>
+              <span>实体 (EPISODIC)</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #f5c872"></div>
+              <span>概念 (SEMANTIC)</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #a882ff"></div>
+              <span>合成 (EMERGENT)</span>
+            </div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--c-border);">
+              <div class="legend-item">
+                <div class="legend-line" style="background: #4ade80"></div>
+                <span>更新</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-line" style="background: #7c8cf5"></div>
+                <span>扩展</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-line" style="background: #f5c872"></div>
+                <span>派生</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detail Panel -->
+          <div class="detail-panel" id="fullDetail">
+            <button class="detail-close" onclick="closeFullDetail()">×</button>
+            <div class="detail-header">
+              <div class="detail-icon" id="fullDetailIcon">💡</div>
+              <div>
+                <div class="detail-title" id="fullDetailTitle">记忆标题</div>
+                <div class="detail-type" id="fullDetailType">概念</div>
+              </div>
+            </div>
+            <div class="detail-content" id="fullDetailContent">内容...</div>
+            <div class="detail-meta">
+              <div class="meta-item">
+                <div class="meta-label">置信度</div>
+                <div class="meta-value" id="fullDetailConf">0.85</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">显著度</div>
+                <div class="meta-value" id="fullDetailSal">0.72</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">访问次数</div>
+                <div class="meta-value" id="fullDetailAccess">12</div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-label">创建时间</div>
+                <div class="meta-value" id="fullDetailTime">2024-01-15</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section 2: Sidebar Version ── -->
+  <div class="demo-section">
+    <h2>Version 2: 侧边栏视图</h2>
+    <p class="desc">集成在现有应用布局中的记忆图谱面板（右侧 340px）</p>
+
+    <div class="app-sidebar">
+      <!-- Title Bar -->
+      <div class="tb">
+        <div class="traffic"><span class="c"></span><span class="m"></span><span class="x"></span></div>
+        <div class="brand">Anima<span class="dot">.</span></div>
+        <nav>
+          <button class="active">Chat</button>
+          <button>Live2D</button>
+          <button>Settings</button>
+        </nav>
+      </div>
+
+      <!-- Sidebar Layout -->
+      <div class="sidebar-layout">
+        <!-- Left Drawer -->
+        <div class="left-drawer">
+          <h4>Persona</h4>
+          <div style="padding: 14px 16px; border-radius: var(--r-xl); background: rgba(232,121,168,0.08); border: 1px solid var(--c-border-accent); margin-bottom: 18px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #e879a8, #b14f7e); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px;">有</div>
+              <div>
+                <div style="font-size: var(--fs-sm); font-weight: 600; color: var(--c-text);">久遠寺有珠</div>
+                <div style="font-size: var(--fs-9); color: var(--c-text-dim); letter-spacing: 0.06em; margin-top: 2px;">純血の魔女</div>
+              </div>
+            </div>
+          </div>
+          <h4>Quick Controls</h4>
+          <div style="font-size: var(--fs-9); color: var(--c-text-muted);">Voice · Mic · Memory</div>
+        </div>
+
+        <!-- Center Stage -->
+        <div class="center-stage">
+          <div class="live2d-placeholder">Live2D</div>
+        </div>
+
+        <!-- Right Panel: Memory Graph -->
+        <div class="right-panel">
+          <div class="memory-panel">
+            <!-- Header -->
+            <div class="memory-panel-header">
+              <span>📖</span>
+              <h3>记忆图谱</h3>
+              <span class="badge">12</span>
+            </div>
+
+            <!-- Filters -->
+            <div class="filter-bar">
+              <div class="chip active">全部</div>
+              <div class="chip">实体</div>
+              <div class="chip">概念</div>
+              <div class="chip">合成</div>
+            </div>
+
+            <!-- Search -->
+            <div class="search-bar">
+              <input type="text" class="search-input" placeholder="搜索记忆...">
+            </div>
+
+            <!-- Mini Graph -->
+            <div class="mini-graph">
+              <canvas id="miniCanvas"></canvas>
+            </div>
+
+            <!-- Memory List -->
+            <div class="memory-list" id="miniMemoryList">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-bar">
+              <span>12 个记忆</span>
+              <span>8 条关系</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Mock Data ──
+const memories = [
+  {
+    id: 'mem-001', type: 'concept',
+    title: '用户偏好：喜欢甜食',
+    content: '用户经常提到喜欢甜食，尤其是蛋糕和巧克力。在讨论食物时，总是倾向于选择甜味的选项。',
+    tags: ['偏好', '食物'], confidence: 0.92, salience: 0.78, accessCount: 15, createdAt: '2024-01-10',
+    relations: [{ target: 'mem-003', type: 'EVOKES' }, { target: 'mem-005', type: 'EXTENDS' }]
+  },
+  {
+    id: 'mem-002', type: 'entity',
+    title: '苍崎青子',
+    content: '用户的朋友，同居者。是第一位朋友，也是战友和共犯。教授用户魔术。',
+    tags: ['人物', '朋友'], confidence: 0.98, salience: 0.95, accessCount: 28, createdAt: '2024-01-05',
+    relations: [{ target: 'mem-004', type: 'UPDATES' }, { target: 'mem-006', type: 'DERIVES' }]
+  },
+  {
+    id: 'mem-003', type: 'source',
+    title: '对话：讨论红茶',
+    content: '用户：你喜欢什么茶？\nAI：红茶。尤其是大吉岭。\n用户：我也是！加糖吗？\nAI：不加。原味最好。',
+    tags: ['对话', '红茶'], confidence: 0.85, salience: 0.45, accessCount: 3, createdAt: '2024-01-12',
+    relations: [{ target: 'mem-001', type: 'EVOKES' }]
+  },
+  {
+    id: 'mem-004', type: 'synthesis',
+    title: '青子是重要的朋友',
+    content: '基于多次对话分析，青子是用户最重要的朋友关系。两人共同生活，互相信任。',
+    tags: ['关系', '洞察'], confidence: 0.88, salience: 0.82, accessCount: 10, createdAt: '2024-01-15',
+    relations: [{ target: 'mem-002', type: 'CONSOLIDATED_INTO' }]
+  },
+  {
+    id: 'mem-005', type: 'concept',
+    title: '魔女身份认同',
+    content: '用户认同自己作为魔女的身份，认为这是母亲传承的血脉。对魔女的生活方式有强烈的执着。',
+    tags: ['身份', '魔女'], confidence: 0.95, salience: 0.90, accessCount: 20, createdAt: '2024-01-08',
+    relations: [{ target: 'mem-001', type: 'EXTENDS' }]
+  },
+  {
+    id: 'mem-006', type: 'concept',
+    title: '魔术教学',
+    content: '用户教授青子魔术，包括童话魔术和Ploy的使用方法。这是两人关系的重要组成部分。',
+    tags: ['魔术', '教学'], confidence: 0.90, salience: 0.75, accessCount: 8, createdAt: '2024-01-11',
+    relations: [{ target: 'mem-002', type: 'DERIVES' }]
+  }
+];
+
+const typeColors = { source: '#6b7280', entity: '#7c8cf5', concept: '#f5c872', synthesis: '#a882ff' };
+const typeIcons = { source: '📄', entity: '🏷️', concept: '💡', synthesis: '🔮' };
+const relationColors = { UPDATES: '#4ade80', EXTENDS: '#7c8cf5', DERIVES: '#f5c872', EVOKES: '#a882ff', CONTRADICTS: '#f87171', CONSOLIDATED_INTO: '#e879a8' };
+
+// ── Graph Class ──
+class MemoryGraph {
+  constructor(canvasId, listId, detailId, options = {}) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx = this.canvas.getContext('2d');
+    this.listId = listId;
+    this.detailId = detailId;
+    this.options = { nodeRadius: options.nodeRadius || 25, showLabels: options.showLabels !== false };
+    this.nodes = [];
+    this.edges = [];
+    this.selectedNode = null;
+    this.hoveredNode = null;
+    this.isDragging = false;
+    this.dragNode = null;
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    this.init();
+    this.bindEvents();
+  }
+
+  init() {
+    this.canvas.width = this.canvas.parentElement.clientWidth;
+    this.canvas.height = this.canvas.parentElement.clientHeight;
+
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    const radius = Math.min(this.canvas.width, this.canvas.height) * 0.3;
+
+    this.nodes = memories.map((mem, i) => {
+      const angle = (i / memories.length) * Math.PI * 2 - Math.PI / 2;
+      return {
+        id: mem.id,
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
+        radius: this.options.nodeRadius + mem.accessCount / 4,
+        type: mem.type,
+        data: mem
+      };
+    });
+
+    this.edges = [];
+    memories.forEach(mem => {
+      mem.relations.forEach(rel => {
+        const source = this.nodes.find(n => n.id === mem.id);
+        const target = this.nodes.find(n => n.id === rel.target);
+        if (source && target) {
+          this.edges.push({ source, target, type: rel.type });
+        }
+      });
+    });
+
+    this.render();
+    this.renderList();
+  }
+
+  bindEvents() {
+    this.canvas.addEventListener('mousedown', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const node = this.getNodeAt(x, y);
+
+      if (node) {
+        this.isDragging = true;
+        this.dragNode = node;
+        this.offsetX = x - node.x;
+        this.offsetY = y - node.y;
+        this.selectNode(node);
+      }
+    });
+
+    this.canvas.addEventListener('mousemove', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (this.isDragging && this.dragNode) {
+        this.dragNode.x = x - this.offsetX;
+        this.dragNode.y = y - this.offsetY;
+        this.render();
+      } else {
+        const node = this.getNodeAt(x, y);
+        if (node !== this.hoveredNode) {
+          this.hoveredNode = node;
+          this.canvas.style.cursor = node ? 'pointer' : 'default';
+          this.render();
+        }
+      }
+    });
+
+    this.canvas.addEventListener('mouseup', () => {
+      this.isDragging = false;
+      this.dragNode = null;
+    });
+
+    window.addEventListener('resize', () => {
+      this.canvas.width = this.canvas.parentElement.clientWidth;
+      this.canvas.height = this.canvas.parentElement.clientHeight;
+      this.render();
+    });
+  }
+
+  getNodeAt(x, y) {
+    return this.nodes.find(node => {
+      const dx = node.x - x;
+      const dy = node.y - y;
+      return Math.sqrt(dx * dx + dy * dy) < node.radius;
+    });
+  }
+
+  render() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Draw edges
+    this.edges.forEach(edge => {
+      ctx.beginPath();
+      ctx.moveTo(edge.source.x, edge.source.y);
+      ctx.lineTo(edge.target.x, edge.target.y);
+      ctx.strokeStyle = (relationColors[edge.type] || '#ffffff') + '40';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Arrow
+      const angle = Math.atan2(edge.target.y - edge.source.y, edge.target.x - edge.source.x);
+      const midX = (edge.source.x + edge.target.x) / 2;
+      const midY = (edge.source.y + edge.target.y) / 2;
+      const arrowSize = 8;
+
+      ctx.beginPath();
+      ctx.moveTo(midX, midY);
+      ctx.lineTo(midX - arrowSize * Math.cos(angle - Math.PI / 6), midY - arrowSize * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(midX - arrowSize * Math.cos(angle + Math.PI / 6), midY - arrowSize * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fillStyle = (relationColors[edge.type] || '#ffffff') + '60';
+      ctx.fill();
+    });
+
+    // Draw nodes
+    this.nodes.forEach(node => {
+      const isSelected = this.selectedNode?.id === node.id;
+      const isHovered = this.hoveredNode?.id === node.id;
+
+      // Glow
+      if (isSelected || isHovered) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius + 6, 0, Math.PI * 2);
+        ctx.fillStyle = typeColors[node.type] + '20';
+        ctx.fill();
+      }
+
+      // Node
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? typeColors[node.type] : typeColors[node.type] + '80';
+      ctx.fill();
+      ctx.strokeStyle = typeColors[node.type];
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.stroke();
+
+      // Icon
+      ctx.font = `${node.radius * 0.7}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(typeIcons[node.type], node.x, node.y);
+
+      // Label
+      if (this.options.showLabels) {
+        ctx.font = '10px -apple-system, sans-serif';
+        ctx.fillStyle = '#e8e0f0';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.data.title.substring(0, 8), node.x, node.y + node.radius + 14);
+      }
+    });
+  }
+
+  renderList() {
+    const list = document.getElementById(this.listId);
+    if (!list) return;
+
+    list.innerHTML = memories.map(mem => `
+      <div class="memory-item" data-id="${mem.id}" onclick="graph_${this.listId}.selectMemory('${mem.id}')">
+        <div class="memory-item-header">
+          <div class="memory-item-icon ${mem.type}">${typeIcons[mem.type]}</div>
+          <div class="memory-item-title">${mem.title}</div>
+          <div class="memory-item-time">${mem.createdAt}</div>
+        </div>
+        <div class="memory-item-preview">${mem.content}</div>
+      </div>
+    `).join('');
+  }
+
+  selectNode(node) {
+    this.selectedNode = node;
+    this.showDetail(node.data);
+    this.highlightListItem(node.id);
+    this.render();
+  }
+
+  selectMemory(id) {
+    const node = this.nodes.find(n => n.id === id);
+    if (node) this.selectNode(node);
+  }
+
+  highlightListItem(id) {
+    const list = document.getElementById(this.listId);
+    if (!list) return;
+    list.querySelectorAll('.memory-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.id === id);
+    });
+  }
+
+  showDetail(mem) {
+    if (!this.detailId) return;
+    const panel = document.getElementById(this.detailId);
+    if (!panel) return;
+
+    document.getElementById(this.detailId + 'Icon').textContent = typeIcons[mem.type];
+    document.getElementById(this.detailId + 'Icon').className = `detail-icon ${mem.type}`;
+    document.getElementById(this.detailId + 'Title').textContent = mem.title;
+    document.getElementById(this.detailId + 'Type').textContent = {
+      source: '来源 (RAW)', entity: '实体 (EPISODIC)', concept: '概念 (SEMANTIC)', synthesis: '合成 (EMERGENT)'
+    }[mem.type];
+    document.getElementById(this.detailId + 'Content').textContent = mem.content;
+    document.getElementById(this.detailId + 'Conf').textContent = mem.confidence.toFixed(2);
+    document.getElementById(this.detailId + 'Sal').textContent = mem.salience.toFixed(2);
+    document.getElementById(this.detailId + 'Access').textContent = mem.accessCount;
+    document.getElementById(this.detailId + 'Time').textContent = mem.createdAt;
+
+    panel.classList.add('visible');
+  }
+
+  closeDetail() {
+    if (!this.detailId) return;
+    const panel = document.getElementById(this.detailId);
+    if (panel) panel.classList.remove('visible');
+    this.selectedNode = null;
+    this.render();
+    this.highlightListItem(null);
+  }
+}
+
+// ── Initialize Graphs ──
+const graph_fullMemoryList = new MemoryGraph('fullCanvas', 'fullMemoryList', 'fullDetail', { nodeRadius: 28 });
+const graph_miniMemoryList = new MemoryGraph('miniCanvas', 'miniMemoryList', null, { nodeRadius: 18, showLabels: false });
+
+function closeFullDetail() { graph_fullMemoryList.closeDetail(); }
+
+// ── Filter Chips ──
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const parent = chip.parentElement;
+    parent.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

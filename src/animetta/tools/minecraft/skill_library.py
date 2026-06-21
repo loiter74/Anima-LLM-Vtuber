@@ -287,6 +287,11 @@ def _check_single(cond: str, ctx: dict[str, Any]) -> bool:  # noqa: C901
 
 # Health threshold below which a skill is aborted after combat.
 _CRITICAL_HEALTH: float = 4.0
+_MIN_DURATION_SECONDS = 1e-9
+
+
+def _elapsed_since(start: float) -> float:
+    return max(time.monotonic() - start, _MIN_DURATION_SECONDS)
 
 
 async def _handle_threat(
@@ -366,7 +371,7 @@ async def execute_skill(
 
     # Skill-level preconditions
     if not check_preconditions(skill.preconditions, ctx):
-        duration = time.monotonic() - start
+        duration = _elapsed_since(start)
         await _update_stats(skill, success=False, duration=duration)
         return SkillResult(
             success=False,
@@ -384,7 +389,7 @@ async def execute_skill(
             if threat_level >= 2:
                 ok, reason = await _handle_threat(bridge, ctx)
                 if not ok:
-                    duration = time.monotonic() - start
+                    duration = _elapsed_since(start)
                     await _update_stats(skill, success=False, duration=duration)
                     return SkillResult(
                         success=False,
@@ -396,7 +401,7 @@ async def execute_skill(
 
         # Step-level preconditions
         if not check_preconditions(step.preconditions, ctx):
-            duration = time.monotonic() - start
+            duration = _elapsed_since(start)
             await _update_stats(skill, success=False, duration=duration)
             return SkillResult(
                 success=False,
@@ -448,7 +453,7 @@ async def execute_skill(
 
         # All retries exhausted
         if last_error is not None:
-            duration = time.monotonic() - start
+            duration = _elapsed_since(start)
             await _update_stats(skill, success=False, duration=duration)
             return SkillResult(
                 success=False,
@@ -459,7 +464,7 @@ async def execute_skill(
             )
 
     # All steps succeeded
-    duration = time.monotonic() - start
+    duration = _elapsed_since(start)
     await _update_stats(skill, success=True, duration=duration)
     return SkillResult(
         success=True,

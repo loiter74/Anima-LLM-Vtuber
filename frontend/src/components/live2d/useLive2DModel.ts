@@ -6,11 +6,16 @@ import { isLoaded, isLoading, loadError, updateModelInfo } from './useInteractio
 export const MODEL_PATH = 'live2d/hiyori/Hiyori.model3.json'
 // Position is computed as a fraction of canvas dimensions at load time,
 // so the model appears at the same relative position on any screen size.
-const POS_X_RATIO = 0.35   // 0.0 = left edge, 1.0 = right edge
-const POS_Y_RATIO = 1.2    // >1.0 = below canvas bottom edge
+const POS_X_RATIO = 0.741   // 800/1080 = 0.741 (74.1% from left)
+const POS_Y_RATIO = 0.677   // 1300/1920 = 0.677 (67.7% from top)
 const INITIAL_SCALE = 2.59
 
-export { POS_X_RATIO, POS_Y_RATIO, INITIAL_SCALE }
+// Fixed pixel position (overrides ratio when set)
+const FIXED_X = 800
+const FIXED_Y = 1300
+const USE_FIXED_POSITION = true  // Set to false to use ratio-based positioning
+
+export { POS_X_RATIO, POS_Y_RATIO, INITIAL_SCALE, FIXED_X, FIXED_Y, USE_FIXED_POSITION }
 
 export interface ScaleStrategy {
   anchor: [number, number]
@@ -112,9 +117,14 @@ export async function loadModel(modelPath: string): Promise<void> {
     baseBounds = { width: initialBounds.width, height: initialBounds.height }
 
     applyScale()
-    // Position model relative to canvas size
-    model.x = app.screen.width * POS_X_RATIO
-    model.y = app.screen.height * POS_Y_RATIO
+    // Position model: fixed pixel position or ratio-based
+    if (USE_FIXED_POSITION) {
+      model.x = FIXED_X
+      model.y = FIXED_Y
+    } else {
+      model.x = app.screen.width * POS_X_RATIO
+      model.y = app.screen.height * POS_Y_RATIO
+    }
     userScale = INITIAL_SCALE
     applyScale()
     isLoaded.value = true
@@ -157,9 +167,13 @@ export function applyScale(): void {
 export function centerModel(): void {
   const app = getApp()
   if (!model || !app) return
-  const cfg = STRATEGIES[strategy]
-  model.x = app.screen.width / 2
-  model.y = cfg.yRatio === 1.0 ? app.screen.height : app.screen.height / 2
+  if (USE_FIXED_POSITION) {
+    model.x = FIXED_X
+    model.y = FIXED_Y
+  } else {
+    model.x = app.screen.width * POS_X_RATIO
+    model.y = app.screen.height * POS_Y_RATIO
+  }
   updateModelInfo()
 }
 

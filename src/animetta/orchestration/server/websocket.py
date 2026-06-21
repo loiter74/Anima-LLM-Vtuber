@@ -70,17 +70,17 @@ class WebSocketServer:
 
         async def serve_singing_subtitle(request):
             filename = request.path_params.get("filename", "")
-            filepath = _PROJECT_ROOT / "data" / "singing" / "outputs" / filename
+            filepath = project_root / "data" / "singing" / "outputs" / filename
             if not filepath.is_file():
                 return Response("Not found", status_code=404)
             return FileResponse(
                 str(filepath),
                 media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
 
         async def serve_singing_recent(request):
-            output_dir = _PROJECT_ROOT / "data" / "singing" / "outputs"
+            output_dir = project_root / "data" / "singing" / "outputs"
             if not output_dir.is_dir():
                 return JSONResponse([])
             files = sorted(output_dir.glob("*_final.wav"), key=lambda f: f.stat().st_mtime, reverse=True)[:5]
@@ -233,4 +233,7 @@ def create_server(config=None) -> WebSocketServer:
     server.setup_tracing()
     server.setup_routes()
     server.setup_lifecycle()
+    # Pass config to route handlers
+    if config:
+        server.set_config(config)
     return server

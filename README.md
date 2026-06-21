@@ -219,10 +219,15 @@ system:
   port: 12394
 ```
 
-设置 API Key：
+设置 API Key。真实凭据只放在 `.env`、本机环境变量或部署平台的 secret manager 中，不要写入 `config/*.yaml`：
 
 ```bash
-export LLM_API_KEY="your-api-key"
+cp .env.example .env
+
+# 按实际 provider 填写其中需要的变量
+export MIMO_API_KEY="your-mimo-api-key"
+export DEEPSEEK_API_KEY="your-deepseek-api-key"
+export OPENAI_API_KEY="your-openai-api-key"
 ```
 
 ### 3. 启动
@@ -250,6 +255,25 @@ docker compose -f docker-compose.cpu.yml up -d
 服务启动后访问 `http://localhost`（前端）和 `http://localhost:12394/health`（健康检查）。
 
 > 详细部署说明参见 [Docker 部署指南](./docs/docker-deployment.md) 和 [ZEABUR.md](./ZEABUR.md)。
+
+---
+
+## 🩺 健康门禁
+
+本地提交前可以运行统一健康门禁：
+
+```bash
+PYTHONPATH=src:. python scripts/health_check.py
+```
+
+如果当前 shell 的 `python` 不是完整项目环境，可以显式指定门禁子命令使用的解释器。例如 PowerShell + uv：
+
+```powershell
+$env:ANIMETTA_PYTHON='uv run --no-project --with-requirements C:\Users\30262\Project\Anima\requirements.txt --with pytest --with pytest-cov --with pytest-asyncio --with pip python'
+python scripts/health_check.py
+```
+
+必需门禁包括后端 lint/type/test/coverage、前端 typecheck/test/build/coverage 脚本校验、Socket.IO 事件校验、密钥扫描、GPU/CPU Docker compose config 校验，以及轻量 ASGI 路由探针。后端 coverage 当前采用 67% 临时 ratchet，目标仍是 70%。当前 Python dependency check 和前端 audit 是有记录的 advisory；已知慢速、探索性或暂存检查必须记录在 [health-advisories.md](./docs/health-advisories.md)。
 
 ---
 
@@ -293,6 +317,52 @@ animetta/
 ├── docker/                        # Docker 配置
 └── docs/                          # ADR 架构决策记录 + 文档
 ```
+
+---
+
+## 📡 Socket.IO 事件命名规范
+
+所有 Socket.IO 事件统一使用 `module:action` 格式，定义在 `config/socket-events.json`（后端单一真相源）。
+
+### 命名规则
+
+- **格式**: `{module}:{action}`（冒号分隔）
+- **发送类事件**（客户端→服务器）: 无动词，如 `chat:text`
+- **接收类事件**（服务器→客户端）: 结果名词，如 `chat:sentence`
+
+### 常量使用
+
+```typescript
+// 前端 (TypeScript)
+import { Events } from '@/constants/socket-events'
+
+socket.emit(Events.CHAT.TEXT, { text: 'hello' })
+socket.on(Events.CHAT.SENTENCE, (data) => { ... })
+```
+
+```python
+# 后端 (Python)
+import json
+events = json.load(open('config/socket-events.json'))
+
+await sio.emit(events['chat']['sentence']['name'], data)
+```
+
+### 事件模块
+
+| 模块 | 说明 | 示例 |
+|------|------|------|
+| `chat` | 对话、语音、音频 | `chat:text`, `chat:sentence` |
+| `config` | 配置管理 | `config:switch`, `config:get` |
+| `system` | 系统状态 | `system:heartbeat`, `system:error` |
+| `persona` | 人格管理 | `persona:list`, `persona:set` |
+| `memory` | 记忆系统 | `memory:organize`, `memory:list_pages` |
+| `sing` | 唱歌功能 | `sing:process`, `sing:complete` |
+| `bilibili` | 直播集成 | `bilibili:connect`, `bilibili:danmaku` |
+| `minecraft` | 游戏集成 | `minecraft:start`, `minecraft:status` |
+| `meme` | 梗系统 | `meme:add`, `meme:review` |
+
+> 完整事件列表见 `config/socket-events.json` 和 [API 文档](./API_DOCUMENTATION.md)。
 
 ---
 

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from animetta.config.app import AppConfig
+
 from ..socket_events import EVENTS
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
@@ -61,7 +63,7 @@ class RouteHandlers:
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
         self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
-            sio, session_manager, self.desktop_manager, self.live2d_manager
+            sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
         )
         self.lifecycle = LifecycleHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager
@@ -256,8 +258,9 @@ class RouteHandlers:
     async def on_memory_organize(self, sid: str, data: dict) -> None:
         """Trigger V2 memory metabolism + compile, emit progress."""
         try:
+            config = self.global_config or AppConfig.load()
             ctx = await self.session_manager.get_or_create_context(
-                sid, self.global_config, self._make_send_callback(sid)
+                sid, config, self.base._make_send_callback(sid)
             )
             mem = getattr(ctx, "memory_system", None)
             if not mem:
@@ -281,14 +284,17 @@ class RouteHandlers:
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
         """Return memory atoms as wiki page data for frontend."""
         try:
+            config = self.global_config or AppConfig.load()
             ctx = await self.session_manager.get_or_create_context(
-                sid, self.global_config, self._make_send_callback(sid)
+                sid, config, self.base._make_send_callback(sid)
             )
             mem = getattr(ctx, "memory_system", None)
             if not mem:
+                logger.warning(f"[wiki_pages] memory_system is None for sid={sid}")
                 return {"pages": [], "error": "Memory system not available"}
 
             atoms = await mem.store.get_all_active(limit=50)
+            logger.info(f"[wiki_pages] sid={sid} atoms={len(atoms)}")
             pages = []
             for a in atoms:
                 # Map layer to page_type for frontend compatibility
@@ -308,6 +314,9 @@ class RouteHandlers:
                 })
             return {"pages": pages}
         except Exception as e:
+            import traceback
+            traceback.print_exc()
+            logger.error(f"[wiki_pages] ERROR: {e}")
             return {"pages": [], "error": str(e)}
 
 

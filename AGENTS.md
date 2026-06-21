@@ -348,3 +348,43 @@ Excalidraw/
 - ❌ 不要用太小的节点（<150px 宽）
 - ❌ 不要省略分组标签（让人一眼看出结构）
 - ❌ 不要在图下面放说明文字（说明放在图上旁边）
+
+---
+
+## DEBUGGING LESSONS LEARNED
+
+### 2026-06-20: MBTI 数值不显示
+
+**问题**: 前端 PersonalityPanel 没有显示 MBTI 数值（ei, sn, tf, jp）。
+
+**尝试了 3 次修复都失败**:
+1. 后端在 `persona:updated` 事件中发送 MBTI 数据 → 只在切换人格时触发，初始加载不触发
+2. 后端在 `persona:list` 事件中也返回 MBTI 数据 → 代码正确，但 `PersonaHandlers.global_config` 是 `None`
+3. 修改 `PersonaHandlers` 接受 `base` 参数 → `base.global_config` 也是 `None`
+
+**Root Cause**: `create_server(config)` 把 config 存到了 `self.config`，但没有调用 `set_config(config)` 把它传递给路由处理器。
+
+**数据流**:
+```
+socketio_server.py → create_server(config) → WebSocketServer(config)
+                                              │
+                                              ├─ setup_routes() → RouteHandlers → PersonaHandlers(base)
+                                              │
+                                              └─ ❌ 没有调用 set_config(config)
+                                                  └─ route_handlers.global_config = None
+```
+
+**最终修复**: 在 `create_server` 中添加 `server.set_config(config)` 调用。
+
+**教训**:
+1. **不要猜测** — 前 3 次修复都是在猜测问题所在，没有追踪完整的数据流
+2. **添加诊断工具** — 第 4 次才添加 logging，立即发现了 `global_config=None`
+3. **追踪整条链路** — 问题不在 PersonaHandlers，而在更上游的 `create_server`
+
+### 调试流程检查清单
+
+当修复无效时:
+- [ ] 是否添加了诊断 logging?
+- [ ] 是否追踪了完整的数据流?
+- [ ] 是否在正确的层修复问题?
+- [ ] 是否检查了初始化顺序?

@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>记忆图谱 — Animetta</title>
+  <style>
+    :root {
+      --c-bg: #0f0a1a;
+      --c-bg-soft: #1a1028;
+      --c-card: #241832;
+      --c-border: rgba(255, 255, 255, 0.08);
+      --c-text: rgba(255, 255, 255, 0.9);
+      --c-text-dim: rgba(255, 255, 255, 0.5);
+      --c-text-muted: rgba(255, 255, 255, 0.3);
+      --c-accent: #e879a8;
+      --c-accent-soft: rgba(232, 121, 168, 0.15);
+      --c-blue: #7c8cf5;
+      --c-blue-soft: rgba(124, 140, 245, 0.15);
+      --c-gold: #f5c872;
+      --c-gold-soft: rgba(245, 200, 114, 0.15);
+      --c-purple: #a882ff;
+      --c-purple-soft: rgba(168, 130, 255, 0.15);
+      --c-green: #4ade80;
+      --c-green-soft: rgba(74, 222, 128, 0.15);
+      --c-gray: #6b7280;
+      --c-gray-soft: rgba(107, 114, 128, 0.15);
+      --c-error: #f87171;
+      --font-sans: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--c-bg);
+      color: var(--c-text);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    .sidebar {
+      width: 320px;
+      background: var(--c-bg-soft);
+      border-right: 1px solid var(--c-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar Header ── */
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .sidebar-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-header p {
+      font-size: 12px;
+      color: var(--c-text-dim);
+      margin-top: 8px;
+    }
+
+    /* ── Filter Bar ── */
+    .filter-bar {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid var(--c-border);
+      background: var(--c-card);
+      color: var(--c-text-dim);
+    }
+
+    .chip:hover {
+      border-color: var(--c-accent);
+      color: var(--c-text);
+    }
+
+    .chip.active {
+      background: var(--c-accent-soft);
+      border-color: var(--c-accent);
+      color: var(--c-accent);
+    }
+
+    /* ── Search ── */
+    .search-box {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--c-border);
+      background: var(--c-card);
+      color: var(--c-text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--c-accent);
+    }
+
+    .search-input::placeholder {
+      color: var(--c-text-muted);
+    }
+
+    /* ── Memory List ── */
+    .memory-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .memory-card {
+      padding: 14px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: var(--c-card);
+      border: 1px solid var(--c-border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .memory-card:hover {
+      border-color: var(--c-accent);
+      transform: translateY(-1px);
+    }
+
+    .memory-card.selected {
+      border-color: var(--c-accent);
+      background: var(--c-accent-soft);
+    }
+
+    .memory-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .memory-type-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .memory-type-icon.source { background: var(--c-gray-soft); }
+    .memory-type-icon.entity { background: var(--c-blue-soft); }
+    .memory-type-icon.concept { background: var(--c-gold-soft); }
+    .memory-type-icon.synthesis { background: var(--c-purple-soft); }
+
+    .memory-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .memory-card-time {
+      font-size: 10px;
+      color: var(--c-text-muted);
+    }
+
+    .memory-card-preview {
+      font-size: 12px;
+      color: var(--c-text-dim);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .memory-card-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      background: var(--c-bg);
+      color: var(--c-text-muted);
+    }
+
+    /* ── Graph Canvas ── */
+    .graph-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: var(--c-card);
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 12px;
+    }
+
+    .legend h3 {
+      font-size: 13px;
+      margin-bottom: 12px;
+      color: var(--c-text);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .legend-line {
+      width: 24px;
+      height: 2px;
+    }
+
+    /* ── Node Detail Panel ── */
+    .detail-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 320px;
+      background: var(--c-card);
+      border: 1px solid var(--c-border);
+      border-radius: 16px;
+      padding: 20px;
+      display: none;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .detail-panel.visible {
+      display: block;
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .detail-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .detail-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .detail-type {
+      font-size: 11px;
+      color: var(--c-text-dim);
+      margin-top: 2px;
+    }
+
+    .detail-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: none;
+      background: var(--c-bg);
+      color: var(--c-text-dim);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .detail-content {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--c-text-dim);
+      margin-bottom: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .detail-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--c-border);
+    }
+
+    .meta-item {
+      font-size: 11px;
+    }
+
+    .meta-label {
+      color: var(--c-text-muted);
+      margin-bottom: 4px;
+    }
+
+    .meta-value {
+      color: var(--c-text);
+      font-weight: 500;
+    }
+
+    .detail-relations {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--c-border);
+    }
+
+    .detail-relations h4 {
+      font-size: 12px;
+      color: var(--c-text-dim);
+      margin-bottom: 12px;
+    }
+
+    .relation-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      background: var(--c-bg);
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .relation-type {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .relation-type.updates { background: var(--c-green-soft); color: var(--c-green); }
+    .relation-type.extends { background: var(--c-blue-soft); color: var(--c-blue); }
+    .relation-type.derives { background: var(--c-gold-soft); color: var(--c-gold); }
+    .relation-type.evokes { background: var(--c-purple-soft); color: var(--c-purple); }
+
+    /* ── Empty State ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--c-text-muted);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+    }
+
+    /* ── Stats Bar ── */
+    .stats-bar {
+      padding: 12px 20px;
+      border-top: 1px solid var(--c-border);
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--c-text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h1>📖 记忆图谱</h1>
+        <p>AI 的知识网络 · 点击节点查看详情</p>
+      </div>
+
+      <div class="filter-bar">
+        <div class="filter-chips">
+          <div class="chip active" data-type="all">全部</div>
+          <div class="chip" data-type="source">📄 来源</div>
+          <div class="chip" data-type="entity">🏷️ 实体</div>
+          <div class="chip" data-type="concept">💡 概念</div>
+          <div class="chip" data-type="synthesis">🔮 合成</div>
+        </div>
+      </div>
+
+      <div class="search-box">
+        <input type="text" class="search-input" placeholder="搜索记忆...">
+      </div>
+
+      <div class="memory-list" id="memoryList">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="stats-bar">
+        <span>12 个记忆</span>
+        <span>8 条关系</span>
+      </div>
+    </div>
+
+    <!-- Main Graph Area -->
+    <div class="main">
+      <div class="graph-container">
+        <canvas id="graphCanvas"></canvas>
+      </div>
+
+      <!-- Legend -->
+      <div class="legend">
+        <h3>图例</h3>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--c-gray)"></div>
+          <span>来源 (RAW)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--c-blue)"></div>
+          <span>实体 (EPISODIC)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--c-gold)"></div>
+          <span>概念 (SEMANTIC)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: var(--c-purple)"></div>
+          <span>合成 (EMERGENT)</span>
+        </div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border)">
+          <div class="legend-item">
+            <div class="legend-line" style="background: var(--c-green)"></div>
+            <span>更新</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background: var(--c-blue); opacity: 0.5"></div>
+            <span>扩展</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background: var(--c-gold); opacity: 0.5"></div>
+            <span>派生</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Panel -->
+      <div class="detail-panel" id="detailPanel">
+        <button class="detail-close" onclick="closeDetail()">×</button>
+        <div class="detail-header">
+          <div class="detail-icon" id="detailIcon">💡</div>
+          <div>
+            <div class="detail-title" id="detailTitle">记忆标题</div>
+            <div class="detail-type" id="detailType">概念</div>
+          </div>
+        </div>
+        <div class="detail-content" id="detailContent">
+          记忆内容将在这里显示...
+        </div>
+        <div class="detail-meta">
+          <div class="meta-item">
+            <div class="meta-label">置信度</div>
+            <div class="meta-value" id="detailConfidence">0.85</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">显著度</div>
+            <div class="meta-value" id="detailSalience">0.72</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">访问次数</div>
+            <div class="meta-value" id="detailAccess">12</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">创建时间</div>
+            <div class="meta-value" id="detailTime">2024-01-15</div>
+          </div>
+        </div>
+        <div class="detail-relations">
+          <h4>关联记忆</h4>
+          <div id="detailRelations">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Mock Data ──
+    const memories = [
+      {
+        id: 'mem-001',
+        type: 'concept',
+        title: '用户偏好：喜欢甜食',
+        content: '用户经常提到喜欢甜食，尤其是蛋糕和巧克力。在讨论食物时，总是倾向于选择甜味的选项。',
+        tags: ['偏好', '食物'],
+        confidence: 0.92,
+        salience: 0.78,
+        accessCount: 15,
+        createdAt: '2024-01-10',
+        relations: [
+          { target: 'mem-003', type: 'EVOKES' },
+          { target: 'mem-005', type: 'EXTENDS' }
+        ]
+      },
+      {
+        id: 'mem-002',
+        type: 'entity',
+        title: '苍崎青子',
+        content: '用户的朋友，同居者。是第一位朋友，也是战友和共犯。教授用户魔术。',
+        tags: ['人物', '朋友'],
+        confidence: 0.98,
+        salience: 0.95,
+        accessCount: 28,
+        createdAt: '2024-01-05',
+        relations: [
+          { target: 'mem-004', type: 'UPDATES' },
+          { target: 'mem-006', type: 'DERIVES' }
+        ]
+      },
+      {
+        id: 'mem-003',
+        type: 'source',
+        title: '对话：讨论红茶',
+        content: '用户：你喜欢什么茶？\nAI：红茶。尤其是大吉岭。\n用户：我也是！加糖吗？\nAI：不加。原味最好。',
+        tags: ['对话', '红茶'],
+        confidence: 0.85,
+        salience: 0.45,
+        accessCount: 3,
+        createdAt: '2024-01-12',
+        relations: [
+          { target: 'mem-001', type: 'EVOKES' }
+        ]
+      },
+      {
+        id: 'mem-004',
+        type: 'synthesis',
+        title: '青子是重要的朋友',
+        content: '基于多次对话分析，青子是用户最重要的朋友关系。两人共同生活，互相信任。',
+        tags: ['关系', '洞察'],
+        confidence: 0.88,
+        salience: 0.82,
+        accessCount: 10,
+        createdAt: '2024-01-15',
+        relations: [
+          { target: 'mem-002', type: 'CONSOLIDATED_INTO' }
+        ]
+      },
+      {
+        id: 'mem-005',
+        type: 'concept',
+        title: '魔女身份认同',
+        content: '用户认同自己作为魔女的身份，认为这是母亲传承的血脉。对魔女的生活方式有强烈的执着。',
+        tags: ['身份', '魔女'],
+        confidence: 0.95,
+        salience: 0.90,
+        accessCount: 20,
+        createdAt: '2024-01-08',
+        relations: [
+          { target: 'mem-001', type: 'EXTENDS' }
+        ]
+      },
+      {
+        id: 'mem-006',
+        type: 'concept',
+        title: '魔术教学',
+        content: '用户教授青子魔术，包括童话魔术和Ploy的使用方法。这是两人关系的重要组成部分。',
+        tags: ['魔术', '教学'],
+        confidence: 0.90,
+        salience: 0.75,
+        accessCount: 8,
+        createdAt: '2024-01-11',
+        relations: [
+          { target: 'mem-002', type: 'DERIVES' }
+        ]
+      }
+    ];
+
+    // ── Graph Rendering ──
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    let nodes = [];
+    let edges = [];
+    let selectedNode = null;
+    let hoveredNode = null;
+    let isDragging = false;
+    let dragNode = null;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const typeColors = {
+      source: '#6b7280',
+      entity: '#7c8cf5',
+      concept: '#f5c872',
+      synthesis: '#a882ff'
+    };
+
+    const typeIcons = {
+      source: '📄',
+      entity: '🏷️',
+      concept: '💡',
+      synthesis: '🔮'
+    };
+
+    const relationColors = {
+      UPDATES: '#4ade80',
+      EXTENDS: '#7c8cf5',
+      DERIVES: '#f5c872',
+      EVOKES: '#a882ff',
+      CONTRADICTS: '#f87171',
+      CONSOLIDATED_INTO: '#e879a8'
+    };
+
+    function initGraph() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      // Create nodes
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = 200;
+
+      nodes = memories.map((mem, i) => {
+        const angle = (i / memories.length) * Math.PI * 2;
+        return {
+          id: mem.id,
+          x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 50,
+          y: centerY + Math.sin(angle) * radius + (Math.random() - 0.5) * 50,
+          radius: 30 + mem.accessCount / 2,
+          type: mem.type,
+          data: mem
+        };
+      });
+
+      // Create edges
+      edges = [];
+      memories.forEach(mem => {
+        mem.relations.forEach(rel => {
+          edges.push({
+            source: nodes.find(n => n.id === mem.id),
+            target: nodes.find(n => n.id === rel.target),
+            type: rel.type
+          });
+        });
+      });
+
+      render();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw edges
+      edges.forEach(edge => {
+        if (!edge.source || !edge.target) return;
+        ctx.beginPath();
+        ctx.moveTo(edge.source.x, edge.source.y);
+        ctx.lineTo(edge.target.x, edge.target.y);
+        ctx.strokeStyle = relationColors[edge.type] || '#ffffff20';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Arrow
+        const angle = Math.atan2(edge.target.y - edge.source.y, edge.target.x - edge.source.x);
+        const arrowSize = 10;
+        const midX = (edge.source.x + edge.target.x) / 2;
+        const midY = (edge.source.y + edge.target.y) / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(
+          midX - arrowSize * Math.cos(angle - Math.PI / 6),
+          midY - arrowSize * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          midX - arrowSize * Math.cos(angle + Math.PI / 6),
+          midY - arrowSize * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fillStyle = relationColors[edge.type] || '#ffffff20';
+        ctx.fill();
+      });
+
+      // Draw nodes
+      nodes.forEach(node => {
+        const isSelected = selectedNode?.id === node.id;
+        const isHovered = hoveredNode?.id === node.id;
+
+        // Glow effect
+        if (isSelected || isHovered) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius + 8, 0, Math.PI * 2);
+          ctx.fillStyle = typeColors[node.type] + '30';
+          ctx.fill();
+        }
+
+        // Node circle
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+        ctx.fillStyle = isSelected ? typeColors[node.type] : typeColors[node.type] + '80';
+        ctx.fill();
+        ctx.strokeStyle = typeColors[node.type];
+        ctx.lineWidth = isSelected ? 3 : 1;
+        ctx.stroke();
+
+        // Icon
+        ctx.font = `${node.radius * 0.8}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(typeIcons[node.type], node.x, node.y);
+
+        // Label
+        ctx.font = '12px "Noto Sans SC"';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.data.title.substring(0, 10), node.x, node.y + node.radius + 16);
+      });
+    }
+
+    function getNodeAt(x, y) {
+      return nodes.find(node => {
+        const dx = node.x - x;
+        const dy = node.y - y;
+        return Math.sqrt(dx * dx + dy * dy) < node.radius;
+      });
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const node = getNodeAt(x, y);
+
+      if (node) {
+        isDragging = true;
+        dragNode = node;
+        offsetX = x - node.x;
+        offsetY = y - node.y;
+        selectNode(node);
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (isDragging && dragNode) {
+        dragNode.x = x - offsetX;
+        dragNode.y = y - offsetY;
+        render();
+      } else {
+        const node = getNodeAt(x, y);
+        if (node !== hoveredNode) {
+          hoveredNode = node;
+          canvas.style.cursor = node ? 'pointer' : 'default';
+          render();
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+      dragNode = null;
+    });
+
+    function selectNode(node) {
+      selectedNode = node;
+      showDetail(node.data);
+      highlightListItem(node.id);
+      render();
+    }
+
+    function showDetail(mem) {
+      const panel = document.getElementById('detailPanel');
+      document.getElementById('detailIcon').textContent = typeIcons[mem.type];
+      document.getElementById('detailIcon').className = `detail-icon memory-type-icon ${mem.type}`;
+      document.getElementById('detailTitle').textContent = mem.title;
+      document.getElementById('detailType').textContent = {
+        source: '来源 (RAW)',
+        entity: '实体 (EPISODIC)',
+        concept: '概念 (SEMANTIC)',
+        synthesis: '合成 (EMERGENT)'
+      }[mem.type];
+      document.getElementById('detailContent').textContent = mem.content;
+      document.getElementById('detailConfidence').textContent = mem.confidence.toFixed(2);
+      document.getElementById('detailSalience').textContent = mem.salience.toFixed(2);
+      document.getElementById('detailAccess').textContent = mem.accessCount;
+      document.getElementById('detailTime').textContent = mem.createdAt;
+
+      // Relations
+      const relContainer = document.getElementById('detailRelations');
+      relContainer.innerHTML = mem.relations.map(rel => {
+        const targetMem = memories.find(m => m.id === rel.target);
+        if (!targetMem) return '';
+        return `
+          <div class="relation-item">
+            <span class="relation-type ${rel.type.toLowerCase()}">${rel.type}</span>
+            <span>${targetMem.title.substring(0, 15)}...</span>
+          </div>
+        `;
+      }).join('');
+
+      panel.classList.add('visible');
+    }
+
+    function closeDetail() {
+      document.getElementById('detailPanel').classList.remove('visible');
+      selectedNode = null;
+      render();
+    }
+
+    // ── Sidebar List ──
+    function renderList(filter = 'all') {
+      const list = document.getElementById('memoryList');
+      const filtered = filter === 'all' ? memories : memories.filter(m => m.type === filter);
+
+      list.innerHTML = filtered.map(mem => `
+        <div class="memory-card" data-id="${mem.id}" onclick="selectMemory('${mem.id}')">
+          <div class="memory-card-header">
+            <div class="memory-type-icon ${mem.type}">${typeIcons[mem.type]}</div>
+            <div class="memory-card-title">${mem.title}</div>
+            <div class="memory-card-time">${mem.createdAt}</div>
+          </div>
+          <div class="memory-card-preview">${mem.content}</div>
+          <div class="memory-card-tags">
+            ${mem.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function selectMemory(id) {
+      const node = nodes.find(n => n.id === id);
+      if (node) selectNode(node);
+    }
+
+    function highlightListItem(id) {
+      document.querySelectorAll('.memory-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.id === id);
+      });
+    }
+
+    // ── Filters ──
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        renderList(chip.dataset.type);
+      });
+    });
+
+    // ── Search ──
+    document.querySelector('.search-input').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      const cards = document.querySelectorAll('.memory-card');
+      cards.forEach(card => {
+        const title = card.querySelector('.memory-card-title').textContent.toLowerCase();
+        const preview = card.querySelector('.memory-card-preview').textContent.toLowerCase();
+        card.style.display = (title.includes(query) || preview.includes(query)) ? 'block' : 'none';
+      });
+    });
+
+    // ── Init ──
+    window.addEventListener('resize', () => {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+      render();
+    });
+
+    initGraph();
+    renderList();
+  </script>
+</body>
+</html>

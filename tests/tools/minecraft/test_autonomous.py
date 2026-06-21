@@ -230,25 +230,25 @@ class TestAutonomousLoopEvaluate:
     def _make_state(self, **kwargs):
         return WorldState(**kwargs)
 
-    def test_evaluate_threat_nearby_triggers_survive(self):
+    async def test_evaluate_threat_nearby_triggers_survive(self):
         loop = self._make_loop()
         state = self._make_state(
             health=20.0,
             entities=[Entity(name="zombie", type="hostile", distance=5.0, count=3)],
         )
-        action, params = loop._evaluate(state)
+        action, params = await loop._evaluate(state)
         assert action == loop.ACTION_SURVIVE
         assert params["reason"] == "threat_nearby"
 
-    def test_evaluate_low_health_triggers_survive(self):
+    async def test_evaluate_low_health_triggers_survive(self):
         loop = self._make_loop()
         loop._rules.auto_heal_threshold = 12
         state = self._make_state(health=8.0)  # below threshold
-        action, params = loop._evaluate(state)
+        action, params = await loop._evaluate(state)
         assert action == loop.ACTION_SURVIVE
         assert params["reason"] == "low_health"
 
-    def test_evaluate_night_return_triggers_survive(self):
+    async def test_evaluate_night_return_triggers_survive(self):
         loop = self._make_loop()
         loop._base_pos = {"x": 100, "y": 64, "z": 100}
         state = self._make_state(
@@ -256,11 +256,11 @@ class TestAutonomousLoopEvaluate:
             health=20.0,
             time="night",
         )
-        action, params = loop._evaluate(state)
+        action, params = await loop._evaluate(state)
         assert action == loop.ACTION_SURVIVE
         assert params["reason"] == "night_return"
 
-    def test_evaluate_night_near_base_does_not_trigger(self):
+    async def test_evaluate_night_near_base_does_not_trigger(self):
         loop = self._make_loop()
         loop._base_pos = {"x": 0, "y": 64, "z": 0}
         state = self._make_state(
@@ -268,11 +268,11 @@ class TestAutonomousLoopEvaluate:
             health=20.0,
             time="night",
         )
-        action, _ = loop._evaluate(state)
+        action, _ = await loop._evaluate(state)
         # Close to base, should not trigger survive
         assert action != loop.ACTION_SURVIVE
 
-    def test_evaluate_building_in_progress_checks_materials(self):
+    async def test_evaluate_building_in_progress_checks_materials(self):
 
         config = MagicMock()
         config.bot.host = "localhost"
@@ -295,30 +295,30 @@ class TestAutonomousLoopEvaluate:
 
         # State where we have NO materials → should GATHER
         state = self._make_state(health=20.0, time="day", inventory={})
-        action, params = loop._evaluate(state)
+        action, params = await loop._evaluate(state)
         # Getting either GATHER or BUILD based on cooldown, need materials first
         if action == loop.ACTION_GATHER:
             assert params["material"] == "cobblestone"
         # If cooldowns align differently, build can also fire if materials are met
 
-    def test_evaluate_idle_when_safe(self):
+    async def test_evaluate_idle_when_safe(self):
         loop = self._make_loop()
         state = self._make_state(health=20.0, time="day")
 
         # Mock random to avoid explore
         with patch("random.random", return_value=1.0):  # suppress chat
             loop._cooldown.mark_executed("explore")  # force cooldown
-            action, _ = loop._evaluate(state)
+            action, _ = await loop._evaluate(state)
             # Should fall through to IDLE when all cooldowns are active
             assert action in (loop.ACTION_IDLE, loop.ACTION_EXPLORE, loop.ACTION_CHAT)
 
-    def test_evaluate_explore_default_fallback(self):
+    async def test_evaluate_explore_default_fallback(self):
         loop = self._make_loop()
         state = self._make_state(health=20.0, time="day", x=10, z=10)
 
         loop._cooldown.reset("explore")
         with patch("random.random", return_value=1.0), patch("random.randint", return_value=5):  # suppress chat random
-            action, params = loop._evaluate(state)
+            action, params = await loop._evaluate(state)
             assert action == loop.ACTION_EXPLORE
             assert "x" in params
             assert "z" in params

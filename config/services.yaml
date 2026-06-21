@@ -8,6 +8,33 @@ asr:
     type: mock
 
 tts:
+  alice_vc:
+    type: qwen3
+    model: /root/.cache/huggingface/hub/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/snapshots/5d83992436eae1d760afd27aff78a71d676296fc
+    speaker: custom
+    device: cuda
+    dtype: bfloat16
+    language: Chinese
+    use_flash_attn: false
+    max_new_tokens: 2048
+    temperature: 0.6
+    top_p: 0.8
+    repetition_penalty: 1.05
+    ref_audio_path: config/personas/voices/alice_ref.wav
+    ref_text: "我是久遠寺有珠，最后的魔女。我的母亲是英国魔女血脉，父亲是久远寺财阀的日本人。我独自一人住在父母留下的洋馆里。我使用童话魔术，使魔是童话怪物。我喜欢红茶和古董，讨厌吵闹和虚伪的人。"
+    x_vector_only: false
+  aoko_vc:
+    type: qwen3
+    model: /root/.cache/huggingface/hub/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/snapshots/5d83992436eae1d760afd27aff78a71d676296fc
+    speaker: custom
+    device: cuda
+    dtype: bfloat16
+    language: Chinese
+    use_flash_attn: false
+    max_new_tokens: 2048
+    ref_audio_path: config/personas/voices/aoko_ref.wav
+    ref_text: ''
+    x_vector_only: true
   kusajuro_vc:
     type: qwen3
     model: /root/.cache/huggingface/hub/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/snapshots/5d83992436eae1d760afd27aff78a71d676296fc
@@ -31,7 +58,7 @@ llm:
     memory_enabled: true
     llm_config:
       type: openai
-      api_key: tp-cnw2lg3ag0pm5au71lp3e34xmg2d1mct7dprkc3pzpmbuxhx
+      api_key: ${MIMO_API_KEY}
       model: mimo-v2.5-pro
       base_url: https://token-plan-cn.xiaomimimo.com/v1
       temperature: 0.7

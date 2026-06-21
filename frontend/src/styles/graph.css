@@ -1,0 +1,158 @@
+/* ── Memory Knowledge Graph — SVG visualization styles ── */
+
+/* ── Node ─────────────────────────────────────────────── */
+
+.graph-node {
+  cursor: grab;
+  transition: opacity 0.2s ease;
+}
+
+.graph-node:active {
+  cursor: grabbing;
+}
+
+.graph-node:hover circle {
+  filter: brightness(1.3);
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 2px;
+}
+
+.graph-node.dimmed {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.graph-node.selected circle {
+  stroke: var(--c-accent);
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 6px var(--c-accent));
+}
+
+/* ── Edge ─────────────────────────────────────────────── */
+
+.graph-edge {
+  transition: opacity 0.2s ease, stroke-width 0.15s ease;
+}
+
+.graph-edge.dimmed {
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.graph-edge:hover {
+  opacity: 0.9 !important;
+  stroke-width: 2.5px !important;
+  cursor: pointer;
+}
+
+/* ── Tooltip ──────────────────────────────────────────── */
+
+.graph-tooltip {
+  position: fixed;
+  z-index: 50;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+/* ── Controls toolbar ─────────────────────────────────── */
+
+.graph-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 12px 12px 0 0;
+  backdrop-filter: blur(12px);
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 640px) {
+  .graph-controls {
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .graph-controls .graph-controls-left,
+  .graph-controls .graph-controls-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .graph-controls .graph-controls-center {
+    width: 100%;
+    order: -1;
+  }
+}
+
+/* ── Empty state ──────────────────────────────────────── */
+
+.graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--c-text-muted);
+  font-size: 13px;
+  user-select: none;
+}
+
+.graph-empty-icon {
+  font-size: 32px;
+  opacity: 0.4;
+}
+
+/* ── SVG container ────────────────────────────────────── */
+
+.graph-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--c-bg);
+}
+
+.graph-container svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Node label text ──────────────────────────────────── */
+
+.graph-node-label {
+  font-size: 10px;
+  fill: var(--c-text-dim);
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+  text-shadow: 0 1px 2px var(--c-bg);
+}
+
+/* ── Category badge on node ───────────────────────────── */
+
+.graph-node-badge {
+  font-size: 8px;
+  fill: var(--c-text-muted);
+  text-anchor: middle;
+  pointer-events: none;
+}

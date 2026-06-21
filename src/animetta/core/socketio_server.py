@@ -252,7 +252,7 @@ def _wrap_with_frontend_serving(app):
             path = request.url.path
 
             # API and WebSocket routes — pass through to backend
-            if path.startswith("/api/") or path.startswith("/socket.io") or path == "/metrics":
+            if path.startswith("/api/") or path.startswith("/socket.io") or path == "/metrics" or path == "/health":
                 return await call_next(request)
 
             # Try to serve exact file match from frontend/dist
