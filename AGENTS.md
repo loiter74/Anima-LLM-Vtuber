@@ -65,6 +65,7 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 - **Logging**: `loguru` logger, English only
 - **Provider plugin pattern**: `interface.py` ABC → implementations → factory → `__init__.py` re-exports
 - **TDD preferred** — write tests first
+- **Frontend styling** — follow `STYLE_GUIDE.md`; use design-system tokens and UnoCSS utilities, not raw hardcoded colors.
 
 ## AGENT WORKFLOW RULES
 

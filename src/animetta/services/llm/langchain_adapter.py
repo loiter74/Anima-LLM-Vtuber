@@ -9,6 +9,7 @@ enabling advanced features such as bind_tools().
 Note: Actual tool calls are handled directly by llm_node.py; this adapter is for basic conversation only.
 """
 
+import inspect
 from collections.abc import Sequence
 from typing import Any, TypeVar
 
@@ -122,13 +123,19 @@ class LLMChatModelAdapter(BaseChatModel):
         full_response = ""
 
         try:
-            async for chunk in self.llm_service.chat_stream(user_input):
-                chunks.append(chunk)
-                full_response += chunk
+            stream = self.llm_service.chat_stream(user_input)
+            if inspect.isawaitable(stream):
+                response = await stream
+                if response:
+                    full_response = str(response)
+            else:
+                async for chunk in stream:
+                    chunks.append(chunk)
+                    full_response += chunk
 
-                # Notify callback (supports streaming output)
-                if run_manager:
-                    await run_manager.on_llm_new_token(chunk)
+                    # Notify callback (supports streaming output)
+                    if run_manager:
+                        await run_manager.on_llm_new_token(chunk)
 
         except Exception as e:
             logger.error(f"[LLM Adapter] Generation failed: {e}")
@@ -161,18 +168,24 @@ class LLMChatModelAdapter(BaseChatModel):
 
 def create_chat_model_from_service(
     llm_service: LLMInterface,
-    _enable_tooling: bool = False,
+    enable_tooling: bool = False,
+    _enable_tooling: bool | None = None,
 ) -> BaseChatModel:
     """
     Create a LangChain ChatModel from an existing LLM service
 
     Args:
         llm_service: Existing LLM service instance
-        _enable_tooling: Whether to enable tool call support (placeholder; actual handling by llm_node.py)
+        enable_tooling: Whether to enable tool call support (placeholder; actual handling by llm_node.py)
+        _enable_tooling: Backward-compatible alias for older callers.
 
     Returns:
         BaseChatModel: LangChain ChatModel instance
     """
+    if _enable_tooling is not None:
+        enable_tooling = _enable_tooling
+    _ = enable_tooling
+
     # Dynamic proxies (e.g. TracingProxy) wrap LLMInterface for OTel tracing
     # but fail Pydantic's strict isinstance(LLMInterface) check in
     # LLMChatModelAdapter.  Unwrap before passing to the adapter.

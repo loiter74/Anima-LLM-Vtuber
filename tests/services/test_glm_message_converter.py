@@ -140,6 +140,24 @@ class _FakeArgsSchema:
         }
 
 
+class _FakePydanticV2ArgsSchema:
+    """Stand-in for a Pydantic V2 args_schema."""
+
+    @staticmethod
+    def model_json_schema():
+        return {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+            },
+            "required": ["query"],
+        }
+
+    @staticmethod
+    def schema():
+        raise AssertionError(".schema() should not be called")
+
+
 class TestGLMToolConverterConvertTools:
     """GLMToolConverter.convert_tools() — LangChain tools → GLM format."""
 
@@ -191,6 +209,18 @@ class TestGLMToolConverterConvertTools:
 
         query_prop = result[0]["function"]["parameters"]["properties"]["query"]
         assert query_prop["type"] == "string"
+
+    def test_prefers_pydantic_v2_model_json_schema(self):
+        """GLM tool conversion should avoid deprecated Pydantic V2 .schema()."""
+        tool = _FakeTool(
+            name="search",
+            description="Search",
+            args_schema=_FakePydanticV2ArgsSchema(),
+        )
+
+        result = GLMToolConverter.convert_tools([tool])
+
+        assert result[0]["function"]["parameters"]["required"] == ["query"]
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -15,7 +15,7 @@ import pytest_asyncio
 
 from animetta.orchestration.graph import stats_store
 from animetta.orchestration.graph.stats_handler import KNOWN_NODES, StatsCallbackHandler
-from animetta.orchestration.graph.stats_store import StatsStore, get_stats_store
+from animetta.orchestration.graph.stats_store import StatsStore, close_stats_store, get_stats_store
 from animetta.orchestration.server.stats_api import get_stats_routes
 
 # 确保项目 src 在 path 中
@@ -183,7 +183,7 @@ class TestStatsStore:
         """并发调用 get_stats_store 不应竞态"""
 
         # 重置单例
-        stats_store._store = None
+        await close_stats_store()
 
         db_path = str(tmp_path / "concurrent_test.db")
 
@@ -210,8 +210,21 @@ class TestStatsStore:
         assert all(s is stores[0] for s in stores)
 
         # 清理
-        await stats_store._store.close()
-        stats_store._store = None
+        await close_stats_store()
+
+    @pytest.mark.asyncio
+    async def test_close_stats_store_closes_and_resets_singleton(self, tmp_path):
+        """close_stats_store closes the global connection before dropping the singleton."""
+
+        db_path = str(tmp_path / "singleton_close.db")
+        store = StatsStore(db_path=db_path)
+        await store.init()
+        stats_store._store = store
+
+        await close_stats_store()
+
+        assert stats_store._store is None
+        assert store._db is None
 
 
 # ============================================================
@@ -278,7 +291,7 @@ class TestStatsAPI:
         from starlette.routing import Mount
 
         # 重置单例
-        stats_store._store = None
+        await close_stats_store()
 
         db_path = str(tmp_path / "api_test.db")
 
@@ -298,8 +311,7 @@ class TestStatsAPI:
             yield c
 
         # 清理
-        await store.close()
-        stats_store._store = None
+        await close_stats_store()
 
     @pytest.mark.asyncio
     async def test_overview_empty(self, client):

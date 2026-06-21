@@ -17,6 +17,9 @@
   --c-blue: #7c8cf5;
   --c-mint: #6ee7b7;
   --c-gold: #f5c872;
+  --c-violet: #a882ff;
+  --c-violet-soft: rgba(168, 130, 255, 0.15);
+  --c-violet-glow: rgba(168, 130, 255, 0.50);
   --c-success: #4ade80;
   --c-warning: #fbbf24;
   --c-error: #f87171;
@@ -43,6 +46,9 @@
   --c-blue: #6b7df0;
   --c-mint: #34d399;
   --c-gold: #f59e0b;
+  --c-violet: #8b6fe8;
+  --c-violet-soft: rgba(139, 111, 232, 0.12);
+  --c-violet-glow: rgba(139, 111, 232, 0.35);
   --c-success: #22c55e;
   --c-warning: #f59e0b;
   --c-error: #ef4444;

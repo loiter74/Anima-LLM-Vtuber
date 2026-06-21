@@ -80,9 +80,9 @@ function handleDelete(id: string) {
 /** Map priority to design-system color */
 function priorityColor(priority: Priority): string {
   const map: Record<Priority, string> = {
-    high: 'var(--c-error, #f87171)',
-    medium: 'var(--c-gold, #f5c872)',
-    low: 'var(--c-blue, #7c8cf5)',
+    high: 'var(--c-error)',
+    medium: 'var(--c-gold)',
+    low: 'var(--c-blue)',
   }
   return map[priority]
 }
@@ -179,24 +179,24 @@ onMounted(() => {
 .error-text,
 .empty-text {
   font-size: 12px;
-  color: var(--c-text-muted, rgba(255, 255, 255, 0.45));
+  color: var(--c-text-muted);
   text-align: center;
 }
 
 .retry-btn {
   padding: 6px 16px;
-  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--c-border);
   border-radius: var(--r-sm, 6px);
-  background: var(--c-accent-soft, rgba(232, 121, 168, 0.15));
-  color: var(--c-accent, #e879a8);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
   font-size: 11px;
   cursor: pointer;
   transition: background var(--d-fast, 150ms) ease;
 }
 
 .retry-btn:hover {
-  background: var(--c-accent, #e879a8);
-  color: #fff;
+  background: var(--c-accent);
+  color: var(--c-bg);
 }
 
 /* ---- 2-column grid ---- */
@@ -209,8 +209,8 @@ onMounted(() => {
 /* ---- Card ---- */
 .card {
   position: relative;
-  background: var(--c-bg, #1a1028);
-  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.08));
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
   border-radius: var(--r-md, 8px);
   overflow: hidden;
   cursor: default;
@@ -220,7 +220,7 @@ onMounted(() => {
 }
 
 .card:hover {
-  border-color: var(--c-border-accent, rgba(232, 121, 168, 0.30));
+  border-color: var(--c-border-accent);
   transform: translateY(-1px);
 }
 
@@ -241,7 +241,7 @@ onMounted(() => {
 .card-main {
   font-size: 12px;
   font-weight: 700;
-  color: #fff;
+  color: var(--c-text);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -250,7 +250,7 @@ onMounted(() => {
 
 .card-desc {
   font-size: 9px;
-  color: var(--c-text-muted, rgba(255, 255, 255, 0.45));
+  color: var(--c-text-muted);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -265,7 +265,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(26, 16, 40, 0.80);
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   opacity: 0;
@@ -283,9 +283,9 @@ onMounted(() => {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.08));
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--c-text-dim, rgba(255, 255, 255, 0.60));
+  border: 1px solid var(--c-border);
+  background: var(--c-border);
+  color: var(--c-text-dim);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -294,15 +294,15 @@ onMounted(() => {
 }
 
 .send-btn:hover {
-  background: var(--c-accent, #e879a8);
-  border-color: var(--c-accent, #e879a8);
-  color: #fff;
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-bg);
 }
 
 .delete-btn:hover {
-  background: var(--c-error, #f87171);
-  border-color: var(--c-error, #f87171);
-  color: #fff;
+  background: var(--c-error);
+  border-color: var(--c-error);
+  color: var(--c-bg);
 }
 
 /* ---- TransitionGroup: card exit animation ---- */

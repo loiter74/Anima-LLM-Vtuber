@@ -154,8 +154,10 @@ class TestConnectionTimeout:
     async def test_wait_for_timeout_returns_failed(self):
         """Returns CheckResult.failed when asyncio.wait_for hits timeout."""
         mock_client = _create_mock_client()
-        # Simulate wait_for timing out (connect never completes)
-        timeout_error = TimeoutError()
+
+        async def _timeout(coro, timeout: float):  # noqa: ARG001
+            coro.close()
+            raise TimeoutError()
 
         with (
             patch(
@@ -164,7 +166,7 @@ class TestConnectionTimeout:
             ),
             patch(
                 "animetta.inspection.checks.pipeline.asyncio.wait_for",
-                side_effect=timeout_error,
+                side_effect=_timeout,
             ),
         ):
             result = await check_conversation_pipeline()

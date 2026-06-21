@@ -23,6 +23,9 @@ New code uses UnoCSS utility classes exclusively. Existing CSS-variable code mig
 | `var(--c-blue)` | `text-c-blue`, `bg-c-blue` |
 | `var(--c-mint)` | `text-c-mint`, `bg-c-mint` |
 | `var(--c-gold)` | `text-c-gold`, `bg-c-gold` |
+| `var(--c-violet)` | `text-c-violet`, `bg-c-violet` |
+| `var(--c-violet-soft)` | `bg-c-violet-soft` |
+| `var(--c-violet-glow)` | Use `shadow` or inline `style` — no direct UnoCSS class |
 | `var(--c-success)` | `text-c-success`, `bg-c-success` |
 | `var(--c-warning)` | `text-c-warning`, `bg-c-warning` |
 | `var(--c-error)` | `text-c-error`, `bg-c-error` |
@@ -102,7 +105,15 @@ UnoCSS uses the Tailwind-compatible spacing scale with a 4px base unit: `p-1` (4
 </template>
 ```
 
-## §4 Code Review Checklist
+## §4 Naming Conventions
+
+- Use `c-*` for design-system color tokens exposed through UnoCSS.
+- Use semantic names (`c-error`, `c-violet`) instead of raw color-family utility classes.
+- Keep component-local CSS class names descriptive and scoped to the component role.
+- Prefer existing shortcuts (`glass`, `btn-accent`, `btn-ghost`) before adding new classes.
+- New visual tokens must be added to `frontend/uno.config.ts`, `frontend/src/styles/themes.css`, and the matching `design-system/*.html` spec.
+
+## §5 Code Review Checklist
 
 - [ ] New code uses UnoCSS (no raw `var(--c-*)` in `<style>` blocks)
 - [ ] Colors use design tokens (no hardcoded hex like `#e879a8`)
@@ -111,7 +122,7 @@ UnoCSS uses the Tailwind-compatible spacing scale with a 4px base unit: `p-1` (4
 - [ ] Glass panels use `glass` or `glass-strong` shortcut
 - [ ] New components have corresponding cards in `design-system/components.html` (or noted as pending)
 
-## §5 Migration Example
+## §6 Migration Example
 
 **Before** (using CSS variables):
 

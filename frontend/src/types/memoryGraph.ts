@@ -98,7 +98,7 @@ export const RELATION_COLORS: Record<string, string> = {
   EXTENDS: 'var(--c-blue)',
   DERIVES: 'var(--c-mint)',
   EVOKES: 'var(--c-gold)',
-  CONTRADICTS: 'var(--c-red, #ef4444)',
+  CONTRADICTS: 'var(--c-error)',
   CONSOLIDATED_INTO: 'var(--c-text-dim)',
   relates_to: 'var(--c-text-muted)',
   default: 'var(--c-text-muted)',

@@ -133,6 +133,15 @@ class TestCreateChatModelFromService:
         # Should still create the adapter with default model_name
         assert adapter.model_name == "unknown"
 
+    def test_accepts_public_enable_tooling_keyword(self):
+        """ToolManager passes ``enable_tooling`` by name; the factory must accept it."""
+
+        mock_svc = _make_llm_service_mock()
+
+        adapter = create_chat_model_from_service(mock_svc, enable_tooling=True)
+
+        assert isinstance(adapter, LLMChatModelAdapter)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # LLMChatModelAdapter — properties
@@ -235,6 +244,25 @@ class TestLLMChatModelAdapterAGenerate:
 
         # Error is caught and embedded in the response
         assert "Error" in result.generations[0].text
+
+    @pytest.mark.asyncio
+    async def test_awaits_coroutine_chat_stream_errors(self):
+        """Coroutine-returning chat_stream failures should be awaited and reported."""
+        mock_svc = MagicMock(spec=LLMInterface)
+
+        async def _broken_stream(_):
+            raise RuntimeError("API error")
+
+        mock_svc.chat_stream = _broken_stream
+        mock_svc.set_system_prompt = MagicMock()
+        mock_svc.close = AsyncMock()
+
+        adapter = LLMChatModelAdapter(llm_service=mock_svc)
+        messages = _make_messages(human="Hi")
+
+        result = await adapter._agenerate(messages)
+
+        assert "API error" in result.generations[0].text
 
     @pytest.mark.asyncio
     async def test_uses_latest_human_message(self):

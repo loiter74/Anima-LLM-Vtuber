@@ -27,6 +27,9 @@
   --c-blue:  #7c8cf5;    /* user message bubble                 */
   --c-mint:  #6ee7b7;
   --c-gold:  #f5c872;
+  --c-violet: #a882ff;   /* sliders and MBTI dimension accents */
+  --c-violet-soft: rgba(168, 130, 255, 0.15);
+  --c-violet-glow: rgba(168, 130, 255, 0.50);
 
   /* ---------- SEMANTIC ------------------------------------------------- */
   --c-success: #4ade80;
@@ -65,7 +68,7 @@
   --shadow-panel:        0 20px 48px rgba(0, 0, 0, 0.45);
   --shadow-glow-accent:  0 0 8px rgba(232, 121, 168, 0.6);
   --shadow-glow-success: 0 0 8px rgba(74, 222, 128, 0.6);
-  --shadow-glow-violet:  0 0 12px rgba(168, 130, 255, 0.5);
+  --shadow-glow-violet:  0 0 12px var(--c-violet-glow);
 
   /* ---------- MOTION --------------------------------------------------- */
   --d-fast: 150ms;

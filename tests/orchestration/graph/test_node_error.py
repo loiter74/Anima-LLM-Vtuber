@@ -8,7 +8,7 @@ import pytest_asyncio
 
 from animetta.orchestration.graph import stats_store as ss
 from animetta.orchestration.graph.node_error import VALID_ERROR_TYPES, log_node_error
-from animetta.orchestration.graph.stats_store import StatsStore
+from animetta.orchestration.graph.stats_store import StatsStore, close_stats_store
 
 
 class TestLogNodeError:
@@ -26,9 +26,11 @@ class TestLogNodeError:
     @pytest_asyncio.fixture
     async def mock_get_store(self, monkeypatch, store):
         """Patch get_stats_store to return our test store."""
+        await close_stats_store()
         ss._store = store
         yield
-        ss._store = None
+        if ss._store is store:
+            ss._store = None
 
     @pytest_asyncio.fixture
     async def trace_id(self, store):

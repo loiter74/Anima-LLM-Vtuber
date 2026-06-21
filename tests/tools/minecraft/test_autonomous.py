@@ -74,6 +74,14 @@ def make_rules_engine():
     return rules
 
 
+def _close_created_task(coro):
+    """Test helper for patched create_task that consumes the coroutine."""
+    coro.close()
+    task = MagicMock()
+    task.done.return_value = True
+    return task
+
+
 # ── Test Classes ──
 
 class TestCooldownTracker:
@@ -142,7 +150,7 @@ class TestAutonomousLoopLifecycle:
         bridge = MinecraftBridge(config)
         loop = AutonomousLoop(bridge)
 
-        with patch("asyncio.create_task"):
+        with patch("asyncio.create_task", side_effect=_close_created_task):
             asyncio.run(loop.start())
 
         assert loop.is_running is True
@@ -156,7 +164,7 @@ class TestAutonomousLoopLifecycle:
         bridge = MinecraftBridge(config)
         loop = AutonomousLoop(bridge)
 
-        with patch("asyncio.create_task") as mock_create:
+        with patch("asyncio.create_task", side_effect=_close_created_task) as mock_create:
             asyncio.run(loop.start())
             asyncio.run(loop.start())
         # create_task should only be called once

@@ -16,6 +16,15 @@ ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, 
 
 const store = usePersonalityStore()
 
+function cssToken(name: string): string {
+  if (typeof window === 'undefined') return ''
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function token(name: string): string {
+  return cssToken(name) || `var(${name})`
+}
+
 onMounted(() => {
   store.fetchAvailablePersonas()
 })
@@ -32,10 +41,10 @@ const chartData = computed(() => {
       {
         label: 'MBTI',
         data: [d.ei, d.sn, d.tf, d.jp],
-        backgroundColor: 'rgba(232, 121, 168, 0.15)',
-        borderColor: 'rgba(232, 121, 168, 0.5)',
-        pointBackgroundColor: 'rgba(232, 121, 168, 1)',
-        pointBorderColor: '#1a1028',
+        backgroundColor: token('--c-ai-bubble'),
+        borderColor: token('--c-border-accent'),
+        pointBackgroundColor: token('--c-accent'),
+        pointBorderColor: token('--c-bg'),
         pointBorderWidth: 1.5,
         pointRadius: 4,
         pointHoverRadius: 6,
@@ -56,17 +65,17 @@ const chartOptions = {
       ticks: {
         stepSize: 25,
         backdropColor: 'transparent',
-        color: 'rgba(255, 255, 255, 0.2)',
+        color: token('--c-text-muted'),
         font: { size: 10 },
       },
       grid: {
-        color: 'rgba(255, 255, 255, 0.06)',
+        color: token('--c-border'),
       },
       angleLines: {
-        color: 'rgba(255, 255, 255, 0.06)',
+        color: token('--c-border'),
       },
       pointLabels: {
-        color: 'rgba(255, 255, 255, 0.5)',
+        color: token('--c-text-dim'),
         font: { size: 11, weight: 500 },
       },
     },
@@ -87,10 +96,10 @@ const computedMbtiType = computed(() => {
 const dimensions = computed(() => {
   const d = store.mbtiDimensions ?? { ei: 50, sn: 50, tf: 50, jp: 50 }
   return [
-    { label: 'E/I', val: d.ei, color: '#a882ff', left: '内向 I', right: '外向 E' },
-    { label: 'S/N', val: d.sn, color: '#5dade2', left: '实感 S', right: '直觉 N' },
-    { label: 'T/F', val: d.tf, color: '#f39c12', left: '共情 F', right: '理性 T' },
-    { label: 'J/P', val: d.jp, color: '#2ecc71', left: '随性 P', right: '计划 J' },
+    { label: 'E/I', val: d.ei, color: token('--c-violet'), left: '内向 I', right: '外向 E' },
+    { label: 'S/N', val: d.sn, color: token('--c-blue'), left: '实感 S', right: '直觉 N' },
+    { label: 'T/F', val: d.tf, color: token('--c-gold'), left: '共情 F', right: '理性 T' },
+    { label: 'J/P', val: d.jp, color: token('--c-mint'), left: '随性 P', right: '计划 J' },
   ]
 })
 
@@ -295,7 +304,7 @@ function toggleMode(): void {
   appearance: none;
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--c-border);
   cursor: pointer;
   outline: none;
 }
@@ -306,27 +315,27 @@ function toggleMode(): void {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: rgba(168, 130, 255, 1); /* TODO: add token — no matching violet token in uno.config.ts */
-  box-shadow: 0 0 8px rgba(168, 130, 255, 0.5); /* TODO: add token */
+  background: var(--c-violet);
+  box-shadow: 0 0 8px var(--c-violet-glow);
   transition: box-shadow 0.2s;
 }
 
 .range-slider::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 12px rgba(168, 130, 255, 0.7); /* TODO: add token */
+  box-shadow: var(--shadow-glow-violet);
 }
 
 .range-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: rgba(168, 130, 255, 1); /* TODO: add token */
+  background: var(--c-violet);
   border: none;
-  box-shadow: 0 0 8px rgba(168, 130, 255, 0.5); /* TODO: add token */
+  box-shadow: 0 0 8px var(--c-violet-glow);
 }
 
 .range-slider::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--c-border);
 }
 </style>

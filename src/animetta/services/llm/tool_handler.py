@@ -18,6 +18,12 @@ if TYPE_CHECKING:
     from .openai_llm import OpenAILLM
 
 
+def _get_args_schema_parameters(args_schema: Any) -> dict[str, Any]:
+    if hasattr(args_schema, "model_json_schema"):
+        return args_schema.model_json_schema()
+    return args_schema.schema()
+
+
 class OpenAIToolHandler:
     """
     Handles tool calling for OpenAILLM.
@@ -46,9 +52,9 @@ class OpenAIToolHandler:
         openai_tools = []
         for tool in tools:
             parameters = {"type": "object", "properties": {}}
-            if hasattr(tool, 'args_schema') and tool.args_schema:
+            if hasattr(tool, "args_schema") and tool.args_schema:
                 try:
-                    parameters = tool.args_schema.schema()
+                    parameters = _get_args_schema_parameters(tool.args_schema)
                 except Exception:
                     parameters = {"type": "object", "properties": {}}
 

@@ -11,6 +11,12 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 
+def _get_args_schema_parameters(args_schema: Any) -> dict[str, Any]:
+    if hasattr(args_schema, "model_json_schema"):
+        return args_schema.model_json_schema()
+    return args_schema.schema()
+
+
 class GLMMessageConverter:
     """Converts LangChain messages to GLM API format"""
 
@@ -126,8 +132,8 @@ class GLMToolConverter:
     @staticmethod
     def _get_tool_parameters(tool: Any) -> dict[str, Any]:
         """Get tool parameter schema"""
-        if hasattr(tool, 'args_schema') and tool.args_schema:
-            return tool.args_schema.schema()
+        if hasattr(tool, "args_schema") and tool.args_schema:
+            return _get_args_schema_parameters(tool.args_schema)
         return {
             "type": "object",
             "properties": {},

@@ -30,10 +30,10 @@
 
 - [x] 4.1 Decide whether backend coverage is immediately gated at 70% or ratcheted from the measured 67% baseline.
 - [x] 4.2 Add targeted tests for health-critical route, health-check, and config-secret behavior until the selected coverage gate passes.
-- [ ] 4.3 Replace Pydantic V2 deprecated `.schema()` calls with `model_json_schema()` where compatible.
-- [ ] 4.4 Fix or isolate async "coroutine was never awaited" warnings in inspection, LangChain adapter, and Minecraft bridge tests.
-- [ ] 4.5 Fix or explicitly suppress resource warnings for unclosed SQLite connections in tested code paths.
-- [ ] 4.6 Re-run backend tests with warnings visible and confirm warning count is reduced or documented.
+- [x] 4.3 Replace Pydantic V2 deprecated `.schema()` calls with `model_json_schema()` where compatible.
+- [x] 4.4 Fix or isolate async "coroutine was never awaited" warnings in inspection, LangChain adapter, and Minecraft bridge tests.
+- [x] 4.5 Fix or explicitly suppress resource warnings for unclosed SQLite connections in tested code paths.
+- [x] 4.6 Re-run backend tests with warnings visible and confirm warning count is reduced or documented.
 
 ## 5. Dependency and Security Baseline
 
@@ -46,11 +46,11 @@
 
 ## 6. UI Style and OpenSpec Synchronization
 
-- [ ] 6.1 Clean hardcoded color literals introduced or touched in `PersonalityPanel.vue` using existing design-system tokens where possible.
-- [ ] 6.2 Clean hardcoded style drift in touched memory graph, memory cards, and live/static surfaces or document approved token additions.
-- [ ] 6.3 If a new visual token is required, add it to both `design-system/colors_and_type.css` and `frontend/uno.config.ts`, then document the role.
-- [ ] 6.4 Synchronize `style-unification-standard` OpenSpec tasks with the actual `STYLE_GUIDE.md` and style-guide spec state.
-- [ ] 6.5 Run frontend type check, tests, and build after style cleanup.
+- [x] 6.1 Clean hardcoded color literals introduced or touched in `PersonalityPanel.vue` using existing design-system tokens where possible.
+- [x] 6.2 Clean hardcoded style drift in touched memory graph, memory cards, and live/static surfaces or document approved token additions.
+- [x] 6.3 If a new visual token is required, add it to both `design-system/colors_and_type.css` and `frontend/uno.config.ts`, then document the role.
+- [x] 6.4 Synchronize `style-unification-standard` OpenSpec tasks with the actual `STYLE_GUIDE.md` and style-guide spec state.
+- [x] 6.5 Run frontend type check, tests, and build after style cleanup.
 
 ## 7. Documentation and Release Checklist
 
@@ -68,4 +68,4 @@
 - [x] 8.4 Run `scripts/validate-events.py` and confirm all Socket.IO event validations pass.
 - [x] 8.5 Run Docker compose config validation for GPU and CPU compose files.
 - [x] 8.6 Run the full Docker startup protocol after implementation, including `/health` HTTP 200, frontend HTTP 200, and log inspection for Traceback or ERROR entries.
-- [ ] 8.7 Confirm `git status` contains only intentional implementation, spec, docs, and lockfile changes.
+- [x] 8.7 Confirm `git status` contains only intentional implementation, spec, docs, and lockfile changes.

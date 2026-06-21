@@ -95,8 +95,8 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a0a0f;
-  font-family: 'Noto Sans SC', sans-serif;
+  background: var(--c-bg);
+  font-family: var(--font-sans);
 }
 
 /* Background */
@@ -110,13 +110,13 @@ onMounted(() => {
 .bg-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #1a1028 0%, #2d1b45 50%, #36205a 100%);
+  background: linear-gradient(135deg, var(--c-bg) 0%, var(--c-panel) 50%, var(--c-card) 100%);
 }
 
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 30%, rgba(10,10,15,0.4) 100%);
+  background: radial-gradient(ellipse at center, transparent 30%, color-mix(in srgb, var(--c-bg) 40%, transparent) 100%);
   pointer-events: none;
   z-index: 1;
 }
@@ -136,12 +136,12 @@ onMounted(() => {
   z-index: 20;
   width: 320px;
   max-height: 500px;
-  background: rgba(10, 10, 15, 0.7);
+  background: color-mix(in srgb, var(--c-bg) 70%, transparent);
   backdrop-filter: blur(30px);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 20px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--d-slow) var(--ease-out-expo);
 }
 
 .danmaku.collapsed {
@@ -164,32 +164,32 @@ onMounted(() => {
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #f0f0f5;
+  color: var(--c-text);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(240,240,245,0.3);
+  background: var(--c-text-muted);
 }
 
 .dot.online {
-  background: #4ade80;
-  box-shadow: 0 0 8px rgba(74,222,128,0.5);
+  background: var(--c-success);
+  box-shadow: var(--shadow-glow-success);
 }
 
 .count {
   font-size: 11px;
-  color: rgba(240,240,245,0.4);
-  background: rgba(255,255,255,0.04);
+  color: var(--c-text-muted);
+  background: color-mix(in srgb, var(--c-border) 50%, transparent);
   padding: 2px 8px;
   border-radius: 10px;
 }
 
 .arrow {
   font-size: 10px;
-  color: rgba(240,240,245,0.3);
+  color: var(--c-text-muted);
 }
 
 .danmaku-list {
@@ -203,14 +203,14 @@ onMounted(() => {
 }
 
 .danmaku-list::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--c-border);
   border-radius: 2px;
 }
 
 .msg {
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-  animation: slideIn 0.3s ease;
+  border-bottom: 1px solid var(--c-border);
+  animation: slideIn var(--d-slow) var(--ease-out-expo);
 }
 
 .msg:last-child {
@@ -220,20 +220,20 @@ onMounted(() => {
 .msg .name {
   font-size: 12px;
   font-weight: 600;
-  color: #e879a8;
+  color: var(--c-accent);
   margin-right: 6px;
 }
 
 .msg .text {
   font-size: 13px;
-  color: #f0f0f5;
+  color: var(--c-text);
 }
 
 .empty {
   padding: 24px;
   text-align: center;
   font-size: 12px;
-  color: rgba(240,240,245,0.3);
+  color: var(--c-text-muted);
 }
 
 @keyframes slideIn {

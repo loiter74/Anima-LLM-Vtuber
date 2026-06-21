@@ -60,6 +60,30 @@ class TestOpenAIToolHandler:
         assert result[0]["function"]["name"] == "fake_weather"
         assert "city" in result[0]["function"]["parameters"]["properties"]
 
+    def test_convert_tools_prefers_pydantic_v2_model_json_schema(self, handler):
+        """_convert_tools_to_openai should avoid deprecated Pydantic V2 .schema()."""
+        class ArgsSchema:
+            @staticmethod
+            def model_json_schema():
+                return {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                }
+
+            @staticmethod
+            def schema():
+                raise AssertionError(".schema() should not be called")
+
+        tool_obj = MagicMock()
+        tool_obj.name = "search"
+        tool_obj.description = "Search"
+        tool_obj.args_schema = ArgsSchema()
+
+        result = handler._convert_tools_to_openai([tool_obj])
+
+        assert result[0]["function"]["parameters"]["required"] == ["query"]
+
     def test_convert_tools_empty(self, handler):
         """_convert_tools_to_openai should return empty list for no tools."""
         assert handler._convert_tools_to_openai([]) == []

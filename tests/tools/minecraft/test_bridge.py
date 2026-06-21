@@ -41,6 +41,16 @@ def mock_process():
     return proc
 
 
+async def _complete_ready_wait(awaitable, timeout):  # noqa: ARG001
+    awaitable.close()
+    return None
+
+
+async def _timeout_ready_wait(awaitable, timeout):  # noqa: ARG001
+    awaitable.close()
+    raise TimeoutError()
+
+
 # ── Test Classes ──
 
 class TestMinecraftBridgeInit:
@@ -99,7 +109,7 @@ class TestMinecraftBridgeStart:
 
         with patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", new=AsyncMock(return_value=None)):
+             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
             result = await bridge.start()
 
         assert result is True
@@ -112,7 +122,7 @@ class TestMinecraftBridgeStart:
 
         with patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+             patch("asyncio.wait_for", side_effect=_timeout_ready_wait):
             result = await bridge.start()
 
         assert result is True
@@ -137,7 +147,7 @@ class TestMinecraftBridgeStart:
         with patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True), \
              patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", new=AsyncMock(return_value=None)), \
+             patch("asyncio.wait_for", side_effect=_complete_ready_wait), \
              patch("animetta.tools.minecraft.autonomous.AutonomousLoop", return_value=mock_loop):
             result = await bridge.start()
 

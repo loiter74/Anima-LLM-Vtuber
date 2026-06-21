@@ -363,6 +363,7 @@ class StatsStore(StatsStoreProtocol):
     async def close(self):
         if self._db:
             await self._db.close()
+            self._db = None
 
 
 # Global singleton (with async lock to prevent race conditions)
@@ -379,3 +380,12 @@ async def get_stats_store() -> StatsStore:
             _store = StatsStore()
             await _store.init()
     return _store
+
+
+async def close_stats_store() -> None:
+    """Close and clear the global stats store singleton."""
+    global _store
+    async with _store_lock:
+        if _store is not None:
+            await _store.close()
+            _store = None

@@ -43,6 +43,7 @@ tests/              # Test suite
 - **Async-first** — all I/O operations must be async
 - **Pydantic V2** — use `model_config = ConfigDict(...)` not `class Config:`
 - **Logging** — use `loguru` logger, English messages only
+- **Frontend styling** — follow [STYLE_GUIDE.md](STYLE_GUIDE.md) and use design tokens/UnoCSS utilities instead of hardcoded colors.
 
 ## Testing
 
