@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -12,34 +11,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Import tech_tree directly, bypassing __init__.py which has a syntax error
-# in benchmark.py (await inside lambda).  Load the module by path.
-_spec = importlib.util.spec_from_file_location(
-    "animetta.tools.minecraft.tech_tree",
-    Path(__file__).resolve().parents[3]
-    / "src"
-    / "animetta"
-    / "tools"
-    / "minecraft"
-    / "tech_tree.py",
+from animetta.tools.minecraft.tech_tree import (
+    _PREDEFINED_PHASES,
+    DIAMOND_PHASE,
+    IRON_PHASE,
+    STONE_PHASE,
+    WOOD_PHASE,
+    TechTreeConfig,
+    TechTreeMetrics,
+    TechTreePhase,
+    TechTreeReport,
+    TechTreeRunner,
+    _phase_tasks,
+    create_default_tech_tree,
 )
-_mod = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = _mod
-_spec.loader.exec_module(_mod)
-
-DIAMOND_PHASE = _mod.DIAMOND_PHASE
-IRON_PHASE = _mod.IRON_PHASE
-STONE_PHASE = _mod.STONE_PHASE
-WOOD_PHASE = _mod.WOOD_PHASE
-TechTreeConfig = _mod.TechTreeConfig
-TechTreeMetrics = _mod.TechTreeMetrics
-TechTreePhase = _mod.TechTreePhase
-TechTreeReport = _mod.TechTreeReport
-TechTreeRunner = _mod.TechTreeRunner
-_PREDEFINED_PHASES = _mod._PREDEFINED_PHASES
-_phase_tasks = _mod._phase_tasks
-create_default_tech_tree = _mod.create_default_tech_tree
-
 
 # ── Lightweight BenchmarkMetrics stub ─────────────────────────────────────────
 # Avoid importing the real benchmark.py (has top-level imports that may fail).
