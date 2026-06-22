@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.config.providers.asr import (
+from animetta.core.config.providers.asr import (
     FasterWhisperASRConfig,
     FunASRConfig,
     GLMASRConfig,

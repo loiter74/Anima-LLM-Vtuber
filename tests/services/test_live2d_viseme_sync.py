@@ -302,8 +302,8 @@ class TestCreateLipSyncEngine:
         """Extra kwargs are forwarded to VisemeConfig."""
         engine = create_lip_sync_engine(mode="viseme", smoothing=0.8, attack=0.05)
         assert isinstance(engine, VisemeLipSync)
-        assert engine.config.smoothing == 0.8
-        assert engine.config.attack == 0.05
+        assert engine.core.config.smoothing == 0.8
+        assert engine.core.config.attack == 0.05
 
     def test_default_sample_rate_is_24000(self):
         """Default sample_rate for viseme mode is 24000."""

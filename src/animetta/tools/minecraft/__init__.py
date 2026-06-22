@@ -10,8 +10,8 @@ Provides:
 - SurvivalIronRunner for deterministic wood-to-iron-gear progression
 """
 
-from .autonomous import AutonomousLoop
-from .benchmark import (
+from .loop import AutonomousLoop
+from .main import (
     BUILDING_CHALLENGE,
     LEARNING_CHALLENGE,
     SURVIVAL_CHALLENGE,
@@ -24,20 +24,20 @@ from .benchmark import (
 )
 from .bridge import MinecraftBridge, get_bridge
 from .config import MinecraftBotConfig, MinecraftConfig, MinecraftSafetyConfig
-from .predefined_skills import get_predefined_skills
-from .rules_engine import RulesEngine
-from .skill_extractor import SkillExtractor
-from .skill_library import SkillStep
-from .skill_validator import SimulatedState, SkillValidator, ValidationResult
-from .survival_benchmark import compare_runs, render_markdown_report, summarize_run
-from .survival_inventory import (
+from .predefined import get_predefined_skills
+from .loop.rules_engine import RulesEngine
+from .extractor import SkillExtractor
+from .library import SkillStep
+from .validator import SimulatedState, SkillValidator, ValidationResult
+from .benchmark.main import compare_runs, render_markdown_report, summarize_run
+from .inventory import (
     all_goals_satisfied,
     find_fuel_item,
     normalize_inventory,
     normalize_item_name,
     resolve_block_type,
 )
-from .survival_models import (
+from .models import (
     IRON_SURVIVAL_GOALS,
     FailureCategory,
     InventoryGoal,
@@ -45,14 +45,14 @@ from .survival_models import (
     RunReport,
     SurvivalPhase,
 )
-from .survival_recovery import (
+from .recovery import (
     check_safety,
     map_collect_failure,
     map_craft_failure,
     map_smelt_failure,
 )
-from .survival_runner import SurvivalIronRunner
-from .tech_tree import (
+from .runner import SurvivalIronRunner
+from .main import (
     DIAMOND_PHASE,
     IRON_PHASE,
     STONE_PHASE,

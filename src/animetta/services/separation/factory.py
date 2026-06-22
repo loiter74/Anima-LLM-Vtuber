@@ -7,8 +7,8 @@ Separation Factory - creates Separation instances based on configuration
 
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.separation import DemucsSeparationConfig, MockSeparationConfig
+from animetta.core.config.core.registry import ProviderRegistry
+from animetta.core.config.providers.separation import DemucsSeparationConfig, MockSeparationConfig
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import SeparationInterface

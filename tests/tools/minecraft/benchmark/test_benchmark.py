@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from animetta.tools.minecraft.benchmark import (
+from animetta.tools.minecraft.benchmark.main import (
     ALL_CONFIGS,
     ALL_SCENARIOS,
     BUILDING_CHALLENGE,
@@ -337,9 +337,9 @@ class TestBenchmarkRunner:
         runner = BenchmarkRunner(bridge=bridge)
 
         with (
-            patch("animetta.tools.minecraft.benchmark.AutonomousLoop"),
+            patch("animetta.tools.minecraft.benchmark.main.main.AutonomousLoop"),
             # Force ImportError by patching the import itself
-            patch.dict("sys.modules", {"animetta.tools.minecraft.predefined_skills": None}),
+            patch.dict("sys.modules", {"animetta.tools.minecraft.skill.predefined": None}),
         ):
             await runner.load_predefined_skills()
             # Should remain empty when import fails
@@ -352,9 +352,9 @@ class TestBenchmarkRunner:
 
         fake_skills = [make_skill("skill_1"), make_skill("skill_2")]
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop"
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop"
         ), patch(
-            "animetta.tools.minecraft.predefined_skills.get_predefined_skills",
+            "animetta.tools.minecraft.skill.predefined.get_predefined_skills",
             return_value=fake_skills,
         ):
             await runner.load_predefined_skills()
@@ -401,7 +401,7 @@ class TestBenchmarkRunnerScenario:
         )
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             # time_limit_minutes=0 → limit_seconds=0 → immediate completion
@@ -438,7 +438,7 @@ class TestBenchmarkRunnerScenario:
         mock_loop.stop = AsyncMock()
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             await runner.run_scenario(scenario, config)
@@ -473,7 +473,7 @@ class TestBenchmarkRunnerScenario:
         mock_loop.stop = AsyncMock()
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             metrics = await runner.run_scenario(scenario, config)
@@ -508,7 +508,7 @@ class TestBenchmarkRunnerScenario:
         mock_loop.stop = AsyncMock()
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             metrics = await runner.run_scenario(scenario, config)
@@ -538,7 +538,7 @@ class TestBenchmarkRunnerScenario:
         mock_loop.stop = AsyncMock()
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             await runner.run_scenario(scenario, config)
@@ -667,7 +667,7 @@ class TestBenchmarkRunnerFullBenchmark:
         mock_loop.stop = AsyncMock()
 
         with patch(
-            "animetta.tools.minecraft.benchmark.AutonomousLoop",
+            "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
             return_value=mock_loop,
         ):
             results = await runner.run_full_benchmark(
@@ -703,7 +703,7 @@ class TestBenchmarkRunnerFullBenchmark:
 
         with (
             patch(
-                "animetta.tools.minecraft.benchmark.AutonomousLoop",
+                "animetta.tools.minecraft.benchmark.main.main.AutonomousLoop",
                 return_value=mock_loop,
             ),
             patch.object(

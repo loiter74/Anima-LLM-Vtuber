@@ -39,7 +39,7 @@ class LangGraphOrchestrator:
         self.emotion_analyzer = emotion_analyzer
         self.enable_tools = enable_tools
         self.enable_memory = enable_memory
-        self.tools_config = tools_config or {}
+        self.core.tools_config = tools_config or {}
 
         self.session_id = getattr(service_context, "session_id", "unknown")
 
@@ -100,8 +100,8 @@ class LangGraphOrchestrator:
             self.graph = create_default_graph(
                 enable_memory=False,
                 enable_tools=self.enable_tools,
-                tools=self.tool_manager.tools if self.tool_manager else None,
-                tools_map=self.tool_manager.tools_map if self.tool_manager else None,
+                tools=self.tool_manager.core.tools if self.tool_manager else None,
+                tools_map=self.tool_manager.core.tools_map if self.tool_manager else None,
             )
 
             self._is_running = True
@@ -114,7 +114,7 @@ class LangGraphOrchestrator:
     async def _load_tools(self) -> None:
         """Load tools"""
         self.tool_manager = ToolManager(self.session_id, self.service_context)
-        success = await self.tool_manager.load_tools(self.tools_config)
+        success = await self.tool_manager.load_tools(self.core.tools_config)
 
         if success:
             # Update LangGraph config
@@ -281,16 +281,16 @@ class LangGraphOrchestrator:
 
     def _get_system_prompt(self) -> str | None:
         """Get system prompt from persona config."""
-        if self.service_context and self.service_context.config:
-            persona = self.service_context.config.get_persona()
+        if self.service_context and self.service_context.core.config:
+            persona = self.service_context.core.config.get_persona()
             if persona:
                 return persona.build_system_prompt()
         return None
 
     def _get_persona_dict(self) -> dict[str, Any] | None:
         """Get persona config dict"""
-        if self.service_context and self.service_context.config:
-            persona = self.service_context.config.get_persona()
+        if self.service_context and self.service_context.core.config:
+            persona = self.service_context.core.config.get_persona()
             if persona:
                 result = {
                     "name": persona.name,

@@ -56,7 +56,7 @@ class PositionBasedStrategy(ITimelineStrategy):
             config: Timeline configuration
             enable_smoothing: Whether to enable smooth transitions (merge adjacent same emotions)
         """
-        self.config = config or TimelineConfig()
+        self.core.config = config or TimelineConfig()
         self._enable_smoothing = enable_smoothing
 
     def calculate(
@@ -84,7 +84,7 @@ class PositionBasedStrategy(ITimelineStrategy):
             ValueError: When input parameters are invalid
         """
         # Use provided config or instance config
-        timeline_config = config or self.config
+        timeline_config = config or self.core.config
 
         # Validate input
         if not self.validate_input(emotions, text, audio_duration):

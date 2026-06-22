@@ -249,8 +249,8 @@ async def _llm_with_tools(
     logger.info(f"[{session_id}] [LLMNode] Using tool calling mode")
 
     system_prompt = state.get("system_prompt")
-    if not system_prompt and service_context.config:
-        system_prompt = service_context.config.get_system_prompt()
+    if not system_prompt and service_context.core.config:
+        system_prompt = service_context.core.config.get_system_prompt()
 
     # Inject memory into system_prompt
     enriched_prompt = _enrich_system_prompt(system_prompt, memory_context)

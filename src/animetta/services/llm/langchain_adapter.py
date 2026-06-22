@@ -17,7 +17,7 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import BaseTool
+from langchain_core.core.tools import BaseTool
 from loguru import logger
 
 # Pydantic v1/v2 compatibility handling
@@ -193,9 +193,9 @@ def create_chat_model_from_service(
         llm_service = llm_service._target
 
     model_name = "unknown"
-    if hasattr(llm_service, "config") and hasattr(llm_service.config, "model"):
-        model_name = llm_service.config.model
-    elif hasattr(llm_service, "config") and hasattr(llm_service.config, "type"):
-        model_name = llm_service.config.type
+    if hasattr(llm_service, "config") and hasattr(llm_service.core.config, "model"):
+        model_name = llm_service.core.config.model
+    elif hasattr(llm_service, "config") and hasattr(llm_service.core.config, "type"):
+        model_name = llm_service.core.config.type
 
     return LLMChatModelAdapter(llm_service=llm_service, model_name=model_name)

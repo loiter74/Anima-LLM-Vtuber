@@ -65,7 +65,7 @@ class TestLLMNodeErrors:
 
         ctx = MagicMock()
         ctx.llm_engine = None
-        ctx.config = None
+        ctx.core.config = None
 
         state = create_initial_state(
             session_id="test-session",

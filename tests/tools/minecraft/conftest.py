@@ -9,7 +9,7 @@ import sys
 import types
 
 # Create a lightweight package stub so that submodule imports
-# like ``from animetta.tools.minecraft.survival_models import ...``
+# like ``from animetta.tools.minecraft.survival.models import ...``
 # don't trigger the full __init__.py import chain.
 _PKG_NAME = "animetta.tools.minecraft"
 _PKG_PATH = "src/animetta/tools/minecraft"

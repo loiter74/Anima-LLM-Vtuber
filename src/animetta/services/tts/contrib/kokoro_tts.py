@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
+from animetta.core.config.core.registry import ProviderRegistry
 
 from ..interface import TTSInterface
 from .glados_effect import KOKORO_SAMPLE_RATE, GladosEffectProcessor

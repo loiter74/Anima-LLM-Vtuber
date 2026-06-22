@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from animetta.tools.base import (
+from animetta.core.tools.base import (
     calculator,
     create_tool_registry,
     get_builtin_tools,
@@ -114,7 +114,7 @@ class TestLoadToolsFromConfig:
         assert len(tools) == 0
         assert tools_map == {}
 
-    @patch("animetta.tools.base.load_tools_from_config")
+    @patch("animetta.core.tools.base.load_tools_from_config")
     def test_get_builtin_tools(self, mock_load):
         tools = get_builtin_tools()
         assert len(tools) == 4
@@ -133,7 +133,7 @@ class TestLoadToolsFromConfig:
         assert tools[0].name == "calculator"
 
     def test_create_tool_registry_with_extra(self):
-        from langchain_core.tools import tool
+        from langchain_core.core.tools import tool
 
         @tool
         async def dummy_tool(param: str) -> str:

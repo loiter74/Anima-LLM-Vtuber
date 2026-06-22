@@ -193,7 +193,7 @@ class BilibiliHandlers:
             if reply_text:
                 character_name = "AI"
                 persona = (
-                    orchestrator.service_context.config.get_persona()
+                    orchestrator.service_context.core.config.get_persona()
                     if orchestrator.service_context
                     else None
                 )

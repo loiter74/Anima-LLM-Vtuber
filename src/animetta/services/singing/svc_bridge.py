@@ -18,7 +18,7 @@ class SVCBridge:
     """Bridge to GPT-SoVITS api_v2.py for voice conversion."""
 
     def __init__(self, config: GPTSoVITSConfig):
-        self.config = config
+        self.core.config = config
         self._client: httpx.AsyncClient | None = None
         self._has_svc = False
         self._has_tts = False
@@ -28,7 +28,7 @@ class SVCBridge:
             return
         timeout = httpx.Timeout(300.0, connect=10.0)
         self._client = httpx.AsyncClient(
-            base_url=self.config.base_url.rstrip("/"),
+            base_url=self.core.config.base_url.rstrip("/"),
             timeout=timeout,
         )
 
@@ -37,13 +37,13 @@ class SVCBridge:
         self._ensure_client()
         assert self._client is not None
         result = {}
-        for endpoint in [self.config.svc_endpoint, "/tts"]:
+        for endpoint in [self.core.config.svc_endpoint, "/tts"]:
             try:
                 resp = await self._client.get(endpoint)
                 result[endpoint] = resp.status_code not in (404, 405)
             except httpx.HTTPError:
                 result[endpoint] = False
-        self._has_svc = result.get(self.config.svc_endpoint, False)
+        self._has_svc = result.get(self.core.config.svc_endpoint, False)
         self._has_tts = result.get("/tts", False)
         return result
 
@@ -75,18 +75,18 @@ class SVCBridge:
         logger.info(f"SVC converting: {source_audio_path} | available endpoints: {endpoints}")
 
         # Strategy 1: True SVC endpoint (audio upload)
-        if endpoints.get(self.config.svc_endpoint, False):
-            logger.info(f"Attempting SVC via {self.config.svc_endpoint}")
+        if endpoints.get(self.core.config.svc_endpoint, False):
+            logger.info(f"Attempting SVC via {self.core.config.svc_endpoint}")
             try:
                 with open(source_audio_path, "rb") as f:
                     files = {"audio": f}
                     data = {
                         "pitch_adjust": pitch_adjust,
-                        "ref_audio_path": self.config.ref_audio_path,
-                        "prompt_text": self.config.prompt_text,
+                        "ref_audio_path": self.core.config.ref_audio_path,
+                        "prompt_text": self.core.config.prompt_text,
                     }
                     resp = await self._client.post(
-                        self.config.svc_endpoint, files=files, data=data,
+                        self.core.config.svc_endpoint, files=files, data=data,
                     )
                 if resp.status_code == 200:
                     output_path_obj.write_bytes(resp.content)
@@ -98,20 +98,20 @@ class SVCBridge:
                 logger.warning(f"SVC endpoint failed: {e}, trying fallback")
 
         # Strategy 2: GPT-SoVITS TTS endpoint
-        if endpoints.get("/tts", False) and self.config.ref_audio_path:
+        if endpoints.get("/tts", False) and self.core.config.ref_audio_path:
             logger.info("Attempting voice conversion via /tts (TTS-based)")
             try:
                 resp = await self._client.post(
                     "/tts",
                     json={
-                        "text": self.config.prompt_text or " ",
-                        "text_lang": self.config.text_lang,
-                        "ref_audio_path": self.config.ref_audio_path,
-                        "prompt_text": self.config.prompt_text or "",
-                        "prompt_lang": self.config.text_lang,
-                        "top_k": self.config.top_k,
-                        "top_p": self.config.top_p,
-                        "temperature": self.config.temperature,
+                        "text": self.core.config.prompt_text or " ",
+                        "text_lang": self.core.config.text_lang,
+                        "ref_audio_path": self.core.config.ref_audio_path,
+                        "prompt_text": self.core.config.prompt_text or "",
+                        "prompt_lang": self.core.config.text_lang,
+                        "top_k": self.core.config.top_k,
+                        "top_p": self.core.config.top_p,
+                        "temperature": self.core.config.temperature,
                         "media_type": "wav",
                     },
                 )
@@ -125,7 +125,7 @@ class SVCBridge:
                 logger.warning(f"TTS endpoint failed: {e}")
 
         raise RuntimeError(
-            f"No working voice conversion endpoint found on {self.config.base_url}. "
+            f"No working voice conversion endpoint found on {self.core.config.base_url}. "
             f"Available: {endpoints}. "
             "Configure a valid SVC endpoint or skip voice conversion."
         )

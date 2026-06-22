@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from animetta.tools.minecraft.autonomous import AutonomousLoop, CooldownTracker
+from animetta.tools.minecraft.autonomous.loop import AutonomousLoop, CooldownTracker
 
 
 @pytest.fixture

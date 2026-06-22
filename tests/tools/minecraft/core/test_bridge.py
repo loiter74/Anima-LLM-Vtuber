@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.bridge import MinecraftBridge
+from animetta.tools.minecraft.core.bridge import MinecraftBridge
 
 """Tests for MinecraftBridge — subprocess lifecycle and JSON-RPC communication."""
 
@@ -103,7 +103,7 @@ class TestMinecraftBridgeStart:
         result = await bridge.start()
         assert result is True
 
-    @patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True)
+    @patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True)
     async def test_start_successful(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
@@ -116,7 +116,7 @@ class TestMinecraftBridgeStart:
         assert bridge.is_running is True
         assert bridge._process is mock_process
 
-    @patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True)
+    @patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True)
     async def test_start_login_timeout_still_succeeds(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
@@ -144,11 +144,11 @@ class TestMinecraftBridgeStart:
         mock_loop = MagicMock()
         mock_loop.start = AsyncMock()
 
-        with patch("animetta.tools.minecraft.bridge.is_service_available", return_value=True), \
+        with patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True), \
              patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
              patch("asyncio.wait_for", side_effect=_complete_ready_wait), \
-             patch("animetta.tools.minecraft.autonomous.AutonomousLoop", return_value=mock_loop):
+             patch("animetta.tools.minecraft.autonomous.loop.loop.AutonomousLoop", return_value=mock_loop):
             result = await bridge.start()
 
         assert result is True

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-from animetta.tools.minecraft.autonomous import AutonomousLoop
-from animetta.tools.minecraft.rules_engine import RulesEngine
-from animetta.tools.minecraft.skill_library import Skill, SkillLibrary, SkillResult
-from animetta.tools.minecraft.world_state import WorldState
+from animetta.tools.minecraft.autonomous.loop import AutonomousLoop
+from animetta.tools.minecraft.autonomous.rules_engine import RulesEngine
+from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillResult
+from animetta.tools.minecraft.other.world_state import WorldState
 
 # ── Helpers ──
 
@@ -44,7 +44,7 @@ def _status_response(
 
 def _make_skill(skill_id: str = "test_skill", preconditions: list[str] | None = None) -> Skill:
     """Create a minimal test skill."""
-    from animetta.tools.minecraft.skill_library import SkillStep
+    from animetta.tools.minecraft.skill.library import SkillStep
 
     return Skill(
         id=skill_id,

@@ -2,7 +2,7 @@
 
 import pytest
 
-from animetta.tools.minecraft.skill_library import Skill, SkillStep
+from animetta.tools.minecraft.skill.library import Skill, SkillStep
 
 
 class TestSkillCreation:

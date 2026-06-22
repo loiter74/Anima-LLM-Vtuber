@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
+from animetta.core.config.core.registry import ProviderRegistry
 
 from .interface import ASRInterface
 

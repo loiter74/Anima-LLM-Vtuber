@@ -10,7 +10,7 @@ allows real-time updates via socket events.
 class TranslationState:
     """Runtime translation configuration state.
 
-    Updated by routes.py when receiving `translation.configure` events.
+    Updated by routes.py when receiving `translation.core.configure` events.
     Read by output_node.py before emitting sentence events.
     """
 

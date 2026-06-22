@@ -61,7 +61,7 @@ class VisemeLipSync:
     """
 
     def __init__(self, config: VisemeConfig = None, sample_rate: int = 24000):
-        self.config = config or VisemeConfig()
+        self.core.config = config or VisemeConfig()
         self.sample_rate = sample_rate
 
         # 状态
@@ -139,7 +139,7 @@ class VisemeLipSync:
         # Extract band energies
         features = []
         for band_name in ['low', 'lowMid', 'mid', 'highMid', 'high']:
-            min_freq, max_freq = self.config.bands[band_name]
+            min_freq, max_freq = self.core.config.bands[band_name]
             energy = self.extract_band_energy(
                 magnitude,
                 self.sample_rate,
@@ -169,7 +169,7 @@ class VisemeLipSync:
         # Calculate weight for each viseme
         weights = []
         for viseme in ['a', 'i', 'u', 'e', 'o']:
-            viseme_weight = np.dot(normalized, self.config.weights[viseme])
+            viseme_weight = np.dot(normalized, self.core.config.weights[viseme])
             weights.append(viseme_weight)
 
         return np.array(weights)
@@ -185,7 +185,7 @@ class VisemeLipSync:
             Smoothed weights
         """
         # Calculate smoothing coefficient
-        alpha = self.config.smoothing
+        alpha = self.core.config.smoothing
 
         # Apply exponential smoothing
         smoothed = alpha * target_weights + (1 - alpha) * self._current_weights

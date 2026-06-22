@@ -5,7 +5,7 @@ Tests for Skill Library
 
 import pytest
 
-from animetta.tools.minecraft.skill_library import (
+from animetta.tools.minecraft.skill.library import (
     Skill,
     SkillLibrary,
     SkillStep,

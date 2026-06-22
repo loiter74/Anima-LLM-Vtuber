@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.planner import (
+from animetta.tools.minecraft.autonomous.planner import (
     MinecraftPlanner,
     ModeSelector,
     Plan,

@@ -389,7 +389,7 @@ class AppConfig(BaseConfig):
 
     def validate_config(self) -> None:
         """Validate configuration — verify required providers are available."""
-        from animetta.config.core.registry import ProviderRegistry
+        from animetta.core.config.core.registry import ProviderRegistry
 
         warnings = []
 

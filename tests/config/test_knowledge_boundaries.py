@@ -3,7 +3,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from animetta.config.persona.base import (
+from animetta.core.config.persona.base import (
     KnowledgeBoundaries,
     PersonaConfig,
 )

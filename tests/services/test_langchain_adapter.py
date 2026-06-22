@@ -44,9 +44,9 @@ def _make_llm_service_mock():
     mock.chat_stream = _stream
 
     # Give it a config-like object for model name detection
-    mock.config = MagicMock()
-    mock.config.model = "test-model"
-    mock.config.type = "test-type"
+    mock.core.config = MagicMock()
+    mock.core.config.model = "test-model"
+    mock.core.config.type = "test-type"
     return mock
 
 
@@ -97,8 +97,8 @@ class TestCreateChatModelFromService:
         outer._target = inner_svc
         # Note: after unwrapping, the code reads model_name from the INNER service's config,
         # which has model="test-model" from _make_llm_service_mock()
-        outer.config = MagicMock()
-        outer.config.model = "inner-model"
+        outer.core.config = MagicMock()
+        outer.core.config.model = "inner-model"
 
         adapter = create_chat_model_from_service(outer)
 
@@ -111,9 +111,9 @@ class TestCreateChatModelFromService:
         mock_svc = MagicMock(spec=LLMInterface)
         mock_svc.close = AsyncMock()
         mock_svc.set_system_prompt = MagicMock()
-        mock_svc.config = MagicMock(spec=[])
+        mock_svc.core.config = MagicMock(spec=[])
         # 'model' not set on config so hasattr returns False
-        mock_svc.config.type = "fallback-type"
+        mock_svc.core.config.type = "fallback-type"
 
         adapter = create_chat_model_from_service(mock_svc)
         assert adapter.model_name == "fallback-type"
@@ -127,7 +127,7 @@ class TestCreateChatModelFromService:
         mock_svc.set_system_prompt = MagicMock()
         # Ensure no config attribute
         if hasattr(mock_svc, "config"):
-            del mock_svc.config
+            del mock_svc.core.config
 
         adapter = create_chat_model_from_service(mock_svc)
         # Should still create the adapter with default model_name

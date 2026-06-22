@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.asr import (
+from animetta.core.config.core.registry import ProviderRegistry
+from animetta.core.config.providers.asr import (
     FasterWhisperASRConfig,
     FunASRConfig,
     GLMASRConfig,

@@ -7,8 +7,8 @@ VC Factory - creates VC instances based on configuration
 
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.vc import MockVCConfig, RVCConfig
+from animetta.core.config.core.registry import ProviderRegistry
+from animetta.core.config.providers.vc import MockVCConfig, RVCConfig
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import VCInterface

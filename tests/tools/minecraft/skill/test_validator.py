@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from animetta.tools.minecraft.skill_library import Skill, SkillStep
-from animetta.tools.minecraft.skill_validator import (
+from animetta.tools.minecraft.skill.library import Skill, SkillStep
+from animetta.tools.minecraft.skill.validator import (
     CHECK_ACTION,
     CHECK_SCHEMA,
     CHECK_SIMULATION,
@@ -450,12 +450,12 @@ class TestValidActions:
     """VALID_ACTIONS set coverage."""
 
     def test_contains_step_types(self):
-        from animetta.tools.minecraft.skill_validator import VALID_ACTIONS
+        from animetta.tools.minecraft.skill.validator import VALID_ACTIONS
         for step_type in ("goto", "collect", "mine", "place", "craft", "chat", "check", "wait"):
             assert step_type in VALID_ACTIONS
 
     def test_contains_available_tools(self):
-        from animetta.tools.minecraft.skill_validator import VALID_ACTIONS
+        from animetta.tools.minecraft.skill.validator import VALID_ACTIONS
         # At minimum, goto, collect, mine, place, attack, chat should be there
         assert "attack" in VALID_ACTIONS
         assert "chat" in VALID_ACTIONS

@@ -10,7 +10,7 @@ live2d_manager). BaseSocketHandler provides shared utilities
 from .base_handler import BaseSocketHandler
 from .bilibili_handlers import BilibiliHandlers
 from .chat_handlers import ChatHandlers
-from .config_handlers import ConfigHandlers
+from .core.config_handlers import ConfigHandlers
 from .lifecycle_handlers import LifecycleHandlers
 from .live2d_handlers import Live2DHandlers
 from .persona_handlers import PersonaHandlers

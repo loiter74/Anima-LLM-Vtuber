@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from animetta.tools.minecraft.tech_tree import (
+from animetta.tools.minecraft.tech_tree.main import (
     _PREDEFINED_PHASES,
     DIAMOND_PHASE,
     IRON_PHASE,
@@ -28,7 +28,7 @@ from animetta.tools.minecraft.tech_tree import (
 
 # ── Lightweight BenchmarkMetrics stub ─────────────────────────────────────────
 # Avoid importing the real benchmark.py (has top-level imports that may fail).
-# The runner's generate_benchmark_metrics() calls ``from .benchmark import
+# The runner's generate_benchmark_metrics() calls ``from .benchmark.main import
 # BenchmarkMetrics`` — we patch that import to use this stub.
 
 
@@ -756,7 +756,7 @@ class TestTechTreeReport:
             phase_details=details,
         )
 
-        assert report.config is config
+        assert report.core.config is config
         assert report.metrics is metrics
         assert report.phase_details == details
         assert report.timestamp  # auto-generated
@@ -795,7 +795,7 @@ class TestGenerateReport:
         report = runner.generate_report()
 
         assert isinstance(report, TechTreeReport)
-        assert report.config is config
+        assert report.core.config is config
         assert report.metrics is runner._metrics
         assert isinstance(report.timestamp, str)
 
@@ -1301,7 +1301,7 @@ class TestGenerateBenchmarkMetrics:
         fake_module = MagicMock()
         fake_module.BenchmarkMetrics = _FakeBenchmarkMetrics
         return patch.dict(sys.modules, {
-            "animetta.tools.minecraft.benchmark": fake_module,
+            "animetta.tools.minecraft.benchmark.main.main": fake_module,
         })
 
     def test_benchmark_metrics_all_phases_completed(self):
@@ -1525,5 +1525,5 @@ class TestRunnerRunIntegration:
         report = runner.generate_report()
 
         assert isinstance(report, TechTreeReport)
-        assert report.config is config
+        assert report.core.config is config
         assert len(report.metrics.phases_completed) >= 1

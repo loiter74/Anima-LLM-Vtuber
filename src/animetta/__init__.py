@@ -14,25 +14,25 @@ __author__ = "Animetta Team"
 # (e.g., during package installation or when running scripts that don't need all modules)
 def __getattr__(name: str):
     if name == "AgentConfig":
-        from .config import AgentConfig
+        from .core.config import AgentConfig
         return AgentConfig
     if name == "AppConfig":
-        from .config import AppConfig
+        from .core.config import AppConfig
         return AppConfig
     if name == "ASRConfig":
-        from .config import ASRConfig
+        from .core.config import ASRConfig
         return ASRConfig
     if name == "LLMConfig":
-        from .config import LLMConfig
+        from .core.config import LLMConfig
         return LLMConfig
     if name == "PersonaConfig":
-        from .config import PersonaConfig
+        from .core.config import PersonaConfig
         return PersonaConfig
     if name == "SystemConfig":
-        from .config import SystemConfig
+        from .core.config import SystemConfig
         return SystemConfig
     if name == "TTSConfig":
-        from .config import TTSConfig
+        from .core.config import TTSConfig
         return TTSConfig
     if name == "ServiceContext":
         from .core.service_context import ServiceContext

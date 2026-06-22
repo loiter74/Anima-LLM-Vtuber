@@ -1,7 +1,7 @@
 """Tests for survival_recovery.py — recovery strategies and safety checks."""
 
-from animetta.tools.minecraft.survival_models import SurvivalPhase
-from animetta.tools.minecraft.survival_recovery import (
+from animetta.tools.minecraft.survival.models import SurvivalPhase
+from animetta.tools.minecraft.survival.recovery import (
     PHASE_RECOVERY_MAP,
     RecoveryAction,
     _extract_error,

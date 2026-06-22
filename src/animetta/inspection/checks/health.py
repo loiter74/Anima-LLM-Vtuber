@@ -82,7 +82,7 @@ async def _probe_chroma() -> bool:
     """Check ChromaDB collection accessibility."""
     try:
         import chromadb
-        from chromadb.config import Settings
+        from chromadb.core.config import Settings
     except ImportError:
         logger.debug("[health/chroma] chromadb not installed — assuming not configured")
         return True
@@ -144,7 +144,7 @@ async def _probe_memory_read() -> bool:
     """Check MemorySystem can perform a read (via ChromaDB proxy)."""
     try:
         import chromadb
-        from chromadb.config import Settings
+        from chromadb.core.config import Settings
     except ImportError:
         logger.debug("[health/memory_read] chromadb not installed — not configured")
         return True

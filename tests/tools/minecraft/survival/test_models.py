@@ -1,6 +1,6 @@
 """Tests for survival_models.py — domain models for the iron survival runner."""
 
-from animetta.tools.minecraft.survival_models import (
+from animetta.tools.minecraft.survival.models import (
     IRON_SURVIVAL_GOALS,
     IRON_SURVIVAL_SUPPORT,
     PHASE_ORDER,

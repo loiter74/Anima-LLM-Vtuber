@@ -27,7 +27,7 @@ class WebSocketServer:
 
     def __init__(self, config=None):
         """Initialize WebSocket server"""
-        self.config = config
+        self.core.config = config
 
         self.sio = socketio.AsyncServer(
             async_mode='asgi',
@@ -133,7 +133,7 @@ class WebSocketServer:
 
     def set_config(self, config) -> None:
         """Set application config"""
-        self.config = config
+        self.core.config = config
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
 
@@ -153,11 +153,11 @@ class WebSocketServer:
         reuses the already-loaded LLM/TTS/ASR engines instead of creating
         them from scratch.
         """
-        if self.config is None:
+        if self.core.config is None:
             logger.info("[Prewarm] No config loaded yet, skipping")
             return
 
-        await ServicePool.init(self.config, model_manager=self.model_manager)
+        await ServicePool.init(self.core.config, model_manager=self.model_manager)
 
     def _load_bilibili_config(self) -> dict[str, Any] | None:
         """Load Bilibili configuration from config.yaml (top-level 'bilibili' key)."""

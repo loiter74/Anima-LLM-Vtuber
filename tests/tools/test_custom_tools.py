@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import animetta.tools.custom_tools as custom_tools
-from animetta.tools.custom_tools import (
+import animetta.core.tools.custom_tools as custom_tools
+from animetta.core.tools.custom_tools import (
     CUSTOM_TOOLS,
     get_custom_tools,
     image_gen,

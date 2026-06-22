@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from animetta.tools.minecraft.skill_library import Skill, SkillLibrary
+from animetta.tools.minecraft.skill.library import Skill, SkillLibrary
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

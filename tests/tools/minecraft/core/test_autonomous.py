@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.autonomous import AutonomousLoop, CooldownTracker
-from animetta.tools.minecraft.bridge import MinecraftBridge
-from animetta.tools.minecraft.rules_engine import BuildPlanStep, BuildTarget
-from animetta.tools.minecraft.world_state import Entity, WorldState
+from animetta.tools.minecraft.autonomous.loop import AutonomousLoop, CooldownTracker
+from animetta.tools.minecraft.core.bridge import MinecraftBridge
+from animetta.tools.minecraft.autonomous.rules_engine import BuildPlanStep, BuildTarget
+from animetta.tools.minecraft.other.world_state import Entity, WorldState
 
 """Tests for AutonomousLoop — perception→decision→execution cycle."""
 

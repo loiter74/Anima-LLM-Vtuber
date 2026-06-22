@@ -55,7 +55,7 @@ def mod():
     with (
         patch("dotenv.load_dotenv"),
         patch(
-            "animetta.config.user.UserSettings._load",
+            "animetta.core.config.user.UserSettings._load",
             return_value={"log_level": "INFO"},
         ),
     ):

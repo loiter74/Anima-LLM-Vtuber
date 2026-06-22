@@ -68,7 +68,7 @@ class PersonaHandlers(BaseSocketHandler):
             # Get current persona's MBTI data
             mbti_data = None
             try:
-                from animetta.config.persona import PersonaConfig
+                from animetta.core.config.persona import PersonaConfig
 
                 logger.info(f"[{sid}] on_get_available_personas: global_config={self.global_config}")
                 if self.global_config:
@@ -115,7 +115,7 @@ class PersonaHandlers(BaseSocketHandler):
         logger.info(f"[{sid}] 切换人设: {persona_name}")
 
         try:
-            from animetta.config.persona import PersonaConfig
+            from animetta.core.config.persona import PersonaConfig
 
             ctx = self.session_manager.get_context(sid)
             if not ctx:
@@ -139,11 +139,11 @@ class PersonaHandlers(BaseSocketHandler):
                 self.global_config.persona = persona_name
                 self.global_config._persona = None  # Invalidate cache
 
-            if ctx.llm_engine and ctx.config:
+            if ctx.llm_engine and ctx.core.config:
                 live2d_prompt = None
                 try:
                     from animetta.avatar.prompts import EmotionPromptBuilder
-                    from animetta.config.live2d import get_live2d_config
+                    from animetta.core.config.live2d import get_live2d_config
 
                     live2d_cfg = get_live2d_config()
                     if live2d_cfg and live2d_cfg.enabled:
@@ -154,7 +154,7 @@ class PersonaHandlers(BaseSocketHandler):
                 except Exception as e:
                     logger.debug(f"[PersonaHandlers] Failed to build Live2D emotion prompt: {e}")
 
-                new_system_prompt = ctx.config.get_system_prompt(
+                new_system_prompt = ctx.core.config.get_system_prompt(
                     live2d_prompt=live2d_prompt
                 )
                 ctx.llm_engine.set_system_prompt(new_system_prompt)

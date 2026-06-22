@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.config import (
+from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,
     MinecraftConfig,
     MinecraftSafetyConfig,
@@ -65,7 +65,7 @@ class TestMinecraftConfig:
     def test_default_values(self):
         cfg = MinecraftConfig()
         assert cfg.enabled is False
-        assert cfg.autonomous is False
+        assert cfg.autonomous.loop is False
         assert cfg.bot.host == "localhost"
         assert cfg.bot.port == 25565
         assert cfg.safety.no_griefing is True
@@ -77,7 +77,7 @@ class TestMinecraftConfig:
             bot=MinecraftBotConfig(host="mc.example.com", username="TestBot"),
         )
         assert cfg.enabled is True
-        assert cfg.autonomous is True
+        assert cfg.autonomous.loop is True
         assert cfg.bot.host == "mc.example.com"
         assert cfg.bot.username == "TestBot"
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.rules_engine import RulesEngine
+from animetta.tools.minecraft.autonomous.rules_engine import RulesEngine
 
 """Tests for RulesEngine action validation and rule querying.
 

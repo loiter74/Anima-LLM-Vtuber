@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from animetta.config.app import AppConfig
+from animetta.core.config.app import AppConfig
 
 from ..socket_events import EVENTS
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
 from .handlers.chat_handlers import ChatHandlers
-from .handlers.config_handlers import ConfigHandlers
+from .handlers.core.config_handlers import ConfigHandlers
 from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
 from .handlers.minecraft_handlers import MinecraftHandlers
@@ -55,7 +55,7 @@ class RouteHandlers:
         )
 
         # Domain handlers (each owns a specific set of events)
-        self.config = ConfigHandlers(
+        self.core.config = ConfigHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
@@ -107,14 +107,14 @@ class RouteHandlers:
         """Set global config — delegates to domain handlers."""
         self.base.set_global_config(config)
         self.global_config = self.base.global_config
-        for h in [self.config, self.persona, self.lifecycle]:
+        for h in [self.core.config, self.persona, self.lifecycle]:
             h.global_config = config
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings — delegates to domain handlers."""
         self.base.set_user_settings(user_settings)
         self.user_settings = self.base.user_settings
-        for h in [self.config, self.persona, self.lifecycle]:
+        for h in [self.core.config, self.persona, self.lifecycle]:
             h.user_settings = user_settings
 
     # ── Shared utility (backward compat) ─────────────────────────────
@@ -176,18 +176,18 @@ class RouteHandlers:
     # ── Config events ─────────────────────────────────────────────────
 
     async def on_switch_config(self, sid: str, data: dict) -> None:
-        return await self.config.on_switch_config(sid, data)
+        return await self.core.config.on_switch_config(sid, data)
 
     async def on_set_log_level(self, sid: str, data: dict) -> None:
-        return await self.config.on_set_log_level(sid, data)
+        return await self.core.config.on_set_log_level(sid, data)
 
     async def on_get_config(self, sid: str, data: dict) -> None:
-        return await self.config.on_get_config(sid, data)
+        return await self.core.config.on_get_config(sid, data)
 
     # ── Heartbeat ─────────────────────────────────────────────────────
 
     async def on_heartbeat(self, sid: str, data: dict) -> None:
-        return await self.config.on_heartbeat(sid, data)
+        return await self.core.config.on_heartbeat(sid, data)
 
     # ── Desktop client events ─────────────────────────────────────────
 
@@ -228,7 +228,7 @@ class RouteHandlers:
     # ── Persona events ────────────────────────────────────────────────
 
     async def on_translation_configure(self, sid: str, data: dict) -> None:
-        return await self.config.on_translation_configure(sid, data)
+        return await self.core.config.on_translation_configure(sid, data)
 
     async def on_get_available_personas(self, sid: str, data: dict) -> dict:
         return await self.persona.on_get_available_personas(sid, data)

@@ -1,6 +1,6 @@
 """Tests for survival_inventory.py — alias normalization and goal checking."""
 
-from animetta.tools.minecraft.survival_inventory import (
+from animetta.tools.minecraft.survival.inventory import (
     PHASE_COMPLETION,
     PHASE_REQUIREMENTS,
     all_goals_satisfied,
@@ -11,7 +11,7 @@ from animetta.tools.minecraft.survival_inventory import (
     normalize_inventory,
     normalize_item_name,
 )
-from animetta.tools.minecraft.survival_models import InventoryGoal
+from animetta.tools.minecraft.survival.models import InventoryGoal
 
 
 class TestNormalizeItemName:

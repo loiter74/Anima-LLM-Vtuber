@@ -1,11 +1,11 @@
 """Tests for survival_benchmark.py — run summaries and markdown reports."""
 
-from animetta.tools.minecraft.survival_benchmark import (
+from animetta.tools.minecraft.survival.benchmark import (
     compare_runs,
     render_markdown_report,
     summarize_run,
 )
-from animetta.tools.minecraft.survival_models import (
+from animetta.tools.minecraft.survival.models import (
     FailureCategory,
     PhaseResult,
     RunReport,

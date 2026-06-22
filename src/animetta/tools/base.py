@@ -4,7 +4,7 @@ Anima tool base classes and tool registry
 
 from typing import Any
 
-from langchain_core.tools import tool
+from langchain_core.core.tools import tool
 from loguru import logger
 
 
@@ -46,7 +46,7 @@ async def web_search(query: str, num_results: int = 5) -> str:
 
     # DuckDuckGo fallback
     try:
-        from langchain_community.tools import DuckDuckGoSearchRun
+        from langchain_community.core.tools import DuckDuckGoSearchRun
         search = DuckDuckGoSearchRun()
         import asyncio
         loop = asyncio.get_event_loop()
@@ -195,7 +195,7 @@ def load_tools_from_config(config: dict[str, Any]) -> tuple:
     minecraft_config = config.get("minecraft", {})
     if minecraft_config.get("enabled", False):
         try:
-            from .minecraft.tools import get_minecraft_tools, init_bridge
+            from .minecraft.core.tools import get_minecraft_tools, init_bridge
             init_bridge(minecraft_config)
             mc_tools = get_minecraft_tools()
             extra_tools.extend(mc_tools)

@@ -11,13 +11,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from animetta.tools.minecraft.planner import (
+from animetta.tools.minecraft.autonomous.planner import (
     MinecraftPlanner,
     ModeSelector,
     Plan,
     PlannerError,
 )
-from animetta.tools.minecraft.skill_library import Skill, SkillLibrary, SkillStep
+from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillStep
 
 # ── Fixtures ──
 

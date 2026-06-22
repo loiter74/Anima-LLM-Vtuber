@@ -21,7 +21,7 @@ def get_python_repl_tool() -> Any:
 
         python_repl = PythonREPL()
 
-        from langchain_core.tools import StructuredTool
+        from langchain_core.core.tools import StructuredTool
         from pydantic import BaseModel, Field
 
         class PythonInput(BaseModel):

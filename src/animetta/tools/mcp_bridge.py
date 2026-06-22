@@ -101,8 +101,8 @@ class MCPClient:
             return []
         try:
             response = await self.session.list_tools()
-            logger.info(f"[MCP:{self.name}] Found {len(response.tools)} tools")
-            return response.tools
+            logger.info(f"[MCP:{self.name}] Found {len(response.core.tools)} tools")
+            return response.core.tools
         except Exception as e:
             logger.warning(f"[MCP:{self.name}] Failed to get tool list: {e}")
             return []
@@ -128,7 +128,7 @@ def _parse_type(type_name: str) -> type:
 
 def mcp_tool_to_langchain(client: MCPClient, tool_info: Any) -> Any:
     """Convert MCP tool to LangChain StructuredTool"""
-    from langchain_core.tools import StructuredTool
+    from langchain_core.core.tools import StructuredTool
     from pydantic import create_model
 
     tool_name = tool_info.name
@@ -166,7 +166,7 @@ class MCPManager:
 
     def __init__(self):
         self.clients: list[MCPClient] = []
-        self.tools: list[Any] = []
+        self.core.tools: list[Any] = []
 
     def _build_docker_command(
         self, sandbox: dict[str, Any], args: list[str]
@@ -282,17 +282,17 @@ class MCPManager:
 
                 for t in await client.list_tools():
                     try:
-                        self.tools.append(mcp_tool_to_langchain(client, t))
+                        self.core.tools.append(mcp_tool_to_langchain(client, t))
                         logger.info(f"[MCP] Loaded tool: {t.name} from {name}")
                     except Exception as e:
                         logger.error(f"[MCP] Failed to convert tool {t.name}: {e}")
 
-        logger.info(f"[MCP] Loaded {len(self.tools)} tools from {len(self.clients)} servers")
-        return self.tools
+        logger.info(f"[MCP] Loaded {len(self.core.tools)} tools from {len(self.clients)} servers")
+        return self.core.tools
 
     async def close_all(self):
         """Close all connections"""
         for client in self.clients:
             await client.disconnect()
         self.clients.clear()
-        self.tools.clear()
+        self.core.tools.clear()

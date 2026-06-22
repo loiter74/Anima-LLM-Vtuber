@@ -4,8 +4,8 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock
 
-from animetta.tools.minecraft.survival_models import SurvivalPhase
-from animetta.tools.minecraft.survival_runner import SurvivalIronRunner
+from animetta.tools.minecraft.survival.models import SurvivalPhase
+from animetta.tools.minecraft.survival.runner import SurvivalIronRunner
 
 
 class MockBridge:

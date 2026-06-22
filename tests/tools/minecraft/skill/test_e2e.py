@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from animetta.tools.minecraft.predefined_skills import get_predefined_skills
-from animetta.tools.minecraft.skill_library import (
+from animetta.tools.minecraft.skill.predefined import get_predefined_skills
+from animetta.tools.minecraft.skill.library import (
     Skill,
     SkillLibrary,
     SkillStep,

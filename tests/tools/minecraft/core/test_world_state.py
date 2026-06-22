@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.tools.minecraft.world_state import WorldState
+from animetta.tools.minecraft.other.world_state import WorldState
 
 """Tests for WorldState model parsing and analysis methods.
 

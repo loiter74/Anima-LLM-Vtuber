@@ -51,7 +51,7 @@ def _make_chromadb_mock(list_collections_ret=None, list_collections_raises=None)
     MagicMock()
     mock_settings_module = MagicMock()
     mock_settings_module.Settings = MagicMock(return_value=MagicMock())
-    mock_chromadb.config = mock_settings_module
+    mock_chromadb.core.config = mock_settings_module
 
     return mock_chromadb, mock_client
 
@@ -208,13 +208,13 @@ class TestProbeChroma:
     async def test_success(self):
         mock_chromadb, _ = _make_chromadb_mock()
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-            # Also need chromadb.config to be accessible
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            # Also need chromadb.core.config to be accessible
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 result = await _probe_chroma()
                 assert result is True
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_not_configured_returns_true(self):
@@ -229,12 +229,12 @@ class TestProbeChroma:
             list_collections_raises=RuntimeError("connection refused")
         )
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 result = await _probe_chroma()
                 assert result is False
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
 
 # ── _probe_llm_available ────────────────────────────────────
@@ -340,15 +340,15 @@ class TestProbeMemoryRead:
         mock_chromadb.PersistentClient = MagicMock(return_value=mock_client)
         mock_settings_module = MagicMock()
         mock_settings_module.Settings = MagicMock(return_value=MagicMock())
-        mock_chromadb.config = mock_settings_module
+        mock_chromadb.core.config = mock_settings_module
 
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 result = await _probe_memory_read()
                 assert result is True
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_empty_collections_returns_true(self):
@@ -359,15 +359,15 @@ class TestProbeMemoryRead:
         mock_chromadb.PersistentClient = MagicMock(return_value=mock_client)
         mock_settings_module = MagicMock()
         mock_settings_module.Settings = MagicMock(return_value=MagicMock())
-        mock_chromadb.config = mock_settings_module
+        mock_chromadb.core.config = mock_settings_module
 
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 result = await _probe_memory_read()
                 assert result is True
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_not_configured_returns_true(self):
@@ -385,15 +385,15 @@ class TestProbeMemoryRead:
         mock_chromadb.PersistentClient = MagicMock(return_value=mock_client)
         mock_settings_module = MagicMock()
         mock_settings_module.Settings = MagicMock(return_value=MagicMock())
-        mock_chromadb.config = mock_settings_module
+        mock_chromadb.core.config = mock_settings_module
 
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 result = await _probe_memory_read()
                 assert result is False
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
 
 # ── _probe_metrics_endpoint ─────────────────────────────────
@@ -536,7 +536,7 @@ class TestCheckAllComponents:
 
         # Mock chromadb for both chroma and memory_read probes
         mock_chromadb, _ = _make_chromadb_mock()
-        mock_chromadb.config.Settings = MagicMock(return_value=MagicMock())
+        mock_chromadb.core.config.Settings = MagicMock(return_value=MagicMock())
 
         # Mock aiohttp for metrics_endpoint probe
         mock_aiohttp, _ = _make_aiohttp_mock(status=200)
@@ -550,11 +550,11 @@ class TestCheckAllComponents:
             patch.dict(sys.modules, {"chromadb": mock_chromadb}),
             patch.dict(sys.modules, {"aiohttp": mock_aiohttp}),
         ):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 results = await check_all_components()
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
         assert isinstance(results, dict)
         assert len(results) == 8
@@ -585,7 +585,7 @@ class TestCheckAllComponents:
 
         # Mock chromadb for both chroma and memory_read probes
         mock_chromadb, _ = _make_chromadb_mock()
-        mock_chromadb.config.Settings = MagicMock(return_value=MagicMock())
+        mock_chromadb.core.config.Settings = MagicMock(return_value=MagicMock())
 
         # Mock aiohttp for metrics_endpoint probe
         mock_aiohttp, _ = _make_aiohttp_mock(status=200)
@@ -602,11 +602,11 @@ class TestCheckAllComponents:
             patch.dict(sys.modules, {"chromadb": mock_chromadb}),
             patch.dict(sys.modules, {"aiohttp": mock_aiohttp}),
         ):
-            sys.modules["chromadb.config"] = mock_chromadb.config
+            sys.modules["chromadb.core.config"] = mock_chromadb.core.config
             try:
                 results = await check_all_components()
             finally:
-                sys.modules.pop("chromadb.config", None)
+                sys.modules.pop("chromadb.core.config", None)
 
         assert results["stats_store"].ok is True
         assert results["chroma"].ok is True

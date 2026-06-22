@@ -177,7 +177,7 @@ class TestServiceContextInit:
     """Verify __init__ sets default values correctly."""
 
     def test_init_defaults(self, ctx):
-        assert ctx.config is None
+        assert ctx.core.config is None
         assert ctx.model_manager is None
         assert ctx.asr_engine is None
         assert ctx.tts_engine is None
@@ -274,12 +274,12 @@ class TestServiceContextLoadFromConfig:
         ctx.init_memory.assert_awaited_once()
         ctx.init_emotion_analyzer.assert_awaited_once_with(app_config)
         ctx._preload_tokenizers.assert_awaited_once()
-        assert ctx.config is app_config
+        assert ctx.core.config is app_config
 
     @pytest.mark.asyncio
     async def test_stores_config(self, ctx, app_config):
         await ctx.load_from_config(app_config)
-        assert ctx.config is app_config
+        assert ctx.core.config is app_config
 
     @pytest.mark.asyncio
     async def test_warmup_called_when_model_manager_present(self, ctx, app_config):
@@ -327,7 +327,7 @@ class TestServiceContextLoadCache:
             send_text=send_text,
         )
 
-        assert ctx.config is app_config
+        assert ctx.core.config is app_config
         assert ctx.asr_engine is asr
         assert ctx.tts_engine is tts
         assert ctx.llm_engine is llm

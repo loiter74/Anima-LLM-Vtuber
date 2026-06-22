@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Optional Chroma support
 try:
     import chromadb
-    from chromadb.config import Settings
+    from chromadb.core.config import Settings
     _HAS_CHROMA = True
 except ImportError:
     _HAS_CHROMA = False

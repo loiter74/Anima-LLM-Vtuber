@@ -10,7 +10,7 @@ from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
 )
-from langchain_core.tools import tool
+from langchain_core.core.tools import tool
 
 from animetta.services.llm.tool_handler import OpenAIToolHandler
 

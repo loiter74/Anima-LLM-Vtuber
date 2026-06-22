@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from animetta.tools import MCPManager
-from animetta.tools.mcp_bridge import MCPClient, _parse_type, mcp_tool_to_langchain
+from animetta.core.tools import MCPManager
+from animetta.core.tools.mcp_bridge import MCPClient, _parse_type, mcp_tool_to_langchain
 
 """Tests for MCP bridge graceful degradation when Docker is unavailable."""
 
@@ -252,7 +252,7 @@ class TestMCPManagerAdvanced:
         # Should not raise with no clients
         await mgr.close_all()
         assert len(mgr.clients) == 0
-        assert len(mgr.tools) == 0
+        assert len(mgr.core.tools) == 0
 
     @pytest.mark.asyncio
     async def test_load_sse_transport_without_mcp(self):

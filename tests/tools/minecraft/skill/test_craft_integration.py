@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from animetta.tools.minecraft.predefined_skills import get_predefined_skills
-from animetta.tools.minecraft.skill_library import (
+from animetta.tools.minecraft.skill.predefined import get_predefined_skills
+from animetta.tools.minecraft.skill.library import (
     Skill,
     SkillLibrary,
     check_preconditions,
@@ -364,7 +364,7 @@ class TestCraftSkillMatching:
     async def test_precondition_check_at_step_level(self) -> None:
         """Step-level preconditions are checked during execution."""
         # Create a skill with a check step that validates inventory
-        from animetta.tools.minecraft.skill_library import SkillStep
+        from animetta.tools.minecraft.skill.library import SkillStep
         skill = Skill(
             id="test_equip_check",
             name="Test Equip Check",

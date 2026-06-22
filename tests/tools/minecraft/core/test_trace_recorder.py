@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from animetta.tools.minecraft.trace_recorder import (
+from animetta.tools.minecraft.other.trace_recorder import (
     ActionTrace,
     TaskTrace,
     TraceRecorder,

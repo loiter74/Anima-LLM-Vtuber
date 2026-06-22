@@ -10,7 +10,7 @@ from collections import deque
 import numpy as np
 from loguru import logger
 
-from animetta.config.core.registry import ProviderRegistry
+from animetta.core.config.core.registry import ProviderRegistry
 
 from .detector import SileroDetector
 from .interface import VADInterface, VADResult, VADState

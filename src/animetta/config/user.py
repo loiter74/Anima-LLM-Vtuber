@@ -13,16 +13,16 @@ class UserSettings:
     """User settings management"""
 
     def __init__(self, root_dir: Path):
-        self.config_file = root_dir / ".user_settings.yaml"
+        self.core.config_file = root_dir / ".user_settings.yaml"
         self.settings = self._load()
 
     def _load(self) -> dict:
         """Load user configuration"""
-        if not self.config_file.exists():
+        if not self.core.config_file.exists():
             return self._create_default()
 
         try:
-            with open(self.config_file, encoding='utf-8') as f:
+            with open(self.core.config_file, encoding='utf-8') as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             logger.warning(f"Failed to load user configuration: {e}")
@@ -37,7 +37,7 @@ class UserSettings:
     def save(self):
         """Save user configuration"""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.core.config_file, 'w', encoding='utf-8') as f:
                 yaml.safe_dump(self.settings, f, allow_unicode=True)
         except Exception as e:
             logger.error(f"Failed to save user configuration: {e}")

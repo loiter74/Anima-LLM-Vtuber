@@ -12,7 +12,7 @@ from typing import Any
 from loguru import logger
 from openai import AsyncOpenAI
 
-from animetta.config.core.registry import ProviderRegistry
+from animetta.core.config.core.registry import ProviderRegistry
 
 from .interface import LLMInterface
 from .stream_handler import OpenAIStreamHandler

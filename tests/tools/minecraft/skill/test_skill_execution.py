@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from animetta.tools.minecraft.skill_library import (
+from animetta.tools.minecraft.skill.library import (
     Skill,
     SkillStep,
     check_preconditions,

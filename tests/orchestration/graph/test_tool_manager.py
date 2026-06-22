@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from animetta.orchestration.graph.tool_manager import ToolManager
-from animetta.tools import MCPManager
+from animetta.core.tools import MCPManager
 
 """Tests for ToolManager — tool loading, config, lifecycle."""
 
@@ -40,8 +40,8 @@ class TestToolManager:
             result = await tool_manager.load_tools({"builtin": "tools"})
 
         assert result is True
-        assert len(tool_manager.tools) == 2
-        assert tool_manager.tools_map == mock_tools_map
+        assert len(tool_manager.core.tools) == 2
+        assert tool_manager.core.tools_map == mock_tools_map
         assert tool_manager.chat_model == "bound_model"
         mock_chat_model.bind_tools.assert_called_once_with(mock_tools)
 
@@ -73,8 +73,8 @@ class TestToolManager:
             })
 
         assert result is True
-        assert len(tool_manager.tools) == 2  # builtin + mcp
-        assert "mcp_tool" in tool_manager.tools_map
+        assert len(tool_manager.core.tools) == 2  # builtin + mcp
+        assert "mcp_tool" in tool_manager.core.tools_map
         assert tool_manager._mcp_manager is mock_mcp_instance
         mock_mcp_instance.load.assert_awaited_once_with([{"name": "server1"}])
 
@@ -92,7 +92,7 @@ class TestToolManager:
             result = await tool_manager.load_tools({"builtin": "tools"})
 
         assert result is True
-        assert len(tool_manager.tools) == 0
+        assert len(tool_manager.core.tools) == 0
         mock_chat_model.bind_tools.assert_not_called()
 
     @pytest.mark.asyncio
@@ -155,14 +155,14 @@ class TestToolManager:
 
     def test_get_config_returns_tools_dict(self, tool_manager):
         """get_config returns the expected tools configuration dict."""
-        tool_manager.tools = [MagicMock(name="t1")]
-        tool_manager.tools_map = {"t1": MagicMock()}
+        tool_manager.core.tools = [MagicMock(name="t1")]
+        tool_manager.core.tools_map = {"t1": MagicMock()}
         tool_manager.chat_model = MagicMock()
 
         config = tool_manager.get_config()
 
-        assert config["tools"] == tool_manager.tools
-        assert config["tools_map"] == tool_manager.tools_map
+        assert config["tools"] == tool_manager.core.tools
+        assert config["tools_map"] == tool_manager.core.tools_map
         assert config["chat_model"] == tool_manager.chat_model
         assert config["enable_tools"] is True
 
@@ -170,19 +170,19 @@ class TestToolManager:
 
     def test_is_loaded_true_when_tools_and_chat_model(self, tool_manager):
         """is_loaded returns True when tools and chat_model are present."""
-        tool_manager.tools = [MagicMock()]
+        tool_manager.core.tools = [MagicMock()]
         tool_manager.chat_model = MagicMock()
         assert tool_manager.is_loaded() is True
 
     def test_is_loaded_false_no_tools(self, tool_manager):
         """is_loaded returns False when no tools are loaded."""
-        tool_manager.tools = []
+        tool_manager.core.tools = []
         tool_manager.chat_model = MagicMock()
         assert tool_manager.is_loaded() is False
 
     def test_is_loaded_false_no_chat_model(self, tool_manager):
         """is_loaded returns False when chat_model is None."""
-        tool_manager.tools = [MagicMock()]
+        tool_manager.core.tools = [MagicMock()]
         tool_manager.chat_model = None
         assert tool_manager.is_loaded() is False
 
@@ -265,7 +265,7 @@ class TestToolManager:
 
         assert tm.session_id == "sid"
         assert tm.service_context is mock_service_context
-        assert tm.tools == []
-        assert tm.tools_map == {}
+        assert tm.core.tools == []
+        assert tm.core.tools_map == {}
         assert tm.chat_model is None
         assert tm._mcp_manager is None
