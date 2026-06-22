@@ -1,103 +1,89 @@
-# MINECRAFT — CROSS-LANGUAGE NODE.JS BOT
+# Minecraft Bot Module — Guide for AI Agents
 
-**Generated:** 2026-06-15
-**Commit:** 10735c3
+## Module Overview
 
-> Parent: [../AGENTS.md](../AGENTS.md) — tools-wide conventions.
+This module provides the Minecraft gameplay integration for Animetta. It bridges Python (LangGraph/LangChain) with a Node.js Mineflayer bot for real-time Minecraft interaction.
 
-## OVERVIEW
-
-⚠️ **Cross-language hybrid.** A Mineflayer (Node.js) bot embedded inside the Python `tools/` tree. Python parent spawns a Node child process and talks to it via newline-delimited JSON over stdin/stdout. The LLM can autonomously control a Minecraft character through five exposed tools (`mc_goto`, `mc_mine`, `mc_build`, `mc_attack`, `mc_chat`), plus an `AutonomousLoop` drives self-directed behavior when no LLM instruction is active.
-
-## WHERE TO LOOK
-
-| Task | Location | Language | Notes |
-|------|----------|----------|-------|
-| Add LLM tool wrapper | `tools.py` | Python | `@tool` decorator, register in `config/tools.yaml` |
-| New bot behavior | `bot/behaviors/*.js` | **JS** | Mineflayer API — keep action name in sync with bridge |
-| Change IPC contract | `bridge.py` + `bot/index.js` | **Both** | Edit both sides or protocol breaks |
-| Tweak autonomous logic | `autonomous.py` | Python | `_evaluate()` priority chain |
-| Edit personality/rules | `rules.md` | YAML | Requires Anima restart (no hot reload) |
-| Add safety check | `rules_engine.py` | Python | `validate()` runs at startup |
-| Parse bot state | `world_state.py` | Python | `WorldState.from_status(resp)` |
-
-## IPC PROTOCOL (the non-obvious thing)
-
-Spawned via `asyncio.create_subprocess_exec("node", "bot/index.js", host, port, username)` with `cwd=bot/`. Requires `bot/node_modules` (run `npm install` in `bot/`).
-
-**Wire format — one JSON object per line, UTF-8, `\n`-terminated:**
+## Architecture
 
 ```
-Python (bridge.py)                         Node.js (bot/index.js)
-  │
-  │  ── stdin ──────────────────────────────►
-  │  {"id": 1, "action": "goto", "params": {"x":100,"y":64,"z":200}}
-  │                                          ├── parse, dispatch to behavior
-  │                                          │
-  │  ◄────────────────────────── stdout ────  {"id": 1, "status": "success", "result": "Arrived"}
-  │
-  │  ◄────────────────────────── stdout ────  {"id": null, "status": "event",
-  │                                             "result": {"type":"heartbeat", ...}}
+Python (LangGraph) ←→ MinecraftBridge ←→ Node.js (Mineflayer) ←→ Minecraft Server
 ```
 
-**Message types:**
-- **Request**: `{"id": <int>, "action": <str>, "params": <dict>}` — id correlates response
-- **Response**: `{"id": <int>, "status": "success"|"error", "result": <any>}` — matched by id via `_pending` future map
-- **Event**: `{"id": null | "system", "status": "event", "result": {"type": ...}}` — unsolicited; known types: `login` (sets `_bot_ready`), `spawn`, `heartbeat`
+- **Python layer**: LangChain @tool functions, survival state machine, skill library, autonomous behavior
+- **Bridge**: JSON-line IPC over stdin/stdout subprocess
+- **Node.js layer**: Mineflayer bot with pathfinding, combat, auto-eat behaviors
 
-**Action vocabulary** (case-sensitive, both sides MUST agree):
-- Movement: `goto {x,y,z}`, `collect {block_type, count}`
-- World: `status {}` → full state snapshot, `place {block_type, x, y, z}`
-- Combat: `attack {target: "nearest_hostile"}`
-- Social: `chat {message: <str>}`
-- Mode switch: `set_mode {mode: "planner"|"rule", plan?: [...]}`, `plan_status {}`
+## Key Files
 
-**Invariants:**
-- Default command timeout: 60s; login readiness wait: 15s for `login` event
-- All pending futures resolve with `{"status":"error","result":"Bridge stopped"}` on shutdown
+### Core
+- `bridge.py` — MinecraftBridge class, subprocess lifecycle, JSON-line protocol
+- `tools.py` — 13 LangChain @tool definitions (mc_goto, mc_collect, mc_craft, mc_smelt, mc_status, mc_survival_iron, etc.)
+- `config.py` — Pydantic config models
 
-## rules.md FORMAT
+### Survival Iron Run
+- `survival_models.py` — SurvivalPhase enum, PhaseResult, RunReport, InventoryGoal
+- `survival_inventory.py` — Item alias normalization, goal satisfaction, missing-material calculation
+- `survival_recovery.py` — Failure-to-recovery mapping, safety checks (health/food/hostiles)
+- `survival_runner.py` — SurvivalIronRunner — the deterministic wood-to-iron-gear state machine
+- `survival_benchmark.py` — Run summaries, markdown reports, multi-run comparison
 
-YAML with four top-level sections, parsed by `RulesEngine`:
-- `priorities: [survival, maintenance, building, gathering, social, exploration]` — decision ordering (lower index = higher priority)
-- `building: {target, blueprint, required_materials, build_plan}` — construction target + steps
-- `safety: {auto_heal_threshold, return_to_base_at_night, max_build_height}` — survival thresholds
-- `chat: {proactive_chance, cooldown_seconds, topics}` — proactive chat config
+### Skills and Learning
+- `skill_library.py` — Facade for SkillLibrary
+- `skill_models.py`, `skill_conditions.py`, `skill_executor.py`, `skill_store.py`, `skill_catalog.py`
+- `skill_extractor.py` — LLM-based skill extraction
+- `skill_validator.py` — Skill validation and simulation
+- `predefined_skills.py` — Built-in skill definitions
 
-`RulesEngine.validate()` runs at construction and warns on impossible configs (e.g. `auto_heal_threshold > 20` → "will never trigger" since max health = 20).
+### Autonomous Behavior
+- `autonomous.py` — AutonomousLoop, idle behavior, learning loop
+- `planner.py` — Plan generation
+- `rules_engine.py` — Rules-based decisions
+- `world_state.py` — World state tracker
 
-## AUTONOMOUSLOOP
+### Benchmarking and Tech Tree
+- `benchmark.py` / `benchmark_runner.py` / `benchmark_*.py`
+- `tech_tree.py` / `tech_tree_runner.py` / `tech_tree_*.py`
 
-Drives behavior when LLM is idle. Tick interval: random 3–8s. Lifecycle: `start()` → `pause()` (LLM instruction arrives) → `resume()` → `stop()`. Decision priority chain (`_evaluate`, survival always #1):
-1. **Threat interrupt** — `threat_level >= 2 && nearest_threat_distance < 15` → `attack` (runs even mid-action via `_threat_check`)
-2. **Low health** → auto-heal
-3. **Night return** → `goto` base
-4. **Building maintenance** → material gaps = `gather`; materials satisfied = `place` next step
-5. **Proactive chat** — roll `proactive_chance`, pick trigger
-6. **Exploration** — random walk ±10 blocks (fallback)
+### Node.js Bot
+- `bot/index.js` — Main bot process with hardened action handlers
+- `bot/behaviors/autoEat.js` — Auto-eat when food low
+- `bot/behaviors/combat.js` — Auto-attack hostiles
+- `bot/behaviors/planExecutor.js` — Multi-step plan execution
 
-Cooldown: 30s per action category (gather/build/chat/explore), tracked in `CooldownTracker`.
+## Bridge Protocol
 
-## CONVENTIONS
+Request:  {"id": N, "action": "<name>", "params": {...}}
+Response: {"id": N, "status": "success"|"error", "result": <string|dict>}
+Event:    {"id": null, "status": "event", "result": {"type": "<kind>", ...}}
 
-- **Node.js is optional at runtime** — `is_service_available("node")` guards startup; if absent, bridge logs "skipped" and other tools still function
-- **`bot/node_modules` MUST exist** — bridge refuses to start otherwise; run `npm install` in `bot/` before first run
-- **Action names are the contract** — adding a behavior requires edits in both `bot/index.js` (dispatch) and the Python caller
-- **Two execution modes**: `rule` (Python `AutonomousLoop` drives) vs `planner` (LLM provides plan_steps, Node executes autonomously) — switch via `set_mode`
+### Hardened Command Responses (Phase 4)
 
-## ANTI-PATTERNS
+- **collect/mine**: On partial failure, throws with .code, .collected, .explored, .reason
+- **craft**: On missing materials, throws with .code, .missing (list), .needsTable
+- **smelt**: On no furnace, throws with .code='SMELT_NO_FURNACE'
+- **status**: Returns dict with position, health, food, inventory, equipment, nearby_entities, deaths
 
-- ❌ Never edit `bot/*.js` from a Python task without also updating the action caller — protocol breaks silently
-- ❌ Never assume synchronous responses — `send_command` is async, returns a future
-- ❌ Never remove `bot/` thinking it's "just a bot" — Python `__init__.py` imports will break
-- ❌ Never bypass `rules_engine.py` survival checks — threat/health gates are #1 priority
-- ❌ Never set `auto_heal_threshold > 20` — max health is 20, rule will never fire (validator warns)
-- ❌ Never reuse `cmd_id` — `_next_id` is monotonic; collisions corrupt the pending future map
+## Public Tool Functions
 
-## NOTES
+| Tool | Purpose |
+|------|---------|
+| mc_goto | Pathfind to coordinates |
+| mc_mine | Mine blocks within 10 blocks |
+| mc_build | Place a block |
+| mc_attack | Attack entity |
+| mc_chat | Send chat message |
+| mc_status | Full world state query |
+| mc_goal | Set autonomous idle goal |
+| mc_stop | Emergency stop |
+| mc_collect | Find+approach+mine+pickup |
+| mc_craft | Craft from inventory |
+| mc_smelt | Smelt in furnace |
+| mc_recipes | Query crafting recipes |
+| mc_survival_iron | Deterministic wood-to-iron-gear run |
 
-- Module-level singleton: `get_bridge()` returns the global `MinecraftBridge` (or `None` if not started)
-- MCP bridge (parent `tools/mcp_bridge.py`) is SEPARATE — Minecraft does NOT go through MCP
-- `pause_autonomous()` / `resume_autonomous()` are called by the orchestration layer around LLM tool calls to prevent autonomous/LLM command interleaving
-- Bot stderr is logged at DEBUG level under `[MinecraftBot]` prefix — Mineflayer is noisy, do not raise to INFO
-- Max 5 Minecraft tool calls per LLM turn (shared limit with all tools); per-call timeout configurable in `config/tools.yaml`
+## Testing
+
+```
+PYTHONPATH=src python -m pytest tests/tools/minecraft/ -q
+```
