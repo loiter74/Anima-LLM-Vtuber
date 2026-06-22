@@ -664,7 +664,10 @@ async function handleCommand(cmd) {
     bot.pathfinder?.stop();
     bot.pvp?.stop();
     bot.stopDigging?.();
-    sendResponse(id, 'error', err.message);
+    const errorData = err.code
+      ? { message: err.message, code: err.code, ...Object.fromEntries(Object.entries(err).filter(([k]) => !['message','stack'].includes(k) && typeof err[k] !== 'function')) }
+      : err.message;
+    sendResponse(id, 'error', errorData);
   }
 }
 
@@ -783,7 +786,10 @@ async function handleCollect(id, params) {
     const result = await _collect(params.block_type, params.count || 1);
     sendResponse(id, 'success', result);
   } catch (err) {
-    sendResponse(id, 'error', err.message);
+    const errorData = err.code
+      ? { message: err.message, code: err.code, collected: err.collected, explored: err.explored, reason: err.reason, requested: err.requested }
+      : err.message;
+    sendResponse(id, 'error', errorData);
   }
 }
 
@@ -814,7 +820,10 @@ async function handleCraft(id, params) {
     const result = await _craft(params.recipe, params.count || 1);
     sendResponse(id, 'success', result);
   } catch (err) {
-    sendResponse(id, 'error', err.message);
+    const errorData = err.code
+      ? { message: err.message, code: err.code, missing: err.missing, needsTable: err.needsTable }
+      : err.message;
+    sendResponse(id, 'error', errorData);
   }
 }
 
@@ -823,7 +832,10 @@ async function handleSmelt(id, params) {
     const result = await _smelt(params.item, params.fuel, params.count || 1);
     sendResponse(id, 'success', result);
   } catch (err) {
-    sendResponse(id, 'error', err.message);
+    const errorData = err.code
+      ? { message: err.message, code: err.code, reason: err.reason }
+      : err.message;
+    sendResponse(id, 'error', errorData);
   }
 }
 

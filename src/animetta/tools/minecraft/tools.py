@@ -55,7 +55,7 @@ def init_bridge(config: dict | None = None):
         else:
             loop.run_until_complete(_bridge.start())
     except RuntimeError:
-        # No running event loop — use asyncio.run() which handles loop lifecycle
+        # No running event loop -- use asyncio.run() which handles loop lifecycle
         asyncio.run(_bridge.start())
 
     logger.info("[MinecraftTools] Bridge initialized and bot connecting...")
@@ -76,7 +76,7 @@ def get_minecraft_tools() -> list[Any]:
     Returns:
         List of LangChain tool objects
     """
-    return [mc_goto, mc_mine, mc_build, mc_attack, mc_chat, mc_status, mc_goal, mc_stop, mc_collect, mc_craft, mc_smelt, mc_recipes]
+    return [mc_goto, mc_mine, mc_build, mc_attack, mc_chat, mc_status, mc_goal, mc_stop, mc_collect, mc_craft, mc_smelt, mc_recipes, mc_survival_iron]
 
 
 # Import asyncio for bridge initialization
@@ -261,3 +261,56 @@ async def mc_recipes(item: str) -> str:
         item: Item name to query (e.g. 'stone_pickaxe', 'furnace', 'iron_ingot')
     """
     return await _send("recipes", {"item": item})
+
+
+@tool
+async def mc_survival_iron() -> str:
+    """Run a deterministic survival path from empty inventory to stable iron equipment.
+
+    Phases: wood -> crafting_table -> wooden_pickaxe -> cobblestone -> stone_kit ->
+    fuel -> iron_ore -> smelt_iron -> iron_gear.
+
+    Returns a structured report with phase progress, final inventory, and
+    success/failure status for each phase. This tool uses a state machine,
+    not LLM planning, so it is reliable and deterministic.
+    """
+    global _bridge
+    if _bridge is None or not _bridge.is_running:
+        return (
+            "Minecraft bot is not connected. "
+            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
+        )
+
+    from .survival_benchmark import summarize_run
+    from .survival_runner import SurvivalIronRunner
+
+    runner = SurvivalIronRunner(_bridge)
+    report = await runner.run()
+
+    summary = summarize_run(report)
+
+    # Format for LLM consumption
+    lines = [
+        f"Survival Iron Run: {'COMPLETED' if report.completed else 'INCOMPLETE'}",
+        f"Duration: {report.elapsed_seconds:.0f}s | Deaths: {report.deaths}",
+        "",
+        "Phase Progress:",
+    ]
+    for pr in report.phase_results:
+        status = "PASS" if pr.success else "FAIL"
+        fail = f" ({pr.failure_category.value}: {pr.failure_message})" if pr.failure_category else ""
+        lines.append(f"  [{status}] {pr.phase.value} -- {pr.actions_succeeded}/{pr.actions_attempted} actions{fail}")
+
+    lines.append("")
+    lines.append("Final Inventory:")
+    for item, count in sorted(report.final_inventory.items()):
+        lines.append(f"  {item}: {count}")
+
+    gear = summary.get("iron_gear_achieved", {})
+    lines.append("")
+    lines.append("Iron Gear:")
+    for item, achieved in gear.items():
+        mark = "YES" if achieved else "NO"
+        lines.append(f"  {item}: {mark}")
+
+    return "\n".join(lines)
