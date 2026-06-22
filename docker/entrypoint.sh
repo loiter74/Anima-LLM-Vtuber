@@ -11,7 +11,11 @@ set -e
 # ---------------------------------------------------------------------------
 validate_env() {
     local missing=()
-    local required_vars=("DEEPSEEK_API_KEY")
+    local required_vars=()
+
+    if [ "${ANIMETTA_LLM:-}" = "deepseek" ]; then
+        required_vars+=("DEEPSEEK_API_KEY")
+    fi
 
     for var in "${required_vars[@]}"; do
         if [ -z "${!var:-}" ]; then

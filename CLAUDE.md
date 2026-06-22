@@ -1,3 +1,10 @@
+# OpenWolf
+
+@.wolf/OPENWOLF.md
+
+This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
+
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -380,11 +387,28 @@ system:
 
 ## Health Stack
 
-- typecheck: mypy src/ --ignore-missing-imports
-- lint: ruff check src/ tests/
-- test: PYTHONPATH=src python -m pytest tests/
-- deadcode: vulture --min-confidence 80 src/animetta/core src/animetta/config src/animetta/memory src/animetta/avatar src/animetta/utils src/animetta/notifier src/animetta/inspection
-- frontend_typecheck: cd frontend && npx vue-tsc --noEmit
+### Quick (Makefile)
+```bash
+make health          # Run all checks locally (requires dev tools installed)
+make docker-health   # Run checks inside Docker container
+```
+
+### Individual checks (local)
+- lint: `PYTHONPATH=src ruff check src/ tests/`
+- typecheck: `PYTHONPATH=src mypy src/animetta --ignore-missing-imports`
+- test: `PYTHONPATH=src python -m pytest tests/`
+- deadcode: `vulture src/animetta --min-confidence 80`
+- frontend_typecheck: `cd frontend && npx vue-tsc --noEmit`
+
+### Docker-based checks (recommended)
+```bash
+make docker-lint       # ruff inside container
+make docker-test       # pytest inside container
+make docker-typecheck  # mypy inside container
+```
+
+### Dev dependencies
+- `requirements-dev.txt` — ruff, mypy, vulture, pytest, pytest-asyncio, pytest-xdist
 
 ## Related Documentation
 

@@ -36,6 +36,8 @@ frontend/.vite/
 
 # Keep docker/ config files
 # docker/
+docker/minecraft-server/data/
+src/animetta/tools/minecraft/bot/node_modules/
 
 # Exclude runtime data
 data/

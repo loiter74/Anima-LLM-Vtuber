@@ -11,6 +11,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY requirements.txt .
 # pip wheel cache persisted across builds via BuildKit cache mount
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --user -r requirements.txt
 
