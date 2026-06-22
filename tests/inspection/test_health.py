@@ -715,10 +715,24 @@ class TestCheckAllComponents:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_check_all_components_with_real_probes_graceful(self):
-        """Call with real probes — should not raise, even if services are down."""
-        try:
-            results = await check_all_components()
-            assert isinstance(results, dict)
-            assert len(results) == 8
-        except Exception as e:
-            pytest.fail(f"check_all_components raised unexpectedly: {e}")
+        """Call real probe wiring with external integrations isolated."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=(1,))
+        mock_store = MagicMock()
+        mock_store._db = MagicMock()
+        mock_store._db.execute = AsyncMock(return_value=mock_cursor)
+
+        with (
+            patch(
+                "animetta.inspection.checks.health.get_stats_store",
+                AsyncMock(return_value=mock_store),
+            ),
+            patch("animetta.core.service_pool.ServicePool._ready", False),
+            patch.dict(sys.modules, {"chromadb": None, "aiohttp": None}),
+        ):
+            try:
+                results = await check_all_components()
+                assert isinstance(results, dict)
+                assert len(results) == 8
+            except Exception as e:
+                pytest.fail(f"check_all_components raised unexpectedly: {e}")
