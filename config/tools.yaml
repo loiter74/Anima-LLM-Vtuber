@@ -61,7 +61,8 @@ mcp_servers:
 # ========================================
 minecraft:
   enabled: true                 # 已启用，AI 控制 Mineflayer Bot 自动连接
-  autonomous: true              # 启用自主行为循环（收集→建造→聊天）
+  mode: fallback                # fallback(默认,纯Survival Runner) | learn(Voyager学习期) | live(直播选技能)
+  autonomous: true              # deprecated: 由 mode 派生，保留向后兼容
   bot:
     host: "localhost"
     port: 25565
@@ -70,6 +71,9 @@ minecraft:
     no_griefing: true           # 不破坏玩家建筑
     auto_heal: true             # 自动回血
     max_distance: 500           # 最大活动半径
+  viewer:
+    username: "LUN077"          # 旁观玩家：进入服务器 / bot 重连后自动 spectate 附身
+    auto_spectate: true
 
 # ========================================
 # 工具调用设置

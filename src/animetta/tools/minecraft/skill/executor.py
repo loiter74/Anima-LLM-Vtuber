@@ -86,6 +86,11 @@ async def execute_skill(
             duration=duration,
         )
 
+    # Voyager code-body 技能（mc-bot-voyager-learning T7）：body.type=="code" 走 eval_code 沙箱
+    body = skill.body or {}
+    if body.get("type") == "code":
+        return await _execute_code_skill(skill, bridge, ctx, start)
+
     for idx, step in enumerate(skill.steps):
         if threat_check_interval > 0 and idx % threat_check_interval == 0:
             threat_level = ctx.get("threat_level", 0)
@@ -169,6 +174,55 @@ async def execute_skill(
         skill_id=skill.id,
         duration=duration,
         context_updates=ctx,
+    )
+
+
+async def _execute_code_skill(
+    skill: Skill,
+    bridge: "MinecraftBridge",
+    ctx: dict[str, Any],
+    start: float,
+) -> SkillResult:
+    """执行 Voyager 风格 code-body 技能：通过 eval_code 沙箱跑 JS（LLM 生成或 seed）。"""
+    body = skill.body or {}
+    code = body.get("code", "")
+    timeout_s = float(body.get("timeout", 60.0))
+
+    try:
+        resp = await bridge.send_command(
+            "eval_code",
+            {"code": code, "timeout": int(timeout_s * 1000)},
+            timeout=timeout_s,
+        )
+    except Exception as exc:
+        duration = _elapsed_since(start)
+        await _update_stats(skill, success=False, duration=duration)
+        return SkillResult(
+            success=False,
+            skill_id=skill.id,
+            reason=f"eval_code exception: {type(exc).__name__}: {exc}",
+            duration=duration,
+        )
+
+    if isinstance(resp, dict) and resp.get("status") == "success":
+        duration = _elapsed_since(start)
+        await _update_stats(skill, success=True, duration=duration)
+        result_data = resp.get("result")
+        if isinstance(result_data, dict):
+            ctx.update(result_data)
+        return SkillResult(
+            success=True, skill_id=skill.id, duration=duration, context_updates=ctx,
+        )
+
+    duration = _elapsed_since(start)
+    await _update_stats(skill, success=False, duration=duration)
+    err = resp.get("result", "unknown error") if isinstance(resp, dict) else str(resp)
+    logger.warning(f"[SkillLibrary] code-body skill '{skill.id}' failed: {err}")
+    return SkillResult(
+        success=False,
+        skill_id=skill.id,
+        reason=f"eval_code failed: {err}",
+        duration=duration,
     )
 
 

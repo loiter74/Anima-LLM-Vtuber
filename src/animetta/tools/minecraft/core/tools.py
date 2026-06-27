@@ -7,7 +7,7 @@ The bridge (MinecraftBridge) manages the Node.js subprocess lifecycle.
 
 from typing import Any
 
-from langchain_core.core.tools import tool
+from langchain_core.tools import tool
 from loguru import logger
 
 # Global bridge instance (initialized by init_bridge)
@@ -25,7 +25,7 @@ def init_bridge(config: dict | None = None):
         return
 
     from .bridge import MinecraftBridge
-    from .config import MinecraftConfig
+    from .config import MinecraftConfig, MinecraftMode
 
     mc_config = MinecraftConfig(**(config or {}))
 
@@ -44,7 +44,7 @@ def init_bridge(config: dict | None = None):
 
     _bridge = MinecraftBridge(
         mc_config,
-        autonomous=mc_config.autonomous.loop,
+        autonomous=mc_config.mode != MinecraftMode.FALLBACK,
         service_pool=service_pool_ref,
     )
 
@@ -281,7 +281,7 @@ async def mc_survival_iron() -> str:
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
 
-    from ..benchmark.main import summarize_run
+    from ..survival.benchmark import summarize_run
     from ..survival.runner import SurvivalIronRunner
 
     runner = SurvivalIronRunner(_bridge)
