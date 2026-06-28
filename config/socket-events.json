@@ -267,6 +267,36 @@
         "username?": "string",
         "error?": "string"
       }
+    },
+    "spectate": {
+      "name": "minecraft:spectate",
+      "payload": {
+        "username?": "string"
+      }
+    },
+    "viewer_status": {
+      "name": "minecraft:viewer_status",
+      "payload": {
+        "status": "string",
+        "username?": "string",
+        "error?": "string"
+      }
+    },
+    "bot_state": {
+      "name": "minecraft:bot_state",
+      "payload": {
+        "health?": "number",
+        "food?": "number",
+        "position?": {"x": "number", "y": "number", "z": "number"},
+        "dimension?": "string",
+        "biome?": "string",
+        "time?": "string",
+        "weather?": "string",
+        "action?": "string",
+        "action_target?": "string",
+        "held_item?": "string",
+        "inventory?": "array"
+      }
     }
   },
   "translation": {

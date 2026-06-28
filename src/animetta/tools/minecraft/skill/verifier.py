@@ -6,6 +6,7 @@
 
 避免论文纯 LLM 验证的 token 成本与延迟。
 """
+
 from __future__ import annotations
 
 import re
@@ -95,9 +96,7 @@ def verify_deterministic(
         passed=len(failures) == 0,
         gate="deterministic",
         failures=failures,
-        reason="all inventory conditions satisfied"
-        if not failures
-        else f"failed: {failures}",
+        reason="all inventory conditions satisfied" if not failures else f"failed: {failures}",
     )
 
 
@@ -157,9 +156,7 @@ async def verify(
 
     det = verify_deterministic(success_criteria, inv)
     if det is not None:
-        logger.info(
-            f"[Verifier] deterministic gate: passed={det.passed} — {det.reason}"
-        )
+        logger.info(f"[Verifier] deterministic gate: passed={det.passed} — {det.reason}")
         return det
 
     logger.info("[Verifier] deterministic gate inconclusive, falling back to LLM")

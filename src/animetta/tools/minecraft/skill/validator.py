@@ -102,7 +102,10 @@ class SimulatedState:
         if name in ("craft",):
             recipe = params.get("recipe", "")
             if recipe and not self._can_craft(recipe):
-                return False, f"Cannot craft '{recipe}' — missing ingredients in simulated inventory"
+                return (
+                    False,
+                    f"Cannot craft '{recipe}' — missing ingredients in simulated inventory",
+                )
 
         if name == "place":
             block_type = params.get("block_type", "")
@@ -262,7 +265,9 @@ class SkillValidator:
 
         # Non-fatal schema warnings
         if not skill.description or not skill.description.strip():
-            result.warnings.append("Skill 'description' is empty — consider adding one for searchability")
+            result.warnings.append(
+                "Skill 'description' is empty — consider adding one for searchability"
+            )
 
         if not skill.category:
             result.warnings.append("Skill 'category' is unset — categorisation aids retrieval")
@@ -305,12 +310,8 @@ class SkillValidator:
 
             can_run, reason = state.can_execute(step)
             if not can_run:
-                result.failures.append(
-                    f"Simulation failed at step {idx} ({step.name}): {reason}"
-                )
-                logger.warning(
-                    f"[SkillValidator] Simulation blocked at step {idx}: {reason}"
-                )
+                result.failures.append(f"Simulation failed at step {idx} ({step.name}): {reason}")
+                logger.warning(f"[SkillValidator] Simulation blocked at step {idx}: {reason}")
                 return  # Hard stop — can't continue past a blocking failure
 
             # Apply the step to advance the simulated state

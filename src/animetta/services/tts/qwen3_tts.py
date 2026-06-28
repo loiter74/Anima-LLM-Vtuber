@@ -25,7 +25,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 from .interface import TTSInterface
 

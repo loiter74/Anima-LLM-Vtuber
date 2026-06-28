@@ -1,13 +1,21 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-06-22T16:00:01.486Z
-> Files: 533 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-06-28T10:07:51.929Z
+> Files: 594 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../.claude/plans/
+
+- `wise-crafting-meadow.md` — Plan: Multi-LLM Comparison Script (~271 tok)
+
+## ../../Documents/my-llm-wiki/my-llm-wiki/Excalidraw/Animetta/MC-Bot/
+
+- `14-Spectator系统架构.canvas` (~1363 tok)
 
 ## ./
 
 - `.coverage` (~28339 tok)
 - `.dockerignore` — Docker ignore rules (~160 tok)
-- `.gitignore` — Git ignore rules (~532 tok)
+- `.gitignore` — Git ignore rules (~564 tok)
 - `AGENTS.md` — ANIMETTA PROJECT KNOWLEDGE BASE (~4529 tok)
 - `API_DOCUMENTATION.md` — Animetta 前端-后端接口文档 (~2179 tok)
 - `ARCHITECTURE.md` — Architecture (~2213 tok)
@@ -15,18 +23,22 @@
 - `CLAUDE.md` — OpenWolf (~3976 tok)
 - `CONTRIBUTING.md` — Contributing Guide (~798 tok)
 - `DESIGN.md` — Asking AI to optimize Animetta's UI using this design system (~1495 tok)
+- `docker-compose.core.yml` — ============================================================================ (~438 tok)
 - `docker-compose.cpu.yml` — Docker Compose: 1 services (~342 tok)
 - `docker-compose.yml` — Docker Compose services (~377 tok)
-- `Dockerfile` — Docker container definition (~402 tok)
-- `Dockerfile.cuda` — Animetta — CUDA 12.4 Multi-Stage Dockerfile (~1217 tok)
+- `Dockerfile` — Docker container definition (~931 tok)
+- `Dockerfile.cuda` — ============================================================================ (~1235 tok)
 - `fly.toml` — ── Animetta Fly.io Deployment Configuration ──────────────────────────── (~389 tok)
 - `Makefile` — Make build targets (~404 tok)
 - `pyproject.toml` — Python project configuration (~690 tok)
 - `README.md` — Project documentation (~3118 tok)
-- `requirements-dev.txt` — Development tools — run: pip install -r requirements-dev.txt (~46 tok)
+- `requirements-core.txt` — ============================================================================ (~325 tok)
+- `requirements-dev.txt` — Development tools -- run: pip install -r requirements-dev.txt (~46 tok)
+- `requirements-local-ai.txt` — ============================================================================ (~345 tok)
 - `requirements.txt` — Python dependencies (~596 tok)
 - `SECURITY.md` — Security Notes (~241 tok)
 - `STYLE_GUIDE.md` — STYLE GUIDE (~1169 tok)
+- `test_iron_pickaxe.py` — Deterministic iron pickaxe crafting script. (~3914 tok)
 - `TESTING.md` — Testing Guide (~656 tok)
 - `zeabur.json` (~251 tok)
 - `ZEABUR.md` — Zeabur 部署指南 (~1516 tok)
@@ -790,4 +802,148 @@
 - `batch-7-input.json` (~1500 tok)
 - `batch-8-input.json` (~1264 tok)
 - `batch-9-input.json` (~1395 tok)
-                                   
+
+## config/
+
+- `services.yaml` — Animetta 服务配置注册表 (~766 tok)
+- `socket-events.json` (~2841 tok)
+
+## docker/minecraft-server/
+
+- `docker-compose.yml` — Docker Compose services (~170 tok)
+
+## docs/development/
+
+- `minecraft-bot-architecture.zh.md` — Minecraft 机器人架构 (~3011 tok)
+
+## frontend/src/components/layout/
+
+- `AppLayout.vue` — Vue: setup (~1301 tok)
+
+## frontend/src/components/minecraft/
+
+- `BotDashboard.vue` — Vue: setup (~1264 tok)
+
+## frontend/src/components/settings/
+
+- `SettingsPanel.vue` — Vue: ASR 语音识别, setup (~5931 tok)
+
+## frontend/src/constants/
+
+- `socket-events.ts` — Socket.IO 事件常量定义 (~1758 tok)
+
+## frontend/src/stores/
+
+- `minecraft.ts` — Exports MinecraftStatus, MinecraftViewerStatus, BotState, useMinecraftStore (~1305 tok)
+
+## frontend/src/types/
+
+- `socket-events.ts` — Payload for the `sentence` socket event (LLM streaming response). (~326 tok)
+
+## openspec/changes/mc-bot-spectator/
+
+- `design.md` — Design: MC Bot Spectator (~1900 tok)
+- `design.md` — 详细设计：config/bot/bridge/handler/frontend (~2500 tok)
+- `proposal.md` — Proposal: MC Bot Spectator (~557 tok)
+- `proposal.md` — MC Bot 第一视角旁观系统提案 (~1200 tok)
+- `tasks.md` — Tasks: MC Bot Spectator (~169 tok)
+- `tasks.md` — 9 个实现任务 (~1200 tok)
+
+## openspec/changes/slim-docker-deployment/
+
+- `design.md` — Design: Slim Docker Deployment (~2296 tok)
+- `proposal.md` — Proposal: Slim Docker Deployment (~1439 tok)
+- `tasks.md` — Tasks: Slim Docker Deployment (~1956 tok)
+
+## scripts/
+
+- `eval_llm.py` — Multi-LLM comparison script. (~3286 tok)
+- `eval_prompts.txt` — eval_prompts.txt — LLM evaluation prompts (~158 tok)
+
+## src/animetta/config/
+
+- `user.py` — UserSettings: save, get_log_level, set_log_level (~406 tok)
+
+## src/animetta/core/
+
+- `service_context.py` — ServiceContext: load_from_config, load_cache, init_asr, init_tts + 2 more (~5826 tok)
+- `socketio_server.py` — FrontendServingMiddleware: parse_server_args, init_config, run_server, cleanup_on_exit + 2 more (~3094 tok)
+
+## src/animetta/orchestration/server/
+
+- `routes.py` — WebSocket route definitions — thin delegation layer. (~5450 tok)
+- `websocket.py` — WebSocket server - Socket.IO server initialization and configuration (~2726 tok)
+
+## src/animetta/orchestration/server/handlers/
+
+- `__init__.py` — Declares that (~236 tok)
+- `minecraft_handlers.py` — MinecraftHandlers: on_viewer_event, on_minecraft_start, on_minecraft_stop, on_minecraft_spectate + 1 (~2433 tok)
+
+## src/animetta/services/asr/
+
+- `__init__.py` — ASR service implementation module (~254 tok)
+
+## src/animetta/services/tts/
+
+- `__init__.py` — TTS service implementation module (~457 tok)
+
+## src/animetta/services/tts/contrib/
+
+- `__init__.py` — Contrib TTS implementations — maintained but not in core CI path. (~344 tok)
+- `kokoro_tts.py` — KokoroTTS: from_config, synthesize, close (~2474 tok)
+
+## src/animetta/tools/
+
+- `base.py` — web_search, get_weather, get_current_time, calculator (~2340 tok)
+
+## src/animetta/tools/minecraft/
+
+- `__init__.py` (~156 tok)
+- `AGENTS.md` — Minecraft Bot Module — Guide for AI Agents (~922 tok)
+
+## src/animetta/tools/minecraft/bot/
+
+- `index.js` — host: getMcData, setupMovements, withTimeout + 9 more (~15173 tok)
+
+## src/animetta/tools/minecraft/bot/behaviors/
+
+- `autoEat.js` — Auto Eat - automatically eats food when hungry (~455 tok)
+- `combat.js` — Combat Interrupt - automatically attacks nearby hostiles (~583 tok)
+
+## src/animetta/tools/minecraft/core/
+
+- `bridge.py` — MinecraftBridge: start, send_command (~4521 tok)
+- `config.py` — Declares MinecraftBotConfig (~263 tok)
+- `hud_renderer.py` — class: from_world_state, render_actionbar, render_sidebar_setup, render_sidebar_update + 3 more (~2932 tok)
+- `state_collector.py` — StateCollector: start, stop, update_action (~1898 tok)
+- `tools.py` — init_bridge, cleanup_bridge, get_minecraft_tools, mc_goto (~3358 tok)
+
+## src/animetta/tools/minecraft/other/
+
+- `smoke_test.py` — Real-server smoke test for the iron survival runner. (~1431 tok)
+- `test_craft_stone_pickaxe.py` — Stone pickaxe test using RCON to give materials. (~834 tok)
+
+## src/animetta/tools/minecraft/other/scripts/
+
+- `run_voyager_skill.py` — 端到端运行 Voyager skill（mc-bot-voyager-learning）。 (~1078 tok)
+- `spike_eval_code.py` — T3 spike — 验证云 LLM 能否生成可执行的 mineflayer JS（mc-bot-voyager-learning go/no-go 关卡）。 (~1463 tok)
+- `test_iron_pickaxe.py` — Deterministic iron pickaxe crafting script. (~3956 tok)
+
+## src/animetta/tools/minecraft/skill/
+
+- `models.py` — Skill domain models and step parameter definitions. (~1508 tok)
+- `predefined.py` (~4586 tok)
+
+## src/animetta/tools/minecraft/survival/
+
+- `recovery.py` — Survival recovery strategies and safety checks. (~3564 tok)
+- `runner.py` — Survival iron runner — the core state machine for wood-to-iron-gear progression. (~3461 tok)
+- `SKILLS.md` — Minecraft 生存技能流程总结 (~1008 tok)
+
+## tests/
+
+- `test_provider_availability.py` — Provider availability smoke tests. (~1637 tok)
+
+## tests/tools/minecraft/
+
+- `test_spectator.py` — Tests for Minecraft spectator viewer feature. (~1104 tok)

@@ -5,6 +5,7 @@
 
 半开放：限定生存技术树（采集/冶炼/工具/建造），靠 LLM 的 MC 世界知识做难度匹配。
 """
+
 from __future__ import annotations
 
 import json
@@ -12,23 +13,26 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from loguru import logger
-
 CURRICULUM_SYSTEM_PROMPT = """You are a Minecraft automatic curriculum teacher for a bot.
 
 Given the bot's current state, propose the NEXT task that is:
 - NOT too hard for current equipment (respect the tech tree)
 - NOT already completed
-- Progressing toward the ultimate goal: craft an iron_pickaxe
-- Within scope: collection / crafting / smelting / mining only
+- Progressing toward the ultimate goal: craft a FULL golden armor set (golden_helmet + golden_chestplate + golden_leggings + golden_boots) by gathering ALL resources yourself. Bot already has iron armor — upgrade to gold.
+- ALSO maximize discovery of NEW craftable items (when the main goal is blocked, propose tasks that discover items the bot has never held)
+- Within scope: collection / crafting / smelting / mining / equipping
 
-Tech tree: punch wood -> wood tools -> stone tools -> (mine iron_ore + coal) -> smelt iron_ingot -> iron tools.
+Tech tree: wood tools (collect('oak_log') then craft wooden_pickaxe) -> stone tools (collect('stone') drops cobblestone, craft stone_pickaxe) -> iron tools (mine iron_ore, smelt raw_iron, craft iron_pickaxe) -> mine gold_ore deep underground (y<32, needs iron_pickaxe) + mine coal_ore for fuel -> smelt('raw_gold','coal',N) -> gold_ingot -> golden armor.
+Golden armor (gold_ingot each): golden_helmet=5, golden_chestplate=8, golden_leggings=7, golden_boots=4 (total 24).
+CRITICAL: the bot MUST gather every resource itself via collect/craft/smelt. Resources do NOT appear by themselves — walk to find oak trees, dig underground for stone then coal_ore/iron_ore/gold_ore (gold_ore is deepest, y<32, often near lava/deepslate). Never assume an item is already available; if the bot lacks something, the task must collect or craft it first.
+PREREQUISITE CHAIN: mining gold_ore requires iron_pickaxe. If inv has NO iron_pickaxe, the NEXT task MUST be 'craft iron_pickaxe' (3 iron_ingot + 2 stick at crafting_table) — do NOT propose mining gold_ore until iron_pickaxe exists. If inv lacks iron_ingot/stick, gather those first (smelt raw_iron / craft stick from planks). Always check prerequisites before proposing a mining task.
+NEVER REDUNDANT: if inv already has iron_pickaxe, NEVER propose 'craft iron_pickaxe' — instead propose mining (gold_ore to get raw_gold, need 24 for full golden armor) or smelting (raw_gold + coal -> gold_ingot) or crafting golden armor pieces. Check inv carefully before proposing any craft task to avoid repeats.
 
 Output ONLY a JSON object, no markdown fences:
-{"task": "one-sentence concrete task using available API", "success_criteria": ["has_<item> >= N"], "reasoning": "one short sentence"}
+{"task": "one-sentence concrete task", "success_criteria": ["has_<item> >= N"], "reasoning": "one short sentence"}
 
-Task must be achievable by JS code calling ONLY: collect(block_type,count), craft(recipe,count), smelt(item,fuel,count), goto(x,y,z), place(block_type,x,y,z), status(), waitFor(sec).
-Prefer tasks that directly advance the iron_pickaxe tech tree. Keep tasks small and verifiable by inventory checks."""
+Task must be achievable by JS code calling ONLY: collect(block_type,count), craft(recipe,count), smelt(item,fuel,count), equip(item,destination), goto(x,y,z), place(block_type,x,y,z), status(), waitFor(sec).
+Keep tasks small + verifiable by inventory checks. If the gold path is blocked (e.g. no gold_ore reachable), pivot to discovering other new craftable items (different tools, blocks, food) to maximize exploration."""
 
 _FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.S)
 
@@ -78,7 +82,7 @@ async def next_task(
         f"Recently failed (avoid repeating): {failed[-8:]}\n"
         f"Learned/verified skills: {learned_skills[:20]}\n"
         f"Position: {state.get('position')}, health: {state.get('health')}, food: {state.get('food')}\n\n"
-        f"Ultimate goal: craft an iron_pickaxe. Propose the next task. Output JSON only."
+        f"Ultimate goal: craft full golden armor BY GATHERING ALL RESOURCES YOURSELF (no free items). Bot already has iron armor — now mine gold_ore deep (y<32) + smelt + craft golden. Propose the next task. Output JSON only."
     )
     messages = [
         {"role": "system", "content": CURRICULUM_SYSTEM_PROMPT},

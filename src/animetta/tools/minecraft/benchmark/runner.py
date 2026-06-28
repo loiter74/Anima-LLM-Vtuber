@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from ..autonomous.loop import AutonomousLoop
+from ..skill.library import Skill, SkillLibrary
 from .criteria import (
     _check_building_criteria,
     _check_learning_criteria,
@@ -27,7 +28,6 @@ from .models import (
 )
 from .report import generate_benchmark_report
 from .scenarios import ALL_CONFIGS, ALL_SCENARIOS
-from ..skill.library import Skill, SkillLibrary
 
 if TYPE_CHECKING:
     from ..core.bridge import MinecraftBridge
@@ -58,13 +58,17 @@ class BenchmarkRunner:
             from ..skill.predefined import get_predefined_skills
 
             self._predefined_skills = get_predefined_skills()
-            logger.info(f"[BenchmarkRunner] Loaded {len(self._predefined_skills)} predefined skills")
+            logger.info(
+                f"[BenchmarkRunner] Loaded {len(self._predefined_skills)} predefined skills"
+            )
         except ImportError:
             logger.warning(
                 "[BenchmarkRunner] predefined_skills module not found, predefined mode will use empty skill set"
             )
 
-    async def run_scenario(self, scenario: BenchmarkScenario, config: BenchmarkConfig) -> BenchmarkMetrics:
+    async def run_scenario(
+        self, scenario: BenchmarkScenario, config: BenchmarkConfig
+    ) -> BenchmarkMetrics:
         logger.info(
             f"[BenchmarkRunner] Starting '{scenario.name}' with mode '{config.mode.value}' "
             f"(limit={config.time_limit_minutes}min, seed={config.world_seed})"
@@ -77,7 +81,11 @@ class BenchmarkRunner:
             for skill in await self._skill_library.get_all_skills():
                 await run_library.save_skill(skill)
 
-        planner = self._llm_service if config.mode in (BenchmarkMode.LLM_ONLY, BenchmarkMode.FULL_VOYAGER) else None
+        planner = (
+            self._llm_service
+            if config.mode in (BenchmarkMode.LLM_ONLY, BenchmarkMode.FULL_VOYAGER)
+            else None
+        )
         skill_extractor = None
         skill_validator = None
         if config.mode == BenchmarkMode.FULL_VOYAGER:
@@ -109,7 +117,9 @@ class BenchmarkRunner:
 
         if config.world_seed:
             try:
-                await self._bridge.send_command("chat", {"message": f"/seed {config.world_seed}"}, timeout=10.0)
+                await self._bridge.send_command(
+                    "chat", {"message": f"/seed {config.world_seed}"}, timeout=10.0
+                )
             except Exception:
                 logger.debug("[BenchmarkRunner] Could not set world seed")
 
@@ -139,7 +149,9 @@ class BenchmarkRunner:
 
         original_send = self._bridge.send_command
 
-        async def _instrumented_send(action: str, params: dict | None = None, timeout: float = 60.0) -> dict:
+        async def _instrumented_send(
+            action: str, params: dict | None = None, timeout: float = 60.0
+        ) -> dict:
             nonlocal tasks_attempted, tasks_succeeded
             if action in ("goto", "collect", "mine", "place", "craft", "attack"):
                 tasks_attempted += 1
@@ -260,14 +272,18 @@ class BenchmarkRunner:
             results[scenario.name] = {}
             for config in configs:
                 run_idx += 1
-                logger.info(f"[BenchmarkRunner] Run {run_idx}/{total_runs}: {scenario.name} x {config.name}")
+                logger.info(
+                    f"[BenchmarkRunner] Run {run_idx}/{total_runs}: {scenario.name} x {config.name}"
+                )
                 results[scenario.name][config.name] = await self.run_scenario(scenario, config)
         logger.info(f"[BenchmarkRunner] Full benchmark completed ({total_runs} runs)")
         return results
 
-    async def run_tech_tree_benchmark(self, config: BenchmarkConfig | None = None) -> BenchmarkMetrics:
+    async def run_tech_tree_benchmark(
+        self, config: BenchmarkConfig | None = None
+    ) -> BenchmarkMetrics:
+        from ..tech_tree.runner import TechTreeRunner
         from .defaults import create_default_tech_tree
-        from .runner import TechTreeRunner
 
         config = config or BenchmarkConfig(
             name="Full Voyager (Tech Tree)",

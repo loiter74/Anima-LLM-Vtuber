@@ -4,7 +4,7 @@ Anima tool base classes and tool registry
 
 from typing import Any
 
-from langchain_core.core.tools import tool
+from langchain_core.tools import tool
 from loguru import logger
 
 

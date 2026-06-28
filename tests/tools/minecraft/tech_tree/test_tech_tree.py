@@ -756,7 +756,7 @@ class TestTechTreeReport:
             phase_details=details,
         )
 
-        assert report.core.config is config
+        assert report.config is config
         assert report.metrics is metrics
         assert report.phase_details == details
         assert report.timestamp  # auto-generated
@@ -795,7 +795,7 @@ class TestGenerateReport:
         report = runner.generate_report()
 
         assert isinstance(report, TechTreeReport)
-        assert report.core.config is config
+        assert report.config is config
         assert report.metrics is runner._metrics
         assert isinstance(report.timestamp, str)
 
@@ -1525,5 +1525,5 @@ class TestRunnerRunIntegration:
         report = runner.generate_report()
 
         assert isinstance(report, TechTreeReport)
-        assert report.core.config is config
+        assert report.config is config
         assert len(report.metrics.phases_completed) >= 1

@@ -31,7 +31,7 @@ class TestAllPredefinedSkillsValid:
     def test_all_predefined_skills_valid(self) -> None:
         """All 9 predefined skills pass validate_params() on every step."""
         skills = _all_skills()
-        assert len(skills) == 9, f"Expected 9 predefined skills, got {len(skills)}"
+        assert len(skills) == 14, f"Expected 14 predefined skills, got {len(skills)}"
 
         for skill in skills:
             assert skill.id, "Skill missing id"
@@ -107,6 +107,26 @@ class TestSurvivalShelterSteps:
         block_types = {s.params["block_type"] for s in place_steps}
         assert "cobblestone" in block_types
         assert "oak_planks" in block_types
+
+
+class TestSurvivalWaterBucketClutchSteps:
+    """survival_water_bucket_clutch skill step sequence."""
+
+    def test_survival_water_bucket_clutch_steps(self) -> None:
+        """Correct step sequence: check → water_bucket_clutch."""
+        skill = _skill_by_id("survival_water_bucket_clutch")
+        step_names = [s.name for s in skill.steps]
+        assert step_names == ["check", "water_bucket_clutch"]
+
+    def test_survival_water_bucket_clutch_preconditions(self) -> None:
+        skill = _skill_by_id("survival_water_bucket_clutch")
+        assert "fall_risk >= 2" in skill.preconditions
+        assert "has_water_bucket" in skill.preconditions
+
+    def test_survival_water_bucket_clutch_tags(self) -> None:
+        skill = _skill_by_id("survival_water_bucket_clutch")
+        assert "fall" in skill.tags
+        assert "water_bucket" in skill.tags
 
 
 class TestCollectMineSteps:

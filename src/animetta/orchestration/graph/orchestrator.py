@@ -39,7 +39,7 @@ class LangGraphOrchestrator:
         self.emotion_analyzer = emotion_analyzer
         self.enable_tools = enable_tools
         self.enable_memory = enable_memory
-        self.core.tools_config = tools_config or {}
+        self.tools_config = tools_config or {}
 
         self.session_id = getattr(service_context, "session_id", "unknown")
 
@@ -114,7 +114,7 @@ class LangGraphOrchestrator:
     async def _load_tools(self) -> None:
         """Load tools"""
         self.tool_manager = ToolManager(self.session_id, self.service_context)
-        success = await self.tool_manager.load_tools(self.core.tools_config)
+        success = await self.tool_manager.load_tools(self.tools_config)
 
         if success:
             # Update LangGraph config

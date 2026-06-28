@@ -4,7 +4,7 @@ Custom tool collection
 Provides additional utility tools.
 """
 
-from langchain_core.core.tools import tool
+from langchain_core.tools import tool
 from loguru import logger
 
 

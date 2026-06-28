@@ -15,8 +15,8 @@ if str(src_dir) not in sys.path:
 
 from loguru import logger
 
-from animetta.core.config.app import AppConfig
-from animetta.core.config.user import UserSettings
+from animetta.config.app import AppConfig
+from animetta.config.user import UserSettings
 from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
 from animetta.orchestration.graph.builder import set_external_checkpointer

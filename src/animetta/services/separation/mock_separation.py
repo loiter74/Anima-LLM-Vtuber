@@ -6,7 +6,7 @@ Mock Separation implementation - for testing and development
 
 from pathlib import Path
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 from .interface import SeparationInterface
 

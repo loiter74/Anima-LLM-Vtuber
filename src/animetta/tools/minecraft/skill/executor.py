@@ -30,9 +30,7 @@ async def _handle_threat(
     logger.warning("[SkillLibrary] Threat detected — pausing skill to engage hostile")
 
     try:
-        resp = await bridge.send_command(
-            "attack", {"target": "nearest_hostile"}, timeout=15.0
-        )
+        resp = await bridge.send_command("attack", {"target": "nearest_hostile"}, timeout=15.0)
     except (TimeoutError, Exception) as exc:
         reason = f"Threat handling failed: {type(exc).__name__}: {exc}"
         logger.error(f"[SkillLibrary] {reason}")
@@ -123,20 +121,14 @@ async def execute_skill(
 
         for attempt in range(attempts):
             try:
-                resp = await bridge.send_command(
-                    step.name, step.params, timeout=step.timeout
-                )
+                resp = await bridge.send_command(step.name, step.params, timeout=step.timeout)
             except TimeoutError:
                 last_error = f"Step {idx} ({step.name}) timed out after {step.timeout}s"
-                logger.warning(
-                    f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})"
-                )
+                logger.warning(f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})")
                 continue
             except Exception as exc:
                 last_error = f"Step {idx} ({step.name}) raised {type(exc).__name__}: {exc}"
-                logger.warning(
-                    f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})"
-                )
+                logger.warning(f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})")
                 continue
 
             status = resp.get("status", "error")
@@ -149,12 +141,8 @@ async def execute_skill(
                 last_error = None
                 break
 
-            last_error = (
-                f"Step {idx} ({step.name}) returned error: {resp.get('result', 'unknown')}"
-            )
-            logger.warning(
-                f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})"
-            )
+            last_error = f"Step {idx} ({step.name}) returned error: {resp.get('result', 'unknown')}"
+            logger.warning(f"[SkillLibrary] {last_error} (attempt {attempt + 1}/{attempts})")
 
         if last_error is not None:
             duration = _elapsed_since(start)
@@ -179,7 +167,7 @@ async def execute_skill(
 
 async def _execute_code_skill(
     skill: Skill,
-    bridge: "MinecraftBridge",
+    bridge: MinecraftBridge,
     ctx: dict[str, Any],
     start: float,
 ) -> SkillResult:
@@ -211,7 +199,10 @@ async def _execute_code_skill(
         if isinstance(result_data, dict):
             ctx.update(result_data)
         return SkillResult(
-            success=True, skill_id=skill.id, duration=duration, context_updates=ctx,
+            success=True,
+            skill_id=skill.id,
+            duration=duration,
+            context_updates=ctx,
         )
 
     duration = _elapsed_since(start)

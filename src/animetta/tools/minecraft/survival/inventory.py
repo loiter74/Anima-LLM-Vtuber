@@ -148,6 +148,7 @@ def find_fuel_item(inventory: dict[str, int]) -> str | None:
             return fuel
     return None
 
+
 # -- Item -> Mineable Block Mapping --
 
 # Maps inventory item names to the Minecraft block that must be mined/collected

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 """
 VAD Factory - Create VAD instances based on configuration

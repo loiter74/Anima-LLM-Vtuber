@@ -5,6 +5,7 @@ LLM 生成 mineflayer JS 代码 → eval_code 沙箱执行 → 失败把「错�
 
 这是 Voyager 论文的灵魂组件：通过环境反馈迭代修正 LLM 生成的代码。
 """
+
 from __future__ import annotations
 
 import re
@@ -25,6 +26,8 @@ Available async API (all return Promises, use await):
 - await goto(x, y, z)
 - await place(block_type, x, y, z)
 - await attack(target)
+- await equip(item, destination)     // wear armor: equip('golden_helmet','head'), equip('golden_chestplate','chest'), equip('golden_leggings','legs'), equip('golden_boots','feet'); destination in head|chest|legs|feet|hand
+Note: in MC 1.21 gold armor item names are golden_helmet / golden_chestplate / golden_leggings / golden_boots (NOT gold_*).
 - await status()         // -> {position:{x,y,z}, health, food, inventory:{<item>:<count>}}
 - await waitFor(seconds)
 
@@ -125,7 +128,11 @@ async def generate_with_iteration(
             raw = await _llm_chat(llm, messages)
         except Exception as exc:
             return GenerationResult(
-                success=False, code=code, error=f"LLM call failed: {exc}", rounds=i - 1, history=history
+                success=False,
+                code=code,
+                error=f"LLM call failed: {exc}",
+                rounds=i - 1,
+                history=history,
             )
 
         code = strip_fences(raw)
@@ -138,14 +145,14 @@ async def generate_with_iteration(
             return GenerationResult(success=True, code=code, rounds=i, history=history)
 
         last_error = (
-            str(result.get("result", "unknown error"))
-            if isinstance(result, dict)
-            else str(result)
+            str(result.get("result", "unknown error")) if isinstance(result, dict) else str(result)
         )
         logger.warning(f"[CodeGen] round {i}/{max_iters} failed: {last_error[:200]}")
 
     logger.error(f"[CodeGen] task '{task}' exhausted {max_iters} iterations")
-    return GenerationResult(success=False, code=code, error=last_error, rounds=max_iters, history=history)
+    return GenerationResult(
+        success=False, code=code, error=last_error, rounds=max_iters, history=history
+    )
 
 
 def to_skill(

@@ -52,11 +52,14 @@ def generate_benchmark_report(results: dict[str, dict[str, BenchmarkMetrics]]) -
 
         lines.append("**Final Inventory (unique items):**\n")
         for config_name, metrics in configs.items():
-            items_str = ", ".join(
-                f"{item}×{count}"
-                for item, count in sorted(metrics.final_inventory.items())
-                if count > 0
-            ) or "(empty)"
+            items_str = (
+                ", ".join(
+                    f"{item}×{count}"
+                    for item, count in sorted(metrics.final_inventory.items())
+                    if count > 0
+                )
+                or "(empty)"
+            )
             lines.append(f"- `{config_name}`: {items_str}")
         lines.append("")
 
@@ -78,8 +81,7 @@ def generate_benchmark_report(results: dict[str, dict[str, BenchmarkMetrics]]) -
     if mode_completions:
         best_mode = max(mode_completions, key=lambda key: mode_completions[key])
         lines.append(
-            f"- **Most successful mode:** {best_mode} "
-            f"({mode_completions[best_mode]} completions)\n"
+            f"- **Most successful mode:** {best_mode} ({mode_completions[best_mode]} completions)\n"
         )
 
     total_skills = sum(

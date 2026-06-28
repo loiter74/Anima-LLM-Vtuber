@@ -17,6 +17,7 @@ AI 虚拟伴侣/VTuber 框架。
 
 | 文档 | 描述 |
 |------|------|
+| [架构总览](architecture/overview.md) | C4 图、LangGraph 流程、核心组件 |
 | [设计模式](architecture/patterns.md) | 6 种设计模式应用 |
 | [ADR 决策记录](adrs/) | 架构决策记录 |
 
@@ -24,13 +25,30 @@ AI 虚拟伴侣/VTuber 框架。
 
 | 文档 | 描述 |
 |------|------|
-| [Docker 部署](docker-deployment.md) | Docker Compose 部署指南 |
+| [Socket.IO API](reference/socket-api.md) | 前后端事件接口 |
+| [后端 API](reference/backend-api.md) | HTTP REST + Socket.IO 接口层次 |
+| [Docker 部署](deployment/docker.md) | Docker Compose 部署指南 |
+| [Zeabur 部署](deployment/zeabur.md) | Zeabur 平台部署指南 |
+| [测试指南](development/testing.md) | pytest 约定与覆盖率目标 |
+| [AI UI 工作流](development/ai-ui-workflow.md) | 基于设计系统进行 UI 优化 |
+| [RVC 训练指南](development/rvc-training-guide.md) | 角色唱歌模型训练流程 |
+| [健康门禁记录](development/health-advisories.md) | 当前健康检查 advisory |
+| [工具系统](reference/tools.md) | Tools / MCP / Minecraft 工具说明 |
+| [Minecraft Bot 架构说明](development/minecraft-bot-architecture.md) | Python bridge、Node Mineflayer、Voyager 技能与生存循环 |
+| [RAG 评估报告](reference/rag-evaluation-report.md) | RAG 质量评估结果 |
+
+### 外部参考
+
+| 文档 | 描述 |
+|------|------|
+| [AIRI Stage UI Kit](external/AIRI%20Stage%20UI%20Kit.html) | 外部 UI 规格参考 |
+| [前端截图](external/frontend-screenshot.png) | 历史前端截图 |
 
 ### 实现计划
 
 | 文档 | 描述 |
 |------|------|
-| [历史计划](plans/history.md) | 已完成和计划中的功能 |
+| [历史计划](plans/) | 已完成和计划中的功能 |
 
 ---
 

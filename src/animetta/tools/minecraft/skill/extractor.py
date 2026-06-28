@@ -87,21 +87,33 @@ Trace:
   result: success
   items_gained: {oak_log: 10}
   duration: 37.1s""",
-        "assistant": json.dumps({
-            "name": "collect_wood",
-            "description": "Gather oak logs by navigating to nearby trees and mining them.",
-            "category": "collection",
-            "parameters": {"count": "int", "block_type": "str"},
-            "preconditions": [],
-            "postconditions": ["has_oak_log >= count"],
-            "tags": ["wood", "gathering", "oak", "logs", "resources"],
-            "steps": [
-                {"name": "collect", "params": {"block_type": "oak_log", "count": 5},
-                 "preconditions": [], "timeout": 60.0, "retry": 1},
-                {"name": "collect", "params": {"block_type": "oak_log", "count": 5},
-                 "preconditions": [], "timeout": 60.0, "retry": 1},
-            ],
-        }),
+        "assistant": json.dumps(
+            {
+                "name": "collect_wood",
+                "description": "Gather oak logs by navigating to nearby trees and mining them.",
+                "category": "collection",
+                "parameters": {"count": "int", "block_type": "str"},
+                "preconditions": [],
+                "postconditions": ["has_oak_log >= count"],
+                "tags": ["wood", "gathering", "oak", "logs", "resources"],
+                "steps": [
+                    {
+                        "name": "collect",
+                        "params": {"block_type": "oak_log", "count": 5},
+                        "preconditions": [],
+                        "timeout": 60.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "collect",
+                        "params": {"block_type": "oak_log", "count": 5},
+                        "preconditions": [],
+                        "timeout": 60.0,
+                        "retry": 1,
+                    },
+                ],
+            }
+        ),
     },
     # 2. craft_tool
     {
@@ -116,23 +128,40 @@ Trace:
   result: success
   items_gained: {wooden_pickaxe: 1, oak_planks: 8}
   duration: 13.3s""",
-        "assistant": json.dumps({
-            "name": "craft_wooden_pickaxe",
-            "description": "Craft a wooden pickaxe from oak logs: logs → planks → sticks → pickaxe.",
-            "category": "crafting",
-            "parameters": {},
-            "preconditions": ["has_oak_log >= 3"],
-            "postconditions": ["has_wooden_pickaxe >= 1"],
-            "tags": ["crafting", "pickaxe", "wooden", "tool", "mining"],
-            "steps": [
-                {"name": "craft", "params": {"recipe": "oak_planks", "count": 12},
-                 "preconditions": [], "timeout": 10.0, "retry": 0},
-                {"name": "craft", "params": {"recipe": "sticks", "count": 4},
-                 "preconditions": [], "timeout": 10.0, "retry": 0},
-                {"name": "craft", "params": {"recipe": "wooden_pickaxe", "count": 1},
-                 "preconditions": [], "timeout": 10.0, "retry": 0},
-            ],
-        }),
+        "assistant": json.dumps(
+            {
+                "name": "craft_wooden_pickaxe",
+                "description": "Craft a wooden pickaxe from oak logs: logs → planks → sticks → pickaxe.",
+                "category": "crafting",
+                "parameters": {},
+                "preconditions": ["has_oak_log >= 3"],
+                "postconditions": ["has_wooden_pickaxe >= 1"],
+                "tags": ["crafting", "pickaxe", "wooden", "tool", "mining"],
+                "steps": [
+                    {
+                        "name": "craft",
+                        "params": {"recipe": "oak_planks", "count": 12},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 0,
+                    },
+                    {
+                        "name": "craft",
+                        "params": {"recipe": "sticks", "count": 4},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 0,
+                    },
+                    {
+                        "name": "craft",
+                        "params": {"recipe": "wooden_pickaxe", "count": 1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 0,
+                    },
+                ],
+            }
+        ),
     },
     # 3. build_platform
     {
@@ -154,38 +183,94 @@ Trace:
   items_gained: {}
   items_lost: {cobblestone: 9}
   duration: 7.2s""",
-        "assistant": json.dumps({
-            "name": "build_platform",
-            "description": "Build a 3x3 cobblestone platform centred at the given coordinates.",
-            "category": "building",
-            "parameters": {"center_x": "int", "center_y": "int", "center_z": "int",
-                           "block_type": "str"},
-            "preconditions": ["has_cobblestone >= 9"],
-            "postconditions": [],
-            "tags": ["building", "platform", "base", "cobblestone"],
-            "steps": [
-                {"name": "goto", "params": {"x": 0, "y": 64, "z": 0},
-                 "preconditions": [], "timeout": 30.0, "retry": 0},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": -1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": -1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": -1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": 0},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": 0},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": 0},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": 1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": 1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-                {"name": "place", "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": 1},
-                 "preconditions": [], "timeout": 10.0, "retry": 1},
-            ],
-        }),
+        "assistant": json.dumps(
+            {
+                "name": "build_platform",
+                "description": "Build a 3x3 cobblestone platform centred at the given coordinates.",
+                "category": "building",
+                "parameters": {
+                    "center_x": "int",
+                    "center_y": "int",
+                    "center_z": "int",
+                    "block_type": "str",
+                },
+                "preconditions": ["has_cobblestone >= 9"],
+                "postconditions": [],
+                "tags": ["building", "platform", "base", "cobblestone"],
+                "steps": [
+                    {
+                        "name": "goto",
+                        "params": {"x": 0, "y": 64, "z": 0},
+                        "preconditions": [],
+                        "timeout": 30.0,
+                        "retry": 0,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": -1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": -1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": -1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": 0},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": 0},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": 0},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": -1, "y": 63, "z": 1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 0, "y": 63, "z": 1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "place",
+                        "params": {"block_type": "cobblestone", "x": 1, "y": 63, "z": 1},
+                        "preconditions": [],
+                        "timeout": 10.0,
+                        "retry": 1,
+                    },
+                ],
+            }
+        ),
     },
     # 4. find_cave
     {
@@ -202,28 +287,39 @@ Trace:
   items_gained: {cobblestone: 8}
   distance_traveled: 45.2
   duration: 13.3s""",
-        "assistant": json.dumps({
-            "name": "find_cave",
-            "description": "Explore underground by mining stone blocks downward to locate a cave.",
-            "category": "exploration",
-            "parameters": {},
-            "preconditions": ["has_pickaxe >= 1"],
-            "postconditions": [],
-            "tags": ["exploration", "cave", "underground", "mining"],
-            "steps": [
-                {"name": "mine", "params": {"block_type": "stone", "count": 3},
-                 "preconditions": [], "timeout": 30.0, "retry": 1},
-                {"name": "mine", "params": {"block_type": "stone", "count": 5},
-                 "preconditions": [], "timeout": 30.0, "retry": 1},
-            ],
-        }),
+        "assistant": json.dumps(
+            {
+                "name": "find_cave",
+                "description": "Explore underground by mining stone blocks downward to locate a cave.",
+                "category": "exploration",
+                "parameters": {},
+                "preconditions": ["has_pickaxe >= 1"],
+                "postconditions": [],
+                "tags": ["exploration", "cave", "underground", "mining"],
+                "steps": [
+                    {
+                        "name": "mine",
+                        "params": {"block_type": "stone", "count": 3},
+                        "preconditions": [],
+                        "timeout": 30.0,
+                        "retry": 1,
+                    },
+                    {
+                        "name": "mine",
+                        "params": {"block_type": "stone", "count": 5},
+                        "preconditions": [],
+                        "timeout": 30.0,
+                        "retry": 1,
+                    },
+                ],
+            }
+        ),
     },
 ]
 
 # Build the full system prompt with embedded few-shot examples
 _FULL_SYSTEM_PROMPT: str = SKILL_EXTRACTION_SYSTEM_PROMPT + "".join(
-    f"\nUser:\n{_ex['user']}\n\nAssistant:\n{_ex['assistant']}\n"
-    for _ex in _FEW_SHOT_EXAMPLES
+    f"\nUser:\n{_ex['user']}\n\nAssistant:\n{_ex['assistant']}\n" for _ex in _FEW_SHOT_EXAMPLES
 )
 
 
@@ -260,9 +356,7 @@ def _format_trace_steps(steps: list[Any]) -> str:
         error = step.error
         dur = step.duration
         status = "error" if error else "success"
-        lines.append(
-            f"    {i + 1}. {action} {params} → {status} ({dur:.1f}s)"
-        )
+        lines.append(f"    {i + 1}. {action} {params} → {status} ({dur:.1f}s)")
     return "\n".join(lines)
 
 
@@ -305,10 +399,7 @@ class SkillExtractor:
         self._library = skill_library
         self._similarity_threshold = similarity_threshold
 
-        logger.info(
-            "[SkillExtractor] Initialized "
-            f"(threshold={similarity_threshold})"
-        )
+        logger.info(f"[SkillExtractor] Initialized (threshold={similarity_threshold})")
 
     # ── Public API ───────────────────────────────────────────────────────
 
@@ -343,9 +434,7 @@ class SkillExtractor:
             return None
 
         if not trace.steps:
-            logger.warning(
-                f"[SkillExtractor] Skipping empty trace: '{trace.goal}'"
-            )
+            logger.warning(f"[SkillExtractor] Skipping empty trace: '{trace.goal}'")
             return None
 
         # ── 1. Duplicate detection ───────────────────────────────────────
@@ -377,9 +466,7 @@ class SkillExtractor:
             response = await self._llm.chat(messages=messages)
             raw_content = response.content
         except Exception as exc:
-            logger.error(
-                f"[SkillExtractor] LLM call failed: {type(exc).__name__}: {exc}"
-            )
+            logger.error(f"[SkillExtractor] LLM call failed: {type(exc).__name__}: {exc}")
             raise SkillExtractorError(f"LLM call failed: {exc}") from exc
 
         # ── 4. Parse response ────────────────────────────────────────────
@@ -390,20 +477,14 @@ class SkillExtractor:
                 f"[SkillExtractor] Failed to parse LLM response as JSON: {exc}\n"
                 f"Raw response (first 500 chars): {raw_content[:500]}"
             )
-            raise SkillExtractorError(
-                f"Failed to parse LLM response as JSON: {exc}"
-            ) from exc
+            raise SkillExtractorError(f"Failed to parse LLM response as JSON: {exc}") from exc
 
         # ── 5. Build Skill object ────────────────────────────────────────
         try:
             skill = self._build_skill(skill_data, trace)
         except (KeyError, ValueError) as exc:
-            logger.error(
-                f"[SkillExtractor] Invalid skill data from LLM: {exc}"
-            )
-            raise SkillExtractorError(
-                f"Invalid skill data from LLM: {exc}"
-            ) from exc
+            logger.error(f"[SkillExtractor] Invalid skill data from LLM: {exc}")
+            raise SkillExtractorError(f"Invalid skill data from LLM: {exc}") from exc
 
         logger.info(
             f"[SkillExtractor] Extracted skill '{skill.name}' "
@@ -415,9 +496,7 @@ class SkillExtractor:
 
     # ── Duplicate detection ──────────────────────────────────────────────
 
-    async def _check_duplicate(
-        self, goal: str
-    ) -> tuple[bool, Skill | None]:
+    async def _check_duplicate(self, goal: str) -> tuple[bool, Skill | None]:
         """Check if a similar high-confidence skill already exists.
 
         Uses ``skill_library.search_skills()`` with the goal text and
@@ -505,9 +584,7 @@ class SkillExtractor:
             )
             errors = step.validate_params()
             if errors:
-                logger.warning(
-                    f"[SkillExtractor] Step validation warnings: {errors}"
-                )
+                logger.warning(f"[SkillExtractor] Step validation warnings: {errors}")
             steps.append(step)
 
         if not steps:

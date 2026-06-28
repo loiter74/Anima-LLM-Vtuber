@@ -32,3 +32,10 @@ export interface MinecraftStatusPayload {
   username?: string
   error?: string
 }
+
+/** Payload for `minecraft:viewer_status` server-to-client event */
+export interface MinecraftViewerStatusPayload {
+  status: 'waiting' | 'joined' | 'left' | 'error'
+  username?: string
+  error?: string
+}

@@ -91,7 +91,7 @@ class TestSurvivalIronRunnerHappyPath:
         bridge.set_response("status", final_status)
 
         runner = SurvivalIronRunner(bridge)
-        report = asyncio.get_event_loop().run_until_complete(runner.run())
+        report = asyncio.new_event_loop().run_until_complete(runner.run())
 
         assert report.completed is True
         assert report.current_phase == SurvivalPhase.IRON_GEAR
@@ -109,7 +109,7 @@ class TestSurvivalIronRunnerHappyPath:
         bridge.set_response("status", _default_status_response())
 
         runner = SurvivalIronRunner(bridge)
-        asyncio.get_event_loop().run_until_complete(runner.run())
+        asyncio.new_event_loop().run_until_complete(runner.run())
 
         status_calls = [c for c in bridge._call_log if c[0] == "status"]
         assert len(status_calls) >= 2  # At least safety pre-check + final
@@ -130,7 +130,7 @@ class TestSurvivalIronRunnerFailures:
         bridge.set_response("status", _default_status_response())
 
         runner = SurvivalIronRunner(bridge)
-        asyncio.get_event_loop().run_until_complete(runner.run())
+        asyncio.new_event_loop().run_until_complete(runner.run())
 
         # Should have retried collect
         collect_calls = [c for c in bridge._call_log if c[0] == "collect"]
@@ -142,7 +142,7 @@ class TestSurvivalIronRunnerFailures:
         bridge.is_running = False
 
         runner = SurvivalIronRunner(bridge)
-        report = asyncio.get_event_loop().run_until_complete(runner.run())
+        report = asyncio.new_event_loop().run_until_complete(runner.run())
 
         assert report.completed is False
 
@@ -153,7 +153,7 @@ class TestSurvivalIronRunnerFailures:
         bridge.send_command = AsyncMock(return_value=None)
 
         runner = SurvivalIronRunner(bridge)
-        report = asyncio.get_event_loop().run_until_complete(runner.run())
+        report = asyncio.new_event_loop().run_until_complete(runner.run())
 
         assert report.completed is False
 
@@ -178,7 +178,7 @@ class TestSurvivalIronRunnerInterrupt:
             return result
 
         runner._run_phase = run_phase_with_interrupt
-        report = asyncio.get_event_loop().run_until_complete(runner.run())
+        report = asyncio.new_event_loop().run_until_complete(runner.run())
 
         # Should have stopped early
         assert len(report.phase_results) <= 2
@@ -202,7 +202,7 @@ class TestSurvivalIronRunnerSummary:
         })
 
         runner = SurvivalIronRunner(bridge)
-        report = asyncio.get_event_loop().run_until_complete(runner.run())
+        report = asyncio.new_event_loop().run_until_complete(runner.run())
 
         s = report.summary()
         assert "completed" in s

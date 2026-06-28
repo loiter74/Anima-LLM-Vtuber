@@ -90,8 +90,12 @@ class SkillLibraryDB:
         await self._db.commit()
 
     async def update_stats(
-        self, skill_id: str, success_count: int, fail_count: int,
-        avg_duration: float, last_used: str,
+        self,
+        skill_id: str,
+        success_count: int,
+        fail_count: int,
+        avg_duration: float,
+        last_used: str,
     ) -> None:
         """Update only the stats columns for a skill."""
         if not self._db:

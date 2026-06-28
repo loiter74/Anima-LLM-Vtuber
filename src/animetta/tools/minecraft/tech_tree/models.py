@@ -22,10 +22,7 @@ class TechTreePhase:
         return self.time_budget_minutes * 60.0
 
     def is_complete(self, inventory: dict[str, int]) -> bool:
-        return all(
-            inventory.get(item, 0) >= needed
-            for item, needed in self.required_items.items()
-        )
+        return all(inventory.get(item, 0) >= needed for item, needed in self.required_items.items())
 
     def missing_items(self, inventory: dict[str, int]) -> dict[str, int]:
         missing: dict[str, int] = {}
@@ -111,6 +108,4 @@ class TechTreeReport:
     config: TechTreeConfig
     metrics: TechTreeMetrics
     phase_details: list[dict[str, Any]] = field(default_factory=list)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now().isoformat(timespec="seconds")
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))

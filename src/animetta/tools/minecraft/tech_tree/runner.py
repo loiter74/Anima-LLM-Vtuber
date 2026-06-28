@@ -102,7 +102,9 @@ class TechTreeRunner:
             )
         return completed
 
-    def _record_phase_detail(self, phase: TechTreePhase, phase_start: float, completed: bool) -> None:
+    def _record_phase_detail(
+        self, phase: TechTreePhase, phase_start: float, completed: bool
+    ) -> None:
         self._phase_details.append(
             {
                 "name": phase.name,
@@ -116,7 +118,9 @@ class TechTreeRunner:
     async def _check_milestone(self, phase: TechTreePhase, inventory: dict[str, int]) -> bool:
         return phase.is_complete(inventory)
 
-    async def _execute_task(self, task_label: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _execute_task(
+        self, task_label: str, action: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
         skill = await self._find_skill(task_label)
         if skill is not None:
             logger.info(f"[TechTreeRunner] Task '{task_label}' - using skill '{skill.id}'")
@@ -125,7 +129,9 @@ class TechTreeRunner:
             if result.success:
                 await self._skill_library.update_success(skill.id)
                 self._metrics.skills_reused += 1
-                logger.info(f"[TechTreeRunner] Skill '{skill.id}' succeeded ({result.duration:.1f}s)")
+                logger.info(
+                    f"[TechTreeRunner] Skill '{skill.id}' succeeded ({result.duration:.1f}s)"
+                )
                 return {"status": "success", "result": result.context_updates}
             await self._skill_library.update_failure(skill.id)
             logger.warning(
@@ -135,7 +141,9 @@ class TechTreeRunner:
         timeout = 120.0 if action in ("collect", "mine") else 60.0
         resp = await self._bridge.send_command(action, params, timeout=timeout)
         if resp.get("status") != "success":
-            logger.warning(f"[TechTreeRunner] Task '{task_label}' failed: {resp.get('result', 'unknown')}")
+            logger.warning(
+                f"[TechTreeRunner] Task '{task_label}' failed: {resp.get('result', 'unknown')}"
+            )
         return resp
 
     async def _find_skill(self, task_label: str) -> Any | None:
@@ -204,7 +212,9 @@ class TechTreeRunner:
             report = self.generate_report()
         return render_markdown_report(report)
 
-    def save_report(self, report: TechTreeReport | None = None, directory: Path | str | None = None) -> Path:
+    def save_report(
+        self, report: TechTreeReport | None = None, directory: Path | str | None = None
+    ) -> Path:
         if report is None:
             report = self.generate_report()
         markdown = self.generate_markdown_report(report)

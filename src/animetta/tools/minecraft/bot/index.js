@@ -7,6 +7,12 @@ import { stdin, stdout, argv } from 'process';
 import { setPlannerMode, setRuleMode, nextPlanStep, stepComplete, stepFailed, getPlanProgress, setOnPlanComplete, getMode } from './behaviors/planExecutor.js';
 import { setupCombatInterrupt } from './behaviors/combat.js';
 import { setupAutoEat } from './behaviors/autoEat.js';
+import { setupSpectator } from './spectator.js';
+import { createSmelt } from './smelt.js';
+import { createEquip } from './equip.js';
+import { createMineShaft } from './mine_shaft.js';
+import { getStatusSnapshot, evalCode } from './sandbox.js';
+import { createResponseGuard, isBusyBypassAction, withTimeout } from './commandRuntime.js';
 
 const { pathfinder, Movements, goals } = pathfinderPkg;
 const { GoalBlock } = goals;
@@ -46,15 +52,6 @@ async function setupMovements() {
   const movements = new Movements(bot, mcData);
   bot.pathfinder.setMovements(movements);
   return mcData;
-}
-
-// --- Action timeout helper ---
-function withTimeout(promise, ms, label) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Action "${label}" timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
 
 // ── Core action functions (single source of truth) ──
@@ -218,6 +215,15 @@ async function _place(block_type, x, y, z) {
   await bot.pathfinder.goto(new GoalBlock(x + 1, y, z));
   await bot.placeBlock(ref, new Vec3(0, 1, 0));
   return `Placed ${block_type} at (${x}, ${y}, ${z})`;
+}
+
+async function _waterBucketClutch() {
+  const bucket = bot.inventory.items().find(i => i.name === 'water_bucket');
+  if (!bucket) throw new Error('No water_bucket in inventory');
+  await bot.equip(bucket, 'hand');
+  await bot.look(0, Math.PI / 2, true);
+  await bot.activateItem();
+  return 'Water bucket clutch attempted';
 }
 
 const HOSTILE_NAMES = ['zombie', 'skeleton', 'spider', 'creeper', 'witch', 'enderman', 'wither_skeleton'];
@@ -908,19 +914,10 @@ function _checkCraftMaterials(recipeObj, count) {
   return missing;
 }
 
-async function _smelt(item, fuel, count = 1) {
-  const mcData = await getMcData();
-  const furnaceBlock = bot.findBlock({ matching: mcData.blocksByName.furnace.id, maxDistance: 32 });
-  if (!furnaceBlock) throw new Error('No furnace nearby');
-  const furnace = await bot.openFurnace(furnaceBlock);
-  const inputItem = mcData.itemsByName[item];
-  const fuelItem = mcData.itemsByName[fuel];
-  if (!inputItem) throw new Error(`Unknown item: ${item}`);
-  if (!fuelItem) throw new Error(`Unknown fuel: ${fuel}`);
-  await furnace.putInput(inputItem.id, null, count);
-  await furnace.putFuel(fuelItem.id, null, Math.ceil(count / 8));
-  return `Smelting ${count} ${item} with ${fuel}`;
-}
+// 冶炼/穿戴/下矿 模块（smelt.js / equip.js / mine_shaft.js）
+const smeltMod = createSmelt({ bot, getMcData, botUsername: username });
+const equipMod = createEquip({ bot });
+const mineShaftMod = createMineShaft({ bot, disableAuto, enableAuto });
 
 async function _recipes(item) {
   const mcData = await getMcData();
@@ -974,71 +971,28 @@ async function _recipes(item) {
 }
 
 // --- JSON line protocol helpers ---
-// --- Voyager code execution sandbox (mc-bot-voyager-learning T2) ---
-// 受控 eval：LLM 生成的 JS 通过受限 API 表面执行，不暴露原生 bot / require / process。
-import vm from 'vm';
-
-function _getStatusSnapshot() {
-  const inv = {};
-  try {
-    if (bot.inventory && bot.inventory.items) {
-      for (const it of bot.inventory.items()) {
-        inv[it.name] = (inv[it.name] || 0) + it.count;
-      }
-    }
-  } catch (_) { /* inventory not ready */ }
-  return {
-    position: bot.entity ? {
-      x: Math.round(bot.entity.position.x),
-      y: Math.round(bot.entity.position.y),
-      z: Math.round(bot.entity.position.z),
-    } : null,
-    health: bot.health,
-    food: bot.food,
-    inventory: inv,
-  };
-}
-
-// 受限 API 表面：LLM 代码只能调这些，碰不到 bot / require / process
+// --- Voyager code execution sandbox (sandbox.js: getStatusSnapshot + evalCode) ---
+// buildSandboxApi 装配点（引用 index.js 核心 action + 模块 + sandbox.getStatusSnapshot）
 function buildSandboxApi() {
   return {
     collect: (block_type, count = 1) => _collect(block_type, count),
     mine:    (block_type, count = 1) => _mine(block_type, count),
     craft:   (recipe, count = 1) => _craft(recipe, count),
-    smelt:   (item, fuel, count = 1) => _smelt(item, fuel, count),
+    smelt:   (item, fuel, count = 1) => smeltMod.smelt(item, fuel, count),
     goto:    (x, y, z) => _goto(x, y, z),
     place:   (block_type, x, y, z) => _place(block_type, x, y, z),
     attack:  (target = 'nearest_hostile') => _attack(target),
-    status:  () => _getStatusSnapshot(),
+    equip:   (item, destination = 'hand') => equipMod.equip(item, destination),
+    mine_shaft: (targetY = 20) => mineShaftMod.mineShaft(targetY),
+    water_bucket_clutch: () => _waterBucketClutch(),
+    status:  () => getStatusSnapshot(bot),
     waitFor: (seconds) => new Promise((r) => setTimeout(r, Math.max(0, seconds) * 1000)),
   };
 }
 
-async function _evalCode(code, timeoutMs = 30000) {
-  const sandbox = vm.createContext({
-    ...buildSandboxApi(),
-    Promise, setTimeout, clearTimeout, console,
-    Math, JSON, Object, Array, String, Number, Boolean,
-  });
-  // async 包装以支持 await；displayErrors 让语法错误信息可读
-  const wrapped = `(async () => {\n${code}\n})()`;
-  let timer;
-  try {
-    const result = await Promise.race([
-      vm.runInContext(wrapped, sandbox, { timeout: timeoutMs, displayErrors: true }),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Code execution timeout after ${timeoutMs}ms`)), timeoutMs);
-      }),
-    ]);
-    return result === undefined ? 'Code executed (no return value)' : String(result);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 async function handleEvalCode(id, params) {
   try {
-    const result = await _evalCode(params.code || '', params.timeout || 30000);
+    const result = await evalCode(params.code || '', params.timeout || 30000, buildSandboxApi());
     sendResponse(id, 'success', result);
   } catch (err) {
     // 超时/异常后清理可能残留的 bot 操作
@@ -1048,11 +1002,36 @@ async function handleEvalCode(id, params) {
     sendResponse(id, 'error', err.message);
   }
 }
+// _mine_shaft 提取到 mine_shaft.js（mineShaftMod）
+
+async function handleMineShaft(id, params) {
+  try {
+    const r = await mineShaftMod.mineShaft(params.target_y || 20);
+    sendResponse(id, 'success', r);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+// _equip 提取到 equip.js（equipMod）
+
+async function handleEquip(id, params) {
+  try {
+    const r = await equipMod.equip(params.item, params.destination || 'hand');
+    sendResponse(id, 'success', r);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
 // --- end sandbox ---
 
-function sendResponse(id, status, result) {
-  const msg = { id, status, result };
+const responseGuard = createResponseGuard((msg) => {
   stdout.write(JSON.stringify(msg) + '\n');
+});
+
+function sendResponse(id, status, result) {
+  responseGuard.send(id, status, result);
 }
 
 function sendEvent(type, data = {}) {
@@ -1103,6 +1082,7 @@ bot.on('login', () => {
 
 // Auto-eat and combat interrupt (setup after spawn)
 let autoEat = null;
+let swimInterval = null;
 let combatGuard = null;
 let planLoopInterval = null;
 let _autoDisabled = false;
@@ -1117,52 +1097,10 @@ bot.on('spawn', () => {
   startPlanLoop();
 });
 
-// --- Auto-spectate: attach viewer to bot's first-person perspective ---
+// --- Auto-spectate: attach viewer to bot's first-person perspective (spectator.js 模块) ---
 const viewerUsername = process.env.MC_VIEWER_USERNAME;
 const autoSpectate = process.env.MC_AUTO_SPECTATE !== 'false';
-
-if (viewerUsername && autoSpectate) {
-  let lastSpectateAt = 0;
-  const isViewerOnline = () =>
-    Object.values(bot.players || {}).some((p) => p && p.username === viewerUsername);
-
-  // 执行附身：gamemode spectator + /spectate 指向 bot；非 periodic 时通知 Python
-  function performSpectate(reason) {
-    console.log(`[spectate] ${reason}: viewer=${viewerUsername} -> ${username}`);
-    bot.chat(`/gamemode spectator ${viewerUsername}`);
-    setTimeout(() => bot.chat(`/spectate ${username} ${viewerUsername}`), 1000);
-    if (reason !== 'periodic') sendEvent('viewer_joined', { username: viewerUsername, reason });
-    lastSpectateAt = Date.now();
-  }
-  // force=true 立即执行；否则限频 ≥25s（防 spam 同时能恢复断开的 spectate）
-  function maybeSpectate(reason, force = false) {
-    if (!isViewerOnline()) return;
-    if (!force && Date.now() - lastSpectateAt < 25000) return;
-    performSpectate(reason);
-  }
-
-  // 1. viewer 后于 bot 进入服务器
-  bot.on('playerJoined', (player) => {
-    if (player.username === viewerUsername) {
-      setTimeout(() => maybeSpectate('playerJoined', true), 2000);
-    }
-  });
-
-  // 2. viewer 先于 bot 在线 / bot 重连后上线 / bot 复活 → spawn 触发（关键修复）
-  bot.on('spawn', () => {
-    setTimeout(() => maybeSpectate('spawn', true), 3000);
-  });
-
-  // 3. viewer 离线
-  bot.on('playerLeft', (player) => {
-    if (player.username === viewerUsername) {
-      sendEvent('viewer_left', { username: viewerUsername });
-    }
-  });
-
-  // 4. 定期重附身：防 spectate 因 bot 死亡/换维度/传送断开 — 保证稳定附在 bot 上
-  setInterval(() => maybeSpectate('periodic'), 20000);
-}
+setupSpectator(bot, viewerUsername, autoSpectate, username, sendEvent);
 
 // Disable/enable auto behaviors during critical operations
 function disableAuto() {
@@ -1176,6 +1114,14 @@ function enableAuto() {
   _autoDisabled = false;
   autoEat?.start();
   combatGuard?.start();
+}
+
+function abortCurrentAction() {
+  bot.pathfinder?.stop();
+  bot.pvp?.stop();
+  bot.stopDigging?.();
+  try { bot.collectBlock?.cancelTask(); } catch {}
+  enableAuto();
 }
 
 bot.on('error', (err) => {
@@ -1222,7 +1168,7 @@ function startPlanLoop() {
         case 'place': result = await handlePlaceInternal(params); break;
         case 'smart_build': result = await handleSmartBuildInt(params); break;
         case 'craft': result = await _craft(params.recipe, params.count || 1); break;
-        case 'smelt': result = await _smelt(params.item, params.fuel, params.count || 1); break;
+        case 'smelt': result = await smeltMod.smelt(params.item, params.fuel, params.count || 1); break;
         case 'chat': result = await handleChatInternal(params); break;
         case 'attack': result = await handleAttackInternal(params); break;
         default:
@@ -1252,32 +1198,37 @@ const DEFAULT_TIMEOUT = 60000; // 60s default timeout
 const rl = createInterface({ input: stdin, terminal: false });
 
 rl.on('line', async (line) => {
+  let commandConsumesBusy = false;
   if (busy) {
-    // Parse the command to get the id, then return error
     try {
       const trimmed = line.trim();
-      if (trimmed) {
-        const cmd = JSON.parse(trimmed);
+      if (!trimmed) return;
+
+      const cmd = JSON.parse(trimmed);
+      if (!isBusyBypassAction(cmd.action)) {
         sendResponse(cmd.id, 'error', 'Bot busy, command rejected');
+        return;
       }
-    } catch (e) {
-      // Ignore parse errors for busy rejection
+
+      await handleCommand(cmd);
+    } catch (err) {
+      sendResponse(null, 'error', err.message);
     }
     return;
   }
-  busy = true;
+
   try {
     const trimmed = line.trim();
-    if (!trimmed) {
-      busy = false;
-      return;
-    }
+    if (!trimmed) return;
+
     const cmd = JSON.parse(trimmed);
+    commandConsumesBusy = !isBusyBypassAction(cmd.action);
+    if (commandConsumesBusy) busy = true;
     await handleCommand(cmd);
   } catch (err) {
     sendResponse(null, 'error', err.message);
   } finally {
-    busy = false;
+    if (commandConsumesBusy) busy = false;
   }
 });
 
@@ -1306,18 +1257,18 @@ async function handleCommand(cmd) {
     case 'spectate':    handler = handleSpectate(id, params); break;
     case 'pillar':      handler = handlePillar(id, params); break;
     case 'eval_code':   handler = handleEvalCode(id, params); break;
+    case 'equip':       handler = handleEquip(id, params); break;
+    case 'mine_shaft':  handler = handleMineShaft(id, params); break;
+    case 'water_bucket_clutch': handler = handleWaterBucketClutch(id, params); break;
     default:
       sendResponse(id, 'error', `Unknown action: ${action}`);
       return;
   }
 
   try {
-    await withTimeout(handler, timeout, action);
+    await withTimeout(handler, timeout, action, abortCurrentAction);
   } catch (err) {
-    // Interrupt any ongoing Mineflayer operations
-    bot.pathfinder?.stop();
-    bot.pvp?.stop();
-    bot.stopDigging?.();
+    abortCurrentAction();
     const errorData = err.code
       ? { message: err.message, code: err.code, ...Object.fromEntries(Object.entries(err).filter(([k]) => !['message','stack'].includes(k) && typeof err[k] !== 'function')) }
       : err.message;
@@ -1348,6 +1299,15 @@ async function handleMine(id, params) {
 async function handlePlace(id, params) {
   try {
     const result = await _place(params.block_type, params.x, params.y, params.z);
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleWaterBucketClutch(id, _params) {
+  try {
+    const result = await _waterBucketClutch();
     sendResponse(id, 'success', result);
   } catch (err) {
     sendResponse(id, 'error', err.message);
@@ -1408,6 +1368,13 @@ async function handleStatus(id, _params) {
     biome: bot.blockAt(pos)?.biome?.name || 'unknown',
     inventory,
     nearby_entities: nearbyEntities,
+    fall_distance: bot.entity?.fallDistance || 0,
+    on_ground: bot.entity?.onGround !== false,
+    velocity: bot.entity?.velocity ? {
+      x: bot.entity.velocity.x,
+      y: bot.entity.velocity.y,
+      z: bot.entity.velocity.z,
+    } : { x: 0, y: 0, z: 0 },
     current_goal: currentGoal || null,
   });
 }
@@ -1456,7 +1423,6 @@ async function handleSetMode(id, params) {
       sendResponse(id, 'error', 'Planner mode requires a plan array');
       return;
     }
-    busy = false;
     stopIdleLoop();
     const result = setPlannerMode(planSteps);
     sendResponse(id, 'success', result);
@@ -1483,7 +1449,7 @@ async function handleCraft(id, params) {
 
 async function handleSmelt(id, params) {
   try {
-    const result = await _smelt(params.item, params.fuel, params.count || 1);
+    const result = await smeltMod.smelt(params.item, params.fuel, params.count || 1);
     sendResponse(id, 'success', result);
   } catch (err) {
     const errorData = err.code

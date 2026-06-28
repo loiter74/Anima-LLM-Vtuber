@@ -1,51 +1,106 @@
-FROM python:3.12-slim-bookworm AS builder
+# ============================================================================
+# Animetta — Core Dockerfile (Lightweight)
+# ============================================================================
+# Minimal image for remote/mock provider deployments.
+# No CUDA, no local AI inference packages.
+#
+# Build:  docker build -t animetta:core .
+# Run:    docker compose -f docker-compose.core.yml up -d
+#
+# For full local AI (GPU), use Dockerfile.cuda instead.
+# ============================================================================
 
-WORKDIR /app
+# ---------------------------------------------------------------------------
+# Stage 1: Frontend builder
+# ---------------------------------------------------------------------------
+FROM node:22-bookworm-slim AS frontend-builder
 
-# Install build deps with apt cache
+RUN npm config set registry https://registry.npmmirror.com
+
+WORKDIR /build/frontend
+
+COPY frontend/package.json frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+
+RUN npm install --legacy-peer-deps
+
+COPY frontend/ .
+
+# Copy config needed by socket-events.ts import
+COPY config/socket-events.json /build/config/socket-events.json
+
+# Skip TypeScript check in Docker build (run vite build directly)
+RUN npx vite build
+
+# ---------------------------------------------------------------------------
+# Stage 2: Python dependency builder
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim-bookworm AS python-builder
+
+WORKDIR /build
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-# pip wheel cache persisted across builds via BuildKit cache mount
+# Use Chinese pip mirror for faster downloads
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --user -r requirements.txt
 
-FROM python:3.12-slim-bookworm
+COPY requirements-core.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user -r requirements-core.txt
+
+# ---------------------------------------------------------------------------
+# Stage 3: Runtime
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 
-# Runtime deps only (no gcc) — use apt cache
+# Install runtime system deps
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
+    apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg nginx curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /root/.local /root/.local
+# Copy installed Python packages from builder
+COPY --from=python-builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
+# Copy backend source
 COPY src/ src/
 COPY config/ config/
 COPY scripts/ scripts/
 COPY .env.example .env.example
 
-# 验证 Socket.IO 事件名一致性
+# Validate Socket.IO event name consistency
 RUN python scripts/validate-events.py
 
+# Copy frontend build
+COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
+
+# Copy stats frontend placeholder (for /stats dashboard)
+COPY frontend/stats/ /app/frontend/stats/
+
+# Copy Docker config files
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Environment variables
 ENV PYTHONPATH=/app/src
 ENV ANIMETTA_HOST=0.0.0.0
 ENV ANIMETTA_PORT=12394
 ENV ANIMETTA_LOG_LEVEL=INFO
 
-EXPOSE 12394
+# Expose nginx (80) and backend (12394)
+EXPOSE 80 12394
 
+# Health check via nginx
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:12394/health')" || exit 1
+    CMD curl -f http://localhost:80/health || exit 1
 
-CMD ["python", "-m", "animetta.core.socketio_server"]
+ENTRYPOINT ["/app/entrypoint.sh"]

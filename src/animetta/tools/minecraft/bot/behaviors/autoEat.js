@@ -3,10 +3,12 @@
  */
 export function setupAutoEat(bot) {
     let checkInterval = null;
+    let _paused = false;
 
     function start() {
         if (checkInterval) return;
         checkInterval = setInterval(async () => {
+            if (_paused) return;
             if (bot.food < 6 || (bot.food < 12 && !bot.pathfinder?.isMoving())) {
                 await eatFood(bot);
             }
@@ -20,7 +22,10 @@ export function setupAutoEat(bot) {
         }
     }
 
-    return { start, stop };
+    function pause() { _paused = true; }
+    function resume() { _paused = false; }
+
+    return { start, stop, pause, resume };
 }
 
 async function eatFood(bot) {

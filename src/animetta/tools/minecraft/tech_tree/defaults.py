@@ -23,7 +23,12 @@ STONE_PHASE = TechTreePhase(
     name="stone",
     time_budget_minutes=15,
     required_items={"stone_pickaxe": 1, "stone_sword": 1, "furnace": 1},
-    skills_to_learn=["mine_cobblestone", "craft_furnace", "craft_stone_pickaxe", "craft_stone_sword"],
+    skills_to_learn=[
+        "mine_cobblestone",
+        "craft_furnace",
+        "craft_stone_pickaxe",
+        "craft_stone_sword",
+    ],
     description=(
         "Mine cobblestone, build a furnace, and upgrade to stone tools. "
         "Opens access to smelting and iron-tier resources."

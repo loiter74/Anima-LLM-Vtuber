@@ -30,7 +30,7 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 ├── frontend/               # Vue 3 + TypeScript + Vite (UnoCSS, Pinia, pixi.js, Electron)
 ├── config/                 # YAML config files (personas, services, tools, singing)
 ├── tests/                  # pytest suite (120 files, asyncio_mode=auto)
-├── docs/                   # ADRs (11), plans, benchmarks, AIRI Stage UI Kit (16MB ⚠️)
+├── docs/                   # ADRs (11), plans, benchmarks, external references
 ├── scripts/                # anima_cli (RVC training), bench (39KB), validate-events
 ├── design-system/          # Visual design spec (HTML spec sheets from uno.config.ts)
 ├── evaluations/            # Standalone RAG evaluation framework (Python)

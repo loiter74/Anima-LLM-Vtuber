@@ -27,6 +27,7 @@ Python (LangGraph) ←→ MinecraftBridge ←→ Node.js (Mineflayer) ←→ Min
 - `survival_recovery.py` — Failure-to-recovery mapping, safety checks (health/food/hostiles)
 - `survival_runner.py` — SurvivalIronRunner — the deterministic wood-to-iron-gear state machine
 - `survival_benchmark.py` — Run summaries, markdown reports, multi-run comparison
+- `survival/SKILLS.md` — 完整生存技能流程总结（技术树、关键点、已知问题）
 
 ### Skills and Learning
 - `skill_library.py` — Facade for SkillLibrary
@@ -50,6 +51,7 @@ Python (LangGraph) ←→ MinecraftBridge ←→ Node.js (Mineflayer) ←→ Min
 - `bot/behaviors/autoEat.js` — Auto-eat when food low
 - `bot/behaviors/combat.js` — Auto-attack hostiles
 - `bot/behaviors/planExecutor.js` — Multi-step plan execution
+- `bot/scripts/` — Manual smoke, debug, collection, crafting, and workflow scripts grouped by purpose
 
 ## Bridge Protocol
 

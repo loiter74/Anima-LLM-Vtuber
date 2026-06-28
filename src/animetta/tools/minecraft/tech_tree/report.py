@@ -18,12 +18,12 @@ def render_markdown_report(report: TechTreeReport) -> str:
     lines.append("# Tech Tree Run Report\n")
     lines.append(f"**Generated:** {report.timestamp}\n")
     lines.append("## Summary\n")
-    total_phases = len(report.core.config.phases)
+    total_phases = len(report.config.phases)
     completed_phases = len(report.metrics.phases_completed)
     lines.append(f"- **Phases completed:** {completed_phases}/{total_phases}")
     lines.append(
         f"- **Total time:** {report.metrics.total_time_seconds:.1f}s "
-        f"(budget: {report.core.config.total_time_budget_minutes}min)"
+        f"(budget: {report.config.total_time_budget_minutes}min)"
     )
     lines.append(f"- **Items collected:** {len(report.metrics.items_collected)} unique types")
     lines.append(f"- **Skills learned:** {report.metrics.skills_learned}")

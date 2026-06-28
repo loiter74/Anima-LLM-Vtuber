@@ -100,6 +100,23 @@ class TestWorldStateParsing:
         state = WorldState.from_status(status)
         assert len(state.entities) == 0
 
+    def test_parse_fall_risk_fields(self):
+        status = _make_status({
+            "result": {
+                "inventory": {"water_bucket": 1},
+                "fall_distance": 14.0,
+                "on_ground": False,
+                "velocity": {"x": 0.0, "y": -1.4, "z": 0.0},
+            }
+        })
+        state = WorldState.from_status(status)
+
+        assert state.fall_distance == 14.0
+        assert state.on_ground is False
+        assert state.velocity_y == -1.4
+        assert state.has_water_bucket is True
+        assert state.get_fall_risk_level() == 3
+
 
 class TestWorldStateProperties:
     """WorldState computed property tests."""

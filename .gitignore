@@ -138,3 +138,6 @@ memory_db/chroma_v2/
 .codegraph/
 .understand-anything/
 smoke_test_result.json
+
+# OpenWolf runtime session state (local, changes every session)
+.wolf/hooks/_session.json

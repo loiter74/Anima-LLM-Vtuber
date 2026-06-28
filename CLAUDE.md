@@ -413,5 +413,5 @@ make docker-typecheck  # mypy inside container
 ## Related Documentation
 
 - [AGENTS.md](AGENTS.md) — Detailed "where to look" guide for different tasks
-- [docs/TOOLS.md](docs/TOOLS.md) — Tools system guide
+- [docs/reference/tools.md](docs/reference/tools.md) — Tools system guide
 - [docs/ADR/](docs/ADR/) — Architecture Decision Records

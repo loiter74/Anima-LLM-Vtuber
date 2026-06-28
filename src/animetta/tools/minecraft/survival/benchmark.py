@@ -19,9 +19,7 @@ def summarize_run(report: RunReport) -> dict[str, Any]:
         for pr in report.phase_results
     ]
     summary["failure_categories"] = [
-        pr.failure_category.value
-        for pr in report.phase_results
-        if pr.failure_category
+        pr.failure_category.value for pr in report.phase_results if pr.failure_category
     ]
     return summary
 
@@ -54,7 +52,9 @@ def render_markdown_report(report: RunReport) -> str:
     for pr in report.phase_results:
         s = "PASS" if pr.success else "FAIL"
         fail = pr.failure_category.value if pr.failure_category else ""
-        lines.append(f"| {pr.phase.value} | {s} | {pr.actions_succeeded}/{pr.actions_attempted} | {fail} |")
+        lines.append(
+            f"| {pr.phase.value} | {s} | {pr.actions_succeeded}/{pr.actions_attempted} | {fail} |"
+        )
     lines.append("")
 
     # Final inventory

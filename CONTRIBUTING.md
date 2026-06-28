@@ -58,7 +58,7 @@ PYTHONPATH=src python -m pytest tests/ --cov=src/animetta
 PYTHONPATH=src python -m pytest tests/orchestration/graph/test_llm_node.py -v
 ```
 
-See [TESTING.md](TESTING.md) for detailed test conventions.
+See [Testing Guide](docs/development/testing.md) for detailed test conventions.
 
 ## Pull Request Process
 
@@ -92,7 +92,7 @@ docker compose -f docker-compose.cpu.yml up -d --build
 
 ### Container Structure
 
-The container runs nginx (port 80) + Python backend (port 12394) via `docker/entrypoint.sh`. Frontend is pre-built and served as static files by nginx. See `docs/docker-deployment.md` for full details.
+The container runs nginx (port 80) + Python backend (port 12394) via `docker/entrypoint.sh`. Frontend is pre-built and served as static files by nginx. See `docs/deployment/docker.md` for full details.
 
 ### Debugging
 

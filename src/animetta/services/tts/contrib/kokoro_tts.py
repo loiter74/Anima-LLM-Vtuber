@@ -17,10 +17,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 from loguru import logger
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 from ..interface import TTSInterface
 from .glados_effect import KOKORO_SAMPLE_RATE, GladosEffectProcessor
@@ -169,6 +168,8 @@ class KokoroTTS(TTSInterface):
         )
 
         try:
+            import torch
+
             # Generate audio via Kokoro pipeline
             # pipeline() is a generator yielding (graphemes, phonemes, audio_tensor)
             audio_chunks: list[torch.Tensor] = []
@@ -220,7 +221,7 @@ class KokoroTTS(TTSInterface):
             logger.error(f"[KokoroTTS] Synthesis failed: {e}")
             raise
 
-    def _tensor_to_wav_bytes(self, audio_tensor: torch.Tensor) -> bytes:
+    def _tensor_to_wav_bytes(self, audio_tensor) -> bytes:
         """
         Convert a 1D audio tensor to WAV bytes using Python's built-in wave module.
 
@@ -231,6 +232,8 @@ class KokoroTTS(TTSInterface):
             WAV file bytes at 24000 Hz sample rate
         """
         import wave
+
+        import torch
 
         # Ensure 1D and convert to int16
         if audio_tensor.dim() > 1:

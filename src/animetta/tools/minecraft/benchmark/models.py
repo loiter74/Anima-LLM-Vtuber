@@ -3,16 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import sys
-from enum import Enum
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    class StrEnum(str, Enum):
-        """Backport of StrEnum for Python < 3.11."""
-        def __str__(self) -> str:
-            return self.value
+from enum import StrEnum
 from typing import Any
 
 

@@ -76,9 +76,10 @@ class SurvivalIronRunner:
         status = await self._send_command("status")
         if status and isinstance(status, dict):
             result = status.get("result", status)
-            raw_inv = result.get("inventory", {})
-            report.final_inventory = normalize_inventory(raw_inv)
-            report.deaths = self._count_deaths(result)
+            if isinstance(result, dict):
+                raw_inv = result.get("inventory", {})
+                report.final_inventory = normalize_inventory(raw_inv)
+                report.deaths = self._count_deaths(result)
 
         report.end_time = time.time()
         report.completed = all_goals_satisfied(report.final_inventory, IRON_SURVIVAL_GOALS)
@@ -100,15 +101,21 @@ class SurvivalIronRunner:
             status = await self._send_command("status")
             if status and isinstance(status, dict):
                 status_data = status.get("result", status)
-                report.status_snapshots.append(status_data)
-                safety = check_safety(status_data)
-                if not safety.safe and safety.should_pause:
-                    result.mark_failure(FailureCategory.SAFETY_PAUSE, safety.reason)
-                    result.elapsed_ms = (time.time() - phase_start) * 1000
-                    return result
+                if isinstance(status_data, dict):
+                    report.status_snapshots.append(status_data)
+                    safety = check_safety(status_data)
+                    if not safety.safe and safety.should_pause:
+                        result.mark_failure(FailureCategory.SAFETY_PAUSE, safety.reason)
+                        result.elapsed_ms = (time.time() - phase_start) * 1000
+                        return result
 
         actions = self._get_phase_actions(phase)
         for action_def in actions:
+            # Check if phase goal is already met
+            await self._refresh_inventory(report)
+            if self._phase_goal_met(phase, report):
+                break
+
             success = False
             last_error = ""
             last_error_raw: str | dict = ""
@@ -120,7 +127,9 @@ class SurvivalIronRunner:
                     return result
 
                 action_result = await self._send_command(
-                    action_def.action, action_def.params, timeout=action_def.timeout,
+                    action_def.action,
+                    action_def.params,
+                    timeout=action_def.timeout,
                 )
 
                 if action_result is None:
@@ -131,7 +140,12 @@ class SurvivalIronRunner:
 
                 if isinstance(action_result, dict) and action_result.get("status") == "success":
                     success = True
-                    result.record_action(action_def.action, action_def.params, True, str(action_result.get("result", "")))
+                    result.record_action(
+                        action_def.action,
+                        action_def.params,
+                        True,
+                        str(action_result.get("result", "")),
+                    )
                     break
                 else:
                     error_msg = ""
@@ -162,14 +176,26 @@ class SurvivalIronRunner:
                     return result
 
                 for rec_action in recovery.actions:
-                    rec_result = await self._send_command(rec_action.action, rec_action.params, timeout=rec_action.timeout)
-                    is_success = isinstance(rec_result, dict) and rec_result.get("status") == "success"
-                    result.record_action(rec_action.action, rec_action.params, is_success, str(rec_result.get("result", "")) if isinstance(rec_result, dict) else "")
+                    rec_result = await self._send_command(
+                        rec_action.action, rec_action.params, timeout=rec_action.timeout
+                    )
+                    is_success = (
+                        isinstance(rec_result, dict) and rec_result.get("status") == "success"
+                    )
+                    result.record_action(
+                        rec_action.action,
+                        rec_action.params,
+                        is_success,
+                        str(rec_result.get("result", "")) if isinstance(rec_result, dict) else "",
+                    )
 
                 await self._refresh_inventory(report)
 
                 if not self._phase_goal_met(phase, report):
-                    result.mark_failure(FailureCategory.ACTION_FAILED, f"Phase {phase.value} failed after recovery: {last_error}")
+                    result.mark_failure(
+                        FailureCategory.ACTION_FAILED,
+                        f"Phase {phase.value} failed after recovery: {last_error}",
+                    )
                     result.elapsed_ms = (time.time() - phase_start) * 1000
                     return result
 
@@ -178,23 +204,69 @@ class SurvivalIronRunner:
 
     def _get_phase_actions(self, phase: SurvivalPhase):
         if phase == SurvivalPhase.WOOD:
-            return [RecoveryAction("collect", {"block_type": "oak_log", "count": 3}, "Collect 3 logs", 120.0)]
+            return [
+                RecoveryAction(
+                    "collect", {"block_type": "oak_log", "count": 5}, "Collect 5 logs", 120.0
+                )
+            ]
         if phase == SurvivalPhase.CRAFTING_TABLE:
-            return [RecoveryAction("craft", {"recipe": "oak_planks", "count": 4}, "Craft planks"), RecoveryAction("craft", {"recipe": "crafting_table", "count": 1}, "Craft table")]
+            # Only craft planks if we don't have enough; always craft table
+            return [
+                RecoveryAction("craft", {"recipe": "oak_planks", "count": 4}, "Craft planks"),
+                RecoveryAction("craft", {"recipe": "crafting_table", "count": 1}, "Craft table"),
+            ]
         if phase == SurvivalPhase.WOODEN_PICKAXE:
-            return [RecoveryAction("craft", {"recipe": "stick", "count": 4}, "Craft sticks"), RecoveryAction("craft", {"recipe": "wooden_pickaxe", "count": 1}, "Craft wooden pickaxe")]
+            return [
+                RecoveryAction("craft", {"recipe": "stick", "count": 4}, "Craft sticks"),
+                RecoveryAction(
+                    "craft", {"recipe": "wooden_pickaxe", "count": 1}, "Craft wooden pickaxe"
+                ),
+            ]
         if phase == SurvivalPhase.COBBLESTONE:
-            return [RecoveryAction("collect", {"block_type": "stone", "count": 12}, "Mine 12 stone for cobblestone", 120.0)]
+            return [
+                RecoveryAction(
+                    "collect",
+                    {"block_type": "stone", "count": 12},
+                    "Mine 12 stone for cobblestone",
+                    120.0,
+                )
+            ]
         if phase == SurvivalPhase.STONE_KIT:
-            return [RecoveryAction("craft", {"recipe": "stone_pickaxe", "count": 1}, "Craft stone pickaxe"), RecoveryAction("craft", {"recipe": "stone_sword", "count": 1}, "Craft stone sword"), RecoveryAction("craft", {"recipe": "furnace", "count": 1}, "Craft furnace")]
+            return [
+                RecoveryAction(
+                    "craft", {"recipe": "stone_pickaxe", "count": 1}, "Craft stone pickaxe"
+                ),
+                RecoveryAction("craft", {"recipe": "stone_sword", "count": 1}, "Craft stone sword"),
+                RecoveryAction("craft", {"recipe": "furnace", "count": 1}, "Craft furnace"),
+            ]
         if phase == SurvivalPhase.FUEL:
-            return [RecoveryAction("collect", {"block_type": "coal_ore", "count": 3}, "Mine 3 coal ore", 120.0)]
+            return [
+                RecoveryAction(
+                    "collect", {"block_type": "coal_ore", "count": 3}, "Mine 3 coal ore", 120.0
+                )
+            ]
         if phase == SurvivalPhase.IRON_ORE:
-            return [RecoveryAction("collect", {"block_type": "iron_ore", "count": 3}, "Mine 3 iron ore", 180.0)]
+            return [
+                RecoveryAction(
+                    "collect", {"block_type": "iron_ore", "count": 3}, "Mine 3 iron ore", 180.0
+                )
+            ]
         if phase == SurvivalPhase.SMELT_IRON:
-            return [RecoveryAction("smelt", {"item": "raw_iron", "fuel": "coal", "count": 3}, "Smelt 3 iron", 120.0)]
+            return [
+                RecoveryAction(
+                    "smelt", {"item": "raw_iron", "fuel": "coal", "count": 3}, "Smelt 3 iron", 120.0
+                )
+            ]
         if phase == SurvivalPhase.IRON_GEAR:
-            return [RecoveryAction("craft", {"recipe": "iron_pickaxe", "count": 1}, "Craft iron pickaxe"), RecoveryAction("craft", {"recipe": "iron_sword", "count": 1}, "Craft iron sword"), RecoveryAction("craft", {"recipe": "iron_chestplate", "count": 1}, "Craft iron chestplate")]
+            return [
+                RecoveryAction(
+                    "craft", {"recipe": "iron_pickaxe", "count": 1}, "Craft iron pickaxe"
+                ),
+                RecoveryAction("craft", {"recipe": "iron_sword", "count": 1}, "Craft iron sword"),
+                RecoveryAction(
+                    "craft", {"recipe": "iron_chestplate", "count": 1}, "Craft iron chestplate"
+                ),
+            ]
         return []
 
     def _phase_goal_met(self, phase: SurvivalPhase, report: RunReport) -> bool:
@@ -206,7 +278,12 @@ class SurvivalIronRunner:
 
     def _build_recovery(self, phase, action, error):
         if action.action in ("collect", "mine"):
-            plan = map_collect_failure(action.params.get("block_type", ""), error, phase)
+            plan = map_collect_failure(
+                action.params.get("block_type", ""),
+                error,
+                phase,
+                requested_count=action.params.get("count", 1),
+            )
             for rec_action in plan.actions:
                 if rec_action.action in ("collect", "mine"):
                     self._resolve_collect_block_type(rec_action)
@@ -214,8 +291,11 @@ class SurvivalIronRunner:
         if action.action == "craft":
             return map_craft_failure(action.params.get("recipe", ""), error)
         if action.action == "smelt":
-            return map_smelt_failure(action.params.get("item", ""), action.params.get("fuel", ""), error)
+            return map_smelt_failure(
+                action.params.get("item", ""), action.params.get("fuel", ""), error
+            )
         from .recovery import RecoveryPlan
+
         return RecoveryPlan()
 
     @staticmethod
@@ -229,8 +309,9 @@ class SurvivalIronRunner:
         status = await self._send_command("status")
         if status and isinstance(status, dict):
             result = status.get("result", status)
-            raw_inv = result.get("inventory", {})
-            report.final_inventory = normalize_inventory(raw_inv)
+            if isinstance(result, dict):
+                raw_inv = result.get("inventory", {})
+                report.final_inventory = normalize_inventory(raw_inv)
         return report.final_inventory
 
     async def _send_command(self, action, params=None, timeout=60.0):
@@ -239,7 +320,7 @@ class SurvivalIronRunner:
                 return None
             return await self._bridge.send_command(action, params, timeout=timeout)
         except Exception as e:
-            logger.error(f"[SurvivalRunner] Bridge command \'{action}\' exception: {e}")
+            logger.error(f"[SurvivalRunner] Bridge command '{action}' exception: {e}")
             return None
 
     def _global_timeout_exceeded(self):

@@ -19,3 +19,12 @@ if _PKG_NAME not in sys.modules or not hasattr(sys.modules[_PKG_NAME], "__path__
     pkg.__path__ = [_PKG_PATH]
     pkg.__package__ = _PKG_NAME
     sys.modules[_PKG_NAME] = pkg
+
+
+def _get_bridge():
+    from animetta.tools.minecraft.core.bridge import get_bridge
+
+    return get_bridge()
+
+
+sys.modules[_PKG_NAME].get_bridge = _get_bridge

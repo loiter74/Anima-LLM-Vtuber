@@ -28,7 +28,7 @@ from .interface import VCInterface
 RVC_PROJECT_ROOT = "C:/Users/30262/RVC20240604Nvidia"
 
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 
 @ProviderRegistry.register_service("vc", "rvc")

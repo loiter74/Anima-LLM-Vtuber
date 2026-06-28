@@ -19,6 +19,9 @@ def status_response(
     time_of_day="day", weather="clear",
     inventory=None,
     nearby_entities=None,
+    fall_distance=0.0,
+    on_ground=True,
+    velocity=None,
 ):
     """Build a realistic mc_status() response dict."""
     if inventory is None:
@@ -39,6 +42,9 @@ def status_response(
             "game_mode": "survival",
             "inventory": inventory,
             "nearby_entities": nearby_entities,
+            "fall_distance": fall_distance,
+            "on_ground": on_ground,
+            "velocity": velocity or {"x": 0.0, "y": 0.0, "z": 0.0},
         }
     }
 
@@ -256,6 +262,20 @@ class TestAutonomousLoopEvaluate:
         assert action == loop.ACTION_SURVIVE
         assert params["reason"] == "low_health"
 
+    async def test_evaluate_fall_risk_with_water_bucket_triggers_clutch(self):
+        loop = self._make_loop()
+        state = self._make_state(
+            health=20.0,
+            inventory={"water_bucket": 1},
+            fall_distance=12.0,
+            on_ground=False,
+            velocity_y=-1.2,
+        )
+        action, params = await loop._evaluate(state)
+        assert action == loop.ACTION_SURVIVE
+        assert params["reason"] == "fall_risk"
+        assert params["method"] == "water_bucket_clutch"
+
     async def test_evaluate_night_return_triggers_survive(self):
         loop = self._make_loop()
         loop._base_pos = {"x": 100, "y": 64, "z": 100}
@@ -370,6 +390,17 @@ class TestAutonomousLoopExecute:
         loop._bridge.send_command.assert_awaited()
         call_args = loop._bridge.send_command.call_args[0]
         assert call_args[0] == "goto"
+
+    async def test_execute_survive_fall_risk_uses_water_bucket_clutch(self):
+        loop = self._make_loop()
+        state = self.default_state()
+        await loop._execute_survive(
+            {"reason": "fall_risk", "method": "water_bucket_clutch"},
+            state,
+        )
+        loop._bridge.send_command.assert_awaited()
+        call_args = loop._bridge.send_command.call_args[0]
+        assert call_args[0] == "water_bucket_clutch"
 
     async def test_execute_gather_collects_material(self):
         loop = self._make_loop()

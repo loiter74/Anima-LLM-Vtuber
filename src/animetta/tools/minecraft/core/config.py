@@ -2,8 +2,7 @@
 Minecraft configuration models
 """
 
-
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
@@ -23,11 +22,12 @@ class MinecraftSafetyConfig(BaseModel):
 
 class MinecraftViewerConfig(BaseModel):
     """Configuration for first-person spectator viewing."""
-    username: str = ""          # MC username of the viewer player
+
+    username: str = ""  # MC username of the viewer player
     auto_spectate: bool = True  # Auto-spectate when viewer joins
 
 
-class MinecraftMode(str, Enum):
+class MinecraftMode(StrEnum):
     """Bot 运行模式（mc-bot-voyager-learning）。
 
     FALLBACK: 纯 Survival Runner 确定性流程（默认，最可靠）

@@ -15,6 +15,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -25,16 +26,13 @@ logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level} | {messag
 
 async def run_smoke_test(host: str, port: int, username: str) -> dict:
     """Run the full iron survival smoke test against a real server."""
-    from animetta.tools.minecraft.core.core.bridge import MinecraftBridge
-    from animetta.tools.minecraft.core.core.config import MinecraftConfig
+    from animetta.tools.minecraft.core.bridge import MinecraftBridge
+    from animetta.tools.minecraft.core.config import MinecraftBotConfig, MinecraftConfig
     from animetta.tools.minecraft.survival.runner import SurvivalIronRunner
 
     # Create config — use 1.21.4 to match the Paper server
     config = MinecraftConfig(
-        host=host,
-        port=port,
-        username=username,
-        version="1.21.4",
+        bot=MinecraftBotConfig(host=host, port=port, username=username, version="1.21.4"),
     )
 
     # Start bridge
@@ -77,7 +75,7 @@ async def run_smoke_test(host: str, port: int, username: str) -> dict:
     await bridge.stop()
 
     # Build result
-    result = {
+    result: dict[str, Any] = {
         "success": report.completed,
         "elapsed_seconds": round(elapsed, 1),
         "deaths": report.deaths,
@@ -95,7 +93,9 @@ async def run_smoke_test(host: str, port: int, username: str) -> dict:
             "actions_succeeded": pr.actions_succeeded,
         }
         if not pr.success:
-            phase_info["failure_category"] = pr.failure_category.value if pr.failure_category else None
+            phase_info["failure_category"] = (
+                pr.failure_category.value if pr.failure_category else None
+            )
             phase_info["failure_message"] = pr.failure_message
             result["failed_phase"] = pr.phase.value
             result["failure_reason"] = pr.failure_message
@@ -118,24 +118,30 @@ def main():
     print("SMOKE TEST RESULT")
     print("=" * 60)
     print(f"Success: {result['success']}")
-    print(f"Elapsed: {result['elapsed_seconds']}s")
-    print(f"Deaths: {result['deaths']}")
+    print(f"Elapsed: {result.get('elapsed_seconds', 0)}s")
+    print(f"Deaths: {result.get('deaths', 0)}")
 
-    if result["failed_phase"]:
+    if result.get("failed_phase"):
         print(f"Failed at: {result['failed_phase']}")
-        print(f"Reason: {result['failure_reason']}")
+        print(f"Reason: {result.get('failure_reason', 'unknown')}")
+    elif result.get("error"):
+        print(f"Error: {result['error']}")
     else:
         print("All phases completed")
 
-    print("\nFinal inventory:")
-    for item, count in result["final_inventory"].items():
-        if count > 0:
-            print(f"  {item}: {count}")
+    if result.get("final_inventory"):
+        print("\nFinal inventory:")
+        for item, count in result["final_inventory"].items():
+            if count > 0:
+                print(f"  {item}: {count}")
 
-    print("\nPhase details:")
-    for phase in result["phase_summary"]:
-        status = "✓" if phase["success"] else "✗"
-        print(f"  {status} {phase['phase']}: {phase['actions_succeeded']}/{phase['actions_attempted']} actions")
+    if result.get("phase_summary"):
+        print("\nPhase details:")
+        for phase in result["phase_summary"]:
+            status = "+" if phase["success"] else "x"
+            print(
+                f"  {status} {phase['phase']}: {phase['actions_succeeded']}/{phase['actions_attempted']} actions"
+            )
 
     print("=" * 60)
 

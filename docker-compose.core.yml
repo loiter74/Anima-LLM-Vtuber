@@ -1,0 +1,48 @@
+# ============================================================================
+# Animetta — Core (Lightweight) Deployment
+# ============================================================================
+# Minimal image: remote/mock providers only, no local AI, no GPU.
+#
+# Usage:
+#   docker compose -f docker-compose.core.yml up -d --build
+#   curl -s http://localhost/health
+#
+# Default: all providers set to mock. Override via .env or environment.
+# ============================================================================
+
+services:
+  animetta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "${ANIMETTA_PORT:-12394}:12394"
+    environment:
+      - ANIMETTA_HOST=0.0.0.0
+      - ANIMETTA_PORT=12394
+      - ANIMETTA_LOG_LEVEL=${ANIMETTA_LOG_LEVEL:-INFO}
+      - ANIMETTA_ASR=${ANIMETTA_ASR:-mock}
+      - ANIMETTA_TTS=${ANIMETTA_TTS:-mock}
+      - ANIMETTA_LLM=${ANIMETTA_LLM:-mock}
+      - ANIMETTA_VAD=${ANIMETTA_VAD:-mock}
+      - GLM_API_KEY=${GLM_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    volumes:
+      - animetta-memory-db:/app/memory_db
+      - animetta-data:/app/data
+      - ./.env:/app/.env:ro
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  animetta-memory-db:
+  animetta-data:

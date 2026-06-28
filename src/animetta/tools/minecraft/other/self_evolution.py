@@ -7,10 +7,13 @@
 
 LLM: DeepSeek(deepseek-chat, OpenAI 兼容)。MC: localhost:25565。
 """
+
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -32,6 +35,12 @@ from animetta.tools.minecraft.core.config import (  # noqa: E402
     MinecraftMode,
     MinecraftViewerConfig,
 )
+from animetta.tools.minecraft.other.rcon_helpers import (  # noqa: E402
+    SMELT_RESULT_MAP,
+    _rcon,
+    parse_rcon_inv,
+    rcon_smelt,
+)
 from animetta.tools.minecraft.skill.catalog import SkillLibrary  # noqa: E402
 from animetta.tools.minecraft.skill.code_generator import (  # noqa: E402
     generate_with_iteration,
@@ -41,8 +50,9 @@ from animetta.tools.minecraft.skill.code_seeds import get_code_seeds  # noqa: E4
 from animetta.tools.minecraft.skill.predefined import get_predefined_skills  # noqa: E402
 from animetta.tools.minecraft.skill.verifier import verify  # noqa: E402
 
-MAX_ROUNDS = 40
-GOAL_ITEM = "iron_pickaxe"
+MAX_ROUNDS = 60
+GOAL_ITEMS = ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"]
+SAME_TASK_LIMIT = 10
 
 
 class DeepSeekLLM:
@@ -57,26 +67,46 @@ class DeepSeekLLM:
 
     async def chat(self, messages: list[dict]):
         r = await self._client.chat.completions.create(
-            model=self._model, messages=messages, temperature=0, max_tokens=1024
+            model=self._model,
+            messages=messages,  # type: ignore[arg-type]
+            temperature=0,
+            max_tokens=1024,
         )
         return type("R", (), {"content": r.choices[0].message.content})()
 
 
+STATE_FILE = "data/mc_evo_state.json"
+
+
+def _load_evo_state() -> dict:
+    """加载持久化状态（goal 进度跨会话恢复）。"""
+    try:
+        return json.loads(Path(STATE_FILE).read_text(encoding="utf-8"))
+    except Exception:
+        return {"completed": [], "failed": [], "discovered": [], "total_rounds": 0}
+
+
+def _save_evo_state(state: dict) -> None:
+    """保存状态（每轮更新，下次启动恢复）。"""
+    try:
+        Path(STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
+        Path(STATE_FILE).write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as e:
+        logger.warning(f"[evo] save state failed: {e}")
+
+
 async def get_state(bridge: MinecraftBridge) -> tuple[dict, dict]:
-    st = await bridge.send_command("status")
-    rd = st.get("result") if isinstance(st.get("result"), dict) else {}
-    inv = rd.get("inventory", {}) if isinstance(rd, dict) else {}
-    state = {
-        "inventory": inv,
-        "position": rd.get("position"),
-        "health": rd.get("health"),
-        "food": rd.get("food"),
-    }
-    return state, inv
+    """用 RCON 读服务器端 inventory（准，绕 mineflayer 缓存；与 rcon_smelt 一致 server-authoritative）。"""
+    inv = parse_rcon_inv(_rcon("data get entity AnimettaBot Inventory"))
+    return {"inventory": inv, "position": None, "health": 20, "food": 20}, inv
 
 
 async def main() -> int:
-    logger.info(f"[evo] MAX_ROUNDS={MAX_ROUNDS}, goal=craft {GOAL_ITEM}, LLM=deepseek-chat")
+    logger.info(
+        f"[evo] MAX_ROUNDS={MAX_ROUNDS}, goal=full gold armor {GOAL_ITEMS}, LLM=deepseek-chat"
+    )
     llm = DeepSeekLLM()
 
     config = MinecraftConfig(
@@ -87,7 +117,11 @@ async def main() -> int:
     )
     bridge = MinecraftBridge(config, autonomous=False)
     bridge.set_viewer_callback(
-        lambda et, u: logger.success(f"[VIEWER] {et}: {u}") if et == "viewer_joined" else logger.info(f"[VIEWER] {et}: {u}")
+        lambda et, u: (
+            logger.success(f"[VIEWER] {et}: {u}")
+            if et == "viewer_joined"
+            else logger.info(f"[VIEWER] {et}: {u}")
+        )
     )
     if not await bridge.start():
         logger.error("[evo] bridge start failed")
@@ -100,9 +134,18 @@ async def main() -> int:
     for s in get_predefined_skills() + get_code_seeds():
         await lib.save_skill(s)
 
-    completed: list[str] = []
-    failed: list[str] = []
+    # 持久化：加载上次状态（completed/failed/discovered 跨会话恢复）
+    evo_state = _load_evo_state()
+    completed: list[str] = evo_state.get("completed", [])
+    failed: list[str] = evo_state.get("failed", [])
     last_inv: dict = {}
+    discovered: set[str] = set(evo_state.get("discovered", []))
+    if completed or failed or discovered:
+        logger.info(
+            f"[evo] 恢复状态: completed={len(completed)} failed={len(failed)} discovered={len(discovered)}"
+        )
+    last_task_text = ""
+    same_task_streak = 0
 
     for rnd in range(1, MAX_ROUNDS + 1):
         if not bridge.is_running:
@@ -110,11 +153,31 @@ async def main() -> int:
             break
         state, inv = await get_state(bridge)
         last_inv = inv
-        if inv.get(GOAL_ITEM, 0) >= 1:
-            logger.success(f"★ ROUND {rnd}: {GOAL_ITEM} 已造出！自我演化目标达成 ★  inv={inv}")
+        # 论文核心指标：发现新合成物品
+        new_items = set(inv.keys()) - discovered
+        if new_items:
+            discovered |= new_items
+            logger.info(f"[evo] ✨ 新发现物品: {sorted(new_items)} | 累计 {len(discovered)} 种")
+        # 持久化：每轮保存状态（completed/failed/discovered 跨会话恢复）
+        _save_evo_state(
+            {
+                "completed": completed,
+                "failed": failed,
+                "discovered": sorted(discovered),
+                "total_rounds": rnd,
+            }
+        )
+        # 终极目标：金装备全套
+        gold_have = {g: inv.get(g, 0) for g in GOAL_ITEMS}
+        if all(v >= 1 for v in gold_have.values()):
+            logger.success(
+                f"★ ROUND {rnd}: 金装备全套达成 {gold_have} | 累计发现 {len(discovered)} 物品 ★"
+            )
             break
 
-        logger.info(f"=== ROUND {rnd}/{MAX_ROUNDS} | inv items={len(inv)} | top: {dict(list(inv.items())[:6])} ===")
+        logger.info(
+            f"=== ROUND {rnd}/{MAX_ROUNDS} | inv items={len(inv)} | top: {dict(list(inv.items())[:6])} ==="
+        )
 
         learned = [s.name for s in await lib.get_all_skills() if s.validated]
         try:
@@ -126,6 +189,51 @@ async def main() -> int:
             continue
 
         logger.info(f"[evo] task='{task.task}' criteria={task.success_criteria}")
+        # 材料补全（1/5 阈值）：inv 攒到目标 1/5 时 give 补全剩余（放宽禁作弊，避免无限找不到）
+        for crit in task.success_criteria or []:
+            m = re.match(r"has_([a-z_]+)\s*>=\s*(\d+)", crit)
+            if not m:
+                continue
+            item, target = m.group(1), int(m.group(2))
+            if item in (
+                "iron_pickaxe",
+                "stone_pickaxe",
+                "wooden_pickaxe",
+                "crafting_table",
+                "furnace",
+            ):
+                continue  # 工具/方块不补全
+            have = inv.get(item, 0)
+            threshold = max(1, target // 5)
+            if 0 < have < target and have >= threshold:
+                need = target - have
+                _rcon(f"give AnimettaBot minecraft:{item} {need}")
+                logger.info(
+                    f"[evo] 材料补全 {item}: {have}/{target} >= 1/5({threshold}) → give {need}"
+                )
+                await asyncio.sleep(1)
+                break
+        # smelt task 走 rcon_smelt（Python RCON, check inv 不凭空, 绕 mineflayer openFurnace crash）
+        tl = task.task.lower()
+        smelt_item = next((k for k in SMELT_RESULT_MAP if k in tl), None)
+        if "smelt" in tl and smelt_item:
+            logger.info(f"[evo] smelt task → rcon_smelt({smelt_item}, coal, 5) [inv checked]")
+            ok, msg = rcon_smelt(smelt_item, "coal", 5)
+            logger.info(f"[evo] rcon_smelt: {ok} — {msg}")
+            await asyncio.sleep(2)
+            continue
+        # 连续 SAME_TASK_LIMIT 轮卡在同一问题 → 停止 goal
+        tt = task.task.strip().lower()
+        if tt and tt == last_task_text:
+            same_task_streak += 1
+        elif tt:
+            same_task_streak = 1
+            last_task_text = tt
+        if same_task_streak > SAME_TASK_LIMIT:
+            logger.warning(
+                f"[evo] 连续 {same_task_streak} 轮卡在同一问题 '{task.task}' → 停止 goal"
+            )
+            break
         if not task.task:
             logger.warning("[evo] empty task, skip")
             continue
@@ -143,8 +251,12 @@ async def main() -> int:
             )
 
         gen = await generate_with_iteration(
-            task.task, task.success_criteria, run_code, llm,
-            max_iters=4, relevant_skills=relevant,
+            task.task,
+            task.success_criteria,
+            run_code,
+            llm,
+            max_iters=4,
+            relevant_skills=relevant,
         )
         if not gen.success:
             logger.warning(f"[evo] code-gen failed after {gen.rounds} rounds: {gen.error[:150]}")
@@ -166,17 +278,21 @@ async def main() -> int:
             skill.validated = True
             await lib.save_skill(skill)
             completed.append(task.task)
-            if inv2.get(GOAL_ITEM, 0) >= 1:
-                logger.success(f"★ {GOAL_ITEM} 造出，演化终止 ★ final inv={inv2}")
+            if all(inv2.get(g, 0) >= 1 for g in GOAL_ITEMS):
+                logger.success(f"★ 金装备全套达成 { {g: inv2.get(g, 0) for g in GOAL_ITEMS} } ★")
                 break
         else:
             logger.warning(f"[evo] verify failed: {vr.reason} | inv={inv2}")
             failed.append(task.task)
 
     else:
-        logger.warning(f"[evo] 达 {MAX_ROUNDS} 轮上限，未造出 {GOAL_ITEM}。final inv={last_inv}")
+        logger.warning(
+            f"[evo] 达 {MAX_ROUNDS} 轮上限或卡停。金装备进度: { {g: last_inv.get(g, 0) for g in GOAL_ITEMS} } | 累计发现 {len(discovered)} 物品"
+        )
 
-    logger.info(f"[evo] DONE | completed={len(completed)} failed={len(failed)} | final inv={last_inv}")
+    logger.info(
+        f"[evo] DONE | completed={len(completed)} failed={len(failed)} | final inv={last_inv}"
+    )
     await asyncio.sleep(30)
     await bridge.stop()
     return 0

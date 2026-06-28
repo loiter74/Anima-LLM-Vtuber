@@ -18,7 +18,7 @@ tests/
 ├── config/                        # Pydantic configs + ProviderRegistry
 ├── core/                          # service container + socketio_server
 ├── eval/  (+ conftest.py)         # RAG quality metrics + sample fixtures
-├── fixtures/                      # static assets (singing_test.m4a)
+├── fixtures/audio/                # static audio assets (singing_test.m4a)
 ├── inspection/                    # health/consistency checks
 ├── integration/  (+ conftest.py)  # ⚠️ AUTO-MARKED `integration`
 ├── memory_v2/                     # atom-based memory (Chroma+SQLite+Wiki)
@@ -49,7 +49,7 @@ tests/
 - **Default filter** — `-m "not slow and not integration"`; opt in by overriding `-m`
 - **Markers** (pyproject.toml `[tool.pytest.ini_options]`): `asyncio`, `integration`, `slow`
 - **Naming** — `test_<module>.py` / `Test<Component>` class / `test_<behavior>` method
-- **AAA pattern** (Arrange/Act/Assert) per TESTING.md
+- **AAA pattern** (Arrange/Act/Assert) per docs/development/testing.md
 - **Frontend (vitest)** — `happy-dom` env, glob `src/**/*.test.ts` only, `@vue/test-utils` + `@testing-library/vue`; `pnpm test:run` / `pnpm test:coverage`
 
 ### Mock Fixtures (tests/conftest.py)
@@ -96,4 +96,4 @@ cd frontend && pnpm test:run && pnpm test:coverage
 - `tests/tracing/conftest.py` `autouse=True` fixture resets: Prometheus REGISTRY, OTel `_TRACER_INITIALIZED`, `metrics._initialized`
 - Required plugins (implicit via addopts): pytest-asyncio, pytest-xdist, pytest-timeout, pytest-cov
 - CI (`.github/workflows/test.yml`): Python 3.12+3.13 matrix, `--cov-fail-under=70`, skips `tests/memory/test_manager.py`
-- TESTING.md is stale (claims 21% coverage); frontend/AGENTS.md is stale (claims 0% coverage / no vitest)
+- docs/development/testing.md is stale (claims 21% coverage); frontend/AGENTS.md is stale (claims 0% coverage / no vitest)

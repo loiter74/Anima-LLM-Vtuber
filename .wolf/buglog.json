@@ -996,7 +996,15 @@
       "file": "src/animetta/tools/minecraft/core/config.py, src/animetta/tools/minecraft/core/tools.py",
       "root_cause": "config.py:30 defines MinecraftConfig.autonomous as bool, but tools.py:47 accesses mc_config.autonomous.loop (treating it as an object with a .loop attribute). tools.yaml passes autonomous: true (a bool), so True.loop raises AttributeError on bridge init. Effect: the autonomous loop never starts, which means the entire Voyager-side (planner, skill learning loop, LLM-driven decisions) is dead code. mc-bot still works only because Survival Runner is invoked via direct LangChain tool calls (mc_survival_iron), NOT via the autonomous loop.",
       "fix": "Planned in OpenSpec change mc-bot-voyager-learning task T1: replace the broken autonomous.loop access with a MinecraftMode enum (learn/live/fallback) stored as config.mode. Not yet fixed — identified during brainstorming session, fix scheduled for implementation phase.",
-      "tags": ["minecraft", "config", "attribute-error", "autonomous", "dead-code", "blocking", "config-mismatch"],
+      "tags": [
+        "minecraft",
+        "config",
+        "attribute-error",
+        "autonomous",
+        "dead-code",
+        "blocking",
+        "config-mismatch"
+      ],
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-06-27T20:00:00.000Z"
@@ -1008,7 +1016,15 @@
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "T2 eval_code sandbox added `const vm = require('vm');` but bot/index.js is an ES module (package.json has \"type\": \"module\"). ESM does not support require(). Node crashed at startup so the bot process exited immediately — bridge saw stdout close, login timed out, and every command (spectate/eval_code) failed with 'Bridge not running'. This was a regression introduced by T2 that only surfaced when actually launching the bot end-to-end.",
       "fix": "Changed `const vm = require('vm');` to `import vm from 'vm';` (ESM import syntax). Verified node starts cleanly and bot logs in. Lesson: bot/index.js is ESM — always use import, never require.",
-      "tags": ["minecraft", "esm", "require", "regression", "bot-crash", "blocking", "T2"],
+      "tags": [
+        "minecraft",
+        "esm",
+        "require",
+        "regression",
+        "bot-crash",
+        "blocking",
+        "T2"
+      ],
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-06-27T21:45:00.000Z"
@@ -1020,10 +1036,171 @@
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "Auto-spectate only triggered on bot.on('playerJoined'). Two uncovered cases: (1) viewer already online when bot connects (viewer joined first) — playerJoined never fires for viewer; (2) bot reconnects/disconnects+rejoins while viewer stays online — again no playerJoined. Result: /gamemode spectator + /spectate never sent, viewer never attaches. Previously worked around by manually calling bridge.spectate_viewer().",
       "fix": "Rewrote the spectator block: extracted maybeSpectate(reason, force) with isViewerOnline() check + 25s rate limit; added bot.on('spawn') trigger (covers viewer-already-online + bot reconnect + bot respawn — the key fix); kept bot.on('playerJoined') (viewer joins after bot); added periodic setInterval(20000) re-attach (recovers from spectate break on bot death/dimension change/teleport). performSpectate sends viewer_joined event except for periodic. Verified via RCON data get entity LUN077 playerGameType: bot spawn→3, bot offline→stays 3, bot reconnect→3 again.",
-      "tags": ["minecraft", "spectator", "auto-spectate", "reconnect", "fix", "spawn-trigger"],
+      "tags": [
+        "minecraft",
+        "spectator",
+        "auto-spectate",
+        "reconnect",
+        "fix",
+        "spawn-trigger"
+      ],
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-06-28T00:06:00.000Z"
+    },
+    {
+      "id": "bug-065",
+      "timestamp": "2026-06-28T00:56:00.000Z",
+      "error_message": "mineflayer bot.equip for armor slots returns success but bot does not actually wear the armor — ArmorItems stays empty",
+      "file": "src/animetta/tools/minecraft/bot/index.js",
+      "root_cause": "mineflayer bot.equip(item, destination) resolves successfully for armor destinations (head/torso/legs/feet) but does not actually equip on the bot's own armor slots — mineflayer bot is a client-side player and its equip for self armor is unreliable/no-op. eval_code equip('golden_chestplate','chest') returned 'success' but RCON data get ArmorItems showed nothing worn. Also: bot.equip requires an Item OBJECT (passing numeric item.id silently no-ops) — fixed _equip to find invItem by name and pass the object. Also: mineflayer destination for chestplate is 'torso' not 'chest' (the original 'invalid destination: chest' error).",
+      "fix": "Three-part: (1) _equip now passes Item object (bot.inventory.items().find) not item.id; (2) destination map chest→torso/legs/feet/head; (3) for actual wearing, fall back to RCON `/item replace entity AnimettaBot armor.<slot> with minecraft:<item>` which executes server-side (`Replaced a slot on AnimettaBot with [Golden X]` x4 confirmed). Note: data get entity ArmorItems on a mineflayer bot still shows empty (client-authoritative NBT quirk), so wearing must be visually confirmed via spectate (LUN077 sees bot in gold armor).",
+      "tags": [
+        "minecraft",
+        "mineflayer",
+        "equip",
+        "armor",
+        "client-authoritative",
+        "workaround"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T00:56:00.000Z"
+    },
+    {
+      "id": "bug-066",
+      "timestamp": "2026-06-28T02:38:00.000Z",
+      "error_message": "_smelt: bot.openFurnace + putInput consumes raw_iron from inventory but furnace never smelts / iron_ingot never produced — bot loses raw_iron with no yield, and node process eventually crashes",
+      "file": "src/animetta/tools/minecraft/bot/index.js",
+      "root_cause": "mineflayer 1.21 Furnace API is broken for bots. bot.openFurnace(furnaceBlock) returns a Furnace wrapper, but putInput(item, null, count) consumes the input item from inventory (inventory count drops) without it actually entering the furnace smelt queue; furnace.outputItem never becomes truthy; takeOutput returns nothing. So _smelt runs, eval_code reports success, but inventory loses raw_iron and gains no iron_ingot. After a few such calls the bot process crashes (bridge not running). Original _smelt also didn't wait for smelt completion or takeOutput — fixed that, but the underlying mineflayer furnace API still doesn't actually smelt for bots.",
+      "fix": "FIXED (2026-06-28): rewrote _smelt to bypass mineflayer furnace API entirely. New _smelt uses op commands (bot has op): (1) /clear AnimettaBot to consume inventory input (physically equivalent to feeding furnace), (2) /forceload add to keep chunk ticking without player, (3) /data merge block <furnace> {Items:[{Slot:0,input},{Slot:1,fuel}],BurnTime:1600s,CookTimeTotal:200s} — writing the furnace BLOCK ENTITY NBT directly makes the MC server tick engine smelt (server-authoritative), (4) wait ~10s, (5) /give output (smelt result). Verified end-to-end: eval_code smelt('raw_iron','coal',3) -> bot inventory iron_ingot=3, raw_iron decreased 3. SMELT_RESULT map covers raw_iron/gold/copper/sand/etc. mineflayer 4.20 openFurnace/putInput stays unused (broken in 1.21).",
+      "tags": [
+        "minecraft",
+        "mineflayer",
+        "furnace",
+        "smelt",
+        "1.21",
+        "blocking",
+        "item-loss",
+        "crash"
+      ],
+      "related_bugs": [
+        "bug-065"
+      ],
+      "occurrences": 5,
+      "last_seen": "2026-06-28T02:38:00.000Z"
+    },
+    {
+      "id": "bug-067",
+      "timestamp": "2026-06-28T06:32:47.228Z",
+      "error_message": "Wrong reference: run_voyager_skill should be scripts",
+      "file": "src/animetta/tools/minecraft/other/scripts/run_voyager_skill.py",
+      "root_cause": "Used \"run_voyager_skill\" instead of \"scripts\"",
+      "fix": "Changed run_voyager_skill → scripts",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T06:32:47.228Z"
+    },
+    {
+      "id": "bug-068",
+      "timestamp": "2026-06-28T06:32:47.714Z",
+      "error_message": "Wrong reference: spike_eval_code should be scripts",
+      "file": "src/animetta/tools/minecraft/other/scripts/spike_eval_code.py",
+      "root_cause": "Used \"spike_eval_code\" instead of \"scripts\"",
+      "fix": "Changed spike_eval_code → scripts",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T06:32:47.714Z"
+    },
+    {
+      "id": "bug-069",
+      "timestamp": "2026-06-28T07:23:58.277Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/orchestration/server/handlers/minecraft_handlers.py",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T07:23:58.277Z"
+    },
+    {
+      "id": "bug-070",
+      "timestamp": "2026-06-28T07:26:29.585Z",
+      "error_message": "Type error",
+      "file": "frontend/src/stores/minecraft.ts",
+      "root_cause": "Missing or incorrect type annotation",
+      "fix": "Added type assertion/annotation",
+      "tags": [
+        "auto-detected",
+        "type-fix",
+        "ts"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T07:26:29.585Z"
+    },
+    {
+      "id": "bug-071",
+      "timestamp": "2026-06-28T07:26:39.261Z",
+      "error_message": "Null/undefined access in ",
+      "file": "frontend/src/stores/minecraft.ts",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "ts"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T07:26:39.261Z"
+    },
+    {
+      "id": "bug-072",
+      "timestamp": "2026-06-28T07:55:04.540Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/core/tools.py",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T07:55:04.540Z"
+    },
+    {
+      "id": "bug-073",
+      "timestamp": "2026-06-28T07:59:20.092Z",
+      "error_message": "Function not marked async",
+      "file": "src/animetta/orchestration/server/handlers/minecraft_handlers.py",
+      "root_cause": "Function uses await but wasn't declared async",
+      "fix": "Added async modifier",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T07:59:20.093Z"
     }
   ]
 }

@@ -27,7 +27,7 @@ tools/
     ├── config.py            #   Minecraft config
     ├── rules_engine.py      #   Behavior rules engine
     ├── world_state.py       #   World state tracker
-    └── bot/                 #   ⚠️ Node.js package: package.json, index.js, behaviors/
+    └── bot/                 #   ⚠️ Node.js package: package.json, index.js, behaviors/, scripts/
 ```
 
 ## WHERE TO LOOK

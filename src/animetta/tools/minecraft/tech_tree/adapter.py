@@ -11,7 +11,7 @@ from .models import TechTreeReport
 def report_to_benchmark_metrics(report: TechTreeReport) -> BenchmarkMetrics:
     """Convert tech tree metrics to generic benchmark metrics."""
     metrics = report.metrics
-    total_phases = len(report.core.config.phases)
+    total_phases = len(report.config.phases)
     completed = len(metrics.phases_completed) >= total_phases
     unique_items = sum(1 for count in metrics.items_collected.values() if count > 0)
 

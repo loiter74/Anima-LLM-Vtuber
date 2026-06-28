@@ -10,9 +10,7 @@ from loguru import logger
 _COND_PATTERN = re.compile(r"^\s*(\w+)\s*(>=|<=|!=|==|>|<)\s*(.+?)\s*$")
 
 
-def check_preconditions(
-    conditions: list[str], context: dict[str, Any] | None = None
-) -> bool:
+def check_preconditions(conditions: list[str], context: dict[str, Any] | None = None) -> bool:
     """Check whether all preconditions are satisfied against context."""
     if not conditions:
         return True

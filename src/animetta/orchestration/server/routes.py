@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from animetta.core.config.app import AppConfig
+from animetta.config.app import AppConfig
 
 from ..socket_events import EVENTS
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
 from .handlers.chat_handlers import ChatHandlers
-from .handlers.core.config_handlers import ConfigHandlers
+from .handlers.config_handlers import ConfigHandlers
 from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
 from .handlers.minecraft_handlers import MinecraftHandlers
@@ -55,7 +55,7 @@ class RouteHandlers:
         )
 
         # Domain handlers (each owns a specific set of events)
-        self.core.config = ConfigHandlers(
+        self.config_handlers = ConfigHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
@@ -107,14 +107,14 @@ class RouteHandlers:
         """Set global config — delegates to domain handlers."""
         self.base.set_global_config(config)
         self.global_config = self.base.global_config
-        for h in [self.core.config, self.persona, self.lifecycle]:
+        for h in [self.config_handlers, self.persona, self.lifecycle]:
             h.global_config = config
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings — delegates to domain handlers."""
         self.base.set_user_settings(user_settings)
         self.user_settings = self.base.user_settings
-        for h in [self.core.config, self.persona, self.lifecycle]:
+        for h in [self.config_handlers, self.persona, self.lifecycle]:
             h.user_settings = user_settings
 
     # ── Shared utility (backward compat) ─────────────────────────────
@@ -176,18 +176,18 @@ class RouteHandlers:
     # ── Config events ─────────────────────────────────────────────────
 
     async def on_switch_config(self, sid: str, data: dict) -> None:
-        return await self.core.config.on_switch_config(sid, data)
+        return await self.config_handlers.on_switch_config(sid, data)
 
     async def on_set_log_level(self, sid: str, data: dict) -> None:
-        return await self.core.config.on_set_log_level(sid, data)
+        return await self.config_handlers.on_set_log_level(sid, data)
 
     async def on_get_config(self, sid: str, data: dict) -> None:
-        return await self.core.config.on_get_config(sid, data)
+        return await self.config_handlers.on_get_config(sid, data)
 
     # ── Heartbeat ─────────────────────────────────────────────────────
 
     async def on_heartbeat(self, sid: str, data: dict) -> None:
-        return await self.core.config.on_heartbeat(sid, data)
+        return await self.config_handlers.on_heartbeat(sid, data)
 
     # ── Desktop client events ─────────────────────────────────────────
 
@@ -225,10 +225,16 @@ class RouteHandlers:
     async def on_minecraft_stop(self, sid: str, data: dict) -> None:
         return await self.minecraft.on_minecraft_stop(sid, data)
 
+    async def on_minecraft_spectate(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_spectate(sid, data)
+
+    async def on_minecraft_command(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_command(sid, data)
+
     # ── Persona events ────────────────────────────────────────────────
 
     async def on_translation_configure(self, sid: str, data: dict) -> None:
-        return await self.core.config.on_translation_configure(sid, data)
+        return await self.config_handlers.on_translation_configure(sid, data)
 
     async def on_get_available_personas(self, sid: str, data: dict) -> dict:
         return await self.persona.on_get_available_personas(sid, data)
@@ -380,6 +386,8 @@ def register_routes(
     # Minecraft bot control events
     sio.on(EVENTS.get("minecraft", {}).get("start", {}).get("name", "minecraft:start"), handlers.on_minecraft_start)
     sio.on(EVENTS.get("minecraft", {}).get("stop", {}).get("name", "minecraft:stop"), handlers.on_minecraft_stop)
+    sio.on(EVENTS.get("minecraft", {}).get("spectate", {}).get("name", "minecraft:spectate"), handlers.on_minecraft_spectate)
+    sio.on("minecraft:command", handlers.on_minecraft_command)
 
     # Translation configuration events
     sio.on(EVENTS.get("translation", {}).get("configure", {}).get("name", "translation:configure"), handlers.on_translation_configure)

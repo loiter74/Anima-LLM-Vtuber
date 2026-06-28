@@ -119,14 +119,14 @@ def test_singing_config_can_disable_rvc():
 
 def test_real_singing_fixture_exists():
     """The smoke test audio fixture (Bilibili BV14oEA6iECF) should exist."""
-    fixture = Path(__file__).parent.parent / "fixtures" / "singing_test.m4a"
+    fixture = Path(__file__).parent.parent / "fixtures" / "audio" / "singing_test.m4a"
     assert fixture.exists(), f"Fixture missing: {fixture}"
     assert fixture.stat().st_size > 100_000, "Fixture too small — re-download"
 
 
 def test_real_singing_fixture_is_valid_audio():
     """The fixture should be a valid M4A container (magic bytes check)."""
-    fixture = Path(__file__).parent.parent / "fixtures" / "singing_test.m4a"
+    fixture = Path(__file__).parent.parent / "fixtures" / "audio" / "singing_test.m4a"
     # M4A/MP4 starts with ftyp box
     with open(fixture, "rb") as f:
         header = f.read(12)

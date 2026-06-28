@@ -7,8 +7,19 @@ from typing import Any
 
 # Includes both Python-side step types and Node.js-side actions from AVAILABLE_TOOLS.
 STEP_TYPES: set[str] = {
-    "goto", "smart_goto", "collect", "mine", "place", "smart_build",
-    "craft", "chat", "check", "wait", "attack",
+    "goto",
+    "smart_goto",
+    "collect",
+    "mine",
+    "place",
+    "smart_build",
+    "craft",
+    "chat",
+    "check",
+    "wait",
+    "attack",
+    "smelt",
+    "water_bucket_clutch",
 }
 
 # Required parameters per step type: name -> (type, default).
@@ -30,6 +41,8 @@ _STEP_PARAM_DEFS: dict[str, dict[str, tuple[type, Any]]] = {
     "check": {"condition": (str, None)},
     "wait": {"seconds": (float, None)},
     "attack": {"target": (str, None)},
+    "smelt": {"item": (str, None), "fuel": (str, None), "count": (int, 1)},
+    "water_bucket_clutch": {},
 }
 
 
@@ -55,7 +68,9 @@ class SkillStep:
         for param_name, (param_type, default) in defs.items():
             if param_name not in self.params:
                 if default is None:
-                    errors.append(f"Missing required param '{param_name}' for step type '{self.name}'")
+                    errors.append(
+                        f"Missing required param '{param_name}' for step type '{self.name}'"
+                    )
             else:
                 value = self.params[param_name]
                 if not isinstance(value, param_type):

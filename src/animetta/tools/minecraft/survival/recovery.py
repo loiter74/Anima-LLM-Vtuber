@@ -13,6 +13,7 @@ from .models import SurvivalPhase
 
 # -- Recovery Actions --
 
+
 @dataclass
 class RecoveryAction:
     """A single recovery step to try after a failure."""
@@ -35,6 +36,7 @@ class RecoveryPlan:
 
 # -- Error Normalization --
 
+
 def _extract_error(error: str | dict) -> tuple[str, dict]:
     """Normalize an error value into (message, raw_dict).
 
@@ -51,10 +53,12 @@ def _extract_error(error: str | dict) -> tuple[str, dict]:
 
 # -- Failure -> Recovery Mapping --
 
+
 def map_collect_failure(
     block_type: str,
     error: str | dict,
     phase: SurvivalPhase,
+    requested_count: int = 1,
 ) -> RecoveryPlan:
     """Map a failed collect/mine action to a recovery plan.
 
@@ -74,13 +78,14 @@ def map_collect_failure(
 
     if code == "NO_BLOCKS" or "no more" in msg.lower() or "nearby" in msg.lower():
         # If we collected some, reduce the remaining count
-        remaining = max(1, 1 - collected) if collected else 1
+        remaining = max(1, requested_count - collected) if collected else requested_count
         return RecoveryPlan(
             actions=[
                 RecoveryAction(
                     action="collect",
                     params={"block_type": block_type, "count": remaining},
-                    description=f"Retry collect {block_type} with exploration" + (f" ({reason})" if reason else ""),
+                    description=f"Retry collect {block_type} with exploration"
+                    + (f" ({reason})" if reason else ""),
                     timeout=90.0,
                 ),
             ]
@@ -226,7 +231,8 @@ def map_smelt_failure(
                 RecoveryAction(
                     action="smelt",
                     params={"item": item, "fuel": result_fuel, "count": 1},
-                    description=f"Retry smelt with {result_fuel} instead of {fuel}" + (f" ({reason})" if reason else ""),
+                    description=f"Retry smelt with {result_fuel} instead of {fuel}"
+                    + (f" ({reason})" if reason else ""),
                 ),
             ]
         )
@@ -247,7 +253,12 @@ def map_smelt_failure(
 PHASE_RECOVERY_MAP: dict[SurvivalPhase, dict[str, Any]] = {
     SurvivalPhase.WOOD: {
         "fallback_actions": [
-            RecoveryAction("collect", {"block_type": "oak_log", "count": 3}, "Collect 3 logs with exploration", 120.0),
+            RecoveryAction(
+                "collect",
+                {"block_type": "oak_log", "count": 3},
+                "Collect 3 logs with exploration",
+                120.0,
+            ),
         ],
         "max_retries": 3,
     },
@@ -262,13 +273,20 @@ PHASE_RECOVERY_MAP: dict[SurvivalPhase, dict[str, Any]] = {
         "fallback_actions": [
             RecoveryAction("craft", {"recipe": "oak_planks", "count": 2}, "Craft extra planks"),
             RecoveryAction("craft", {"recipe": "stick", "count": 2}, "Craft sticks"),
-            RecoveryAction("craft", {"recipe": "wooden_pickaxe", "count": 1}, "Craft wooden pickaxe"),
+            RecoveryAction(
+                "craft", {"recipe": "wooden_pickaxe", "count": 1}, "Craft wooden pickaxe"
+            ),
         ],
         "max_retries": 2,
     },
     SurvivalPhase.COBBLESTONE: {
         "fallback_actions": [
-            RecoveryAction("collect", {"block_type": "cobblestone", "count": 12}, "Collect 12 cobblestone", 120.0),
+            RecoveryAction(
+                "collect",
+                {"block_type": "cobblestone", "count": 12},
+                "Collect 12 cobblestone",
+                120.0,
+            ),
         ],
         "max_retries": 3,
     },
@@ -282,19 +300,25 @@ PHASE_RECOVERY_MAP: dict[SurvivalPhase, dict[str, Any]] = {
     },
     SurvivalPhase.FUEL: {
         "fallback_actions": [
-            RecoveryAction("collect", {"block_type": "coal", "count": 3}, "Collect coal", 120.0),
+            RecoveryAction(
+                "collect", {"block_type": "coal_ore", "count": 3}, "Collect coal", 120.0
+            ),
         ],
         "max_retries": 3,
     },
     SurvivalPhase.IRON_ORE: {
         "fallback_actions": [
-            RecoveryAction("collect", {"block_type": "raw_iron", "count": 3}, "Collect raw iron", 180.0),
+            RecoveryAction(
+                "collect", {"block_type": "iron_ore", "count": 3}, "Collect raw iron", 180.0
+            ),
         ],
         "max_retries": 3,
     },
-SurvivalPhase.SMELT_IRON: {
+    SurvivalPhase.SMELT_IRON: {
         "fallback_actions": [
-            RecoveryAction("smelt", {"item": "raw_iron", "fuel": "coal", "count": 3}, "Smelt 3 iron", 120.0),
+            RecoveryAction(
+                "smelt", {"item": "raw_iron", "fuel": "coal", "count": 3}, "Smelt 3 iron", 120.0
+            ),
         ],
         "max_retries": 2,
     },
@@ -302,7 +326,9 @@ SurvivalPhase.SMELT_IRON: {
         "fallback_actions": [
             RecoveryAction("craft", {"recipe": "iron_pickaxe", "count": 1}, "Craft iron pickaxe"),
             RecoveryAction("craft", {"recipe": "iron_sword", "count": 1}, "Craft iron sword"),
-            RecoveryAction("craft", {"recipe": "iron_chestplate", "count": 1}, "Craft iron chestplate"),
+            RecoveryAction(
+                "craft", {"recipe": "iron_chestplate", "count": 1}, "Craft iron chestplate"
+            ),
         ],
         "max_retries": 2,
     },
@@ -310,6 +336,7 @@ SurvivalPhase.SMELT_IRON: {
 
 
 # -- Safety Checks --
+
 
 @dataclass
 class SafetyStatus:

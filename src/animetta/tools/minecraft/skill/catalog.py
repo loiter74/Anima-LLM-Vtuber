@@ -72,9 +72,7 @@ class SkillLibrary:
         if skill.id in self._skills:
             existing = self._skills[skill.id]
             if existing.is_learned:
-                logger.debug(
-                    f"[SkillLibrary] Learned skill '{skill.id}' already exists — skipping"
-                )
+                logger.debug(f"[SkillLibrary] Learned skill '{skill.id}' already exists — skipping")
                 return False
 
         if skill.tags:
@@ -136,8 +134,11 @@ class SkillLibrary:
             skill.last_used = datetime.now().isoformat()
             if self._db:
                 await self._db.update_stats(
-                    skill_id, skill.success_count, skill.fail_count,
-                    skill.avg_duration, skill.last_used,
+                    skill_id,
+                    skill.success_count,
+                    skill.fail_count,
+                    skill.avg_duration,
+                    skill.last_used,
                 )
             logger.info(f"[SkillLibrary] Updated success: {skill_id} ({skill.success_rate:.0%})")
 
@@ -149,8 +150,11 @@ class SkillLibrary:
             skill.last_used = datetime.now().isoformat()
             if self._db:
                 await self._db.update_stats(
-                    skill_id, skill.success_count, skill.fail_count,
-                    skill.avg_duration, skill.last_used,
+                    skill_id,
+                    skill.success_count,
+                    skill.fail_count,
+                    skill.avg_duration,
+                    skill.last_used,
                 )
             logger.info(f"[SkillLibrary] Updated failure: {skill_id} ({skill.success_rate:.0%})")
 
@@ -188,13 +192,13 @@ class SkillLibrary:
             )
 
         return await execute_skill(
-            skill, bridge, context,
+            skill,
+            bridge,
+            context,
             threat_check_interval=threat_check_interval,
         )
 
-    async def match_skills(
-        self, context: dict[str, Any], limit: int = 5
-    ) -> list[Skill]:
+    async def match_skills(self, context: dict[str, Any], limit: int = 5) -> list[Skill]:
         """Return skills whose preconditions are all satisfied."""
         candidates: list[Skill] = []
         for skill in self._skills.values():
@@ -204,9 +208,7 @@ class SkillLibrary:
         candidates.sort(key=lambda s: (-s.success_rate, s.avg_duration))
         return candidates[:limit]
 
-    async def search_by_keyword(
-        self, keyword: str, limit: int = 5
-    ) -> list[Skill]:
+    async def search_by_keyword(self, keyword: str, limit: int = 5) -> list[Skill]:
         """Search skills by keyword in name, description, or tags."""
         kw = keyword.lower()
         scored: list[tuple[int, bool, Skill]] = []
@@ -227,10 +229,7 @@ class SkillLibrary:
     async def get_skills_by_category(self, category: str) -> list[Skill]:
         """Return all skills matching category."""
         cat_lower = category.lower()
-        return [
-            s for s in self._skills.values()
-            if s.category.lower() == cat_lower
-        ]
+        return [s for s in self._skills.values() if s.category.lower() == cat_lower]
 
     async def cleanup(self) -> int:
         """Remove low-quality learned skills."""

@@ -254,7 +254,7 @@ docker compose -f docker-compose.cpu.yml up -d
 
 服务启动后访问 `http://localhost`（前端）和 `http://localhost:12394/health`（健康检查）。
 
-> 详细部署说明参见 [Docker 部署指南](./docs/docker-deployment.md) 和 [ZEABUR.md](./ZEABUR.md)。
+> 详细部署说明参见 [Docker 部署指南](./docs/deployment/docker.md) 和 [Zeabur 部署指南](./docs/deployment/zeabur.md)。
 
 ---
 
@@ -273,7 +273,7 @@ $env:ANIMETTA_PYTHON='uv run --no-project --with-requirements C:\Users\30262\Pro
 python scripts/health_check.py
 ```
 
-必需门禁包括后端 lint/type/test/coverage、前端 typecheck/test/build/coverage 脚本校验、Socket.IO 事件校验、密钥扫描、GPU/CPU Docker compose config 校验，以及轻量 ASGI 路由探针。后端 coverage 当前采用 67% 临时 ratchet，目标仍是 70%。当前 Python dependency check 和前端 audit 是有记录的 advisory；已知慢速、探索性或暂存检查必须记录在 [health-advisories.md](./docs/health-advisories.md)。
+必需门禁包括后端 lint/type/test/coverage、前端 typecheck/test/build/coverage 脚本校验、Socket.IO 事件校验、密钥扫描、GPU/CPU Docker compose config 校验，以及轻量 ASGI 路由探针。后端 coverage 当前采用 67% 临时 ratchet，目标仍是 70%。当前 Python dependency check 和前端 audit 是有记录的 advisory；已知慢速、探索性或暂存检查必须记录在 [health-advisories.md](./docs/development/health-advisories.md)。
 
 ---
 
@@ -362,7 +362,7 @@ await sio.emit(events['chat']['sentence']['name'], data)
 | `minecraft` | 游戏集成 | `minecraft:start`, `minecraft:status` |
 | `meme` | 梗系统 | `meme:add`, `meme:review` |
 
-> 完整事件列表见 `config/socket-events.json` 和 [API 文档](./API_DOCUMENTATION.md)。
+> 完整事件列表见 `config/socket-events.json` 和 [API 文档](./docs/reference/socket-api.md)。
 
 ---
 

@@ -12,6 +12,8 @@ from loguru import logger
 
 # Global bridge instance (initialized by init_bridge)
 _bridge = None
+# Global state collector (set by MinecraftHandlers after start)
+_state_collector = None
 
 
 def init_bridge(config: dict | None = None):
@@ -24,6 +26,7 @@ def init_bridge(config: dict | None = None):
     if _bridge is not None:
         return
 
+    from . import bridge as bridge_module
     from .bridge import MinecraftBridge
     from .config import MinecraftConfig, MinecraftMode
 
@@ -37,6 +40,7 @@ def init_bridge(config: dict | None = None):
     service_pool_ref = None
     try:
         from animetta.core.service_pool import ServicePool
+
         if ServicePool._ready:
             service_pool_ref = ServicePool
     except Exception:
@@ -47,18 +51,11 @@ def init_bridge(config: dict | None = None):
         autonomous=mc_config.mode != MinecraftMode.FALLBACK,
         service_pool=service_pool_ref,
     )
+    bridge_module._bridge = _bridge
 
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_bridge.start())
-        else:
-            loop.run_until_complete(_bridge.start())
-    except RuntimeError:
-        # No running event loop -- use asyncio.run() which handles loop lifecycle
-        asyncio.run(_bridge.start())
-
-    logger.info("[MinecraftTools] Bridge initialized and bot connecting...")
+    # Bridge is created but NOT started here.
+    # Callers should await _bridge.start() explicitly.
+    logger.info("[MinecraftTools] Bridge created (not started yet)")
 
 
 async def cleanup_bridge():
@@ -67,6 +64,9 @@ async def cleanup_bridge():
     if _bridge:
         await _bridge.stop()
         _bridge = None
+        from . import bridge as bridge_module
+
+        bridge_module._bridge = None
         logger.info("[MinecraftTools] Bridge cleaned up")
 
 
@@ -76,7 +76,21 @@ def get_minecraft_tools() -> list[Any]:
     Returns:
         List of LangChain tool objects
     """
-    return [mc_goto, mc_mine, mc_build, mc_attack, mc_chat, mc_status, mc_goal, mc_stop, mc_collect, mc_craft, mc_smelt, mc_recipes, mc_survival_iron]
+    return [
+        mc_goto,
+        mc_mine,
+        mc_build,
+        mc_attack,
+        mc_chat,
+        mc_status,
+        mc_goal,
+        mc_stop,
+        mc_collect,
+        mc_craft,
+        mc_smelt,
+        mc_recipes,
+        mc_survival_iron,
+    ]
 
 
 # Import asyncio for bridge initialization
@@ -91,6 +105,20 @@ async def _send(action: str, params: dict | None = None, timeout: float = 60.0) 
             "Minecraft bot is not connected. "
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
+
+    # Notify state collector of action
+    if _state_collector is not None:
+        target = ""
+        if params:
+            if action == "mine_block":
+                target = params.get("block_type", "")
+            elif action == "goto":
+                target = f"({params.get('x',0)},{params.get('y',0)},{params.get('z',0)})"
+            elif action == "craft_item":
+                target = params.get("item_name", "")
+            elif action == "chop_tree":
+                target = params.get("tree_type", "tree")
+        _state_collector.update_action(action, target)
 
     result = await _bridge.send_command(action, params, timeout=timeout)
 
@@ -298,8 +326,12 @@ async def mc_survival_iron() -> str:
     ]
     for pr in report.phase_results:
         status = "PASS" if pr.success else "FAIL"
-        fail = f" ({pr.failure_category.value}: {pr.failure_message})" if pr.failure_category else ""
-        lines.append(f"  [{status}] {pr.phase.value} -- {pr.actions_succeeded}/{pr.actions_attempted} actions{fail}")
+        fail = (
+            f" ({pr.failure_category.value}: {pr.failure_message})" if pr.failure_category else ""
+        )
+        lines.append(
+            f"  [{status}] {pr.phase.value} -- {pr.actions_succeeded}/{pr.actions_attempted} actions{fail}"
+        )
 
     lines.append("")
     lines.append("Final Inventory:")

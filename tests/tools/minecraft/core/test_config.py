@@ -3,6 +3,7 @@ from __future__ import annotations
 from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,
     MinecraftConfig,
+    MinecraftMode,
     MinecraftSafetyConfig,
 )
 
@@ -65,7 +66,7 @@ class TestMinecraftConfig:
     def test_default_values(self):
         cfg = MinecraftConfig()
         assert cfg.enabled is False
-        assert cfg.autonomous.loop is False
+        assert cfg.mode == MinecraftMode.FALLBACK
         assert cfg.bot.host == "localhost"
         assert cfg.bot.port == 25565
         assert cfg.safety.no_griefing is True
@@ -73,11 +74,11 @@ class TestMinecraftConfig:
     def test_enabled_config(self):
         cfg = MinecraftConfig(
             enabled=True,
-            autonomous=True,
+            mode=MinecraftMode.LEARN,
             bot=MinecraftBotConfig(host="mc.example.com", username="TestBot"),
         )
         assert cfg.enabled is True
-        assert cfg.autonomous.loop is True
+        assert cfg.mode == MinecraftMode.LEARN
         assert cfg.bot.host == "mc.example.com"
         assert cfg.bot.username == "TestBot"
 

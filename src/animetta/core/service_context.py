@@ -12,13 +12,13 @@ from loguru import logger
 
 from animetta.avatar.factory import EmotionAnalyzerFactory
 from animetta.avatar.prompts import EmotionPromptBuilder
-from animetta.core.config.agent import AgentConfig
-from animetta.core.config.app import AppConfig
-from animetta.core.config.live2d import get_live2d_config
-from animetta.core.config.persona.base import PersonaConfig
-from animetta.core.config.providers.asr import ASRConfig
-from animetta.core.config.providers.tts import TTSConfig
-from animetta.core.config.providers.vad import VADConfig
+from animetta.config.agent import AgentConfig
+from animetta.config.app import AppConfig
+from animetta.config.live2d import get_live2d_config
+from animetta.config.persona.base import PersonaConfig
+from animetta.config.providers.asr import ASRConfig
+from animetta.config.providers.tts import TTSConfig
+from animetta.config.providers.vad import VADConfig
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.services.asr import ASRFactory, ASRInterface
 from animetta.services.audio.processor import AudioProcessorInterface
@@ -35,7 +35,7 @@ class ServiceContext:
     """Service context class"""
 
     def __init__(self, model_manager: ModelLoadingManager | None = None):
-        self.core.config: AppConfig | None = None
+        self.config: AppConfig | None = None
         self.model_manager = model_manager
 
         # Service instances
@@ -75,7 +75,7 @@ class ServiceContext:
     # Initialization methods
     async def load_from_config(self, config: AppConfig) -> None:
         """Load all services from config"""
-        self.core.config = config
+        self.config = config
         logger.info(f"[{self.session_id}] Loading services from config...")
 
         await self.init_asr(config.asr)
@@ -110,7 +110,7 @@ class ServiceContext:
         send_text: Callable | None = None,
     ) -> None:
         """Load services from cache (reuse existing instances)"""
-        self.core.config = config
+        self.config = config
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
         self.llm_engine = llm_engine

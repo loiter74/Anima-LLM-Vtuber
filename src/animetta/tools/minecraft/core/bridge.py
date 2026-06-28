@@ -38,7 +38,7 @@ class MinecraftBridge:
         autonomous: bool = False,
         service_pool: Any | None = None,
     ):
-        self.core.config = config
+        self.config = config
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future] = {}
         self._next_id = 1
@@ -52,6 +52,9 @@ class MinecraftBridge:
         self._autonomous_enabled = autonomous
         self._service_pool = service_pool
 
+        # Viewer callback for forwarding viewer_joined/viewer_left events
+        self._viewer_callback: Any | None = None
+
     async def start(self) -> bool:
         """Start the Mineflayer bot subprocess"""
         if self._running:
@@ -61,7 +64,7 @@ class MinecraftBridge:
             logger.info("[MinecraftBridge] Skipped — Node.js not available in this environment")
             return False
 
-        bot_dir = os.path.join(os.path.dirname(__file__), "bot")
+        bot_dir = os.path.join(os.path.dirname(__file__), "..", "bot")
         bot_script = os.path.join(bot_dir, "index.js")
 
         if not os.path.exists(bot_script):
@@ -69,19 +72,29 @@ class MinecraftBridge:
             return False
 
         if not os.path.exists(os.path.join(bot_dir, "node_modules")):
-            logger.error(f"[MinecraftBridge] node_modules not found, run 'npm install' in {bot_dir}")
+            logger.error(
+                f"[MinecraftBridge] node_modules not found, run 'npm install' in {bot_dir}"
+            )
             return False
 
         try:
+            # Build environment with viewer config
+            env = os.environ.copy()
+            if self.config.viewer.username:
+                env["MC_VIEWER_USERNAME"] = self.config.viewer.username
+                env["MC_AUTO_SPECTATE"] = "true" if self.config.viewer.auto_spectate else "false"
+
             self._process = await asyncio.create_subprocess_exec(
-                "node", bot_script,
-                self.core.config.bot.host,
-                str(self.core.config.bot.port),
-                self.core.config.bot.username,
+                "node",
+                bot_script,
+                self.config.bot.host,
+                str(self.config.bot.port),
+                self.config.bot.username,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=bot_dir,
+                env=env,
             )
 
             self._running = True
@@ -92,7 +105,7 @@ class MinecraftBridge:
 
             logger.info(
                 f"[MinecraftBridge] Bot process started (PID: {self._process.pid}, "
-                f"server={self.core.config.bot.host}:{self.core.config.bot.port})"
+                f"server={self.config.bot.host}:{self.config.bot.port})"
             )
 
             # Wait for bot to log in
@@ -138,7 +151,13 @@ class MinecraftBridge:
             future = asyncio.get_event_loop().create_future()
             self._pending[cmd_id] = future
 
-        command = json.dumps({"id": cmd_id, "action": action, "params": params or {}})
+        command = json.dumps(
+            {
+                "id": cmd_id,
+                "action": action,
+                "params": {**(params or {}), "timeout": int(timeout * 1000)},
+            }
+        )
         logger.debug(f"[MinecraftBridge] Sending: {action} (id={cmd_id})")
 
         try:
@@ -177,7 +196,9 @@ class MinecraftBridge:
                     # Suppress noisy individual line warnings when connection is refused
                     if "ECONNREFUSED" in line:
                         if not _connection_refused_logged:
-                            logger.info("[MinecraftBridge] Minecraft server not available on localhost:25565")
+                            logger.info(
+                                "[MinecraftBridge] Minecraft server not available on localhost:25565"
+                            )
                             _connection_refused_logged = True
                     else:
                         logger.debug(f"[MinecraftBridge] Non-JSON from bot: {line[:100]}")
@@ -196,12 +217,22 @@ class MinecraftBridge:
                         self._bot_ready.set()
                     elif isinstance(result, dict) and result.get("type") == "spawn":
                         logger.info("[MinecraftBridge] Bot spawned in world")
+                    elif isinstance(result, dict) and result.get("type") in (
+                        "viewer_joined",
+                        "viewer_left",
+                    ):
+                        event_type = result["type"]
+                        event_username = result.get("username", "")
+                        logger.info(f"[MinecraftBridge] {event_type}: {event_username}")
+                        if self._viewer_callback:
+                            try:
+                                self._viewer_callback(event_type, event_username)
+                            except Exception as e:
+                                logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
                     continue
 
                 if resp_id is not None and resp_id in self._pending:
-                    self._pending[resp_id].set_result(
-                        {"status": status, "result": result}
-                    )
+                    self._pending[resp_id].set_result({"status": status, "result": result})
                 else:
                     logger.debug(f"[MinecraftBridge] Unhandled response id={resp_id}")
 
@@ -228,15 +259,15 @@ class MinecraftBridge:
     async def _start_autonomous(self):
         """Start the autonomous behavior loop with learning components."""
         from ..autonomous.loop import AutonomousLoop
+        from ..other.trace_recorder import TraceRecorder
         from ..skill.library import SkillLibrary
         from ..skill.validator import SkillValidator
-        from ..other.trace_recorder import TraceRecorder
 
         # Check if we can wire the full learning loop
         llm_service = None
         if self._service_pool is not None:
             try:
-                llm_service = getattr(self._service_pool, '_llm', None)
+                llm_service = getattr(self._service_pool, "_llm", None)
             except Exception:
                 logger.warning("[MinecraftBridge] Could not get LLM service from ServicePool")
 
@@ -292,20 +323,50 @@ class MinecraftBridge:
 
     async def set_planner_mode(self, plan_steps: list) -> dict:
         """Switch bot to planner mode with a plan"""
-        return await self.send_command("set_mode", {
-            "mode": "planner",
-            "plan": plan_steps,
-        }, timeout=10.0)
+        return await self.send_command(
+            "set_mode",
+            {
+                "mode": "planner",
+                "plan": plan_steps,
+            },
+            timeout=10.0,
+        )
 
     async def set_rule_mode(self) -> dict:
         """Switch bot to rule mode (Python-driven)"""
-        return await self.send_command("set_mode", {
-            "mode": "rule",
-        }, timeout=10.0)
+        return await self.send_command(
+            "set_mode",
+            {
+                "mode": "rule",
+            },
+            timeout=10.0,
+        )
 
     async def get_plan_status(self) -> dict:
         """Get current plan execution status"""
         return await self.send_command("plan_status", {}, timeout=5.0)
+
+    async def spectate_viewer(self, username: str | None = None) -> dict:
+        """Send spectate command to attach viewer to bot's perspective.
+
+        Args:
+            username: Viewer's MC username. If None, uses config.viewer.username.
+
+        Returns:
+            Dict with status and result keys.
+        """
+        params = {}
+        if username:
+            params["username"] = username
+        return await self.send_command("spectate", params, timeout=10.0)
+
+    def set_viewer_callback(self, callback: Any) -> None:
+        """Set callback for viewer join/leave events.
+
+        The callback receives: (event_type: str, username: str)
+        where event_type is 'viewer_joined' or 'viewer_left'.
+        """
+        self._viewer_callback = callback
 
     async def stop(self):
         """Stop the bot subprocess and autonomous loop"""

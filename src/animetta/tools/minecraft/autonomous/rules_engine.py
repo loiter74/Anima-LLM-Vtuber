@@ -4,6 +4,7 @@ Minecraft AI Behavior Rules Engine
 Parses rules.md YAML config and provides rule query/evaluation interface.
 Implements Rule-based decision: priority-driven action selection with safety overrides.
 """
+
 import os
 import random
 from dataclasses import dataclass, field
@@ -41,21 +42,32 @@ class ChatTopic:
 class BehaviorRules:
     character_name: str = "AnimaBot"
     personality: str = ""
-    priorities: list[str] = field(default_factory=lambda: [
-        "survival", "maintenance", "building", "gathering", "social", "exploration"
-    ])
+    priorities: list[str] = field(
+        default_factory=lambda: [
+            "survival",
+            "maintenance",
+            "building",
+            "gathering",
+            "social",
+            "exploration",
+        ]
+    )
     building: BuildTarget | None = None
-    safety: dict = field(default_factory=lambda: {
-        "return_to_base_at_night": True,
-        "auto_heal_threshold": 10,
-        "avoid_ravines": True,
-        "max_build_height": 50,
-    })
-    chat: dict = field(default_factory=lambda: {
-        "proactive_chance": 0.25,
-        "cooldown_seconds": 30,
-        "topics": [],
-    })
+    safety: dict = field(
+        default_factory=lambda: {
+            "return_to_base_at_night": True,
+            "auto_heal_threshold": 10,
+            "avoid_ravines": True,
+            "max_build_height": 50,
+        }
+    )
+    chat: dict = field(
+        default_factory=lambda: {
+            "proactive_chance": 0.25,
+            "cooldown_seconds": 30,
+            "topics": [],
+        }
+    )
     base_position: dict | None = None  # {"x": int, "y": int, "z": int}
 
 
@@ -99,13 +111,15 @@ class RulesEngine:
             if building_raw:
                 build_plan = []
                 for step in building_raw.get("build_plan", []):
-                    build_plan.append(BuildPlanStep(
-                        action=step.get("action", ""),
-                        block=step.get("block", ""),
-                        description=step.get("description", ""),
-                        area=step.get("area"),
-                        height=step.get("height"),
-                    ))
+                    build_plan.append(
+                        BuildPlanStep(
+                            action=step.get("action", ""),
+                            block=step.get("block", ""),
+                            description=step.get("description", ""),
+                            area=step.get("area"),
+                            height=step.get("height"),
+                        )
+                    )
                 self.rules.building = BuildTarget(
                     target=building_raw.get("target", ""),
                     blueprint=building_raw.get("blueprint", ""),
@@ -122,7 +136,11 @@ class RulesEngine:
                 if key in self._safety_config:
                     config_val = self._safety_config[key]
                     rules_val = self.rules.safety.get(key)
-                    if rules_val is not None and config_val < rules_val if isinstance(config_val, int) else True:
+                    if (
+                        rules_val is not None and config_val < rules_val
+                        if isinstance(config_val, int)
+                        else True
+                    ):
                         logger.info(
                             f"[RulesEngine] Safety override: {key}={rules_val} -> {config_val} (from config/tools.yaml)"
                         )
@@ -139,16 +157,20 @@ class RulesEngine:
                 )
                 topics = []
                 for t in chat_raw.get("topics", []):
-                    topics.append(ChatTopic(
-                        trigger=t.get("trigger", ""),
-                        messages=t.get("messages", []),
-                    ))
+                    topics.append(
+                        ChatTopic(
+                            trigger=t.get("trigger", ""),
+                            messages=t.get("messages", []),
+                        )
+                    )
                 self.rules.chat["topics"] = topics
 
             self._validate()
-            logger.info(f"[RulesEngine] Loaded rules for '{self.rules.character_name}' "
-                       f"({len(self.rules.priorities)} priorities, "
-                       f"{len(self.rules.chat.get('topics', []))} chat topics)")
+            logger.info(
+                f"[RulesEngine] Loaded rules for '{self.rules.character_name}' "
+                f"({len(self.rules.priorities)} priorities, "
+                f"{len(self.rules.chat.get('topics', []))} chat topics)"
+            )
 
         except yaml.YAMLError as e:
             logger.error(f"[RulesEngine] Failed to parse rules.md: {e}")

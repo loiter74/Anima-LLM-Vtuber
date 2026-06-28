@@ -1,0 +1,49 @@
+# ============================================================================
+# Animetta -- Core Runtime Dependencies
+# ============================================================================
+# Minimal set for the default server: backend, Socket.IO, config,
+# orchestration, remote/mock providers, SQLite persistence.
+#
+# For local AI inference (torch, kokoro, whisper, etc.):
+#   pip install -r requirements-local-ai.txt
+# ============================================================================
+
+# --- Backend & Web ---
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-socketio==5.10.0
+python-engineio==4.8.0
+websockets>=11.0
+
+# --- Config & Logging ---
+pydantic>=2.0.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# --- Orchestration (LangGraph / LangChain) ---
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+
+# --- MCP (Model Context Protocol) ---
+mcp>=0.1.0
+
+# --- Data & Text ---
+numpy>=1.24.0
+aiosqlite>=0.20.0
+opencc-python-reimplemented>=0.1.7
+jieba>=0.42.1
+pyjwt>=2.10.0
+
+# --- HTTP Client ---
+httpx[socks]>=0.27.0
+
+# --- Monitoring (pure Python, minimal footprint) ---
+prometheus-client>=0.19.0
+
+# --- Tracing (required by inspection/scheduler → tracing/context.py) ---
+opentelemetry-api>=1.30.0
+opentelemetry-sdk>=1.30.0

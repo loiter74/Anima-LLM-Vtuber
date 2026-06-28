@@ -60,20 +60,20 @@ class PresetLoader:
             project_root = Path(__file__).parent.parent.parent.parent.parent
             config_path = project_root / "config" / "live2d-presets.yaml"
 
-        self.core.config_path = Path(config_path)
+        self.config_path = Path(config_path)
         self.presets: dict[str, Any] = {}
         self._load_presets()
 
     def _load_presets(self):
         """Load preset file"""
-        if not self.core.config_path.exists():
-            logger.warning(f"[PresetLoader] Preset file does not exist: {self.core.config_path}")
+        if not self.config_path.exists():
+            logger.warning(f"[PresetLoader] Preset file does not exist: {self.config_path}")
             return
 
         try:
-            with open(self.core.config_path, encoding='utf-8') as f:
+            with open(self.config_path, encoding='utf-8') as f:
                 self.presets = yaml.safe_load(f)
-            logger.info(f"[PresetLoader] Preset loaded successfully: {self.core.config_path}")
+            logger.info(f"[PresetLoader] Preset loaded successfully: {self.config_path}")
         except Exception as e:
             logger.error(f"[PresetLoader] Failed to load preset: {e}")
 

@@ -11,8 +11,8 @@ from typing import Any
 
 from loguru import logger
 
-from animetta.core.config.core.registry import ProviderRegistry
-from animetta.core.config.providers.llm import MockLLMConfig
+from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm import MockLLMConfig
 
 from .interface import LLMInterface
 

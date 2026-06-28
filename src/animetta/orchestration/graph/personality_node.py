@@ -87,7 +87,7 @@ async def personality_node(
             # Try loading from global config
             persona_name = getattr(config_store, "persona_name", None)
             if persona_name:
-                from animetta.core.config.persona.base import PersonaConfig
+                from animetta.config.persona.base import PersonaConfig
                 try:
                     persona_cfg = PersonaConfig.load(persona_name)
                 except Exception:

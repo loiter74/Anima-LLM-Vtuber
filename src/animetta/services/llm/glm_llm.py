@@ -13,7 +13,7 @@ from typing import Any
 from loguru import logger
 from zhipuai import ZhipuAI
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 from .glm_message_converter import GLMMessageConverter, GLMToolConverter
 from .interface import LLMInterface
@@ -24,7 +24,7 @@ class GLMLLM(LLMInterface):
     """GLM (Zhipu AI) LLM implementation"""
 
     def __init__(self, config: GLMLLMConfig):
-        self.core.config = config
+        self.config = config
         self.client = None
         self._conversation_history: list[dict[str, Any]] = []
         self._call_count = 0
@@ -37,7 +37,7 @@ class GLMLLM(LLMInterface):
 
     async def _ensure_client(self):
         if self.client is None:
-            self.client = ZhipuAI(api_key=self.core.config.api_key, disable_token_cache=False)
+            self.client = ZhipuAI(api_key=self.config.api_key, disable_token_cache=False)
             logger.info("[GLM] ZhipuAI client initialized")
 
     async def preload(self) -> None:
@@ -45,7 +45,7 @@ class GLMLLM(LLMInterface):
         if self.client is not None:
             return
         await self._ensure_client()
-        logger.info(f"[GLM] API client preloaded (model={self.core.config.model})")
+        logger.info(f"[GLM] API client preloaded (model={self.config.model})")
 
     async def chat_stream(
         self,
@@ -63,11 +63,11 @@ class GLMLLM(LLMInterface):
         try:
             def _create_stream():
                 return self.client.chat.completions.create(
-                    model=self.core.config.model,
+                    model=self.config.model,
                     messages=messages,
                     tools=glm_tools,
                     stream=True,
-                    temperature=self.core.config.temperature,
+                    temperature=self.config.temperature,
                 )
 
             response = await asyncio.to_thread(_create_stream)
@@ -99,11 +99,11 @@ class GLMLLM(LLMInterface):
         try:
             def _create_completion():
                 return self.client.chat.completions.create(
-                    model=self.core.config.model,
+                    model=self.config.model,
                     messages=messages,
                     tools=glm_tools,
                     stream=False,
-                    temperature=self.core.config.temperature,
+                    temperature=self.config.temperature,
                 )
 
             response = await asyncio.to_thread(_create_completion)
@@ -139,12 +139,12 @@ class GLMLLM(LLMInterface):
         try:
             def _create_completion():
                 return self.client.chat.completions.create(
-                    model=self.core.config.model,
+                    model=self.config.model,
                     messages=messages,
                     tools=glm_tools,
                     tool_choice="auto",
                     stream=False,
-                    temperature=self.core.config.temperature,
+                    temperature=self.config.temperature,
                 )
 
             response = await asyncio.to_thread(_create_completion)
@@ -294,13 +294,13 @@ class GLMLLM(LLMInterface):
 
     @property
     def max_tokens(self) -> int | None:
-        return self.core.config.max_tokens
+        return self.config.max_tokens
 
     def set_max_tokens(self, max_tokens: int):
-        self.core.config.max_tokens = max_tokens
+        self.config.max_tokens = max_tokens
 
     def supports_tool_calls(self) -> bool:
-        return self.core.config.model.startswith("glm-4")
+        return self.config.model.startswith("glm-4")
 
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         logger.info(f"[GLM] Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}")

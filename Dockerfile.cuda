@@ -59,9 +59,9 @@ ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_EXTRA_INDEX_URL=https://pypi.org/simple/
 ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
 
-COPY requirements.txt .
+COPY requirements-core.txt requirements-local-ai.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install -r requirements-core.txt -r requirements-local-ai.txt
 
 # ---------------------------------------------------------------------------
 # Stage 3: Runtime

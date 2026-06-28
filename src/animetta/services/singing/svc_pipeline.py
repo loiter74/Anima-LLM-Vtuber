@@ -31,7 +31,7 @@ class SVCPipeline(SingingService):
     """Full SVC pipeline: download → separate → transcribe → SVC → mix."""
 
     def __init__(self, config: SingingConfig):
-        self.core.config = config
+        self.config = config
         self._stage = PipelineStage.IDLE
         self._progress = 0.0
         self._message = ""
@@ -109,7 +109,7 @@ class SVCPipeline(SingingService):
                 video_title or bv_id or Path(audio_path).stem
             )
             self._init_session(safe_name)
-            original_output = Path(self.core.config.output_dir) / f"{safe_name}_original.wav"
+            original_output = Path(self.config.output_dir) / f"{safe_name}_original.wav"
             shutil.copy2(audio_path, str(original_output))
 
             return await self._run_stages(audio_path, video_title=video_title, original_path=str(original_output))
@@ -146,7 +146,7 @@ class SVCPipeline(SingingService):
             f"{seed}{datetime.now().isoformat()}".encode()
         ).hexdigest()[:6]
         session_id = f"{clean}_{short_hash}"
-        session_output_dir = Path(self.core.config.output_dir) / session_id
+        session_output_dir = Path(self.config.output_dir) / session_id
         session_output_dir.mkdir(parents=True, exist_ok=True)
         self._session_dir = session_output_dir
 
@@ -192,7 +192,7 @@ class SVCPipeline(SingingService):
         ass_path = session_dir / "lyrics.ass"
         ass_path.write_text(ass_content, encoding="utf-8")
         subtitle_output_name = f"{session_id}_lyrics.ass"
-        subtitle_output_path = Path(self.core.config.output_dir) / subtitle_output_name
+        subtitle_output_path = Path(self.config.output_dir) / subtitle_output_name
         subtitle_output_path.write_text(ass_content, encoding="utf-8")
         self._message = f"Lyrics saved to {ass_path}"
 
@@ -236,7 +236,7 @@ class SVCPipeline(SingingService):
             self._update_progress(PipelineStage.CONVERTING, 100, "Voice conversion skipped — using original vocals")
 
         # Copy converted vocals to outputs for API serving (used for lip sync)
-        vocals_output = Path(self.core.config.output_dir) / f"{session_id}_vocals.wav"
+        vocals_output = Path(self.config.output_dir) / f"{session_id}_vocals.wav"
         shutil.copy2(str(converted_path), str(vocals_output))
 
         # Stage 6: Mix (original vocals)

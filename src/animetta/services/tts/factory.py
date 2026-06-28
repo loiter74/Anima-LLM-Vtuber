@@ -13,8 +13,8 @@ To add a new TTS provider, simply:
 
 from loguru import logger
 
-from animetta.core.config.core.registry import ProviderRegistry
-from animetta.core.config.providers.tts import (
+from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts import (
     ChatTTSConfig,
     EdgeTTSConfig,
     GPTSoVITSConfig,

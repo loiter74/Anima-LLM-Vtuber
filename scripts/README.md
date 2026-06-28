@@ -1,4 +1,4 @@
-# Anima Utility Scripts
+# Animetta Utility Scripts
 
 Development and training utilities for the Anima VTuber project.
 
@@ -6,12 +6,24 @@ Development and training utilities for the Anima VTuber project.
 
 | Script | Purpose |
 |--------|---------|
-| `bench.py` | LangGraph pipeline performance benchmark (1024 lines) |
-| `collect-voice.py` | Download & prepare voice training data (yt-dlp + Demucs) |
+| `anima_cli.py` | RVC training CLI wrapper |
+| `bench.py` | LangGraph pipeline performance benchmark |
+| `check_secrets.py` | Tracked config secret scanner |
+| `health_check.py` | Local health gate orchestrator |
+| `route_smoke.py` | Lightweight ASGI route probes |
+| `validate-events.py` | Socket.IO event contract validator |
 | `download-models.sh` | Pre-download AI models (Kokoro, Qwen3, Whisper) |
-| `process-icons.py` | Icon asset processing — white background removal + resize |
-| `seed-persona.py` | Generate seed data for a persona in the memory DB |
-| `start-mc-bot.py` / `.bat` | Persistent Minecraft bot launcher |
+| `collect_danmaku.py` | Build danmaku sample datasets |
+| `analyze_danmaku_opencode.py` | Analyze collected danmaku samples |
+| `e2e_test_events.py` | Socket event end-to-end checks |
+| `start-mc-bot.bat` | Windows helper for the Minecraft bot |
+
+## Subdirectories
+
+| Directory | Purpose |
+|-----------|---------|
+| `minecraft_manual/` | Manual Minecraft skill, tech-tree, and bot smoke scripts |
+| `train/` | Character singing model training pipeline |
 
 ## Training Pipeline
 
@@ -19,8 +31,7 @@ Development and training utilities for the Anima VTuber project.
 train/
 ├── cli.py              ← Main entry: python -m scripts.train.cli --character <name>
 ├── config.yaml          ← Training configuration
-├── collect-data.py      ← Stage 1: collect voice samples
-├── prepare-data.py      ← Stage 2: preprocess audio
+├── prepare_data.py      ← Stage 1: preprocess audio
 └── deploy.py            ← Stage 3: deploy model to Anima config
 ```
 

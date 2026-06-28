@@ -48,7 +48,7 @@ class TestCraftSkillStructure:
     def test_all_craft_skills_exist(self) -> None:
         """All 3 craft skills are present in predefined skills."""
         skills = _craft_skills()
-        assert len(skills) == 3, f"Expected 3 craft skills, got {len(skills)}"
+        assert len(skills) == 6, f"Expected 6 craft skills, got {len(skills)}"
 
     def test_craft_equipment_exists(self) -> None:
         """craft_equipment skill exists with correct structure."""
@@ -323,7 +323,7 @@ class TestCraftSkillMatching:
         self, lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """Searching by 'crafting' tag finds all craft skills."""
-        results = await lib_with_craft_skills.search_by_tags(["crafting"])
+        results = await lib_with_craft_skills.search_by_tags(["crafting"], limit=10)
         result_ids = {s.id for s in results}
         assert "craft_equipment" in result_ids
         assert "craft_basic_tools" in result_ids

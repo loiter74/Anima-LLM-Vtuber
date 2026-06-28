@@ -7,6 +7,7 @@ Takes mc_status() output and enriches it with:
 - Material gap analysis (inventory vs building targets)
 - Entity classification (hostile/neutral/player/passive)
 """
+
 import math
 from dataclasses import dataclass, field
 
@@ -38,12 +39,17 @@ class WorldState:
 
     # Environment
     dimension: str = "overworld"
-    time: str = "day"          # "day" | "sunset" | "night" | "sunrise"
-    weather: str = "clear"     # "clear" | "rain" | "thunder"
+    time: str = "day"  # "day" | "sunset" | "night" | "sunrise"
+    weather: str = "clear"  # "clear" | "rain" | "thunder"
     biome: str = "unknown"
 
     # Gameplay
     game_mode: str = "survival"
+
+    # Movement / fall safety
+    fall_distance: float = 0.0
+    on_ground: bool = True
+    velocity_y: float = 0.0
 
     # Inventory (block_type -> count)
     inventory: dict = field(default_factory=dict)
@@ -74,6 +80,14 @@ class WorldState:
         dimension = payload.get("dimension", "overworld")
         game_mode = payload.get("game_mode", "survival")
 
+        # Movement / fall safety
+        fall_distance = float(payload.get("fall_distance", 0.0) or 0.0)
+        on_ground = bool(payload.get("on_ground", True))
+        velocity = payload.get("velocity", {})
+        velocity_y = 0.0
+        if isinstance(velocity, dict):
+            velocity_y = float(velocity.get("y", 0.0) or 0.0)
+
         # Vital stats
         health = payload.get("health", 20.0)
         food = payload.get("food", 20.0)
@@ -103,19 +117,29 @@ class WorldState:
                 else:
                     continue
                 if count > 0:
-                    entities.append(Entity(
-                        name=name,
-                        type=entity_type,
-                        count=count,
-                        distance=dist if entity_type == "hostile" else 20.0,
-                    ))
+                    entities.append(
+                        Entity(
+                            name=name,
+                            type=entity_type,
+                            count=count,
+                            distance=dist if entity_type == "hostile" else 20.0,
+                        )
+                    )
 
         return cls(
-            x=x, y=y, z=z,
-            health=health, food=food,
-            dimension=dimension, time=time,
-            weather=weather, biome=biome,
+            x=x,
+            y=y,
+            z=z,
+            health=health,
+            food=food,
+            dimension=dimension,
+            time=time,
+            weather=weather,
+            biome=biome,
             game_mode=game_mode,
+            fall_distance=fall_distance,
+            on_ground=on_ground,
+            velocity_y=velocity_y,
             inventory=inventory,
             entities=entities,
             current_goal=payload.get("current_goal"),
@@ -142,6 +166,10 @@ class WorldState:
     @property
     def is_hungry(self) -> bool:
         return self.food < 6
+
+    @property
+    def has_water_bucket(self) -> bool:
+        return self.inventory.get("water_bucket", 0) > 0
 
     @property
     def hostile_count(self) -> int:
@@ -175,6 +203,23 @@ class WorldState:
         if hc >= 3 or self.nearest_threat_distance < 15:
             return 2
         return 1
+
+    def get_fall_risk_level(self) -> int:
+        """
+        Fall risk level: 0 (safe) to 3 (urgent).
+
+        Mineflayer versions differ on whether fall distance or vertical velocity
+        is the more reliable signal, so use both.
+        """
+        if self.on_ground:
+            return 0
+        if self.fall_distance >= 12 or self.velocity_y <= -1.1:
+            return 3
+        if self.fall_distance >= 6 or self.velocity_y <= -0.7:
+            return 2
+        if self.fall_distance >= 3 or self.velocity_y <= -0.35:
+            return 1
+        return 0
 
     def get_player_nearby(self) -> bool:
         """Check if any player is nearby"""

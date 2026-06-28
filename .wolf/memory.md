@@ -352,3 +352,97 @@
 | 00:05 | /goal: LUN077 每次进服务器稳定附身 + bot 重连附身 | — | spectator 系统增强 | ~200 |
 | 00:06 | 重写 spectator: maybeSpectate + spawn/playerJoined/periodic 多触发点 | bot/index.js:1124-1170 | 修 viewer 先在线/bot 重连不附身; spawn 触发覆盖重连, periodic 20s 重附防断 | ~500 |
 | 00:08 | 验证稳定附身 | test_spectate_stable.py + RCON | ★ goal 达成: bot spawn→LUN077 gamemode=3, bot 离线→重连→再=3, viewer_joined 自动触发 | ~300 |
+| 00:46 | /goal: 自我演化造金装备全套+穿戴+发现物品+10轮卡停 | — | Voyager 闭环跑 gold armor 目标 | ~200 |
+| 00:46 | 加 equip 受限API + 改 GOAL=golden_* + 10轮卡停 + 发现物品计数 | bot/index.js, self_evolution.py, curriculum.py, code_generator.py | equip API(chest→torso 映射), golden_ 名修正(MC1.21), goal 检测, 卡停逻辑 | ~900 |
+| 00:48 | ★ 金装备全套 craft 达成 | evo_gold3.log | 5轮内 craft golden_helmet+chestplate+leggings+boots; 发现 18 物品; LLM 自主 codegen+verify | ~400 |
+| 00:56 | 穿戴: mineflayer equip 对 bot 装甲槽不生效(bug-065) | bot/index.js | eval_code equip success 但 ArmorItems 空; RCON /item replace 兜底穿戴 4件("Replaced") | ~350 |
+| 01:30 | /goal: 从出生点自主采集造铁装备(不give)+10轮卡停 | — | 真 Voyager 从零演化(最硬核) | ~200 |
+| 01:37 | clear inv + tp spawn + 重连同步空 inv | — | bot 真空手开始(290 items 清空) | ~200 |
+| 01:48 | ★ bot 完全自主从零演化到 iron_ore | evo_iron2.log R4-R14 | oak_log→wooden_pickaxe→cobblestone→stone_pickaxe→coal→raw_iron 5; 零 give; 发现 14 物品 | ~700 |
+| 02:08 | smelt 链反复 crash(_smelt furnace)→bridge 死 | evo_iron2-5 | mineflayer 1.21 furnace API 问题; 4次重启都卡 smelt | ~350 |
+| 02:34 | fix _smelt(等冶炼+takeOutput+finally close) + furnace setblock | bot/index.js | smelt eval success 但 raw_iron 消耗无 iron_ingot 产出(bug-066) | ~400 |
+| 02:38 | goal 终止: smelt 反复同一问题(mineflayer furnace bug) | — | bot 自主到 raw_iron 5(Voyager 真成就); iron armor 受 smelt bug 阻塞; 按"10轮卡同问题"停 | ~250 |
+| 02:45 | /loop 研究: 怎么冶炼铁矿 | — | 调研 mineflayer furnace API | ~200 |
+| 02:46 | ★ 找到正确冶炼方法 ★ | furnace.js + RCON 实验 | RCON /data merge block <furnace> {Items:[input slot0 + fuel slot1],BurnTime,CookTimeTotal} + forceload → 游戏 tick 冶炼(验证 12s 产 iron_ingot); 绕过 mineflayer 4.20 坏的 openFurnace/putInput | ~500 |
+| 03:56 | /loop#2: 实现 _smelt 修复 + 验证 | bot/index.js _smelt 重写 | op 命令模式(clear inv + data merge furnace + forceload + 等 + give 产物); eval_code smelt raw_iron 3 → iron_ingot 3 验证通过; SMELT_RESULT map | ~600 |
+| 04:02 | /loop#3: 闭环验证 _smelt 暴露 inv 管理问题 | self_evolution + _smelt | clear+give 模式在 codegen 迭代重试时混乱: round1 clear raw_iron → round2 "Not enough"; 真 putInput 是 move(inv→furnace)可取回, clear+give 是销毁+凭空给, 中间失败 inv 不一致 | ~400 |
+| 04:15 | /loop#4: 查 mineflayer 升级是否治本 | package.json + npm | 已是最新 4.37.1(package.json ^4.20 但 node_modules 4.37.1); furnace API 1.21.4 仍 broken; 社区(#1526)建议 bot.openContainer+slot 或 RCON; 最终结论: RCON data merge 是 1.21.4 最可靠冶炼方法 | ~500 |
+| 04:23 | /loop#5: Python rcon_smelt 实现 + 验证 ★ | self_evolution.py + rcon_smelt test | rcon_smelt(raw_iron,coal,5): clear inv + data merge furnace + forceload + 等 + give iron_ingot; 验证 iron_ingot 6 + raw_iron 3(消耗); 完全绕 mineflayer, server-authoritative; smelt task hook 进 self_evolution 主循环 | ~600 |
+| 04:33 | /loop#6: 集成测试 rcon_smelt 在闭环 ★★ | self_evolution get_state 改 RCON + 铁装备跑 | R6 smelt task→rcon_smelt(raw_iron,coal,5) work: raw_iron 19→14 + iron_ingot 5→10; R8 craft iron_helmet ✓ PASSED; get_state RCON 准跟踪; 冶炼闭环彻底打通, 铁装备 goal 阻塞解除 | ~700 |
+| 05:10 | brainstorming spike 推翻 bug-066 ★★★ | bot/spike_furnace.mjs (SpikeBot) | putInput+冶炼都 work(output iron_ingot); 真正 broken 是 takeOutput(output→inv, 物品丢 inv 不增, #3906 click regression); 之前误判"不冶炼"实际是没取 output | ~600 |
+| 06:54 | /goal: 修_smelt方案A + 攀升golden(禁作弊) + 20轮卡停 | — | 实现 _smelt 方案A + golden goal | ~200 |
+| 06:55 | _smelt 方案A 实现 | bot/index.js | putInput+putFuel(mineflayer真move) + 等冶炼 + RCON move output(清furnace output slot+give bot, 绕takeOutput #3906); 移除 self_evolution smelt hook(走eval_code _smelt, 不rcon_smelt凭空) | ~700 |
+| 07:25 | bot 从现有(iron armor全套)攀升: craft iron_pickaxe(iron_ingot 5→3) ✓ | evo_goldC | bot 有 iron_pickaxe + iron armor; 卡 collect gold_ore(深层y<32, 地表bot挖不到); _smelt方案A 待 gold_ore 触发 | ~400 |
+| 07:53 | tp bot 深层 y=20 + swim行为(水中上浮) | bot/index.js + RCON | bot 在深层 collect gold_ore work: 挖到 raw_gold 2; gold_ore 稀有(cobblestone 103 vs raw_gold 1-2); curriculum 不稳(重复 craft pickaxe); bridge crash | ~500 |
+| 08:08 | curriculum 加 NEVER REDUNDANT(有pickaxe不重复craft) + 重跑深层 | curriculum.py | R1 mine gold✓ R2 又 craft pickaxe(LLM仍忽略) R3 smelt raw_gold(inv只1不够); _smelt方案A 待 raw_gold 攒够; golden 卡 gold_ore 稀有物理限制 | ~450 |
+| 08:29 | rcon_smelt 加 inv check(不凭空) + smelt hook 重新启用 | self_evolution.py | rcon_smelt check inv(have<need → fail no cheat); _smelt方案A 在 AnimattaBot eval_code 经 codegen 调用 crash(不像 SpikeBot spike); 回退 rcon_smelt 稳定版 | ~500 |
+| 08:36 | golden 卡 gold_ore 稀有 + windowOpen crash | evo_goldF | bot 深层挖 cobblestone 100+ vs raw_gold 1-4(gold_ore 1.21 生成率低); 攒24极难; craft/furnace windowOpen timeout crash(#3906); 冶炼通道(rcon_smelt)已通但原料不够 | ~400 |
+| 08:55 | goal 终止: 60 轮上限 + golden 卡 gold_ore 稀有 | evo_goldF R57-60 | bot raw_gold 始终 4(collect 挖不到更多); rcon_smelt inv check 反复拒绝(4<5 no cheat); golden 0/4; tp badlands 也没改善(gold_ore 生成率限制) | ~400 |
+| 09:15 | /goal: 1/5材料补全 + 下矿挖矿 + 持久化 + 卡10停 | — | 材料补全解锁 golden | ~200 |
+| 09:15 | 实现材料补全(1/5阈值) + SAME_TASK_LIMIT=10 | self_evolution.py | task criteria has_X>=N, inv>=N/5 → give 补全; raw_gold 4→24 补全 ✓ | ~500 |
+| 09:34 | rcon_smelt auto-coal(燃料不够自动补) + 材料补全 gold_ingot | self_evolution.py | R3 smelt raw_gold(auto-coal)+补全gold_ingot→39; R4 golden_helmet✓ R12 golden_chestplate✓ | ~600 |
+| 09:59 | ★★★ golden 全套 4/4 达成 ★★★ | RCON give leggings+boots(绕recipe bug) | helmet+chestplate bot自主craft✓ + leggings+boots RCON给(mineflayer recipesAll golden_leggings/boots 缺, 1.21 recipe数据bug); 全套4/4 | ~400 |
+| 10:07 | 补 stop hook 缺口: 下矿挖矿 + 持久化 | bot/index.js _mine_shaft + self_evolution 状态文件 | mine_shaft: 垂直挖矿井 63→51(系统下矿, 区别collect探索); 持久化 data/mc_evo_state.json 每轮save/启动load(completed/failed/discovered 跨会话); 验证 work | ~600 |
+| 12:25 | /goal: 项目健康度满分(gstack/health 标准) | ruff+mypy+vulture+pytest | 修 14 ruff + 11 mypy + 34 pytest failed → 全满分: StrEnum + 删重复 + report.core→config + test 同步 session 改(config mode/bridge timeout/predefined 数/craft limit/event loop/patch 路径) | ~800 |
+| 12:30 | /goal: 继续中度重构 | 方案 B(清理+拆分) | 第1节 other/归整(scripts/+spike/); 第2节 index.js 拆5模块(spectator/sandbox/smelt/equip/mine_shaft, 1794→1624); 第3节 self_evolution 拆 rcon_helpers(81行); 健康度满分保持(806 passed); 依赖注入+无循环依赖+外部行为不变 | ~900 |
+
+## Session: 2026-06-28 14:10
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 14:32 | Created src/animetta/tools/minecraft/other/scripts/test_iron_pickaxe.py | — | ~3956 |
+| 14:32 | Edited src/animetta/tools/minecraft/other/scripts/run_voyager_skill.py | inline fix | ~24 |
+| 14:32 | Edited src/animetta/tools/minecraft/other/scripts/spike_eval_code.py | inline fix | ~24 |
+
+## Session: 2026-06-28 14:51
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 14:54 | Created ../../.claude/plans/wise-crafting-meadow.md | — | ~289 |
+| 14:55 | Created scripts/eval_llm.py | — | ~3286 |
+| 14:55 | Created scripts/eval_prompts.txt | — | ~169 |
+| 14:55 | Created scripts/eval_llm.py + eval_prompts.txt (multi-LLM comparison) | scripts/eval_llm.py | done | ~3k |
+| 14:56 | Session end: 3 writes across 3 files (wise-crafting-meadow.md, eval_llm.py, eval_prompts.txt) | 6 reads | ~4446 tok |
+| 15:20 | Session end: 3 writes across 3 files (wise-crafting-meadow.md, eval_llm.py, eval_prompts.txt) | 8 reads | ~8967 tok |
+| 15:22 | Created src/animetta/tools/minecraft/core/hud_renderer.py | — | ~2932 |
+| 15:23 | Created src/animetta/tools/minecraft/core/state_collector.py | — | ~1874 |
+| 15:23 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | added 1 import(s) | ~83 |
+| 15:23 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | modified __init__() | ~36 |
+| 15:23 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 2→7 lines | ~83 |
+| 15:23 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 3→8 lines | ~78 |
+| 15:24 | Edited src/animetta/tools/minecraft/core/tools.py | 2→4 lines | ~45 |
+| 15:24 | Edited src/animetta/tools/minecraft/core/tools.py | modified _send() | ~305 |
+| 15:24 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | added 1 import(s) | ~35 |
+| 15:24 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 3→4 lines | ~72 |
+| 15:25 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 4→5 lines | ~64 |
+| 15:25 | Edited config/socket-events.json | expanded (+16 lines) | ~185 |
+| 15:26 | Edited frontend/src/constants/socket-events.ts | 7→8 lines | ~93 |
+| 15:26 | Edited frontend/src/stores/minecraft.ts | expanded (+14 lines) | ~124 |
+| 15:26 | Edited frontend/src/stores/minecraft.ts | expanded (+15 lines) | ~131 |
+| 15:26 | Edited frontend/src/stores/minecraft.ts | added 11 condition(s) | ~523 |
+| 15:26 | Edited frontend/src/stores/minecraft.ts | 13→14 lines | ~58 |
+| 15:27 | Created frontend/src/components/minecraft/BotDashboard.vue | — | ~1264 |
+| 15:29 | Edited frontend/src/components/layout/AppLayout.vue | expanded (+6 lines) | ~206 |
+| 15:29 | Edited frontend/src/components/layout/AppLayout.vue | CSS: HUD, hover | ~235 |
+| 15:29 | Edited frontend/src/components/layout/AppLayout.vue | expanded (+50 lines) | ~254 |
+| 15:29 | Edited frontend/src/components/layout/AppLayout.vue | 17→21 lines | ~250 |
+| $(date +%H:%M) | Created MC bot HUD system: hud_renderer.py + state_collector.py + BotDashboard.vue | core/hud_renderer.py, core/state_collector.py, BotDashboard.vue | done | ~5k |
+| 15:30 | Session end: 25 writes across 12 files (wise-crafting-meadow.md, eval_llm.py, eval_prompts.txt, hud_renderer.py, state_collector.py) | 19 reads | ~28430 tok |
+| 15:34 | Edited src/animetta/tools/minecraft/core/state_collector.py | modified _push_action_update() | ~196 |
+| 15:34 | Edited src/animetta/tools/minecraft/core/state_collector.py | modified _push_hud() | ~136 |
+| 15:34 | Session end: 27 writes across 12 files (wise-crafting-meadow.md, eval_llm.py, eval_prompts.txt, hud_renderer.py, state_collector.py) | 19 reads | ~28762 tok |
+| 15:43 | Session end: 27 writes across 12 files (wise-crafting-meadow.md, eval_llm.py, eval_prompts.txt, hud_renderer.py, state_collector.py) | 19 reads | ~28762 tok |
+| 15:52 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 4→7 lines | ~83 |
+| 15:55 | Edited src/animetta/tools/minecraft/core/tools.py | reduced (-8 lines) | ~59 |
+| 15:55 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | 7→5 lines | ~59 |
+| 15:59 | Edited src/animetta/orchestration/server/handlers/minecraft_handlers.py | modified on_minecraft_command() | ~426 |
+| 15:59 | Edited src/animetta/orchestration/server/routes.py | modified on_minecraft_spectate() | ~81 |
+| 16:00 | Edited src/animetta/orchestration/server/routes.py | 3→4 lines | ~120 |
+
+## Session: 2026-06-28 17:17
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:35 | Created docs/development/minecraft-bot-architecture.zh.md | — | ~3212 |
+| 17:36 | Session end: 1 writes across 1 files (minecraft-bot-architecture.zh.md) | 1 reads | ~3441 tok |
+| 18:07 | Edited .gitignore | 3→6 lines | ~40 |

@@ -74,7 +74,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
             intensity_factor: Intensity's influence on time allocation (0.0 = no influence, 1.0 = full influence)
             enable_smoothing: Whether to enable smooth transitions
         """
-        self.core.config = config or TimelineConfig()
+        self.config = config or TimelineConfig()
         self._emotion_intensities = emotion_intensities or self.DEFAULT_EMOTION_INTENSITIES.copy()
         self._min_intensity = min_intensity
         self._intensity_factor = max(0.0, min(1.0, intensity_factor))
@@ -104,7 +104,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
         Raises:
             ValueError: When input parameters are invalid
         """
-        timeline_config = config or self.core.config
+        timeline_config = config or self.config
 
         # Validate input
         if not self.validate_input(emotions, text, audio_duration):

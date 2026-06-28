@@ -4,6 +4,7 @@ LLM Planner — decomposes natural language goals into executable sub-task plans
 Uses Anima's existing LLM service to plan Minecraft bot behaviors.
 Outputs structured JSON plans that the Node.js state machine can execute.
 """
+
 import json
 from dataclasses import dataclass, field
 
@@ -13,11 +14,13 @@ from ..skill.library import SkillLibrary
 
 # ── Data models ──
 
+
 @dataclass
 class PlanStep:
-    action: str           # goto | smart_goto | collect | mine | place | smart_build | chat | attack
+    action: str  # goto | smart_goto | collect | mine | place | smart_build | chat | attack
     params: dict = field(default_factory=dict)
     description: str = ""
+
 
 @dataclass
 class Plan:
@@ -29,28 +32,55 @@ class Plan:
 # ── Tool catalog (what the bot can do) ──
 
 AVAILABLE_TOOLS = [
-    {"action": "goto",           "params": {"x": "int", "y": "int", "z": "int"},
-     "desc": "Navigate to coordinates using A* pathfinding"},
-    {"action": "smart_goto",     "params": {"target": "string (block type or entity name)"},
-     "desc": "Smart navigate to nearest block/entity of given type (e.g. 'oak_tree', 'cow')"},
-    {"action": "mine",           "params": {"block_type": "string", "count": "int"},
-     "desc": "Find and mine nearest blocks within 10 blocks"},
-    {"action": "collect",        "params": {"block_type": "string", "count": "int"},
-     "desc": "Find, navigate to, mine, and collect blocks. More reliable than mine alone."},
-    {"action": "place",          "params": {"block_type": "string", "x": "int", "y": "int", "z": "int"},
-     "desc": "Place a block at specific coordinates (need solid block below)"},
-    {"action": "smart_build",    "params": {"block_type": "string", "x": "int", "y": "int", "z": "int",
-                                             "blueprint": "string (platform|wall|tower)"},
-     "desc": "Multi-step building at a location. blueprints: platform(3x3), wall, tower"},
-    {"action": "attack",         "params": {"target": "string (nearest_hostile | entity_name)"},
-     "desc": "Fight nearest hostile mob or specific entity"},
-    {"action": "chat",           "params": {"message": "string"},
-     "desc": "Send a chat message to all players"},
+    {
+        "action": "goto",
+        "params": {"x": "int", "y": "int", "z": "int"},
+        "desc": "Navigate to coordinates using A* pathfinding",
+    },
+    {
+        "action": "smart_goto",
+        "params": {"target": "string (block type or entity name)"},
+        "desc": "Smart navigate to nearest block/entity of given type (e.g. 'oak_tree', 'cow')",
+    },
+    {
+        "action": "mine",
+        "params": {"block_type": "string", "count": "int"},
+        "desc": "Find and mine nearest blocks within 10 blocks",
+    },
+    {
+        "action": "collect",
+        "params": {"block_type": "string", "count": "int"},
+        "desc": "Find, navigate to, mine, and collect blocks. More reliable than mine alone.",
+    },
+    {
+        "action": "place",
+        "params": {"block_type": "string", "x": "int", "y": "int", "z": "int"},
+        "desc": "Place a block at specific coordinates (need solid block below)",
+    },
+    {
+        "action": "smart_build",
+        "params": {
+            "block_type": "string",
+            "x": "int",
+            "y": "int",
+            "z": "int",
+            "blueprint": "string (platform|wall|tower)",
+        },
+        "desc": "Multi-step building at a location. blueprints: platform(3x3), wall, tower",
+    },
+    {
+        "action": "attack",
+        "params": {"target": "string (nearest_hostile | entity_name)"},
+        "desc": "Fight nearest hostile mob or specific entity",
+    },
+    {
+        "action": "chat",
+        "params": {"message": "string"},
+        "desc": "Send a chat message to all players",
+    },
 ]
 
-TOOLS_DESC = "\n".join([
-    f"- {t['action']}({t['params']}): {t['desc']}" for t in AVAILABLE_TOOLS
-])
+TOOLS_DESC = "\n".join([f"- {t['action']}({t['params']}): {t['desc']}" for t in AVAILABLE_TOOLS])
 
 
 # ── Planner Prompt Template ──
@@ -80,6 +110,7 @@ Format:
 """
 
 # ── Planner Class ──
+
 
 class PlannerError(Exception):
     pass
@@ -136,7 +167,9 @@ class MinecraftPlanner:
             parts = []
             if "position" in context:
                 p = context["position"]
-                parts.append(f"current position: ({p.get('x',0)}, {p.get('y',0)}, {p.get('z',0)})")
+                parts.append(
+                    f"current position: ({p.get('x', 0)}, {p.get('y', 0)}, {p.get('z', 0)})"
+                )
             if "inventory" in context:
                 inv = context["inventory"]
                 if inv:
@@ -184,8 +217,12 @@ class MinecraftPlanner:
         if not self._last_plan:
             raise PlannerError("No previous plan to replan from")
 
-        remaining_goal = f"Continue the plan '{self._last_plan.goal}' from step {failed_step_index + 1}. "
-        remaining_goal += f"Previous steps completed successfully. Step {failed_step_index} failed: {error}"
+        remaining_goal = (
+            f"Continue the plan '{self._last_plan.goal}' from step {failed_step_index + 1}. "
+        )
+        remaining_goal += (
+            f"Previous steps completed successfully. Step {failed_step_index} failed: {error}"
+        )
 
         context = context or {}
         context["completed_steps"] = failed_step_index
@@ -214,11 +251,13 @@ class MinecraftPlanner:
     def _parse_plan(self, goal: str, raw: dict) -> Plan:
         steps = []
         for s in raw.get("steps", []):
-            steps.append(PlanStep(
-                action=s.get("action", "goto"),
-                params=s.get("params", {}),
-                description=s.get("description", ""),
-            ))
+            steps.append(
+                PlanStep(
+                    action=s.get("action", "goto"),
+                    params=s.get("params", {}),
+                    description=s.get("description", ""),
+                )
+            )
         return Plan(goal=goal, steps=steps)
 
     def _validate_plan(self, plan: Plan):
@@ -226,7 +265,9 @@ class MinecraftPlanner:
         valid_actions = {t["action"] for t in AVAILABLE_TOOLS}
         for i, step in enumerate(plan.steps):
             if step.action not in valid_actions:
-                logger.warning(f"[MinecraftPlanner] Step {i}: unknown action '{step.action}', will be attempted anyway")
+                logger.warning(
+                    f"[MinecraftPlanner] Step {i}: unknown action '{step.action}', will be attempted anyway"
+                )
             # Ensure params is a dict
             if not isinstance(step.params, dict):
                 step.params = {}
@@ -237,6 +278,7 @@ class MinecraftPlanner:
 
 
 # ── Mode Selector ──
+
 
 class ModeSelector:
     """Decides whether to use planner or rule mode based on context"""
@@ -264,10 +306,7 @@ class ModeSelector:
                 plan = await self._planner.plan(self._goal, context)
                 return {
                     "mode": "planner",
-                    "plan": [
-                        {"action": s.action, "params": s.params}
-                        for s in plan.steps
-                    ]
+                    "plan": [{"action": s.action, "params": s.params} for s in plan.steps],
                 }
             except PlannerError as e:
                 logger.warning(f"[ModeSelector] Planner failed: {e}, falling back to rule mode")

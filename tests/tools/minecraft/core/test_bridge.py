@@ -56,6 +56,36 @@ async def _timeout_ready_wait(awaitable, timeout):  # noqa: ARG001
 class TestMinecraftBridgeInit:
     """Bridge construction and initial state tests."""
 
+    def test_top_level_get_bridge_imports(self):
+        from animetta.tools.minecraft import get_bridge
+
+        assert callable(get_bridge)
+
+    def test_core_tools_init_bridge_sets_core_bridge_singleton(self, mock_config):
+        from animetta.tools.minecraft.core import bridge as bridge_module
+        from animetta.tools.minecraft.core import tools as tools_module
+
+        tools_module._bridge = None
+        bridge_module._bridge = None
+
+        try:
+            with patch("animetta.tools.minecraft.core.config.MinecraftConfig", return_value=mock_config), \
+                 patch("animetta.tools.minecraft.core.bridge.MinecraftBridge") as bridge_cls, \
+                 patch("animetta.tools.minecraft.core.tools.asyncio.get_running_loop") as get_loop, \
+                 patch("animetta.tools.minecraft.core.tools.asyncio.ensure_future"):
+                mock_loop = MagicMock()
+                mock_loop.is_running.return_value = True
+                get_loop.return_value = mock_loop
+                bridge_cls.return_value.start = AsyncMock()
+
+                tools_module.init_bridge({"enabled": True})
+
+            assert tools_module._bridge is bridge_cls.return_value
+            assert bridge_module.get_bridge() is bridge_cls.return_value
+        finally:
+            tools_module._bridge = None
+            bridge_module._bridge = None
+
     def test_initial_state_not_running(self, mock_config):
         bridge = MinecraftBridge(mock_config)
         assert bridge.is_running is False
@@ -103,7 +133,7 @@ class TestMinecraftBridgeStart:
         result = await bridge.start()
         assert result is True
 
-    @patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True)
+    @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
     async def test_start_successful(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
@@ -116,7 +146,7 @@ class TestMinecraftBridgeStart:
         assert bridge.is_running is True
         assert bridge._process is mock_process
 
-    @patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True)
+    @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
     async def test_start_login_timeout_still_succeeds(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
@@ -144,11 +174,11 @@ class TestMinecraftBridgeStart:
         mock_loop = MagicMock()
         mock_loop.start = AsyncMock()
 
-        with patch("animetta.tools.minecraft.core.core.bridge.is_service_available", return_value=True), \
+        with patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True), \
              patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
              patch("asyncio.wait_for", side_effect=_complete_ready_wait), \
-             patch("animetta.tools.minecraft.autonomous.loop.loop.AutonomousLoop", return_value=mock_loop):
+             patch("animetta.tools.minecraft.autonomous.loop.AutonomousLoop", return_value=mock_loop):
             result = await bridge.start()
 
         assert result is True
@@ -192,7 +222,7 @@ class TestMinecraftBridgeSendCommand:
         written = mock_process.stdin.write.call_args[0][0]
         decoded = json.loads(written.decode("utf-8").strip())
         assert decoded["action"] == "goto"
-        assert decoded["params"] == {"x": 0, "y": 64, "z": 0}
+        assert decoded["params"] == {"x": 0, "y": 64, "z": 0, "timeout": 60000}
 
     async def test_send_command_timeout(self, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)

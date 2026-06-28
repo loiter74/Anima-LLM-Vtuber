@@ -71,7 +71,7 @@ class DurationBasedStrategy(ITimelineStrategy):
             max_emotion_duration: Maximum duration for a single emotion (seconds)
             enable_smoothing: Whether to enable smooth transitions
         """
-        self.core.config = config or TimelineConfig()
+        self.config = config or TimelineConfig()
         self._duration_weights = duration_weights or self.DEFAULT_DURATION_WEIGHTS.copy()
         self._min_emotion_duration = min_emotion_duration
         self._max_emotion_duration = max_emotion_duration
@@ -101,7 +101,7 @@ class DurationBasedStrategy(ITimelineStrategy):
         Raises:
             ValueError: When input parameters are invalid
         """
-        timeline_config = config or self.core.config
+        timeline_config = config or self.config
 
         # Validate input
         if not self.validate_input(emotions, text, audio_duration):

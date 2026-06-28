@@ -6,6 +6,7 @@
 code 基于 Survival Runner 实测有效的动作序列，因此 ``validated=True``——
 这是「学习期产出的 verified 技能」的 bootstrap 种子形态。
 """
+
 from __future__ import annotations
 
 from .models import Skill

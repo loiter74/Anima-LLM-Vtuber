@@ -15,6 +15,7 @@ Lifecycle:
     3. resume() → LLM instruction complete, resume
     4. stop() → cancel loop, cleanup
 """
+
 import asyncio
 import contextlib
 import random
@@ -23,11 +24,11 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from .rules_engine import RulesEngine
-from ..skill.extractor import SkillExtractor
-from ..skill.validator import SkillValidator
 from ..other.trace_recorder import TraceRecorder
 from ..other.world_state import WorldState
+from ..skill.extractor import SkillExtractor
+from ..skill.validator import SkillValidator
+from .rules_engine import RulesEngine
 
 if TYPE_CHECKING:
     from ..core.bridge import MinecraftBridge
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
 
 
 # ── Cooldown tracker ──
+
 
 class CooldownTracker:
     """Per-action cooldown to prevent spam"""
@@ -58,6 +60,7 @@ class CooldownTracker:
 
 # ── Autonomous Loop ──
 
+
 class AutonomousLoop:
     """Perception → Evaluation → Decision → Execution loop"""
 
@@ -70,12 +73,18 @@ class AutonomousLoop:
     ACTION_IDLE = "idle"
     ACTION_EXECUTE_SKILL = "execute_skill"
 
-    def __init__(self, bridge: "MinecraftBridge", rules: RulesEngine | None = None,
-                 skill_library: "SkillLibrary | None" = None, planner=None, config=None,
-                 trace_recorder: TraceRecorder | None = None,
-                 skill_extractor: SkillExtractor | None = None,
-                 skill_validator: SkillValidator | None = None,
-                 cleanup_chance: float = 0.05):
+    def __init__(
+        self,
+        bridge: "MinecraftBridge",
+        rules: RulesEngine | None = None,
+        skill_library: "SkillLibrary | None" = None,
+        planner=None,
+        config=None,
+        trace_recorder: TraceRecorder | None = None,
+        skill_extractor: SkillExtractor | None = None,
+        skill_validator: SkillValidator | None = None,
+        cleanup_chance: float = 0.05,
+    ):
         self._bridge = bridge
         self._rules = rules or RulesEngine()
         self._running = False
@@ -106,8 +115,9 @@ class AutonomousLoop:
         # Safety: base position (set on first night return or manual trigger)
         self._base_pos: dict | None = None
 
-        logger.info("[AutonomousLoop] Initialized with rules for '{}'",
-                   self._rules.rules.character_name)
+        logger.info(
+            "[AutonomousLoop] Initialized with rules for '{}'", self._rules.rules.character_name
+        )
 
     # ── Lifecycle ──
 
@@ -150,7 +160,9 @@ class AutonomousLoop:
             state = WorldState.from_status(status)
             if state.get_threat_level() >= 2 and state.nearest_threat_distance < 15:
                 logger.info("[AutonomousLoop] Threat detected during action! Attacking.")
-                await self._bridge.send_command("attack", {"target": "nearest_hostile"}, timeout=10.0)
+                await self._bridge.send_command(
+                    "attack", {"target": "nearest_hostile"}, timeout=10.0
+                )
                 return True
         except Exception:
             pass
@@ -204,6 +216,21 @@ class AutonomousLoop:
         """Priority-based decision engine with LLM fallback"""
 
         # === SURVIVAL (always #1) ===
+        fall_risk_fn = getattr(state, "get_fall_risk_level", None)
+        fall_risk = fall_risk_fn() if callable(fall_risk_fn) else 0
+        if not isinstance(fall_risk, (int, float)):
+            fall_risk = 0
+        has_water_bucket = bool(getattr(state, "has_water_bucket", False))
+        if fall_risk >= 2 and has_water_bucket:
+            return (
+                self.ACTION_SURVIVE,
+                {
+                    "reason": "fall_risk",
+                    "method": "water_bucket_clutch",
+                    "fall_risk": fall_risk,
+                },
+            )
+
         # Threat check
         threat_level = state.get_threat_level()
         if threat_level >= 2 and state.nearest_threat_distance < 15:
@@ -221,20 +248,25 @@ class AutonomousLoop:
 
         # === SKILL LIBRARY MATCHING ===
         if self._skill_library:
-            matching = await self._skill_library.match_skills({
-                "health": state.health,
-                "food": state.food,
-                "is_day": state.is_day,
-                "is_night": state.is_night,
-                "is_raining": state.is_raining,
-                "inventory": state.inventory,
-                "threat_level": state.get_threat_level(),
-            })
+            matching = await self._skill_library.match_skills(
+                {
+                    "health": state.health,
+                    "food": state.food,
+                    "is_day": state.is_day,
+                    "is_night": state.is_night,
+                    "is_raining": state.is_raining,
+                    "inventory": state.inventory,
+                    "threat_level": state.get_threat_level(),
+                    "fall_risk": state.get_fall_risk_level(),
+                }
+            )
             if matching:
                 return (self.ACTION_EXECUTE_SKILL, {"skill_id": matching[0].id})
 
         # === MAINTENANCE (building progress) ===
-        if self._rules.rules.building and self._current_step < len(self._rules.rules.building.build_plan):
+        if self._rules.rules.building and self._current_step < len(
+            self._rules.rules.building.build_plan
+        ):
             building = self._rules.rules.building
             required = building.required_materials
 
@@ -246,7 +278,10 @@ class AutonomousLoop:
                     pass  # cooldown active, skip
                 else:
                     target_material = list(gaps.keys())[0]
-                    return (self.ACTION_GATHER, {"material": target_material, "count": gaps[target_material]})
+                    return (
+                        self.ACTION_GATHER,
+                        {"material": target_material, "count": gaps[target_material]},
+                    )
             else:
                 # Have materials, time to build
                 if not self._cooldown.can_execute("build"):
@@ -257,13 +292,16 @@ class AutonomousLoop:
                         # Select build site at current position
                         self._build_site = {"x": state.x, "y": state.y - 1, "z": state.z}
                         logger.info(f"[AutonomousLoop] Build site selected at {self._build_site}")
-                    return (self.ACTION_BUILD, {
-                        "step": self._current_step,
-                        "block": step.block,
-                        "action": step.action,
-                        "description": step.description,
-                        "site": self._build_site,
-                    })
+                    return (
+                        self.ACTION_BUILD,
+                        {
+                            "step": self._current_step,
+                            "block": step.block,
+                            "action": step.action,
+                            "description": step.description,
+                            "site": self._build_site,
+                        },
+                    )
 
         # === SOCIAL (chat) ===
         if self._cooldown.can_execute("chat"):
@@ -351,17 +389,24 @@ class AutonomousLoop:
         if reason == "threat_nearby":
             # Try to attack nearest hostile
             await self._bridge.send_command("attack", {"target": "nearest_hostile"}, timeout=15.0)
+        elif reason == "fall_risk":
+            method = params.get("method", "water_bucket_clutch")
+            await self._bridge.send_command(method, {}, timeout=3.0)
         elif reason == "low_health":
             # Regenerate naturally or eat
             logger.info(f"[AutonomousLoop] Low health ({state.health}), auto-healing...")
         elif reason == "night_return":
             base = params.get("base", {})
             if base:
-                await self._bridge.send_command("goto", {
-                    "x": int(base.get("x", 0)),
-                    "y": int(base.get("y", 65)),
-                    "z": int(base.get("z", 0)),
-                }, timeout=60.0)
+                await self._bridge.send_command(
+                    "goto",
+                    {
+                        "x": int(base.get("x", 0)),
+                        "y": int(base.get("y", 65)),
+                        "z": int(base.get("z", 0)),
+                    },
+                    timeout=60.0,
+                )
                 # Save current position as base for future reference
                 if not self._base_pos:
                     self._base_pos = {"x": state.x, "y": state.y, "z": state.z}
@@ -376,17 +421,23 @@ class AutonomousLoop:
         # Check threat before long action
         await self._threat_check()
 
-        result = await self._bridge.send_command("collect", {
-            "block_type": material,
-            "count": min(count, 16),
-        }, timeout=60.0)
+        result = await self._bridge.send_command(
+            "collect",
+            {
+                "block_type": material,
+                "count": min(count, 16),
+            },
+            timeout=60.0,
+        )
 
         # Update state after gathering
         if result.get("status") == "success":
             self._gathering_for = None
             # Optionally trigger chat
             if random.random() < 0.3:
-                chat_msg = self._rules.get_chat_message("found_ore" if "ore" in material else "gathering_start")
+                chat_msg = self._rules.get_chat_message(
+                    "found_ore" if "ore" in material else "gathering_start"
+                )
                 if chat_msg:
                     await self._bridge.send_command("chat", {"message": chat_msg}, timeout=5.0)
 
@@ -402,18 +453,24 @@ class AutonomousLoop:
         bz = int(site.get("z", state.z))
 
         # Actually place the block
-        await self._bridge.send_command("place", {
-            "block_type": block,
-            "x": bx,
-            "y": by + 1,
-            "z": bz,
-        }, timeout=timeout)
+        await self._bridge.send_command(
+            "place",
+            {
+                "block_type": block,
+                "x": bx,
+                "y": by + 1,
+                "z": bz,
+            },
+            timeout=timeout,
+        )
 
         # Advance build step
         self._current_step = step_idx + 1
 
         # Trigger chat
-        if self._rules.rules.building and self._current_step >= len(self._rules.rules.building.build_plan):
+        if self._rules.rules.building and self._current_step >= len(
+            self._rules.rules.building.build_plan
+        ):
             chat_msg = self._rules.get_chat_message("building_complete")
             if chat_msg:
                 await self._bridge.send_command("chat", {"message": chat_msg}, timeout=5.0)
@@ -458,9 +515,7 @@ class AutonomousLoop:
         tz = int(params.get("z", 0))
         await self._threat_check()
         logger.debug(f"[AutonomousLoop] Exploring to ({tx}, ~, {tz})")
-        await self._bridge.send_command("goto", {
-            "x": tx, "y": 65, "z": tz
-        }, timeout=timeout)
+        await self._bridge.send_command("goto", {"x": tx, "y": 65, "z": tz}, timeout=timeout)
 
     # ── Skill Execution ──
 
@@ -477,6 +532,9 @@ class AutonomousLoop:
             "is_night": state.is_night,
             "inventory": state.inventory,
         }
+        fall_risk = state.get_fall_risk_level()
+        if fall_risk > 0:
+            context["fall_risk"] = fall_risk
         result = await self._skill_library.execute_skill_by_id(skill_id, self._bridge, context)
 
         # Track success/failure in the library
@@ -504,6 +562,7 @@ class AutonomousLoop:
             "inventory": state.inventory,
             "player_count": state.player_count,
             "threat_level": state.get_threat_level(),
+            "fall_risk": state.get_fall_risk_level(),
         }
 
     async def _trigger_skill_extraction(self, trace: "TaskTrace", state: WorldState) -> None:

@@ -241,6 +241,43 @@ onUnmounted(() => {
             {{ minecraftStore.connected ? '⏹ 停止' : '▶ 启动' }}
           </template>
         </button>
+
+        <!-- Viewer spectator section -->
+        <div v-if="minecraftStore.connected" class="mt-3 space-y-2">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="{
+                'bg-c-text-muted': minecraftStore.viewerStatus === 'idle',
+                'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.6)] animate-pulse': minecraftStore.viewerStatus === 'waiting',
+                'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]': minecraftStore.viewerStatus === 'joined',
+                'bg-c-error': minecraftStore.viewerStatus === 'left',
+              }"
+            />
+            <span class="text-xs" :class="{
+              'text-c-text-muted': minecraftStore.viewerStatus === 'idle',
+              'text-yellow-400': minecraftStore.viewerStatus === 'waiting',
+              'text-c-success': minecraftStore.viewerStatus === 'joined',
+              'text-c-error': minecraftStore.viewerStatus === 'left',
+            }">
+              <template v-if="minecraftStore.viewerStatus === 'idle'">旁观者: 未配置</template>
+              <template v-else-if="minecraftStore.viewerStatus === 'waiting'">等待 {{ minecraftStore.viewerUsername }} 连接...</template>
+              <template v-else-if="minecraftStore.viewerStatus === 'joined'">👁 旁观中: {{ minecraftStore.viewerUsername }}</template>
+              <template v-else-if="minecraftStore.viewerStatus === 'left'">{{ minecraftStore.viewerUsername }} 已断开</template>
+            </span>
+          </div>
+          <button
+            v-if="minecraftStore.viewerStatus !== 'idle'"
+            class="w-full px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
+            :class="(minecraftStore.viewerStatus === 'joined' || minecraftStore.viewerStatus === 'left')
+              ? 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
+              : 'bg-c-card/50 text-c-text-muted pointer-events-none opacity-50'"
+            :disabled="minecraftStore.viewerStatus !== 'joined' && minecraftStore.viewerStatus !== 'left'"
+            @click="minecraftStore.spectate()"
+          >
+            👁 Spectate
+          </button>
+        </div>
       </div>
     </div>
 

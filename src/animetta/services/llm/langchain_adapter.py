@@ -17,7 +17,7 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.core.tools import BaseTool
+from langchain_core.tools import BaseTool
 from loguru import logger
 
 # Pydantic v1/v2 compatibility handling

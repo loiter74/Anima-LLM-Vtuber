@@ -6,11 +6,12 @@ export function setupCombatInterrupt(bot, attackHandler) {
     let combatCheckInterval = null;
     let wasInCombat = false;
     let combatActive = false;
+    let _paused = false;
 
     function start() {
         if (combatCheckInterval) return;
         combatCheckInterval = setInterval(() => {
-            if (combatActive) return; // Already fighting
+            if (combatActive || _paused) return;
 
             const hostiles = Object.values(bot.entities).filter(e => {
                 if (!e || !e.name) return false;
@@ -49,6 +50,8 @@ export function setupCombatInterrupt(bot, attackHandler) {
     }
 
     function isInCombat() { return combatActive; }
+    function pause() { _paused = true; bot.pvp?.stop(); }
+    function resume() { _paused = false; }
 
-    return { start, stop, isInCombat };
+    return { start, stop, isInCombat, pause, resume };
 }
