@@ -141,3 +141,6 @@ smoke_test_result.json
 
 # OpenWolf runtime session state (local, changes every session)
 .wolf/hooks/_session.json
+
+# Temporary files
+tmp/
