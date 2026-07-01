@@ -84,6 +84,15 @@ class MinecraftBridge:
                 env["MC_VIEWER_USERNAME"] = self.config.viewer.username
                 env["MC_AUTO_SPECTATE"] = "true" if self.config.viewer.auto_spectate else "false"
 
+            cv = self.config.client_viewer
+            if cv.enabled:
+                env["MC_CLIENT_VIEWER_ENABLED"] = "true"
+                env["MC_CLIENT_VIEWER_USERNAME"] = cv.username
+                env["MC_CLIENT_VIEWER_MODE"] = cv.mode
+                env["MC_CLIENT_VIEWER_AUTO_SPECTATE"] = "true" if cv.auto_spectate else "false"
+                env["MC_CLIENT_VIEWER_POLL_INTERVAL"] = str(cv.poll_interval)
+                env["MC_CLIENT_VIEWER_SPECTATE_TIMEOUT"] = str(cv.spectate_timeout)
+
             self._process = await asyncio.create_subprocess_exec(
                 "node",
                 bot_script,
@@ -227,6 +236,16 @@ class MinecraftBridge:
                         if self._viewer_callback:
                             try:
                                 self._viewer_callback(event_type, event_username)
+                            except Exception as e:
+                                logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
+                    elif isinstance(result, dict) and result.get("type") == "client_viewer_status":
+                        logger.info(
+                            "[MinecraftBridge] client_viewer_status: "
+                            f"{result.get('state', '')} {result.get('username', '')}"
+                        )
+                        if self._viewer_callback:
+                            try:
+                                self._viewer_callback("client_viewer_status", result)
                             except Exception as e:
                                 logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
                     continue

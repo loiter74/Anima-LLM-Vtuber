@@ -13,6 +13,7 @@ import { createEquip } from './equip.js';
 import { createMineShaft } from './mine_shaft.js';
 import { getStatusSnapshot, evalCode } from './sandbox.js';
 import { createResponseGuard, isBusyBypassAction, withTimeout } from './commandRuntime.js';
+import { setupClientViewer } from './clientViewer.js';
 
 const { pathfinder, Movements, goals } = pathfinderPkg;
 const { GoalBlock } = goals;
@@ -1101,6 +1102,12 @@ bot.on('spawn', () => {
 const viewerUsername = process.env.MC_VIEWER_USERNAME;
 const autoSpectate = process.env.MC_AUTO_SPECTATE !== 'false';
 setupSpectator(bot, viewerUsername, autoSpectate, username, sendEvent);
+
+// --- Client viewer: real Minecraft client capture mode (clientViewer.js) ---
+const clientViewerCtx = setupClientViewer(bot, username, sendEvent);
+if (clientViewerCtx.config?.enabled) {
+  console.log('[index] client-viewer enabled: username=' + clientViewerCtx.config.username + ', mode=' + clientViewerCtx.config.mode);
+}
 
 // Disable/enable auto behaviors during critical operations
 function disableAuto() {

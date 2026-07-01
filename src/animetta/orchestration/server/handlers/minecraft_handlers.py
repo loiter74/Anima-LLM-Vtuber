@@ -35,15 +35,30 @@ class MinecraftHandlers:
     def _setup_viewer_callback(self, bridge) -> None:
         """Register callback to forward viewer join/leave events to frontend."""
 
-        def on_viewer_event(event_type: str, username: str) -> None:
+        def on_viewer_event(event_type: str, payload) -> None:
             import asyncio
-            status = "joined" if event_type == "viewer_joined" else "left"
+            if event_type == "client_viewer_status" and isinstance(payload, dict):
+                data = {
+                    "status": payload.get("state", "unknown"),
+                    "username": payload.get("username", ""),
+                    "mode": payload.get("mode", ""),
+                    "reason": payload.get("reason", ""),
+                }
+                if payload.get("error"):
+                    data["error"] = payload["error"]
+                if payload.get("spectate_command_sent"):
+                    data["spectate_command_sent"] = True
+                    data["commands"] = payload.get("commands", [])
+            else:
+                username = str(payload)
+                status = "joined" if event_type == "viewer_joined" else "left"
+                data = {"status": status, "username": username}
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
                     self.sio.emit(
                         EVENTS["minecraft"]["viewer_status"]["name"],
-                        {"status": status, "username": username},
+                        data,
                     )
                 )
             except RuntimeError:
@@ -198,7 +213,7 @@ class MinecraftHandlers:
             bridge = get_bridge()
             if bridge is None or not bridge.is_running:
                 await self.sio.emit(
-                    "minecraft:command_result",
+                    EVENTS["minecraft"]["command_result"]["name"],
                     {"status": "error", "error": "Bot not running"},
                     to=sid,
                 )
@@ -210,14 +225,14 @@ class MinecraftHandlers:
 
             result = await bridge.send_command(action, params, timeout=timeout)
             await self.sio.emit(
-                "minecraft:command_result",
+                EVENTS["minecraft"]["command_result"]["name"],
                 {"action": action, "result": result},
                 to=sid,
             )
         except Exception as e:
             logger.error(f"[Minecraft] Command failed: {e}")
             await self.sio.emit(
-                "minecraft:command_result",
+                EVENTS["minecraft"]["command_result"]["name"],
                 {"status": "error", "error": str(e)},
                 to=sid,
             )

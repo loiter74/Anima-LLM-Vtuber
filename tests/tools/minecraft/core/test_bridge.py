@@ -314,6 +314,31 @@ class TestMinecraftBridgeReadStdout:
         await bridge._read_stdout()
         assert bridge._bot_ready.is_set()
 
+    async def test_read_stdout_forwards_client_viewer_status_event(self, mock_config, mock_process):
+        bridge = MinecraftBridge(mock_config)
+        bridge._running = True
+        bridge._process = mock_process
+        events = []
+        bridge.set_viewer_callback(lambda event_type, payload: events.append((event_type, payload)))
+
+        payload = {
+            "type": "client_viewer_status",
+            "state": "waiting",
+            "username": "CameraGuy",
+            "mode": "spectator",
+            "reason": "poll_detected",
+        }
+        line = json.dumps({
+            "id": None,
+            "status": "event",
+            "result": payload,
+        }).encode("utf-8") + b"\n"
+        mock_process.stdout.readline = AsyncMock(side_effect=[line, b""])
+
+        await bridge._read_stdout()
+
+        assert events == [("client_viewer_status", payload)]
+
     async def test_read_stdout_handles_cancellation(self, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
         bridge._running = True

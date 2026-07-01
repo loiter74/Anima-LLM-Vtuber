@@ -279,7 +279,11 @@
       "payload": {
         "status": "string",
         "username?": "string",
-        "error?": "string"
+        "error?": "string",
+        "mode?": "string",
+        "reason?": "string",
+        "spectate_command_sent?": "boolean",
+        "commands?": "string[]"
       }
     },
     "bot_state": {
@@ -296,6 +300,15 @@
         "action_target?": "string",
         "held_item?": "string",
         "inventory?": "array"
+      }
+    },
+    "command_result": {
+      "name": "minecraft:command_result",
+      "payload": {
+        "status?": "string",
+        "error?": "string",
+        "action?": "string",
+        "result?": "object"
       }
     }
   },

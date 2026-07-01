@@ -3,6 +3,7 @@ Minecraft configuration models
 """
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -27,6 +28,17 @@ class MinecraftViewerConfig(BaseModel):
     auto_spectate: bool = True  # Auto-spectate when viewer joins
 
 
+class MinecraftClientViewerConfig(BaseModel):
+    """Configuration for real Minecraft client capture mode."""
+
+    enabled: bool = False
+    username: str = ""
+    mode: Literal["spectator"] = "spectator"
+    auto_spectate: bool = True
+    poll_interval: int = 30
+    spectate_timeout: int = 10
+
+
 class MinecraftMode(StrEnum):
     """Bot 运行模式（mc-bot-voyager-learning）。
 
@@ -47,3 +59,4 @@ class MinecraftConfig(BaseModel):
     bot: MinecraftBotConfig = MinecraftBotConfig()
     safety: MinecraftSafetyConfig = MinecraftSafetyConfig()
     viewer: MinecraftViewerConfig = MinecraftViewerConfig()
+    client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
