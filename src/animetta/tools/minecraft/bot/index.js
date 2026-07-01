@@ -13,6 +13,8 @@ import { createEquip } from './equip.js';
 import { createMineShaft } from './mine_shaft.js';
 import { getStatusSnapshot, evalCode } from './sandbox.js';
 import { createResponseGuard, isBusyBypassAction, withTimeout } from './commandRuntime.js';
+import { locateResource, getMemorySummary } from './resources/locator.js';
+import { maybeStartFirstPersonViewer, webViewerConfigFromEnv } from './viewer.js';
 import { setupClientViewer } from './clientViewer.js';
 
 const { pathfinder, Movements, goals } = pathfinderPkg;
@@ -154,7 +156,21 @@ async function _mineInner(block_type, count) {
   for (let i = 0; i < count; i++) {
     let b = bot.findBlock({ matching: bi.id, maxDistance: 10 });
 
-    // If not found nearby, explore
+    // If not found nearby, use Resource Locator (registry strategies + memory) first,
+    // then fall back to blind _explore_for_block for compatibility.
+    if (!b) {
+      try {
+        const cand = await locateResource(bot, resolvedBlockType, { mcData, getMcData });
+        const at = bot.blockAt(new Vec3(cand.position.x, cand.position.y, cand.position.z));
+        if (at && at.type === bi.id) b = at;
+      } catch (_locErr) {
+        // Hard locator errors are actionable; do not hide them behind blind exploration.
+        if (_locErr && ['TOOL_REQUIRED', 'UNKNOWN_RESOURCE', 'UNSAFE_AREA'].includes(_locErr.code)) {
+          throw _locErr;
+        }
+        // Soft locator misses (RESOURCE_NOT_FOUND/SEARCH_TIMEOUT) → old fallback stays compatible.
+      }
+    }
     if (!b) {
       try {
         await _explore_for_block(resolvedBlockType, 32, 5);
@@ -352,7 +368,21 @@ async function _collectInner(block_type, count, mcData) {
     // Find block
     let block = bot.findBlock({ matching: bi.id, maxDistance: 32 });
 
-    // If not found, explore
+    // If not found, use Resource Locator (registry strategies + memory) first,
+    // then fall back to blind _explore_for_block for compatibility.
+    if (!block) {
+      try {
+        const cand = await locateResource(bot, resolvedBlockType, { mcData, getMcData });
+        const at = bot.blockAt(new Vec3(cand.position.x, cand.position.y, cand.position.z));
+        if (at && at.type === bi.id) block = at;
+      } catch (_locErr) {
+        // Hard locator errors are actionable; do not hide them behind blind exploration.
+        if (_locErr && ['TOOL_REQUIRED', 'UNKNOWN_RESOURCE', 'UNSAFE_AREA'].includes(_locErr.code)) {
+          throw _locErr;
+        }
+        // Soft locator misses (RESOURCE_NOT_FOUND/SEARCH_TIMEOUT) → old fallback stays compatible.
+      }
+    }
     if (!block) {
       try {
         await _explore_for_block(resolvedBlockType, 32, 3);
@@ -685,12 +715,16 @@ async function _craft(recipe, count = 1) {
   if (allRecipes.length === 0) {
     allRecipes = bot.recipesAll(item.id, null, null) || [];
   }
+  if (allRecipes.length === 0 && mcData.recipes && mcData.recipes[item.id]) {
+    allRecipes = mcData.recipes[item.id] || [];
+  }
 
   // Debug: log recipe info
   const debugInfo = {
     recipe, itemId: item.id, hasTable: !!craftingTable,
     recipesWithTable: craftingTable ? (bot.recipesAll(item.id, null, craftingTable) || []).length : 0,
     recipesWithoutTable: (bot.recipesAll(item.id, null, null) || []).length,
+    recipesFromData: (mcData.recipes && mcData.recipes[item.id] ? mcData.recipes[item.id] : []).length,
     totalRecipes: allRecipes.length,
   };
   process.stderr.write(JSON.stringify(debugInfo) + '\n');
@@ -1087,9 +1121,19 @@ let swimInterval = null;
 let combatGuard = null;
 let planLoopInterval = null;
 let _autoDisabled = false;
+let _firstPersonViewerStarted = false;
+const webViewerConfig = webViewerConfigFromEnv();
 
 bot.on('spawn', () => {
   sendEvent('spawn');
+  if (!_firstPersonViewerStarted) {
+    _firstPersonViewerStarted = true;
+    void maybeStartFirstPersonViewer({
+      bot,
+      config: webViewerConfig,
+      sendEvent,
+    });
+  }
   // Start survival systems
   autoEat = setupAutoEat(bot);
   autoEat.start();
@@ -1106,7 +1150,12 @@ setupSpectator(bot, viewerUsername, autoSpectate, username, sendEvent);
 // --- Client viewer: real Minecraft client capture mode (clientViewer.js) ---
 const clientViewerCtx = setupClientViewer(bot, username, sendEvent);
 if (clientViewerCtx.config?.enabled) {
-  console.log('[index] client-viewer enabled: username=' + clientViewerCtx.config.username + ', mode=' + clientViewerCtx.config.mode);
+  console.log(`[index] client-viewer enabled: username=${clientViewerCtx.config.username}, mode=${clientViewerCtx.config.mode}`);
+}
+
+// --- Web viewer (prismarine-viewer) is debug-only; real-client capture is the intended surface ---
+if (webViewerConfig.enabled) {
+  console.log('[index] NOTE: prismarine-viewer is debug-only. For production/broadcast, use real-client capture via MC_CLIENT_VIEWER_*.');
 }
 
 // Disable/enable auto behaviors during critical operations
@@ -1256,6 +1305,7 @@ async function handleCommand(cmd) {
     case 'setgoal':     handler = handleSetGoal(id, params); break;
     case 'stop':        handler = handleStop(id, params); break;
     case 'collect':     handler = handleCollect(id, params); break;
+    case 'locate_resource': handler = handleLocateResource(id, params); break;
     case 'craft':       handler = handleCraft(id, params); break;
     case 'smelt':       handler = handleSmelt(id, params); break;
     case 'recipes':     handler = handleRecipes(id, params); break;
@@ -1416,6 +1466,44 @@ async function handleCollect(id, params) {
   } catch (err) {
     const errorData = err.code
       ? { message: err.message, code: err.code, collected: err.collected, explored: err.explored, reason: err.reason, requested: err.requested }
+      : err.message;
+    sendResponse(id, 'error', errorData);
+  }
+}
+
+// Resource Locator 诊断/调试入口（mcbot-resource-locator T8.2/T8.3）。
+// locate_resource 找候选点但不采集；params.debug=true 返回 resource memory 摘要（T11.3）。
+// 结构化错误（.code）透传：UNKNOWN_RESOURCE / TOOL_REQUIRED / UNSAFE_AREA / RESOURCE_NOT_FOUND / SEARCH_TIMEOUT。
+async function handleLocateResource(id, params) {
+  try {
+    if (params.debug || params.summary) {
+      sendResponse(id, 'success', getMemorySummary());
+      return;
+    }
+    if (!params.resource) {
+      sendResponse(id, 'error', 'locate_resource requires a resource name');
+      return;
+    }
+    const mcData = await getMcData();
+    const result = await locateResource(bot, params.resource, {
+      count: params.count,
+      maxDistance: params.maxDistance,
+      timeBudgetMs: params.timeBudgetMs,
+      allowedStrategies: params.allowedStrategies,
+      mcData,
+    });
+    sendResponse(id, 'success', result);
+  } catch (err) {
+    const errorData = err.code
+      ? {
+          message: err.message,
+          code: err.code,
+          resource: err.resource,
+          strategy: err.strategy,
+          reason: err.reason,
+          attempts: err.attempts,
+          requiredTool: err.requiredTool,
+        }
       : err.message;
     sendResponse(id, 'error', errorData);
   }

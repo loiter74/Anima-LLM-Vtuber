@@ -28,15 +28,28 @@ class MinecraftViewerConfig(BaseModel):
     auto_spectate: bool = True  # Auto-spectate when viewer joins
 
 
-class MinecraftClientViewerConfig(BaseModel):
-    """Configuration for real Minecraft client capture mode."""
+class MinecraftWebViewerConfig(BaseModel):
+    """Configuration for optional first-person web viewing."""
 
     enabled: bool = False
-    username: str = ""
-    mode: Literal["spectator"] = "spectator"
-    auto_spectate: bool = True
-    poll_interval: int = 30
-    spectate_timeout: int = 10
+    host: str = "127.0.0.1"
+    port: int = 3007
+
+
+class MinecraftClientViewerConfig(BaseModel):
+    """Configuration for real Minecraft client capture mode.
+
+    A separate Minecraft client account acts as a camera/presentation layer
+    while Mineflayer remains the action executor. The bot detects the viewer
+    account on the server and optionally binds it via /spectate.
+    """
+
+    enabled: bool = False
+    username: str = ""  # MC username of the real-client viewer account
+    mode: Literal["spectator"] = "spectator"  # binding mode: only "spectator" for now
+    auto_spectate: bool = True  # auto-run /spectate when viewer is online
+    poll_interval: int = 30  # seconds between viewer-online polling checks
+    spectate_timeout: int = 10  # seconds to wait for spectate command result
 
 
 class MinecraftMode(StrEnum):
@@ -59,4 +72,5 @@ class MinecraftConfig(BaseModel):
     bot: MinecraftBotConfig = MinecraftBotConfig()
     safety: MinecraftSafetyConfig = MinecraftSafetyConfig()
     viewer: MinecraftViewerConfig = MinecraftViewerConfig()
+    web_viewer: MinecraftWebViewerConfig = MinecraftWebViewerConfig()
     client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
