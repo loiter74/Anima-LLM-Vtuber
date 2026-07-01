@@ -10,7 +10,7 @@ import events from '../../../config/socket-events.json'
 // 从 JSON 推断类型
 type EventConfig = {
   name: string
-  payload: Record<string, string>
+  payload: Record<string, unknown>
 }
 
 type ModuleEvents = Record<string, EventConfig>
@@ -96,6 +96,7 @@ export const Events = {
     SPECTATE: socketEvents.minecraft.spectate.name,
     VIEWER_STATUS: socketEvents.minecraft.viewer_status.name,
     BOT_STATE: socketEvents.minecraft.bot_state.name,
+    COMMAND_RESULT: socketEvents.minecraft.command_result.name,
   },
   TRANSLATION: {
     CONFIGURE: socketEvents.translation.configure.name,

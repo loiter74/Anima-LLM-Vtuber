@@ -1,50 +1,22 @@
-# collect-build-pipeline Specification
-
-## Purpose
-TBD - created by archiving change minecraft-ai-autonomous-builder. Update Purpose after archive.
-## Requirements
-### Requirement: Material inventory tracking
-系统 SHALL 跟踪 Bot 当前库存，并与建筑目标所需材料进行对比。支持 LLM planner 动态注入新的材料需求。
-
-#### Scenario: Check material sufficiency
-- **WHEN** 自主循环或 planner 评估建造行为
-- **THEN** 系统 SHALL 对比库存与 target.required_materials
-- **AND** planner 可动态追加材料需求（如 LLM 判断需要玻璃做窗户）
-
-#### Scenario: Inventory status report
-- **WHEN** 收集行为完成或库存变化
-- **THEN** Bot 可触发状态报告，LLM planner 可根据库存变化重新规划
+## MODIFIED Requirements
 
 ### Requirement: Target material gathering
-系统 SHALL 自动寻找并收集建造所需的缺失材料。
+系统 SHALL 自动寻找并收集建造所需的缺失材料，并 SHALL 使用 Resource Locator 优先定位最近的可获取来源。
 
 #### Scenario: Gather missing materials
 - **WHEN** 检测到某种材料数量 < 目标需求
 - **THEN** Bot SHALL 使用 mc_collect 工具收集该材料
+- **AND** mc_collect SHALL consult Resource Locator before blind exploration
 - **AND** 优先收集最近的可获取来源
 
 #### Scenario: Gather until sufficient
 - **WHEN** Bot 执行收集行为
-- **THEN** 持续收集直到该材料数量 >= 目标需求，或无法找到更多来源
+- **THEN** 持续收集直到该材料数量 >= 目标需求，或 Resource Locator 返回结构化无法获取原因
 
-### Requirement: Build plan execution
-系统 SHALL 按 rules.md 中定义的 build_plan 步骤依次建造。
+#### Scenario: Reuse discovered material source
+- **WHEN** Resource Locator 已记录某材料的可用资源点
+- **THEN** Bot SHALL 优先尝试该资源点，确认仍可采集后再继续搜索
 
-#### Scenario: Execute build steps in order
-- **WHEN** 所有必需材料已收集完毕
-- **THEN** Bot SHALL 按 build_plan 顺序执行每个建造步骤
-- **AND** 每个步骤完成后 SHALL 评估结果再进入下一步
-
-#### Scenario: Build progress tracking
-- **WHEN** 一个建造步骤完成
-- **THEN** 系统 SHALL 记录已完成步骤索引
-- **AND** 持久化进度以便重启后恢复
-
-### Requirement: Building site management
-系统 SHALL 管理建造场地位置，确保建筑在同一位置进行。
-
-#### Scenario: Designate build site
-- **WHEN** 首次启动建造
-- **THEN** Bot SHALL 选择平坦区域作为建造场地
-- **AND** 在 rules.md 或运行时记录该位置坐标
-
+#### Scenario: Stop repeating impossible search
+- **WHEN** Resource Locator 返回 `TOOL_REQUIRED`, `UNSAFE_AREA`, `RESOURCE_NOT_FOUND`, or `SEARCH_TIMEOUT`
+- **THEN** material gathering SHALL stop or trigger recovery instead of repeating the same failed search indefinitely

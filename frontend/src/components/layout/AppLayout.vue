@@ -77,7 +77,7 @@ function handlePopoutClosed(): void {
     </Transition>
 
     <!-- Mobile layout -->
-    <div v-else class="mobile-content">
+    <div v-if="isMobile" class="mobile-content">
       <!-- Live2D: compact top area -->
       <div class="mobile-stage">
         <Live2DRenderer />
