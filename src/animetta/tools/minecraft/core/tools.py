@@ -5,6 +5,7 @@ Each tool maps to a Mineflayer bot action and is registered as a LangChain @tool
 The bridge (MinecraftBridge) manages the Node.js subprocess lifecycle.
 """
 
+import asyncio  # noqa: F401  (patch anchor: tests/tools/minecraft/core/test_bridge.py)
 from typing import Any
 
 from langchain_core.tools import tool
@@ -90,11 +91,9 @@ def get_minecraft_tools() -> list[Any]:
         mc_smelt,
         mc_recipes,
         mc_survival_iron,
+        mc_voyager_learn,
+        mc_voyager_live,
     ]
-
-
-# Import asyncio for bridge initialization
-import asyncio
 
 
 async def _send(action: str, params: dict | None = None, timeout: float = 60.0) -> str:
@@ -346,3 +345,75 @@ async def mc_survival_iron() -> str:
         lines.append(f"  {item}: {mark}")
 
     return "\n".join(lines)
+
+
+@tool
+async def mc_voyager_learn() -> str:
+    """Switch the Minecraft bot to Voyager offline LEARNING mode.
+
+    In learn mode the bot runs the full Voyager 4-component loop offline
+    (automatic curriculum → iterative code generation → skill library →
+    self-verification) to accumulate a library of verified, reusable skills.
+    This is offline exploration — it does NOT generate code during live streaming.
+    Use mc_voyager_live to switch to the reliable live mode after training.
+    """
+    global _bridge
+    if _bridge is None or not _bridge.is_running:
+        return (
+            "Minecraft bot is not connected. "
+            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
+        )
+
+    await _bridge.set_voyager_mode("learn")
+    return (
+        "Voyager LEARN mode enabled. The bot will run the curriculum → code-gen → "
+        "self-verify loop offline to accumulate verified skills. Switch to live mode "
+        "with mc_voyager_live once training is sufficient."
+    )
+
+
+@tool
+async def mc_voyager_live(goal: str = "") -> str:
+    """Switch to Voyager LIVE mode — reuse verified skills only, no new code generation.
+
+    In live mode the bot selects skills from the verified library (by precondition
+    match + success rate) and re-executes them. This is the reliable streaming mode.
+    If all skills fail or the bot gets stuck, it automatically falls back to the
+    deterministic Survival Runner.
+
+    Args:
+        goal: Optional goal to pursue immediately (e.g. 'collect wood', 'smelt iron').
+              If omitted, the bot just enters live standby.
+    """
+    global _bridge
+    if _bridge is None or not _bridge.is_running:
+        return (
+            "Minecraft bot is not connected. "
+            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
+        )
+
+    await _bridge.set_voyager_mode("live")
+    if not goal:
+        return (
+            "Voyager LIVE mode enabled. The bot reuses verified skills only (no new "
+            "code generation) and falls back to Survival Runner on failure. "
+            "Provide a goal to pursue a specific task."
+        )
+
+    # best-effort：若 autonomous loop 已装配 skill_library，用 LiveAgent 执行 goal
+    loop = getattr(_bridge, "_autonomous_loop", None)
+    library = getattr(loop, "_skill_library", None) if loop is not None else None
+    if library is None:
+        return (
+            f"Voyager LIVE mode enabled, but no skill library is wired yet (run LEARN "
+            f"mode first). Goal '{goal}' deferred."
+        )
+
+    from ..autonomous.live_agent import LiveAgent
+
+    agent = LiveAgent(library, _bridge)
+    result = await agent.run_goal(goal)
+    outcome = result.get("outcome", "unknown")
+    suffix = " (fell back to Survival Runner)" if result.get("fallback") else ""
+    degraded = " [skill degraded]" if result.get("degraded") else ""
+    return f"Live goal '{goal}': {outcome}{suffix}{degraded}."

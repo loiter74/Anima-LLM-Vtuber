@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from animetta.orchestration.socket_events import EVENTS
+
 from .hud_renderer import BotHudState, render_actionbar, render_chat_action, render_sidebar_update
 
 if TYPE_CHECKING:
@@ -189,6 +191,6 @@ class StateCollector:
         if not self._sio:
             return
         try:
-            await self._sio.emit("mc_bot_state", data)
+            await self._sio.emit(EVENTS["minecraft"]["bot_state"]["name"], data)
         except Exception as e:
             logger.debug(f"[StateCollector] Socket.IO emit failed: {e}")

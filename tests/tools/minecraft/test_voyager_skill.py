@@ -23,6 +23,15 @@ def test_code_seed_structure():
     assert skill.postconditions
 
 
+def test_curriculum_targets_any_one_golden_equipment_piece():
+    """课程目标与本轮目标一致：任意一件金装备即可。"""
+    from animetta.tools.minecraft.autonomous.curriculum import CURRICULUM_SYSTEM_PROMPT
+
+    prompt = CURRICULUM_SYSTEM_PROMPT.lower()
+    assert "any one golden armor piece" in prompt
+    assert "full golden armor set" not in prompt
+
+
 def test_code_seed_uses_only_restricted_api():
     """code 只用受限 API（collect/craft/status），不碰 bot/require/process。"""
     code = get_code_seeds()[0].body["code"]
@@ -136,6 +145,78 @@ def test_code_generator_iteration_success_on_retry():
     skill = to_skill("collect 1 oak log", result, postconditions=["has_oak_log >= 1"])
     assert skill.body.get("type") == "code"
     assert skill.validated is False  # 待 verifier 验证
+
+
+def test_code_generator_retries_empty_code_before_execution():
+    """迭代提示：LLM 返回空代码时不执行，直接要求重写。"""
+    from animetta.tools.minecraft.skill.code_generator import generate_with_iteration
+
+    class _Resp:
+        def __init__(self, content):
+            self.content = content
+
+    class MockLLM:
+        def __init__(self):
+            self._responses = ["", "await collect('gold_ore', 4)"]
+            self._i = 0
+
+        async def chat(self, messages):
+            content = self._responses[self._i]
+            self._i += 1
+            return _Resp(content)
+
+    executed: list[str] = []
+
+    async def mock_run(code: str):
+        executed.append(code)
+        return {"status": "success", "result": "ok"}
+
+    async def run():
+        return await generate_with_iteration(
+            "mine gold ore",
+            ["has_raw_gold >= 4"],
+            mock_run,
+            MockLLM(),
+            max_iters=2,
+        )
+
+    result = asyncio.run(run())
+    assert result.success is True
+    assert result.rounds == 2
+    assert executed == ["await collect('gold_ore', 4)"]
+
+
+def test_code_generator_uses_reasoning_content_when_content_empty():
+    """DeepSeek 4 Pro 有时把可执行代码放在 reasoning_content 中。"""
+    from animetta.tools.minecraft.skill.code_generator import generate_with_iteration
+
+    class _Resp:
+        content = ""
+        reasoning_content = "Plan done.\nawait collect('gold_ore', 4);\nawait craft('golden_boots', 1);"
+
+    class MockLLM:
+        async def chat(self, messages):
+            return _Resp()
+
+    executed: list[str] = []
+
+    async def mock_run(code: str):
+        executed.append(code)
+        return {"status": "success", "result": "ok"}
+
+    async def run():
+        return await generate_with_iteration(
+            "mine gold ore",
+            ["has_golden_boots >= 1"],
+            mock_run,
+            MockLLM(),
+            max_iters=1,
+        )
+
+    result = asyncio.run(run())
+    assert result.success is True
+    assert "await collect('gold_ore', 4);" in result.code
+    assert executed == [result.code]
 
 
 def test_code_generator_exhaustion_returns_failure():

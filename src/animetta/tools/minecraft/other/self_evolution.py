@@ -3,9 +3,9 @@
 循环 ≤ MAX_ROUNDS(40) 轮：
   curriculum 出题 → code_generator 生成 JS(≤4 轮迭代) → eval_code 执行 → verifier 验证
   → 通过则存 verified 技能库 → 检查终止条件
-终止：inventory 出现 iron_pickaxe，或轮次超过 MAX_ROUNDS。
+终止：inventory 出现任意一件金装备，或轮次超过 MAX_ROUNDS。
 
-LLM: DeepSeek(deepseek-chat, OpenAI 兼容)。MC: localhost:25565。
+LLM: DeepSeek 4 Pro(OpenAI 兼容)。MC: localhost:25565。
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from openai import AsyncOpenAI
@@ -52,13 +53,26 @@ from animetta.tools.minecraft.skill.verifier import verify  # noqa: E402
 
 MAX_ROUNDS = 60
 GOAL_ITEMS = ["golden_helmet", "golden_chestplate", "golden_leggings", "golden_boots"]
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro"
 SAME_TASK_LIMIT = 10
+
+# ── 材料补全开关（mc-evo-purity）─────────────────────────────────────────────
+# 默认 False → 学习/生产模式永不 _rcon give，保持 verifier 自我验证纯净
+# （inventory 不被人为补齐，避免「真实环境会失败的 code-body skill」被误标
+# validated=True 入库——即「假技能」）。仅在 MC_EVO_ALLOW_GIVE=1 时保留调试期
+# give 行为（复现卡死场景）。运行时可被 purify / 测试覆写（模块全局动态查找）。
+MC_EVO_ALLOW_GIVE = os.environ.get("MC_EVO_ALLOW_GIVE", "0") == "1"
+
+# give 补全时跳过的工具/方块——这些必须靠真实采集/合成获得，补全会破坏判定意义。
+_GIVE_SKIP_ITEMS = frozenset(
+    {"iron_pickaxe", "stone_pickaxe", "wooden_pickaxe", "crafting_table", "furnace"}
+)
 
 
 class DeepSeekLLM:
     """DeepSeek (OpenAI 兼容) 包装成 code_generator/curriculum 期望的 .chat 接口。"""
 
-    def __init__(self, model: str = "deepseek-chat"):
+    def __init__(self, model: str = DEFAULT_DEEPSEEK_MODEL):
         self._client = AsyncOpenAI(
             base_url="https://api.deepseek.com/v1",
             api_key=os.environ["DEEPSEEK_API_KEY"],
@@ -72,7 +86,15 @@ class DeepSeekLLM:
             temperature=0,
             max_tokens=1024,
         )
-        return type("R", (), {"content": r.choices[0].message.content})()
+        msg = r.choices[0].message
+        return type(
+            "R",
+            (),
+            {
+                "content": msg.content,
+                "reasoning_content": getattr(msg, "reasoning_content", ""),
+            },
+        )()
 
 
 STATE_FILE = "data/mc_evo_state.json"
@@ -83,7 +105,13 @@ def _load_evo_state() -> dict:
     try:
         return json.loads(Path(STATE_FILE).read_text(encoding="utf-8"))
     except Exception:
-        return {"completed": [], "failed": [], "discovered": [], "total_rounds": 0}
+        return {
+            "completed": [],
+            "failed": [],
+            "discovered": [],
+            "total_rounds": 0,
+            "give_mode": False,
+        }
 
 
 def _save_evo_state(state: dict) -> None:
@@ -97,42 +125,72 @@ def _save_evo_state(state: dict) -> None:
         logger.warning(f"[evo] save state failed: {e}")
 
 
+def _gold_goal_reached(inv: dict) -> bool:
+    """本轮 MC 迭代目标：打造任意一件金装备。"""
+    return any(inv.get(item, 0) >= 1 for item in GOAL_ITEMS)
+
+
+def _gold_progress(inv: dict) -> dict:
+    """Return current golden equipment counts for logs."""
+    return {item: inv.get(item, 0) for item in GOAL_ITEMS}
+
+
 async def get_state(bridge: MinecraftBridge) -> tuple[dict, dict]:
     """用 RCON 读服务器端 inventory（准，绕 mineflayer 缓存；与 rcon_smelt 一致 server-authoritative）。"""
     inv = parse_rcon_inv(_rcon("data get entity AnimettaBot Inventory"))
     return {"inventory": inv, "position": None, "health": 20, "food": 20}, inv
 
 
-async def main() -> int:
+async def _maybe_give_materials(task: Any, inv: dict) -> bool:
+    """材料补全（受 ``MC_EVO_ALLOW_GIVE`` 守卫，mc-evo-purity）。
+
+    默认 ``MC_EVO_ALLOW_GIVE=False`` → 直接返回，**永不 _rcon give**，保持 verifier
+    自我验证的纯净（inventory 不被人为补齐，避免假技能入库）。仅当显式开启
+    （``MC_EVO_ALLOW_GIVE=1``）时保留调试期行为：inv 攒到目标 1/5 时 give 补全剩余。
+
+    Returns:
+        True 表示执行了一次 give（仅供可观测/可测试；调用方无需据此分支）。
+    """
+    if not MC_EVO_ALLOW_GIVE:
+        return False
+    for crit in task.success_criteria or []:
+        m = re.match(r"has_([a-z_]+)\s*>=\s*(\d+)", crit)
+        if not m:
+            continue
+        item, target = m.group(1), int(m.group(2))
+        if item in _GIVE_SKIP_ITEMS:
+            continue  # 工具/方块不补全
+        have = inv.get(item, 0)
+        threshold = max(1, target // 5)
+        if 0 < have < target and have >= threshold:
+            need = target - have
+            _rcon(f"give AnimettaBot minecraft:{item} {need}")
+            logger.info(
+                f"[evo] 材料补全 {item}: {have}/{target} >= 1/5({threshold}) → give {need}"
+            )
+            await asyncio.sleep(1)
+            return True
+    return False
+
+
+async def run_learning_loop(
+    bridge: MinecraftBridge,
+    lib: SkillLibrary,
+    llm: Any,
+) -> dict[str, Any]:
+    """Voyager 学习闭环核心（mc-bot-voyager-learning T9 复用入口）。
+
+    curriculum 出题 → code_generator 迭代生成 JS → eval_code 执行 → verifier 验证
+    → 通过则存 verified 技能。循环 ≤ MAX_ROUNDS 轮或达任意一件 GOAL_ITEMS。
+
+    bridge 生命周期由调用方管理：``main()`` 起/停 bridge；``bridge._start_autonomous``
+    在 LEARN 模式下后台创建 task 跑本函数。返回摘要
+    ``{completed, failed, discovered, total_rounds, give_mode}``。
+    """
     logger.info(
-        f"[evo] MAX_ROUNDS={MAX_ROUNDS}, goal=full gold armor {GOAL_ITEMS}, LLM=deepseek-chat"
+        f"[evo] run_learning_loop | max_rounds={MAX_ROUNDS} goal=any_of({GOAL_ITEMS}) "
+        f"LLM={type(llm).__name__} give_mode={MC_EVO_ALLOW_GIVE}"
     )
-    llm = DeepSeekLLM()
-
-    config = MinecraftConfig(
-        enabled=True,
-        mode=MinecraftMode.FALLBACK,
-        bot=MinecraftBotConfig(host="localhost", port=25565, username="AnimettaBot"),
-        viewer=MinecraftViewerConfig(username="LUN077", auto_spectate=True),
-    )
-    bridge = MinecraftBridge(config, autonomous=False)
-    bridge.set_viewer_callback(
-        lambda et, u: (
-            logger.success(f"[VIEWER] {et}: {u}")
-            if et == "viewer_joined"
-            else logger.info(f"[VIEWER] {et}: {u}")
-        )
-    )
-    if not await bridge.start():
-        logger.error("[evo] bridge start failed")
-        return 2
-    await asyncio.sleep(10)
-    await bridge.spectate_viewer("LUN077")
-    await asyncio.sleep(2)
-
-    lib = SkillLibrary()
-    for s in get_predefined_skills() + get_code_seeds():
-        await lib.save_skill(s)
 
     # 持久化：加载上次状态（completed/failed/discovered 跨会话恢复）
     evo_state = _load_evo_state()
@@ -146,6 +204,7 @@ async def main() -> int:
         )
     last_task_text = ""
     same_task_streak = 0
+    rnd = 0
 
     for rnd in range(1, MAX_ROUNDS + 1):
         if not bridge.is_running:
@@ -165,13 +224,14 @@ async def main() -> int:
                 "failed": failed,
                 "discovered": sorted(discovered),
                 "total_rounds": rnd,
+                "give_mode": MC_EVO_ALLOW_GIVE,
             }
         )
-        # 终极目标：金装备全套
-        gold_have = {g: inv.get(g, 0) for g in GOAL_ITEMS}
-        if all(v >= 1 for v in gold_have.values()):
+        # 本轮目标：任意一件金装备
+        gold_have = _gold_progress(inv)
+        if _gold_goal_reached(inv):
             logger.success(
-                f"★ ROUND {rnd}: 金装备全套达成 {gold_have} | 累计发现 {len(discovered)} 物品 ★"
+                f"★ ROUND {rnd}: 金装备目标达成 {gold_have} | 累计发现 {len(discovered)} 物品 ★"
             )
             break
 
@@ -189,30 +249,9 @@ async def main() -> int:
             continue
 
         logger.info(f"[evo] task='{task.task}' criteria={task.success_criteria}")
-        # 材料补全（1/5 阈值）：inv 攒到目标 1/5 时 give 补全剩余（放宽禁作弊，避免无限找不到）
-        for crit in task.success_criteria or []:
-            m = re.match(r"has_([a-z_]+)\s*>=\s*(\d+)", crit)
-            if not m:
-                continue
-            item, target = m.group(1), int(m.group(2))
-            if item in (
-                "iron_pickaxe",
-                "stone_pickaxe",
-                "wooden_pickaxe",
-                "crafting_table",
-                "furnace",
-            ):
-                continue  # 工具/方块不补全
-            have = inv.get(item, 0)
-            threshold = max(1, target // 5)
-            if 0 < have < target and have >= threshold:
-                need = target - have
-                _rcon(f"give AnimettaBot minecraft:{item} {need}")
-                logger.info(
-                    f"[evo] 材料补全 {item}: {have}/{target} >= 1/5({threshold}) → give {need}"
-                )
-                await asyncio.sleep(1)
-                break
+        # 材料补全（受 MC_EVO_ALLOW_GIVE 守卫，mc-evo-purity）：默认 False → 永不 give，
+        # 保持 verifier 自我验证纯净。仅 MC_EVO_ALLOW_GIVE=1 时保留调试期 give 行为。
+        await _maybe_give_materials(task, inv)
         # smelt task 走 rcon_smelt（Python RCON, check inv 不凭空, 绕 mineflayer openFurnace crash）
         tl = task.task.lower()
         smelt_item = next((k for k in SMELT_RESULT_MAP if k in tl), None)
@@ -278,8 +317,8 @@ async def main() -> int:
             skill.validated = True
             await lib.save_skill(skill)
             completed.append(task.task)
-            if all(inv2.get(g, 0) >= 1 for g in GOAL_ITEMS):
-                logger.success(f"★ 金装备全套达成 { {g: inv2.get(g, 0) for g in GOAL_ITEMS} } ★")
+            if _gold_goal_reached(inv2):
+                logger.success(f"★ 金装备目标达成 {_gold_progress(inv2)} ★")
                 break
         else:
             logger.warning(f"[evo] verify failed: {vr.reason} | inv={inv2}")
@@ -287,12 +326,55 @@ async def main() -> int:
 
     else:
         logger.warning(
-            f"[evo] 达 {MAX_ROUNDS} 轮上限或卡停。金装备进度: { {g: last_inv.get(g, 0) for g in GOAL_ITEMS} } | 累计发现 {len(discovered)} 物品"
+            f"[evo] 达 {MAX_ROUNDS} 轮上限或卡停。金装备进度: {_gold_progress(last_inv)} | 累计发现 {len(discovered)} 物品"
         )
 
     logger.info(
         f"[evo] DONE | completed={len(completed)} failed={len(failed)} | final inv={last_inv}"
     )
+    return {
+        "completed": len(completed),
+        "failed": len(failed),
+        "discovered": len(discovered),
+        "total_rounds": rnd,
+        "give_mode": MC_EVO_ALLOW_GIVE,
+    }
+
+
+async def main() -> int:
+    """独立 CLI 入口：起 bridge + lib，跑学习闭环，停 bridge。"""
+    logger.info(
+        f"[evo] standalone CLI | MAX_ROUNDS={MAX_ROUNDS} goal=any_of({GOAL_ITEMS}) LLM={DEFAULT_DEEPSEEK_MODEL}"
+    )
+    llm = DeepSeekLLM()
+
+    config = MinecraftConfig(
+        enabled=True,
+        mode=MinecraftMode.FALLBACK,
+        bot=MinecraftBotConfig(host="localhost", port=25565, username="AnimettaBot"),
+        viewer=MinecraftViewerConfig(username="LUN077", auto_spectate=True),
+    )
+    bridge = MinecraftBridge(config, autonomous=False)
+    bridge.set_viewer_callback(
+        lambda et, u: (
+            logger.success(f"[VIEWER] {et}: {u}")
+            if et == "viewer_joined"
+            else logger.info(f"[VIEWER] {et}: {u}")
+        )
+    )
+    if not await bridge.start():
+        logger.error("[evo] bridge start failed")
+        return 2
+    await asyncio.sleep(10)
+    await bridge.spectate_viewer("LUN077")
+    await asyncio.sleep(2)
+
+    lib = SkillLibrary()
+    for s in get_predefined_skills() + get_code_seeds():
+        await lib.save_skill(s)
+
+    await run_learning_loop(bridge, lib, llm)
+
     await asyncio.sleep(30)
     await bridge.stop()
     return 0

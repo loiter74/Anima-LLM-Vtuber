@@ -52,6 +52,13 @@ class BenchmarkMetrics:
     elapsed_seconds: float = 0.0
     tasks_attempted: int = 0
     tasks_succeeded: int = 0
+    # ── Voyager 论文对齐指标（mc-bot-voyager-learning T14）───────────────────
+    # 技术树覆盖率（0.0–1.0）：木/石/铁/钻石工具 + 基础建造 key 节点达成比例
+    tech_tree_coverage: float = 0.0
+    # 单任务平均迭代轮次（code_generator ≤4 轮）：越低越好
+    avg_iterations_per_task: float = 0.0
+    # 学习期累计 token 消耗（云 LLM 成本）
+    total_tokens: int = 0
 
 
 @dataclass

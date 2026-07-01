@@ -76,6 +76,34 @@ def map_collect_failure(
     if code == "BLOCK_NOT_FOUND" or "Unknown block" in msg:
         return RecoveryPlan(should_abort=True, abort_reason=f"Unknown block type: {block_type}")
 
+    # Locator codes (add-mcbot-resource-locator T9.4):
+    # TOOL_REQUIRED — bot lacks the required pickaxe tier; abort so runner can craft one.
+    if code == "TOOL_REQUIRED":
+        required = err.get("requiredTool", "pickaxe")
+        return RecoveryPlan(
+            should_abort=True,
+            abort_reason=f"Missing tool for {block_type}: need {required}",
+        )
+
+    # UNSAFE_AREA — lava/hostiles/low health during search; pause and retry later.
+    if code == "UNSAFE_AREA":
+        return RecoveryPlan(
+            actions=[
+                RecoveryAction(
+                    action="stop",
+                    params={},
+                    description=f"Stop due to unsafe area: {reason}",
+                ),
+                RecoveryAction(
+                    action="collect",
+                    params={"block_type": block_type, "count": requested_count},
+                    description=f"Retry collect {block_type} after safety pause",
+                    timeout=120.0,
+                ),
+            ],
+            should_advance_phase=False,
+        )
+
     if code == "NO_BLOCKS" or "no more" in msg.lower() or "nearby" in msg.lower():
         # If we collected some, reduce the remaining count
         remaining = max(1, requested_count - collected) if collected else requested_count

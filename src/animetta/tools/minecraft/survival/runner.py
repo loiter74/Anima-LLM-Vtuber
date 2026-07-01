@@ -39,11 +39,22 @@ GLOBAL_TIMEOUT_SECONDS = 45 * 60
 class SurvivalIronRunner:
     """Drives the bot from empty inventory to iron gear through explicit phases."""
 
-    def __init__(self, bridge: Any, *, max_global_timeout: float = GLOBAL_TIMEOUT_SECONDS):
+    def __init__(
+        self,
+        bridge: Any,
+        *,
+        max_global_timeout: float = GLOBAL_TIMEOUT_SECONDS,
+        skill_library: Any = None,
+        skill_extractor: Any = None,
+    ):
         self._bridge = bridge
         self._max_global_timeout = max_global_timeout
         self._start_time = 0.0
         self._interrupted = False
+        # Voyager bootstrap 钩子（mc-bot-voyager-learning T8）：成功 phase 的动作序列
+        # 喂 SkillExtractor 转 reusable skill 存库。两者任一为 None → 钩子不启用（不影响确定性流程）。
+        self._skill_library = skill_library
+        self._skill_extractor = skill_extractor
 
     async def run(self) -> RunReport:
         """Execute the full iron survival phase loop."""
@@ -72,6 +83,8 @@ class SurvivalIronRunner:
                 )
                 break
             logger.info(f"[SurvivalRunner] Phase {phase.value} completed")
+            # T8: 成功 phase → 动作序列喂 SkillExtractor 转 bootstrap 种子存库（best-effort，不阻断主流程）
+            await self._extract_phase_skill(phase, phase_result)
 
         status = await self._send_command("status")
         if status and isinstance(status, dict):
@@ -91,6 +104,65 @@ class SurvivalIronRunner:
 
     def interrupt(self) -> None:
         self._interrupted = True
+
+    async def _extract_phase_skill(self, phase: SurvivalPhase, phase_result: PhaseResult) -> None:
+        """T8: 把成功 phase 的动作序列喂 SkillExtractor 转 reusable skill 存库。
+
+        bootstrap 种子路径（mc-bot-voyager-learning）：确定性 Survival Runner 每个
+        成功 phase 的动作序列本身就是可复用模式——转成 skill 存库，作为 Voyager
+        学习期的可信种子（``validated=True``、不依赖 LLM 自我验证）。
+
+        best-effort：library/extractor 未注入或抽取失败均不阻断确定性生存流程。
+        """
+        if not self._skill_library or not self._skill_extractor:
+            return
+        if not phase_result.success or not phase_result.action_log:
+            return
+        try:
+            from ..other.trace_recorder import ActionTrace, TaskTrace
+
+            successful = [a for a in phase_result.action_log if a.get("success")]
+            if not successful:
+                return
+            steps = [
+                ActionTrace(
+                    action=a["action"],
+                    params=a.get("params", {}),
+                    result=a.get("result", ""),
+                    duration=0.0,
+                    state_before={},
+                    state_after={},
+                    error=None,
+                )
+                for a in successful
+            ]
+            trace = TaskTrace(
+                id=f"survival_{phase.value}",
+                goal=f"survival phase: {phase.value}",
+                steps=steps,
+                final_result="success",
+                total_duration=phase_result.elapsed_ms / 1000.0,
+                items_gained={},
+                items_lost={},
+                distance_traveled=0.0,
+                start_position={},
+                end_position={},
+                timestamp="",
+            )
+            skill = await self._skill_extractor.extract(trace, context={"phase": phase.value})
+            if skill is None:
+                return
+            # 标记为 bootstrap 种子：可信（validated）、可被 live 期检索复用
+            skill.tags = list(skill.tags) + ["bootstrap", "survival-seed"]
+            skill.validated = True
+            await self._skill_library.save_skill(skill)
+            logger.info(
+                f"[SurvivalRunner] bootstrap skill extracted: {skill.name} (phase={phase.value})"
+            )
+        except Exception as e:  # bootstrap 抽取失败绝不能拖垮确定性生存流程
+            logger.warning(
+                f"[SurvivalRunner] phase skill extraction failed ({phase.value}): {e}"
+            )
 
     async def _run_phase(self, phase: SurvivalPhase, report: RunReport) -> PhaseResult:
         result = PhaseResult(phase=phase, success=True)

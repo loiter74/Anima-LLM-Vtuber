@@ -16,11 +16,11 @@ def generate_benchmark_report(results: dict[str, dict[str, BenchmarkMetrics]]) -
     lines.append("## Summary\n")
     lines.append(
         "| Scenario | Config | Completed | Time (s) | Items | Distance | "
-        "Deaths | Skills Created | Task Rate |"
+        "Deaths | Skills Created | Task Rate | TechCov | AvgIter | Tokens |"
     )
     lines.append(
         "|----------|--------|-----------|----------|-------|----------|"
-        "--------|----------------|-----------|"
+        "--------|----------------|-----------|---------|---------|--------|"
     )
 
     for scenario_name, configs in results.items():
@@ -30,7 +30,9 @@ def generate_benchmark_report(results: dict[str, dict[str, BenchmarkMetrics]]) -
                 f"| {scenario_name} | {config_name} | {status} | "
                 f"{metrics.elapsed_seconds:.0f} | {metrics.unique_items_collected} | "
                 f"{metrics.distance_traveled:.0f} | {metrics.deaths} | "
-                f"{metrics.skills_created} | {metrics.task_success_rate:.0%} |"
+                f"{metrics.skills_created} | {metrics.task_success_rate:.0%} | "
+                f"{metrics.tech_tree_coverage:.0%} | "
+                f"{metrics.avg_iterations_per_task:.1f} | {metrics.total_tokens} |"
             )
 
     lines.append("\n## Detailed Results\n")

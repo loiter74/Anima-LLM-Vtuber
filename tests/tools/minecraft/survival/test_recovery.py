@@ -91,6 +91,74 @@ class TestMapCollectFailure:
         )
         assert "cave collapsed" in plan.actions[0].description
 
+    # ── T12.5: Locator error code recovery tests ──────────────────────
+
+    def test_tool_required_aborts(self):
+        """Locator TOOL_REQUIRED → abort so runner can craft the required tool."""
+        plan = map_collect_failure(
+            "iron_ore",
+            {
+                "message": "requires stone_pickaxe",
+                "code": "TOOL_REQUIRED",
+                "resource": "iron_ore",
+                "requiredTool": "stone_pickaxe",
+                "have": 0,
+                "need": 2,
+            },
+            SurvivalPhase.IRON_ORE,
+        )
+        assert plan.should_abort is True
+        assert "stone_pickaxe" in plan.abort_reason
+
+    def test_tool_required_coal_aborts(self):
+        """Locator TOOL_REQUIRED for coal → abort with tool info."""
+        plan = map_collect_failure(
+            "coal_ore",
+            {
+                "message": "requires wooden_pickaxe",
+                "code": "TOOL_REQUIRED",
+                "resource": "coal_ore",
+                "requiredTool": "wooden_pickaxe",
+                "have": 0,
+                "need": 1,
+            },
+            SurvivalPhase.FUEL,
+        )
+        assert plan.should_abort is True
+        assert "wooden_pickaxe" in plan.abort_reason
+
+    def test_unsafe_area_stops_and_retries(self):
+        """Locator UNSAFE_AREA → stop action + retry after safety pause."""
+        plan = map_collect_failure(
+            "iron_ore",
+            {
+                "message": "lava below during descent",
+                "code": "UNSAFE_AREA",
+                "resource": "iron_ore",
+                "strategy": "safe_descent",
+            },
+            SurvivalPhase.IRON_ORE,
+        )
+        assert plan.should_abort is False
+        assert len(plan.actions) == 2
+        assert plan.actions[0].action == "stop"
+        assert plan.actions[1].action == "collect"
+        assert plan.actions[1].params["block_type"] == "iron_ore"
+
+    def test_unsafe_area_hostile_retries(self):
+        """Locator UNSAFE_AREA due to hostile → stop + retry."""
+        plan = map_collect_failure(
+            "coal_ore",
+            {
+                "message": "hostile zombie nearby",
+                "code": "UNSAFE_AREA",
+                "resource": "coal_ore",
+            },
+            SurvivalPhase.FUEL,
+        )
+        assert plan.should_abort is False
+        assert plan.actions[0].action == "stop"
+
 
 class TestMapCraftFailure:
     def test_unknown_item_aborts(self):

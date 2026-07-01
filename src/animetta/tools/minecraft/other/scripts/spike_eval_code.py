@@ -53,10 +53,10 @@ def strip_code_fences(text: str) -> str:
 
 
 async def llm_chat(messages: list[dict]) -> str:
-    """调云 LLM。优先 ServicePool 已配的 LLM；否则需在此手动接入直连 client。
+    """调云 LLM。优先 ServicePool 已配的 LLM；否则直连 DeepSeek（self_evolution.DeepSeekLLM）。
 
     生产实现走 ServicePool._llm.chat(messages=...) -> {content}。
-    若 ServicePool 未就绪，按下方注释接 OpenAI/GLM/DeepSeek 直连。
+    独立跑 spike 时（ServicePool 未就绪）回落到 DeepSeek 直连（读 .env 的 DEEPSEEK_API_KEY）。
     """
     try:
         from animetta.core.service_pool import ServicePool
@@ -67,15 +67,18 @@ async def llm_chat(messages: list[dict]) -> str:
     except Exception as e:
         logger.warning(f"ServicePool LLM unavailable: {e}")
 
-    # --- 直连 fallback（按需启用）---
-    # from openai import AsyncOpenAI
-    # client = AsyncOpenAI()  # 读 OPENAI_API_KEY / OPENAI_BASE_URL
-    # resp = await client.chat.completions.create(model="gpt-4o", messages=messages)
-    # return resp.choices[0].message.content
+    # --- 直连 DeepSeek fallback（独立跑 spike 时启用）---
+    try:
+        from animetta.tools.minecraft.other.self_evolution import DeepSeekLLM
+
+        resp = await DeepSeekLLM().chat(messages=messages)
+        return resp.content if hasattr(resp, "content") else str(resp)
+    except Exception as e:
+        logger.error(f"DeepSeek direct fallback failed: {e}")
 
     raise RuntimeError(
-        "No LLM available. Initialize ServicePool first (run Animetta main), "
-        "or edit llm_chat() to use a direct OpenAI/GLM/DeepSeek client."
+        "No LLM available. Set DEEPSEEK_API_KEY in .env (DeepSeek direct fallback), "
+        "or initialize ServicePool first."
     )
 
 

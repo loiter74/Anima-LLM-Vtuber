@@ -19,11 +19,27 @@ export function createMineShaft({ bot, disableAuto, enableAuto }) {
         const curY = Math.floor(bot.entity.position.y);
         if (curY === lastY) {
           stuck++;
-          if (stuck > 6) break;  // 卡住退出
+          if (stuck > 6) {
+            const err = new Error(
+              `mine_shaft stuck above target: y=${curY}, target=${targetY}`
+            );
+            err.code = 'MINE_SHAFT_STUCK';
+            err.currentY = curY;
+            err.targetY = targetY;
+            throw err;
+          }
         } else {
           stuck = 0;
           lastY = curY;
         }
+      }
+      const finalY = Math.floor(bot.entity.position.y);
+      if (finalY > targetY) {
+        const err = new Error(`mine_shaft timed out above target: y=${finalY}, target=${targetY}`);
+        err.code = 'MINE_SHAFT_TIMEOUT';
+        err.currentY = finalY;
+        err.targetY = targetY;
+        throw err;
       }
       return `Shaft mined ${startY} -> y=${Math.floor(bot.entity.position.y)} (target ${targetY})`;
     } finally {

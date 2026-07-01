@@ -49,6 +49,9 @@ Examples:
 - smelt iron:             await smelt('raw_iron', 'coal', 3);"""
 
 _FENCE = re.compile(r"```(?:js|javascript)?\s*\n?(.*?)```", re.S)
+_ALLOWED_AWAIT = re.compile(
+    r"^\s*await\s+(collect|craft|smelt|goto|place|attack|equip|status|waitFor)\s*\(",
+)
 
 
 @dataclass
@@ -68,9 +71,26 @@ def strip_fences(text: str) -> str:
     return m.group(1).strip() if m else text.strip()
 
 
+def _extract_code_from_reasoning(text: str) -> str:
+    """Extract simple allowed API calls from reasoning-only DeepSeek responses."""
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _ALLOWED_AWAIT.match(stripped):
+            lines.append(stripped)
+    return "\n".join(lines)
+
+
 async def _llm_chat(llm: Any, messages: list[dict]) -> str:
     resp = await llm.chat(messages=messages)
-    return resp.content if hasattr(resp, "content") else str(resp)
+    if hasattr(resp, "content") and resp.content:
+        return resp.content
+    reasoning = getattr(resp, "reasoning_content", "")
+    if reasoning:
+        return _extract_code_from_reasoning(str(reasoning))
+    if hasattr(resp, "content"):
+        return ""
+    return str(resp)
 
 
 async def generate_with_iteration(
@@ -138,6 +158,11 @@ async def generate_with_iteration(
         code = strip_fences(raw)
         history.append({"round": i, "code": code, "error": last_error})
         messages.append({"role": "assistant", "content": raw})
+
+        if not code.strip():
+            last_error = "LLM returned empty code; output a non-empty JavaScript code body."
+            logger.warning(f"[CodeGen] round {i}/{max_iters} failed: {last_error}")
+            continue
 
         result = await run_code(code)
         if isinstance(result, dict) and result.get("status") == "success":
