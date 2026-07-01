@@ -446,3 +446,188 @@
 | 17:35 | Created docs/development/minecraft-bot-architecture.zh.md | — | ~3212 |
 | 17:36 | Session end: 1 writes across 1 files (minecraft-bot-architecture.zh.md) | 1 reads | ~3441 tok |
 | 18:07 | Edited .gitignore | 3→6 lines | ~40 |
+| 18:09 | Session end: 2 writes across 2 files (minecraft-bot-architecture.zh.md, .gitignore) | 2 reads | ~4015 tok |
+| 20:03 | Created docs/development/voyager-landscape-research.zh.md | — | ~2144 |
+| 20:04 | Session end: 3 writes across 3 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md) | 2 reads | ~6312 tok |
+| 20:11 | Edited docs/development/voyager-landscape-research.zh.md | expanded (+45 lines) | ~827 |
+| 20:12 | Session end: 4 writes across 3 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md) | 10 reads | ~13292 tok |
+| 20:30 | Session end: 4 writes across 3 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md) | 10 reads | ~13292 tok |
+| 20:38 | Created docs/development/voyager-self-evolution-optimization-roadmap.zh.md | — | ~1839 |
+| 20:41 | Created ../../Documents/my-llm-wiki/my-llm-wiki/Excalidraw/Animetta/MC-Bot/voyager-self-evolution-optimization/01-优化路线图总览.canvas | — | ~755 |
+| 20:42 | Session end: 6 writes across 5 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md, voyager-self-evolution-optimization-roadmap.zh.md, 01-优化路线图总览.canvas) | 11 reads | ~16071 tok |
+| 20:48 | Created openspec/changes/mc-evo-purity/proposal.md | — | ~694 |
+| 20:48 | Created openspec/changes/mc-evo-purity/design.md | — | ~919 |
+| 20:49 | Created openspec/changes/mc-evo-purity/tasks.md | — | ~354 |
+| 20:49 | Session end: 9 writes across 8 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md, voyager-self-evolution-optimization-roadmap.zh.md, 01-优化路线图总览.canvas) | 15 reads | ~18179 tok |
+| 20:58 | Session end: 9 writes across 8 files (minecraft-bot-architecture.zh.md, .gitignore, voyager-landscape-research.zh.md, voyager-self-evolution-optimization-roadmap.zh.md, 01-优化路线图总览.canvas) | 16 reads | ~18179 tok |
+
+## Session: 2026-06-28 20:58
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 21:11 | Edited src/animetta/tools/minecraft/other/self_evolution.py | expanded (+12 lines) | ~190 |
+| 21:12 | Edited src/animetta/tools/minecraft/other/self_evolution.py | modified get_state() | ~413 |
+| 21:12 | Edited src/animetta/tools/minecraft/other/self_evolution.py | added 1 import(s) | ~30 |
+| 21:13 | Edited src/animetta/tools/minecraft/other/self_evolution.py | reduced (-21 lines) | ~77 |
+| 21:13 | Edited src/animetta/tools/minecraft/other/self_evolution.py | modified _load_evo_state() | ~98 |
+| 21:13 | Edited src/animetta/tools/minecraft/other/self_evolution.py | 9→10 lines | ~94 |
+| 21:15 | Created src/animetta/tools/minecraft/other/purify.py | — | ~2393 |
+| 21:17 | Created tests/tools/minecraft/test_self_evolution.py | — | ~950 |
+| 21:18 | Created tests/tools/minecraft/test_purify.py | — | ~1520 |
+| 21:21 | Edited openspec/changes/mc-evo-purity/tasks.md | 16→16 lines | ~321 |
+| 21:25 | Session end: 10 writes across 5 files (self_evolution.py, purify.py, test_self_evolution.py, test_purify.py, tasks.md) | 9 reads | ~9462 tok |
+
+## Session: 2026-06-28 21:27
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 21:44 | Edited src/animetta/tools/minecraft/survival/runner.py | modified __init__() | ~170 |
+| 21:45 | Edited src/animetta/tools/minecraft/survival/runner.py | 1→3 lines | ~65 |
+| 21:45 | Edited src/animetta/tools/minecraft/survival/runner.py | modified interrupt() | ~700 |
+| 21:46 | Created tests/tools/minecraft/test_voyager_runner_bootstrap.py | — | ~847 |
+| 21:47 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~42 |
+| 21:47 | Edited src/animetta/tools/minecraft/benchmark/models.py | expanded (+7 lines) | ~200 |
+| 21:48 | Edited src/animetta/tools/minecraft/benchmark/criteria.py | modified _check_tech_tree_criteria() | ~609 |
+| 21:48 | Edited src/animetta/tools/minecraft/benchmark/report.py | modified items() | ~295 |
+| 21:49 | Created tests/tools/minecraft/test_voyager_benchmark.py | — | ~916 |
+| 21:50 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~30 |
+| 21:50 | Created src/animetta/tools/minecraft/autonomous/training.py | — | ~1089 |
+| 21:51 | Edited src/animetta/tools/minecraft/autonomous/loop.py | modified __init__() | ~127 |
+| 21:51 | Edited src/animetta/tools/minecraft/autonomous/loop.py | 4→8 lines | ~83 |
+| 21:51 | Edited src/animetta/tools/minecraft/autonomous/loop.py | modified is_running() | ~272 |
+| 21:51 | Edited src/animetta/tools/minecraft/autonomous/loop.py | 3→8 lines | ~128 |
+| 21:52 | Created tests/tools/minecraft/test_training_sufficiency.py | — | ~1133 |
+| 21:54 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~31 |
+| 21:55 | Created src/animetta/tools/minecraft/autonomous/live_agent.py | — | ~1456 |
+| 21:56 | Created tests/tools/minecraft/test_live_agent.py | — | ~1657 |
+| 21:57 | Edited tests/tools/minecraft/test_live_agent.py | modified _skill() | ~126 |
+| 21:59 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | 2→2 lines | ~69 |
+| 21:59 | Edited src/animetta/tools/minecraft/core/bridge.py | modified resume_autonomous() | ~223 |
+| 21:59 | Edited src/animetta/tools/minecraft/core/tools.py | 15→17 lines | ~90 |
+| 22:00 | Edited src/animetta/tools/minecraft/core/tools.py | modified mc_voyager_learn() | ~931 |
+| 22:00 | Created tests/tools/minecraft/test_voyager_tools.py | — | ~565 |
+| 22:01 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~36 |
+| 22:03 | Edited src/animetta/tools/minecraft/benchmark/criteria.py | modified _check_voyager_paper_criteria() | ~144 |
+| 22:06 | Edited src/animetta/tools/minecraft/core/tools.py | 7→11 lines | ~99 |
+| 22:06 | Edited src/animetta/tools/minecraft/core/tools.py | modified _send() | ~35 |
+| 22:08 | Edited src/animetta/tools/minecraft/core/tools.py | 11→8 lines | ~70 |
+| 22:11 | Session end: 30 writes across 15 files (runner.py, test_voyager_runner_bootstrap.py, tasks.md, models.py, criteria.py) | 13 reads | ~24488 tok |
+| 22:35 | Edited src/animetta/tools/minecraft/other/self_evolution.py | modified run_learning_loop() | ~337 |
+| 22:35 | Edited src/animetta/tools/minecraft/other/self_evolution.py | modified main() | ~442 |
+| 22:36 | Edited src/animetta/tools/minecraft/core/bridge.py | inline fix | ~15 |
+| 22:36 | Edited src/animetta/tools/minecraft/core/bridge.py | 2→7 lines | ~97 |
+| 22:37 | Edited src/animetta/tools/minecraft/core/bridge.py | modified _start_autonomous() | ~1054 |
+| 22:37 | Edited src/animetta/tools/minecraft/core/bridge.py | modified set_voyager_mode() | ~388 |
+| 22:37 | Edited src/animetta/tools/minecraft/core/bridge.py | modified _stop_autonomous() | ~129 |
+| 22:38 | Created tests/tools/minecraft/test_voyager_bridge_wiring.py | — | ~874 |
+| 22:40 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~48 |
+| 22:40 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~44 |
+| 22:41 | Created tests/tools/minecraft/test_e2e_voyager.py | — | ~1153 |
+| 22:41 | Edited openspec/changes/mc-bot-voyager-learning/tasks.md | inline fix | ~31 |
+| 22:42 | Edited tests/tools/minecraft/test_e2e_voyager.py | inline fix | ~27 |
+| 22:43 | Edited tests/tools/minecraft/test_e2e_voyager.py | start() → bool() | ~42 |
+| 22:46 | Session end: 44 writes across 18 files (runner.py, test_voyager_runner_bootstrap.py, tasks.md, models.py, criteria.py) | 16 reads | ~35509 tok |
+| 22:57 | Edited tests/tools/minecraft/test_e2e_voyager.py | 9→12 lines | ~148 |
+| 22:59 | Edited src/animetta/tools/minecraft/other/scripts/spike_eval_code.py | modified llm_chat() | ~336 |
+| 23:03 | Created tests/tools/minecraft/_spike_controlled_run.py | — | ~398 |
+| 23:12 | Created _fix_bug082.py | — | ~314 |
+| 23:15 | Session end: 48 writes across 21 files (runner.py, test_voyager_runner_bootstrap.py, tasks.md, models.py, criteria.py) | 16 reads | ~36689 tok |
+| 23:34 | Created src/animetta/tools/minecraft/bot/resources/registry.js | — | ~1111 |
+| 23:35 | Created src/animetta/tools/minecraft/bot/resources/memory.js | — | ~823 |
+| 23:36 | Created src/animetta/tools/minecraft/bot/resources/strategies.js | — | ~3004 |
+| 23:37 | Edited src/animetta/tools/minecraft/bot/resources/strategies.js | added 3 condition(s) | ~195 |
+| 23:38 | Created src/animetta/tools/minecraft/bot/resources/locator.js | — | ~1296 |
+| 23:43 | Created src/animetta/tools/minecraft/bot/resources/registry.js | — | ~1086 |
+| 23:44 | Created src/animetta/tools/minecraft/bot/resources/memory.js | — | ~822 |
+| 23:44 | Created src/animetta/tools/minecraft/bot/resources/strategies.js | — | ~3051 |
+| 23:45 | Created src/animetta/tools/minecraft/bot/resources/locator.js | — | ~1239 |
+| 23:48 | Edited src/animetta/tools/minecraft/bot/index.js | added 1 import(s) | ~48 |
+| 23:48 | Edited src/animetta/tools/minecraft/bot/index.js | added 2 condition(s) | ~236 |
+| 23:49 | Edited src/animetta/tools/minecraft/bot/index.js | added 2 condition(s) | ~239 |
+| 23:49 | Edited src/animetta/tools/minecraft/bot/index.js | added 2 condition(s) | ~476 |
+| 23:50 | Edited src/animetta/tools/minecraft/bot/index.js | 1→2 lines | ~42 |
+| 23:53 | Created src/animetta/tools/minecraft/bot/resources/registry.test.js | — | ~988 |
+| 23:54 | Created src/animetta/tools/minecraft/bot/resources/memory.test.js | — | ~728 |
+| 23:54 | Created tests/tools/minecraft/test_resource_locator_protocol.py | — | ~1158 |
+| 23:58 | Created _meta_update.py | — | ~722 |
+
+## Session: 2026-06-28 23:59
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 00:02 | Edited src/animetta/tools/minecraft/bot/resources/locator.js | added 1 condition(s) | ~244 |
+| 00:02 | Edited src/animetta/tools/minecraft/bot/resources/locator.js | added optional chaining | ~586 |
+| 00:02 | Edited src/animetta/tools/minecraft/bot/resources/locator.js | 10→12 lines | ~158 |
+| 00:03 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~31 |
+| 00:03 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~63 |
+| 00:03 | Edited tests/tools/minecraft/test_resource_locator_protocol.py | modified test_mine_success_shape_compat() | ~864 |
+| 00:04 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~28 |
+| 00:05 | Edited src/animetta/tools/minecraft/survival/recovery.py | modified codes() | ~378 |
+| 00:05 | Edited tests/tools/minecraft/survival/test_recovery.py | modified test_structured_reason_in_description() | ~766 |
+| 00:05 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~31 |
+| 00:06 | Created tests/tools/minecraft/SMOKE_TESTS_resource_locator.md | — | ~1066 |
+| 00:06 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~46 |
+| 00:07 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~24 |
+| 00:08 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~75 |
+| 00:08 | Edited openspec/changes/add-mcbot-resource-locator/tasks.md | inline fix | ~44 |
+| 00:10 | Session end: 15 writes across 6 files (locator.js, tasks.md, test_resource_locator_protocol.py, recovery.py, test_recovery.py) | 12 reads | ~40850 tok |
+| 00:12 | Session end: 15 writes across 6 files (locator.js, tasks.md, test_resource_locator_protocol.py, recovery.py, test_recovery.py) | 12 reads | ~40850 tok |
+
+## Session: 2026-06-29 00:11
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-07-01 23:45
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 23:47 | Created tests/tools/minecraft/core/test_client_viewer_config.py | — | ~1003 |
+| 23:48 | Edited src/animetta/tools/minecraft/core/config.py | modified MinecraftClientViewerConfig() | ~218 |
+| 23:48 | Edited src/animetta/tools/minecraft/core/config.py | 2→3 lines | ~60 |
+| 23:48 | Edited tests/tools/minecraft/core/test_config.py | 7→8 lines | ~59 |
+| 23:49 | Edited src/animetta/tools/minecraft/core/config.py | added 1 import(s) | ~24 |
+| 23:49 | Edited src/animetta/tools/minecraft/core/config.py | inline fix | ~25 |
+| 23:49 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | inline fix | ~24 |
+| 23:49 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | 2→2 lines | ~57 |
+| 23:50 | Created tests/tools/minecraft/core/test_client_viewer_bridge.py | — | ~1669 |
+| 23:50 | Edited src/animetta/tools/minecraft/core/bridge.py | expanded (+10 lines) | ~237 |
+| 23:51 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | inline fix | ~29 |
+| 23:51 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | 2→2 lines | ~54 |
+| 23:51 | Created src/animetta/tools/minecraft/bot/clientViewer.js | — | ~1720 |
+| 23:52 | Edited src/animetta/tools/minecraft/bot/index.js | added 1 import(s) | ~40 |
+| 23:52 | Edited src/animetta/tools/minecraft/bot/index.js | added optional chaining | ~250 |
+| 23:53 | Created src/animetta/tools/minecraft/bot/clientViewer.test.js | — | ~2239 |
+| 23:56 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | added optional chaining | ~67 |
+| 23:56 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | inline fix | ~34 |
+| 23:57 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | inline fix | ~18 |
+| 23:57 | Edited src/animetta/tools/minecraft/bot/clientViewer.test.js | expanded (+9 lines) | ~1583 |
+| 23:58 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~68 |
+| 23:58 | Edited src/animetta/tools/minecraft/bot/clientViewer.test.js | 41→44 lines | ~497 |
+| 00:03 | Edited src/animetta/tools/minecraft/bot/clientViewer.test.js | 44→48 lines | ~560 |
+| 00:12 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~106 |
+| 00:16 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | 5→7 lines | ~86 |
+| 00:17 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | added error handling | ~133 |
+| 00:18 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~30 |
+| 00:18 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~27 |
+| 00:18 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~21 |
+| 00:18 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | 5→4 lines | ~39 |
+| 00:19 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | 7→5 lines | ~50 |
+| 00:19 | Edited src/animetta/tools/minecraft/bot/clientViewer.js | modified if() | ~120 |
+| 00:21 | Edited src/animetta/tools/minecraft/bot/clientViewer.test.js | 19→23 lines | ~282 |
+| 00:22 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | 2→2 lines | ~55 |
+| 00:22 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | 5→5 lines | ~138 |
+| 00:23 | Created docs/minecraft/client-viewer.md | — | ~1721 |
+| 00:23 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | 3→3 lines | ~68 |
+| 00:24 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | inline fix | ~27 |
+| 00:24 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | inline fix | ~24 |
+| 00:24 | Edited openspec/changes/mc-neurosama-client-capture/tasks.md | inline fix | ~35 |
+
+## Session: 2026-07-01 — mc-neurosama-client-capture implementation
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| HH:MM | Implemented all 19/19 tasks for mc-neurosama-client-capture | config.py, bridge.py, clientViewer.js, index.js, docs, tests | All Python (33) and Node (14) tests pass | ~15k |
+| HH:MM | Bug: auto_spectate camelCase mismatch in clientViewer.js | clientViewer.js | Fixed config.auto_spectate → config.autoSpectate | ~500 |
+| 00:25 | Session end: 40 writes across 10 files (test_client_viewer_config.py, config.py, test_config.py, tasks.md, test_client_viewer_bridge.py) | 16 reads | ~41896 tok |
+| 00:28 | Session end: 40 writes across 10 files (test_client_viewer_config.py, config.py, test_config.py, tasks.md, test_client_viewer_bridge.py) | 16 reads | ~41896 tok |

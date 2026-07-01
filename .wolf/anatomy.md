@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-06-28T10:07:51.929Z
-> Files: 594 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-01T16:24:37.063Z
+> Files: 638 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../.claude/plans/
 
@@ -11,8 +11,14 @@
 
 - `14-Spectator系统架构.canvas` (~1363 tok)
 
+## ../../Documents/my-llm-wiki/my-llm-wiki/Excalidraw/Animetta/MC-Bot/voyager-self-evolution-optimization/
+
+- `01-优化路线图总览.canvas` (~755 tok)
+
 ## ./
 
+- `_fix_bug082.py` (~314 tok)
+- `_meta_update.py` — ── cerebrum: 加 Do-Not-Repeat + Key Learning（UTF-8，绕开 bash 编码）── (~722 tok)
 - `.coverage` (~28339 tok)
 - `.dockerignore` — Docker ignore rules (~160 tok)
 - `.gitignore` — Git ignore rules (~564 tok)
@@ -815,6 +821,12 @@
 ## docs/development/
 
 - `minecraft-bot-architecture.zh.md` — Minecraft 机器人架构 (~3011 tok)
+- `voyager-landscape-research.zh.md` — Voyager 生态调研：官方、社区与本项目实现对照 (~2761 tok)
+- `voyager-self-evolution-optimization-roadmap.zh.md` — Voyager 自进化系统优化 Roadmap (~1724 tok)
+
+## docs/minecraft/
+
+- `client-viewer.md` — Real Minecraft Client Viewer (Client Capture Mode) (~1613 tok)
 
 ## frontend/src/components/layout/
 
@@ -840,6 +852,10 @@
 
 - `socket-events.ts` — Payload for the `sentence` socket event (LLM streaming response). (~326 tok)
 
+## openspec/changes/add-mcbot-resource-locator/
+
+- `tasks.md` — 1. Preflight And Context (~2586 tok)
+
 ## openspec/changes/mc-bot-spectator/
 
 - `design.md` — Design: MC Bot Spectator (~1900 tok)
@@ -848,6 +864,20 @@
 - `proposal.md` — MC Bot 第一视角旁观系统提案 (~1200 tok)
 - `tasks.md` — Tasks: MC Bot Spectator (~169 tok)
 - `tasks.md` — 9 个实现任务 (~1200 tok)
+
+## openspec/changes/mc-bot-voyager-learning/
+
+- `tasks.md` — Tasks: MC Bot Voyager Learning (~667 tok)
+
+## openspec/changes/mc-evo-purity/
+
+- `design.md` — Design: MC Bot Evo Purity（自演化学习环境纯净化） (~862 tok)
+- `proposal.md` — Proposal: MC Bot Evo Purity（自演化学习环境纯净化） (~651 tok)
+- `tasks.md` — Tasks: MC Bot Evo Purity（自演化学习环境纯净化） (~332 tok)
+
+## openspec/changes/mc-neurosama-client-capture/
+
+- `tasks.md` — 1. Test Coverage (~515 tok)
 
 ## openspec/changes/slim-docker-deployment/
 
@@ -901,32 +931,57 @@
 - `__init__.py` (~156 tok)
 - `AGENTS.md` — Minecraft Bot Module — Guide for AI Agents (~922 tok)
 
+## src/animetta/tools/minecraft/autonomous/
+
+- `live_agent.py` — 直播期 agent（mc-bot-voyager-learning T11/T12）。 (~1456 tok)
+- `loop.py` — CooldownTracker: can_execute, mark_executed, reset, start + 6 more (~6848 tok)
+- `training.py` — 训练充分判据 + 阶段切换（mc-bot-voyager-learning T10）。 (~1089 tok)
+
+## src/animetta/tools/minecraft/benchmark/
+
+- `criteria.py` — Benchmark success criteria helpers. (~1022 tok)
+- `models.py` — Benchmark data models for Minecraft Voyager evaluations. (~508 tok)
+- `report.py` — Markdown reporting helpers for Minecraft benchmark results. (~1112 tok)
+
 ## src/animetta/tools/minecraft/bot/
 
-- `index.js` — host: getMcData, setupMovements, withTimeout + 9 more (~15173 tok)
+- `clientViewer.js` — clientViewer.js — Real Minecraft client viewer helper. (~1774 tok)
+- `clientViewer.test.js` — clientViewer.test.js — Tests for clientViewer.js helper module. (~2503 tok)
+- `index.js` — host: getMcData, setupMovements, _goto + 9 more (~17028 tok)
 
 ## src/animetta/tools/minecraft/bot/behaviors/
 
 - `autoEat.js` — Auto Eat - automatically eats food when hungry (~455 tok)
 - `combat.js` — Combat Interrupt - automatically attacks nearby hostiles (~583 tok)
 
+## src/animetta/tools/minecraft/bot/resources/
+
+- `locator.js` — 定位资源候选点（不采集）。 (~1560 tok)
+- `memory.js` — memory.js — In-process resource memory (mcbot-resource-locator). (~822 tok)
+- `memory.test.js` — memory.test.js — Pure tests for ResourceMemory (T4.6/T69). (~728 tok)
+- `registry.js` — registry.js — Resource metadata + alias normalization (mcbot-resource-locator). (~1086 tok)
+- `registry.test.js` — registry.test.js — Pure tests for registry normalization + metadata (T3.7/T68). (~988 tok)
+- `strategies.js` — strategies.js — Search strategies + shared helpers (mcbot-resource-locator). (~3051 tok)
+
 ## src/animetta/tools/minecraft/core/
 
-- `bridge.py` — MinecraftBridge: start, send_command (~4521 tok)
-- `config.py` — Declares MinecraftBotConfig (~263 tok)
+- `bridge.py` — MinecraftBridge: start, send_command (~5914 tok)
+- `config.py` — Declares import (~710 tok)
 - `hud_renderer.py` — class: from_world_state, render_actionbar, render_sidebar_setup, render_sidebar_update + 3 more (~2932 tok)
 - `state_collector.py` — StateCollector: start, stop, update_action (~1898 tok)
-- `tools.py` — init_bridge, cleanup_bridge, get_minecraft_tools, mc_goto (~3358 tok)
+- `tools.py` — init_bridge, cleanup_bridge, get_minecraft_tools, mc_goto (~4259 tok)
 
 ## src/animetta/tools/minecraft/other/
 
+- `purify.py` — 历史净化（mc-evo-purity T3/T4）。 (~2393 tok)
+- `self_evolution.py` — Voyager 自我演化主循环（mc-bot-voyager-learning）。 (~3741 tok)
 - `smoke_test.py` — Real-server smoke test for the iron survival runner. (~1431 tok)
 - `test_craft_stone_pickaxe.py` — Stone pickaxe test using RCON to give materials. (~834 tok)
 
 ## src/animetta/tools/minecraft/other/scripts/
 
 - `run_voyager_skill.py` — 端到端运行 Voyager skill（mc-bot-voyager-learning）。 (~1078 tok)
-- `spike_eval_code.py` — T3 spike — 验证云 LLM 能否生成可执行的 mineflayer JS（mc-bot-voyager-learning go/no-go 关卡）。 (~1463 tok)
+- `spike_eval_code.py` — T3 spike — 验证云 LLM 能否生成可执行的 mineflayer JS（mc-bot-voyager-learning go/no-go 关卡）。 (~1496 tok)
 - `test_iron_pickaxe.py` — Deterministic iron pickaxe crafting script. (~3956 tok)
 
 ## src/animetta/tools/minecraft/skill/
@@ -936,8 +991,8 @@
 
 ## src/animetta/tools/minecraft/survival/
 
-- `recovery.py` — Survival recovery strategies and safety checks. (~3564 tok)
-- `runner.py` — Survival iron runner — the core state machine for wood-to-iron-gear progression. (~3461 tok)
+- `recovery.py` — Survival recovery strategies and safety checks. (~3975 tok)
+- `runner.py` — Survival iron runner — the core state machine for wood-to-iron-gear progression. (~4639 tok)
 - `SKILLS.md` — Minecraft 生存技能流程总结 (~1008 tok)
 
 ## tests/
@@ -946,4 +1001,26 @@
 
 ## tests/tools/minecraft/
 
+- `_spike_controlled_run.py` — 受控 spike 复跑：在 bot 脚边 setblock 一个 oak_log（隔离「世界无树」变量）， (~398 tok)
+- `SMOKE_TESTS_resource_locator.md` — Resource Locator Smoke Tests (~1000 tok)
+- `test_e2e_voyager.py` — T15: 端到端 @slow 测试 — Voyager learn→live 全流程（mc-bot-voyager-learning）。 (~1189 tok)
+- `test_live_agent.py` — T11/T12: LiveAgent 直播选技能 + 兜底回落 (mc-bot-voyager-learning). (~1582 tok)
+- `test_purify.py` — Tests for purify_validated_skills (mc-evo-purity T7). (~1520 tok)
+- `test_resource_locator_protocol.py` — T70/T71: Resource Locator protocol + collect/mine compat (add-mcbot-resource-locator). (~1898 tok)
+- `test_self_evolution.py` — Tests for self_evolution give-purity guard + evo_state (mc-evo-purity T5/T6). (~950 tok)
 - `test_spectator.py` — Tests for Minecraft spectator viewer feature. (~1104 tok)
+- `test_training_sufficiency.py` — T10: 训练充分判据 + 阶段切换 (mc-bot-voyager-learning). (~1133 tok)
+- `test_voyager_benchmark.py` — T14: benchmark Voyager 论文指标 (mc-bot-voyager-learning). (~916 tok)
+- `test_voyager_bridge_wiring.py` — T9: bridge Voyager 学习闭环接线 (mc-bot-voyager-learning). (~874 tok)
+- `test_voyager_runner_bootstrap.py` — T8: survival runner bootstrap skill extraction hook (mc-bot-voyager-learning). (~847 tok)
+- `test_voyager_tools.py` — T13: mc_voyager_learn / mc_voyager_live entry tools (mc-bot-voyager-learning). (~565 tok)
+
+## tests/tools/minecraft/core/
+
+- `test_client_viewer_bridge.py` — Tests for client-viewer environment export in MinecraftBridge.start(). (~1669 tok)
+- `test_client_viewer_config.py` — Tests for MinecraftClientViewerConfig — real-client capture mode. (~1003 tok)
+- `test_config.py` — TestMinecraftBotConfig: test_default_values, test_custom_values, test_port_must_be_int, test_default (~902 tok)
+
+## tests/tools/minecraft/survival/
+
+- `test_recovery.py` — Tests for survival_recovery.py — recovery strategies and safety checks. (~3489 tok)

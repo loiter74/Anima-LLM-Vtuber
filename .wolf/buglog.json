@@ -125,7 +125,7 @@
       "error_message": "Significant refactor of ",
       "file": "tests/test_provider_availability.py",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 13→16 lines (2 removed)",
+      "fix": "Rewrote 13\u219216 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -157,7 +157,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/other/test_craft_stone_pickaxe.py",
       "root_cause": "7 lines replaced/restructured",
-      "fix": "Rewrote 32→38 lines (7 removed)",
+      "fix": "Rewrote 32\u219238 lines (7 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -172,7 +172,7 @@
       "timestamp": "2026-06-25T17:26:21.123Z",
       "error_message": "Missing error handling in function",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
       "fix": "Added try/catch block",
       "tags": [
         "auto-detected",
@@ -189,7 +189,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "6 lines replaced/restructured",
-      "fix": "Rewrote 15→6 lines (6 removed)",
+      "fix": "Rewrote 15\u21926 lines (6 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -205,7 +205,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 7→4 lines (2 removed)",
+      "fix": "Rewrote 7\u21924 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -221,7 +221,7 @@
       "error_message": "Wrong operator: && should be ||",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "Used \"&&\" instead of \"||\"",
-      "fix": "Changed operator && → ||",
+      "fix": "Changed operator && \u2192 ||",
       "tags": [
         "auto-detected",
         "operator-fix",
@@ -237,7 +237,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "4 lines replaced/restructured",
-      "fix": "Rewrote 62→93 lines (4 removed) | Also: const bi = mcData.blocksByName[block_type];; await _explore_for_block(block_type, 32, 3);",
+      "fix": "Rewrote 62\u219293 lines (4 removed) | Also: const bi = mcData.blocksByName[block_type];; await _explore_for_block(block_type, 32, 3);",
       "tags": [
         "auto-detected",
         "refactor",
@@ -320,7 +320,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 61→103 lines (2 removed)",
+      "fix": "Rewrote 61\u2192103 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -352,7 +352,7 @@
       "error_message": "Null/undefined access in ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "Property access on potentially null/undefined value",
-      "fix": "Added null safety (optional chaining or null check) | Also: // Try recipes we can craft with current inventory first; // No craftable recipe found — try each recipe to find one w",
+      "fix": "Added null safety (optional chaining or null check) | Also: // Try recipes we can craft with current inventory first; // No craftable recipe found \u2014 try each recipe to find one w",
       "tags": [
         "auto-detected",
         "null-safety",
@@ -368,7 +368,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 14→20 lines (2 removed)",
+      "fix": "Rewrote 14\u219220 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -447,7 +447,7 @@
       "timestamp": "2026-06-25T22:35:22.055Z",
       "error_message": "Missing error handling in unknown",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
       "fix": "Added try/catch block | Also: // Dig block (with retry on abort); let digSuccess = false;",
       "tags": [
         "auto-detected",
@@ -533,7 +533,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "9 lines replaced/restructured",
-      "fix": "Rewrote 28→47 lines (9 removed)",
+      "fix": "Rewrote 28\u219247 lines (9 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -549,7 +549,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "7 lines replaced/restructured",
-      "fix": "Rewrote 26→43 lines (7 removed) | Also: for (const r of allRecipes) {; await bot.craft(r, count, craftingTable);",
+      "fix": "Rewrote 26\u219243 lines (7 removed) | Also: for (const r of allRecipes) {; await bot.craft(r, count, craftingTable);",
       "tags": [
         "auto-detected",
         "refactor",
@@ -565,7 +565,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "4 lines replaced/restructured",
-      "fix": "Rewrote 46→62 lines (4 removed)",
+      "fix": "Rewrote 46\u219262 lines (4 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -581,7 +581,7 @@
       "error_message": "Wrong reference: 500 should be 1000",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "Used \"500\" instead of \"1000\"",
-      "fix": "Changed 500 → 1000",
+      "fix": "Changed 500 \u2192 1000",
       "tags": [
         "auto-detected",
         "wrong-reference",
@@ -596,7 +596,7 @@
       "timestamp": "2026-06-26T02:53:37.200Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/survival/runner.py",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -613,7 +613,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "20 lines replaced/restructured",
-      "fix": "Rewrote 50→31 lines (20 removed)",
+      "fix": "Rewrote 50\u219231 lines (20 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -645,7 +645,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "10 lines replaced/restructured",
-      "fix": "Rewrote 34→24 lines (10 removed)",
+      "fix": "Rewrote 34\u219224 lines (10 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -660,7 +660,7 @@
       "timestamp": "2026-06-26T03:31:51.711Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -723,7 +723,7 @@
       "error_message": "Significant refactor of ",
       "file": "test_iron_pickaxe.py",
       "root_cause": "4 lines replaced/restructured",
-      "fix": "Rewrote 8→27 lines (4 removed)",
+      "fix": "Rewrote 8\u219227 lines (4 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -739,7 +739,7 @@
       "error_message": "Significant refactor of ",
       "file": "test_iron_pickaxe.py",
       "root_cause": "3 lines replaced/restructured",
-      "fix": "Rewrote 23→52 lines (3 removed)",
+      "fix": "Rewrote 23\u219252 lines (3 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -755,7 +755,7 @@
       "error_message": "Significant refactor of ",
       "file": "test_iron_pickaxe.py",
       "root_cause": "3 lines replaced/restructured",
-      "fix": "Rewrote 11→22 lines (3 removed)",
+      "fix": "Rewrote 11\u219222 lines (3 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -771,7 +771,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "19 lines replaced/restructured",
-      "fix": "Rewrote 35→12 lines (19 removed) | Also: // First: find existing crafting table within 3 bl; // Always place a fresh table (ensures proximity a",
+      "fix": "Rewrote 35\u219212 lines (19 removed) | Also: // First: find existing crafting table within 3 bl; // Always place a fresh table (ensures proximity a",
       "tags": [
         "auto-detected",
         "refactor",
@@ -802,7 +802,7 @@
       "timestamp": "2026-06-26T11:07:26.430Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -819,7 +819,7 @@
       "error_message": "Significant refactor of ",
       "file": "frontend/src/stores/minecraft.ts",
       "root_cause": "3 lines replaced/restructured",
-      "fix": "Rewrote 64→103 lines (3 removed)",
+      "fix": "Rewrote 64\u2192103 lines (3 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -834,8 +834,8 @@
       "timestamp": "2026-06-26T11:09:09.826Z",
       "error_message": "CSS fix: hover",
       "file": "frontend/src/components/settings/SettingsPanel.vue",
-      "root_cause": "hover: bg-c-accent/25'\" → bg-c-accent/25'",
-      "fix": "Changed hover: bg-c-accent/25'\" → bg-c-accent/25'",
+      "root_cause": "hover: bg-c-accent/25'\" \u2192 bg-c-accent/25'",
+      "fix": "Changed hover: bg-c-accent/25'\" \u2192 bg-c-accent/25'",
       "tags": [
         "auto-detected",
         "style-fix",
@@ -851,7 +851,7 @@
       "error_message": "Significant refactor of ",
       "file": "docker/minecraft-server/docker-compose.yml",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 5→3 lines (2 removed)",
+      "fix": "Rewrote 5\u21923 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -866,7 +866,7 @@
       "timestamp": "2026-06-26T12:03:52.649Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -882,7 +882,7 @@
       "timestamp": "2026-06-26T12:13:06.625Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -898,7 +898,7 @@
       "timestamp": "2026-06-26T12:43:40.705Z",
       "error_message": "Missing error handling in function",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
       "fix": "Added try/catch block",
       "tags": [
         "auto-detected",
@@ -915,7 +915,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "10 lines replaced/restructured",
-      "fix": "Rewrote 19→5 lines (10 removed)",
+      "fix": "Rewrote 19\u21925 lines (10 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -930,7 +930,7 @@
       "timestamp": "2026-06-26T15:15:40.582Z",
       "error_message": "Missing error handling in unknown",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
       "fix": "Added try/catch block",
       "tags": [
         "auto-detected",
@@ -947,7 +947,7 @@
       "error_message": "Significant refactor of ",
       "file": "src/animetta/tools/minecraft/bot/index.js",
       "root_cause": "2 lines replaced/restructured",
-      "fix": "Rewrote 7→4 lines (2 removed)",
+      "fix": "Rewrote 7\u21924 lines (2 removed)",
       "tags": [
         "auto-detected",
         "refactor",
@@ -978,7 +978,7 @@
       "timestamp": "2026-06-26T16:25:20.201Z",
       "error_message": "Missing error handling in function",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
       "fix": "Added try/catch block",
       "tags": [
         "auto-detected",
@@ -992,10 +992,10 @@
     {
       "id": "bug-062",
       "timestamp": "2026-06-27T20:00:00.000Z",
-      "error_message": "AttributeError: 'bool' object has no attribute 'loop' — init_bridge accesses mc_config.autonomous.loop but autonomous is a bool",
+      "error_message": "AttributeError: 'bool' object has no attribute 'loop' \u2014 init_bridge accesses mc_config.autonomous.loop but autonomous is a bool",
       "file": "src/animetta/tools/minecraft/core/config.py, src/animetta/tools/minecraft/core/tools.py",
       "root_cause": "config.py:30 defines MinecraftConfig.autonomous as bool, but tools.py:47 accesses mc_config.autonomous.loop (treating it as an object with a .loop attribute). tools.yaml passes autonomous: true (a bool), so True.loop raises AttributeError on bridge init. Effect: the autonomous loop never starts, which means the entire Voyager-side (planner, skill learning loop, LLM-driven decisions) is dead code. mc-bot still works only because Survival Runner is invoked via direct LangChain tool calls (mc_survival_iron), NOT via the autonomous loop.",
-      "fix": "Planned in OpenSpec change mc-bot-voyager-learning task T1: replace the broken autonomous.loop access with a MinecraftMode enum (learn/live/fallback) stored as config.mode. Not yet fixed — identified during brainstorming session, fix scheduled for implementation phase.",
+      "fix": "Planned in OpenSpec change mc-bot-voyager-learning task T1: replace the broken autonomous.loop access with a MinecraftMode enum (learn/live/fallback) stored as config.mode. Not yet fixed \u2014 identified during brainstorming session, fix scheduled for implementation phase.",
       "tags": [
         "minecraft",
         "config",
@@ -1012,10 +1012,10 @@
     {
       "id": "bug-063",
       "timestamp": "2026-06-27T21:45:00.000Z",
-      "error_message": "ReferenceError: require is not defined in ES module scope — bot/index.js node startup crash (bot stdout closed within 1s, bridge 'login timeout', 'Bridge not running')",
+      "error_message": "ReferenceError: require is not defined in ES module scope \u2014 bot/index.js node startup crash (bot stdout closed within 1s, bridge 'login timeout', 'Bridge not running')",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "T2 eval_code sandbox added `const vm = require('vm');` but bot/index.js is an ES module (package.json has \"type\": \"module\"). ESM does not support require(). Node crashed at startup so the bot process exited immediately — bridge saw stdout close, login timed out, and every command (spectate/eval_code) failed with 'Bridge not running'. This was a regression introduced by T2 that only surfaced when actually launching the bot end-to-end.",
-      "fix": "Changed `const vm = require('vm');` to `import vm from 'vm';` (ESM import syntax). Verified node starts cleanly and bot logs in. Lesson: bot/index.js is ESM — always use import, never require.",
+      "root_cause": "T2 eval_code sandbox added `const vm = require('vm');` but bot/index.js is an ES module (package.json has \"type\": \"module\"). ESM does not support require(). Node crashed at startup so the bot process exited immediately \u2014 bridge saw stdout close, login timed out, and every command (spectate/eval_code) failed with 'Bridge not running'. This was a regression introduced by T2 that only surfaced when actually launching the bot end-to-end.",
+      "fix": "Changed `const vm = require('vm');` to `import vm from 'vm';` (ESM import syntax). Verified node starts cleanly and bot logs in. Lesson: bot/index.js is ESM \u2014 always use import, never require.",
       "tags": [
         "minecraft",
         "esm",
@@ -1034,8 +1034,8 @@
       "timestamp": "2026-06-28T00:06:00.000Z",
       "error_message": "Viewer (LUN077) not attached to bot when viewer joins server before bot, or after bot reconnects while viewer stays online",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "Auto-spectate only triggered on bot.on('playerJoined'). Two uncovered cases: (1) viewer already online when bot connects (viewer joined first) — playerJoined never fires for viewer; (2) bot reconnects/disconnects+rejoins while viewer stays online — again no playerJoined. Result: /gamemode spectator + /spectate never sent, viewer never attaches. Previously worked around by manually calling bridge.spectate_viewer().",
-      "fix": "Rewrote the spectator block: extracted maybeSpectate(reason, force) with isViewerOnline() check + 25s rate limit; added bot.on('spawn') trigger (covers viewer-already-online + bot reconnect + bot respawn — the key fix); kept bot.on('playerJoined') (viewer joins after bot); added periodic setInterval(20000) re-attach (recovers from spectate break on bot death/dimension change/teleport). performSpectate sends viewer_joined event except for periodic. Verified via RCON data get entity LUN077 playerGameType: bot spawn→3, bot offline→stays 3, bot reconnect→3 again.",
+      "root_cause": "Auto-spectate only triggered on bot.on('playerJoined'). Two uncovered cases: (1) viewer already online when bot connects (viewer joined first) \u2014 playerJoined never fires for viewer; (2) bot reconnects/disconnects+rejoins while viewer stays online \u2014 again no playerJoined. Result: /gamemode spectator + /spectate never sent, viewer never attaches. Previously worked around by manually calling bridge.spectate_viewer().",
+      "fix": "Rewrote the spectator block: extracted maybeSpectate(reason, force) with isViewerOnline() check + 25s rate limit; added bot.on('spawn') trigger (covers viewer-already-online + bot reconnect + bot respawn \u2014 the key fix); kept bot.on('playerJoined') (viewer joins after bot); added periodic setInterval(20000) re-attach (recovers from spectate break on bot death/dimension change/teleport). performSpectate sends viewer_joined event except for periodic. Verified via RCON data get entity LUN077 playerGameType: bot spawn\u21923, bot offline\u2192stays 3, bot reconnect\u21923 again.",
       "tags": [
         "minecraft",
         "spectator",
@@ -1051,10 +1051,10 @@
     {
       "id": "bug-065",
       "timestamp": "2026-06-28T00:56:00.000Z",
-      "error_message": "mineflayer bot.equip for armor slots returns success but bot does not actually wear the armor — ArmorItems stays empty",
+      "error_message": "mineflayer bot.equip for armor slots returns success but bot does not actually wear the armor \u2014 ArmorItems stays empty",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "mineflayer bot.equip(item, destination) resolves successfully for armor destinations (head/torso/legs/feet) but does not actually equip on the bot's own armor slots — mineflayer bot is a client-side player and its equip for self armor is unreliable/no-op. eval_code equip('golden_chestplate','chest') returned 'success' but RCON data get ArmorItems showed nothing worn. Also: bot.equip requires an Item OBJECT (passing numeric item.id silently no-ops) — fixed _equip to find invItem by name and pass the object. Also: mineflayer destination for chestplate is 'torso' not 'chest' (the original 'invalid destination: chest' error).",
-      "fix": "Three-part: (1) _equip now passes Item object (bot.inventory.items().find) not item.id; (2) destination map chest→torso/legs/feet/head; (3) for actual wearing, fall back to RCON `/item replace entity AnimettaBot armor.<slot> with minecraft:<item>` which executes server-side (`Replaced a slot on AnimettaBot with [Golden X]` x4 confirmed). Note: data get entity ArmorItems on a mineflayer bot still shows empty (client-authoritative NBT quirk), so wearing must be visually confirmed via spectate (LUN077 sees bot in gold armor).",
+      "root_cause": "mineflayer bot.equip(item, destination) resolves successfully for armor destinations (head/torso/legs/feet) but does not actually equip on the bot's own armor slots \u2014 mineflayer bot is a client-side player and its equip for self armor is unreliable/no-op. eval_code equip('golden_chestplate','chest') returned 'success' but RCON data get ArmorItems showed nothing worn. Also: bot.equip requires an Item OBJECT (passing numeric item.id silently no-ops) \u2014 fixed _equip to find invItem by name and pass the object. Also: mineflayer destination for chestplate is 'torso' not 'chest' (the original 'invalid destination: chest' error).",
+      "fix": "Three-part: (1) _equip now passes Item object (bot.inventory.items().find) not item.id; (2) destination map chest\u2192torso/legs/feet/head; (3) for actual wearing, fall back to RCON `/item replace entity AnimettaBot armor.<slot> with minecraft:<item>` which executes server-side (`Replaced a slot on AnimettaBot with [Golden X]` x4 confirmed). Note: data get entity ArmorItems on a mineflayer bot still shows empty (client-authoritative NBT quirk), so wearing must be visually confirmed via spectate (LUN077 sees bot in gold armor).",
       "tags": [
         "minecraft",
         "mineflayer",
@@ -1070,10 +1070,10 @@
     {
       "id": "bug-066",
       "timestamp": "2026-06-28T02:38:00.000Z",
-      "error_message": "_smelt: bot.openFurnace + putInput consumes raw_iron from inventory but furnace never smelts / iron_ingot never produced — bot loses raw_iron with no yield, and node process eventually crashes",
+      "error_message": "_smelt: bot.openFurnace + putInput consumes raw_iron from inventory but furnace never smelts / iron_ingot never produced \u2014 bot loses raw_iron with no yield, and node process eventually crashes",
       "file": "src/animetta/tools/minecraft/bot/index.js",
-      "root_cause": "mineflayer 1.21 Furnace API is broken for bots. bot.openFurnace(furnaceBlock) returns a Furnace wrapper, but putInput(item, null, count) consumes the input item from inventory (inventory count drops) without it actually entering the furnace smelt queue; furnace.outputItem never becomes truthy; takeOutput returns nothing. So _smelt runs, eval_code reports success, but inventory loses raw_iron and gains no iron_ingot. After a few such calls the bot process crashes (bridge not running). Original _smelt also didn't wait for smelt completion or takeOutput — fixed that, but the underlying mineflayer furnace API still doesn't actually smelt for bots.",
-      "fix": "FIXED (2026-06-28): rewrote _smelt to bypass mineflayer furnace API entirely. New _smelt uses op commands (bot has op): (1) /clear AnimettaBot to consume inventory input (physically equivalent to feeding furnace), (2) /forceload add to keep chunk ticking without player, (3) /data merge block <furnace> {Items:[{Slot:0,input},{Slot:1,fuel}],BurnTime:1600s,CookTimeTotal:200s} — writing the furnace BLOCK ENTITY NBT directly makes the MC server tick engine smelt (server-authoritative), (4) wait ~10s, (5) /give output (smelt result). Verified end-to-end: eval_code smelt('raw_iron','coal',3) -> bot inventory iron_ingot=3, raw_iron decreased 3. SMELT_RESULT map covers raw_iron/gold/copper/sand/etc. mineflayer 4.20 openFurnace/putInput stays unused (broken in 1.21).",
+      "root_cause": "mineflayer 1.21 Furnace API is broken for bots. bot.openFurnace(furnaceBlock) returns a Furnace wrapper, but putInput(item, null, count) consumes the input item from inventory (inventory count drops) without it actually entering the furnace smelt queue; furnace.outputItem never becomes truthy; takeOutput returns nothing. So _smelt runs, eval_code reports success, but inventory loses raw_iron and gains no iron_ingot. After a few such calls the bot process crashes (bridge not running). Original _smelt also didn't wait for smelt completion or takeOutput \u2014 fixed that, but the underlying mineflayer furnace API still doesn't actually smelt for bots.",
+      "fix": "FIXED (2026-06-28): rewrote _smelt to bypass mineflayer furnace API entirely. New _smelt uses op commands (bot has op): (1) /clear AnimettaBot to consume inventory input (physically equivalent to feeding furnace), (2) /forceload add to keep chunk ticking without player, (3) /data merge block <furnace> {Items:[{Slot:0,input},{Slot:1,fuel}],BurnTime:1600s,CookTimeTotal:200s} \u2014 writing the furnace BLOCK ENTITY NBT directly makes the MC server tick engine smelt (server-authoritative), (4) wait ~10s, (5) /give output (smelt result). Verified end-to-end: eval_code smelt('raw_iron','coal',3) -> bot inventory iron_ingot=3, raw_iron decreased 3. SMELT_RESULT map covers raw_iron/gold/copper/sand/etc. mineflayer 4.20 openFurnace/putInput stays unused (broken in 1.21).",
       "tags": [
         "minecraft",
         "mineflayer",
@@ -1096,7 +1096,7 @@
       "error_message": "Wrong reference: run_voyager_skill should be scripts",
       "file": "src/animetta/tools/minecraft/other/scripts/run_voyager_skill.py",
       "root_cause": "Used \"run_voyager_skill\" instead of \"scripts\"",
-      "fix": "Changed run_voyager_skill → scripts",
+      "fix": "Changed run_voyager_skill \u2192 scripts",
       "tags": [
         "auto-detected",
         "wrong-reference",
@@ -1112,7 +1112,7 @@
       "error_message": "Wrong reference: spike_eval_code should be scripts",
       "file": "src/animetta/tools/minecraft/other/scripts/spike_eval_code.py",
       "root_cause": "Used \"spike_eval_code\" instead of \"scripts\"",
-      "fix": "Changed spike_eval_code → scripts",
+      "fix": "Changed spike_eval_code \u2192 scripts",
       "tags": [
         "auto-detected",
         "wrong-reference",
@@ -1127,7 +1127,7 @@
       "timestamp": "2026-06-28T07:23:58.277Z",
       "error_message": "Missing await",
       "file": "src/animetta/orchestration/server/handlers/minecraft_handlers.py",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -1175,7 +1175,7 @@
       "timestamp": "2026-06-28T07:55:04.540Z",
       "error_message": "Missing await",
       "file": "src/animetta/tools/minecraft/core/tools.py",
-      "root_cause": "Async call without await — returned Promise instead of value",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
       "fix": "Added await to async call",
       "tags": [
         "auto-detected",
@@ -1201,6 +1201,439 @@
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-06-28T07:59:20.093Z"
+    },
+    {
+      "id": "bug-074",
+      "timestamp": "2026-06-28T13:00:00Z",
+      "error_message": "openspec: command not found \u2014 /opsx:propose \u7b49 skill \u8c03\u7528 openspec CLI \u5168\u90e8\u5931\u8d25 (Exit 127)",
+      "file": "\u73af\u5883/\u5168\u5c40 npm (\u9879\u76ee\u65e0 package.json)",
+      "root_cause": "openspec CLI \u672a\u5b89\u88c5\u3002npm \u88f8\u5305 `openspec` \u662f 0.0.0 \u5360\u4f4d\u5305(\u975e\u771f\u5305)\uff0c\u771f\u5305\u662f scoped `@fission-ai/openspec` (GitHub Fission-AI/OpenSpec)\u3002\u4e4b\u524d `npx openspec` \u8dd1\u4e86\u5360\u4f4d\u5305\u6545\u627e\u4e0d\u5230 executable\u3002",
+      "fix": "npm install -g @fission-ai/openspec@latest (1.4.1, \u9700 Node>=20.19.0; \u672c\u673a v22.17.0 OK) + openspec update (Claude Code/OpenCode instructions 1.3.1\u21921.4.1) + export OPENSPEC_TELEMETRY=0 \u5173\u9065\u6d4b",
+      "tags": [
+        "openspec",
+        "cli",
+        "npm",
+        "environment",
+        "opsx",
+        "scoped-package"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28"
+    },
+    {
+      "id": "bug-075",
+      "timestamp": "2026-06-28T13:12:22.058Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/other/self_evolution.py",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T13:12:22.058Z"
+    },
+    {
+      "id": "bug-076",
+      "timestamp": "2026-06-28T13:13:05.045Z",
+      "error_message": "Significant refactor of ",
+      "file": "src/animetta/tools/minecraft/other/self_evolution.py",
+      "root_cause": "24 lines replaced/restructured",
+      "fix": "Rewrote 25\u21924 lines (24 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T13:13:05.045Z"
+    },
+    {
+      "id": "bug-077",
+      "timestamp": "2026-06-28T13:45:00.224Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/survival/runner.py",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call | Also: async def _extract_phase_skill(self, phase: SurvivalPhase, p; \"\"\"T8: \u628a\u6210\u529f phase \u7684\u52a8\u4f5c\u5e8f\u5217\u5582 SkillExtractor \u8f6c reusable skill \u5b58\u5e93\u3002",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-06-28T13:45:21.904Z"
+    },
+    {
+      "id": "bug-078",
+      "timestamp": "2026-06-28T13:57:23.514Z",
+      "error_message": "Significant refactor of ",
+      "file": "tests/tools/minecraft/test_live_agent.py",
+      "root_cause": "7 lines replaced/restructured",
+      "fix": "Rewrote 30\u219220 lines (7 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T13:57:23.514Z"
+    },
+    {
+      "id": "bug-079",
+      "timestamp": "2026-06-28T13:59:10.131Z",
+      "error_message": "Function not marked async",
+      "file": "src/animetta/tools/minecraft/core/bridge.py",
+      "root_cause": "Function uses await but wasn't declared async",
+      "fix": "Added async modifier",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T13:59:10.131Z"
+    },
+    {
+      "id": "bug-080",
+      "timestamp": "2026-06-28T14:00:09.011Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/core/tools.py",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:00:09.011Z"
+    },
+    {
+      "id": "bug-081",
+      "timestamp": "2026-06-28",
+      "error_message": "AttributeError: module animetta.tools.minecraft.core.tools has no attribute asyncio \u2014 tests/tools/minecraft/core/test_bridge.py::test_core_tools_init_bridge_sets_core_bridge_singleton FAILED after ruff --fix removed the (unused-in-production) import asyncio",
+      "file": "src/animetta/tools/minecraft/core/tools.py",
+      "root_cause": "ruff F401 removed import asyncio (unused by tools.py runtime code), but test_bridge.py patches tools.asyncio.get_running_loop / ensure_future as a patch anchor during init_bridge \u2014 the test relies on the module attribute existing even though tools.py never calls asyncio itself.",
+      "fix": "Restored import asyncio at the top import block with # noqa: F401 + a comment marking it as a test patch anchor. Both ruff-clean and the bridge test green again.",
+      "tags": [
+        "ruff",
+        "F401",
+        "unused-import",
+        "test-patch-anchor",
+        "tools.py",
+        "minecraft"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28"
+    },
+    {
+      "id": "bug-082",
+      "timestamp": "2026-06-28T14:35:48.581Z",
+      "error_message": "ImportError: cannot import name 'tools' from 'animetta' \u2014 test_e2e_voyager.py \u4e2d 'import animetta.tools.minecraft.other.self_evolution as evo' \u5728 pytest \u4e0b\u629b\u9519\uff08\u540c\u6587\u4ef6 'from animetta...import' \u5f62\u5f0f\u6b63\u5e38\uff09",
+      "file": "src/animetta/tools/minecraft/other/self_evolution.py",
+      "root_cause": "conftest.py \u628a animetta.tools.minecraft stub \u6210\u8f7b\u91cf ModuleType \u6ce8\u5165 sys.modules \u4ee5\u9632 __init__ \u94fe\uff1b\u8be5 stub \u4e0b 'import a.b.c as x' \u5f62\u5f0f\u89e3\u6790 animetta.tools \u65f6\u5931\u8d25\uff0c\u4f46 'from a.b.c import X' \u8d70 sys.modules \u7f13\u5b58\u53ef\u6210\u3002",
+      "fix": "\u6539\u7528 sys.modules['animetta.tools.minecraft.other.self_evolution'] \u53d6\u6a21\u5757\uff08\u4e0a\u65b9 from-import \u5df2\u5c06\u5176\u88c5\u5165 sys.modules\uff09\uff0c\u518d\u6539\u5176 MAX_ROUNDS\u3002",
+      "tags": [
+        "conftest",
+        "stub",
+        "import",
+        "pytest",
+        "minecraft",
+        "e2e"
+      ],
+      "related_bugs": [
+        "bug-081"
+      ],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:35:48.581Z"
+    },
+    {
+      "id": "bug-083",
+      "timestamp": "2026-06-28T14:37:18.153Z",
+      "error_message": "Significant refactor of ",
+      "file": "src/animetta/tools/minecraft/core/bridge.py",
+      "root_cause": "4 lines replaced/restructured",
+      "fix": "Rewrote 46\u219286 lines (4 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:37:18.153Z"
+    },
+    {
+      "id": "bug-084",
+      "timestamp": "2026-06-28T14:37:39.466Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/core/bridge.py",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:37:39.466Z"
+    },
+    {
+      "id": "bug-085",
+      "timestamp": "2026-06-28T14:42:15.846Z",
+      "error_message": "Wrong reference: MAX_ROUNDS should be run_learning_loop",
+      "file": "tests/tools/minecraft/test_e2e_voyager.py",
+      "root_cause": "Used \"MAX_ROUNDS\" instead of \"run_learning_loop\"",
+      "fix": "Changed MAX_ROUNDS \u2192 run_learning_loop",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:42:15.846Z"
+    },
+    {
+      "id": "bug-086",
+      "timestamp": "2026-06-28T14:57:16.854Z",
+      "error_message": "Significant refactor of ",
+      "file": "tests/tools/minecraft/test_e2e_voyager.py",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 9\u219212 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T14:57:16.854Z"
+    },
+    {
+      "id": "bug-082",
+      "timestamp": "2026-06-28",
+      "error_message": "ImportError: cannot import name 'tools' from 'animetta' \u2014 test_e2e_voyager.py \u884c  \u5728 pytest \u4e0b\u629b\u9519\uff08\u5176\u4f59  \u6b63\u5e38\uff09",
+      "file": "tests/tools/minecraft/test_e2e_voyager.py",
+      "root_cause": "conftest.py \u628a animetta.tools.minecraft stub \u6210\u8f7b\u91cf ModuleType \u6ce8\u5165 sys.modules \u9632 __init__ \u94fe\uff1b\u8be5 stub \u4e0b  \u5f62\u5f0f\u89e3\u6790 animetta.tools \u65f6\u5931\u8d25\uff0c\u4f46  \u8d70 sys.modules \u7f13\u5b58\u53ef\u6210\u3002",
+      "fix": "\u6539\u7528 sys.modules[\"animetta.tools.minecraft.other.self_evolution\"] \u53d6\u6a21\u5757\uff08\u4e0a\u65b9 from-import \u5df2\u5c06\u5176\u88c5\u5165 sys.modules\uff09\uff0c\u518d\u6539\u5176 MAX_ROUNDS\u3002",
+      "tags": [
+        "conftest",
+        "stub",
+        "import",
+        "pytest",
+        "minecraft",
+        "e2e"
+      ],
+      "related_bugs": [
+        "bug-081"
+      ],
+      "occurrences": 1,
+      "last_seen": "2026-06-28"
+    },
+    {
+      "id": "bug-088",
+      "timestamp": "2026-06-28T15:37:37.808Z",
+      "error_message": "Missing guard clause",
+      "file": "src/animetta/tools/minecraft/bot/resources/strategies.js",
+      "root_cause": "No early return/throw for edge case: !bot || !bot.pathfinder || !bot.pathfinder.goto",
+      "fix": "Added guard clause: if (!bot || !bot.pathfinder || !bot.pathfind)",
+      "tags": [
+        "auto-detected",
+        "guard-clause",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T15:37:37.808Z"
+    },
+    {
+      "id": "bug-089",
+      "timestamp": "2026-06-28T16:02:47.433Z",
+      "error_message": "Null/undefined access in ",
+      "file": "src/animetta/tools/minecraft/bot/resources/locator.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-06-28T16:02:47.433Z"
+    },
+    {
+      "id": "bug-090",
+      "timestamp": "2026-07-01T15:52:22.024Z",
+      "error_message": "Null/undefined access in ",
+      "file": "src/animetta/tools/minecraft/bot/index.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T15:52:22.024Z"
+    },
+    {
+      "id": "bug-091",
+      "timestamp": "2026-07-01T15:56:37.498Z",
+      "error_message": "Null/undefined access in ",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T15:56:37.498Z"
+    },
+    {
+      "id": "bug-092",
+      "timestamp": "2026-07-01T15:56:59.978Z",
+      "error_message": "Wrong return value",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "Was returning: { config, getState: () => ctx.state };",
+      "fix": "Now returns: { config, getState: () => ctx.state, dispose: () =",
+      "tags": [
+        "auto-detected",
+        "return-value",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-07-01T15:58:16.904Z"
+    },
+    {
+      "id": "bug-093",
+      "timestamp": "2026-07-01T16:03:30.754Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.test.js",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T16:03:30.754Z"
+    },
+    {
+      "id": "bug-094",
+      "timestamp": "2026-07-01T16:17:40.769Z",
+      "error_message": "Missing error handling in unknown",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "Code path had no error handling \u2014 exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T16:17:40.769Z"
+    },
+    {
+      "id": "bug-095",
+      "timestamp": "2026-07-01T16:18:26.961Z",
+      "error_message": "Wrong reference: auto_spectate should be autoSpectate",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "Used \"auto_spectate\" instead of \"autoSpectate\"",
+      "fix": "Changed auto_spectate \u2192 autoSpectate",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-07-01T16:18:43.548Z"
+    },
+    {
+      "id": "bug-096",
+      "timestamp": "2026-07-01T16:18:49.481Z",
+      "error_message": "Wrong condition in logic",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "Condition was: if (config.auto_spectate)",
+      "fix": "Changed to: if (config.autoSpectate)",
+      "tags": [
+        "auto-detected",
+        "logic-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T16:18:49.481Z"
+    },
+    {
+      "id": "bug-097",
+      "timestamp": "2026-07-01T16:19:09.546Z",
+      "error_message": "Significant refactor of ",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 7\u21925 lines (2 removed) | Also: try {; } catch(e) {",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-07-01T16:19:33.115Z"
+    },
+    {
+      "id": "bug-098",
+      "timestamp": "2026-07-01T16:21:03.206Z",
+      "error_message": "Missing await",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.test.js",
+      "root_cause": "Async call without await \u2014 returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T16:21:03.206Z"
+    },
+    {
+      "id": "bug-099",
+      "timestamp": "2026-07-01T16:21:42.968131Z",
+      "error_message": "config.auto_spectate is undefined - readConfig returns autoSpectate (camelCase) but code checks auto_spectate (snake_case)",
+      "file": "src/animetta/tools/minecraft/bot/clientViewer.js",
+      "root_cause": "readConfig() returns camelCase properties but handlers used snake_case. undefined is falsy so auto-spectate never triggered.",
+      "fix": "Changed config.auto_spectate to config.autoSpectate in 3 places",
+      "tags": [
+        "minecraft",
+        "naming-convention",
+        "camelCase",
+        "client-viewer"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-01T16:21:42.968131Z"
     }
   ]
 }
