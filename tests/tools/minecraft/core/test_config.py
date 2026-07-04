@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,
-    MinecraftClientViewerConfig,
     MinecraftConfig,
     MinecraftMode,
     MinecraftSafetyConfig,
-    MinecraftWebViewerConfig,
 )
 
 """Tests for Minecraft configuration models."""
@@ -62,22 +60,6 @@ class TestMinecraftSafetyConfig:
         assert cfg.max_distance == 1000
 
 
-class TestMinecraftWebViewerConfig:
-    """MinecraftWebViewerConfig model tests."""
-
-    def test_default_values(self):
-        cfg = MinecraftWebViewerConfig()
-        assert cfg.enabled is False
-        assert cfg.host == "127.0.0.1"
-        assert cfg.port == 3007
-
-    def test_custom_values(self):
-        cfg = MinecraftWebViewerConfig(enabled=True, host="0.0.0.0", port=3010)
-        assert cfg.enabled is True
-        assert cfg.host == "0.0.0.0"
-        assert cfg.port == 3010
-
-
 class TestMinecraftConfig:
     """MinecraftConfig model tests."""
 
@@ -88,7 +70,6 @@ class TestMinecraftConfig:
         assert cfg.bot.host == "localhost"
         assert cfg.bot.port == 25565
         assert cfg.safety.no_griefing is True
-        assert cfg.web_viewer.enabled is False
 
     def test_enabled_config(self):
         cfg = MinecraftConfig(

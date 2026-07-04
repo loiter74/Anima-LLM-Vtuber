@@ -6,25 +6,28 @@ import { createInterface } from 'readline';
 import { stdin, stdout, argv } from 'process';
 import { setPlannerMode, setRuleMode, nextPlanStep, stepComplete, stepFailed, getPlanProgress, setOnPlanComplete, getMode } from './behaviors/planExecutor.js';
 import { setupCombatInterrupt } from './behaviors/combat.js';
-import { setupAutoEat } from './behaviors/autoEat.js';
+import { setupAutoEat, eatFood } from './behaviors/autoEat.js';
 import { setupSpectator } from './spectator.js';
 import { createSmelt } from './smelt.js';
 import { createEquip } from './equip.js';
 import { createMineShaft } from './mine_shaft.js';
+import { createBranchMine } from './branch_mine.js';
 import { getStatusSnapshot, evalCode } from './sandbox.js';
 import { createResponseGuard, isBusyBypassAction, withTimeout } from './commandRuntime.js';
 import { locateResource, getMemorySummary } from './resources/locator.js';
-import { maybeStartFirstPersonViewer, webViewerConfigFromEnv } from './viewer.js';
 import { setupClientViewer } from './clientViewer.js';
+import { findReachableCraftingTable } from './craftingTable.js';
+import { grantInitialLoadout } from './initialLoadout.js';
 
 const { pathfinder, Movements, goals } = pathfinderPkg;
-const { GoalBlock } = goals;
+const { GoalBlock, GoalNear } = goals;
 const { plugin: pvp } = pvpPkg;
 
 // --- CLI arguments ---
 const host = argv[2];
 const port = parseInt(argv[3], 10);
 const username = argv[4];
+const version = argv[5] || undefined;
 
 if (!host || !port || !username) {
   const msg = { id: null, status: 'error', result: 'Usage: node index.js <host> <port> <username>' };
@@ -33,7 +36,7 @@ if (!host || !port || !username) {
 }
 
 // --- Bot setup ---
-const bot = mineflayer.createBot({ host, port, username });
+const bot = mineflayer.createBot({ host, port, username, version });
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(pvp);
 
@@ -244,6 +247,8 @@ async function _waterBucketClutch() {
 }
 
 const HOSTILE_NAMES = ['zombie', 'skeleton', 'spider', 'creeper', 'witch', 'enderman', 'wither_skeleton'];
+const ACTIVE_COMBAT_HOSTILE_NAMES = ['zombie', 'skeleton', 'spider', 'drowned', 'husk', 'stray', 'slime', 'wither_skeleton'];
+const FOOD_ANIMAL_NAMES = ['cow', 'pig', 'chicken', 'sheep'];
 
 async function _attack(target = 'nearest_hostile') {
   await setupMovements();
@@ -251,7 +256,12 @@ async function _attack(target = 'nearest_hostile') {
   if (target === 'nearest_hostile') {
     entity = bot.nearestEntity(e => {
       const n = (e.name || '').toLowerCase();
-      return HOSTILE_NAMES.some(h => n.includes(h));
+      return ACTIVE_COMBAT_HOSTILE_NAMES.some(h => n.includes(h));
+    });
+  } else if (target === 'nearest_food_animal') {
+    entity = bot.nearestEntity(e => {
+      const n = (e.name || '').toLowerCase();
+      return FOOD_ANIMAL_NAMES.some(name => n.includes(name));
     });
   } else if (target === 'nearest_player') {
     entity = bot.nearestEntity(e => e.type === 'player');
@@ -260,6 +270,10 @@ async function _attack(target = 'nearest_hostile') {
   }
   if (!entity) throw new Error(`Target not found: ${target}`);
   await bot.pvp?.attack(entity);
+  if (target === 'nearest_food_animal') {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await _pickupDroppedItems(6000, entity.position);
+  }
   return `Attacked ${entity.name || target}`;
 }
 
@@ -291,12 +305,152 @@ const BLOCK_DROP_ITEM = {
   redstone_ore: 'redstone',
 };
 
-async function _pickupDroppedItems(timeout = 5000) {
+function _inventoryCount(itemName) {
+  let total = 0;
+  for (const item of bot.inventory.items()) {
+    if (item.name === itemName) total += item.count;
+  }
+  return total;
+}
+
+async function _waitForInventoryIncrease(itemName, beforeCount, minimumIncrease = 1, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  const expected = beforeCount + Math.max(1, minimumIncrease);
+  while (Date.now() < deadline) {
+    if (_inventoryCount(itemName) >= expected) return true;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return _inventoryCount(itemName) >= expected;
+}
+
+function _collectDebug(message) {
+  if (process.env.COLLECT_DEBUG) {
+    console.error(`[collect-debug] ${message}`);
+  }
+}
+
+function _isAirLike(block) {
+  return !block || block.name === 'air' || block.boundingBox === 'empty';
+}
+
+function _findNearestStandable(maxRadius = 8) {
+  if (!bot.entity?.position) return null;
+  const origin = bot.entity.position.floored();
+  const candidates = [];
+
+  for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+    for (let dz = -maxRadius; dz <= maxRadius; dz++) {
+      for (let dy = 3; dy >= -8; dy--) {
+        const groundPos = origin.offset(dx, dy, dz);
+        const ground = bot.blockAt(groundPos);
+        if (_isAirLike(ground)) continue;
+
+        const feet = bot.blockAt(groundPos.offset(0, 1, 0));
+        const head = bot.blockAt(groundPos.offset(0, 2, 0));
+        if (!_isAirLike(feet) || !_isAirLike(head)) continue;
+
+        const standPos = groundPos.offset(0, 1, 0);
+        candidates.push({
+          pos: standPos,
+          distance: bot.entity.position.distanceTo(standPos.offset(0.5, 0, 0.5)),
+        });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  return candidates[0]?.pos || null;
+}
+
+async function _stabilizePosition(timeout = 7000) {
+  if (!bot.entity) return false;
+  if (bot.entity.onGround !== false) return true;
+
+  const standPos = _findNearestStandable(8);
+  if (!standPos) {
+    _collectDebug('stabilize skipped: no nearby standable position');
+    return false;
+  }
+
+  try {
+    _collectDebug(`stabilize goto=${standPos.x},${standPos.y},${standPos.z}`);
+    await withTimeout(
+      bot.pathfinder.goto(new GoalBlock(standPos.x, standPos.y, standPos.z)),
+      timeout,
+      'stabilize position'
+    );
+    bot.pathfinder.stop();
+  } catch (e) {
+    _collectDebug(`stabilize path failed: ${e.message}`);
+    try {
+      await bot.lookAt(standPos.offset(0.5, 0.25, 0.5), true);
+      bot.setControlState('forward', true);
+      await new Promise(resolve => setTimeout(resolve, 900));
+    } finally {
+      bot.setControlState('forward', false);
+    }
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return bot.entity?.onGround !== false;
+}
+
+const PICKAXE_TIERS = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe', 'stone_pickaxe', 'wooden_pickaxe'];
+const IRON_PICKAXE_REQUIRED = new Set(['diamond_ore', 'deepslate_diamond_ore', 'emerald_ore', 'deepslate_emerald_ore', 'gold_ore', 'deepslate_gold_ore', 'redstone_ore', 'deepslate_redstone_ore']);
+const PICKAXE_BLOCKS = new Set([
+  'stone', 'deepslate', 'cobbled_deepslate', 'coal_ore', 'deepslate_coal_ore',
+  'iron_ore', 'deepslate_iron_ore', 'copper_ore', 'deepslate_copper_ore',
+  'lapis_ore', 'deepslate_lapis_ore', ...IRON_PICKAXE_REQUIRED,
+]);
+const AXE_SUFFIXES = ['_log', '_wood', '_stem', '_hyphae'];
+
+async function _equipToolForBlock(block) {
+  const name = block?.name;
+  if (!name) return null;
+
+  let candidates = [];
+  if (IRON_PICKAXE_REQUIRED.has(name)) {
+    candidates = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe'];
+  } else if (PICKAXE_BLOCKS.has(name)) {
+    candidates = PICKAXE_TIERS;
+  } else if (AXE_SUFFIXES.some(suffix => name.endsWith(suffix))) {
+    candidates = ['netherite_axe', 'diamond_axe', 'iron_axe', 'stone_axe', 'wooden_axe'];
+  }
+
+  for (const toolName of candidates) {
+    const item = bot.inventory.items().find(i => i.name === toolName);
+    if (item) {
+      await bot.equip(item, 'hand');
+      _collectDebug(`equipped ${toolName} for ${name}`);
+      return toolName;
+    }
+  }
+  return null;
+}
+
+async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
+  await _stabilizePosition(5000);
+
   // Wait for items to drop
   await new Promise(resolve => setTimeout(resolve, 300));
 
   const deadline = Date.now() + timeout;
   let attempts = 0;
+  let triedFallbackPosition = false;
+
+  const walkToward = async (pos, label) => {
+    try {
+      await bot.lookAt(pos.offset ? pos.offset(0, 0.25, 0) : new Vec3(pos.x, pos.y + 0.25, pos.z), true);
+      bot.setControlState('forward', true);
+      bot.setControlState('sprint', true);
+      await new Promise(resolve => setTimeout(resolve, 650));
+    } catch (e) {
+      _collectDebug(`manual pickup move failed (${label}): ${e.message}`);
+    } finally {
+      bot.setControlState('forward', false);
+      bot.setControlState('sprint', false);
+    }
+  };
 
   while (Date.now() < deadline && attempts < 10) {
     attempts++;
@@ -313,7 +467,25 @@ async function _pickupDroppedItems(timeout = 5000) {
     }
 
     if (items.length === 0) {
-      // No items visible
+      // Sometimes the dropped item is not yet visible to the bot, especially
+      // after mining logs/leaves. Walk to the broken block position once, then
+      // rescan for the actual entity.
+      if (fallbackPos && !triedFallbackPosition) {
+        triedFallbackPosition = true;
+        try {
+          _collectDebug(`no item entity visible; moving to fallback=${fallbackPos.x},${fallbackPos.y},${fallbackPos.z}`);
+          await withTimeout(
+            bot.pathfinder.goto(new GoalNear(fallbackPos.x, fallbackPos.y, fallbackPos.z, 1)),
+            5000,
+            'pickup fallback position'
+          );
+          bot.pathfinder.stop();
+          await walkToward(fallbackPos, 'fallback');
+        } catch (e) {
+          _collectDebug(`pickup fallback path failed: ${e.message}`);
+          await walkToward(fallbackPos, 'fallback after path failure');
+        }
+      }
       await new Promise(resolve => setTimeout(resolve, 500));
       continue;
     }
@@ -321,20 +493,25 @@ async function _pickupDroppedItems(timeout = 5000) {
     // Sort by distance, pick up closest
     items.sort((a, b) => a.dist - b.dist);
     const closest = items[0].entity;
+    _collectDebug(`pickup candidates=${items.length} closest=${closest.position.x.toFixed(2)},${closest.position.y.toFixed(2)},${closest.position.z.toFixed(2)} dist=${items[0].dist.toFixed(2)}`);
 
     try {
       const pos = closest.position;
       await withTimeout(
-        bot.pathfinder.goto(new GoalBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))),
-        2000,
+        bot.pathfinder.goto(new GoalNear(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), 1)),
+        5000,
         'pickup item'
       );
+      bot.pathfinder.stop();
+      await walkToward(pos, 'item entity');
     } catch (e) {
-      // Ignore path errors
+      _collectDebug(`pickup path failed: ${e.message}`);
+      await walkToward(closest.position, 'item entity after path failure');
     }
 
     // Wait for pickup to register
     await new Promise(resolve => setTimeout(resolve, 200));
+    _collectDebug(`pickup wait done inventory=${JSON.stringify(Object.fromEntries(bot.inventory.items().map((it) => [it.name, it.count])))}`);
   }
 }
 
@@ -353,6 +530,7 @@ async function _collect(block_type, count = 1) {
 }
 
 async function _collectInner(block_type, count, mcData) {
+  await _stabilizePosition(5000);
 
   // If block_type is an item name (e.g. "coal"), map to the block that drops it
   let resolvedBlockType = block_type;
@@ -363,8 +541,14 @@ async function _collectInner(block_type, count, mcData) {
   }
   if (!bi) throw new Error(`Unknown block: ${block_type}`);
 
+  const dropItem = BLOCK_DROP_ITEM[resolvedBlockType] || block_type;
+  const startingCount = _inventoryCount(dropItem);
+  _collectDebug(`start block=${block_type} resolved=${resolvedBlockType} drop=${dropItem} need=${count} starting=${startingCount}`);
   let collected = 0;
-  for (let i = 0; i < count; i++) {
+  let attempts = 0;
+  const maxAttempts = Math.max(count * 3, count + 3);
+  while (collected < count && attempts < maxAttempts) {
+    attempts++;
     // Find block
     let block = bot.findBlock({ matching: bi.id, maxDistance: 32 });
 
@@ -393,11 +577,12 @@ async function _collectInner(block_type, count, mcData) {
     }
 
     if (!block) throw new Error(`No more ${resolvedBlockType} nearby, collected ${collected}`);
+    _collectDebug(`target block=${block.name}@${block.position.x},${block.position.y},${block.position.z}`);
 
     // Navigate to block with timeout
     try {
       await withTimeout(
-        bot.pathfinder.goto(new GoalBlock(block.position.x, block.position.y + 1, block.position.z)),
+        bot.pathfinder.goto(new GoalNear(block.position.x, block.position.y, block.position.z, 3)),
         15000,
         'navigate to block'
       );
@@ -408,14 +593,19 @@ async function _collectInner(block_type, count, mcData) {
     // Stop pathfinder and wait for bot to fully stop
     bot.pathfinder.stop();
     await new Promise(resolve => setTimeout(resolve, 200));
+    _collectDebug(`after navigation pos=${bot.entity.position.x.toFixed(2)},${bot.entity.position.y.toFixed(2)},${bot.entity.position.z.toFixed(2)}`);
 
     // Dig block (with retry on abort)
     let digSuccess = false;
     for (let retry = 0; retry < 3 && !digSuccess; retry++) {
       try {
+        await _equipToolForBlock(block);
         await bot.dig(block);
         digSuccess = true;
+        const afterBlock = bot.blockAt(block.position);
+        _collectDebug(`dig success afterBlock=${afterBlock?.name || 'null'}@${block.position.x},${block.position.y},${block.position.z}`);
       } catch (e) {
+        _collectDebug(`dig failed retry=${retry} message=${e.message}`);
         if (e.message && e.message.includes('aborted') && retry < 2) {
           await new Promise(resolve => setTimeout(resolve, 500));
           // Check if block was actually broken despite abort
@@ -434,9 +624,19 @@ async function _collectInner(block_type, count, mcData) {
     if (digSuccess) {
       // Wait for item entity to register and pick up drops
       await new Promise(resolve => setTimeout(resolve, 500));
-      await _pickupDroppedItems(5000);
-      collected++;
+      await _pickupDroppedItems(8000, block.position);
+      const actual = Math.max(0, _inventoryCount(dropItem) - startingCount);
+      collected = Math.min(actual, count);
+      _collectDebug(`after pickup actual=${actual} collected=${collected} inventoryCount=${_inventoryCount(dropItem)}`);
     }
+  }
+  if (collected < count) {
+    const err = new Error(`Collected ${collected}/${count} ${block_type}; drops were not fully picked up`);
+    err.code = 'PARTIAL_COLLECT';
+    err.collected = collected;
+    err.requested = count;
+    err.reason = `inventory gained ${collected} ${dropItem}`;
+    throw err;
   }
   return `Collected ${collected} ${block_type}`;
 }
@@ -496,29 +696,41 @@ function craftError(message, code, extra = {}) {
 }
 
 async function _ensureCraftingTable(mcData) {
+  const waitUntilGround = async (timeoutMs = 3000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (bot.entity?.onGround) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  };
+
   // First: find existing crafting table within 5 blocks (close enough to interact)
   try {
     const veryClose = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 5 });
     if (veryClose) return veryClose;
   } catch (e) {}
 
-  // Second: find existing table within 32 blocks and navigate to it
-  try {
-    const far = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 32 });
-    if (far) {
-      try {
-        await bot.pathfinder.goto(new GoalBlock(far.position.x, far.position.y + 1, far.position.z));
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return far;
-      } catch (e) {}
-    }
-  } catch (e) {}
-
-  // Third: place a fresh table from inventory
-  const tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+  // Second: place a fresh table from inventory. Avoid pathing to stale tables
+  // from previous runs when the bot can make a local survival-valid table.
+  let tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+  if (!tableItem) {
+    try {
+      const tableInfo = mcData.itemsByName.crafting_table;
+      const hasPlanks = bot.inventory.items().some(i => PLANK_ALIASES.has(i.name) && i.count >= 4);
+      if (tableInfo && hasPlanks) {
+        const recipes = bot.recipesFor(tableInfo.id, null, 1, null) || [];
+        if (recipes.length > 0) {
+          await bot.craft(recipes[0], 1, null);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+        }
+      }
+    } catch (e) {}
+  }
   if (tableItem) {
+    await waitUntilGround();
     const pos = bot.entity.position;
-    const offsets = [[0, -1, 0], [1, -1, 0], [-1, -1, 0], [0, -1, 1], [0, -1, -1]];
+    const offsets = [[1, -1, 0], [-1, -1, 0], [0, -1, 1], [0, -1, -1], [0, -1, 0]];
     for (const [dx, dy, dz] of offsets) {
       const bx = Math.floor(pos.x) + dx;
       const by = Math.floor(pos.y) + dy;
@@ -526,17 +738,109 @@ async function _ensureCraftingTable(mcData) {
       const block = bot.blockAt(new Vec3(bx, by, bz));
       if (block && block.name !== 'air' && block.name !== 'water' && block.name !== 'lava') {
         try {
+          const targetPos = new Vec3(bx, by + 1, bz);
+          let targetBlock = bot.blockAt(targetPos);
+          if (targetBlock && !['air', 'water', 'lava', 'crafting_table'].includes(targetBlock.name)) {
+            await _equipToolForBlock(targetBlock);
+            await bot.dig(targetBlock);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            targetBlock = bot.blockAt(targetPos);
+          }
+          if (targetBlock?.name === 'crafting_table') return targetBlock;
+          if (targetBlock && targetBlock.name !== 'air') continue;
+
           await bot.equip(tableItem, 'hand');
-          await bot.placeBlock(block, new Vec3(0, 1, 0));
+          const target = new Vec3(bx + 0.5, by + 1.5, bz + 0.5);
+          if (typeof bot.lookAt === 'function') {
+            await bot.lookAt(target, true);
+          }
+          const canControl = typeof bot.setControlState === 'function';
+          const directUnderfoot = dx === 0 && dy === -1 && dz === 0;
+          if (canControl && directUnderfoot) {
+            bot.setControlState('jump', true);
+            await new Promise(resolve => setTimeout(resolve, 150));
+            bot.setControlState('jump', false);
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+          if (canControl) {
+            bot.setControlState('sneak', true);
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          try {
+            await bot.placeBlock(block, new Vec3(0, 1, 0));
+          } finally {
+            if (canControl) bot.setControlState('sneak', false);
+          }
           await new Promise(resolve => setTimeout(resolve, 1000));
           const placed = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 5 });
           if (placed) return placed;
         } catch (e) {}
       }
     }
+    const feet = new Vec3(Math.floor(bot.entity.position.x), Math.floor(bot.entity.position.y), Math.floor(bot.entity.position.z));
+    const faces = [
+      new Vec3(0, 1, 0),
+      new Vec3(1, 0, 0),
+      new Vec3(-1, 0, 0),
+      new Vec3(0, 0, 1),
+      new Vec3(0, 0, -1),
+    ];
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const targetPos = feet.offset(dx, dy, dz);
+          if (targetPos.equals(feet) || targetPos.equals(feet.offset(0, 1, 0))) continue;
+          const targetBlock = bot.blockAt(targetPos);
+          if (!targetBlock || targetBlock.name !== 'air') continue;
+          for (const face of faces) {
+            const refPos = targetPos.minus(face);
+            const refBlock = bot.blockAt(refPos);
+            if (!refBlock || ['air', 'water', 'lava'].includes(refBlock.name)) continue;
+            try {
+              tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
+              if (!tableItem) break;
+              await bot.equip(tableItem, 'hand');
+              await bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true);
+              await bot.placeBlock(refBlock, face);
+              await new Promise(resolve => setTimeout(resolve, 700));
+              const placed = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 5 });
+              if (placed) return placed;
+            } catch (e) {}
+          }
+        }
+      }
+    }
+    return null;
   }
 
+  // Last: recover a previously placed table, including surface tables above
+  // the mining shaft.
+  try {
+    const far = await findReachableCraftingTable({
+      bot,
+      craftingTableId: mcData.blocksByName.crafting_table.id,
+      GoalNear,
+    });
+    if (far) return far;
+  } catch (e) {}
+
   return null;
+}
+
+async function _reclaimCraftingTable(craftingTable) {
+  if (!craftingTable) return;
+  if (bot.inventory.items().some(i => i.name === 'crafting_table')) return;
+  try {
+    const block = bot.blockAt(craftingTable.position);
+    if (!block || block.name !== 'crafting_table') return;
+    await _equipToolForBlock(block);
+    await bot.dig(block);
+    await _pickupDroppedItems(5000, block.position);
+  } catch (e) {
+    if (process.env.CRAFT_DEBUG) {
+      process.stderr.write(`[craft-debug] reclaim table failed: ${e.message}\n`);
+    }
+  }
 }
 
 // ── Hardcoded fallback recipes for Minecraft 1.21+ ──
@@ -551,6 +855,7 @@ const FALLBACK_RECIPES = {
   iron_pickaxe: { ingredients: { iron_ingot: 3, stick: 2 }, result: 1, requiresTable: true },
   stone_sword: { ingredients: { cobblestone: 2, stick: 1 }, result: 1, requiresTable: true },
   iron_sword: { ingredients: { iron_ingot: 2, stick: 1 }, result: 1, requiresTable: true },
+  torch: { ingredients: { coal: 1, stick: 1 }, result: 4, requiresTable: false },
   furnace: { ingredients: { cobblestone: 8 }, result: 1, requiresTable: true },
   iron_chestplate: { ingredients: { iron_ingot: 8 }, result: 1, requiresTable: true },
   chest: { ingredients: { oak_planks: 8 }, result: 1, requiresTable: true },
@@ -612,9 +917,11 @@ async function _craftWithFallback(recipe, count, craftingTable) {
           if (preferred) {
             // Try all viable recipes until one works (wood variants may fail)
             const toTry = preferred ? [preferred, ...viable.filter(r => r !== preferred)] : viable;
-            for (const recipe of toTry) {
+            for (const candidateRecipe of toTry) {
               try {
-                await bot.craft(recipe, count, null);
+                const before = _inventoryCount(recipe);
+                await bot.craft(candidateRecipe, count, null);
+                await _waitForInventoryIncrease(recipe, before, 1);
                 return `Crafted ${count} ${recipe} (fallback)`;
               } catch (e) { /* try next */ }
             }
@@ -634,9 +941,12 @@ async function _craftWithFallback(recipe, count, craftingTable) {
             }) || viable[0];
             if (preferred) {
               const toTry = preferred ? [preferred, ...viable.filter(r => r !== preferred)] : viable;
-              for (const recipe of toTry) {
+              for (const candidateRecipe of toTry) {
                 try {
-                  await bot.craft(recipe, count, craftingTable);
+                  const before = _inventoryCount(recipe);
+                  await bot.craft(candidateRecipe, count, craftingTable);
+                  await _waitForInventoryIncrease(recipe, before, 1);
+                  await _reclaimCraftingTable(craftingTable);
                   return `Crafted ${count} ${recipe} (fallback-table)`;
                 } catch (e) { /* try next */ }
               }
@@ -646,7 +956,10 @@ async function _craftWithFallback(recipe, count, craftingTable) {
         throw new Error('No recipes found even with fallback');
       }
 
+      const before = _inventoryCount(recipe);
       await bot.craft(recipes[0], count, craftingTable || null);
+      await _waitForInventoryIncrease(recipe, before, 1);
+      await _reclaimCraftingTable(craftingTable);
       return `Crafted ${count} ${recipe}`;
     } catch (e) {
       if (e.code) throw e;
@@ -666,7 +979,10 @@ async function _craftWithFallback(recipe, count, craftingTable) {
 
     const recipes = bot.recipesFor(item.id, null, count, craftingTable);
     if (recipes && recipes.length > 0) {
+      const before = _inventoryCount(recipe);
       await bot.craft(recipes[0], count, craftingTable);
+      await _waitForInventoryIncrease(recipe, before, 1);
+      await _reclaimCraftingTable(craftingTable);
       return `Crafted ${count} ${recipe}`;
     }
 
@@ -684,7 +1000,10 @@ async function _craftWithFallback(recipe, count, craftingTable) {
       }) || viable[0];
       if (preferred) {
         try {
+          const before = _inventoryCount(recipe);
           await bot.craft(preferred, count, craftingTable);
+          await _waitForInventoryIncrease(recipe, before, 1);
+          await _reclaimCraftingTable(craftingTable);
           return `Crafted ${count} ${recipe} (fallback)`;
         } catch (e) { /* continue */ }
       }
@@ -699,6 +1018,8 @@ async function _craftWithFallback(recipe, count, craftingTable) {
 
 async function _craft(recipe, count = 1) {
   const mcData = await getMcData();
+  const fallbackRecipe = FALLBACK_RECIPES[recipe] || null;
+  const needsCraftingTable = fallbackRecipe ? fallbackRecipe.requiresTable : null;
 
   // Look up item by name
   const item = mcData.itemsByName[recipe];
@@ -706,13 +1027,18 @@ async function _craft(recipe, count = 1) {
     throw craftError(`Item not found: ${recipe}`, 'NO_RECIPE');
   }
 
-  // Get ALL recipes — try with crafting table first, then without
-  const craftingTable = await _ensureCraftingTable(mcData);
+  // Only locate/place a table for recipes that may actually need one.
+  // Inventory recipes like logs -> planks must stay local, otherwise the bot can
+  // waste the command timeout pathing to an old table in the world.
+  const craftingTable = needsCraftingTable === false ? null : await _ensureCraftingTable(mcData);
   let allRecipes = [];
-  if (craftingTable) {
+  if (needsCraftingTable !== true) {
+    allRecipes = bot.recipesAll(item.id, null, null) || [];
+  }
+  if (allRecipes.length === 0 && craftingTable) {
     allRecipes = bot.recipesAll(item.id, null, craftingTable) || [];
   }
-  if (allRecipes.length === 0) {
+  if (allRecipes.length === 0 && needsCraftingTable !== true) {
     allRecipes = bot.recipesAll(item.id, null, null) || [];
   }
   if (allRecipes.length === 0 && mcData.recipes && mcData.recipes[item.id]) {
@@ -727,12 +1053,14 @@ async function _craft(recipe, count = 1) {
     recipesFromData: (mcData.recipes && mcData.recipes[item.id] ? mcData.recipes[item.id] : []).length,
     totalRecipes: allRecipes.length,
   };
-  process.stderr.write(JSON.stringify(debugInfo) + '\n');
+  if (process.env.CRAFT_DEBUG) {
+    process.stderr.write(`[craft-debug] ${JSON.stringify(debugInfo)}\n`);
+  }
 
   if (!allRecipes || allRecipes.length === 0) {
     // Try hardcoded fallback recipes (1.21.4 compatibility)
-    const craftingTable = await _ensureCraftingTable(mcData);
-    const fallbackResult = await _craftWithFallback(recipe, count, craftingTable);
+    const fallbackTable = fallbackRecipe?.requiresTable ? craftingTable : null;
+    const fallbackResult = await _craftWithFallback(recipe, count, fallbackTable);
     if (fallbackResult) {
       return fallbackResult;
     }
@@ -750,9 +1078,18 @@ async function _craft(recipe, count = 1) {
     // No recipes match — try all recipes anyway (some may work despite mismatched IDs)
     for (const r of allRecipes) {
       try {
-        await bot.craft(r, count, craftingTable || null);
+        const before = _inventoryCount(recipe);
+        await bot.craft(r, count, needsCraftingTable === false ? null : craftingTable || null);
+        await _waitForInventoryIncrease(recipe, before, 1);
+        await _reclaimCraftingTable(needsCraftingTable === false ? null : craftingTable || null);
         return `Crafted ${count} ${recipe} (tried-all)`;
       } catch (e) { /* try next */ }
+    }
+    if (fallbackRecipe) {
+      const fallbackTable = fallbackRecipe.requiresTable ? (craftingTable || await _ensureCraftingTable(mcData)) : null;
+      const fallbackResult = await _craftWithFallback(recipe, count, fallbackTable);
+      await _reclaimCraftingTable(fallbackTable);
+      return fallbackResult;
     }
     const missing = _checkCraftMaterials(allRecipes[0], count);
     throw craftError(`Missing materials for ${recipe}: ${missing.join(', ')}`, 'MISSING_MATERIALS');
@@ -761,7 +1098,10 @@ async function _craft(recipe, count = 1) {
   // Try all viable recipes until one works (wood variants may fail)
   for (const recipeToUse of viable) {
     try {
-      await bot.craft(recipeToUse, count, craftingTable || null);
+      const before = _inventoryCount(recipe);
+      await bot.craft(recipeToUse, count, needsCraftingTable === false ? null : craftingTable || null);
+      await _waitForInventoryIncrease(recipe, before, 1);
+      await _reclaimCraftingTable(needsCraftingTable === false ? null : craftingTable || null);
       return `Crafted ${count} ${recipe}`;
     } catch (e) { /* try next */ }
   }
@@ -769,9 +1109,19 @@ async function _craft(recipe, count = 1) {
   // If no viable recipe worked, try all recipes as last resort
   for (const r of allRecipes) {
     try {
-      await bot.craft(r, count, craftingTable || null);
+      const before = _inventoryCount(recipe);
+      await bot.craft(r, count, needsCraftingTable === false ? null : craftingTable || null);
+      await _waitForInventoryIncrease(recipe, before, 1);
+      await _reclaimCraftingTable(needsCraftingTable === false ? null : craftingTable || null);
       return `Crafted ${count} ${recipe} (all-recipes)`;
     } catch (e) { /* try next */ }
+  }
+
+  if (fallbackRecipe) {
+    const fallbackTable = fallbackRecipe.requiresTable ? (craftingTable || await _ensureCraftingTable(mcData)) : null;
+    const fallbackResult = await _craftWithFallback(recipe, count, fallbackTable);
+    await _reclaimCraftingTable(fallbackTable);
+    return fallbackResult;
   }
 
   throw craftError(`Craft failed for ${recipe}: no working recipe`, 'CRAFT_FAILED');
@@ -953,6 +1303,7 @@ function _checkCraftMaterials(recipeObj, count) {
 const smeltMod = createSmelt({ bot, getMcData, botUsername: username });
 const equipMod = createEquip({ bot });
 const mineShaftMod = createMineShaft({ bot, disableAuto, enableAuto });
+const branchMineMod = createBranchMine({ bot, disableAuto, enableAuto });
 
 async function _recipes(item) {
   const mcData = await getMcData();
@@ -1019,7 +1370,9 @@ function buildSandboxApi() {
     attack:  (target = 'nearest_hostile') => _attack(target),
     equip:   (item, destination = 'hand') => equipMod.equip(item, destination),
     mine_shaft: (targetY = 20) => mineShaftMod.mineShaft(targetY),
+    branch_mine: (length = 8) => branchMineMod.branchMine(length),
     water_bucket_clutch: () => _waterBucketClutch(),
+    stabilize_position: () => _stabilizePosition(),
     status:  () => getStatusSnapshot(bot),
     waitFor: (seconds) => new Promise((r) => setTimeout(r, Math.max(0, seconds) * 1000)),
   };
@@ -1041,7 +1394,27 @@ async function handleEvalCode(id, params) {
 
 async function handleMineShaft(id, params) {
   try {
-    const r = await mineShaftMod.mineShaft(params.target_y || 20);
+    const targetY = params.target_y ?? params.targetY ?? 20;
+    const r = await mineShaftMod.mineShaft(targetY);
+    sendResponse(id, 'success', r);
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleEatFood(id) {
+  try {
+    await eatFood(bot);
+    sendResponse(id, 'success', 'eat_food attempted');
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleBranchMine(id, params) {
+  try {
+    const length = params.length ?? params.blocks ?? 8;
+    const r = await branchMineMod.branchMine(length);
     sendResponse(id, 'success', r);
   } catch (err) {
     sendResponse(id, 'error', err.message);
@@ -1121,19 +1494,12 @@ let swimInterval = null;
 let combatGuard = null;
 let planLoopInterval = null;
 let _autoDisabled = false;
-let _firstPersonViewerStarted = false;
-const webViewerConfig = webViewerConfigFromEnv();
 
 bot.on('spawn', () => {
   sendEvent('spawn');
-  if (!_firstPersonViewerStarted) {
-    _firstPersonViewerStarted = true;
-    void maybeStartFirstPersonViewer({
-      bot,
-      config: webViewerConfig,
-      sendEvent,
-    });
-  }
+  grantInitialLoadout(bot)
+    .then((result) => sendEvent('initial_loadout', result))
+    .catch((err) => sendEvent('error', { message: `Initial loadout failed: ${err.message}` }));
   // Start survival systems
   autoEat = setupAutoEat(bot);
   autoEat.start();
@@ -1151,11 +1517,6 @@ setupSpectator(bot, viewerUsername, autoSpectate, username, sendEvent);
 const clientViewerCtx = setupClientViewer(bot, username, sendEvent);
 if (clientViewerCtx.config?.enabled) {
   console.log(`[index] client-viewer enabled: username=${clientViewerCtx.config.username}, mode=${clientViewerCtx.config.mode}`);
-}
-
-// --- Web viewer (prismarine-viewer) is debug-only; real-client capture is the intended surface ---
-if (webViewerConfig.enabled) {
-  console.log('[index] NOTE: prismarine-viewer is debug-only. For production/broadcast, use real-client capture via MC_CLIENT_VIEWER_*.');
 }
 
 // Disable/enable auto behaviors during critical operations
@@ -1305,6 +1666,8 @@ async function handleCommand(cmd) {
     case 'setgoal':     handler = handleSetGoal(id, params); break;
     case 'stop':        handler = handleStop(id, params); break;
     case 'collect':     handler = handleCollect(id, params); break;
+    case 'pickup_drops': handler = handlePickupDrops(id, params); break;
+    case 'stabilize_position': handler = handleStabilizePosition(id, params); break;
     case 'locate_resource': handler = handleLocateResource(id, params); break;
     case 'craft':       handler = handleCraft(id, params); break;
     case 'smelt':       handler = handleSmelt(id, params); break;
@@ -1315,7 +1678,9 @@ async function handleCommand(cmd) {
     case 'pillar':      handler = handlePillar(id, params); break;
     case 'eval_code':   handler = handleEvalCode(id, params); break;
     case 'equip':       handler = handleEquip(id, params); break;
+    case 'eat_food':    handler = handleEatFood(id, params); break;
     case 'mine_shaft':  handler = handleMineShaft(id, params); break;
+    case 'branch_mine': handler = handleBranchMine(id, params); break;
     case 'water_bucket_clutch': handler = handleWaterBucketClutch(id, params); break;
     default:
       sendResponse(id, 'error', `Unknown action: ${action}`);
@@ -1414,6 +1779,29 @@ async function handleStatus(id, _params) {
     }
   }
 
+  const blocks = {};
+  try {
+    const base = bot.entity.position.floored();
+    const sample = {
+      feet: base,
+      head: base.offset(0, 1, 0),
+      below1: base.offset(0, -1, 0),
+      below2: base.offset(0, -2, 0),
+      north_support: base.offset(0, -1, -1),
+      south_support: base.offset(0, -1, 1),
+      east_support: base.offset(1, -1, 0),
+      west_support: base.offset(-1, -1, 0),
+    };
+    for (const [key, blockPos] of Object.entries(sample)) {
+      const block = bot.blockAt(blockPos);
+      blocks[key] = block ? {
+        name: block.name,
+        boundingBox: block.boundingBox,
+        position: { x: blockPos.x, y: blockPos.y, z: blockPos.z },
+      } : null;
+    }
+  } catch (e) {}
+
   sendResponse(id, 'success', {
     position: { x: Math.floor(pos.x * 100) / 100, y: Math.floor(pos.y * 100) / 100, z: Math.floor(pos.z * 100) / 100 },
     health: Math.floor(bot.health * 10) / 10,
@@ -1424,6 +1812,7 @@ async function handleStatus(id, _params) {
     time: timeLabel,
     biome: bot.blockAt(pos)?.biome?.name || 'unknown',
     inventory,
+    blocks,
     nearby_entities: nearbyEntities,
     fall_distance: bot.entity?.fallDistance || 0,
     on_ground: bot.entity?.onGround !== false,
@@ -1468,6 +1857,29 @@ async function handleCollect(id, params) {
       ? { message: err.message, code: err.code, collected: err.collected, explored: err.explored, reason: err.reason, requested: err.requested }
       : err.message;
     sendResponse(id, 'error', errorData);
+  }
+}
+
+async function handlePickupDrops(id, params) {
+  try {
+    const pos = params.x !== undefined && params.y !== undefined && params.z !== undefined
+      ? new Vec3(Math.floor(params.x), Math.floor(params.y), Math.floor(params.z))
+      : null;
+    await setupMovements();
+    await _pickupDroppedItems(params.timeout || 10000, pos);
+    sendResponse(id, 'success', 'Picked up nearby drops');
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
+  }
+}
+
+async function handleStabilizePosition(id, params) {
+  try {
+    await setupMovements();
+    const ok = await _stabilizePosition(params.timeout || 7000);
+    sendResponse(id, ok ? 'success' : 'error', ok ? 'Position stabilized' : 'No reachable standable position');
+  } catch (err) {
+    sendResponse(id, 'error', err.message);
   }
 }
 

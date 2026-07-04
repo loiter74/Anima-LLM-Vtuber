@@ -83,15 +83,12 @@ class MinecraftBridge:
             return False
 
         try:
+            self._bot_ready.clear()
             # Build environment with viewer config
             env = os.environ.copy()
             if self.config.viewer.username:
                 env["MC_VIEWER_USERNAME"] = self.config.viewer.username
                 env["MC_AUTO_SPECTATE"] = "true" if self.config.viewer.auto_spectate else "false"
-            if self.config.web_viewer.enabled:
-                env["MC_WEB_VIEWER_ENABLED"] = "true"
-                env["MC_WEB_VIEWER_HOST"] = self.config.web_viewer.host
-                env["MC_WEB_VIEWER_PORT"] = str(self.config.web_viewer.port)
 
             # Export client-viewer (real Minecraft client capture) settings
             cv = self.config.client_viewer
@@ -103,12 +100,18 @@ class MinecraftBridge:
                 env["MC_CLIENT_VIEWER_POLL_INTERVAL"] = str(cv.poll_interval)
                 env["MC_CLIENT_VIEWER_SPECTATE_TIMEOUT"] = str(cv.spectate_timeout)
 
-            self._process = await asyncio.create_subprocess_exec(
-                "node",
-                bot_script,
+            bot_args = [
                 self.config.bot.host,
                 str(self.config.bot.port),
                 self.config.bot.username,
+            ]
+            if self.config.bot.version:
+                bot_args.append(self.config.bot.version)
+
+            self._process = await asyncio.create_subprocess_exec(
+                "node",
+                bot_script,
+                *bot_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -188,12 +191,26 @@ class MinecraftBridge:
 
         except TimeoutError:
             logger.warning(f"[MinecraftBridge] Command '{action}' timeout after {timeout}s")
+            if action in {"collect", "mine_shaft", "branch_mine"}:
+                await self._restart_after_command_timeout(action)
             return {"status": "error", "result": f"Command timed out after {timeout}s"}
         except Exception as e:
             logger.error(f"[MinecraftBridge] Command '{action}' failed: {e}")
             return {"status": "error", "result": str(e)}
         finally:
             self._pending.pop(cmd_id, None)
+
+    async def _restart_after_command_timeout(self, action: str) -> None:
+        """Recover from a long-running Node action that outlived Python's timeout."""
+        logger.warning(f"[MinecraftBridge] Restarting bot after timed-out action: {action}")
+        for future in list(self._pending.values()):
+            if not future.done():
+                future.cancel()
+        self._pending.clear()
+        await self.stop()
+        started = await self.start()
+        if not started:
+            logger.error("[MinecraftBridge] Bot restart after timeout failed")
 
     async def _read_stdout(self):
         """Read JSON responses from bot stdout"""
@@ -202,7 +219,9 @@ class MinecraftBridge:
             while self._running and self._process and self._process.stdout:
                 line = await self._process.stdout.readline()
                 if not line:
-                    logger.info("[MinecraftBridge] Bot stdout closed")
+                    logger.info(
+                        f"[MinecraftBridge] Bot stdout closed (returncode={self._process.returncode})"
+                    )
                     break
 
                 line = line.decode("utf-8").strip()
@@ -261,7 +280,9 @@ class MinecraftBridge:
                     continue
 
                 if resp_id is not None and resp_id in self._pending:
-                    self._pending[resp_id].set_result({"status": status, "result": result})
+                    pending = self._pending[resp_id]
+                    if not pending.done():
+                        pending.set_result({"status": status, "result": result})
                 else:
                     logger.debug(f"[MinecraftBridge] Unhandled response id={resp_id}")
 
@@ -281,7 +302,7 @@ class MinecraftBridge:
                     break
                 msg = line.decode("utf-8").strip()
                 if msg:
-                    logger.debug(f"[MinecraftBot] {msg}")
+                    logger.warning(f"[MinecraftBot] {msg}")
         except Exception as e:
             logger.debug(f"[MinecraftBridge] stderr reader stopped: {e}")
 

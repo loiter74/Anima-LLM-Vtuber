@@ -28,14 +28,6 @@ class MinecraftViewerConfig(BaseModel):
     auto_spectate: bool = True  # Auto-spectate when viewer joins
 
 
-class MinecraftWebViewerConfig(BaseModel):
-    """Configuration for optional first-person web viewing."""
-
-    enabled: bool = False
-    host: str = "127.0.0.1"
-    port: int = 3007
-
-
 class MinecraftClientViewerConfig(BaseModel):
     """Configuration for real Minecraft client capture mode.
 
@@ -72,5 +64,4 @@ class MinecraftConfig(BaseModel):
     bot: MinecraftBotConfig = MinecraftBotConfig()
     safety: MinecraftSafetyConfig = MinecraftSafetyConfig()
     viewer: MinecraftViewerConfig = MinecraftViewerConfig()
-    web_viewer: MinecraftWebViewerConfig = MinecraftWebViewerConfig()
     client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
