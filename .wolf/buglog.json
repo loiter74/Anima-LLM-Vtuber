@@ -2184,6 +2184,38 @@
       "related_bugs": [],
       "occurrences": 2,
       "last_seen": "2026-07-05T07:30:41.566Z"
+    },
+    {
+      "id": "bug-134",
+      "timestamp": "2026-07-05T07:51:18.889Z",
+      "error_message": "Wrong reference: RuntimePersonalityPromptSource should be RoleplayGuardPromptSource",
+      "file": "src/animetta/orchestration/prompting/pipeline.py",
+      "root_cause": "Used \"RuntimePersonalityPromptSource\" instead of \"RoleplayGuardPromptSource\"",
+      "fix": "Changed RuntimePersonalityPromptSource → RoleplayGuardPromptSource",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-05T07:51:18.889Z"
+    },
+    {
+      "id": "bug-135",
+      "timestamp": "2026-07-05T07:56:44.605Z",
+      "error_message": "Significant refactor of ",
+      "file": "src/animetta/orchestration/prompting/sources.py",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 20→34 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "py"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-07-05T07:56:44.605Z"
     }
   ]
 }

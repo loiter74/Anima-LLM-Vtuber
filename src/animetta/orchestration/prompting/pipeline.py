@@ -8,7 +8,12 @@ from langgraph.types import RunnableConfig
 
 from .assembler import assemble
 from .context import build_context
-from .sources import MemoryPromptSource, PersonaPromptSource, RuntimePersonalityPromptSource
+from .sources import (
+    MemoryPromptSource,
+    PersonaPromptSource,
+    RoleplayGuardPromptSource,
+    RuntimePersonalityPromptSource,
+)
 from .types import CompiledPrompt
 
 
@@ -37,6 +42,7 @@ async def compile(
     sources = [
         PersonaPromptSource(),
         RuntimePersonalityPromptSource(),
+        RoleplayGuardPromptSource(),
         MemoryPromptSource(),
     ]
 

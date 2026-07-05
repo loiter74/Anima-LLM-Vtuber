@@ -157,6 +157,7 @@ class OpenAIToolHandler:
                 temperature=self.llm.temperature,
                 max_tokens=self.llm.max_tokens,
                 stream=False,
+                **({"extra_body": self.llm.extra_body} if self.llm.extra_body else {}),
             )
 
             # OTel metrics: record token usage + cost + duration

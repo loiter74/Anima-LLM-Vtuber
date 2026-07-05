@@ -71,9 +71,14 @@ class RuntimePersonalityPromptSource:
 
 
 class MemoryPromptSource:
-    """Produces memory context section from pre-retrieved memory."""
+    """Produces memory context section from pre-retrieved memory.
+
+    In realtime roleplay mode, memory is capped at 500 chars to prevent
+    diluting persona instructions with long history.
+    """
 
     name = "memory"
+    REALTIME_MAX_CHARS = 500
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         if not ctx.memory_context:
@@ -84,11 +89,40 @@ class MemoryPromptSource:
                 content="",
             )]
 
+        content = ctx.memory_context
+        warnings = []
+
+        # Cap memory in realtime roleplay mode
+        if ctx.personality_mode in ("streaming", "default") and len(content) > self.REALTIME_MAX_CHARS:
+            content = content[:self.REALTIME_MAX_CHARS] + "\n…(记忆已截断)"
+            warnings.append(f"memory truncated from {len(ctx.memory_context)} to {self.REALTIME_MAX_CHARS} chars")
+
         atom_count = ctx.memory_metadata.get("atom_count", 0)
         return [PromptSection(
             name=self.name,
             role=SectionRole.MEMORY,
             priority=SectionPriority.MEMORY,
-            content=ctx.memory_context,
-            metadata={"atom_count": atom_count},
+            content=content,
+            metadata={"atom_count": atom_count, "warnings": warnings} if warnings else {"atom_count": atom_count},
+        )]
+
+
+class RoleplayGuardPromptSource:
+    """Produces a one-turn correction section when assistant-flavor drift is detected."""
+
+    name = "roleplay_correction"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        if not ctx.roleplay_correction:
+            return [PromptSection(
+                name=self.name,
+                role=SectionRole.CORRECTION,
+                priority=SectionPriority.CORRECTION,
+                content="",
+            )]
+        return [PromptSection(
+            name=self.name,
+            role=SectionRole.CORRECTION,
+            priority=SectionPriority.CORRECTION,
+            content=ctx.roleplay_correction,
         )]

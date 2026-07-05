@@ -34,4 +34,5 @@ def build_context(
         mbti_sn=metadata.get("mbti_sn", 50),
         mbti_tf=metadata.get("mbti_tf", 50),
         mbti_jp=metadata.get("mbti_jp", 50),
+        roleplay_correction=metadata.get("roleplay_correction", ""),
     )

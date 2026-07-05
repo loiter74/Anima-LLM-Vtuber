@@ -11,6 +11,7 @@ class SectionRole:
     """Semantic role for a prompt section."""
     PERSONA = "persona"
     RUNTIME_PERSONALITY = "runtime_personality"
+    CORRECTION = "correction"
     MEMORY = "memory"
     TOOL_INSTRUCTION = "tool_instruction"
 
@@ -19,6 +20,7 @@ class SectionPriority(IntEnum):
     """Rendering priority (lower number = rendered first)."""
     PERSONA = 100
     RUNTIME_PERSONALITY = 200
+    CORRECTION = 250  # After runtime personality, before memory
     MEMORY = 300
     TOOL_INSTRUCTION = 400
 
@@ -49,6 +51,7 @@ class PromptContext:
     mbti_sn: int = 50
     mbti_tf: int = 50
     mbti_jp: int = 50
+    roleplay_correction: str = ""
 
 
 @dataclass

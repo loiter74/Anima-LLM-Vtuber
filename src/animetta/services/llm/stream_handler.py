@@ -59,6 +59,7 @@ class OpenAIStreamHandler:
                 max_tokens=kwargs.get("max_tokens", self.llm.max_tokens),
                 stream=True,
                 stream_options={"include_usage": True},
+                **({"extra_body": self.llm.extra_body} if self.llm.extra_body else {}),
             )
 
             async for chunk in response:

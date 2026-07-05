@@ -1102,3 +1102,36 @@
 | 15:30 | Edited openspec/specs/memory-middleware/spec.md | expanded (+8 lines) | ~303 |
 | 15:31 | Edited openspec/specs/tool-calling/spec.md | expanded (+8 lines) | ~430 |
 | 15:31 | Session end: 45 writes across 21 files (proposal.md, design.md, spec.md, tasks.md, test_llm_node_personality_bridge.py) | 36 reads | ~26744 tok |
+| 15:33 | Session end: 45 writes across 21 files (proposal.md, design.md, spec.md, tasks.md, test_llm_node_personality_bridge.py) | 36 reads | ~26744 tok |
+| 15:46 | Edited src/animetta/config/providers/llm/deepseek.py | modified DeepSeekLLMConfig() | ~212 |
+| 15:47 | Edited src/animetta/services/llm/openai_llm.py | modified __init__() | ~287 |
+| 15:47 | Edited src/animetta/services/llm/openai_llm.py | expanded (+9 lines) | ~245 |
+| 15:47 | Edited src/animetta/services/llm/openai_llm.py | 8→9 lines | ~75 |
+| 15:48 | Edited src/animetta/services/llm/openai_llm.py | 6→7 lines | ~112 |
+| 15:48 | Edited src/animetta/services/llm/openai_llm.py | 6→8 lines | ~104 |
+| 15:48 | Edited src/animetta/services/llm/stream_handler.py | 8→9 lines | ~144 |
+| 15:48 | Edited src/animetta/services/llm/tool_handler.py | 9→10 lines | ~142 |
+| 15:48 | Created tests/config/test_deepseek_config.py | — | ~467 |
+| 15:49 | Created src/animetta/services/llm/deepseek_policy.py | — | ~427 |
+| 15:49 | Created tests/services/llm/test_deepseek_policy.py | — | ~258 |
+| 15:49 | Created src/animetta/orchestration/prompting/roleplay_guard.py | — | ~309 |
+| 15:50 | Edited src/animetta/orchestration/prompting/types.py | modified SectionPriority() | ~138 |
+| 15:50 | Edited src/animetta/orchestration/prompting/types.py | 4→5 lines | ~35 |
+| 15:51 | Edited src/animetta/orchestration/prompting/sources.py | modified sections() | ~401 |
+| 15:51 | Edited src/animetta/orchestration/prompting/pipeline.py | inline fix | ~34 |
+| 15:51 | Edited src/animetta/orchestration/prompting/pipeline.py | 5→6 lines | ~46 |
+| 15:51 | Edited src/animetta/orchestration/prompting/context.py | 5→6 lines | ~73 |
+| 15:51 | Created tests/orchestration/graph/test_roleplay_guard.py | — | ~715 |
+| 15:53 | Created openspec/changes/optimize-anima-v01-deepseek/tasks.md | — | ~1342 |
+| 15:54 | Session end: 65 writes across 30 files (proposal.md, design.md, spec.md, tasks.md, test_llm_node_personality_bridge.py) | 44 reads | ~37869 tok |
+| 15:56 | Edited src/animetta/orchestration/prompting/sources.py | modified sections() | ~352 |
+| 15:56 | Edited src/animetta/orchestration/prompting/sources.py | inline fix | ~33 |
+| 15:57 | Created tests/orchestration/graph/test_memory_pressure.py | — | ~554 |
+| 15:57 | Created tests/eval/test_anima_roleplay_eval.py | — | ~1264 |
+| 15:57 | Created tests/eval/test_anima_eval_scoring.py | — | ~877 |
+| 15:58 | Created tests/eval/anima_eval_runner.py | — | ~1020 |
+| 15:58 | Edited tests/eval/anima_eval_runner.py | expanded (+6 lines) | ~49 |
+| 15:59 | Edited config/services.yaml | 9→10 lines | ~88 |
+| 16:01 | Edited src/animetta/orchestration/prompting/sources.py | 5→4 lines | ~96 |
+| 16:01 | Created openspec/changes/optimize-anima-v01-deepseek/tasks.md | — | ~1342 |
+| 15:40 | optimize-anima-v01-deepseek: DeepSeek thinking config + extra_body passthrough (chat/stream/tool) + runtime policy (flash/pro) + roleplay guard (drift detect + one-turn correction via pipeline) + memory caps + eval fixtures + eval runner | deepseek.py, openai_llm.py, stream_handler.py, tool_handler.py, deepseek_policy.py, roleplay_guard.py, sources.py, types.py, context.py, pipeline.py, config/services.yaml, tests/ | 69/69 tests green, ruff clean | ~25k |

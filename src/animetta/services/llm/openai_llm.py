@@ -37,6 +37,7 @@ class OpenAILLM(LLMInterface):
         base_url: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 1000,
+        extra_body: dict | None = None,
         **kwargs
     ):
         """
@@ -49,6 +50,7 @@ class OpenAILLM(LLMInterface):
             base_url: Custom API endpoint (optional)
             temperature: Temperature parameter
             max_tokens: Maximum number of tokens to generate
+            extra_body: Provider-specific request extras (e.g. DeepSeek thinking mode)
         """
         self.api_key = api_key
         self.model = model
@@ -56,6 +58,7 @@ class OpenAILLM(LLMInterface):
         self.base_url = base_url
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.extra_body = extra_body or {}
 
         # Conversation history
         self.history: list[dict[str, str]] = []
@@ -106,6 +109,15 @@ class OpenAILLM(LLMInterface):
         temperature = getattr(config, 'temperature', 0.7)
         max_tokens = getattr(config, 'max_tokens', 1000)
 
+        # Build extra_body from DeepSeek thinking config if present
+        extra_body: dict | None = None
+        thinking = getattr(config, 'thinking', None)
+        if thinking:
+            if thinking == "enabled":
+                extra_body = {"thinking": {"type": "enabled"}}
+            elif thinking == "disabled":
+                extra_body = {"thinking": {"type": "disabled"}}
+
         return cls(
             api_key=api_key,
             model=model,
@@ -113,6 +125,7 @@ class OpenAILLM(LLMInterface):
             base_url=base_url,
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body=extra_body,
         )
 
     def _build_messages(self, user_input: str, system_prompt: str | None = None) -> list[dict[str, str]]:
@@ -167,7 +180,8 @@ class OpenAILLM(LLMInterface):
                 model=kwargs.get("model", self.model),
                 messages=messages,
                 temperature=kwargs.get("temperature", self.temperature),
-                max_tokens=kwargs.get("max_tokens", self.max_tokens)
+                max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                **({"extra_body": self.extra_body} if self.extra_body else {}),
             )
 
             assistant_message = response.choices[0].message.content
@@ -210,6 +224,8 @@ class OpenAILLM(LLMInterface):
             "temperature": kwargs.get("temperature", self.temperature),
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
         }
+        if self.extra_body:
+            create_kwargs["extra_body"] = self.extra_body
         if "response_format" in kwargs:
             create_kwargs["response_format"] = kwargs["response_format"]
 

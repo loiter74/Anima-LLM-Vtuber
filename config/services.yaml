@@ -79,6 +79,7 @@ llm:
       api_key: ${DEEPSEEK_API_KEY}
       model: deepseek-v4-flash
       base_url: https://api.deepseek.com/v1
+      thinking: disabled  # Anima v0.1 realtime roleplay: thinking disabled
       temperature: 0.7
       max_tokens: 4096
   mock:

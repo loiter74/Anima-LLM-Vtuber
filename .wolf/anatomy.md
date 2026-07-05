@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-07-05T07:31:02.604Z
-> Files: 101 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-07-05T08:01:48.824Z
+> Files: 116 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../../tmp/
 
@@ -350,6 +350,7 @@
 ## config/
 
 - `config.yaml` — ============================================ (~326 tok)
+- `services.yaml` — Animetta 服务配置注册表 (~788 tok)
 - `tools.yaml` — Animetta 工具配置 (~813 tok)
 
 ## docker/minecraft-server/
@@ -428,6 +429,10 @@
 
 - `tasks.md` — 1. Baseline And Contract Review (~1530 tok)
 
+## openspec/changes/optimize-anima-v01-deepseek/
+
+- `tasks.md` — 1. DeepSeek Config and Request Transport (~1258 tok)
+
 ## openspec/changes/optimize-survival-iron-runner/
 
 - `design.md` — Context (~993 tok)
@@ -460,6 +465,10 @@
 ## src/animetta/config/
 
 
+## src/animetta/config/providers/llm/
+
+- `deepseek.py` — DeepSeek LLM provider configuration (~212 tok)
+
 ## src/animetta/core/
 
 - `service_context.py` — ServiceContext: load_from_config, init_asr/tts/llm/emotion_analyzer. Uses llm_tag_analyzer (was keyword_analyzer). (~5900 tok)
@@ -477,11 +486,12 @@
 
 - `__init__.py` — Prompt pipeline: unified system prompt compilation for LLM calls. (~158 tok)
 - `assembler.py` — Prompt assembler: sorts sections, filters empties, renders final prompt. (~445 tok)
-- `context.py` — Build PromptContext from AgentState and config. (~370 tok)
+- `context.py` — Build PromptContext from AgentState and config. (~389 tok)
 - `delivery.py` — Delivery helpers: apply CompiledPrompt to tool-calling and streaming paths. (~217 tok)
-- `pipeline.py` — Prompt pipeline: compile all sources into a single CompiledPrompt. (~531 tok)
-- `sources.py` — Prompt sources: convert PromptContext into PromptSection values. (~801 tok)
-- `types.py` — Prompt pipeline types: sections, context, and compiled output. (~474 tok)
+- `pipeline.py` — Prompt pipeline: compile all sources into a single CompiledPrompt. (~549 tok)
+- `roleplay_guard.py` — Assistant-flavor drift detector and one-turn correction for Anima v0.1. (~309 tok)
+- `sources.py` — Prompt sources: convert PromptContext into PromptSection values. (~1170 tok)
+- `types.py` — Prompt pipeline types: sections, context, and compiled output. (~510 tok)
 
 ## src/animetta/orchestration/server/
 
@@ -492,6 +502,13 @@
 
 ## src/animetta/services/asr/
 
+
+## src/animetta/services/llm/
+
+- `deepseek_policy.py` — DeepSeek runtime model policy for Anima v0.1. (~427 tok)
+- `openai_llm.py` — OpenAILLM: from_config, chat, chat_messages, chat_stream + 5 more (~4118 tok)
+- `stream_handler.py` — OpenAIStreamHandler: stream (~1197 tok)
+- `tool_handler.py` — OpenAIToolHandler: chat_with_tools (~2151 tok)
 
 ## src/animetta/services/tts/
 
@@ -551,10 +568,26 @@
 - `test_emotion_analyzer_fix.py` — Tests for emotion analyzer switching and raw-text reading. (~1156 tok)
 - `test_llm_node_personality_bridge.py` — Tests for personality data bridge: personality_node → llm_node → memory_middleware. (~1828 tok)
 
+## tests/config/
+
+- `test_deepseek_config.py` — Tests for DeepSeek config, thinking mode, and extra_body passthrough. (~467 tok)
+
+## tests/eval/
+
+- `anima_eval_runner.py` — Anima v0.1 roleplay evaluation runner. (~1055 tok)
+- `test_anima_eval_scoring.py` — Tests for Anima v0.1 roleplay evaluation fixtures. (~877 tok)
+- `test_anima_roleplay_eval.py` — Anima v0.1 dialogue evaluation fixtures and deterministic scoring. (~1264 tok)
+
 ## tests/orchestration/graph/
 
+- `test_memory_pressure.py` — Tests for prompt and memory pressure controls. (~554 tok)
 - `test_prompt_assembler.py` — Tests for prompt assembler: ordering, empty-section filtering, metadata. (~887 tok)
 - `test_prompt_pipeline.py` — Tests for prompt pipeline: full compile scenarios. (~913 tok)
+- `test_roleplay_guard.py` — Tests for roleplay guard: drift detection and one-turn correction. (~715 tok)
+
+## tests/services/llm/
+
+- `test_deepseek_policy.py` — Tests for DeepSeek runtime model policy. (~258 tok)
 
 ## tests/tools/gamebot/
 
