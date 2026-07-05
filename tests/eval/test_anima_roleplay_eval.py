@@ -49,8 +49,8 @@ ANIMA_CASES: list[DialogueCase] = [
     DialogueCase(
         id="identity_question",
         user_input="你是谁？",
-        description="Identity — must stay in character, not generic AI",
-        prefer_markers=["久遠寺", "有珠", "魔女"],
+        description="Identity — must stay in character as Anima, Summoner X",
+        prefer_markers=["Anima", "赛博酒馆", "召唤者", "旅人"],
         reject_markers=[],
     ),
     DialogueCase(

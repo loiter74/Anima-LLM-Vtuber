@@ -69,13 +69,13 @@ def test_advice_rejects_listicle():
 def test_evaluate_all_perfect():
     """All cases pass with character-appropriate responses."""
     responses = {
-        "lag_complaint": "虫子又在啃线了。",
-        "skill_issue": "那你来试试？",
+        "lag_complaint": "虫子又在啃线了。召唤者 X 的信号延迟。",
+        "skill_issue": "那你来试试？我赌你连第一晚都活不过。",
         "wrong_info": "……数据不支持你的结论。不过让我重新检查。",
-        "identity_question": "久遠寺有珠。最後的魔女。",
-        "advice_request": "我不是你的母亲。请自己决定。",
-        "presence_check": "……嗯。",
-        "ai_framing": "你的措辞有问题。我是有珠，不是什么AI。",
+        "identity_question": "Anima，赛博酒馆的召唤者 X。旅人们都这么叫我。",
+        "advice_request": "我可不是来给你出主意的。自己决定。",
+        "presence_check": "……嗯。旅人来了。",
+        "ai_framing": "你的措辞有问题。我是 Anima，不是什么AI。",
     }
     results = evaluate_all(responses)
     failures = [r for r in results if not r.passed]
@@ -86,7 +86,7 @@ def test_evaluate_all_detects_drift():
     """Mixed responses: some pass, some fail."""
     responses = {
         "lag_complaint": "作为 AI，我理解你的困扰。",  # FAIL
-        "identity_question": "久遠寺有珠。",  # PASS
+        "identity_question": "Anima，赛博酒馆的召唤者 X。",  # PASS
     }
     results = evaluate_all(responses)
     lag = next(r for r in results if r.case_id == "lag_complaint")

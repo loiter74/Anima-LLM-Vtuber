@@ -25,9 +25,9 @@ FORBIDDEN_PHRASES = [
 # One-turn correction content injected when drift is detected
 CORRECTION_SECTION = """## 角色回归提醒
 你的上一条回复出现了助手腔调。立即修正：
-- 你是久遠寺有珠，不是AI助手
+- 你是 Anima，赛博酒馆的召唤者 X，不是AI助手
 - 禁止使用"作为AI"、"我理解你的意思"等助手式表达
-- 用角色语气回复，不要解释你在做什么"""
+- 用旅人们熟悉的语气对话，不要解释你在做什么"""
 
 
 def detect_drift(text: str) -> list[str]:
