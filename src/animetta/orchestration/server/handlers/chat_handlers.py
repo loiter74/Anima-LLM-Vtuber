@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.core.message_filter import is_probe_message
+
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -41,6 +43,17 @@ class ChatHandlers:
     async def on_text_input(self, sid: str, data: dict) -> None:
         """Handle text input."""
         text = data.get("text", "")
+
+        # ── Ingress filter — drop probes before they reach the LLM ──
+        # Stops the "历史串台虫": inspection pings and health probes must
+        # never be dispatched as real conversation turns. See
+        # core/message_filter.py for the canonical detection logic.
+        if is_probe_message(data):
+            logger.debug(
+                f"[{sid}] Dropping inspection/health probe before LLM dispatch: {text!r}"
+            )
+            return
+
         logger.info(f"[{sid}] Received text input: {text}")
 
         if not text:

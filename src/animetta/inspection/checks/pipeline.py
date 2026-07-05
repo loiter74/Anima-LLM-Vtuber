@@ -81,7 +81,15 @@ async def check_conversation_pipeline() -> CheckResult:
             )
 
         # ── Send test message ─────────────────────────────────────
-        await sio.emit("chat:text", {"text": "[inspection] ping", "mode": "text"})
+        # ``is_inspection`` tags this payload so ChatHandlers can drop it
+        # before LLM dispatch (see core/message_filter.py). The textual
+        # ``[inspection]`` prefix is a redundant backstop in case an older
+        # handler is in play.
+        await sio.emit("chat:text", {
+            "text": "[inspection] ping",
+            "mode": "text",
+            "is_inspection": True,
+        })
         logger.info("[inspection:pipeline] Sent test message, collecting events...")
 
         # ── Wait for pipeline to process ──────────────────────────
