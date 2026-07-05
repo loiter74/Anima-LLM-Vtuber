@@ -1,0 +1,79 @@
+## ADDED Requirements
+
+### Requirement: Unified prompt compilation
+The system SHALL provide a prompt pipeline that compiles all LLM system prompt contributors into a single `CompiledPrompt` before any LLM provider call.
+
+#### Scenario: Compiles final system prompt once
+- **WHEN** the LLM node is ready to call an LLM provider
+- **THEN** the system SHALL call the prompt pipeline to produce one `CompiledPrompt`
+- **THEN** the final system prompt text SHALL come from `CompiledPrompt.system_prompt`
+
+#### Scenario: LLM node does not concatenate prompt sections
+- **WHEN** persona, runtime personality, or memory context is present
+- **THEN** the LLM node SHALL NOT manually concatenate those prompt fragments
+- **THEN** the prompt pipeline SHALL own final prompt assembly
+
+### Requirement: Prompt sections are structured
+The prompt pipeline SHALL represent each prompt contributor as one or more structured prompt sections before rendering final prompt text.
+
+#### Scenario: Prompt source emits structured section
+- **WHEN** a prompt source contributes content
+- **THEN** it SHALL return a section with a stable name, role, priority, content, and metadata
+- **THEN** the assembler SHALL use those fields to render and describe the final prompt
+
+#### Scenario: Empty section is skipped
+- **WHEN** a prompt source has no content to contribute
+- **THEN** the assembler SHALL omit that source from final prompt text
+- **THEN** the final prompt SHALL NOT contain empty section separators
+
+### Requirement: Prompt section ordering is deterministic
+The prompt assembler SHALL render sections in a deterministic order that preserves instruction priority and keeps dynamic context separate from persistent persona content.
+
+#### Scenario: Persona precedes runtime context
+- **WHEN** persona and runtime personality sections are both present
+- **THEN** the persona section SHALL appear before the runtime personality section
+
+#### Scenario: Runtime context precedes memory context
+- **WHEN** runtime personality and memory sections are both present
+- **THEN** the runtime personality section SHALL appear before the memory section
+
+### Requirement: Prompt delivery is mode-specific but content-equivalent
+The system SHALL isolate prompt delivery mechanics from prompt assembly so tool-calling and streaming modes receive the same compiled prompt content.
+
+#### Scenario: Tool mode receives compiled prompt
+- **WHEN** tool-calling mode invokes `chat_with_tools`
+- **THEN** it SHALL pass `CompiledPrompt.system_prompt` as the system prompt argument
+
+#### Scenario: Streaming mode receives compiled prompt
+- **WHEN** streaming mode invokes `chat_stream`
+- **THEN** it SHALL use `CompiledPrompt.system_prompt` as the system prompt content
+
+#### Scenario: Modes share compiled content
+- **WHEN** the same state and configuration are used for tool-calling and streaming modes
+- **THEN** both modes SHALL receive equivalent compiled system prompt text
+
+### Requirement: Prompt debug metadata
+The prompt pipeline SHALL expose metadata that allows developers to inspect prompt composition without requiring full prompt text logs.
+
+#### Scenario: Metadata lists included sections
+- **WHEN** a compiled prompt is produced
+- **THEN** its metadata SHALL include the names of included sections
+- **THEN** its metadata SHALL include the number of included sections
+
+#### Scenario: Metadata records warnings
+- **WHEN** a prompt source fails or omits expected content
+- **THEN** the compiled prompt SHALL include a warning entry describing the source and failure category
+- **THEN** prompt compilation SHALL continue when a safe fallback exists
+
+### Requirement: Prompt pipeline failure containment
+The prompt pipeline SHALL preserve the LLM call path when optional prompt contributors fail.
+
+#### Scenario: Memory prompt source fails
+- **WHEN** memory recall or memory section creation fails
+- **THEN** the prompt pipeline SHALL compile a prompt without memory content
+- **THEN** the LLM node SHALL still be able to call the LLM provider
+
+#### Scenario: Base persona is missing
+- **WHEN** no base persona prompt is available
+- **THEN** the prompt pipeline SHALL compile the remaining available sections
+- **THEN** the compiled prompt SHALL include a warning about the missing persona prompt

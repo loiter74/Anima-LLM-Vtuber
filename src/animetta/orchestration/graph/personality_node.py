@@ -121,6 +121,12 @@ async def personality_node(
         "personality_mood": personality_mood,
         "metadata": {
             **metadata,
+            # Structured runtime personality (new pipeline)
+            "runtime_personality": {
+                "mode": personality_mode,
+                "mood": personality_mood,
+            },
+            # Compatibility fields (preserved during migration)
             "personality_overlay": personality_overlay,
             "personality_mode": personality_mode,
             "personality_mood": personality_mood,

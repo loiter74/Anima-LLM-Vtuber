@@ -1,8 +1,5 @@
-# memory-middleware Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change supermemory-memory-enhancement. Update Purpose after archive.
-## Requirements
 ### Requirement: 記憶中間件（MemoryMiddleware）
 
 系統 SHALL 提供 `MemoryMiddleware` 元件，在 LLM 呼叫前後自動處理記憶。
@@ -63,4 +60,3 @@ For the compatibility path:
 - **WHEN** memory context is available
 - **THEN** the prompt pipeline SHALL receive metadata sufficient to report memory section inclusion
 - **THEN** the compiled prompt metadata SHALL identify that memory context was included
-

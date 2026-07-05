@@ -61,6 +61,12 @@ async def _retrieve_memory_context(
     config: RunnableConfig | None,
     max_turns: int = 5,
     current_emotion: Any = None,
+    character_known: list[str] | None = None,
+    character_unknown: list[str] | None = None,
+    mbti_ei: int = 50,
+    mbti_sn: int = 50,
+    mbti_tf: int = 50,
+    mbti_jp: int = 50,
 ) -> tuple[str, dict]:
     """
     Retrieve memory context via LivingMemorySystem V2 recall().
@@ -71,6 +77,9 @@ async def _retrieve_memory_context(
         config: LangGraph config
         max_turns: Maximum number of turns to retrieve
         current_emotion: VADVector for mood-congruent recall
+        character_known: Character's known knowledge domains (from persona config)
+        character_unknown: Character's unknown knowledge domains (excluded from recall)
+        mbti_ei, mbti_sn, mbti_tf, mbti_jp: MBTI dimensions for persona-biased ranking
 
     Returns:
         Tuple of (enriched system prompt, metadata dict)
@@ -85,6 +94,12 @@ async def _retrieve_memory_context(
             session_id=session_id,
             user_input=query,
             current_emotion=current_emotion,
+            character_known=character_known,
+            character_unknown=character_unknown,
+            mbti_ei=mbti_ei,
+            mbti_sn=mbti_sn,
+            mbti_tf=mbti_tf,
+            mbti_jp=mbti_jp,
         )
         if metadata:
             logger.info(f"[{session_id}] [LLMNode] Memory injected")
@@ -99,17 +114,11 @@ def _enrich_system_prompt(
     memory_context: str,
 ) -> str:
     """
-    Inject memory context into the system prompt
+    Inject memory context into the system prompt.
 
-    Note: When MemoryMiddleware is active, memory_context is already
-    a fully-enriched prompt. This function is kept for backward compatibility.
-
-    Args:
-        base_prompt: Base system prompt
-        memory_context: Memory context / enriched prompt text
-
-    Returns:
-        Enriched system prompt
+    .. deprecated::
+        Use ``orchestration.prompting.pipeline.compile()`` instead.
+        Kept only for backward compatibility with existing tests and callers.
     """
     if not memory_context:
         return base_prompt or ""
@@ -194,12 +203,19 @@ async def llm_node(
     from animetta.memory.v2.emotion_field import VADVector
     current_emotion = VADVector(*vad_tuple) if vad_tuple else None
     t_rag = time_module.perf_counter()
+    _meta = state.get("metadata", {})
     retrieval_result = await _retrieve_memory_context(
         session_id=session_id,
         query=user_text,
         config=config,
         max_turns=5,
         current_emotion=current_emotion,
+        character_known=_meta.get("character_known"),
+        character_unknown=_meta.get("character_unknown"),
+        mbti_ei=_meta.get("mbti_ei", 50),
+        mbti_sn=_meta.get("mbti_sn", 50),
+        mbti_tf=_meta.get("mbti_tf", 50),
+        mbti_jp=_meta.get("mbti_jp", 50),
     )
     memory_context, rag_metadata = retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
     rag_duration = (time_module.perf_counter() - t_rag) * 1000
@@ -248,12 +264,17 @@ async def _llm_with_tools(
 
     logger.info(f"[{session_id}] [LLMNode] Using tool calling mode")
 
-    system_prompt = state.get("system_prompt")
-    if not system_prompt and service_context.core.config:
-        system_prompt = service_context.core.config.get_system_prompt()
+    # Compile final system prompt via pipeline (replaces manual concatenation)
+    from animetta.orchestration.prompting.pipeline import compile as compile_prompt
+    compiled = await compile_prompt(state, config, memory_context=memory_context)
+    enriched_prompt = compiled.system_prompt
 
-    # Inject memory into system_prompt
-    enriched_prompt = _enrich_system_prompt(system_prompt, memory_context)
+    if compiled.warnings:
+        logger.debug(f"[{session_id}] [LLMNode] Prompt warnings: {compiled.warnings}")
+    logger.info(
+        f"[{session_id}] [LLMNode] Compiled prompt: {compiled.section_count} sections, "
+        f"memory={compiled.memory_included}"
+    )
 
     bound_tools = getattr(chat_model, "bound_tools", []) or getattr(chat_model, "tools", [])
 
@@ -323,10 +344,10 @@ async def _llm_without_tools(
 
     logger.info(f"[{session_id}] [LLMNode] Using streaming mode (no tools)")
 
-    system_prompt = state.get("system_prompt", "")
-
-    # Inject memory into system_prompt
-    enriched_prompt = _enrich_system_prompt(system_prompt, memory_context)
+    # Compile final system prompt via pipeline (replaces manual concatenation)
+    from animetta.orchestration.prompting.pipeline import compile as compile_prompt
+    compiled = await compile_prompt(state, config, memory_context=memory_context)
+    enriched_prompt = compiled.system_prompt
 
     if (not messages or not isinstance(messages[0], SystemMessage)) and enriched_prompt:
         messages.insert(0, SystemMessage(content=enriched_prompt))

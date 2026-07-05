@@ -34,7 +34,10 @@ async def emotion_node(
     Output: state["emotion"]
     """
     session_id = state.get("session_id", "unknown")
-    response_text = state.get("response_text", "")
+    # Prefer response_chunks (raw text with [emotion] tags intact) over
+    # response_text (tags already stripped by llm_node).
+    response_chunks = state.get("response_chunks") or []
+    response_text = response_chunks[0] if response_chunks else state.get("response_text", "")
 
     logger.info(f"[{session_id}] [EmotionNode] Starting analysis...")
 
