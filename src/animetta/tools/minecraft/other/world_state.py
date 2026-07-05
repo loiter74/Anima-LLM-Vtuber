@@ -60,6 +60,9 @@ class WorldState:
     # Goal state
     current_goal: str | None = None
 
+    # Block data at bot position (feet, head, below1, below2, etc.)
+    blocks: dict = field(default_factory=dict)
+
     @classmethod
     def from_status(cls, status_result: dict) -> "WorldState":
         """Parse mc_status() result dict into WorldState"""
@@ -143,6 +146,7 @@ class WorldState:
             inventory=inventory,
             entities=entities,
             current_goal=payload.get("current_goal"),
+            blocks=payload.get("blocks", {}),
         )
 
     # ── Analysis Methods ──
@@ -218,6 +222,22 @@ class WorldState:
         if self.fall_distance >= 6 or self.velocity_y <= -0.7:
             return 2
         if self.fall_distance >= 3 or self.velocity_y <= -0.35:
+            return 1
+        return 0
+
+    def get_lava_risk(self) -> int:
+        """❼ Lava risk level: 0 (safe), 1 (warning: lava below), 2 (critical: lava at feet).
+
+        Uses block data from status response (feet, below1 positions).
+        """
+        lava_names = {"lava", "flowing_lava"}
+        feet_block = self.blocks.get("feet")
+        below1_block = self.blocks.get("below1")
+        feet_name = feet_block.get("name", "") if isinstance(feet_block, dict) else ""
+        below1_name = below1_block.get("name", "") if isinstance(below1_block, dict) else ""
+        if feet_name in lava_names:
+            return 2
+        if below1_name in lava_names:
             return 1
         return 0
 

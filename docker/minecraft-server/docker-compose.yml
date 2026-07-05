@@ -1,6 +1,6 @@
 services:
   minecraft:
-    image: itzg/minecraft-server:latest
+    image: itzg/minecraft-server:java21
     container_name: animetta-mc
     restart: unless-stopped
     ports:
@@ -8,11 +8,14 @@ services:
     environment:
       EULA: "TRUE"
       ONLINE_MODE: "false"
-      VERSION: "1.21.4"
+      TYPE: "PAPER"
+      VERSION: "1.21"
+      MODRINTH_PROJECTS: "paper:spectatorplus:paper-1.2.1"
       DIFFICULTY: "normal"
       GAMEMODE: "survival"
       MOTD: "Animetta MC Bot Test Server"
       MAX_PLAYERS: "10"
+      OPS: "AnimettaBot"
       VIEW_DISTANCE: "10"
       SIMULATION_DISTANCE: "6"
       ALLOW_FLIGHT: "true"

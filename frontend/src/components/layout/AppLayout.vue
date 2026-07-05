@@ -78,14 +78,14 @@ function handlePopoutClosed(): void {
 
     <!-- Mobile layout -->
     <div v-if="isMobile" class="mobile-content">
-      <!-- Live2D: compact top area -->
-      <div class="mobile-stage">
+      <!-- Live2D: full-screen background stage -->
+      <div class="mobile-stage mobile-stage-fullscreen">
         <Live2DRenderer />
       </div>
 
-      <!-- Interactive Panel: fills remaining space -->
+      <!-- Interactive Panel: bottom overlay over the full-screen stage -->
       <InteractivePanel
-        class="mobile-panel"
+        class="mobile-panel mobile-panel-overlay"
         :live2d-popout="live2dPopout"
         :is-mobile="true"
         @popout="handlePopout"
@@ -141,20 +141,42 @@ function handlePopoutClosed(): void {
 /* Mobile layout */
 .mobile-content {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 .mobile-stage {
-  height: 35vh;
-  flex-shrink: 0;
-  position: relative;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(26, 16, 40, 0.30);
 }
 
 .mobile-panel {
-  flex: 1;
+  position: absolute;
+  left: var(--s-3);
+  right: var(--s-3);
+  bottom: var(--s-3);
+  z-index: 20;
+  height: min(54vh, 440px);
   min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-2xl);
+  background: rgba(36, 21, 56, 0.82);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  box-shadow: var(--shadow-panel);
+}
+
+@media (max-height: 680px) {
+  .mobile-panel {
+    height: min(62vh, 420px);
+    left: var(--s-2);
+    right: var(--s-2);
+    bottom: var(--s-2);
+  }
 }
 
 /* Bot HUD floating panel */

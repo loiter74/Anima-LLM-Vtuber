@@ -8,8 +8,8 @@ from typing import Any
 from loguru import logger
 
 from animetta.services.llm.langchain_adapter import create_chat_model_from_service
-from animetta.core.tools import load_tools_from_config
-from animetta.core.tools.mcp_bridge import MCPManager
+from animetta.tools import load_tools_from_config
+from animetta.tools.mcp_bridge import MCPManager
 from animetta.tools.minecraft import get_bridge
 
 

@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from animetta.tools.minecraft.core.config import (
     MinecraftClientViewerConfig,
     MinecraftConfig,
-    MinecraftMode,
 )
 
 

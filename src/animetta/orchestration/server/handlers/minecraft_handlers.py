@@ -73,9 +73,23 @@ class MinecraftHandlers:
         Emits minecraft.status on success or failure.
         """
         try:
-
-            config = MinecraftConfig(enabled=True, autonomous=True)
-            logger.info("[Minecraft] Frontend requested start")
+            # Load full minecraft config from tools.yaml (includes runtime path/entrypoint)
+            from pathlib import Path
+            import yaml
+            config_path = Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "tools.yaml"
+            mc_cfg_dict: dict = {}
+            if config_path.exists():
+                with open(config_path, encoding="utf-8") as f:
+                    tools_yaml = yaml.safe_load(f) or {}
+                mc_cfg_dict = tools_yaml.get("minecraft", {}) or {}
+            # Force enabled=True (frontend explicitly requested start)
+            mc_cfg_dict["enabled"] = True
+            config = MinecraftConfig(**mc_cfg_dict)
+            logger.info(
+                f"[Minecraft] Frontend requested start "
+                f"(runtime={config.runtime.runtime_path or 'default'}, "
+                f"entrypoint={config.runtime.entrypoint})"
+            )
 
             # Init bridge (creates the singleton if not exists) and start
             init_bridge(config.model_dump())

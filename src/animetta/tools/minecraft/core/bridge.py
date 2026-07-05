@@ -2,7 +2,7 @@
 Minecraft Bridge — Manages Mineflayer bot subprocess lifecycle and communication
 
 Architecture:
-  Anima startup → MinecraftBridge.start() → spawns Node.js subprocess
+  Anima startup → MinecraftBridge.start() → spawns Node.js subprocess via StdioGameBotTransport
   LLM tool call → bridge.send_command(action, params) → JSON to stdin → wait response
   Bot idle → sends heartbeat events → Python tracks state
   Anima shutdown → MinecraftBridge.stop() → kill subprocess
@@ -23,6 +23,7 @@ from loguru import logger
 
 from animetta.utils.service_availability import is_service_available
 
+from ...gamebot.stdio_transport import StdioGameBotTransport
 from .config import MinecraftConfig, MinecraftMode
 
 if TYPE_CHECKING:
@@ -47,6 +48,9 @@ class MinecraftBridge:
         self._reader_task: asyncio.Task | None = None
         self._bot_ready = asyncio.Event()
 
+        # Generic transport layer (Phase 13: delegates subprocess lifecycle)
+        self._transport: StdioGameBotTransport | None = None
+
         # Autonomous behavior loop (lazy init)
         self._autonomous_loop = None
         self._autonomous_enabled = autonomous
@@ -69,8 +73,9 @@ class MinecraftBridge:
             logger.info("[MinecraftBridge] Skipped — Node.js not available in this environment")
             return False
 
-        bot_dir = os.path.join(os.path.dirname(__file__), "..", "bot")
-        bot_script = os.path.join(bot_dir, "index.js")
+        # Phase 15: resolve runtime path — prefer configured external path, fall back to embedded
+        bot_dir = self._resolve_bot_dir()
+        bot_script = os.path.join(bot_dir, self.config.runtime.entrypoint)
 
         if not os.path.exists(bot_script):
             logger.error(f"[MinecraftBridge] Bot script not found: {bot_script}")
@@ -108,29 +113,25 @@ class MinecraftBridge:
             if self.config.bot.version:
                 bot_args.append(self.config.bot.version)
 
-            self._process = await asyncio.create_subprocess_exec(
-                "node",
-                bot_script,
-                *bot_args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            self._transport = StdioGameBotTransport(
+                argv=["node", bot_script, *bot_args],
                 cwd=bot_dir,
                 env=env,
             )
+            self._transport.on_event(self._handle_runtime_event)
+            await self._transport.start(login_timeout=15.0)
 
+            # Expose process for backward compatibility
+            self._process = self._transport._process
             self._running = True
-
-            # Start reader tasks
-            self._reader_task = asyncio.create_task(self._read_stdout())
-            asyncio.create_task(self._read_stderr())
 
             logger.info(
                 f"[MinecraftBridge] Bot process started (PID: {self._process.pid}, "
-                f"server={self.config.bot.host}:{self.config.bot.port})"
+                f"server={self.config.bot.host}:{self.config.bot.port}, "
+                f"cwd={bot_dir})"
             )
 
-            # Wait for bot to log in
+            # Wait for bot to log in (transport routes runtime events into _handle_runtime_event)
             try:
                 await asyncio.wait_for(self._bot_ready.wait(), timeout=15.0)
                 logger.info("[MinecraftBridge] Bot logged in successfully")
@@ -146,6 +147,40 @@ class MinecraftBridge:
         except Exception as e:
             logger.error(f"[MinecraftBridge] Failed to start: {e}")
             return False
+
+    def _resolve_bot_dir(self) -> str:
+        """Resolve the bot runtime directory.
+
+        When ``config.runtime.runtime_path`` is set, use that path. When it is
+        unset, prefer the sibling external ``voyager-mc-bot`` project. The old
+        embedded runtime is only considered when explicitly enabled for rollback.
+        """
+        rt = self.config.runtime
+        if rt.runtime_path:
+            external = os.path.abspath(rt.runtime_path)
+            if os.path.isdir(external):
+                return external
+            logger.warning(
+                f"[MinecraftBridge] External runtime path not found: {external}"
+            )
+            return external
+
+        # Default: external voyager-mc-bot project
+        default = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..",
+                         "..", "voyager-mc-bot")
+        )
+        if os.path.isdir(default):
+            return default
+
+        use_embedded = getattr(rt, "use_embedded_fallback", False)
+        if use_embedded is True:
+            embedded = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "bot"))
+            if os.path.isdir(embedded):
+                return embedded
+
+        # Absolute fallback for development
+        return "C:/Users/30262/Project/voyager-mc-bot"
 
     async def send_command(
         self, action: str, params: dict | None = None, timeout: float = 60.0
@@ -166,6 +201,16 @@ class MinecraftBridge:
         if self._process.returncode is not None:
             self._running = False
             return {"status": "error", "result": "Bot process has exited"}
+
+        if self._transport:
+            logger.debug(f"[MinecraftBridge] Sending via transport: {action}")
+            command_params = {**(params or {}), "timeout": int(timeout * 1000)}
+            result = await self._transport.send_command(action, command_params, timeout=timeout)
+            if result.get("status") == "error" and "timed out" in str(result.get("result", "")):
+                logger.warning(f"[MinecraftBridge] Command '{action}' timeout after {timeout}s")
+                if action in {"collect", "mine_shaft", "branch_mine"}:
+                    await self._restart_after_command_timeout(action)
+            return result
 
         async with self._lock:
             cmd_id = self._next_id
@@ -199,6 +244,35 @@ class MinecraftBridge:
             return {"status": "error", "result": str(e)}
         finally:
             self._pending.pop(cmd_id, None)
+
+    def _handle_runtime_event(self, result: dict[str, Any]) -> None:
+        """Handle async runtime events emitted by the generic gamebot transport."""
+        if result.get("type") == "heartbeat":
+            logger.debug(f"[MinecraftBridge] Heartbeat: {result}")
+        elif result.get("type") == "login":
+            logger.info(f"[MinecraftBridge] Bot logged in: {result.get('username')}")
+            self._bot_ready.set()
+        elif result.get("type") == "spawn":
+            logger.info("[MinecraftBridge] Bot spawned in world")
+        elif result.get("type") in ("viewer_joined", "viewer_left"):
+            event_type = result["type"]
+            event_username = result.get("username", "")
+            logger.info(f"[MinecraftBridge] {event_type}: {event_username}")
+            if self._viewer_callback:
+                try:
+                    self._viewer_callback(event_type, event_username)
+                except Exception as e:
+                    logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
+        elif result.get("type") == "client_viewer_status":
+            logger.info(
+                "[MinecraftBridge] client_viewer_status: "
+                f"{result.get('state', '')} {result.get('username', '')}"
+            )
+            if self._viewer_callback:
+                try:
+                    self._viewer_callback("client_viewer_status", result)
+                except Exception as e:
+                    logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
 
     async def _restart_after_command_timeout(self, action: str) -> None:
         """Recover from a long-running Node action that outlived Python's timeout."""
@@ -506,7 +580,12 @@ class MinecraftBridge:
                 await self._reader_task
             self._reader_task = None
 
-        if self._process:
+        # Phase 13: delegate process termination to generic transport when available.
+        # Fall back to direct process termination for backward compatibility (tests, hand-set process).
+        if self._transport:
+            await self._transport.stop()
+            self._transport = None
+        elif self._process:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
@@ -520,6 +599,8 @@ class MinecraftBridge:
                     pass
             except ProcessLookupError:
                 pass
+
+        self._process = None
 
         # Resolve all pending futures with error
         for future in self._pending.values():

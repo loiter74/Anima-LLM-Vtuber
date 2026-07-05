@@ -139,8 +139,8 @@ memory_db/chroma_v2/
 .understand-anything/
 smoke_test_result.json
 
-# OpenWolf runtime session state (local, changes every session)
-.wolf/hooks/_session.json
+# OpenWolf runtime/session state (local agent artifacts)
+.wolf/
 
 # Temporary files
 tmp/

@@ -4,6 +4,7 @@ from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,
     MinecraftConfig,
     MinecraftMode,
+    MinecraftRuntimeConfig,
     MinecraftSafetyConfig,
 )
 
@@ -58,6 +59,36 @@ class TestMinecraftSafetyConfig:
         assert cfg.no_griefing is False
         assert cfg.auto_heal is False
         assert cfg.max_distance == 1000
+
+
+class TestMinecraftRuntimeConfig:
+    """MinecraftRuntimeConfig model tests."""
+
+    def test_default_values(self):
+        cfg = MinecraftRuntimeConfig()
+        assert cfg.runtime_path == ""
+        assert cfg.entrypoint == "index.js"
+        assert cfg.package_manager == "npm"
+        assert cfg.use_embedded_fallback is False
+        assert cfg.install_command == ""
+
+    def test_external_runtime_full_config(self):
+        cfg = MinecraftRuntimeConfig(
+            runtime_path="C:/Users/30262/Project/voyager-mc-bot",
+            entrypoint="src/index.js",
+            package_manager="pnpm",
+            use_embedded_fallback=True,
+            install_command="pnpm install --frozen-lockfile",
+        )
+        assert cfg.runtime_path == "C:/Users/30262/Project/voyager-mc-bot"
+        assert cfg.entrypoint == "src/index.js"
+        assert cfg.package_manager == "pnpm"
+        assert cfg.use_embedded_fallback is True
+
+    def test_default_in_minecraft_config(self):
+        cfg = MinecraftConfig()
+        assert cfg.runtime.runtime_path == ""
+        assert cfg.runtime.entrypoint == "index.js"
 
 
 class TestMinecraftConfig:

@@ -34,16 +34,18 @@ function sendMessage(): void {
 
 <template>
   <div
-    class="border border-c-border rounded-lg bg-c-panel flex gap-2.5 items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
+    data-testid="chat-input-bar"
+    class="border border-c-border rounded-lg bg-c-panel flex items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
     :class="isMobile
-      ? 'px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] w-full'
-      : 'pl-5 pr-4 py-4'"
+      ? 'mobile-input-bar gap-3 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'
+      : 'gap-2.5 pl-5 pr-4 py-4'"
     style="touch-action: manipulation"
   >
     <textarea
       ref="textareaRef"
       v-model="inputText"
       class="flex-1 bg-transparent border-0 outline-none text-sm text-c-text placeholder-c-text-muted resize-none min-h-10 max-h-30"
+      :class="isMobile ? 'mobile-input-textarea leading-snug' : ''"
       placeholder="输入消息..."
       rows="1"
       @input="handleInput"

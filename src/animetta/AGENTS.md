@@ -37,8 +37,9 @@ src/animetta/
 │   ├── analyzers/           # Keyword + LLM-based emotion extraction
 │   ├── mappers/             # Emotion → Live2D parameter mapping
 │   └── strategies/          # Duration/intensity/position strategies
-├── tools/                   # Tool calling + MCP bridge + Minecraft bot
-│   └── minecraft/           # ⚠️ Node.js bot (Mineflayer) inside Python tree
+├── tools/                   # Tool calling + MCP bridge + game-bot/Minecraft adapters
+│   ├── gamebot/             # Generic game-bot contracts/client/stdio transport
+│   └── minecraft/           # Minecraft-specific Python adapters and orchestration
 ├── notifier/                # Alert channels (Discord, Feishu, Email)
 ├── inspection/              # Health/telemetry background checks
 ├── tracing/                 # OpenTelemetry observability
@@ -56,7 +57,7 @@ src/animetta/
 | Graph node template | `orchestration/graph/__init__.py` | Node docstring explains pattern |
 | Tool definitions | `tools/base.py` + `tools/custom_tools.py` | `@tool` decorator |
 | Singing pipeline | `services/singing/` | RVC/SVC pipeline + mixer |
-| Minecraft bot | `tools/minecraft/` | ⚠️ Node.js bot in Python tree |
+| Minecraft bot | `tools/minecraft/` + `tools/gamebot/` | Python adapter; Node runtime lives in external `C:/Users/30262/Project/voyager-mc-bot` |
 | Health checks | `inspection/` | Background periodic checks |
 | Alert notifications | `notifier/` | Discord, Feishu, Email |
 | Tracing setup | `tracing/` | OpenTelemetry spans → StatsStore |
@@ -72,6 +73,6 @@ src/animetta/
 - `orchestration/server/routes.py` at 386 lines is the critical hotspot
 - Services are FLAT (no `speech/` or `intelligence/` nesting)
 - Provider configs at `config/providers/{type}/` mirror `services/{type}/`
-- `tools/minecraft/bot/` is a Node.js package embedded in Python tree — cross-language hybrid
+- Minecraft's Mineflayer runtime lives in external `C:/Users/30262/Project/voyager-mc-bot`; Anima communicates with it through the generic game-bot stdio transport
 - Two runtime data dirs: `data/` (chroma_db, stats) + `memory_db/` (chroma_v2, living_memory.sqlite)
 - `persistence/` directory deleted — use memory/v2/ directly

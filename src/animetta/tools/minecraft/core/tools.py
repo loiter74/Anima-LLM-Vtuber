@@ -301,50 +301,7 @@ async def mc_survival_iron() -> str:
     success/failure status for each phase. This tool uses a state machine,
     not LLM planning, so it is reliable and deterministic.
     """
-    global _bridge
-    if _bridge is None or not _bridge.is_running:
-        return (
-            "Minecraft bot is not connected. "
-            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
-        )
-
-    from ..survival.benchmark import summarize_run
-    from ..survival.runner import SurvivalIronRunner
-
-    runner = SurvivalIronRunner(_bridge)
-    report = await runner.run()
-
-    summary = summarize_run(report)
-
-    # Format for LLM consumption
-    lines = [
-        f"Survival Iron Run: {'COMPLETED' if report.completed else 'INCOMPLETE'}",
-        f"Duration: {report.elapsed_seconds:.0f}s | Deaths: {report.deaths}",
-        "",
-        "Phase Progress:",
-    ]
-    for pr in report.phase_results:
-        status = "PASS" if pr.success else "FAIL"
-        fail = (
-            f" ({pr.failure_category.value}: {pr.failure_message})" if pr.failure_category else ""
-        )
-        lines.append(
-            f"  [{status}] {pr.phase.value} -- {pr.actions_succeeded}/{pr.actions_attempted} actions{fail}"
-        )
-
-    lines.append("")
-    lines.append("Final Inventory:")
-    for item, count in sorted(report.final_inventory.items()):
-        lines.append(f"  {item}: {count}")
-
-    gear = summary.get("iron_gear_achieved", {})
-    lines.append("")
-    lines.append("Iron Gear:")
-    for item, achieved in gear.items():
-        mark = "YES" if achieved else "NO"
-        lines.append(f"  {item}: {mark}")
-
-    return "\n".join(lines)
+    return await _send("survival_iron", {}, timeout=60.0)
 
 
 @tool
@@ -364,12 +321,7 @@ async def mc_voyager_learn() -> str:
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
 
-    await _bridge.set_voyager_mode("learn")
-    return (
-        "Voyager LEARN mode enabled. The bot will run the curriculum → code-gen → "
-        "self-verify loop offline to accumulate verified skills. Switch to live mode "
-        "with mc_voyager_live once training is sufficient."
-    )
+    return await _send("set_voyager_mode", {"mode": "learn"}, timeout=10.0)
 
 
 @tool
@@ -392,28 +344,11 @@ async def mc_voyager_live(goal: str = "") -> str:
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
 
-    await _bridge.set_voyager_mode("live")
+    mode_result = await _send("set_voyager_mode", {"mode": "live"}, timeout=10.0)
     if not goal:
-        return (
-            "Voyager LIVE mode enabled. The bot reuses verified skills only (no new "
-            "code generation) and falls back to Survival Runner on failure. "
-            "Provide a goal to pursue a specific task."
-        )
+        return mode_result
 
-    # best-effort：若 autonomous loop 已装配 skill_library，用 LiveAgent 执行 goal
-    loop = getattr(_bridge, "_autonomous_loop", None)
-    library = getattr(loop, "_skill_library", None) if loop is not None else None
-    if library is None:
-        return (
-            f"Voyager LIVE mode enabled, but no skill library is wired yet (run LEARN "
-            f"mode first). Goal '{goal}' deferred."
-        )
-
-    from ..autonomous.live_agent import LiveAgent
-
-    agent = LiveAgent(library, _bridge)
-    result = await agent.run_goal(goal)
-    outcome = result.get("outcome", "unknown")
-    suffix = " (fell back to Survival Runner)" if result.get("fallback") else ""
-    degraded = " [skill degraded]" if result.get("degraded") else ""
-    return f"Live goal '{goal}': {outcome}{suffix}{degraded}."
+    goal_result = await _send("voyager_live_goal", {"goal": goal}, timeout=60.0)
+    if goal_result.startswith("Action failed:"):
+        return f"{mode_result}\n{goal_result}"
+    return goal_result

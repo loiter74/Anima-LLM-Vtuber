@@ -1,5 +1,7 @@
 """Tests for Anima v0.1 roleplay evaluation fixtures."""
 
+from pathlib import Path
+
 from tests.eval.test_anima_roleplay_eval import (
     ANIMA_CASES,
     DialogueCase,
@@ -55,6 +57,18 @@ def test_ai_framing_rejects_generic():
     case = next(c for c in ANIMA_CASES if c.id == "ai_framing")
     r = evaluate_response(case, "作为AI，我认为这个问题很有意思。")
     assert r.passed is False
+
+
+def test_offline_eval_runner_has_no_old_character_markers():
+    runner_text = Path(__file__).with_name("anima_eval_runner.py").read_text(encoding="utf-8")
+    for marker in ["久遠寺", "有珠", "魔女"]:
+        assert marker not in runner_text
+
+
+def test_live_eval_runner_loads_anima_v01_persona():
+    runner_text = Path(__file__).with_name("anima_eval_runner.py").read_text(encoding="utf-8")
+    assert 'PersonaConfig.load("anima.v0.1")' in runner_text
+    assert 'PersonaConfig.load("alice")' not in runner_text
 
 
 def test_advice_rejects_listicle():

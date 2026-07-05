@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useLive2D } from './useLive2D'
 import { MODEL_PATH } from './useLive2D'
 import SubtitleOverlay from './SubtitleOverlay.vue'
@@ -10,11 +10,15 @@ const containerRef = ref<HTMLDivElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const live2d = useLive2D(canvasRef)
 
-// Mobile: toggle to disable Live2D for performance
-const live2dEnabled = ref(!isMobile.value)  // Disable on mobile by default to avoid WebGL issues
+// Live2D stays visible by default on every viewport; users can pause it manually.
+const live2dEnabled = ref(true)
+const live2dInitialized = ref(false)
 
-onMounted(async () => {
+async function initializeLive2D(): Promise<void> {
+  if (!live2dEnabled.value || live2dInitialized.value) return
+  await nextTick()
   await live2d.init()
+  live2dInitialized.value = true
 
   // Expose resetView globally for SettingsPanel button
   ;(window as any).__live2dResetView = () => live2d.resetView()
@@ -25,6 +29,10 @@ onMounted(async () => {
   } catch {
     // Model not found is OK, user can load one later
   }
+}
+
+onMounted(async () => {
+  await initializeLive2D()
 })
 
 function handleMouseDown(e: MouseEvent): void {
@@ -80,8 +88,9 @@ function handleTouchEnd(): void {
   live2d.stopDrag()
 }
 
-function toggleLive2D(): void {
+async function toggleLive2D(): Promise<void> {
   live2dEnabled.value = !live2dEnabled.value
+  await initializeLive2D()
 }
 </script>
 
@@ -119,7 +128,7 @@ function toggleLive2D(): void {
     >
       <div class="text-center text-c-text-muted">
         <p class="text-4xl mb-2">🎭</p>
-        <p class="text-xs opacity-60">Live2D 已暂停（节省性能）</p>
+        <p class="text-xs opacity-60">Live2D 已隐藏</p>
       </div>
     </div>
 
@@ -162,7 +171,7 @@ function toggleLive2D(): void {
 
     <!-- Error state with retry button -->
     <div
-      v-if="live2d.loadError.value"
+      v-if="live2d.loadError.value && live2dEnabled"
       class="absolute inset-0 flex items-center justify-center"
     >
       <div class="glass px-6 py-4 text-sm text-center">

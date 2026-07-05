@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { ref } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick, ref } from 'vue'
 import Live2DRenderer from '@/components/live2d/Live2DRenderer.vue'
+
+const mockIsMobile = vi.hoisted(() => ({ value: false, __v_isRef: true }))
 
 // Create a mock for useLive2D with controllable state
 const mockLive2DState = {
@@ -33,6 +35,10 @@ vi.mock('@/components/live2d/useLive2D', () => ({
   MODEL_PATH: 'live2d/hiyori/Hiyori.model3.json',
 }))
 
+vi.mock('@/composables/useMobile', () => ({
+  useMobile: () => ({ isMobile: mockIsMobile }),
+}))
+
 function createWrapper() {
   return mount(Live2DRenderer, {
     global: {
@@ -53,11 +59,48 @@ describe('Live2DRenderer', () => {
     mockLive2DState.loadError.value = ''
     mockLive2DState.modelInfo.value = null
     mockLive2DState.isDragging.value = false
+    mockIsMobile.value = false
   })
 
   it('renders canvas element', () => {
     const wrapper = createWrapper()
     expect(wrapper.find('canvas').exists()).toBe(true)
+  })
+
+  it('initializes and loads the default model on desktop', async () => {
+    createWrapper()
+    await flushPromises()
+
+    expect(mockLive2DState.init).toHaveBeenCalledTimes(1)
+    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/hiyori/Hiyori.model3.json')
+  })
+
+  it('initializes Live2D by default on mobile', async () => {
+    mockIsMobile.value = true
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('canvas').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Live2D ON')
+    expect(wrapper.text()).not.toContain('Live2D 已暂停')
+    expect(mockLive2DState.init).toHaveBeenCalledTimes(1)
+    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/hiyori/Hiyori.model3.json')
+  })
+
+  it('can pause Live2D on mobile without showing a load error', async () => {
+    mockIsMobile.value = true
+    mockLive2DState.loadError.value = 'PixiJS 未初始化，请刷新页面重试'
+
+    const wrapper = createWrapper()
+    const toggle = wrapper.find('button')
+    await toggle.trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Live2D OFF')
+    expect(wrapper.text()).not.toContain('模型加载失败')
+    expect(wrapper.text()).not.toContain('PixiJS 未初始化')
   })
 
   describe('idle state (no model)', () => {

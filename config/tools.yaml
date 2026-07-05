@@ -67,6 +67,7 @@ minecraft:
     host: "localhost"
     port: 25565
     username: "AnimettaBot"
+    version: "1.21"              # Match SpectatorPlus paper-1.2.1 / Fabric mc1.21
   safety:
     no_griefing: true           # 不破坏玩家建筑
     auto_heal: true             # 自动回血
@@ -74,6 +75,11 @@ minecraft:
   viewer:
     username: "LUN077"          # 旁观玩家：进入服务器 / bot 重连后自动 spectate 附身
     auto_spectate: true
+  runtime:
+    runtime_path: "C:/Users/30262/Project/voyager-mc-bot"   # 外部 voyager-mc-bot 项目
+    entrypoint: "src/index.js"
+    package_manager: "npm"
+    use_embedded_fallback: false   # embedded runtime 已移除
 
 # ========================================
 # 工具调用设置

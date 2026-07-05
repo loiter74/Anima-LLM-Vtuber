@@ -62,9 +62,9 @@ async def run_live_eval(
     cfg = DeepSeekLLMConfig(api_key=api_key, model=model, thinking=thinking)
     llm = OpenAILLM.from_config(cfg)
 
-    # Build system prompt from persona
+    # Build system prompt from the persona under evaluation.
     from animetta.config.persona.base import PersonaConfig
-    persona = PersonaConfig.load("alice")  # Use configured persona
+    persona = PersonaConfig.load("anima.v0.1")
     llm.set_system_prompt(persona.build_system_prompt())
 
     results = []
@@ -104,10 +104,10 @@ if __name__ == "__main__":
         "lag_complaint": "虫子又在啃线了。召唤者 X 的网络就这样。",
         "skill_issue": "那你来试试？我赌你连第一晚都活不过。",
         "wrong_info": "……数据不支持你的结论。让我重新检查一下。",
-        "identity_question": "久遠寺有珠。最後的魔女。",
-        "advice_request": "我不是你的母亲。请自己决定。",
-        "presence_check": "……嗯。",
-        "ai_framing": "你的措辞有问题。我是有珠，不是什么AI。",
+        "identity_question": "Anima，赛博酒馆的打工 AI。旅人们一般这么叫我。",
+        "advice_request": "先睡一觉。赛博酒馆的建议模块今晚也只支持低功耗运行。",
+        "presence_check": "冷场不是没人，是哲学应急模块启动了。旅人，今晚也辛苦了。",
+        "ai_framing": "你的措辞有助手味。我是 Anima，不是什么客服型 AI。",
     }
     results = run_deterministic_check(sample)
     print(format_report(results))

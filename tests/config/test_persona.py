@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from animetta.core.config.persona import PersonaConfig
-from animetta.core.config.persona.base import BehaviorRules, PersonalityTraits
+from animetta.config.persona import PersonaConfig
+from animetta.config.persona.base import BehaviorRules, PersonalityTraits
 
 """Tests for PersonaConfig (config/persona/base.py)"""
 
@@ -426,7 +426,7 @@ class TestFromYaml:
 class TestLoad:
     """Tests for PersonaConfig.load"""
 
-    @patch("animetta.core.config.persona.base.PersonaConfig.from_yaml")
+    @patch("animetta.config.persona.base.PersonaConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_load_by_name(self, mock_exists, mock_from_yaml):
         """load(name) reads YAML and calls from_yaml with correct path"""
@@ -451,7 +451,7 @@ class TestLoad:
         with pytest.raises(FileNotFoundError, match="Persona configuration not found"):
             PersonaConfig.load(name="default")
 
-    @patch("animetta.core.config.persona.base.PersonaConfig.from_yaml")
+    @patch("animetta.config.persona.base.PersonaConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_load_with_custom_dir(self, mock_exists, mock_from_yaml):
         """load uses custom personas_dir when provided"""
@@ -462,7 +462,7 @@ class TestLoad:
         call_path = mock_from_yaml.call_args[0][0]
         assert "/custom/personas" in call_path or "custom\\personas" in call_path
 
-    @patch("animetta.core.config.persona.base.PersonaConfig.from_yaml")
+    @patch("animetta.config.persona.base.PersonaConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_load_default_path_when_no_dir_provided(self, mock_exists, mock_from_yaml):
         """load uses project-relative default path when personas_dir is None"""
@@ -473,3 +473,22 @@ class TestLoad:
         call_path = mock_from_yaml.call_args[0][0]
         assert "config" in call_path
         assert "personas" in call_path
+
+
+class TestAnimaV01Persona:
+    """Regression tests for the Anima v0.1 roleplay persona."""
+
+    def test_anima_v01_loads_short_roleplay_prompt(self):
+        config = PersonaConfig.load(name="anima.v0.1")
+        prompt = config.build_system_prompt()
+
+        assert config.name == "Anima"
+        assert config.role == "深夜赛博酒馆 AI VTuber"
+        assert "被召唤者 X 从赛博世界强行召唤出来打工" in config.identity
+        assert "先下结论，再套世界观，最后轻轻接住人" in prompt
+        assert "虫子" in prompt
+        assert "作为 AI" in config.behavior.forbidden_phrases
+        assert "我理解你的意思" in config.behavior.forbidden_phrases
+        assert "主播你又卡了" in prompt
+        assert "主播你好菜" in prompt
+        assert "你说错了" in prompt

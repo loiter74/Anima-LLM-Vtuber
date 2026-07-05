@@ -15,7 +15,8 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+import contextlib
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
@@ -62,10 +63,8 @@ class StateCollector:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("[StateCollector] Stopped")
 

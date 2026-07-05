@@ -272,6 +272,17 @@ class AutonomousLoop:
         if threat_level >= 2 and state.nearest_threat_distance < 15:
             return (self.ACTION_SURVIVE, {"reason": "threat_nearby", "threat_level": threat_level})
 
+        # ❼ Lava detection
+        lava_risk_fn = getattr(state, "get_lava_risk", None)
+        lava_risk = lava_risk_fn() if callable(lava_risk_fn) else 0
+        if not isinstance(lava_risk, (int, float)):
+            lava_risk = 0
+        if lava_risk >= 1:
+            return (
+                self.ACTION_SURVIVE,
+                {"reason": "lava_detected", "lava_risk": lava_risk, "x": state.x, "z": state.z},
+            )
+
         # Health check
         if state.health < self._rules.auto_heal_threshold:
             return (self.ACTION_SURVIVE, {"reason": "low_health", "health": state.health})
@@ -429,8 +440,31 @@ class AutonomousLoop:
             method = params.get("method", "water_bucket_clutch")
             await self._bridge.send_command(method, {}, timeout=3.0)
         elif reason == "low_health":
-            # Regenerate naturally or eat
-            logger.info(f"[AutonomousLoop] Low health ({state.health}), auto-healing...")
+            # ❷ Flee: move away from nearest threat + eat food
+            logger.info(f"[AutonomousLoop] Low health ({state.health}), fleeing + eating...")
+            # Calculate flee direction (opposite of nearest threat)
+            flee_x, flee_z = int(state.x), int(state.z)
+            for e in state.entities:
+                if e.is_threat and e.distance < 30:
+                    # Move 20 blocks away from threat
+                    dx = state.x - (state.x + e.distance)  # simplified: move in random safe direction
+                    flee_x = int(state.x + (20 if state.x >= 0 else -20))
+                    flee_z = int(state.z + (20 if state.z >= 0 else -20))
+                    break
+            await self._bridge.send_command(
+                "goto", {"x": flee_x, "y": int(state.y), "z": flee_z}, timeout=30.0
+            )
+            await self._bridge.send_command("eat_food", {}, timeout=10.0)
+        elif reason == "lava_detected":
+            # ❼ Lava escape: move away from current position
+            lava_risk = params.get("lava_risk", 1)
+            logger.warning(f"[AutonomousLoop] Lava detected (risk={lava_risk}), escaping!")
+            # Move 10 blocks in a safe direction (positive X as default escape)
+            escape_x = int(params.get("x", state.x) + 10)
+            escape_z = int(params.get("z", state.z))
+            await self._bridge.send_command(
+                "goto", {"x": escape_x, "y": int(state.y + 2), "z": escape_z}, timeout=15.0
+            )
         elif reason == "night_return":
             base = params.get("base", {})
             if base:

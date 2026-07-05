@@ -57,6 +57,21 @@ class MinecraftMode(StrEnum):
     LIVE = "live"
 
 
+class MinecraftRuntimeConfig(BaseModel):
+    """External runtime configuration for the Minecraft bot process.
+
+    When a runtime_path is configured, the bridge launches the bot from that
+    directory. If empty, the bridge defaults to the external voyager-mc-bot
+    project directory (assumed sibling of the Anima repo).
+    """
+
+    runtime_path: str = ""  # empty → default to voyager-mc-bot sibling
+    entrypoint: str = "index.js"  # relative to runtime_path
+    package_manager: str = "npm"  # npm | yarn | pnpm
+    use_embedded_fallback: bool = False  # embedded runtime has been migrated out
+    install_command: str = ""  # empty → derive from package_manager ("npm install")
+
+
 class MinecraftConfig(BaseModel):
     enabled: bool = False
     mode: MinecraftMode = MinecraftMode.FALLBACK
@@ -65,3 +80,4 @@ class MinecraftConfig(BaseModel):
     safety: MinecraftSafetyConfig = MinecraftSafetyConfig()
     viewer: MinecraftViewerConfig = MinecraftViewerConfig()
     client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
+    runtime: MinecraftRuntimeConfig = MinecraftRuntimeConfig()

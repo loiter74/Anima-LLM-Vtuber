@@ -1,11 +1,22 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import AppLayout from '@/components/layout/AppLayout.vue'
 
+const mockIsMobile = vi.hoisted(() => ({ value: false, __v_isRef: true }))
+
 // Mock useDanmaku to avoid socket initialization
 vi.mock('@/composables/useDanmaku', () => ({
   useDanmaku: () => ({ store: {}, connect: vi.fn(), disconnect: vi.fn(), updateRoom: vi.fn() }),
+}))
+
+vi.mock('@/composables/useMobile', () => ({
+  useMobile: () => ({
+    isMobile: mockIsMobile,
+    isTablet: { value: false, __v_isRef: true },
+    isDesktop: { value: true, __v_isRef: true },
+    breakpoint: { value: 'desktop', __v_isRef: true },
+  }),
 }))
 
 function createWrapper() {
@@ -23,6 +34,10 @@ function createWrapper() {
 }
 
 describe('AppLayout', () => {
+  beforeEach(() => {
+    mockIsMobile.value = false
+  })
+
   it('renders Live2DRenderer stub', () => {
     const wrapper = createWrapper()
     const renderer = wrapper.findComponent({ name: 'Live2DRenderer' })
@@ -59,5 +74,18 @@ describe('AppLayout', () => {
   it('renders without errors', () => {
     const wrapper = createWrapper()
     expect(wrapper.exists()).toBe(true)
+  })
+
+  it('uses a full-screen Live2D stage behind the mobile panel', () => {
+    mockIsMobile.value = true
+
+    const wrapper = createWrapper()
+    const stage = wrapper.find('.mobile-stage')
+    const panel = wrapper.find('.mobile-panel')
+
+    expect(stage.exists()).toBe(true)
+    expect(stage.classes()).toContain('mobile-stage-fullscreen')
+    expect(panel.exists()).toBe(true)
+    expect(panel.classes()).toContain('mobile-panel-overlay')
   })
 })

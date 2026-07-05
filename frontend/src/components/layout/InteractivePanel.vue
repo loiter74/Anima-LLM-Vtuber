@@ -45,7 +45,7 @@ useDanmaku()
 
 <template>
   <!-- ========== MOBILE LAYOUT ========== -->
-  <div v-if="isMobile" class="flex flex-col h-full pointer-events-none">
+  <div v-if="isMobile" class="mobile-interactive-panel flex flex-col h-full pointer-events-none">
     <!-- Mobile: panel content -->
     <div class="flex-1 overflow-hidden relative pointer-events-auto">
       <Transition name="fade" mode="out-in">
@@ -59,11 +59,15 @@ useDanmaku()
     </div>
 
     <!-- Mobile: fixed bottom navigation bar -->
-    <nav class="shrink-0 pointer-events-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-c-surface/90 backdrop-blur-xl border-t border-c-border">
+    <nav
+      data-testid="mobile-tabbar"
+      class="mobile-tabbar shrink-0 pointer-events-auto grid grid-cols-6 items-center gap-1 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-c-surface/90 backdrop-blur-xl border-t border-c-border"
+    >
       <button
         v-for="tab in mobileTabs"
         :key="tab.key"
-        class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all touch-manipulation"
+        data-testid="mobile-tab-button"
+        class="mobile-tab-button flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-xl transition-all touch-manipulation"
         :class="activeTab === tab.key
           ? 'bg-c-accent/20 text-c-accent'
           : 'text-c-text-dim active:text-c-accent'"
@@ -126,6 +130,18 @@ useDanmaku()
 </template>
 
 <style scoped>
+.mobile-interactive-panel {
+  contain: layout paint;
+}
+
+.mobile-tabbar {
+  min-height: 58px;
+}
+
+.mobile-tab-button {
+  min-height: 42px;
+}
+
 /* Desktop Panel Container */
 .panel-container {
   width: 340px;

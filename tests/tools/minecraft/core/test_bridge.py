@@ -19,6 +19,10 @@ def mock_config():
     cfg.bot.host = "localhost"
     cfg.bot.port = 25565
     cfg.bot.username = "TestBot"
+    cfg.bot.version = None
+    cfg.runtime.runtime_path = ""  # default: resolves to voyager-mc-bot sibling
+    cfg.runtime.entrypoint = "index.js"
+    cfg.runtime.use_embedded_fallback = False
     return cfg
 
 
@@ -101,6 +105,29 @@ class TestMinecraftBridgeInit:
         bridge = MinecraftBridge(mock_config)
         assert bridge._autonomous_enabled is False
 
+    def test_resolve_bot_dir_keeps_invalid_configured_external_path(self, mock_config):
+        mock_config.runtime.runtime_path = "C:/missing/voyager-mc-bot"
+        bridge = MinecraftBridge(mock_config)
+
+        with patch("os.path.isdir", return_value=False):
+            resolved = bridge._resolve_bot_dir()
+
+        assert resolved.endswith("C:\\missing\\voyager-mc-bot") or resolved == "C:/missing/voyager-mc-bot"
+
+    def test_resolve_bot_dir_uses_embedded_path_only_when_enabled(self, mock_config):
+        mock_config.runtime.runtime_path = ""
+        mock_config.runtime.use_embedded_fallback = True
+        bridge = MinecraftBridge(mock_config)
+
+        def is_dir(path):
+            normalized = str(path).replace("\\", "/")
+            return normalized.endswith("/minecraft/bot")
+
+        with patch("os.path.isdir", side_effect=is_dir):
+            resolved = bridge._resolve_bot_dir()
+
+        assert resolved.replace("\\", "/").endswith("/minecraft/bot")
+
 
 class TestMinecraftBridgeStart:
     """Bridge.start() lifecycle tests."""
@@ -145,6 +172,28 @@ class TestMinecraftBridgeStart:
         assert result is True
         assert bridge.is_running is True
         assert bridge._process is mock_process
+
+    @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
+    async def test_start_passes_configured_minecraft_version(self, mock_is_available, mock_config, mock_process):
+        mock_config.bot.version = "1.21"
+        create_proc = AsyncMock(return_value=mock_process)
+        bridge = MinecraftBridge(mock_config)
+
+        with patch("os.path.exists", return_value=True), \
+             patch("asyncio.create_subprocess_exec", new=create_proc), \
+             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+            result = await bridge.start()
+
+        assert result is True
+        args = create_proc.await_args.args
+        assert args[:6] == (
+            "node",
+            args[1],
+            "localhost",
+            "25565",
+            "TestBot",
+            "1.21",
+        )
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
     async def test_start_login_timeout_still_succeeds(self, mock_is_available, mock_config, mock_process):
@@ -234,6 +283,58 @@ class TestMinecraftBridgeSendCommand:
 
         assert result["status"] == "error"
         assert "timed out" in result["result"]
+
+    async def test_send_command_timeout_triggers_restart_for_long_running_actions(
+        self, mock_config, mock_process
+    ):
+        """Timeout of collect/mine_shaft/branch_mine must trigger a bridge restart."""
+        bridge = MinecraftBridge(mock_config)
+        bridge._running = True
+        bridge._process = mock_process
+
+        stop_called = False
+        start_called = False
+
+        async def fake_stop():
+            nonlocal stop_called
+            stop_called = True
+
+        async def fake_start():
+            nonlocal start_called
+            start_called = True
+            return True
+
+        bridge.stop = fake_stop
+        bridge.start = fake_start
+
+        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+            result = await bridge.send_command("collect", timeout=0.1)
+
+        assert result["status"] == "error"
+        assert stop_called
+        assert start_called
+
+    async def test_send_command_timeout_no_restart_for_short_running_actions(
+        self, mock_config, mock_process
+    ):
+        """Timeout of regular actions (not collect/mine_shaft/branch_mine) must NOT restart."""
+        bridge = MinecraftBridge(mock_config)
+        bridge._running = True
+        bridge._process = mock_process
+
+        restart_called = False
+
+        async def fake_stop():
+            nonlocal restart_called
+            restart_called = True
+
+        bridge.stop = fake_stop
+
+        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+            result = await bridge.send_command("goto", timeout=0.1)
+
+        assert result["status"] == "error"
+        assert not restart_called
 
     async def test_send_command_exception(self, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)

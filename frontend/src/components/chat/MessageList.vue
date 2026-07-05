@@ -26,12 +26,13 @@ watch(() => store.lastMessage?.text, scrollToBottom)
 </script>
 
 <template>
-  <div
-    ref="listRef"
-    class="overflow-y-auto px-5 py-4"
-    :class="$attrs.class"
-    @scroll="handleScroll"
-  >
+	  <div
+	    ref="listRef"
+	    data-testid="message-list"
+	    class="message-list-stable overflow-y-auto px-5 py-4"
+	    :class="$attrs.class"
+	    @scroll="handleScroll"
+	  >
     <!-- Welcome screen (empty state) -->
     <WelcomeScreen v-if="store.messages.length === 0" />
 
@@ -49,4 +50,10 @@ watch(() => store.lastMessage?.text, scrollToBottom)
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+.message-list-stable {
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  padding-bottom: var(--s-5);
+}
 </style>

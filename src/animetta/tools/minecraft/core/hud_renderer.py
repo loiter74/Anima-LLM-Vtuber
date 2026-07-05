@@ -11,7 +11,7 @@ All methods return raw MC command strings to be executed via RCON or bot.chat().
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -160,28 +160,26 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     Shows: Health, Food, Position, Hostiles, Passives, Goal.
     Uses a single dummy objective 'hud_sidebar' with formatted lines.
     """
-    bot = "AnimettaBot"
-
     hp_color = _color_for_health(state.health)
     food_color = _color_for_food(state.food)
 
     # Build sidebar using a single dummy objective with line ordering
     lines = [
-        (15, f'{{"text":"━━━ Bot HUD ━━━","color":"gold","bold":true}}'),
+        (15, '{"text":"━━━ Bot HUD ━━━","color":"gold","bold":true}'),
         (14, f'{{"text":"❤ {state.health:.0f}/20 { _bar(state.health, 20)}","color":"{hp_color}"}}'),
         (13, f'{{"text":"🍖 {state.food:.0f}/20 { _bar(state.food, 20)}","color":"{food_color}"}}'),
         (12, f'{{"text":"📍 {state.x:.0f} {state.y:.0f} {state.z:.0f}","color":"aqua"}}'),
         (11, f'{{"text":"🌍 {state.dimension}","color":"white"}}'),
         (10, f'{{"text":"🌿 {state.biome}","color":"green"}}'),
         (9, f'{{"text":"⏰ {state.time_of_day} | {state.weather}","color":"yellow"}}'),
-        (8, f'{{"text":"━━━ Entities ━━━","color":"gold","bold":true}}'),
+        (8, '{"text":"━━━ Entities ━━━","color":"gold","bold":true}'),
         (7, f'{{"text":"⚔ Hostiles: {state.nearby_hostiles}","color":"red"}}'),
         (6, f'{{"text":"🐄 Passives: {state.nearby_passives}","color":"green"}}'),
     ]
 
     if state.current_goal:
         lines.append(
-            (5, f'{{"text":"━━━ Goal ━━━","color":"gold","bold":true}}')
+            (5, '{"text":"━━━ Goal ━━━","color":"gold","bold":true}')
         )
         lines.append(
             (4, f'{{"text":"🎯 {state.current_goal[:30]}","color":"light_purple"}}')
@@ -220,10 +218,8 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     ]
 
     if state.current_goal:
-        # Truncate goal to fit scoreboard line
-        goal_len = min(len(state.current_goal), 16)
         cmds.append(
-            f"scoreboard players set 🎯_Goal hud_sidebar 0"
+            "scoreboard players set 🎯_Goal hud_sidebar 0"
         )
 
     return cmds

@@ -1,6 +1,6 @@
 # Minecraft 机器人架构
 
-> 最后更新：2026-06-28
+> 最后更新：2026-07-04
 >
 > 本文档为 [`minecraft-bot-architecture.md`](minecraft-bot-architecture.md) 的中文翻译，技术术语与代码标识符保留原文以便对照。
 >
@@ -23,7 +23,7 @@ flowchart LR
   SocketHandlers --> Bridge
   Tools --> Bridge
   Bridge --> IPC["JSON-line IPC"]
-  IPC --> Node["bot/index.js"]
+  IPC --> Node["voyager-mc-bot/src/index.js"]
   Node --> Mineflayer["Mineflayer 机器人"]
   Mineflayer --> Server["Minecraft 服务器"]
 ```
@@ -51,8 +51,9 @@ Node 用以下格式回复：
 | 路径 | 职责 |
 | --- | --- |
 | `src/animetta/tools/minecraft/core/` | Python 桥接层、配置、LangChain 工具注册、HUD 状态采集 |
-| `src/animetta/tools/minecraft/bot/` | Node.js Mineflayer 进程及具体动作处理器 |
-| `src/animetta/tools/minecraft/bot/behaviors/` | Node 端自动进食、战斗守卫、计划执行器 |
+| `src/animetta/tools/gamebot/` | 通用 game-bot 契约、客户端与 stdio transport |
+| `C:/Users/30262/Project/voyager-mc-bot/src/` | 外部 Node.js Mineflayer runtime 及具体动作处理器 |
+| `C:/Users/30262/Project/voyager-mc-bot/src/behaviors/` | Node 端自动进食、战斗守卫、计划执行器 |
 | `src/animetta/tools/minecraft/autonomous/` | Python 端自主决策循环、规则引擎、LLM 规划器 |
 | `src/animetta/tools/minecraft/skill/` | Voyager 风格技能模型、技能库、执行器、抽取器、校验器 |
 | `src/animetta/tools/minecraft/survival/` | 确定性的“从木头到铁”生存状态机 |
@@ -73,13 +74,13 @@ sequenceDiagram
   participant H as MinecraftHandlers
   participant T as core/tools.py
   participant B as MinecraftBridge
-  participant N as Node bot/index.js
+  participant N as Node voyager-mc-bot/src/index.js
 
   UI->>H: minecraft:start
   H->>T: init_bridge(config)
   T->>B: MinecraftBridge(...)
   H->>B: bridge.start()
-  B->>N: spawn node index.js host port username
+  B->>N: spawn configured external runtime host port username
   N-->>B: event login/spawn
   H->>H: start StateCollector
   H-->>UI: minecraft.status connected=true

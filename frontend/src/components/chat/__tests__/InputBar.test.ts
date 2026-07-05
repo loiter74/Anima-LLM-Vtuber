@@ -1,6 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import InputBar from '@/components/chat/InputBar.vue'
+
+const mockIsMobile = vi.hoisted(() => ({ value: false, __v_isRef: true }))
+
+vi.mock('@/composables/useMobile', () => ({
+  useMobile: () => ({ isMobile: mockIsMobile }),
+}))
 
 function createWrapper(sendText: (text: string) => void = vi.fn()) {
   return mount(InputBar, {
@@ -15,6 +21,10 @@ function createWrapper(sendText: (text: string) => void = vi.fn()) {
 }
 
 describe('InputBar', () => {
+  beforeEach(() => {
+    mockIsMobile.value = false
+  })
+
   it('renders textarea and send button', () => {
     const wrapper = createWrapper()
     expect(wrapper.find('textarea').exists()).toBe(true)
@@ -96,5 +106,17 @@ describe('InputBar', () => {
     // The VoiceButton should be rendered as a stub
     const voiceBtn = wrapper.findComponent({ name: 'VoiceButton' })
     expect(voiceBtn.exists()).toBe(true)
+  })
+
+  it('uses stable fixed bottom spacing on mobile', () => {
+    mockIsMobile.value = true
+
+    const wrapper = createWrapper()
+    const root = wrapper.find('[data-testid="chat-input-bar"]')
+
+    expect(root.exists()).toBe(true)
+    expect(root.classes()).toContain('mobile-input-bar')
+    expect(root.classes()).toContain('gap-3')
+    expect(wrapper.find('textarea').classes()).toContain('mobile-input-textarea')
   })
 })

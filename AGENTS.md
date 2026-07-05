@@ -67,6 +67,23 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 - **TDD preferred** — write tests first
 - **Frontend styling** — follow `STYLE_GUIDE.md`; use design-system tokens and UnoCSS utilities, not raw hardcoded colors.
 
+## VIBE CODING 八荣八耻
+
+与 AI 协作（Codex / Claude / Copilot）时的铁律：
+
+| # | 以…为耻 | 以…为荣 |
+|---|---------|---------|
+| 1 | 臆猜接口 | 查档求证 |
+| 2 | 模糊开工 | 对齐需求 |
+| 3 | 脑补业务 | 请示规则 |
+| 4 | 新增冗余 | 复用存量 |
+| 5 | 省略校验 | 完备测例 |
+| 6 | 乱改架构 | 恪守规范 |
+| 7 | 不懂装懂 | 坦诚存疑 |
+| 8 | 批量乱改 | 分步迭代 |
+
+**核心原则**：别让 AI 瞎猜，喂它准确信息。AI 能力强但没有项目上下文，你不给它准确信息它就只能臆猜——以上每一条都在堵这个漏洞。
+
 ## AGENT WORKFLOW RULES
 
 ### Testing (QA)

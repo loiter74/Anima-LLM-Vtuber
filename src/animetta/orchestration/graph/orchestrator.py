@@ -100,8 +100,8 @@ class LangGraphOrchestrator:
             self.graph = create_default_graph(
                 enable_memory=False,
                 enable_tools=self.enable_tools,
-                tools=self.tool_manager.core.tools if self.tool_manager else None,
-                tools_map=self.tool_manager.core.tools_map if self.tool_manager else None,
+                tools=self.tool_manager.tools if self.tool_manager else None,
+                tools_map=self.tool_manager.tools_map if self.tool_manager else None,
             )
 
             self._is_running = True
@@ -281,16 +281,16 @@ class LangGraphOrchestrator:
 
     def _get_system_prompt(self) -> str | None:
         """Get system prompt from persona config."""
-        if self.service_context and self.service_context.core.config:
-            persona = self.service_context.core.config.get_persona()
+        if self.service_context and self.service_context.config:
+            persona = self.service_context.config.get_persona()
             if persona:
                 return persona.build_system_prompt()
         return None
 
     def _get_persona_dict(self) -> dict[str, Any] | None:
         """Get persona config dict"""
-        if self.service_context and self.service_context.core.config:
-            persona = self.service_context.core.config.get_persona()
+        if self.service_context and self.service_context.config:
+            persona = self.service_context.config.get_persona()
             if persona:
                 result = {
                     "name": persona.name,

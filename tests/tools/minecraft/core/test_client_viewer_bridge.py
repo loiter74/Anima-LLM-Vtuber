@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from animetta.tools.minecraft.core.bridge import MinecraftBridge
 from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,

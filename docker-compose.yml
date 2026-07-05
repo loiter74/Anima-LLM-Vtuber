@@ -13,7 +13,7 @@ services:
       - ANIMETTA_DEVICE=cuda
       - ANIMETTA_ASR=${ANIMETTA_ASR:-mock}
       - ANIMETTA_TTS=${ANIMETTA_TTS:-mock}
-      - ANIMETTA_LLM=${ANIMETTA_LLM:-mock}
+      - ANIMETTA_LLM=${ANIMETTA_LLM:-deepseek}
       - ANIMETTA_VAD=${ANIMETTA_VAD:-mock}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

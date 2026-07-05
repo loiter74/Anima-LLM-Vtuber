@@ -1,6 +1,6 @@
 # Minecraft Bot Architecture
 
-> Last updated: 2026-06-28
+> Last updated: 2026-07-04
 >
 > This document explains the current Minecraft bot implementation in Animetta.
 > The short version: Python decides, stores state, exposes tools, and runs
@@ -23,7 +23,7 @@ flowchart LR
   SocketHandlers --> Bridge
   Tools --> Bridge
   Bridge --> IPC["JSON-line IPC"]
-  IPC --> Node["bot/index.js"]
+  IPC --> Node["voyager-mc-bot/src/index.js"]
   Node --> Mineflayer["Mineflayer Bot"]
   Mineflayer --> Server["Minecraft Server"]
 ```
@@ -51,8 +51,9 @@ or:
 | Path | Role |
 | --- | --- |
 | `src/animetta/tools/minecraft/core/` | Python bridge, config, LangChain tool registration, HUD state collection |
-| `src/animetta/tools/minecraft/bot/` | Node.js Mineflayer process and concrete action handlers |
-| `src/animetta/tools/minecraft/bot/behaviors/` | Node-side auto-eat, combat guard, plan executor |
+| `src/animetta/tools/gamebot/` | Generic game-bot contracts, client, and stdio transport |
+| `C:/Users/30262/Project/voyager-mc-bot/src/` | External Node.js Mineflayer runtime and concrete action handlers |
+| `C:/Users/30262/Project/voyager-mc-bot/src/behaviors/` | Node-side auto-eat, combat guard, plan executor |
 | `src/animetta/tools/minecraft/autonomous/` | Python-side autonomous decision loop, rules engine, LLM planner |
 | `src/animetta/tools/minecraft/skill/` | Voyager-style skill models, library, executor, extractor, validator |
 | `src/animetta/tools/minecraft/survival/` | Deterministic wood-to-iron survival state machine |
@@ -73,13 +74,13 @@ sequenceDiagram
   participant H as MinecraftHandlers
   participant T as core/tools.py
   participant B as MinecraftBridge
-  participant N as Node bot/index.js
+  participant N as Node voyager-mc-bot/src/index.js
 
   UI->>H: minecraft:start
   H->>T: init_bridge(config)
   T->>B: MinecraftBridge(...)
   H->>B: bridge.start()
-  B->>N: spawn node index.js host port username
+  B->>N: spawn configured external runtime host port username
   N-->>B: event login/spawn
   H->>H: start StateCollector
   H-->>UI: minecraft.status connected=true

@@ -7,7 +7,7 @@
 
 ## OVERVIEW
 
-LLM tool calling system with built-in tools (calculator, web search, file I/O), MCP protocol bridge for external tool servers, and Minecraft bot integration. ⚠️ The Minecraft bot is a Node.js package embedded inside the Python tree.
+LLM tool calling system with built-in tools (calculator, web search, file I/O), MCP protocol bridge for external tool servers, and Minecraft bot integration. The Minecraft action bot now runs as the external Node.js project `C:/Users/30262/Project/voyager-mc-bot`; Anima owns the Python bridge, Minecraft adapters, and generic game-bot contracts.
 
 ## STRUCTURE
 
@@ -19,15 +19,14 @@ tools/
 ├── mcp_bridge.py            # MCP protocol bridge — connects to external MCP servers
 ├── audio_tools.py           # Audio-related tools
 ├── config.py                # Tool configuration loader (from config/tools.yaml)
-└── minecraft/               # ⚠️ Node.js bot inside Python tree!
-    ├── bridge.py            #   Python ↔ Node.js IPC bridge
-    ├── tools.py             #   Minecraft tool definitions (mine, build, navigate, etc.)
-    ├── autonomous.py        #   Autonomous agent controller
-    ├── planner.py           #   Action planner
-    ├── config.py            #   Minecraft config
-    ├── rules_engine.py      #   Behavior rules engine
-    ├── world_state.py       #   World state tracker
-    └── bot/                 #   ⚠️ Node.js package: package.json, index.js, behaviors/, scripts/
+├── gamebot/                 # Generic game-bot contracts, client, and stdio transport
+└── minecraft/               # Minecraft-specific Python adapters and orchestration
+    ├── core/bridge.py       #   Python ↔ external Node.js runtime IPC bridge
+    ├── core/tools.py        #   Minecraft tool definitions (mine, build, navigate, etc.)
+    ├── autonomous/          #   Autonomous agent controller
+    ├── skill/               #   Voyager-style skill models and execution
+    ├── survival/            #   Iron-survival runner
+    └── tech_tree/           #   Tech-tree progression runner
 ```
 
 ## WHERE TO LOOK
@@ -37,7 +36,7 @@ tools/
 | Add built-in tool | `base.py` | Use `@tool` decorator, add to config/tools.yaml |
 | Add custom tool | `custom_tools.py` | User-defined, registered at runtime |
 | Connect MCP server | `mcp_bridge.py` | Configure in config/tools.yaml under mcp_servers |
-| Minecraft bot logic | `minecraft/bot/index.js` | ⚠️ JavaScript — cross-language IPC via bridge.py |
+| Minecraft bot logic | `C:/Users/30262/Project/voyager-mc-bot/src/index.js` | JavaScript runtime — cross-language IPC via `minecraft/core/bridge.py` |
 | Minecraft tool defs | `minecraft/tools.py` | Python-side tool definitions for LLM |
 | Tool configuration | `config.py` + `config/tools.yaml` | Enable/disable tools, MCP servers, settings |
 
@@ -45,18 +44,18 @@ tools/
 
 - **@tool decorator**: LangChain `@tool` for built-in tools — auto-discovered by tool_manager
 - **MCP bridge**: stdio transport to external MCP servers, tools exposed via mcp_bridge
-- **Cross-language Minecraft**: Python bridge.py spawns Node.js process, communicates via JSON over stdin/stdout
+- **Cross-language Minecraft**: Python `minecraft/core/bridge.py` spawns the configured external Node.js process and communicates via JSON over stdin/stdout
 - **Tool config**: config/tools.yaml → tool_config.py → ToolManager in orchestration/graph/
 
 ## ANTI-PATTERNS
 
-- ❌ Never modify minecraft/bot/ Node.js code from the Python side — use bridge.py IPC
+- ❌ Never reintroduce a Node.js runtime under `src/animetta/tools/minecraft/bot/` without a new migration plan
 - ❌ Never add tools without corresponding config in config/tools.yaml
 - ❌ Do not remove minecraft/ thinking it's "just a bot" — it's cross-language, removal breaks imports
 
 ## NOTES
 
-- Minecraft bot is a Mineflayer (Node.js) bot — the ONLY JavaScript code in the Python backend
+- Minecraft bot is a Mineflayer (Node.js) runtime in `C:/Users/30262/Project/voyager-mc-bot`; Anima launches it through `config/tools.yaml` runtime settings
 - MCP bridge supports stdio transport only; HTTP/SSE not yet implemented
 - Tool execution timeout: 30s (configurable in tools.yaml)
 - Max 5 tool calls per LLM turn
