@@ -14,19 +14,107 @@ from animetta.tracing.metrics import get_rag_chunks, get_rag_duration, get_rag_t
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
 from .node_error import log_node_error
-from .state import AgentState, log_timing
+from .state import AFFINITY_MAX, AFFINITY_MIN, DEFAULT_AFFINITY, AgentState, log_timing
 
 # Configurable timeout for LLM provider calls (default: 30 seconds)
 TIMEOUT_SECONDS = 30
 FALLBACK_RESPONSE = "I need a moment to think about that."
 
-# Regex for emotion tags like [happy], [neutral], [sad]
+# Regex for emotion tags like [happy], [neutral], [sad]. Does NOT match
+# ``[affinity:N]`` — affinity marker stripping is handled exclusively by
+# ``_extract_and_update_affinity`` (which respects the 【debug】 visibility
+# switch). Keeping these regexes separate prevents the emotion stripper from
+# clobbering a marker that the affinity parser deliberately preserved.
 _EMOTION_TAG_RE = re.compile(r"\s*\[[\w-]+\]\s*")
+
+# Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
+# The LLM emits this at the end of each reply per the AffinityPromptSource
+# contract. Parsed value flows into state["affinity"] + metadata for the next
+# turn's prompt overlay.
+_AFFINITY_MARKER_RE = re.compile(r"\[affinity:(-?\d+)\]")
+_SENTENCE_END_RE = re.compile(r"([^。！？!?]+)([。！？!?])")
 
 
 def _strip_emotion_tags(text: str) -> str:
     """Remove emotion tags like [happy], [neutral] from LLM output."""
     return _EMOTION_TAG_RE.sub(" ", text).strip()
+
+
+def _enforce_persona_verbal_tics(response_text: str, system_prompt: str | None) -> str:
+    """Apply explicit persona verbal-tic hard rules to visible replies.
+
+    This is intentionally narrow: it only handles the Anima v0.1-style
+    "每一句话后面都要加上喵" rule when it appears in the compiled prompt.
+    """
+    if not response_text or not system_prompt:
+        return response_text
+    if "每一句话后面都要加上喵" not in system_prompt:
+        return response_text
+
+    def _add_nya(match: re.Match[str]) -> str:
+        body = match.group(1).rstrip()
+        punct = match.group(2)
+        if body.endswith("喵"):
+            return f"{body}{punct}"
+        return f"{body}喵{punct}"
+
+    rewritten = _SENTENCE_END_RE.sub(_add_nya, response_text)
+    if rewritten == response_text and response_text.strip() and not response_text.rstrip().endswith("喵"):
+        return f"{response_text.rstrip()}喵"
+    return rewritten
+
+
+def _extract_and_update_affinity(state: dict[str, Any], response_text: str) -> str:
+    """Parse the LLM's ``[affinity:N]`` marker, write the value back to state.
+
+    The marker is Galgame-style self-report: the LLM emits its updated
+    affection toward the 旅人 at the end of each reply (per
+    AffinityPromptSource contract). We:
+    1. Find the last ``[affinity:N]`` occurrence (in case of repetition).
+    2. Clamp to ``[AFFINITY_MIN, AFFINITY_MAX]``.
+    3. Write to ``state["affinity"]`` and ``state["metadata"]["affinity"]``
+       so the next turn's build_context() picks it up.
+    4. Return the response text with the marker stripped — UNLESS the user
+       sent ``【debug】`` on this turn, in which case the marker is kept
+       visible (per the affinity_marker special_behavior contract).
+
+    If no marker is present, ``state["affinity"]`` is left untouched (the
+    previous turn's value carries over via metadata) and the text is
+    returned unchanged.
+
+    Args:
+        state: AgentState dict (mutated in place — affinity + metadata).
+        response_text: Raw LLM response (may contain ``[affinity:N]``).
+
+    Returns:
+        The response text; marker stripped unless this is a 【debug】 turn.
+    """
+    matches = _AFFINITY_MARKER_RE.findall(response_text or "")
+    if not matches:
+        return response_text
+
+    # Last match wins (LLM sometimes double-emits; final value is canonical).
+    raw_value = int(matches[-1])
+    clamped = max(AFFINITY_MIN, min(AFFINITY_MAX, raw_value))
+    if clamped != raw_value:
+        logger.debug(
+            f"[affinity] LLM emitted out-of-range value {raw_value}; clamped to {clamped}"
+        )
+
+    state["affinity"] = clamped
+    metadata = state.setdefault("metadata", {})
+    metadata["affinity"] = clamped
+    logger.info(f"[affinity] Updated to {clamped}/100")
+
+    # 【debug】 visibility switch: if the user asked for debug this turn,
+    # keep the marker so they can see the raw value. Otherwise strip it.
+    user_text = state.get("user_text", "") or ""
+    if "【debug】" in user_text:
+        logger.debug("[affinity] 【debug】 turn — keeping marker visible")
+        return response_text
+
+    # Strip ALL affinity markers from the visible text.
+    return _AFFINITY_MARKER_RE.sub("", response_text)
 
 # ========================================
 # RAG memory retrieval helper functions
@@ -313,6 +401,11 @@ async def _llm_with_tools(
             else:
                 full_response = response.get("content", "")
                 logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
+
+                # ── Affinity marker parsing ── (same as streaming path)
+                full_response = _extract_and_update_affinity(state, full_response)
+                original_response = full_response
+                full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
                 ai_message = AIMessage(content=full_response)
 
                 # after_llm_call notification (non-blocking)
@@ -320,9 +413,10 @@ async def _llm_with_tools(
 
                 return {
                     "response_text": _strip_emotion_tags(full_response),
-                    "response_chunks": [full_response],
+                    "response_chunks": [full_response if full_response != original_response else original_response],
                     "messages": [ai_message],
                     "tool_calls": None,
+                    "metadata": {**state.get("metadata", {})},
                 }
 
     except Exception as e:
@@ -385,6 +479,9 @@ async def _llm_without_tools(
         full_response = FALLBACK_RESPONSE
         chunks = [FALLBACK_RESPONSE]
 
+        # Note: no affinity marker in the FALLBACK_RESPONSE, so the value
+        # carries over from the previous turn (correct behavior — we did not
+        # actually talk to the 旅人, affection shouldn't shift).
         ai_message = AIMessage(content=full_response)
         return {
             "response_text": _strip_emotion_tags(full_response),
@@ -399,6 +496,20 @@ async def _llm_without_tools(
     logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
     log_timing(state, "llm.api_call", llm_duration,
                f"chat_stream | chunks={len(chunks)} | ttfb_first_chunk=<see llm_engine.log>")
+
+    # ── Affinity marker parsing ──
+    # Extract [affinity:N] (mutates state + metadata) and strip the marker
+    # from the visible text. Done before AIMessage construction so the chat
+    # history (used for roleplay-guard drift detection next turn) doesn't
+    # carry stale markers.
+    full_response = _extract_and_update_affinity(state, full_response)
+    original_response = full_response
+    full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
+    # Also strip any chunks that may contain the marker (defensive — the
+    # streaming chunks accumulate the raw marker).
+    chunks = [full_response] if full_response != original_response else [
+        _AFFINITY_MARKER_RE.sub("", c) for c in chunks
+    ]
 
     ai_message = AIMessage(content=full_response)
 

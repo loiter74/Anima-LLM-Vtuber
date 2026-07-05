@@ -10,7 +10,9 @@ from typing import Any
 class SectionRole:
     """Semantic role for a prompt section."""
     PERSONA = "persona"
+    AFFINITY = "affinity"
     RUNTIME_PERSONALITY = "runtime_personality"
+    IMPROVISATION = "improvisation"
     CORRECTION = "correction"
     MEMORY = "memory"
     TOOL_INSTRUCTION = "tool_instruction"
@@ -19,7 +21,9 @@ class SectionRole:
 class SectionPriority(IntEnum):
     """Rendering priority (lower number = rendered first)."""
     PERSONA = 100
+    AFFINITY = 150  # After persona identity, before runtime personality overlay
     RUNTIME_PERSONALITY = 200
+    IMPROVISATION = 225
     CORRECTION = 250  # After runtime personality, before memory
     MEMORY = 300
     TOOL_INSTRUCTION = 400
@@ -52,6 +56,10 @@ class PromptContext:
     mbti_tf: int = 50
     mbti_jp: int = 50
     roleplay_correction: str = ""
+    # Affinity — Galgame-style 好感度 toward the current 旅人.
+    # Default 50 (neutral); updated each turn from the LLM's [affinity:N] marker.
+    affinity: int = 50
+    config_version: int = 1
 
 
 @dataclass
@@ -63,3 +71,4 @@ class CompiledPrompt:
     warnings: list[str] = field(default_factory=list)
     memory_included: bool = False
     memory_atom_count: int = 0
+    config_version: int = 1

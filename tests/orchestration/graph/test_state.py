@@ -9,6 +9,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
 
 from animetta.orchestration.graph.state import (
+    AFFINITY_MAX,
+    AFFINITY_MIN,
+    DEFAULT_AFFINITY,
     create_ai_message,
     create_initial_state,
     create_system_message,
@@ -51,6 +54,7 @@ class TestAgentStateKeys:
             "user_id",
             "user_name",
             "metadata",
+            "config_version",
             # Error handling
             "error",
             "should_retry",
@@ -66,6 +70,8 @@ class TestAgentStateKeys:
             # Personality
             "personality_mode",
             "personality_mood",
+            # Affinity (Galgame-style 好感度 overlay)
+            "affinity",
         }
         assert keys == expected, f"Missing or extra keys: {keys ^ expected}"
 
@@ -126,6 +132,8 @@ class TestCreateInitialState:
         # Personality defaults
         assert state["personality_mode"] == "default"
         assert state["personality_mood"] is None
+        # Affinity default — neutral first impression (DEFAULT_AFFINITY=50)
+        assert state["affinity"] == 50
 
     def test_override_input_type(self):
         """input_type can be overridden."""
@@ -316,3 +324,36 @@ class TestLogTiming:
         original_id = id(state["_timings"])
         log_timing(state, "x", 1.0)
         assert id(state["_timings"]) == original_id
+
+
+# ── Affinity ───────────────────────────────────────────────────────────
+
+
+class TestAffinityDefaults:
+    """Affinity (Galgame-style 好感度) constants and default value."""
+
+    def test_default_affinity_constant(self):
+        """DEFAULT_AFFINITY is 50 (neutral first impression)."""
+        assert DEFAULT_AFFINITY == 50
+
+    def test_affinity_range_constants(self):
+        """AFFINITY_MIN/MAX bracket the valid range."""
+        assert AFFINITY_MIN == 0
+        assert AFFINITY_MAX == 100
+
+    def test_initial_state_uses_default_affinity(self):
+        """A freshly-created state has affinity == DEFAULT_AFFINITY."""
+        state = create_initial_state(session_id="sess_01")
+        assert state["affinity"] == DEFAULT_AFFINITY
+
+    def test_affinity_independent_per_session(self):
+        """Two sessions don't share affinity (each call is fresh)."""
+        s1 = create_initial_state(session_id="a")
+        s2 = create_initial_state(session_id="b")
+        s1["affinity"] = 90
+        assert s2["affinity"] == DEFAULT_AFFINITY  # unchanged
+
+    def test_affinity_field_typed_int(self):
+        """The affinity default is a Python int (not str/float)."""
+        state = create_initial_state(session_id="sess_01")
+        assert isinstance(state["affinity"], int)

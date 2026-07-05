@@ -10,20 +10,25 @@ from animetta.orchestration.prompting.types import CompiledPrompt
 
 @pytest.mark.asyncio
 async def test_persona_only():
-    """Only persona, no memory or overlay."""
+    """Persona + default affinity section (no overlay, no memory).
+
+    AffinityPromptSource always emits a section (default value 50), so the
+    minimal prompt is persona + affinity + improvised chat = 3 sections.
+    """
     state = {
         "session_id": "test",
         "system_prompt": "You are Aura.",
         "metadata": {},
     }
     result = await compile_prompt(state)
-    assert result.system_prompt == "You are Aura."
-    assert result.section_count == 1  # persona only (runtime_personality empty → omitted)
+    assert result.system_prompt.startswith("You are Aura.")
+    assert "好感度状态" in result.system_prompt  # affinity section present
+    assert result.section_count == 3  # persona + affinity + improvised_chat
 
 
 @pytest.mark.asyncio
 async def test_persona_plus_overlay():
-    """Persona + runtime personality overlay."""
+    """Persona + affinity + runtime personality overlay + improvised chat = 4 sections."""
     state = {
         "session_id": "test",
         "system_prompt": "You are Aura.",
@@ -32,7 +37,7 @@ async def test_persona_plus_overlay():
     result = await compile_prompt(state)
     assert "You are Aura." in result.system_prompt
     assert "当前情绪：保持积极愉快的语气" in result.system_prompt
-    assert result.section_count == 2
+    assert result.section_count == 4  # persona + affinity + overlay + improvised_chat
 
 
 @pytest.mark.asyncio
@@ -99,6 +104,32 @@ async def test_mood_overlay():
 
 
 @pytest.mark.asyncio
+async def test_improvised_chat_section_present_by_default():
+    """Realtime Anima prompt should explicitly avoid stiff repeated templates."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    assert "即兴闲聊模式" in result.system_prompt
+    assert "不要复用最近回复的开头" in result.system_prompt
+    assert "improvised_chat" in result.section_names
+
+
+@pytest.mark.asyncio
+async def test_config_version_metadata_flows_into_compiled_prompt():
+    """CompiledPrompt exposes the runtime config version used for this turn."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {"config_version": 7},
+    }
+    result = await compile_prompt(state)
+    assert result.config_version == 7
+
+
+@pytest.mark.asyncio
 async def test_section_names_in_metadata():
     """Metadata includes section names."""
     state = {
@@ -108,3 +139,184 @@ async def test_section_names_in_metadata():
     }
     result = await compile_prompt(state)
     assert "persona" in result.section_names
+
+
+# ── Affinity overlay tests ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_default_affinity_section_appears():
+    """A fresh state always includes an affinity section (default 50)."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    assert "好感度状态" in result.system_prompt
+    assert "当前对旅人的好感度: 50/100" in result.system_prompt
+    assert "affinity" in result.section_names
+
+
+@pytest.mark.asyncio
+async def test_affinity_value_from_metadata():
+    """Affinity value flows from metadata into the prompt."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {"affinity": 82},
+    }
+    result = await compile_prompt(state)
+    assert "当前对旅人的好感度: 82/100" in result.system_prompt
+    assert "亲近" in result.system_prompt  # band for 71-85
+
+
+@pytest.mark.asyncio
+async def test_affinity_section_ordering():
+    """Affinity (priority 150) renders after persona (100), before overlay (200)."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "[PERSONA-BLOCK]",
+        "metadata": {
+            "affinity": 60,
+            "personality_overlay": "[OVERLAY-BLOCK]",
+        },
+    }
+    result = await compile_prompt(state)
+    persona_pos = result.system_prompt.index("[PERSONA-BLOCK]")
+    affinity_pos = result.system_prompt.index("好感度状态")
+    overlay_pos = result.system_prompt.index("[OVERLAY-BLOCK]")
+    assert persona_pos < affinity_pos < overlay_pos, (
+        f"ordering wrong: persona={persona_pos}, affinity={affinity_pos}, overlay={overlay_pos}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_affinity_band_text_changes_with_value():
+    """Different affinity values produce different band labels in the prompt."""
+    bands = {}
+    for value, expected_substring in [(15, "警惕疏离"), (45, "礼貌"), (62, "略熟"), (78, "亲近"), (92, "宠溺")]:
+        state = {
+            "session_id": "test",
+            "system_prompt": "Base.",
+            "metadata": {"affinity": value},
+        }
+        result = await compile_prompt(state)
+        assert expected_substring in result.system_prompt, (
+            f"value={value} should mention {expected_substring!r}"
+        )
+        bands[value] = expected_substring
+    # Sanity: bands are actually different across the range
+    assert len(set(bands.values())) == 5
+
+
+@pytest.mark.asyncio
+async def test_affinity_clamped_to_display_range():
+    """Out-of-range affinity values are clamped for display (no crash)."""
+    for raw_value in [-50, 200]:
+        state = {
+            "session_id": "test",
+            "system_prompt": "Base.",
+            "metadata": {"affinity": raw_value},
+        }
+        result = await compile_prompt(state)
+        # Clamped to [0, 100], prompt still compiles
+        assert "当前对旅人的好感度:" in result.system_prompt
+
+
+# ── Live improvisation section tests (task 1.5) ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_improvisation_section_included_and_named():
+    """Live improvisation section is present with stable name."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base persona.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    assert "improvised_chat" in result.section_names
+    assert "即兴闲聊模式" in result.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_improvisation_ordered_before_memory():
+    """Live improvisation (priority 225) appears before memory (priority 300)."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "[PERSONA]",
+        "metadata": {},
+    }
+    result = await compile_prompt(
+        state, memory_context="## 相关记忆\n用户喜欢猫"
+    )
+    improv_pos = result.system_prompt.index("即兴闲聊模式")
+    memory_pos = result.system_prompt.index("相关记忆")
+    assert improv_pos < memory_pos, (
+        f"improvisation ({improv_pos}) should come before memory ({memory_pos})"
+    )
+
+
+@pytest.mark.asyncio
+async def test_improvisation_discourages_customer_service_phrasing():
+    """The section should explicitly forbid assistant/customer-service phrases."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    prompt = result.system_prompt
+    # Should contain explicit prohibitions
+    assert "禁止" in prompt
+    assert "客服" in prompt or "当然可以" in prompt
+
+
+@pytest.mark.asyncio
+async def test_improvisation_promotes_short_anima_replies():
+    """The section should promote short replies with Anima voice anchors."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    prompt = result.system_prompt
+    # Should mention style anchors
+    assert "Anima" in prompt or "毒舌" in prompt or "慵懒" in prompt
+
+
+@pytest.mark.asyncio
+async def test_improvisation_preserves_persona_verbal_tics():
+    """Improvisation must not override persona-specific suffixes or口癖."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "Base persona says every sentence ends with 喵.",
+        "metadata": {},
+    }
+    result = await compile_prompt(state)
+    prompt = result.system_prompt
+    assert "基础人设" in prompt
+    assert "口癖" in prompt
+    assert "句尾后缀" in prompt
+
+
+@pytest.mark.asyncio
+async def test_persona_and_affinity_unchanged_after_improvisation():
+    """Persona, affinity, and runtime sections remain deterministic."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "[FIXED-PERSONA]",
+        "metadata": {"affinity": 65},
+    }
+    result = await compile_prompt(state)
+    # Persona still present unchanged
+    assert "[FIXED-PERSONA]" in result.system_prompt
+    # Affinity still present
+    assert "好感度状态" in result.system_prompt
+    assert "65/100" in result.system_prompt
+    # Both appear before improvisation
+    persona_pos = result.system_prompt.index("[FIXED-PERSONA]")
+    improv_pos = result.system_prompt.index("即兴闲聊模式")
+    assert persona_pos < improv_pos

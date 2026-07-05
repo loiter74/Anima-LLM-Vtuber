@@ -29,6 +29,60 @@ class PersonaPromptSource:
         )]
 
 
+class AffinityPromptSource:
+    """Produces the 好感度 (affinity) overlay section.
+
+    Borrows the Galgame/VTuber "好感度" mechanic: the LLM is told its current
+    affection toward the 旅人 plus a tone hint for that range, so it can
+    naturally shift register (疏离 / 毒舌温柔 / 宠溺) without an if-else ladder.
+
+    The value comes from parsing the LLM's own ``[affinity:N]`` marker on the
+    previous turn (see ``llm_node._extract_and_update_affinity``). It is a
+    per-turn overlay, not persisted across sessions.
+    """
+
+    name = "affinity"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        # Clamp to a sane display range even if upstream handed us garbage.
+        affinity = max(0, min(100, int(ctx.affinity)))
+        band = _affinity_band(affinity)
+
+        content = (
+            f"## 好感度状态 (Affinity)\n\n"
+            f"当前对旅人的好感度: {affinity}/100 — {band}\n\n"
+            f"区间提示：\n"
+            f"- 0-30: 警惕疏离，话少而硬，不主动找话题\n"
+            f"- 31-54: 礼貌但有距离感，回答克制\n"
+            f"- 55-70: 略熟，可毒舌但温柔收尾\n"
+            f"- 71-85: 亲近，会主动找话题，偶尔流露在意\n"
+            f"- 86-100: 宠溺，护短，偶尔撒娇\n\n"
+            f"每轮回复末尾在内心更新好感度并输出 marker：``[affinity:N]``"
+            f"（N 为 0-100 的整数）。除非旅人消息带``【debug】``，"
+            f"否则 marker 不对旅人可见——后台会剥除它。"
+        )
+        return [PromptSection(
+            name=self.name,
+            role=SectionRole.AFFINITY,
+            priority=SectionPriority.AFFINITY,
+            content=content,
+            metadata={"affinity": affinity, "band": band},
+        )]
+
+
+def _affinity_band(value: int) -> str:
+    """Return a short Chinese label for the affinity band."""
+    if value <= 30:
+        return "警惕疏离"
+    if value <= 54:
+        return "礼貌有距离"
+    if value <= 70:
+        return "略熟，可毒舌"
+    if value <= 85:
+        return "亲近"
+    return "宠溺"
+
+
 class RuntimePersonalityPromptSource:
     """Produces runtime personality overlay section.
 
@@ -66,6 +120,38 @@ class RuntimePersonalityPromptSource:
             name=self.name,
             role=SectionRole.RUNTIME_PERSONALITY,
             priority=SectionPriority.RUNTIME_PERSONALITY,
+            content=content,
+        )]
+
+
+class ImprovisedChatPromptSource:
+    """Produces a short realtime overlay that keeps Anima from sounding templated."""
+
+    name = "improvised_chat"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        content = (
+            "## 即兴闲聊模式\n\n"
+            "把当前回复当成直播弹幕即兴接话：先接住弹幕，再抛一个短包袱或轻吐槽，"
+            "最后自然收住。\n\n"
+            "**禁止用语（逐条遵守）：**\n"
+            "- 禁止客服腔：不要出现「当然可以」「很高兴帮助你」「有什么可以帮到你的吗」「请问」\n"
+            "- 禁止说教腔：不要写成「第一…第二…第三…」的建议列表，不要用「你需要做的就是…」\n"
+            "- 禁止自我介绍：不要出现「我是一个 AI」「作为 Anima 我觉得」\n"
+            "- 禁止元解释：不要说「让我来翻译一下」「简单来说就是」\n\n"
+            "**风格锚点：**\n"
+            "- 即兴闲聊只调整节奏和临场感，不能覆盖基础人设；基础人设里的口癖、称呼、"
+            "句尾后缀必须逐句保留\n"
+            "- 保持 Anima 的语气：疲惫、轻度毒舌、偶尔慵懒吐槽，像网吧通宵后的深夜主播\n"
+            "- 一到三句收住，不要铺陈开写成小作文\n"
+            "- 偶尔用「…」省略号、反问句、轻吐槽自然收尾\n"
+            "- 不要复用最近回复的开头、比喻、结尾和固定句式；不要总结规则；"
+            "不要把每句话都写成规整的三段式"
+        )
+        return [PromptSection(
+            name=self.name,
+            role=SectionRole.IMPROVISATION,
+            priority=SectionPriority.IMPROVISATION,
             content=content,
         )]
 

@@ -6,6 +6,12 @@ from typing import Annotated, Any, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
 
+# Affinity defaults — borrowed from the Galgame/VTuber "好感度" convention.
+# Initial 50 = neutral first impression. Range [0, 100].
+DEFAULT_AFFINITY: int = 50
+AFFINITY_MIN: int = 0
+AFFINITY_MAX: int = 100
+
 
 class AgentState(TypedDict):
     """LangGraph Agent state"""
@@ -40,6 +46,7 @@ class AgentState(TypedDict):
     user_id: str | None
     user_name: str | None
     metadata: dict[str, Any]
+    config_version: int
 
     # Error handling
     error: str | None
@@ -59,6 +66,12 @@ class AgentState(TypedDict):
     # Personality
     personality_mode: str              # 'default' | 'streaming' | 'mood_xxx'
     personality_mood: str | None    # current mood override
+
+    # Affinity — Galgame-style affection counter for the current 旅人.
+    # Per-turn overlay: parsed from the LLM's `[affinity:N]` marker on the
+    # previous turn (see llm_node._extract_and_update_affinity). Not persisted
+    # across sessions; resets to DEFAULT_AFFINITY on a fresh conversation.
+    affinity: int
 
 
 def create_initial_state(
@@ -93,6 +106,7 @@ def create_initial_state(
         "user_id": user_id,
         "user_name": user_name,
         "metadata": {},
+        "config_version": 1,
         "error": None,
         "should_retry": False,
         "retry_count": 0,
@@ -106,6 +120,8 @@ def create_initial_state(
         # Personality
         "personality_mode": "default",
         "personality_mood": None,
+        # Affinity — neutral first impression (DEFAULT_AFFINITY=50)
+        "affinity": DEFAULT_AFFINITY,
     }
 
 

@@ -35,4 +35,14 @@ def build_context(
         mbti_tf=metadata.get("mbti_tf", 50),
         mbti_jp=metadata.get("mbti_jp", 50),
         roleplay_correction=metadata.get("roleplay_correction", ""),
+        # Affinity: prefer metadata (cross-turn overlay path), fall back to
+        # top-level state (set by create_initial_state on the first turn).
+        affinity=metadata.get(
+            "affinity",
+            state.get("affinity", 50),
+        ),
+        config_version=metadata.get(
+            "config_version",
+            state.get("config_version", 1),
+        ),
     )

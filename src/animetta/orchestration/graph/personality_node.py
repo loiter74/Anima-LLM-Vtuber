@@ -116,6 +116,19 @@ async def personality_node(
         f"mood={personality_mood}, overlay={bool(personality_overlay)}"
     )
 
+    # ── Drift detection on previous AI turn ──
+    # If Anima's last reply slipped into generic assistant flavor, inject a
+    # one-turn correction section so the prompt pipeline can pull her back
+    # into character. ``has_drift`` is cheap substring matching; safe to run
+    # every turn. See orchestration/prompting/roleplay_guard.py.
+    roleplay_correction = _detect_previous_turn_drift(state)
+
+    if roleplay_correction:
+        logger.info(
+            f"[{session_id}] [PersonalityNode] Drift detected in previous turn; "
+            f"injecting roleplay correction section"
+        )
+
     return {
         "personality_mode": personality_mode,
         "personality_mood": personality_mood,
@@ -136,5 +149,34 @@ async def personality_node(
             "mbti_sn": mbti_sn,
             "mbti_tf": mbti_tf,
             "mbti_jp": mbti_jp,
+            # Roleplay guard: non-empty when the previous AI turn drifted.
+            # Consumed by RoleplayGuardPromptSource in the prompt pipeline.
+            "roleplay_correction": roleplay_correction,
         },
     }
+
+
+def _detect_previous_turn_drift(state: AgentState) -> str:
+    """Return CORRECTION_SECTION if the last AIMessage shows assistant drift.
+
+    Returns "" when there is no prior turn or no drift detected.
+
+    Imported lazily to keep the module importable in isolation (tests).
+    """
+    from langchain_core.messages import AIMessage
+
+    from animetta.orchestration.prompting.roleplay_guard import (
+        CORRECTION_SECTION,
+        has_drift,
+    )
+
+    messages = state.get("messages", []) or []
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage):
+            content = msg.content or ""
+            if content and has_drift(content):
+                return CORRECTION_SECTION
+            # First AIMessage (most recent) is the only one we correct on.
+            return ""
+    # No prior AIMessage → first turn, nothing to correct.
+    return ""

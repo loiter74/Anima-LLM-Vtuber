@@ -9,6 +9,8 @@ from langgraph.types import RunnableConfig
 from .assembler import assemble
 from .context import build_context
 from .sources import (
+    AffinityPromptSource,
+    ImprovisedChatPromptSource,
     MemoryPromptSource,
     PersonaPromptSource,
     RoleplayGuardPromptSource,
@@ -41,7 +43,9 @@ async def compile(
 
     sources = [
         PersonaPromptSource(),
+        AffinityPromptSource(),
         RuntimePersonalityPromptSource(),
+        ImprovisedChatPromptSource(),
         RoleplayGuardPromptSource(),
         MemoryPromptSource(),
     ]
@@ -61,4 +65,6 @@ async def compile(
                 metadata={"warnings": [f"Source failed: {exc}"]},
             ))
 
-    return assemble(sections)
+    compiled = assemble(sections)
+    compiled.config_version = ctx.config_version
+    return compiled
