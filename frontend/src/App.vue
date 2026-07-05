@@ -32,7 +32,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-screen w-screen overflow-hidden bg-c-bg text-c-text relative">
+  <div class="flex flex-col h-screen w-screen overflow-hidden text-c-text relative">
+    <!-- Background layer: lives at z-index 0 so the global preset image shows
+         through the transparent .app-container / .stage. The root div carries
+         no bg-c-bg itself — the body element keeps --c-bg as the ultimate
+         fallback if the user clears the background. -->
     <div
       v-if="bgSrc"
       class="absolute inset-0"

@@ -38,9 +38,13 @@ describe('WelcomeScreen', () => {
     })
   })
 
-  it('renders hero section', () => {
+  it('renders hero section fitting the narrow chat panel', () => {
+    // WelcomeScreen is rendered inside the 340px chat panel (MessageList empty
+    // state), so it must use h-full/min-h — not h-screen which overflows.
     const wrapper = mount(WelcomeScreen)
-    expect(wrapper.find('.h-screen').exists()).toBe(true)
+    const root = wrapper.find('.h-full')
+    expect(root.exists()).toBe(true)
+    expect(root.classes()).not.toContain('h-screen')
   })
 
   it('renders title with accent dot', () => {
@@ -70,10 +74,12 @@ describe('WelcomeScreen', () => {
     expect(wrapper.emitted('dismiss')).toBeTruthy()
   })
 
-  it('renders background image', () => {
+  it('renders a radial wash overlay so the title pops over the panel', () => {
+    // The background image is no longer local to this component — the global
+    // preset shows through the translucent panel. We still keep a radial wash
+    // overlay for title legibility.
     const wrapper = mount(WelcomeScreen)
-    const bg = wrapper.find('[style*="background-image"]')
-    expect(bg.exists()).toBe(true)
+    expect(wrapper.find('.bg-gradient-radial').exists()).toBe(true)
   })
 
   it('renders SceneEffects', () => {
@@ -81,14 +87,11 @@ describe('WelcomeScreen', () => {
     expect(wrapper.find('.mock-scene-effects').exists()).toBe(true)
   })
 
-  it('renders scroll hint', () => {
+  it('stacks CTA buttons vertically to fit the 340px panel width', () => {
     const wrapper = mount(WelcomeScreen)
-    expect(wrapper.find('.animate-bounce').exists()).toBe(true)
-  })
-
-  it('has responsive classes', () => {
-    const wrapper = mount(WelcomeScreen)
-    expect(wrapper.find('.md\\:text-6xl').exists()).toBe(true)
-    expect(wrapper.find('.lg\\:text-7xl').exists()).toBe(true)
+    const cta = wrapper.find('[ref="ctaRef"]')
+    // The CTA container uses flex-col (stacked) instead of sm:flex-row
+    const ctaContainer = wrapper.findAll('.flex').find(el => el.classes().includes('flex-col') && el.findAll('button').length === 2)
+    expect(ctaContainer).toBeTruthy()
   })
 })

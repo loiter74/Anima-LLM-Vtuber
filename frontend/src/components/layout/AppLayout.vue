@@ -101,10 +101,13 @@ function handlePopoutClosed(): void {
   flex-direction: column;
   height: 100vh;
   position: relative;
+  /* Transparent so the global background layer in App.vue (z-index: 0) shows
+     through. The decorative radial-gradient washes are kept as overlays, but
+     the solid --c-bg base is dropped — otherwise it occludes the background
+     image. See openspec/changes/live2d-bg-layout. */
   background:
     radial-gradient(ellipse at 80% 20%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%),
-    var(--c-bg);
+    radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%);
 }
 
 /* Desktop layout: floating drawer + stage + right panel */
@@ -118,11 +121,13 @@ function handlePopoutClosed(): void {
   gap: var(--s-4);
 }
 
-/* Center Stage: fills available space */
+/* Center Stage: fills available space.
+   Background is intentionally transparent so the global background layer
+   in App.vue (z-index: 0) shows through the Live2D canvas (backgroundAlpha: 0).
+   The border + radius are kept to preserve the three-column visual分区. */
 .stage {
   flex: 1;
   position: relative;
-  background: rgba(26, 16, 40, 0.30);
   border: 1px solid var(--c-border);
   border-radius: var(--r-2xl);
   overflow: hidden;
@@ -150,7 +155,6 @@ function handlePopoutClosed(): void {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: rgba(26, 16, 40, 0.30);
 }
 
 .mobile-panel {

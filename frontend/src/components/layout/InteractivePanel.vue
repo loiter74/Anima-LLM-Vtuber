@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import LiveChatPanel from '@/components/chat/LiveChatPanel.vue'
 import SettingsPanel from '@/components/settings/SettingsPanel.vue'
@@ -9,6 +9,7 @@ import MusicCard from '@/components/singing/MusicCard.vue'
 import PopOutButton from '@/components/live2d/PopOutButton.vue'
 import { useDanmaku } from '@/composables/useDanmaku'
 import { useMobile } from '@/composables/useMobile'
+import { useChatStore } from '@/stores/chat'
 
 const props = defineProps<{
   live2dPopout: boolean
@@ -20,8 +21,19 @@ const emit = defineEmits<{
 }>()
 
 const { isMobile } = useMobile()
+const chatStore = useChatStore()
 const isCollapsed = ref(false)
 const activeTab = ref<'chat' | 'live' | 'memory' | 'personality' | 'singing' | 'settings'>('chat')
+const reloadHint = computed(() => chatStore.reloadConfigMessage || '重载人格配置')
+const isReloading = computed(() => chatStore.reloadConfigStatus === 'loading')
+
+async function reloadConfig(): Promise<void> {
+  try {
+    await chatStore.reloadRuntimeConfig()
+  } catch {
+    // Store owns the visible error state.
+  }
+}
 
 // Mobile tab definitions (icon-only)
 const mobileTabs = [
@@ -48,6 +60,26 @@ useDanmaku()
   <div v-if="isMobile" class="mobile-interactive-panel flex flex-col h-full pointer-events-none">
     <!-- Mobile: panel content -->
     <div class="flex-1 overflow-hidden relative pointer-events-auto">
+      <div class="mobile-config-control pointer-events-auto">
+        <button
+          class="config-reload-button"
+          :class="[`status-${chatStore.reloadConfigStatus}`]"
+          :disabled="isReloading"
+          :aria-busy="isReloading"
+          :title="reloadHint"
+          aria-label="重载人格配置"
+          @click="reloadConfig"
+        >
+          <span class="reload-icon" :class="{ spinning: isReloading }">↻</span>
+        </button>
+        <span
+          v-if="chatStore.reloadConfigStatus !== 'idle'"
+          class="config-reload-label"
+          :class="[`status-${chatStore.reloadConfigStatus}`]"
+        >
+          {{ reloadHint }}
+        </span>
+      </div>
       <Transition name="fade" mode="out-in">
         <ChatPanel v-if="activeTab === 'chat'" key="chat" />
         <LiveChatPanel v-else-if="activeTab === 'live'" key="live" />
@@ -103,6 +135,27 @@ useDanmaku()
         @popout="emit('popout')"
       />
 
+      <div class="config-reload-wrap">
+        <button
+          class="config-reload-button"
+          :class="[`status-${chatStore.reloadConfigStatus}`]"
+          :disabled="isReloading"
+          :aria-busy="isReloading"
+          :title="reloadHint"
+          aria-label="重载人格配置"
+          @click="reloadConfig"
+        >
+          <span class="reload-icon" :class="{ spinning: isReloading }">↻</span>
+        </button>
+        <span
+          v-if="chatStore.reloadConfigStatus !== 'idle'"
+          class="config-reload-label"
+          :class="[`status-${chatStore.reloadConfigStatus}`]"
+        >
+          {{ reloadHint }}
+        </span>
+      </div>
+
       <!-- Collapse button -->
       <button
         class="panel-collapse"
@@ -142,12 +195,24 @@ useDanmaku()
   min-height: 42px;
 }
 
-/* Desktop Panel Container */
+.mobile-config-control {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: calc(100% - var(--s-6));
+}
+
+/* Desktop Panel Container — lightweight translucent so the global background
+   image shows through (blurred) while keeping dialog text readable. */
 .panel-container {
   width: 340px;
-  background: rgba(36, 21, 56, 0.85);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  background: rgba(26, 16, 40, 0.30);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
   border: 1px solid var(--c-border);
   border-radius: var(--r-2xl);
   display: flex;
@@ -170,6 +235,82 @@ useDanmaku()
   gap: var(--s-1);
   flex: 1;
   overflow-x: auto;
+}
+
+.config-reload-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 28px;
+}
+
+.config-reload-button {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 16, 40, 0.40);
+  border: none;
+  border-radius: var(--r-lg);
+  color: var(--c-text-dim);
+  cursor: pointer;
+  transition: all var(--d-base) var(--ease-out-expo);
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.config-reload-button:hover:not(:disabled) {
+  color: var(--c-text);
+  background: rgba(26, 16, 40, 0.60);
+}
+
+.config-reload-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.config-reload-button.status-success {
+  color: var(--c-success);
+  background: rgba(96, 211, 148, 0.14);
+}
+
+.config-reload-button.status-error {
+  color: var(--c-error);
+  background: rgba(255, 107, 138, 0.14);
+}
+
+.reload-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.reload-icon.spinning {
+  animation: config-reload-spin 0.8s linear infinite;
+}
+
+.config-reload-label {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--c-text-dim);
+}
+
+.config-reload-label.status-success {
+  color: var(--c-success);
+}
+
+.config-reload-label.status-error {
+  color: var(--c-error);
+}
+
+@keyframes config-reload-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .panel-tab {

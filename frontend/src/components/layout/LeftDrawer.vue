@@ -5,7 +5,11 @@ import QuickControls from './QuickControls.vue'
 import SessionStats from './SessionStats.vue'
 import MemoryCards from './MemoryCards.vue'
 
-const isCollapsed = ref(false)
+// Default to collapsed on every page load. This frees the left side and lets
+// the central stage + global background image fill the visible area. The user
+// can expand the drawer via the expand-btn, but the choice is not persisted
+// (refreshing returns to collapsed). See openspec/changes/live2d-bg-layout.
+const isCollapsed = ref(true)
 
 function toggleDrawer() {
   isCollapsed.value = !isCollapsed.value

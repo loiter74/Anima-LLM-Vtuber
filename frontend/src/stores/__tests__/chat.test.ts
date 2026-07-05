@@ -15,6 +15,11 @@ vi.mock('@/composables/useMessageStore', () => ({
 describe('useChatStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   describe('initial state', () => {
@@ -198,6 +203,22 @@ describe('useChatStore', () => {
       expect(store.messages[0].text).toBe('Direct complete')
       expect(store.messages[0].status).toBe('complete')
     })
+
+    it('does NOT create a duplicate when finalize is called twice (dedup guard)', () => {
+      // Regression: duplicate sentence listeners could call finalizeResponse
+      // twice in quick succession, producing two identical complete bubbles.
+      const store = useChatStore()
+      store.bufferChunk(0, 'Same reply')
+      store.processBufferedChunks()
+      store.finalizeResponse()
+      expect(store.messages).toHaveLength(1)
+
+      // Second finalize with the same content — should be deduped.
+      store.bufferChunk(0, 'Same reply')
+      store.processBufferedChunks()
+      store.finalizeResponse()
+      expect(store.messages).toHaveLength(1) // still 1, not 2
+    })
   })
 
   describe('scheduleFlush', () => {
@@ -236,6 +257,77 @@ describe('useChatStore', () => {
       vi.advanceTimersByTime(500)
       expect(callback1).not.toHaveBeenCalled()
       expect(callback2).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('reloadRuntimeConfig', () => {
+    it('sets loading state while reload request is pending', async () => {
+      const store = useChatStore()
+      let resolveJson!: (value: unknown) => void
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => new Promise((resolve) => {
+          resolveJson = resolve
+        }),
+      }))
+
+      const pending = store.reloadRuntimeConfig()
+      await Promise.resolve()
+
+      expect(store.reloadConfigStatus).toBe('loading')
+      expect(store.reloadConfigMessage).toBe('正在重载配置...')
+
+      resolveJson({
+        ok: true,
+        version: 2,
+        persona: 'anima.v0.1',
+        refreshed: ['persona'],
+      })
+      await pending
+    })
+
+    it('posts reload request and records success state', async () => {
+      const store = useChatStore()
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          ok: true,
+          version: 3,
+          persona: 'anima.v0.1',
+          refreshed: ['persona', 'llm'],
+        }),
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const result = await store.reloadRuntimeConfig()
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/config/reload', { method: 'POST' })
+      expect(result.version).toBe(3)
+      expect(store.reloadConfigStatus).toBe('success')
+      expect(store.reloadConfigVersion).toBe(3)
+      expect(store.reloadConfigPersona).toBe('anima.v0.1')
+      expect(store.reloadConfigMessage).toBe('已加载 anima.v0.1 · v3')
+      expect(store.messages).toHaveLength(0)
+    })
+
+    it('records API failure without adding chat messages', async () => {
+      const store = useChatStore()
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({
+          ok: false,
+          version: 1,
+          persona: 'anima.v0.1',
+          refreshed: [],
+          error: 'persona yaml invalid',
+        }),
+      }))
+
+      await expect(store.reloadRuntimeConfig()).rejects.toThrow('persona yaml invalid')
+
+      expect(store.reloadConfigStatus).toBe('error')
+      expect(store.reloadConfigMessage).toBe('重载失败，仍使用上一份有效配置：persona yaml invalid')
+      expect(store.messages).toHaveLength(0)
     })
   })
 })
