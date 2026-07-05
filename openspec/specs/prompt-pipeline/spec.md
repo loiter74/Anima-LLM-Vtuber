@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Defines how system prompt contributors are compiled, ordered, delivered, and inspected before LLM calls.
+## Requirements
 ### Requirement: Unified prompt compilation
 The system SHALL provide a prompt pipeline that compiles all LLM system prompt contributors into a single `CompiledPrompt` before any LLM provider call.
 
@@ -77,3 +78,27 @@ The prompt pipeline SHALL preserve the LLM call path when optional prompt contri
 - **WHEN** no base persona prompt is available
 - **THEN** the prompt pipeline SHALL compile the remaining available sections
 - **THEN** the compiled prompt SHALL include a warning about the missing persona prompt
+
+### Requirement: Live improvisation control layer
+The prompt pipeline SHALL include a concise live improvisation control layer for realtime Anima chat replies without modifying the accepted persona config.
+
+#### Scenario: Live improvisation section is included
+- **WHEN** the prompt pipeline compiles a prompt for realtime chat
+- **THEN** the compiled prompt SHALL include a stable live improvisation section
+- **THEN** the section metadata SHALL expose its stable section name
+
+#### Scenario: Persona config remains the source of identity
+- **WHEN** the live improvisation section is added
+- **THEN** the persona section SHALL remain included as the base identity source
+- **THEN** the live improvisation section SHALL NOT require editing persona YAML content
+
+#### Scenario: Live improvisation sharpens reply style
+- **WHEN** the live improvisation section is rendered
+- **THEN** it SHALL instruct the model to produce short live-chat replies in Anima voice
+- **THEN** it SHALL discourage customer-service phrasing, meta explanations, and rigid advice formatting
+
+#### Scenario: Live improvisation precedes memory context
+- **WHEN** live improvisation and memory sections are both present
+- **THEN** the live improvisation section SHALL appear before the memory section
+- **THEN** memory context SHALL NOT be the final style-setting instruction
+

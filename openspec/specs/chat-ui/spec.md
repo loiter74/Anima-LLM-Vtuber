@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Defines the chat interface behavior for message display, input, voice controls, and subtitle presentation.
+## Requirements
 ### Requirement: ChatPanel 布局组件
 系统 SHALL 提供 `<ChatPanel>` 组件作为聊天区域容器，包含标题栏、消息列表、输入区域。
 
@@ -80,3 +81,28 @@
 #### Scenario: TTS 播放中
 - **WHEN** 后端发送 `audio` 或 `audio_with_expression` 事件
 - **THEN** 显示波形动画指示器，播放结束自动隐藏
+
+### Requirement: Subtitle translations match the active turn
+The chat UI SHALL display translated subtitle text only when the translation belongs to the currently active subtitle turn.
+
+#### Scenario: Matching translation is displayed
+- **WHEN** the UI receives a `chat:sentence` event with `turn_id`
+- **AND** the UI later receives a `chat:subtitle_translation` event with the same `turn_id`
+- **THEN** the UI SHALL display that translation with the current original subtitle
+
+#### Scenario: Stale translation is ignored
+- **WHEN** the UI receives a `chat:subtitle_translation` event with a `turn_id` older than the current subtitle turn
+- **THEN** the UI SHALL ignore that translation
+- **THEN** the current original subtitle SHALL remain unchanged
+
+#### Scenario: Translation does not replace original subtitle
+- **WHEN** the UI is in bilingual subtitle mode
+- **AND** a matching translation arrives
+- **THEN** the UI SHALL keep the original subtitle text visible
+- **THEN** the UI SHALL render the translation as the translated subtitle text
+
+#### Scenario: Legacy translation without turn identity is safe
+- **WHEN** the UI receives a translation event without `turn_id`
+- **THEN** the UI SHALL NOT overwrite a newer subtitle turn
+- **THEN** the UI MAY display it only when no current turn identity is known
+
