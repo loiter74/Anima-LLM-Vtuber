@@ -2,13 +2,20 @@ from __future__ import annotations
 
 """Tests for output distribution node — Socket.IO + memory storage."""
 
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
 from langgraph.types import RunnableConfig
 
+# Note: ``output_node`` resolves to the *function* (re-exported by
+# graph/__init__.py), shadowing the module of the same name. To reach
+# module-level helpers like ``_is_unpersistable_response`` we go through
+# sys.modules to grab the actual module object.
 from animetta.orchestration.graph import output_node
 from animetta.orchestration.graph.state import create_initial_state
+
+_output_node_module = sys.modules["animetta.orchestration.graph.output_node"]
 
 
 class TestOutputNode:
@@ -115,3 +122,233 @@ class TestOutputNode:
         call_kwargs = mock_service_context.memory_system.encode.call_args
         assert call_kwargs.kwargs["user_input"] == "Hi there"
         assert call_kwargs.kwargs["agent_response"] == "Hello Alice!"
+
+
+class TestUnpersistableResponseGuard:
+    """Layer-2 defense: fallback/template replies must not enter V2 memory.
+
+    These replies would otherwise be treated as something Anima actually
+    said on the next turn, polluting the persona ("角色污染").
+    """
+
+    @pytest.mark.asyncio
+    async def test_timeout_fallback_not_stored(self, mock_socketio, mock_service_context):
+        """llm_node's FALLBACK_RESPONSE ('I need a moment...') must not persist."""
+        mock_service_context.memory_system.encode = AsyncMock()
+
+        state = create_initial_state(
+            session_id="test",
+            user_text="讲个笑话",
+        )
+        state["response_text"] = "I need a moment to think about that."
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_timeout_metadata_flag_not_stored(self, mock_socketio, mock_service_context):
+        """When llm_node sets metadata['error_type']='timeout', skip persistence."""
+        mock_service_context.memory_system.encode = AsyncMock()
+
+        state = create_initial_state(
+            session_id="test",
+            user_text="继续",
+        )
+        # A response that does not match any marker but is flagged as timeout
+        state["response_text"] = "[一些部分生成的内容]"
+        state["metadata"] = {"error_type": "timeout"}
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_mockllm_customer_service_template_not_stored(
+        self, mock_socketio, mock_service_context
+    ):
+        """MockLLM's '有什么我可以帮助你的吗？' template must not persist."""
+        mock_service_context.memory_system.encode = AsyncMock()
+
+        state = create_initial_state(
+            session_id="test",
+            user_text="ping",
+        )
+        state["response_text"] = "你好！你说的是：「ping」。有什么我可以帮助你的吗？"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_mockllm_self_identifying_template_not_stored(
+        self, mock_socketio, mock_service_context
+    ):
+        """MockLLM's '我是一个 Mock LLM' self-identifying template must not persist."""
+        mock_service_context.memory_system.encode = AsyncMock()
+
+        state = create_initial_state(
+            session_id="test",
+            user_text="你是谁",
+        )
+        state["response_text"] = "收到你的消息：「你是谁」。我是一个 Mock LLM，用于测试和开发。"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_genuine_anima_reply_is_stored(self, mock_socketio, mock_service_context):
+        """Real in-character Anima replies must still be persisted.
+
+        Regression guard: the filter must not be over-eager and drop genuine
+        conversation turns. Lines containing markers like '帮助' (help) used
+        naturally are fine; only the exact customer-service template is dropped.
+        """
+        mock_service_context.memory_system.encode = AsyncMock()
+
+        state = create_initial_state(
+            session_id="test",
+            user_text="主播好",
+        )
+        # An Anima-flavored line that contains 'help' semantically but is
+        # clearly in-character — must be persisted.
+        state["response_text"] = "又来了。酒馆还没开门你就堵在门口，我帮你倒杯红茶？"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        mock_service_context.memory_system.encode.assert_called_once()
+        call_kwargs = mock_service_context.memory_system.encode.call_args
+        assert call_kwargs.kwargs["agent_response"].startswith("又来了")
+
+
+class TestIsUnpersistableResponse:
+    """Unit tests for the _is_unpersistable_response module-level helper."""
+
+    def test_timeout_fallback_marker_detected(self):
+        state = create_initial_state(session_id="t")
+        state["response_text"] = "I need a moment to think about that."
+        assert _output_node_module._is_unpersistable_response(state, state["response_text"]) is True
+
+    def test_customer_service_marker_detected(self):
+        state = create_initial_state(session_id="t")
+        text = "你好！有什么我可以帮助你的吗？"
+        assert _output_node_module._is_unpersistable_response(state, text) is True
+
+    def test_clean_anima_line_passes(self):
+        state = create_initial_state(session_id="t")
+        text = "……嗯。但我不是很在意天气。"
+        assert _output_node_module._is_unpersistable_response(state, text) is False
+
+    def test_timeout_metadata_flag_detected(self):
+        state = create_initial_state(session_id="t")
+        state["metadata"] = {"error_type": "timeout"}
+        assert _output_node_module._is_unpersistable_response(state, "任何内容") is True
+
+    def test_no_timeout_flag_passes(self):
+        state = create_initial_state(session_id="t")
+        state["metadata"] = {}  # no error_type
+        assert _output_node_module._is_unpersistable_response(state, "正常回复") is False
+
+
+class TestTurnIdentity:
+    """Task 1.4: Prove chat:sentence and chat:subtitle_translation payloads
+    include matching turn_id."""
+
+    @pytest.mark.asyncio
+    async def test_sentence_payload_includes_turn_id(self, mock_socketio, mock_service_context):
+        """chat:sentence payload should include turn_id."""
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        sentence_calls = [
+            c for c in mock_socketio.emit.call_args_list
+            if c[0][0] == "chat:sentence"
+        ]
+        # First sentence call should have turn_id
+        assert len(sentence_calls) >= 1
+        payload = sentence_calls[0][0][1]
+        assert "turn_id" in payload
+        assert isinstance(payload["turn_id"], str)
+        assert len(payload["turn_id"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_sentence_and_complete_share_turn_id(self, mock_socketio, mock_service_context):
+        """The text sentence and complete marker should share the same turn_id."""
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        sentence_calls = [
+            c for c in mock_socketio.emit.call_args_list
+            if c[0][0] == "chat:sentence"
+        ]
+        assert len(sentence_calls) >= 2
+        turn_id_text = sentence_calls[0][0][1].get("turn_id")
+        turn_id_complete = sentence_calls[1][0][1].get("turn_id")
+        assert turn_id_text == turn_id_complete
+
+    @pytest.mark.asyncio
+    async def test_turn_id_reused_from_metadata(self, mock_socketio, mock_service_context):
+        """When metadata contains turn_id, it should be reused (not regenerated)."""
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好"
+        state["metadata"] = {"turn_id": "custom_turn_abc"}
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        sentence_calls = [
+            c for c in mock_socketio.emit.call_args_list
+            if c[0][0] == "chat:sentence"
+        ]
+        assert sentence_calls[0][0][1]["turn_id"] == "custom_turn_abc"
+
+    @pytest.mark.asyncio
+    async def test_backward_compat_old_fields_preserved(self, mock_socketio, mock_service_context):
+        """Existing fields (text, seq, lang) must still be present for old clients."""
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好"
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+        await output_node(state, config)
+
+        sentence_calls = [
+            c for c in mock_socketio.emit.call_args_list
+            if c[0][0] == "chat:sentence"
+        ]
+        payload = sentence_calls[0][0][1]
+        # Old fields must still be present
+        assert "text" in payload
+        assert "seq" in payload
+        assert "lang" in payload
+        # New field added
+        assert "turn_id" in payload

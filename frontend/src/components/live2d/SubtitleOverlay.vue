@@ -58,9 +58,13 @@ const positionStyle = computed(() => {
       maxWidth: '80vw',
     }
   }
-  // Default centered: original hardcoded offset (matches pre-fix behavior)
+  // Default centered. The earlier `calc(50% - 200px)` was a stale hardcoded
+  // offset that shifted the subtitle ~200px left of the container center
+  // (verified via Playwright: container center=605px, subtitle center=405px).
+  // 50% + translateX(-50%) centers it on the Live2D model, matching the
+  // custom-position branch with posX=0.5.
   return {
-    left: `calc(50% - 200px)`,
+    left: `50%`,
     transform: 'translateX(-50%)',
     maxWidth: '80vw',
   }

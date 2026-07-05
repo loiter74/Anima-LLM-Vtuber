@@ -2,7 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { getSocket } from './useSocket'
 import { Events } from '@/constants/socket-events'
-import type { SentenceEvent } from '@/types/socket-events'
+import type { SentenceEvent, SubtitleTranslationEvent } from '@/types/socket-events'
 
 export function useSubtitle() {
   const store = useSubtitleStore()
@@ -22,6 +22,8 @@ export function useSubtitle() {
   let hideTimeout: ReturnType<typeof setTimeout> | null = null
   let accumulatedText = ''
   let accumulatedTranslation = ''
+  /** The turn_id of the currently active subtitle turn (task 5.2) */
+  let currentTurnId: string | null = null
 
   function scheduleHide(delay = 6000): void {
     if (hideTimeout) clearTimeout(hideTimeout)
@@ -29,6 +31,7 @@ export function useSubtitle() {
       visible.value = false
       text.value = ''
       translation.value = ''
+      currentTurnId = null
     }, delay)
   }
 
@@ -46,12 +49,6 @@ export function useSubtitle() {
     sourceLang.value = lang || ''
     targetLang.value = tLang || ''
     visible.value = true
-  }
-
-  /** Translation received async (non-blocking, from background task) */
-  interface SubtitleTranslationEvent {
-    translation: string
-    target_lang?: string
   }
 
   /** Payload for audio_with_expression event (we only need audio metadata) */
@@ -103,6 +100,11 @@ export function useSubtitle() {
     _onSentence = (data: SentenceEvent) => {
       if (!store.enabled) return
 
+      // Track current turn_id (task 5.2)
+      if (data.turn_id) {
+        currentTurnId = data.turn_id
+      }
+
       // Final / complete signal
       if (data.is_complete || data.text === '') {
         isStreaming.value = false
@@ -145,12 +147,28 @@ export function useSubtitle() {
     }
 
     // Receive translation asynchronously (non-blocking backend)
+    // Tasks 5.3-5.5: Only display when turn_id matches, ignore stale
     _onSubtitleTranslation = (data: SubtitleTranslationEvent) => {
-      translation.value = data.translation
-      targetLang.value = data.target_lang || ''
-      // Reset the hide timer since we got new content
-      cancelHide()
-      scheduleHide(6000)
+      // Task 5.5: Legacy behavior — no turn identity known
+      if (!data.turn_id && !currentTurnId) {
+        translation.value = data.translation
+        targetLang.value = data.target_lang || ''
+        cancelHide()
+        scheduleHide(6000)
+        return
+      }
+
+      // Task 5.3: Display only when turn_id matches current subtitle turn
+      if (data.turn_id && data.turn_id === currentTurnId) {
+        translation.value = data.translation
+        targetLang.value = data.target_lang || ''
+        cancelHide()
+        scheduleHide(6000)
+        return
+      }
+
+      // Task 5.4: Stale translation — ignore without clearing current subtitle
+      // (do nothing: don't update translation.value, don't reset timer)
     }
 
     // When TTS audio arrives, cancel the 6s fallback timer and

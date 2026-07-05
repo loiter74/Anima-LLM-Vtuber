@@ -5,7 +5,8 @@
       "payload": {
         "text": "string",
         "user_id?": "string",
-        "from_name?": "string"
+        "from_name?": "string",
+        "is_inspection?": "boolean"
       }
     },
     "audio": {
@@ -30,7 +31,8 @@
         "text": "string",
         "seq": "number",
         "lang": "string",
-        "is_complete?": "boolean"
+        "is_complete?": "boolean",
+        "turn_id?": "string"
       }
     },
     "control": {
@@ -64,7 +66,8 @@
       "name": "chat:subtitle_translation",
       "payload": {
         "translation": "string",
-        "target_lang": "string"
+        "target_lang": "string",
+        "turn_id?": "string"
       }
     },
     "live2d_action": {

@@ -19,6 +19,16 @@ export interface SentenceEvent {
   translation?: string
   /** Target language code (e.g. "en", "ja") */
   target_lang?: string
+  /** Turn identity for matching subtitle translations to their source turn */
+  turn_id?: string
+}
+
+/** Payload for `chat:subtitle_translation` server-to-client event */
+export interface SubtitleTranslationEvent {
+  translation: string
+  target_lang?: string
+  /** Turn identity — matches the originating sentence turn */
+  turn_id?: string
 }
 
 /** Payload for `translation.configure` client-to-server event */

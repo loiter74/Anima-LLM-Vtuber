@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import os
+import uuid
 from functools import partial
 from typing import Any
 
@@ -13,7 +14,13 @@ from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.orchestration.socket_events import EVENTS
 
 from .state import AgentState
+from .subtitle_translator import translate_subtitle_text
 from .translation_state import translation_state
+
+
+def _generate_turn_id() -> str:
+    """Generate a stable turn identity for subtitle event binding."""
+    return uuid.uuid4().hex[:12]
 
 
 def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
@@ -53,16 +60,21 @@ async def output_node(
     # Send text response
     response_text = state.get("response_text", "")
     if response_text:
+        # ── 0. Resolve turn_id: reuse graph metadata or generate one ──
+        metadata = state.get("metadata", {}) or {}
+        turn_id = metadata.get("turn_id") or _generate_turn_id()
+
         # ── 1. Send original text immediately (no blocking) ──
         sentence_payload = {
             "text": response_text,
             "seq": 0,
             "lang": translation_state.source_language.lower()[:2],
+            "turn_id": turn_id,
         }
         await sio.emit(EVENTS["chat"]["sentence"]["name"], sentence_payload, to=to)
         logger.info(f"[{session_id}] [OutputNode] ✅ Sent text response")
 
-        await sio.emit(EVENTS["chat"]["sentence"]["name"], {"text": "", "is_complete": True}, to=to)
+        await sio.emit(EVENTS["chat"]["sentence"]["name"], {"text": "", "is_complete": True, "turn_id": turn_id}, to=to)
         logger.debug(f"[{session_id}] [OutputNode] ✅ Sent stream end marker")
 
         # ── 2. Run translation in background (non-blocking) ──
@@ -71,22 +83,19 @@ async def output_node(
                 try:
                     service_context = _get_from_config(config, "service_context")
                     if service_context and hasattr(service_context, "llm_engine") and service_context.llm_engine:
-                        translate_prompt = (
-                            f"Translate the following text from {translation_state.source_language} "
-                            f"to {translation_state.target_language}. "
-                            f"Output only the translation, no explanations, no quotes.\n\n"
-                            f"Text: {response_text}\n"
-                            f"Translation:"
-                        )
                         llm = service_context.llm_engine
-                        translated = await llm.chat(translate_prompt)
-                        if translated and translated.strip():
-                            translation = translated.strip()
+                        translated = await translate_subtitle_text(
+                            llm,
+                            response_text,
+                            source_lang=translation_state.source_language,
+                            target_lang=translation_state.target_language,
+                        )
+                        if translated:
                             target_lang = translation_state.target_language.lower()[:2]
-                            # Emit a subtitle.translate event with the translation
                             await sio.emit(EVENTS["chat"]["subtitle_translation"]["name"], {
-                                "translation": translation,
+                                "translation": translated,
                                 "target_lang": target_lang,
+                                "turn_id": turn_id,
                             }, to=to)
                             logger.info(f"[{session_id}] [OutputNode] ✅ Translated response to {translation_state.target_language}")
                 except Exception as e:
@@ -262,6 +271,17 @@ async def _store_conversation_to_memory(
         if not user_text or not response_text:
             return
 
+        # ── Don't pollute context with non-Anima replies ──
+        # Fallback responses (LLM timeout, MockLLM templates, customer-service
+        # flavor) must never enter V2 memory, or the next turn will treat them
+        # as something Anima actually said — the "角色污染" half of the bug.
+        if _is_unpersistable_response(state, response_text):
+            logger.info(
+                f"[{session_id}] [OutputNode] Skipping memory storage "
+                f"for fallback/template reply (len={len(response_text)})"
+            )
+            return
+
         vad_tuple = state.get("emotion_vad")
         from animetta.memory.v2.emotion_field import VADVector
         vad = VADVector(*vad_tuple) if vad_tuple else None
@@ -277,3 +297,31 @@ async def _store_conversation_to_memory(
 
     except Exception as e:
         logger.warning(f"[{session_id}] [OutputNode] Memory storage failed: {e}")
+
+
+# Markers that identify a reply as a non-Anima fallback / template.
+# Such replies must not be persisted to V2 memory (would pollute persona).
+# Kept short and unambiguous so genuine Anima lines never match.
+_UNPERSISTABLE_MARKERS: tuple[str, ...] = (
+    "I need a moment to think about that.",   # llm_node FALLBACK_RESPONSE (timeout)
+    "有什么我可以帮助你的吗？",                  # MockLLM customer-service template
+    "我是一个 Mock LLM，用于测试和开发。",        # MockLLM self-identifying template
+)
+
+
+def _is_unpersistable_response(state: AgentState, response_text: str) -> bool:
+    """Return True when ``response_text`` is a fallback/template that must not be persisted.
+
+    Triggers on:
+    - Any substring in ``_UNPERSISTABLE_MARKERS`` (timeout fallback, MockLLM templates).
+    - The ``metadata["error_type"] == "timeout"`` flag set by ``llm_node`` on timeout.
+    """
+    for marker in _UNPERSISTABLE_MARKERS:
+        if marker in response_text:
+            return True
+
+    metadata = state.get("metadata", {}) or {}
+    if metadata.get("error_type") == "timeout":
+        return True
+
+    return False
