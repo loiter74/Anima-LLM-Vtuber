@@ -51,6 +51,7 @@ class ServiceContext:
 
         # Session state
         self.session_id: str | None = None
+        self.runtime_config_version: int = 1
         self.is_speaking: bool = False
         self.is_processing: bool = False
 

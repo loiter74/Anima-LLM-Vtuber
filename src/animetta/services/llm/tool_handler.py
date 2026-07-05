@@ -155,6 +155,7 @@ class OpenAIToolHandler:
                 tools=openai_tools if openai_tools else None,
                 tool_choice="auto" if openai_tools else None,
                 temperature=self.llm.temperature,
+                top_p=self.llm.top_p,
                 max_tokens=self.llm.max_tokens,
                 stream=False,
                 **({"extra_body": self.llm.extra_body} if self.llm.extra_body else {}),

@@ -36,6 +36,7 @@ class OpenAILLM(LLMInterface):
         system_prompt: str = "",
         base_url: str | None = None,
         temperature: float = 0.7,
+        top_p: float = 0.9,
         max_tokens: int = 1000,
         extra_body: dict | None = None,
         **kwargs
@@ -49,6 +50,7 @@ class OpenAILLM(LLMInterface):
             system_prompt: System prompt
             base_url: Custom API endpoint (optional)
             temperature: Temperature parameter
+            top_p: Nucleus sampling parameter
             max_tokens: Maximum number of tokens to generate
             extra_body: Provider-specific request extras (e.g. DeepSeek thinking mode)
         """
@@ -57,6 +59,7 @@ class OpenAILLM(LLMInterface):
         self.system_prompt = system_prompt
         self.base_url = base_url
         self.temperature = temperature
+        self.top_p = top_p
         self.max_tokens = max_tokens
         self.extra_body = extra_body or {}
 
@@ -107,6 +110,7 @@ class OpenAILLM(LLMInterface):
         model = getattr(config, 'model', 'gpt-4o-mini')
         base_url = getattr(config, 'base_url', None)
         temperature = getattr(config, 'temperature', 0.7)
+        top_p = getattr(config, 'top_p', 0.9)
         max_tokens = getattr(config, 'max_tokens', 1000)
 
         # Build extra_body from DeepSeek thinking config if present
@@ -124,6 +128,7 @@ class OpenAILLM(LLMInterface):
             system_prompt=system_prompt,
             base_url=base_url,
             temperature=temperature,
+            top_p=top_p,
             max_tokens=max_tokens,
             extra_body=extra_body,
         )
@@ -180,6 +185,7 @@ class OpenAILLM(LLMInterface):
                 model=kwargs.get("model", self.model),
                 messages=messages,
                 temperature=kwargs.get("temperature", self.temperature),
+                top_p=kwargs.get("top_p", self.top_p),
                 max_tokens=kwargs.get("max_tokens", self.max_tokens),
                 **({"extra_body": self.extra_body} if self.extra_body else {}),
             )
@@ -222,6 +228,7 @@ class OpenAILLM(LLMInterface):
             "model": kwargs.get("model", self.model),
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
+            "top_p": kwargs.get("top_p", self.top_p),
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
         }
         if self.extra_body:

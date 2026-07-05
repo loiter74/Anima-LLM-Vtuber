@@ -116,6 +116,13 @@ _services_yaml_cache: dict[str, Any] | None = None
 _services_config_logged: set[str] = set()
 
 
+def clear_config_caches() -> None:
+    """Clear module-level config file caches so a runtime reload sees disk changes."""
+    global _services_yaml_cache
+    _services_yaml_cache = None
+    _services_config_logged.clear()
+
+
 def _load_yaml_file(path: Path) -> dict[str, Any]:
     """Load YAML file"""
     try:

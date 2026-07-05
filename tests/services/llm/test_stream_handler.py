@@ -15,6 +15,7 @@ def mock_openai_llm():
     llm = MagicMock()
     llm.model = "gpt-4"
     llm.temperature = 0.7
+    llm.top_p = 0.93
     llm.max_tokens = 1024
     llm.history = []
     llm.client = MagicMock()
@@ -129,3 +130,18 @@ class TestOpenAIStreamHandler:
             pass
 
         assert mock_openai_llm._record_usage.called
+
+    async def test_stream_passes_top_p_to_api(self, handler, mock_openai_llm):
+        """Stream calls should pass top_p to keep streamed chat sampling lively."""
+        mock_response = AsyncMock()
+        mock_response.__aiter__.return_value = []
+        mock_openai_llm.client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+        mock_openai_llm._build_messages = MagicMock(return_value=[])
+
+        async for _ in handler.stream("hi"):
+            pass
+
+        call_kwargs = mock_openai_llm.client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["top_p"] == 0.93

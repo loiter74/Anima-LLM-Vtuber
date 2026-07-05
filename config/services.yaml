@@ -80,7 +80,8 @@ llm:
       model: deepseek-v4-flash
       base_url: https://api.deepseek.com/v1
       thinking: disabled  # Anima v0.1 realtime roleplay: thinking disabled
-      temperature: 0.7
+      temperature: 0.9
+      top_p: 0.93
       max_tokens: 4096
   mock:
     memory_enabled: false

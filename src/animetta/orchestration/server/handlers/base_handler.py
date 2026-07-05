@@ -47,6 +47,7 @@ class BaseSocketHandler:
 
     def set_global_config(self, config) -> None:
         """Set global config (delegated from RouteHandlers)."""
+        self.global_config = config
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings (delegated from RouteHandlers)."""

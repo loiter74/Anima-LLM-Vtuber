@@ -100,6 +100,15 @@ class ServicePool:
         }
 
     @classmethod
+    def apply_llm_config(cls, llm_config: Any) -> None:
+        """Apply lightweight LLM config updates to the pooled engine."""
+        if cls._llm is None:
+            return
+        from animetta.config.runtime_reload import apply_lightweight_llm_config
+
+        apply_lightweight_llm_config(cls._llm, llm_config)
+
+    @classmethod
     async def shutdown(cls) -> None:
         """Cleanly shut down all pooled engines."""
         if not cls._ready:

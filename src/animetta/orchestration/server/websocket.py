@@ -12,6 +12,7 @@ from starlette.routing import Mount, Route
 
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_pool import ServicePool
+from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
 from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager
@@ -28,6 +29,7 @@ class WebSocketServer:
     def __init__(self, config=None):
         """Initialize WebSocket server"""
         self.config = config
+        self.runtime_reloader = RuntimeConfigReloader(config) if config is not None else None
 
         self.sio = socketio.AsyncServer(
             async_mode='asgi',
@@ -109,6 +111,30 @@ class WebSocketServer:
             Route("/api/singing/recent", serve_singing_recent),
         ]
 
+        async def reload_config_endpoint(request):
+            if self.runtime_reloader is None:
+                if self.config is None:
+                    return JSONResponse(
+                        {
+                            "ok": False,
+                            "version": 1,
+                            "persona": "",
+                            "refreshed": [],
+                            "error": "No active config to reload",
+                        },
+                        status_code=400,
+                    )
+                self.runtime_reloader = RuntimeConfigReloader(self.config)
+
+            result = self.runtime_reloader.reload()
+            if result.ok:
+                await self._apply_reloaded_config(self.runtime_reloader.config, result.version)
+            return JSONResponse(result.to_dict(), status_code=200 if result.ok else 400)
+
+        config_routes = [
+            Route("/api/config/reload", reload_config_endpoint, methods=["POST"]),
+        ]
+
         # Frontend static files (production build)
         frontend_dist = Path(__file__).parent.parent.parent.parent.parent / "frontend" / "dist"
         frontend_routes = []
@@ -118,7 +144,7 @@ class WebSocketServer:
             logger.info(f"[Socket.IO] Frontend static files mounted at /app from {frontend_dist}")
 
         self.asgi_app = Starlette(
-            routes=stats_routes + metrics_route + singing_routes + frontend_routes + [Mount("/", app=sio_app)],
+            routes=stats_routes + metrics_route + singing_routes + config_routes + frontend_routes + [Mount("/", app=sio_app)],
         )
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
@@ -134,8 +160,25 @@ class WebSocketServer:
     def set_config(self, config) -> None:
         """Set application config"""
         self.config = config
+        self.runtime_reloader = RuntimeConfigReloader(config)
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
+
+    async def _apply_reloaded_config(self, config, version: int) -> None:
+        """Apply a successfully reloaded config to active runtime holders."""
+        self.config = config
+        if self.runtime_reloader is not None:
+            self.runtime_reloader._config = config
+            self.runtime_reloader.version = version
+        if self.route_handlers:
+            self.route_handlers.set_global_config(config)
+
+        llm_config = config.agent.llm_config if config.agent else None
+        ServicePool.apply_llm_config(llm_config)
+        for ctx in self.session_manager.contexts.values():
+            ctx.config = config
+            ctx.runtime_config_version = version
+            apply_lightweight_llm_config(getattr(ctx, "llm_engine", None), llm_config)
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings"""

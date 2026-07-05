@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.providers.llm import (
+from animetta.config.providers.llm import (
     DeepSeekLLMConfig,
     GLMLLMConfig,
     LocalLoraLLMConfig,
@@ -74,6 +74,7 @@ def openai_llm_config():
         api_key="test-openai-key",
         model="gpt-4o-mini",
         temperature=0.5,
+        top_p=0.92,
         max_tokens=500,
     )
 
@@ -309,7 +310,27 @@ class TestOpenAILLM:
         assert instance.model == "gpt-4o-mini"
         assert instance.system_prompt == "test"
         assert instance.temperature == 0.5
+        assert instance.top_p == 0.92
         assert instance.max_tokens == 500
+
+    @pytest.mark.asyncio
+    async def test_chat_passes_top_p_to_api(self):
+        """chat() should pass top_p so realtime roleplay can use lively sampling."""
+
+        with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_choice = MagicMock()
+            mock_choice.message.content = "Mocked OpenAI response"
+            mock_response.choices = [mock_choice]
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock.return_value = mock_client
+
+            llm = OpenAILLM(api_key="key", model="gpt-4", top_p=0.94)
+            await llm.chat("Hello")
+
+        call_kwargs = mock_client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["top_p"] == 0.94
 
     def test_from_config_supports_deepseek(self):
         """from_config should also work with DeepSeekLLMConfig."""

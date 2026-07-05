@@ -235,6 +235,13 @@ class LangGraphOrchestrator:
         if metadata:
             initial_state["metadata"] = metadata
 
+        config_version = int(getattr(self.service_context, "runtime_config_version", 1) or 1)
+        initial_state["config_version"] = config_version
+        initial_state["metadata"] = {
+            **initial_state.get("metadata", {}),
+            "config_version": config_version,
+        }
+
         return initial_state
 
     async def _run_graph(self, initial_state: AgentState) -> dict[str, Any]:

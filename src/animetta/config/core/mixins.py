@@ -44,4 +44,5 @@ class TemperatureMixin:
     Composed into: LLMBaseConfig
     """
     temperature: float = Field(default=0.7, ge=0, le=2, description="Generation temperature (higher = more creative)")
+    top_p: float = Field(default=0.9, ge=0, le=1, description="Nucleus sampling parameter")
     max_tokens: int = Field(default=4096, ge=1, description="Maximum generated tokens")

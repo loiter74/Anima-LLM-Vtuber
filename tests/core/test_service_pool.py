@@ -483,3 +483,30 @@ class TestIsReady:
 
     def test_returns_false_when_not_ready(self):
         assert ServicePool.is_ready() is False
+
+
+class TestApplyLlmConfig:
+    """ServicePool.apply_llm_config() — runtime lightweight updates."""
+
+    def test_updates_pooled_llm_engine(self):
+        class Engine:
+            model = "old-model"
+            temperature = 0.1
+            top_p = 0.2
+            max_tokens = 64
+
+        class Config:
+            model = "new-model"
+            temperature = 0.7
+            top_p = 0.8
+            max_tokens = 256
+
+        engine = Engine()
+        ServicePool._llm = engine
+
+        ServicePool.apply_llm_config(Config())
+
+        assert engine.model == "new-model"
+        assert engine.temperature == 0.7
+        assert engine.top_p == 0.8
+        assert engine.max_tokens == 256

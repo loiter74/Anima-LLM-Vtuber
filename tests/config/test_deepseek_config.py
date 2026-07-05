@@ -15,6 +15,13 @@ def test_thinking_disabled_by_default():
     assert cfg.thinking == "disabled"
 
 
+def test_realtime_roleplay_sampling_defaults_are_lively():
+    """DeepSeek realtime roleplay should default to non-deterministic chat sampling."""
+    cfg = DeepSeekLLMConfig(api_key="test")
+    assert cfg.temperature >= 0.85
+    assert cfg.top_p >= 0.9
+
+
 def test_thinking_enabled():
     cfg = DeepSeekLLMConfig(api_key="test", thinking="enabled")
     assert cfg.thinking == "enabled"

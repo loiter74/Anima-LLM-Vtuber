@@ -56,6 +56,7 @@ class OpenAIStreamHandler:
                 model=kwargs.get("model", self.llm.model),
                 messages=messages,
                 temperature=kwargs.get("temperature", self.llm.temperature),
+                top_p=kwargs.get("top_p", self.llm.top_p),
                 max_tokens=kwargs.get("max_tokens", self.llm.max_tokens),
                 stream=True,
                 stream_options={"include_usage": True},

@@ -107,7 +107,16 @@ class RouteHandlers:
         """Set global config — delegates to domain handlers."""
         self.base.set_global_config(config)
         self.global_config = self.base.global_config
-        for h in [self.config_handlers, self.persona, self.lifecycle]:
+        for h in [
+            self.config_handlers,
+            self.bilibili,
+            self.chat,
+            self.live2d,
+            self.minecraft,
+            self.persona,
+            self.lifecycle,
+            self.singing,
+        ]:
             h.global_config = config
 
     def set_user_settings(self, user_settings) -> None:

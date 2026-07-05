@@ -10,7 +10,7 @@ from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
 )
-from langchain_core.core.tools import tool
+from langchain_core.tools import tool
 
 from animetta.services.llm.tool_handler import OpenAIToolHandler
 
@@ -21,6 +21,7 @@ def mock_openai_llm():
     llm = MagicMock()
     llm.model = "gpt-4"
     llm.temperature = 0.7
+    llm.top_p = 0.93
     llm.max_tokens = 1024
     llm.history = []
     llm.client = MagicMock()
@@ -231,3 +232,26 @@ class TestOpenAIToolHandler:
             )
 
         mock_openai_llm._record_error.assert_called_once()
+
+    @patch("animetta.services.llm.tool_handler.logger")
+    async def test_chat_with_tools_passes_top_p(self, mock_logger, handler, mock_openai_llm):
+        """Tool-call path should preserve realtime sampling configuration."""
+        mock_choice = MagicMock()
+        mock_choice.message.content = "ok"
+        mock_choice.message.tool_calls = None
+
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_openai_llm.client.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+
+        await handler.chat_with_tools(
+            user_input="hi",
+            tools=[],
+            langchain_history=[],
+        )
+
+        call_kwargs = mock_openai_llm.client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["top_p"] == 0.93

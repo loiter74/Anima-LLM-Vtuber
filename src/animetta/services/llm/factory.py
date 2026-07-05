@@ -82,6 +82,7 @@ class LLMFactory:
                 model=kwargs.get("model", "gpt-4o-mini"),
                 base_url=kwargs.get("base_url"),
                 temperature=kwargs.get("temperature", 0.7),
+                top_p=kwargs.get("top_p", 0.9),
                 max_tokens=kwargs.get("max_tokens", 1000)
             ),
             "glm": lambda: GLMLLMConfig(
