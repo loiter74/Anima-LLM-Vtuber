@@ -26,4 +26,3 @@ TBD - created by archiving change mc-bot-smart-brain. Update Purpose after archi
 #### Scenario: Switch to rule mode
 - **WHEN** Python 侧发送 set_mode(rule)
 - **THEN** 状态机 SHALL 进入闲置状态，由 Python 的 autonomous-loop 逐条发指令
-

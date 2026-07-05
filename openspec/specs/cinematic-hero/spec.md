@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the cinematic-hero capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Full-screen background with parallax
 The system SHALL display a full-screen background image with parallax scroll effect.

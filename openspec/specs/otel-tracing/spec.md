@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the otel-tracing capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Service calls produce OTel spans
 Every service method call (LLM.chat_stream, TTS.synthesize, ASR.transcribe, VAD.detect_speech) SHALL automatically produce an OpenTelemetry span.

@@ -3,7 +3,8 @@
 ## Purpose
 Vue 3 梗筛选卡片页面，逐个展示待筛选梗，支持好/坏投票和 AI 吐槽展示。
 
-## ADDED Requirements
+Defines the accepted behavior and requirements for the meme-review-ui capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+## Requirements
 
 ### Requirement: 梗筛选页面路由
 系统 SHALL 在 Anima 前端新增 `/meme-review` 路由，加载 `MemeReview.vue` 视图组件。

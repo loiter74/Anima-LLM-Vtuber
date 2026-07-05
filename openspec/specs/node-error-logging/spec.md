@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the node-error-logging capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Graph nodes report structured errors to StatsStore
 The system SHALL provide a shared `log_node_error()` utility that any graph node can call to record a provider failure with structured metadata (error type, provider name, duration) to StatsStore. The error SHALL be stored in the existing `spans` table with `status = "error"` and error metadata as JSON in the `attributes` column.

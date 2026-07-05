@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the llm-cost-tracking capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Provider pricing table
 The system SHALL maintain a `PROVIDER_PRICING` dictionary mapping `(provider, model)` to `(input_price_per_1k_tokens, output_price_per_1k_tokens)` in USD.

@@ -43,4 +43,3 @@ TBD - created by archiving change improve-danmaku-meme-collection. Update Purpos
 #### Scenario: 查询缓冲区统计
 - **WHEN** 外部模块调用 `total_count` 或 `get_stats()`
 - **THEN** 系统 SHALL 返回缓冲区当前弹幕总数、短语种类数、最早/最晚弹幕时间
-

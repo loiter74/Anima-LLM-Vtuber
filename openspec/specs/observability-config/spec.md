@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the observability-config capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: OTLP export disabled by default
 The observability configuration SHALL default to `otlp.enabled: false` so that OTLP gRPC export to the OTel Collector is opt-in, preventing continuous retry errors when the observability stack is not running.

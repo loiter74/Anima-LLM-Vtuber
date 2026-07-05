@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the llm-evaluation capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Multi-LLM comparison script
 The system SHALL provide a CLI script `scripts/eval_llm.py` that sends identical prompts to multiple configured LLM providers and compares responses using semantic similarity scoring.

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the error-resilience capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: LLM timeout triggers mock fallback
 When an LLM provider call exceeds a configurable timeout, the system SHALL catch the timeout exception, log the error to StatsStore as an error trace, and automatically switch to the mock LLM provider for the remainder of that conversation turn.

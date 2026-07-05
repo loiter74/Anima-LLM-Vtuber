@@ -46,4 +46,3 @@ bot SHALL 对于 3x3 合成自动查找附近的工作台。
 #### Scenario: 无工作台
 - **WHEN** 32 格范围内无工作台
 - **THEN** 返回 `{"status":"error","result":"No crafting table found nearby"}`
-

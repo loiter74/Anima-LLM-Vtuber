@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the autonomous-loop capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Autonomous decision loop
 系统 SHALL 实现一个自主决策循环，作为 LLM 规划不可用时的后备行为模式。当 Bot 无活跃 LLM 指令且 planner 未执行时，定期评估环境并选择下一行为。当学习组件可用时，循环 SHALL 包含技能匹配、轨迹记录和技能提取。

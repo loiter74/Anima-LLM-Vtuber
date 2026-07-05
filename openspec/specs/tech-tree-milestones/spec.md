@@ -48,4 +48,3 @@ The system SHALL provide a function to check milestone achievement.
 #### Scenario: Check milestone
 - **WHEN** check_milestone(phase, inventory) is called
 - **THEN** returns True if all required items are present
-

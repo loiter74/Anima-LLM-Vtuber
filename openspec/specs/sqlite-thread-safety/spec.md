@@ -47,4 +47,3 @@ The lock SHALL NOT introduce measurable latency under normal single-threaded usa
 
 - **WHEN** a single conversation turn stores data, triggering `_index_file` once
 - **THEN** the total operation time SHALL NOT increase by more than 1ms compared to the non-locked baseline
-

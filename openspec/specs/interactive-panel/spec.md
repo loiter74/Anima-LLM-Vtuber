@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the interactive-panel capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Right panel width matches design system specification
 The system SHALL render the InteractivePanel (right panel) at 340px width, matching the `design-system/ui-kit.html` specification.

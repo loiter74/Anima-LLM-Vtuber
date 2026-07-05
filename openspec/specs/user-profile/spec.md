@@ -33,4 +33,3 @@ TBD - created by archiving change supermemory-memory-enhancement. Update Purpose
 - **WHEN** `MemoryMiddleware.before_llm_call` 執行
 - **THEN** 注入的 system prompt 中包含 `## 用戶畫像` 區塊
 - **THEN** 內容同時列出 static 和 dynamic 資訊
-

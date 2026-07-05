@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the scroll-driven-animations capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Image scale-fade on scroll
 The system SHALL animate images from scale 0.8 to 1.0 as they scroll into view, and fade to opacity 0.2 as they scroll out.

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the grafana-dashboards capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Grafana auto-provisioned with Prometheus and Tempo datasources
 Grafana SHALL be configured via provisioning to automatically connect to Prometheus (port 9090) and Tempo (port 3200) on startup, requiring zero manual configuration.

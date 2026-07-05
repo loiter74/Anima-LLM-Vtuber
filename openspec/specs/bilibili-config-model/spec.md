@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the bilibili-config-model capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: BilibiliConfig Pydantic model
 The system SHALL provide a `BilibiliConfig` Pydantic model at `config/providers/bilibili.py` that replaces the manual key-stripping of `bilibili` from `config.yaml` in `app.py`.

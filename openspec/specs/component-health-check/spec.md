@@ -1,8 +1,11 @@
 # Component Health Check
 
+## Purpose
+Defines the accepted behavior and requirements for the component-health-check capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
 Provides granular per-component health status for the Anima backend, replacing the binary `/health` endpoint (`{"status":"ok"}`) with component-level diagnostics.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Health endpoint returns per-component status
 

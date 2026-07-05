@@ -35,4 +35,3 @@ TBD - created by archiving change mc-bot-craft-equipment. Update Purpose after a
 #### Scenario: 铁锭不足
 - **WHEN** 背包中 iron_ingot < 24
 - **THEN** 跳过该 Skill
-

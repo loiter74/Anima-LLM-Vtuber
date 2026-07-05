@@ -34,4 +34,3 @@ TBD - created by archiving change minecraft-ai-autonomous-builder. Update Purpos
 #### Scenario: Message from template
 - **WHEN** 触发 player_nearby 聊天
 - **THEN** Bot SHALL 从对应话题的消息列表中随机选择一条发送
-

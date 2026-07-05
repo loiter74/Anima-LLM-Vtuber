@@ -3,7 +3,7 @@
 ## Purpose
 使用 LLM 对采集到的梗进行认知科学分析，输出幽默机制、使用场景、情感色彩等结构化描述，存入 Meme 模型供 AI 对话时使用。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 梗认知分析
 系统 SHALL 对每个梗候选执行 LLM 驱动的认知分析，输出结构化分析结果。

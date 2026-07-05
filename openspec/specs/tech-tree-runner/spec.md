@@ -53,4 +53,3 @@ The system SHALL detect when all phases are complete.
 #### Scenario: Time budget exceeded
 - **WHEN** total time exceeds 60 minutes
 - **THEN** runner stops and reports partial progress
-

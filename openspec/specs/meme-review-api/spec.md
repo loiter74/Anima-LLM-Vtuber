@@ -2,6 +2,8 @@
 
 ## Purpose
 后端梗筛选 REST API，提供梗列表获取、筛选结果记录、数据集导出功能。
+
+Defines the accepted behavior and requirements for the meme-review-api capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
 ## Requirements
 ### Requirement: 待筛选梗列表 API
 系统 SHALL 提供 `GET /api/memes/list` 接口返回待筛选梗列表。
@@ -71,4 +73,3 @@
 #### Scenario: review_status 持久化
 - **WHEN** MemeStore 保存或更新 Meme
 - **THEN** `review_status` SHALL 通过 Wiki metadata 持久化
-

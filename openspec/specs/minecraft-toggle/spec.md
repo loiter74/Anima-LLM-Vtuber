@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the minecraft-toggle capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Minecraft start/stop via Socket.IO
 The system SHALL expose Socket.IO events `minecraft.start` and `minecraft.stop` that allow the frontend to control the Minecraft bot lifecycle at runtime.

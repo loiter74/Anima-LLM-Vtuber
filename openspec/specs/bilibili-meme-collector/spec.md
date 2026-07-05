@@ -98,4 +98,3 @@
 - **WHEN** jieba 库未安装
 - **THEN** 系统 SHALL 回退到原有的字符 2-gram 方法
 - **AND** 记录 warning 日志提示安装 jieba
-

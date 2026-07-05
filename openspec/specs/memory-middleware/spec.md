@@ -63,4 +63,3 @@ For the compatibility path:
 - **WHEN** memory context is available
 - **THEN** the prompt pipeline SHALL receive metadata sufficient to report memory section inclusion
 - **THEN** the compiled prompt metadata SHALL identify that memory context was included
-

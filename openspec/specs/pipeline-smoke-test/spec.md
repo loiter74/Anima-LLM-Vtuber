@@ -1,5 +1,8 @@
 # Pipeline Smoke Test
 
+## Purpose
+Defines the accepted behavior and requirements for the pipeline-smoke-test capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
 Verifies the end-to-end conversation pipeline by initiating a real Socket.IO connection, sending a test message, and collecting expected events across all 7 LangGraph nodes.
 ## Requirements
 ### Requirement: Smoke test uses real Socket.IO client
@@ -47,4 +50,3 @@ The system SHALL enforce a total test timeout of 35 seconds (5s connect + 30s ev
 
 - **WHEN** the event collection phase exceeds 30 seconds without receiving all expected events
 - **THEN** the test SHALL disconnect, report whatever events were received up to that point, and report `"ok": false` with missing events listed
-

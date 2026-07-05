@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the subtitle-responsive-positioning capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: 比例化位置存储
 字幕位置 SHALL 以相对于 Live2D 容器的比例值（0.0~1.0）存储，而非绝对像素值。`posX` 表示面板中心点在容器中的水平比例，`posY` 表示面板底边在容器中的垂直比例。`null` 表示使用默认居中位置。存储数据 SHALL 包含 `_version: 2` 版本标记。

@@ -3,7 +3,8 @@
 ## Purpose
 在对话中基于语义匹配将合适的梗注入 LLM 上下文，让 AI 在对话中自然接梗。
 
-## ADDED Requirements
+Defines the accepted behavior and requirements for the meme-context-injection capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+## Requirements
 
 ### Requirement: 语义匹配替代关键词匹配
 系统 SHALL 升级 `MemePool.select_for_context()` 方法，从简单关键词匹配改为语义匹配。

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the redis-session-sharing capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Redis checkpoint via CLI flag
 The system SHALL accept an optional `--redis-url` CLI argument. When provided, LangGraph checkpoints SHALL be stored in Redis using `AsyncRedisSaver`. When absent, the existing in-memory `MemorySaver` SHALL be used.

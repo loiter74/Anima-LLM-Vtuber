@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the benchmark-report capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Benchmark produces latency distribution report
 The system SHALL run a configurable number of conversation turns against a mock LLM backend and record per-node latency, token counts, and error counts to StatsStore. Results SHALL be viewable on the existing Dashboard.

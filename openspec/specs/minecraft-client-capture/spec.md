@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the minecraft-client-capture capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Real client capture mode configuration
 The system SHALL provide a Minecraft client viewer configuration that can enable or disable real-client capture independently from the Mineflayer action bot and browser debug viewer.

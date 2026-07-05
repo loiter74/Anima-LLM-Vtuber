@@ -34,4 +34,3 @@ TBD - created by archiving change live-stream-page. Update Purpose after archive
 #### Scenario: 默认背景
 - **WHEN** URL 不包含 `?bg` 参数
 - **THEN** 系统 SHALL 使用默认背景图片或渐变色
-

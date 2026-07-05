@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the gsap-integration capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: GSAP core library integration
 The system SHALL include GSAP 3.x as a dependency and register ScrollTrigger plugin globally.

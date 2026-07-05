@@ -3,7 +3,7 @@
 ## Purpose
 分析 B 站直播间的弹幕互动模式（回应节奏、梗使用时机、观众情绪响应），生成直播优化策略，帮助 Anima 在直播中表现更贴近真人主播。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 弹幕互动模式采集
 系统 SHALL 从 B 站热门直播间采集弹幕互动数据用于模式分析。

@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the service-pool capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: LLM/TTS/ASR engines are globally shared
 The system SHALL maintain a single shared instance of LLM, TTS, and ASR engines that all sessions reuse. The MinecraftBridge SHALL access the shared LLM engine via ServicePool for skill extraction.

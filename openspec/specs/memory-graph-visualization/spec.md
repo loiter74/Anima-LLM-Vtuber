@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the memory-graph-visualization capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Render knowledge graph from memory data
 The system SHALL render an interactive knowledge graph visualization using SVG elements and d3-force layout, displaying Memory V2 atoms as draggable nodes and their relations as labeled edges.

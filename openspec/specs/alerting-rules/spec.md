@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the alerting-rules capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: High error rate alert
 The system SHALL fire an `AnimaHighErrorRate` alert when the LLM error rate exceeds 5% for 5 continuous minutes.

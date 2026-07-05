@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the window-manager capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: 单窗口默认布局
 系统 SHALL 默认以单窗口模式启动，窗口内左侧为 Live2D 渲染区域，右侧为聊天面板，使用响应式布局。

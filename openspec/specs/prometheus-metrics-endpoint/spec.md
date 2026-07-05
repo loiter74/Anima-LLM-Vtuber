@@ -43,4 +43,3 @@ The system SHALL NOT require all metrics to be pre-declared. Metrics SHALL be re
 
 - **WHEN** the server starts and `GET /metrics` is called before any LLM error occurs
 - **THEN** the response SHALL still return HTTP 200 and include default process metrics (e.g., `python_info`, `process_start_time_seconds`)
-

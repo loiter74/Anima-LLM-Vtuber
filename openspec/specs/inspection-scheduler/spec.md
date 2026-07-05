@@ -1,8 +1,11 @@
 # Inspection Scheduler
 
+## Purpose
+Defines the accepted behavior and requirements for the inspection-scheduler capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
 Orchestrates daily inspection runs: triggers all checks, aggregates results into structured reports, persists reports, and alerts on failures.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Data models for inspection results
 

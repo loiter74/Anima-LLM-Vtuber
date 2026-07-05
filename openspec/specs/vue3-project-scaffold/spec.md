@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the vue3-project-scaffold capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: electron-vite 项目初始化
 系统 SHALL 使用 electron-vite 脚手架创建项目，支持 main/renderer/preload 三进程分离，TypeScript 严格模式，Vite 开发服务器 HMR。

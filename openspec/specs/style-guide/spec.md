@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the style-guide capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: CSS variable to UnoCSS mapping table
 The system SHALL provide a complete mapping table from all 21 color CSS variables (`var(--c-*)`) to their UnoCSS class equivalents in STYLE_GUIDE.md.

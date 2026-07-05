@@ -42,4 +42,3 @@ The registry SHALL include TypeScript type definitions for each event's payload.
 #### Scenario: Emit with typed payload
 - **WHEN** frontend emits `Events.CHAT_SEND_TEXT`
 - **THEN** TypeScript SHALL enforce the payload matches `{ text: string; user_id?: string; from_name?: string }`
-

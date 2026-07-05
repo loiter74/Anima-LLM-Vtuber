@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the bilibili-shared-models capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Unified danmaku message model
 The system SHALL provide a single `DanmakuMessage` dataclass in `services.bilibili.models` that represents all danmaku types (text, gift, super chat) with unified field names.

@@ -37,4 +37,3 @@ rules.md SHALL 支持安全相关配置，且安全硬编码优先级高于 rule
 - **WHEN** rules.md 中 max_distance 大于 config/tools.yaml 中的值
 - **THEN** 系统 SHALL 使用 config/tools.yaml 中较小的值
 - **AND** 记录配置冲突告警
-

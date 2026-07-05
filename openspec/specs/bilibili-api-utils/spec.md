@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the bilibili-api-utils capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Unified bilibili-api-python access
 The system SHALL provide a single module `services.bilibili.api` as the sole entry point for all `bilibili-api-python` imports, using lazy-loading with a single `try-except ImportError` guard.

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the auto-benchmark capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: One-command auto benchmark
 The benchmark tool SHALL support a single command that automates the full pipeline: start server, run tests, collect results, generate report.

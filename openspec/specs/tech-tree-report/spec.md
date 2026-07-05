@@ -44,4 +44,3 @@ The system SHALL integrate with BenchmarkRunner for metrics collection.
   - distance_traveled
   - skills_created
   - skills_reused
-

@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the collect-build-pipeline capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Target material gathering
 系统 SHALL 自动寻找并收集建造所需的缺失材料，并 SHALL 使用 Resource Locator 优先定位最近的可获取来源。

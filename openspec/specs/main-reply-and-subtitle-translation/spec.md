@@ -61,4 +61,3 @@ The system SHALL attach a stable turn identity to original subtitle and translat
 #### Scenario: Missing upstream turn identity is handled
 - **WHEN** the graph state does not already include a turn identity
 - **THEN** the output node SHALL generate a stable turn identity for all subtitle events from that output pass
-

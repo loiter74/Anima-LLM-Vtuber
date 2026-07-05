@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the bilibili-text-utils capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Shared Chinese stopwords constant
 The system SHALL define a single `STOPWORDS` frozenset in `services.bilibili.text_utils` containing Chinese stopwords for danmaku/comment filtering, imported by all modules that need it.

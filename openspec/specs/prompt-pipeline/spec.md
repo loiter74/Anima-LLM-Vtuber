@@ -101,4 +101,3 @@ The prompt pipeline SHALL include a concise live improvisation control layer for
 - **WHEN** live improvisation and memory sections are both present
 - **THEN** the live improvisation section SHALL appear before the memory section
 - **THEN** memory context SHALL NOT be the final style-setting instruction
-

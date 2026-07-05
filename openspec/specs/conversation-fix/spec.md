@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the conversation-fix capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: AI conversation response display
 The system SHALL correctly display AI responses in the frontend chat interface after the user sends a text message.

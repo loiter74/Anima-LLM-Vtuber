@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the otel-metrics capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: OTel MeterProvider initialized
 The system SHALL initialize an OpenTelemetry MeterProvider alongside the existing TracerProvider during `init_tracing()`. Metrics SHALL be exported to the OTel Collector via OTLP only when `otlp.enabled` is explicitly set to `true` in `config/observability.yaml`.

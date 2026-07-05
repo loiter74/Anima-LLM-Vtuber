@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the survival-iron-action-injection capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Survival runner uses injected bot-level action functions
 The survival iron runner SHALL execute collect, craft, smelt, and equip actions through functions attached to the bot object by the runtime, rather than through self-implemented helpers.

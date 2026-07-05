@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the skill-persistence capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: SkillLibrary persists to SQLite
 The system SHALL persist all learned and predefined skills to a SQLite database so that skills survive bot restarts.

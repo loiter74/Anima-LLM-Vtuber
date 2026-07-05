@@ -3,7 +3,7 @@
 ## Purpose
 梗筛选 AI 反馈生成器——根据用户的选择（好/烂），AI 给出对应风格的点评：标记「好」时赞赏，标记「烂」时吐槽。提升筛选交互的趣味性。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 好梗 AI 赞赏
 系统 SHALL 在用户标记梗为「好」时，调用 LLM 生成一条简洁赞赏。

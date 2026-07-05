@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the auto-skill-cleanup capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Auto-cleanup runs probabilistically each tick
 The system SHALL automatically clean up low-quality skills at the end of each AutonomousLoop tick with a 5% probability.

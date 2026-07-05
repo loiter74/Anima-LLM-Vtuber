@@ -28,4 +28,3 @@ TBD - created by archiving change mc-bot-smart-brain. Update Purpose after archi
 #### Scenario: LLM unavailable falls back to rules
 - **WHEN** LLM 服务不可用或规划超时
 - **THEN** 系统 SHALL 自动切换到 autonomous-loop 的规则模式
-

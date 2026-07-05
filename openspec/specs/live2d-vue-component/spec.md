@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the live2d-vue-component capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: Live2D 渲染组件
 系统 SHALL 提供 `<Live2DRenderer>` Vue 3 组件，封装 pixi.js Application 和 pixi-live2d-display，接受 props 控制模型和表情。pixi.js SHALL 通过 ES module import（`import * as PIXI from 'pixi.js'`）加载，pixi-live2d-display SHALL 通过 `import { Live2DModel } from 'pixi-live2d-display/cubism4'` 加载。组件初始化时 SHALL 设置 `window.PIXI = PIXI` 以满足 pixi-live2d-display 内部的 Ticker 驱动依赖。

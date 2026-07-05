@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the accepted behavior and requirements for the anime-theme capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
+
+## Requirements
 
 ### Requirement: 主题色系统
 系统 SHALL 定义完整的日系二次元主题色 token，包含背景色、文字色、强调色、面板色、边框色等语义化色彩变量。

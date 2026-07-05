@@ -63,4 +63,3 @@ TBD - created by archiving change live-stream-page. Update Purpose after archive
 #### Scenario: 自定义背景
 - **WHEN** URL 包含 `?bg=xxx.jpg` 参数
 - **THEN** 页面 SHALL 使用指定的背景图片，否则使用默认背景
-

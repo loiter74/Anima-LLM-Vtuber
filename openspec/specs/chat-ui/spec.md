@@ -105,4 +105,3 @@ The chat UI SHALL display translated subtitle text only when the translation bel
 - **WHEN** the UI receives a translation event without `turn_id`
 - **THEN** the UI SHALL NOT overwrite a newer subtitle turn
 - **THEN** the UI MAY display it only when no current turn identity is known
-
