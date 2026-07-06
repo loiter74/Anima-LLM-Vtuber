@@ -36,6 +36,7 @@ frontend/
 ├── package.json              # Dependencies + scripts
 ├── tsconfig.json             # TypeScript config
 ├── vite.config.ts            # Vite build config
+├── vitest.config.ts          # Vitest + happy-dom test config
 └── uno.config.ts             # UnoCSS config
 ```
 
@@ -95,11 +96,12 @@ cd frontend && pnpm install  # Install
 pnpm dev                     # Dev server (port 3000)
 pnpm build                   # Build
 pnpm vue-tsc --noEmit        # Type check
+pnpm test:run                # Frontend tests (Vitest + happy-dom)
 ```
 
 ## NOTES
 
-- **No frontend tests exist** — test framework not yet installed (vitest recommended).
+- **23 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
 - Live2D model files (`.moc3`, textures) are loaded from `assets/` at runtime.
 - Bilingual subtitle feature uses LLM translation — configured in Settings panel.
 - **Dev server runs on port 3000** (Vite, not 5173). Electron builder is not configured.
