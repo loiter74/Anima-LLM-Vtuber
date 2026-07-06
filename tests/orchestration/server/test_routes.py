@@ -137,6 +137,14 @@ class TestRouteHandlersInit:
 
         assert handlers.memory.global_config is handlers.global_config
 
+    def test_meme_events_are_owned_by_meme_handler(
+        self, mock_socketio, mock_session_manager
+    ):
+        """RouteHandlers remains a facade for meme review events."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        assert handlers.meme is not None
+
     def test_setup_live2d_callback_sets_execute_callback(self, mock_socketio, mock_session_manager):
         """_setup_live2d_callback registers an async callback on the Live2D manager."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -682,6 +690,36 @@ class TestRouteHandlersDispatch:
 
         assert await handlers.on_get_wiki_pages("sid1", {}) == {"pages": pages}
 
+    @pytest.mark.asyncio
+    async def test_meme_review_roundtrip_uses_registered_runtime_pool(
+        self, mock_socketio, mock_session_manager
+    ):
+        """meme:* events should back the frontend review workflow."""
+
+        mock_session_manager.get_or_create_context = AsyncMock(
+            return_value=SimpleNamespace(llm_engine=None)
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        add_result = await handlers.on_add_meme(
+            "sid1", {"text": "电子榨菜", "source": "user", "tags": ["bilibili"]}
+        )
+        meme_id = add_result["meme"]["id"]
+
+        list_result = await handlers.on_list_memes("sid1", {"limit": 50})
+        review_result = await handlers.on_review_meme(
+            "sid1", {"meme_id": meme_id, "status": "good"}
+        )
+        dataset_result = await handlers.on_export_meme_dataset("sid1", {})
+
+        assert add_result["ok"] is True
+        assert list_result["memes"][0]["text"] == "电子榨菜"
+        assert review_result == {"ok": True, "feedback": "已收录为好梗"}
+        assert dataset_result["memes"][0]["review_status"] == "good"
+        mock_socketio.emit.assert_any_call("meme:list", list_result, to="sid1")
+        mock_socketio.emit.assert_any_call("meme:review", review_result, to="sid1")
+        mock_socketio.emit.assert_any_call("meme:dataset", dataset_result, to="sid1")
+
 
 # ── RouteHandlers — Broadcast ──────────────────────────────────────
 
@@ -794,6 +832,16 @@ class TestRegisterRoutes:
 
         events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
         for event in ("chat:text", "chat:audio", "chat:audio_end", "chat:interrupt"):
+            assert event in events_bound, f"{event} should be registered"
+
+    def test_register_routes_binds_meme_events(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Meme review catalog events are bound to backend handlers."""
+        register_routes(mock_socketio, mock_session_manager)
+
+        events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
+        for event in ("meme:add", "meme:list", "meme:review", "meme:dataset", "meme:collect"):
             assert event in events_bound, f"{event} should be registered"
 
     def test_register_routes_binds_desktop_events(

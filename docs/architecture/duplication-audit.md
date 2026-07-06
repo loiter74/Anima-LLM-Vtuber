@@ -311,6 +311,13 @@ continue.
 store. The backend returned pages through the Socket.IO ack path, so the
 post-organize refresh never updated `wikiPages`.
 
+### Meme review event catalog without backend routes
+
+`config/socket-events.json` and the frontend exposed `meme:add`, `meme:list`,
+`meme:review`, `meme:dataset`, and `meme:collect`, but `register_routes()` did
+not bind any of those events to backend handlers. The Meme Review UI could emit
+catalog-valid events, but no server-side business boundary received them.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -354,6 +361,7 @@ post-organize refresh never updated `wikiPages`.
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
 | Routed memory organize completion through the frontend memory store refresh instead of a no-op `memory:list_pages` emit. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
+| Added backend meme review handlers and route registration for the existing `meme:*` catalog events. | `src/animetta/orchestration/server/handlers/meme_handlers.py`, `src/animetta/orchestration/server/routes.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -417,6 +425,8 @@ Behavior preserved:
 - Memory organize still emits the same backend event and clears the organizing
   state on completion; the wiki list now refreshes through the memory store ack
   path.
+- Meme review event names are unchanged; existing frontend emit/once and ack
+  callers now reach a backend handler backed by the existing meme services.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

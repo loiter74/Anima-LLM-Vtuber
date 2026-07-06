@@ -16,6 +16,7 @@ from .handlers.chat_handlers import ChatHandlers
 from .handlers.config_handlers import ConfigHandlers
 from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
+from .handlers.meme_handlers import MemeHandlers
 from .handlers.memory_handlers import MemoryHandlers
 from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
@@ -61,6 +62,7 @@ class RouteHandlers:
         self.chat = ChatHandlers(sio, session_manager, self.base)
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
         self.memory = MemoryHandlers(sio, session_manager, self.base)
+        self.meme = MemeHandlers(sio, session_manager, self.base)
         self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
@@ -109,6 +111,7 @@ class RouteHandlers:
             self.chat,
             self.live2d,
             self.memory,
+            self.meme,
             self.minecraft,
             self.persona,
             self.lifecycle,
@@ -293,6 +296,23 @@ class RouteHandlers:
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
         return await self.memory.on_get_wiki_pages(sid, data)
 
+    # ── Meme review events ─────────────────────────────────────────────
+
+    async def on_add_meme(self, sid: str, data: dict) -> dict:
+        return await self.meme.on_add_meme(sid, data)
+
+    async def on_list_memes(self, sid: str, data: dict) -> dict:
+        return await self.meme.on_list_memes(sid, data)
+
+    async def on_review_meme(self, sid: str, data: dict) -> dict:
+        return await self.meme.on_review_meme(sid, data)
+
+    async def on_export_meme_dataset(self, sid: str, data: dict) -> dict:
+        return await self.meme.on_export_dataset(sid, data)
+
+    async def on_collect_memes(self, sid: str, data: dict) -> dict:
+        return await self.meme.on_collect_memes(sid, data)
+
 
 def register_routes(
     sio: "AsyncServer",
@@ -376,6 +396,13 @@ def register_routes(
     # Memory: wiki pages (legacy compat — delegates to V2)
     sio.on(event_name("memory", "organize"), handlers.on_memory_organize)
     sio.on(event_name("memory", "list_pages"), handlers.on_get_wiki_pages)
+
+    # Meme review
+    sio.on(event_name("meme", "add"), handlers.on_add_meme)
+    sio.on(event_name("meme", "list"), handlers.on_list_memes)
+    sio.on(event_name("meme", "review"), handlers.on_review_meme)
+    sio.on(event_name("meme", "dataset"), handlers.on_export_meme_dataset)
+    sio.on(event_name("meme", "collect"), handlers.on_collect_memes)
 
     logger.info("WebSocket routes registered")
     return handlers
