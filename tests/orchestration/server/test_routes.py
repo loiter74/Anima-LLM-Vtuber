@@ -255,6 +255,28 @@ class TestRouteHandlersDispatch:
         }, to="sid1")
 
     @pytest.mark.asyncio
+    async def test_on_switch_config_accepts_catalog_config_name(
+        self, mock_socketio, mock_session_manager
+    ):
+        """config:switch should use the catalog payload field."""
+
+        mock_session_manager.orchestrators = {"sid1": MagicMock()}
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        await handlers.on_switch_config("sid1", {"config_name": "streaming"})
+
+        assert "sid1" not in mock_session_manager.orchestrators
+        mock_socketio.emit.assert_any_call(
+            "config:switched",
+            {
+                "type": "config:switched",
+                "config_name": "streaming",
+                "message": "Switched to config: streaming",
+            },
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
     async def test_on_raw_audio_data_processes_chunk(
         self, mock_socketio, mock_session_manager, monkeypatch
     ):

@@ -41,7 +41,7 @@ class ConfigHandlers(BaseSocketHandler):
 
     async def on_switch_config(self, sid: str, data: dict) -> None:
         """Switch config."""
-        config_name = data.get("file", "default")
+        config_name = data.get("config_name") or data.get("file") or "default"
         logger.info(f"[{sid}] Switching config: {config_name}")
 
         try:
@@ -52,6 +52,7 @@ class ConfigHandlers(BaseSocketHandler):
                 EVENTS["config"]["switched"]["name"],
                 {
                     "type": EVENTS["config"]["switched"]["name"],
+                    "config_name": config_name,
                     "message": f"Switched to config: {config_name}",
                 },
                 to=sid,

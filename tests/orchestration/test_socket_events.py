@@ -31,6 +31,19 @@ def test_translation_configure_payload_accepts_partial_updates() -> None:
     }
 
 
+def test_config_switch_payload_matches_handler_contract() -> None:
+    """config:switch should document the active field and legacy fallback."""
+    assert EVENTS["config"]["switch"]["payload"] == {
+        "config_name?": "string",
+        "file?": "string",
+    }
+    assert EVENTS["config"]["switched"]["payload"] == {
+        "type?": "string",
+        "config_name": "string",
+        "message": "string",
+    }
+
+
 def test_event_name_rejects_missing_event_definition() -> None:
     with pytest.raises(KeyError):
         event_name("missing", "event")

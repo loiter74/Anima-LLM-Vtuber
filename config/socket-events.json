@@ -109,7 +109,8 @@
     "switch": {
       "name": "config:switch",
       "payload": {
-        "config_name": "string"
+        "config_name?": "string",
+        "file?": "string"
       }
     },
     "log_level": {
@@ -125,7 +126,9 @@
     "switched": {
       "name": "config:switched",
       "payload": {
-        "config_name": "string"
+        "type?": "string",
+        "config_name": "string",
+        "message": "string"
       }
     },
     "log_level_changed": {
