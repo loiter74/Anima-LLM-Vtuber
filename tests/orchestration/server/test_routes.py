@@ -77,6 +77,39 @@ class TestRouteHandlersInit:
         assert handlers.base.global_config is config
         assert handlers.config_handlers.global_config is config
 
+    def test_persona_config_logging_does_not_leak_config_repr(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """Persona handler config plumbing must not log the full config object."""
+
+        class SecretConfig:
+            persona = "anima"
+
+            def __repr__(self) -> str:
+                return "SecretConfig(api_key='sk-test-secret')"
+
+        info = MagicMock()
+        debug = MagicMock()
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.logger.info",
+            info,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.logger.debug",
+            debug,
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(SecretConfig())
+        _ = handlers.persona.global_config
+
+        logged = "\n".join(
+            str(call.args) + str(call.kwargs)
+            for log in (info, debug)
+            for call in log.call_args_list
+        )
+        assert "sk-test-secret" not in logged
+
     def test_set_user_settings(self, mock_socketio, mock_session_manager):
         """set_user_settings stores settings reference."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)

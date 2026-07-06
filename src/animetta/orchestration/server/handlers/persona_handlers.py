@@ -38,14 +38,23 @@ class PersonaHandlers(BaseSocketHandler):
     @property
     def global_config(self):
         """Get global_config from base handler if available."""
-        logger.info(f"[PersonaHandlers] global_config property called: _base={self._base}, _base.global_config={self._base.global_config if self._base else 'N/A'}, _global_config={self._global_config}")
+        logger.debug(
+            "[PersonaHandlers] global_config requested: has_base={}, "
+            "base_has_config={}, local_has_config={}",
+            self._base is not None,
+            bool(self._base and self._base.global_config),
+            self._global_config is not None,
+        )
         if self._base and self._base.global_config:
             return self._base.global_config
         return self._global_config
 
     @global_config.setter
     def global_config(self, value):
-        logger.info(f"[PersonaHandlers] global_config setter called: {value}")
+        logger.debug(
+            "[PersonaHandlers] global_config updated: has_config={}",
+            value is not None,
+        )
         self._global_config = value
 
     # ── Persona Runtime Switching ──────────────────────────────────────

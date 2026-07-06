@@ -173,6 +173,13 @@ After the first catalog cleanup, `persona:list` still reloaded the active
 persona by name to extract MBTI data even when `AppConfig` already held the
 current cached persona.
 
+### Persona handler config logging leak
+
+`PersonaHandlers.global_config` logged full config objects while bridging config
+state between the shared route handler base and the extracted persona handler.
+That made the server-handler boundary noisy and could leak provider/API-key
+details through object `repr()` output in runtime logs.
+
 ### Direct config load boundary classification
 
 The remaining production `AppConfig.load()` calls are now classified by timing:
@@ -225,6 +232,7 @@ reachable.
 | Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
 | Re-aligned inspection checks with the current probe filter, Socket.IO event catalog, runtime log filename, and idle-safe StatsStore reachability semantics. | `src/animetta/inspection/checks/pipeline.py`, `src/animetta/inspection/checks/consistency.py`, `tests/inspection/test_pipeline.py`, `tests/inspection/test_consistency.py` |
 | Routed `persona:list` MBTI extraction through the active `AppConfig.get_persona()` cache instead of reloading the current persona by name. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Sanitized persona-handler config diagnostics so they report propagation state without logging full config object representations. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -254,6 +262,8 @@ Behavior preserved:
   `config/personas/*.yaml` catalog; `persona:list` keeps its `default` fallback.
 - `persona:list` still returns current MBTI data when available, now from the
   active config persona cache.
+- Persona handler config propagation is unchanged; diagnostics now log booleans
+  only instead of full config object representations.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.
