@@ -169,6 +169,20 @@ Persona loading, enhanced persona prompt loading, `config:get`, and
 `persona:list` each carried their own project `config/personas` path or `*.yaml`
 listing logic. That made the persona catalog boundary drift-prone and left
 server handlers responsible for filesystem details already owned by config.
+After the first catalog cleanup, `persona:list` still reloaded the active
+persona by name to extract MBTI data even when `AppConfig` already held the
+current cached persona.
+
+### Direct config load boundary classification
+
+The remaining production `AppConfig.load()` calls are now classified by timing:
+
+- `core/socketio_server.py` is bootstrap-time runtime config initialization.
+- `config/runtime_reload.py` is an explicit runtime reload path.
+- `BaseSocketHandler.get_active_config()` is the single request-time fallback
+  for handlers without an injected `global_config`.
+
+No additional production call site currently bypasses those categories.
 
 ### Inspection check drift from runtime boundaries
 
@@ -210,6 +224,7 @@ reachable.
 | Routed `config:get` through the shared handler `get_active_config()` fallback instead of a second direct `AppConfig.load()` call. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
 | Re-aligned inspection checks with the current probe filter, Socket.IO event catalog, runtime log filename, and idle-safe StatsStore reachability semantics. | `src/animetta/inspection/checks/pipeline.py`, `src/animetta/inspection/checks/consistency.py`, `tests/inspection/test_pipeline.py`, `tests/inspection/test_consistency.py` |
+| Routed `persona:list` MBTI extraction through the active `AppConfig.get_persona()` cache instead of reloading the current persona by name. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -237,6 +252,8 @@ Behavior preserved:
   server-handler config fallback.
 - Persona loading and persona listing still read the same project
   `config/personas/*.yaml` catalog; `persona:list` keeps its `default` fallback.
+- `persona:list` still returns current MBTI data when available, now from the
+  active config persona cache.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.
@@ -281,10 +298,9 @@ documented more explicitly before consolidation.
 ### Provider and config construction
 
 Provider creation mostly flows through `ProviderRegistry` and `ServicePool`, but
-there are still category-specific factory helpers and several runtime seams that
-call `AppConfig.load()` directly. This is expected today because handlers,
-runtime reload, and tool setup need different config timing. Consolidating this
-should wait until the service-container boundary is designed explicitly.
+there are still category-specific factory helpers and the three classified
+config load timings listed above. Consolidating this should wait until the
+service-container boundary is designed explicitly.
 
 ### Legacy documentation drift
 
@@ -300,6 +316,6 @@ the current Starlette + Socket.IO ASGI + LangGraph architecture.
    truth, then consolidate only the parts with duplicate executable logic.
 3. Add a generated or schema-checked Socket.IO event API for both Python and
    TypeScript so all event names come from `config/socket-events.json`.
-4. Audit direct `AppConfig.load()` calls and classify them as bootstrap,
-   request-time fallback, reload, or test utility.
+4. Design whether `BaseSocketHandler.get_active_config()` should remain the
+   request-time fallback or be replaced by an explicit runtime config provider.
 5. Update stale architecture docs after runtime boundaries are settled.

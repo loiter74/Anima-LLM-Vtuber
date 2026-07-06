@@ -498,6 +498,51 @@ class TestRouteHandlersDispatch:
         )
 
     @pytest.mark.asyncio
+    async def test_on_get_available_personas_uses_active_config_persona_cache(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """persona:list should read MBTI from the active AppConfig persona cache."""
+
+        mbti = SimpleNamespace(
+            type="INTJ",
+            dimensions=SimpleNamespace(ei=20, sn=80, tf=75, jp=65),
+            description="cached profile",
+        )
+        current_persona = SimpleNamespace(
+            personality=SimpleNamespace(mbti=mbti),
+        )
+        config = SimpleNamespace(
+            persona="anima",
+            get_persona=MagicMock(return_value=current_persona),
+        )
+        direct_load = MagicMock(side_effect=RuntimeError("direct load should not run"))
+
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.list_available_personas",
+            MagicMock(return_value=["anima"]),
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.PersonaConfig.load",
+            direct_load,
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        result = await handlers.on_get_available_personas("sid1", {})
+
+        config.get_persona.assert_called_once_with()
+        direct_load.assert_not_called()
+        assert result == {
+            "personas": ["anima"],
+            "mbti": {
+                "type": "INTJ",
+                "dimensions": {"ei": 20, "sn": 80, "tf": 75, "jp": 65},
+                "description": "cached profile",
+            },
+        }
+
+    @pytest.mark.asyncio
     async def test_on_memory_organize_uses_public_metabolism_api(
         self, mock_socketio, mock_session_manager
     ):

@@ -58,11 +58,15 @@ class PersonaHandlers(BaseSocketHandler):
             # Get current persona's MBTI data
             mbti_data = None
             try:
-                logger.info(f"[{sid}] on_get_available_personas: global_config={self.global_config}")
-                if self.global_config:
-                    current_persona_name = self.global_config.persona
+                active_config = self.global_config
+                logger.info(f"[{sid}] on_get_available_personas: global_config={active_config}")
+                if active_config:
+                    current_persona_name = active_config.persona
                     logger.info(f"[{sid}] Loading persona: {current_persona_name}")
-                    current_persona = PersonaConfig.load(current_persona_name)
+                    if hasattr(active_config, "get_persona"):
+                        current_persona = active_config.get_persona()
+                    else:
+                        current_persona = PersonaConfig.load(current_persona_name)
                     if current_persona and current_persona.personality and current_persona.personality.mbti:
                         mbti = current_persona.personality.mbti
                         mbti_data = {
