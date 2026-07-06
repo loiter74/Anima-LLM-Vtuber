@@ -8,13 +8,13 @@ Model stored on local disk, loaded to GPU memory at startup
 # Status: experimental
 # Last verified: 2026-05-23
 
-import tempfile
 from pathlib import Path
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
 
@@ -235,10 +235,7 @@ class ChatTTSTTS(TTSInterface):
             logger.warning(f"ChatTTS text empty after cleaning, original: {text}")
             silence = np.zeros(self.SAMPLE_RATE, dtype=np.float32)
             audio_bytes = self._wav_to_bytes(silence)
-            temp_file = tempfile.mktemp(suffix=".wav")
-            with open(temp_file, "wb") as f:
-                f.write(audio_bytes)
-            return temp_file
+            return write_temp_bytes(audio_bytes, suffix=".wav")
 
         logger.debug(f"ChatTTS cleaned text: {cleaned_text}")
 
@@ -261,10 +258,7 @@ class ChatTTSTTS(TTSInterface):
                 logger.warning("ChatTTS returned empty result, using silence instead")
                 silence = np.zeros(self.SAMPLE_RATE, dtype=np.float32)
                 audio_bytes = self._wav_to_bytes(silence)
-                temp_file = tempfile.mktemp(suffix=".wav")
-                with open(temp_file, "wb") as f:
-                    f.write(audio_bytes)
-                return temp_file
+                return write_temp_bytes(audio_bytes, suffix=".wav")
 
             # wavs[0] is a numpy array
             wav_array = wavs[0]
@@ -275,10 +269,7 @@ class ChatTTSTTS(TTSInterface):
                 logger.warning("ChatTTS generated empty audio, using silence instead")
                 silence = np.zeros(self.SAMPLE_RATE, dtype=np.float32)
                 audio_bytes = self._wav_to_bytes(silence)
-                temp_file = tempfile.mktemp(suffix=".wav")
-                with open(temp_file, "wb") as f:
-                    f.write(audio_bytes)
-                return temp_file
+                return write_temp_bytes(audio_bytes, suffix=".wav")
 
             audio_bytes = self._wav_to_bytes(wav_array)
 
@@ -293,9 +284,7 @@ class ChatTTSTTS(TTSInterface):
                 return str(output_path)
             else:
                 # Write to temp file and return path (consistent with EdgeTTS behavior)
-                temp_file = tempfile.mktemp(suffix=".wav")
-                with open(temp_file, "wb") as f:
-                    f.write(audio_bytes)
+                temp_file = write_temp_bytes(audio_bytes, suffix=".wav")
                 logger.debug(
                     f"ChatTTS synthesis complete: {len(text)} chars -> {temp_file}"
                 )
@@ -313,10 +302,7 @@ class ChatTTSTTS(TTSInterface):
                     with open(output_path, "wb") as f:
                         f.write(audio_bytes)
                     return str(output_path)
-                temp_file = tempfile.mktemp(suffix=".wav")
-                with open(temp_file, "wb") as f:
-                    f.write(audio_bytes)
-                return temp_file
+                return write_temp_bytes(audio_bytes, suffix=".wav")
             logger.error(f"ChatTTS synthesis failed: {e}")
             raise
 

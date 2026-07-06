@@ -12,6 +12,7 @@ from loguru import logger
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.orchestration.socket_events import EVENTS
+from animetta.utils.tempfiles import reserve_temp_path, write_temp_bytes
 
 from .state import AgentState
 from .subtitle_translator import translate_subtitle_text
@@ -161,11 +162,8 @@ async def output_node(
                 elif tts_audio[:4] == b"OggS":
                     format = "ogg"
                 audio_data = base64.b64encode(tts_audio).decode("utf-8")
-                # Write bytes to a temp file so we can compute volume envelope for lip sync
-                import tempfile
-                tmp_audio = tempfile.mktemp(suffix=f".{format}")
-                with open(tmp_audio, "wb") as f:
-                    f.write(tts_audio)
+                # Write bytes to a temp file so we can compute volume envelope for lip sync.
+                tmp_audio = write_temp_bytes(tts_audio, suffix=f".{format}")
                 volumes = _compute_volumes(tmp_audio)
 
             if audio_data:
@@ -198,8 +196,6 @@ def _trim_leading_silence(audio_path: str) -> str | None:
     Returns None if no trimming was needed.
     """
     try:
-        import tempfile
-
         from pydub import AudioSegment
 
         audio = AudioSegment.from_file(audio_path).set_channels(1)
@@ -213,7 +209,7 @@ def _trim_leading_silence(audio_path: str) -> str | None:
 
         if trim_ms > 50:  # only trim if more than 50ms of silence
             trimmed = audio[trim_ms:]
-            tmp = tempfile.mktemp(suffix=".wav")
+            tmp = str(reserve_temp_path(suffix=".wav"))
             trimmed.export(tmp, format="wav")
             logger.debug(f"[output_node] Trimmed {trim_ms}ms leading silence from audio")
             return tmp

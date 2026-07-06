@@ -329,9 +329,7 @@ class RouteHandlers:
                 })
             return {"pages": pages}
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            logger.error(f"[wiki_pages] ERROR: {e}")
+            logger.exception(f"[wiki_pages] ERROR: {e}")
             return {"pages": [], "error": str(e)}
 
 

@@ -12,7 +12,6 @@ https://github.com/hexgrad/kokoro
 # Status: maintained
 # Last verified: 2026-05-23
 import io
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +19,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
 from .glados_effect import KOKORO_SAMPLE_RATE, GladosEffectProcessor
@@ -212,8 +212,7 @@ class KokoroTTS(TTSInterface):
 
             # Write to temp file so downstream (output_node) can compute
             # volume envelope for Live2D lip sync
-            temp_file = tempfile.mktemp(suffix=".wav")
-            Path(temp_file).write_bytes(audio_bytes)
+            temp_file = write_temp_bytes(audio_bytes, suffix=".wav")
             logger.debug(f"[KokoroTTS] Written to temp file: {temp_file}")
             return temp_file
 

@@ -9,7 +9,6 @@ Supports voice effects via SSML prosody adjustments:
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 # Status: active
@@ -17,6 +16,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.utils.tempfiles import write_temp_bytes
 
 from .interface import TTSInterface
 
@@ -179,10 +179,7 @@ class EdgeTTS(TTSInterface):
                 logger.debug(f"Edge TTS synthesis complete: {len(text)} chars -> {len(audio_data)} bytes")
 
                 if not kwargs.get('return_bytes', False):
-                    temp_file = tempfile.mktemp(suffix=".mp3")
-                    with open(temp_file, "wb") as f:
-                        f.write(audio_data)
-                    return temp_file
+                    return write_temp_bytes(audio_data, suffix=".mp3")
                 return audio_data
             else:
                 with open(output_path, "wb") as f:

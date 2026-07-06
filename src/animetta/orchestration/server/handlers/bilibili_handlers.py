@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.services.bilibili import DanmakuService
+from animetta.utils.tempfiles import write_temp_bytes
 
 from ...socket_events import EVENTS
 
@@ -248,11 +249,7 @@ class BilibiliHandlers:
                 elif tts_audio[:4] == b"OggS":
                     format = "ogg"
                 audio_data = base64.b64encode(tts_audio).decode("utf-8")
-                import tempfile
-
-                tmp_audio = tempfile.mktemp(suffix=f".{format}")
-                with open(tmp_audio, "wb") as f:
-                    f.write(tts_audio)
+                tmp_audio = write_temp_bytes(tts_audio, suffix=f".{format}")
                 volumes = _compute_volumes(tmp_audio) or []
 
             if audio_data:
