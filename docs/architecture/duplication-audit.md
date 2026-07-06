@@ -244,6 +244,14 @@ unless the response body was also parsed.
 still documented an older synthetic `{timestamp, status, checks}` shape, and the
 stats API tests did not cover this route.
 
+### Metrics route smoke coverage gap
+
+`WebSocketServer` mounts `/metrics` when `prometheus-client` is available, but
+`scripts/route_smoke.py` only checked singing media routes. That left the
+runtime observability endpoint outside the lightweight ASGI route gate even
+though the integration tests and Docker protocol rely on route probes for early
+startup regressions.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -279,6 +287,7 @@ stats API tests did not cover this route.
 | Replaced full config dumps and API-key prefix logging during config env expansion with provider type and key-length diagnostics. | `src/animetta/config/app.py`, `tests/config/test_app_config.py` |
 | Replaced full tool-config logging during orchestrator creation and `tools.yaml` loading with enabled-state and key-name diagnostics. | `src/animetta/orchestration/server/session.py`, `tests/orchestration/server/test_session.py` |
 | Covered `/api/stats/inspection/latest` and updated the API reference to the persisted StatsStore report shape. | `tests/orchestration/server/test_stats_api.py`, `docs/reference/backend-api.md` |
+| Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |
 
 Behavior preserved:
 
@@ -323,6 +332,8 @@ Behavior preserved:
 - `/api/stats/inspection/latest` keeps returning the latest persisted
   inspection report, now with explicit route coverage and matching reference
   documentation.
+- `/metrics` behavior is unchanged; it is now part of the lightweight route
+  smoke gate when `prometheus-client` is installed.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

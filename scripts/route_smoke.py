@@ -38,6 +38,7 @@ def _make_lightweight_server() -> WebSocketServer:
 def run_smoke_probes() -> list[ProbeResult]:
     server = _make_lightweight_server()
     probes = [
+        ("/metrics", 200),
         ("/api/singing/recent", 200),
         ("/api/singing/audio/__missing__.wav", 404),
         ("/api/singing/subtitle/__missing__.ass", 404),

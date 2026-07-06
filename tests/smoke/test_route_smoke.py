@@ -8,3 +8,9 @@ def test_route_smoke_probes_lightweight_routes() -> None:
 
     assert results
     assert all(result.ok for result in results)
+
+
+def test_route_smoke_covers_metrics_endpoint() -> None:
+    results = run_smoke_probes()
+
+    assert any(result.path == "/metrics" for result in results)
