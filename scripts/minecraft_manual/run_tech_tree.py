@@ -6,18 +6,21 @@ Runs the full tech tree unlock sequence on a Minecraft server.
 Target: 1 hour autonomous run to unlock wood → stone → iron → diamond
 """
 import asyncio
-import sys
 import os
+import sys
 import time
+
+from loguru import logger
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from animetta.tools.minecraft.bridge import MinecraftBridge
-from animetta.tools.minecraft.config import MinecraftConfig, MinecraftBotConfig
-from animetta.tools.minecraft.skill_library import SkillLibrary
-from animetta.tools.minecraft.trace_recorder import TraceRecorder
+from animetta.tools.minecraft.config import MinecraftBotConfig, MinecraftConfig
 from animetta.tools.minecraft.skill_extractor import SkillExtractor
+from animetta.tools.minecraft.skill_library import SkillLibrary
 from animetta.tools.minecraft.skill_validator import SkillValidator
+from animetta.tools.minecraft.trace_recorder import TraceRecorder
+
 from animetta.tools.minecraft.tech_tree import TechTreeRunner, create_default_tech_tree
 
 
@@ -26,7 +29,7 @@ async def main():
     print("  TechTreeRunner - Autonomous Tech Tree Unlock")
     print("=" * 60)
     print()
-    
+
     # 1. Initialize components
     print("[1/5] Initializing components...")
     config = MinecraftConfig(
@@ -39,21 +42,21 @@ async def main():
     )
     bridge = MinecraftBridge(config)
     skill_library = SkillLibrary()
-    trace_recorder = TraceRecorder()
-    skill_extractor = SkillExtractor(llm_service=None)  # No LLM for now
-    skill_validator = SkillValidator()
-    
+    _trace_recorder = TraceRecorder()
+    _skill_extractor = SkillExtractor(llm_service=None)  # No LLM for now
+    _skill_validator = SkillValidator()
+
     print("  [OK] Bridge initialized")
     print("  [OK] Skill library initialized")
     print("  [OK] Trace recorder initialized")
-    
+
     # 2. Create TechTree config
     print("\n[2/5] Creating tech tree config...")
     tech_tree_config = create_default_tech_tree()
     print(f"  [OK] {len(tech_tree_config.phases)} phases, {tech_tree_config.total_time_budget_minutes}min total")
     for phase in tech_tree_config.phases:
         print(f"    - {phase.name}: {phase.time_budget_minutes}min → {list(phase.required_items.keys())}")
-    
+
     # 3. Start bridge
     print("\n[3/5] Starting Minecraft bot...")
     try:
@@ -63,7 +66,7 @@ async def main():
             return
         print("  [OK] Bot started, waiting for login...")
         await asyncio.sleep(3)
-        
+
         # Get initial status
         status = await bridge.send_command("status", {})
         if status.get("status") == "success":
@@ -78,7 +81,7 @@ async def main():
     except Exception as e:
         print(f"  [FAIL] Error: {e}")
         return
-    
+
     # 4. Create TechTreeRunner
     print("\n[4/5] Creating TechTreeRunner...")
     runner = TechTreeRunner(
@@ -87,7 +90,7 @@ async def main():
         config=tech_tree_config
     )
     print("  [OK] Runner created")
-    
+
     # 5. Run!
     print("\n[5/5] Starting tech tree unlock...")
     print("=" * 60)
@@ -96,14 +99,14 @@ async def main():
     print("  Phases: wood → stone → iron → diamond")
     print("=" * 60)
     print()
-    
+
     start_time = time.time()
-    
+
     try:
         metrics = await runner.run()
-        
+
         elapsed = time.time() - start_time
-        
+
         print("\n" + "=" * 60)
         print("  Tech Tree Unlock Complete!")
         print("=" * 60)
@@ -114,26 +117,25 @@ async def main():
         print(f"  Skills learned: {metrics.skills_learned}")
         print(f"  Skills reused: {metrics.skills_reused}")
         print(f"  Deaths: {metrics.deaths}")
-        
+
         if metrics.phases_completed:
             print(f"\n  Completed phases: {', '.join(metrics.phases_completed)}")
-        
+
         # Generate report
         report = runner.generate_report()
         report_path = runner.save_report(report)
         print(f"\n  Report saved: {report_path}")
-        
+
     except KeyboardInterrupt:
         print("\n\n  Interrupted by user")
     except Exception as e:
         print(f"\n\n  Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Tech tree unlock failed")
     finally:
         print("\n  Stopping bot...")
         await bridge.stop()
         print("  [OK] Bot stopped")
-    
+
     print("\n" + "=" * 60)
     print("  Done!")
     print("=" * 60)
