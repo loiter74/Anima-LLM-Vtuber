@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from animetta.config.app import AppConfig
 from animetta.config.live2d import get_live2d_config
 from animetta.utils.logger_manager import logger_manager
 
@@ -92,7 +91,7 @@ class ConfigHandlers(BaseSocketHandler):
         """Return current config (sanitized) to frontend."""
         logger.info(f"[{sid}] Requested config data")
 
-        config = self.global_config or AppConfig.load()
+        config = self.get_active_config()
 
         available_personas = []
         if _PERSONAS_DIR.is_dir():

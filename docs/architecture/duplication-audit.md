@@ -156,6 +156,13 @@ copied `global_config` and `user_settings` from `BaseSocketHandler` as plain
 attributes, so backward-compatible direct assignment could diverge from the
 state seen by extracted handlers.
 
+### Duplicated server handler config fallback
+
+After `BaseSocketHandler` gained the shared `get_active_config()` helper,
+`ConfigHandlers.on_get_config()` still kept its own
+`self.global_config or AppConfig.load()` fallback. That left two server-handler
+config fallback entrypoints and made future handler moves more likely to drift.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -181,6 +188,7 @@ state seen by extracted handlers.
 | Centralized the Socket.IO entrypoint project root path so user settings, `.env`, logs, and frontend serving resolve from the same project root. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 | Closed partially initialized pooled LLM/TTS/ASR engines when `ServicePool` initialization fails. | `src/animetta/core/service_pool.py`, `tests/core/test_service_pool.py` |
 | Moved Memory/Wiki socket business logic out of the route facade and routed it through the shared handler config/context boundary. | `src/animetta/orchestration/server/routes.py`, `src/animetta/orchestration/server/handlers/base_handler.py`, `src/animetta/orchestration/server/handlers/memory_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Routed `config:get` through the shared handler `get_active_config()` fallback instead of a second direct `AppConfig.load()` call. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -204,6 +212,8 @@ Behavior preserved:
   sharing; only failed partial initialization now closes those engines.
 - `memory:organize` and `memory:list_pages` keep the same public event behavior,
   now delegated from `RouteHandlers` to `MemoryHandlers`.
+- `config:get` keeps the same sanitized response shape while using the shared
+  server-handler config fallback.
 
 ## Left For Later
 

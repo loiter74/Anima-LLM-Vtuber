@@ -3,7 +3,7 @@ from __future__ import annotations
 """Tests for WebSocket route handlers — event dispatch and registration."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 
@@ -328,6 +328,66 @@ class TestRouteHandlersDispatch:
 
         assert payload is not None
         assert "default" in payload["available_personas"]
+
+    @pytest.mark.asyncio
+    async def test_on_get_config_uses_shared_active_config_boundary(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """config:get should use BaseSocketHandler config fallback in one place."""
+
+        config = SimpleNamespace(
+            persona="default",
+            services=SimpleNamespace(
+                asr="mock",
+                tts="mock",
+                agent="mock",
+                vad="mock",
+            ),
+            asr=SimpleNamespace(type="mock"),
+            tts=SimpleNamespace(type="mock"),
+            agent=SimpleNamespace(llm_config=SimpleNamespace(type="mock")),
+            vad=SimpleNamespace(type="mock"),
+            system=SimpleNamespace(host="localhost", port=12394, log_level="INFO"),
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.config_handlers.get_live2d_config",
+            MagicMock(return_value=SimpleNamespace(model=SimpleNamespace(path="/model.json"))),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.config_handlers.get_active_config = MagicMock(return_value=config)
+
+        await handlers.on_get_config("sid1", {})
+
+        handlers.config_handlers.get_active_config.assert_called_once_with()
+        mock_socketio.emit.assert_any_call(
+            "config:data",
+            {
+                "persona": "default",
+                "services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "agent": "mock",
+                    "vad": "mock",
+                },
+                "active_services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "llm": "mock",
+                    "vad": "mock",
+                },
+                "system": {
+                    "host": "localhost",
+                    "port": 12394,
+                    "log_level": "INFO",
+                },
+                "live2d": {
+                    "model_path": "/model.json",
+                    "enabled": True,
+                },
+                "available_personas": ANY,
+            },
+            to="sid1",
+        )
 
     @pytest.mark.asyncio
     async def test_bilibili_ai_reply_uses_current_service_context_config(
