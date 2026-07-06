@@ -139,7 +139,12 @@ class PersonaHandlers(BaseSocketHandler):
                 self.global_config.persona = persona_name
                 self.global_config._persona = None  # Invalidate cache
 
-            if ctx.llm_engine and ctx.core.config:
+            ctx_config = getattr(ctx, "config", None)
+            if ctx_config is None:
+                legacy_core = getattr(ctx, "core", None)
+                ctx_config = getattr(legacy_core, "config", None)
+
+            if ctx.llm_engine and ctx_config:
                 live2d_prompt = None
                 try:
                     from animetta.avatar.prompts import EmotionPromptBuilder
@@ -154,7 +159,7 @@ class PersonaHandlers(BaseSocketHandler):
                 except Exception as e:
                     logger.debug(f"[PersonaHandlers] Failed to build Live2D emotion prompt: {e}")
 
-                new_system_prompt = ctx.core.config.get_system_prompt(
+                new_system_prompt = ctx_config.get_system_prompt(
                     live2d_prompt=live2d_prompt
                 )
                 ctx.llm_engine.set_system_prompt(new_system_prompt)

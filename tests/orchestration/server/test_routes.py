@@ -237,6 +237,114 @@ class TestRouteHandlersDispatch:
         }, to="sid1")
 
     @pytest.mark.asyncio
+    async def test_bilibili_ai_reply_uses_current_service_context_config(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Bilibili reply integration should use ServiceContext.config directly."""
+
+        persona = SimpleNamespace(name="Anima")
+        config = MagicMock()
+        config.get_persona.return_value = persona
+        service_context = SimpleNamespace(config=config)
+        orchestrator = SimpleNamespace(
+            service_context=service_context,
+            process_text=AsyncMock(
+                return_value={
+                    "response_text": "hello back",
+                    "emotion": None,
+                    "tts_audio": None,
+                }
+            ),
+        )
+        message = SimpleNamespace(
+            text="hello",
+            user_name="viewer",
+            user_id=1001,
+            to_dict=lambda: {
+                "text": "hello",
+                "user_name": "viewer",
+                "user_id": 1001,
+            },
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.base._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
+
+        await handlers.bilibili._process_danmaku(message)
+
+        reply_payload = None
+        for call_args in mock_socketio.emit.call_args_list:
+            if call_args.args[0] == "bilibili:danmaku_ai_reply":
+                reply_payload = call_args.args[1]
+                break
+
+        assert reply_payload is not None
+        assert reply_payload["danmaku_text"] == "hello"
+        assert reply_payload["reply_text"] == "hello back"
+        assert reply_payload["user_name"] == "viewer"
+        assert reply_payload["character_name"] == "Anima"
+        assert isinstance(reply_payload["timestamp"], float)
+
+    @pytest.mark.asyncio
+    async def test_translation_configure_updates_shared_translation_state(
+        self, mock_socketio, mock_session_manager
+    ):
+        """translation:configure should update the shared translation state."""
+
+        from animetta.orchestration.graph.translation_state import translation_state
+
+        old_target = translation_state.target_language
+        try:
+            handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+            await handlers.on_translation_configure(
+                "sid1", {"target_language": "Japanese"}
+            )
+
+            assert translation_state.target_language == "Japanese"
+            mock_socketio.emit.assert_any_call(
+                "translation:status",
+                {"target_language": "Japanese", "enabled": translation_state.enabled},
+                to="sid1",
+            )
+        finally:
+            translation_state.target_language = old_target
+
+    @pytest.mark.asyncio
+    async def test_on_set_persona_uses_current_context_config(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """Persona switching should use ServiceContext.config directly."""
+
+        from animetta.config.persona import PersonaConfig
+
+        new_persona = SimpleNamespace(personality=None)
+        monkeypatch.setattr(PersonaConfig, "load", MagicMock(return_value=new_persona))
+        monkeypatch.setattr(
+            "animetta.config.live2d.get_live2d_config",
+            MagicMock(return_value=SimpleNamespace(enabled=False)),
+        )
+
+        llm = MagicMock()
+        config = MagicMock()
+        config.get_system_prompt.return_value = "new prompt"
+        ctx = SimpleNamespace(llm_engine=llm, config=config)
+        mock_session_manager.get_context.return_value = ctx
+        mock_session_manager.get_orchestrator.return_value = MagicMock()
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        await handlers.on_set_persona("sid1", {"persona_name": "anima"})
+
+        llm.set_system_prompt.assert_called_once_with("new prompt")
+        mock_socketio.emit.assert_any_call(
+            "persona:updated",
+            {"persona_name": "anima", "mbti": None},
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
     async def test_on_memory_organize_uses_public_metabolism_api(
         self, mock_socketio, mock_session_manager
     ):

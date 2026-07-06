@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.config.app import AppConfig
+from animetta.config.live2d import Live2DConfig
+from animetta.utils.logger_manager import logger_manager
+
+from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
 
