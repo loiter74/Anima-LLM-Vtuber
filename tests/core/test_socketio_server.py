@@ -11,6 +11,7 @@ public/private function in isolation.
 
 import argparse
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,6 +67,17 @@ def mod():
 
 
 # ── TestParseServerArgs ─────────────────────────────────────────────
+
+
+class TestUserSettingsRuntimePath:
+    """Runtime user settings location."""
+
+    def test_user_settings_uses_project_root(self, mod):
+        """User settings should live at project root, not under src/."""
+
+        project_root = Path(__file__).resolve().parents[2]
+
+        assert mod.user_settings.config_file == project_root / ".user_settings.yaml"
 
 
 class TestParseServerArgs:

@@ -124,7 +124,10 @@ personas from `src/animetta/config/personas` instead of the project
 `config/personas` directory and called the removed `Live2DConfig.load()`
 entrypoint instead of the current `get_live2d_config()`. The enhanced persona
 builder had the same root-directory drift and resolved default personas under
-`src/config/personas`.
+`src/config/personas`. The Socket.IO runtime entrypoint also mixed path
+ownership: `.env`, logs, and frontend serving used the project root, but
+`UserSettings` was initialized with `src/`, so runtime log-level changes were
+persisted to `src/.user_settings.yaml` instead of the project root.
 
 ### Duplicate Bilibili configuration entrypoint
 
@@ -156,6 +159,7 @@ runtime config object from controlling Bilibili auto-start.
 | Routed Bilibili auto-start through the active `AppConfig.bilibili` object instead of re-reading YAML from `WebSocketServer`. | `src/animetta/orchestration/server/websocket.py`, `tests/orchestration/server/test_websocket.py` |
 | Fixed `config:get` to list personas from the project config directory and to load Live2D settings through the current `get_live2d_config()` entrypoint. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Fixed enhanced persona prompt loading to use the project `config/personas` directory by default. | `src/animetta/config/persona/enhanced.py`, `tests/config/test_persona.py` |
+| Centralized the Socket.IO entrypoint project root path so user settings, `.env`, logs, and frontend serving resolve from the same project root. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 
 Behavior preserved:
 
