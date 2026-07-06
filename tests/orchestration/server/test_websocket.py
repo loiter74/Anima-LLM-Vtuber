@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for WebSocketServer — server init, routes, lifecycle, and prewarm."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -193,6 +194,27 @@ class TestSetupRoutes:
             websocket_server.setup_routes()
 
             assert websocket_server.model_manager._socketio is websocket_server.sio
+
+    def test_setup_routes_uses_app_config_bilibili(self, websocket_server):
+        """Bilibili startup config should come from AppConfig.bilibili."""
+        websocket_server.config = SimpleNamespace(
+            bilibili=SimpleNamespace(
+                enabled=True,
+                room_id=12345,
+                sessdata="sess",
+            )
+        )
+
+        with patch("animetta.orchestration.server.websocket.register_routes") as mock_reg:
+            mock_reg.return_value = MagicMock()
+
+            websocket_server.setup_routes()
+
+            assert mock_reg.call_args.kwargs["bilibili_config"] == {
+                "enabled": True,
+                "room_id": 12345,
+                "sessdata": "sess",
+            }
 
 
 # ── WebSocketServer — setup_lifecycle ──────────────────────────────

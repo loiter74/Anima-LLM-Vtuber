@@ -698,6 +698,50 @@ class TestFromYaml:
     @patch("animetta.config.app._load_service_config")
     @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
+    def test_bilibili_yaml_loaded_when_present(
+        self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
+    ):
+        """Bilibili config is loaded from config/bilibili.yaml."""
+        mock_exists.return_value = True
+        mock_load_yaml.side_effect = [
+            {
+                "persona": "default",
+                "services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "agent": "mock",
+                    "vad": "mock",
+                },
+                "system": {"host": "localhost", "port": 12394},
+            },
+            {"enabled": True, "room_id": 12345, "sessdata": "sess"},
+        ]
+
+        def load_service_side(service_type, service_name):
+            configs = {
+                ("asr", "mock"): {"type": "mock"},
+                ("tts", "mock"): {"type": "mock"},
+                ("llm", "mock"): {
+                    "memory_enabled": False,
+                    "llm_config": {"type": "mock"},
+                },
+                ("vad", "mock"): {"type": "mock"},
+            }
+            return configs.get((service_type, service_name), {"type": "mock"})
+
+        mock_load_service.side_effect = load_service_side
+
+        config = AppConfig.from_yaml("/fake/path.yaml")
+
+        assert config.bilibili is not None
+        assert config.bilibili.enabled is True
+        assert config.bilibili.room_id == 12345
+        assert config.bilibili.sessdata == "sess"
+
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
+    @patch("pathlib.Path.exists")
     def test_known_fields_only(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
     ):
@@ -707,7 +751,7 @@ class TestFromYaml:
             "persona": "default",
             "services": {"asr": "mock", "tts": "mock", "agent": "mock", "vad": "mock"},
             "system": {"host": "localhost", "port": 12394},
-            "bilibili": {"room_id": 123},  # unknown key — should be stripped
+            "bilibili": {"room_id": 123},  # ignored; loaded from bilibili.yaml
             "unknown_tool": {"key": "val"},
         }
 

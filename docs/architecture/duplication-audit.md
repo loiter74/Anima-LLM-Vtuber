@@ -120,6 +120,14 @@ names or object shapes that were not carried across the new boundary.
 importing them, and Bilibili/persona handlers still reached through removed
 `service_context.core.config` / `ctx.core.config` wrappers on runtime paths.
 
+### Duplicate Bilibili configuration entrypoint
+
+`AppConfig` already loads the optional Bilibili danmaku settings from
+`config/bilibili.yaml`, but `WebSocketServer` still tried to read a top-level
+`bilibili` key from `config/config.yaml` by hand during route setup. This
+created two competing configuration entrypoints and prevented the parsed
+runtime config object from controlling Bilibili auto-start.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -139,6 +147,7 @@ importing them, and Bilibili/persona handlers still reached through removed
 | Made the RVC VC provider lazy so `VCFactory` and `MockVC` do not require optional RVC/audio dependencies at package import time. | `src/animetta/services/vc/__init__.py`, `src/animetta/services/vc/factory.py`, `tests/services/vc/test_vc_factory.py` |
 | Updated stale tests from removed `.core.config` wrapper assertions to the current direct `.config` attributes and current handler config propagation. | `tests/core/test_service_context.py`, `tests/orchestration/server/test_websocket.py`, `tests/avatar/test_position_strategy.py`, `tests/services/test_live2d_viseme_sync.py`, `tests/orchestration/server/test_routes.py` |
 | Fixed split server handlers that still relied on missing imports or removed `.core.config` wrappers in Bilibili, translation, and persona event paths. | `src/animetta/orchestration/server/handlers/bilibili_handlers.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Routed Bilibili auto-start through the active `AppConfig.bilibili` object instead of re-reading YAML from `WebSocketServer`. | `src/animetta/orchestration/server/websocket.py`, `tests/orchestration/server/test_websocket.py` |
 
 Behavior preserved:
 
@@ -156,6 +165,8 @@ Behavior preserved:
 - Health checks no longer fail solely because a stale repository `.venv` exists.
 - Importing the VC package no longer loads the heavy RVC provider unless RVC is
   explicitly requested.
+- Bilibili auto-start still receives the same `enabled`, `room_id`, and
+  `sessdata` fields, now from the parsed runtime config object.
 
 ## Left For Later
 
