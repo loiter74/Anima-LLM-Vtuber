@@ -2,7 +2,7 @@
 
 import pytest
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 
 class TestDynamicCategories:
@@ -11,7 +11,7 @@ class TestDynamicCategories:
     def test_register_new_category(self):
         from typing import Literal
 
-        from animetta.core.config.core.base import ProviderConfig
+        from animetta.config.core.base import ProviderConfig
 
         category = "test_cat_" + str(id(self))  # unique to avoid cross-test pollution
 
@@ -25,7 +25,7 @@ class TestDynamicCategories:
     def test_create_union_type_for_new_category(self):
         from typing import Literal
 
-        from animetta.core.config.core.base import ProviderConfig
+        from animetta.config.core.base import ProviderConfig
 
         category = "test_union_" + str(id(self))
 
@@ -42,9 +42,9 @@ class TestDynamicCategories:
 
     def test_list_configs(self):
         # Import providers to trigger decorator registration
-        import animetta.core.config.providers.llm.deepseek  # noqa: F401
-        import animetta.core.config.providers.llm.mock  # noqa: F401
-        import animetta.core.config.providers.llm.openai  # noqa: F401
+        import animetta.config.providers.llm.deepseek  # noqa: F401
+        import animetta.config.providers.llm.mock  # noqa: F401
+        import animetta.config.providers.llm.openai  # noqa: F401
 
         configs = ProviderRegistry.list_configs("llm")
         assert "openai" in configs

@@ -7,9 +7,11 @@ import argparse
 import sys
 from pathlib import Path
 
-# Fix module import path: add src directory to Python path
 current_dir = Path(__file__).resolve().parent
-src_dir = current_dir.parent  # C:\Users\30262\Project\Anima\src
+_PROJECT_ROOT = current_dir.parents[2]
+
+# Fix module import path: add src directory to Python path
+src_dir = _PROJECT_ROOT / "src"
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
@@ -21,13 +23,12 @@ from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
 from animetta.orchestration.graph.builder import set_external_checkpointer
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
-from animetta.tracing.bootstrap import init_tracing
 from animetta.utils.logger_manager import logger_manager
 
 # Load environment variables from .env file (must be before other imports)
 try:
     from dotenv import load_dotenv
-    env_path = Path(__file__).parent.parent.parent.parent / '.env'
+    env_path = _PROJECT_ROOT / '.env'
     if env_path.exists():
         load_dotenv(env_path, override=True)
         logger.info(f"[OK] Environment variables loaded from: {env_path}")
@@ -61,7 +62,7 @@ _server_args = parse_server_args()
 global_config: AppConfig = None
 
 # User settings
-user_settings = UserSettings(Path(__file__).parent.parent.parent)
+user_settings = UserSettings(_PROJECT_ROOT)
 
 # Apply user-configured log level
 initial_log_level = user_settings.get_log_level()
@@ -157,15 +158,8 @@ def get_asgi_app():
         if global_config is None:
             init_config()
 
-        # ── Initialize OpenTelemetry tracing + metrics pipeline ──
-        try:
-            init_tracing()
-            logger.info("[Tracing] OTel pipeline initialized")
-        except Exception as e:
-            logger.warning(f"[Tracing] OTel init failed (non-fatal): {e}")
-
         # ── File logging for Loki ingestion ─────────────────────
-        logs_dir = Path(__file__).parent.parent.parent.parent / "logs"
+        logs_dir = _PROJECT_ROOT / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         logger.add(
             str(logs_dir / "animetta.log"),
@@ -228,8 +222,7 @@ def _wrap_with_frontend_serving(app):
     from starlette.responses import FileResponse
 
     # Resolve frontend/dist path (project_root/frontend/dist)
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
-    frontend_dist = project_root / "frontend" / "dist"
+    frontend_dist = _PROJECT_ROOT / "frontend" / "dist"
 
     if not frontend_dist.is_dir():
         logger.warning(f"[Frontend] frontend/dist not found: {frontend_dist}")

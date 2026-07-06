@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 from animetta.orchestration.graph.output_node import output_node
 from animetta.services.llm import LLMFactory, MockLLM
 from animetta.services.vad import MockVAD, VADFactory

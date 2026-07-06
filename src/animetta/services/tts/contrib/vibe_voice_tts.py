@@ -15,13 +15,13 @@ For local RTX 5090D, Remote mode + persistent FastAPI inference service is recom
 
 import asyncio
 import os
-import tempfile
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.utils.tempfiles import reserve_temp_path
 
 from ..interface import TTSInterface
 
@@ -234,7 +234,7 @@ class VibeVoiceTTS(TTSInterface):
             out_file = Path(output_path)
             out_file.parent.mkdir(parents=True, exist_ok=True)
         else:
-            out_file = Path(tempfile.mktemp(suffix=".wav"))
+            out_file = reserve_temp_path(suffix=".wav")
 
         # Build inference command
         infer_script = self._find_infer_script()

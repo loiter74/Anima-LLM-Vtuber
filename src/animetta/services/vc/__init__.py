@@ -3,7 +3,6 @@
 from .factory import VCFactory
 from .interface import VCInterface
 from .mock_vc import MockVC
-from .rvc_vc import RVCVC
 
 __all__ = [
     "VCInterface",
@@ -11,3 +10,11 @@ __all__ = [
     "MockVC",
     "RVCVC",
 ]
+
+
+def __getattr__(name: str):
+    if name == "RVCVC":
+        from .rvc_vc import RVCVC
+
+        return RVCVC
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

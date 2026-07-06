@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from animetta.core.config.core.registry import ProviderRegistry
-from animetta.core.config.providers.tts.qwen3 import Qwen3TTSConfig
+from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.qwen3 import Qwen3TTSConfig
 from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
 
 """Unit tests for Qwen3-TTS provider (config + registry + from_config)"""

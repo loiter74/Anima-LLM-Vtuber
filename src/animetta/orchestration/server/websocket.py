@@ -10,9 +10,9 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
+from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_pool import ServicePool
-from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
 from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager
@@ -203,19 +203,19 @@ class WebSocketServer:
         await ServicePool.init(self.config, model_manager=self.model_manager)
 
     def _load_bilibili_config(self) -> dict[str, Any] | None:
-        """Load Bilibili configuration from config.yaml (top-level 'bilibili' key)."""
-        try:
-            from pathlib import Path
-
-            import yaml
-            config_path = Path(__file__).parent.parent.parent.parent.parent / "config" / "config.yaml"
-            if config_path.exists():
-                with open(config_path, encoding='utf-8') as f:
-                    data = yaml.safe_load(f)
-                return data.get("bilibili")
-        except Exception as e:
-            logger.warning(f"[Bilibili] Failed to load config: {e}")
-        return None
+        """Return Bilibili configuration from the active app config."""
+        bilibili_config = getattr(self.config, "bilibili", None)
+        if bilibili_config is None:
+            return None
+        if isinstance(bilibili_config, dict):
+            return bilibili_config
+        if hasattr(bilibili_config, "model_dump"):
+            return bilibili_config.model_dump()
+        return {
+            "enabled": getattr(bilibili_config, "enabled", False),
+            "room_id": getattr(bilibili_config, "room_id", 0),
+            "sessdata": getattr(bilibili_config, "sessdata", ""),
+        }
 
     def setup_routes(self) -> None:
         """Set up all routes"""

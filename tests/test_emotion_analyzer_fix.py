@@ -13,7 +13,6 @@ import pytest
 
 from animetta.avatar.analyzers.llm_tag import StandaloneLLMTagAnalyzer
 
-
 # ── StandaloneLLMTagAnalyzer contract tests ────────────────
 
 

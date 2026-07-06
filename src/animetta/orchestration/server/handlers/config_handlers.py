@@ -2,11 +2,15 @@
 Configuration event handlers — config switching, log level, heartbeat, translation.
 """
 
-import os
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.config.live2d import get_live2d_config
+from animetta.config.persona import list_available_personas
+from animetta.utils.logger_manager import logger_manager
+
+from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
 
@@ -85,27 +89,13 @@ class ConfigHandlers(BaseSocketHandler):
         """Return current config (sanitized) to frontend."""
         logger.info(f"[{sid}] Requested config data")
 
-        config = self.global_config or AppConfig.load()
+        config = self.get_active_config()
 
-        # Read available personas from filesystem
-        personas_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "config",
-            "personas",
-        )
-        available_personas = []
-        if os.path.isdir(personas_dir):
-            available_personas = sorted(
-                [
-                    f.replace(".yaml", "")
-                    for f in os.listdir(personas_dir)
-                    if f.endswith(".yaml")
-                ]
-            )
+        available_personas = list_available_personas(fallback_to_default=False)
 
         # Read live2d config
         try:
-            live2d_cfg = Live2DConfig.load()
+            live2d_cfg = get_live2d_config()
             live2d_model_path = live2d_cfg.model.path
         except Exception as e:
             logger.warning(f"[ConfigHandlers] Failed to load Live2D config, using fallback: {e}")

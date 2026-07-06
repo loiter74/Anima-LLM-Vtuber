@@ -16,13 +16,15 @@ ARG DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security
 FROM node:22-bookworm-slim AS frontend-builder
 
 # Use Chinese npm registry
-RUN npm config set registry https://registry.npmmirror.com
+RUN corepack enable \
+    && corepack prepare pnpm@11.7.0 --activate \
+    && pnpm config set registry https://registry.npmmirror.com
 
 WORKDIR /build/frontend
 
-COPY frontend/package.json frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+COPY frontend/.npmrc frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 
-RUN npm install --legacy-peer-deps
+RUN pnpm install --frozen-lockfile
 
 COPY frontend/ .
 
@@ -30,7 +32,7 @@ COPY frontend/ .
 COPY config/socket-events.json /build/config/socket-events.json
 
 # Skip TypeScript check in Docker build (run vite build directly)
-RUN npx vite build
+RUN pnpm exec vite build
 
 # ---------------------------------------------------------------------------
 # Stage 2: Python dependency builder

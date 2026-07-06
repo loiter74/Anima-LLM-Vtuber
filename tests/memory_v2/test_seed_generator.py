@@ -2,7 +2,7 @@
 
 import pytest
 
-from animetta.core.config.persona.base import (
+from animetta.config.persona.base import (
     KnowledgeBoundaries,
     MBTIDimensions,
     MBTIProfile,

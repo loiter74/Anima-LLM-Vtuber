@@ -2,17 +2,20 @@ from __future__ import annotations
 
 """Tests for built-in tools (calculator, get_current_time, load_tools_from_config)."""
 
+import sys
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
 
-from animetta.core.tools.base import (
+from animetta.tools.base import (
     calculator,
     create_tool_registry,
     get_builtin_tools,
     get_current_time,
     get_tools_map,
     load_tools_from_config,
+    web_search,
 )
 
 
@@ -83,6 +86,28 @@ class TestGetCurrentTime:
         assert "Asia/Tokyo" in result
 
 
+class TestWebSearch:
+    """web_search fallback tests."""
+
+    @pytest.mark.asyncio
+    async def test_uses_duckduckgo_fallback_when_tavily_is_unset(self, monkeypatch):
+        """web_search uses langchain_community.tools DuckDuckGo fallback."""
+
+        class FakeDuckDuckGoSearchRun:
+            def run(self, query: str) -> str:
+                return f"fake results for {query}"
+
+        fake_tools_module = ModuleType("langchain_community.tools")
+        fake_tools_module.DuckDuckGoSearchRun = FakeDuckDuckGoSearchRun
+        monkeypatch.setitem(sys.modules, "langchain_community.tools", fake_tools_module)
+        monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+        result = await web_search.coroutine("animetta architecture")
+
+        assert "Search results (DuckDuckGo)" in result
+        assert "fake results for animetta architecture" in result
+
+
 class TestLoadToolsFromConfig:
     """load_tools_from_config tests."""
 
@@ -114,7 +139,7 @@ class TestLoadToolsFromConfig:
         assert len(tools) == 0
         assert tools_map == {}
 
-    @patch("animetta.core.tools.base.load_tools_from_config")
+    @patch("animetta.tools.base.load_tools_from_config")
     def test_get_builtin_tools(self, mock_load):
         tools = get_builtin_tools()
         assert len(tools) == 4
@@ -133,7 +158,7 @@ class TestLoadToolsFromConfig:
         assert tools[0].name == "calculator"
 
     def test_create_tool_registry_with_extra(self):
-        from langchain_core.core.tools import tool
+        from langchain_core.tools import tool
 
         @tool
         async def dummy_tool(param: str) -> str:

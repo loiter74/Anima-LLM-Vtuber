@@ -8,17 +8,21 @@ Covers:
 
 from __future__ import annotations
 
+import sys
 import time
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from animetta.inspection.checks import consistency
 from animetta.inspection.checks.consistency import (
     check_data_consistency,
     chroma_responds,
     has_trace_in_last,
     log_file_stale,
+    stats_store_responds,
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -33,9 +37,17 @@ def _make_mock_store(trace_count: int = 0, raises: bool = False) -> MagicMock:
         store._db = None
     else:
         mock_db = AsyncMock()
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value=[trace_count])
-        mock_db.execute = AsyncMock(return_value=mock_cursor)
+        trace_cursor = AsyncMock()
+        trace_cursor.fetchone = AsyncMock(return_value=[trace_count])
+        ping_cursor = AsyncMock()
+        ping_cursor.fetchone = AsyncMock(return_value=[1])
+
+        async def _execute(sql: str, *args, **kwargs):
+            if "COUNT(*) FROM traces" in sql:
+                return trace_cursor
+            return ping_cursor
+
+        mock_db.execute = AsyncMock(side_effect=_execute)
         store._db = mock_db
     return store
 
@@ -47,6 +59,57 @@ def _make_mock_chroma(raises: bool = False) -> MagicMock:
     instance = MagicMock()
     instance.list_collections = MagicMock(return_value=["col_a"])
     return MagicMock(return_value=instance)
+
+
+@pytest.fixture(autouse=True)
+def _stub_chromadb_module(monkeypatch):
+    """Provide a patchable chromadb module when the optional package is absent."""
+
+    module = types.SimpleNamespace(PersistentClient=MagicMock())
+    monkeypatch.setitem(sys.modules, "chromadb", module)
+
+
+# ─────────────────────────────────────────────────────────────
+# stats_store_responds
+# ─────────────────────────────────────────────────────────────
+
+
+class TestStatsStoreResponds:
+    """Probe: StatsStore SQLite reachability."""
+
+    @pytest.mark.asyncio
+    async def test_stats_store_reachable(self):
+
+        mock_store = _make_mock_store(trace_count=0)
+        with patch(
+            "animetta.inspection.checks.consistency.get_stats_store",
+            new=AsyncMock(return_value=mock_store),
+        ):
+            result = await stats_store_responds()
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_stats_store_uninitialized(self):
+
+        mock_store = _make_mock_store(raises=True)
+        with patch(
+            "animetta.inspection.checks.consistency.get_stats_store",
+            new=AsyncMock(return_value=mock_store),
+        ):
+            result = await stats_store_responds()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_stats_store_query_fails(self):
+
+        mock_store = _make_mock_store(trace_count=0)
+        mock_store._db.execute = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch(
+            "animetta.inspection.checks.consistency.get_stats_store",
+            new=AsyncMock(return_value=mock_store),
+        ):
+            result = await stats_store_responds()
+            assert result is False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -164,6 +227,20 @@ class TestLogFileStale:
             result = log_file_stale(minutes=60)
             assert result is True
 
+    def test_log_file_stale_uses_current_server_log_name(self, tmp_path, monkeypatch):
+        """log_file_stale checks logs/animetta.log, matching socketio_server."""
+
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        current_log = logs_dir / "animetta.log"
+        current_log.write_text("recent log", encoding="utf-8")
+
+        monkeypatch.setattr(consistency, "_PROJECT_ROOT", tmp_path)
+
+        result = log_file_stale(minutes=60)
+
+        assert result is False
+
     def test_log_file_stale(self):
 
         old_time = time.time() - 7200  # 2 hours ago
@@ -217,7 +294,7 @@ class TestCheckDataConsistency:
         assert result.detail["issues"] == []
 
     @pytest.mark.asyncio
-    async def test_no_recent_trace_fails(self):
+    async def test_no_recent_trace_is_diagnostic_only(self):
 
         mock_store = _make_mock_store(trace_count=0)
         mock_chroma = _make_mock_chroma(raises=False)
@@ -228,8 +305,26 @@ class TestCheckDataConsistency:
              patch.object(Path, "exists", return_value=True), \
              patch.object(Path, "stat", return_value=MagicMock(st_mtime=now)):
             result = await check_data_consistency()
+        assert result.ok is True
+        assert result.error is None
+        assert result.detail["stats_store_ok"] is True
+        assert result.detail["stats_has_recent_trace"] is False
+        assert result.detail["issues"] == []
+
+    @pytest.mark.asyncio
+    async def test_stats_store_unreachable_fails(self):
+
+        mock_store = _make_mock_store(raises=True)
+        mock_chroma = _make_mock_chroma(raises=False)
+        now = time.time()
+
+        with patch(self._STATS, new=AsyncMock(return_value=mock_store)), \
+             patch(self._CHROMA, mock_chroma), \
+             patch.object(Path, "exists", return_value=True), \
+             patch.object(Path, "stat", return_value=MagicMock(st_mtime=now)):
+            result = await check_data_consistency()
         assert result.ok is False
-        assert "stats_no_recent_trace" in result.error
+        assert "stats_store_unreachable" in result.error
 
     @pytest.mark.asyncio
     async def test_chroma_unreachable_fails(self):
@@ -263,7 +358,7 @@ class TestCheckDataConsistency:
     @pytest.mark.asyncio
     async def test_all_fail(self):
 
-        mock_store = _make_mock_store(trace_count=0)
+        mock_store = _make_mock_store(raises=True)
         old_time = time.time() - 7200
 
         with patch(self._STATS, new=AsyncMock(return_value=mock_store)), \
@@ -272,7 +367,7 @@ class TestCheckDataConsistency:
              patch.object(Path, "stat", return_value=MagicMock(st_mtime=old_time)):
             result = await check_data_consistency()
         assert result.ok is False
-        assert "stats_no_recent_trace" in result.error
+        assert "stats_store_unreachable" in result.error
         assert "chroma_unreachable" in result.error
         assert "log_file_stale" in result.error
         assert len(result.detail["issues"]) == 3

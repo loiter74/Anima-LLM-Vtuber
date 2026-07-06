@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.services.bilibili import DanmakuService
+from animetta.utils.tempfiles import write_temp_bytes
 
+from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -192,11 +194,12 @@ class BilibiliHandlers:
             # Also emit danmaku.ai_reply for the chat message integration
             if reply_text:
                 character_name = "AI"
-                persona = (
-                    orchestrator.service_context.core.config.get_persona()
-                    if orchestrator.service_context
-                    else None
-                )
+                service_context = getattr(orchestrator, "service_context", None)
+                config = getattr(service_context, "config", None)
+                if config is None:
+                    legacy_core = getattr(service_context, "core", None)
+                    config = getattr(legacy_core, "config", None)
+                persona = config.get_persona() if config else None
                 if persona:
                     character_name = persona.name
 
@@ -248,11 +251,7 @@ class BilibiliHandlers:
                 elif tts_audio[:4] == b"OggS":
                     format = "ogg"
                 audio_data = base64.b64encode(tts_audio).decode("utf-8")
-                import tempfile
-
-                tmp_audio = tempfile.mktemp(suffix=f".{format}")
-                with open(tmp_audio, "wb") as f:
-                    f.write(tts_audio)
+                tmp_audio = write_temp_bytes(tts_audio, suffix=f".{format}")
                 volumes = _compute_volumes(tmp_audio) or []
 
             if audio_data:

@@ -8,9 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from animetta.config.app import AppConfig
-
-from ..socket_events import EVENTS
+from ..socket_events import event_name
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -18,6 +16,7 @@ from .handlers.chat_handlers import ChatHandlers
 from .handlers.config_handlers import ConfigHandlers
 from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
+from .handlers.memory_handlers import MemoryHandlers
 from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
@@ -61,6 +60,7 @@ class RouteHandlers:
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
         self.chat = ChatHandlers(sio, session_manager, self.base)
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
+        self.memory = MemoryHandlers(sio, session_manager, self.base)
         self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
@@ -72,16 +72,48 @@ class RouteHandlers:
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
 
-        # Backward-compat: expose global_config/user_settings from base
-        self.global_config = self.base.global_config
-        self.user_settings = self.base.user_settings
-
         # Wire up Live2D callback
         self.live2d._setup_live2d_callback()
 
     # ── Config setters (backward compat) ──────────────────────────────
 
     # ── Backward-compat properties for internal state moved to handlers ─
+
+    @property
+    def global_config(self):
+        """Backward-compat: shared config now lives on BaseSocketHandler."""
+        return self.base.global_config
+
+    @global_config.setter
+    def global_config(self, value) -> None:
+        self.base.global_config = value
+        for handler in self._domain_handlers():
+            handler.global_config = value
+
+    @property
+    def user_settings(self):
+        """Backward-compat: shared user settings now live on BaseSocketHandler."""
+        return self.base.user_settings
+
+    @user_settings.setter
+    def user_settings(self, value) -> None:
+        self.base.user_settings = value
+        for handler in self._domain_handlers():
+            if hasattr(handler, "user_settings"):
+                handler.user_settings = value
+
+    def _domain_handlers(self) -> list[Any]:
+        return [
+            self.config_handlers,
+            self.bilibili,
+            self.chat,
+            self.live2d,
+            self.memory,
+            self.minecraft,
+            self.persona,
+            self.lifecycle,
+            self.singing,
+        ]
 
     @property
     def _bilibili_service(self):
@@ -105,26 +137,11 @@ class RouteHandlers:
 
     def set_global_config(self, config) -> None:
         """Set global config — delegates to domain handlers."""
-        self.base.set_global_config(config)
-        self.global_config = self.base.global_config
-        for h in [
-            self.config_handlers,
-            self.bilibili,
-            self.chat,
-            self.live2d,
-            self.minecraft,
-            self.persona,
-            self.lifecycle,
-            self.singing,
-        ]:
-            h.global_config = config
+        self.global_config = config
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings — delegates to domain handlers."""
-        self.base.set_user_settings(user_settings)
-        self.user_settings = self.base.user_settings
-        for h in [self.config_handlers, self.persona, self.lifecycle]:
-            h.user_settings = user_settings
+        self.user_settings = user_settings
 
     # ── Shared utility (backward compat) ─────────────────────────────
 
@@ -271,68 +288,10 @@ class RouteHandlers:
     # ── Memory / Wiki (V2 bridge) ────────────────────────────────────
 
     async def on_memory_organize(self, sid: str, data: dict) -> None:
-        """Trigger V2 memory metabolism + compile, emit progress."""
-        try:
-            config = self.global_config or AppConfig.load()
-            ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base._make_send_callback(sid)
-            )
-            mem = getattr(ctx, "memory_system", None)
-            if not mem:
-                await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                    {"status": "error", "message": "Memory system not available"}, to=sid)
-                return
-
-            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
-                {"text": "Running metabolism tick...", "progress": 30}, to=sid)
-            await mem._run_metabolism_tick()
-
-            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
-                {"text": "Compiling RAW → EPISODIC...", "progress": 60}, to=sid)
-
-            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                {"status": "ok", "message": "Memory organized"}, to=sid)
-        except Exception as e:
-            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                {"status": "error", "message": str(e)}, to=sid)
+        return await self.memory.on_memory_organize(sid, data)
 
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
-        """Return memory atoms as wiki page data for frontend."""
-        try:
-            config = self.global_config or AppConfig.load()
-            ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base._make_send_callback(sid)
-            )
-            mem = getattr(ctx, "memory_system", None)
-            if not mem:
-                logger.warning(f"[wiki_pages] memory_system is None for sid={sid}")
-                return {"pages": [], "error": "Memory system not available"}
-
-            atoms = await mem.store.get_all_active(limit=50)
-            logger.info(f"[wiki_pages] sid={sid} atoms={len(atoms)}")
-            pages = []
-            for a in atoms:
-                # Map layer to page_type for frontend compatibility
-                layer_to_type = {
-                    "RAW": "source",
-                    "EPISODIC": "entity",
-                    "SEMANTIC": "concept",
-                    "EMERGENT": "synthesis",
-                }
-                pages.append({
-                    "path": a.id,
-                    "title": a.summary or a.content[:80],
-                    "content": a.content,
-                    "page_type": layer_to_type.get(a.layer.name, a.layer.name.lower()),
-                    "tags": a.tags or [],
-                    "updated_at": (a.rewritten_at or a.occurred_at).isoformat() if (a.rewritten_at or a.occurred_at) else "",
-                })
-            return {"pages": pages}
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            logger.error(f"[wiki_pages] ERROR: {e}")
-            return {"pages": [], "error": str(e)}
+        return await self.memory.on_get_wiki_pages(sid, data)
 
 
 def register_routes(
@@ -361,62 +320,62 @@ def register_routes(
     sio.on("disconnect", handlers.on_disconnect)
 
     # Conversation events
-    sio.on(EVENTS.get("chat", {}).get("text", {}).get("name", "chat:text"), handlers.on_text_input)
-    sio.on(EVENTS.get("chat", {}).get("audio", {}).get("name", "chat:audio"), handlers.on_raw_audio_data)
-    sio.on(EVENTS.get("chat", {}).get("audio_end", {}).get("name", "chat:audio_end"), handlers.on_mic_audio_end)
-    sio.on(EVENTS.get("chat", {}).get("interrupt", {}).get("name", "chat:interrupt"), handlers.on_interrupt_signal)
+    sio.on(event_name("chat", "text"), handlers.on_text_input)
+    sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
+    sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
+    sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)
 
     # History events
-    sio.on(EVENTS.get("history", {}).get("list", {}).get("name", "history:list"), handlers.on_fetch_history_list)
-    sio.on(EVENTS.get("history", {}).get("fetch", {}).get("name", "history:fetch"), handlers.on_fetch_history)
-    sio.on(EVENTS.get("history", {}).get("clear", {}).get("name", "history:clear"), handlers.on_clear_history)
-    sio.on(EVENTS.get("history", {}).get("create", {}).get("name", "history:create"), handlers.on_create_new_history)
+    sio.on(event_name("history", "list"), handlers.on_fetch_history_list)
+    sio.on(event_name("history", "fetch"), handlers.on_fetch_history)
+    sio.on(event_name("history", "clear"), handlers.on_clear_history)
+    sio.on(event_name("history", "create"), handlers.on_create_new_history)
 
     # Config events
-    sio.on(EVENTS.get("config", {}).get("switch", {}).get("name", "config:switch"), handlers.on_switch_config)
-    sio.on(EVENTS.get("config", {}).get("log_level", {}).get("name", "config:log_level"), handlers.on_set_log_level)
-    sio.on(EVENTS.get("config", {}).get("get", {}).get("name", "config:get"), handlers.on_get_config)
+    sio.on(event_name("config", "switch"), handlers.on_switch_config)
+    sio.on(event_name("config", "log_level"), handlers.on_set_log_level)
+    sio.on(event_name("config", "get"), handlers.on_get_config)
 
     # Heartbeat
-    sio.on(EVENTS.get("system", {}).get("heartbeat", {}).get("name", "system:heartbeat"), handlers.on_heartbeat)
+    sio.on(event_name("system", "heartbeat"), handlers.on_heartbeat)
 
     # Desktop client events
-    sio.on(EVENTS.get("desktop", {}).get("register", {}).get("name", "desktop:register"), handlers.on_desktop_register)
-    sio.on(EVENTS.get("desktop", {}).get("live2d_action", {}).get("name", "desktop:live2d_action"), handlers.on_desktop_live2d_action)
-    sio.on(EVENTS.get("desktop", {}).get("chat_message", {}).get("name", "desktop:chat_message"), handlers.on_desktop_chat_message)
-    sio.on(EVENTS.get("desktop", {}).get("voice_start", {}).get("name", "desktop:voice_start"), handlers.on_desktop_voice_start)
-    sio.on(EVENTS.get("desktop", {}).get("voice_stop", {}).get("name", "desktop:voice_stop"), handlers.on_desktop_voice_stop)
+    sio.on(event_name("desktop", "register"), handlers.on_desktop_register)
+    sio.on(event_name("desktop", "live2d_action"), handlers.on_desktop_live2d_action)
+    sio.on(event_name("desktop", "chat_message"), handlers.on_desktop_chat_message)
+    sio.on(event_name("desktop", "voice_start"), handlers.on_desktop_voice_start)
+    sio.on(event_name("desktop", "voice_stop"), handlers.on_desktop_voice_stop)
 
     # Bilibili frontend control events
-    sio.on(EVENTS.get("bilibili", {}).get("connect", {}).get("name", "bilibili:connect"), handlers.on_bilibili_connect)
-    sio.on(EVENTS.get("bilibili", {}).get("disconnect", {}).get("name", "bilibili:disconnect"), handlers.on_bilibili_disconnect)
-    sio.on(EVENTS.get("bilibili", {}).get("update_room", {}).get("name", "bilibili:update_room"), handlers.on_bilibili_update_room)
+    sio.on(event_name("bilibili", "connect"), handlers.on_bilibili_connect)
+    sio.on(event_name("bilibili", "disconnect"), handlers.on_bilibili_disconnect)
+    sio.on(event_name("bilibili", "update_room"), handlers.on_bilibili_update_room)
 
     # Minecraft bot control events
-    sio.on(EVENTS.get("minecraft", {}).get("start", {}).get("name", "minecraft:start"), handlers.on_minecraft_start)
-    sio.on(EVENTS.get("minecraft", {}).get("stop", {}).get("name", "minecraft:stop"), handlers.on_minecraft_stop)
-    sio.on(EVENTS.get("minecraft", {}).get("spectate", {}).get("name", "minecraft:spectate"), handlers.on_minecraft_spectate)
-    sio.on("minecraft:command", handlers.on_minecraft_command)
+    sio.on(event_name("minecraft", "start"), handlers.on_minecraft_start)
+    sio.on(event_name("minecraft", "stop"), handlers.on_minecraft_stop)
+    sio.on(event_name("minecraft", "spectate"), handlers.on_minecraft_spectate)
+    sio.on(event_name("minecraft", "command"), handlers.on_minecraft_command)
 
     # Translation configuration events
-    sio.on(EVENTS.get("translation", {}).get("configure", {}).get("name", "translation:configure"), handlers.on_translation_configure)
+    sio.on(event_name("translation", "configure"), handlers.on_translation_configure)
 
     # Persona runtime switching
-    sio.on(EVENTS.get("persona", {}).get("list", {}).get("name", "persona:list"), handlers.on_get_available_personas)
-    sio.on(EVENTS.get("persona", {}).get("set", {}).get("name", "persona:set"), handlers.on_set_persona)
+    sio.on(event_name("persona", "list"), handlers.on_get_available_personas)
+    sio.on(event_name("persona", "set"), handlers.on_set_persona)
 
     # Personality mode runtime switching
-    sio.on(EVENTS.get("persona", {}).get("set_mode", {}).get("name", "persona:set_mode"), handlers.on_set_personality_mode)
+    sio.on(event_name("persona", "set_mode"), handlers.on_set_personality_mode)
 
     # Singing module events
-    sio.on(EVENTS.get("sing", {}).get("process", {}).get("name", "sing:process"), handlers.on_sing_process)
-    sio.on(EVENTS.get("sing", {}).get("confirm_lyrics", {}).get("name", "sing:confirm_lyrics"), handlers.on_sing_confirm_lyrics)
-    sio.on(EVENTS.get("sing", {}).get("cancel", {}).get("name", "sing:cancel"), handlers.on_sing_cancel)
-    sio.on(EVENTS.get("sing", {}).get("subtitle_sync", {}).get("name", "sing:subtitle_sync"), handlers.on_sing_subtitle_sync)
+    sio.on(event_name("sing", "process"), handlers.on_sing_process)
+    sio.on(event_name("sing", "confirm_lyrics"), handlers.on_sing_confirm_lyrics)
+    sio.on(event_name("sing", "cancel"), handlers.on_sing_cancel)
+    sio.on(event_name("sing", "subtitle_sync"), handlers.on_sing_subtitle_sync)
 
     # Memory: wiki pages (legacy compat — delegates to V2)
-    sio.on(EVENTS.get("memory", {}).get("organize", {}).get("name", "memory:organize"), handlers.on_memory_organize)
-    sio.on(EVENTS.get("memory", {}).get("list_pages", {}).get("name", "memory:list_pages"), handlers.on_get_wiki_pages)
+    sio.on(event_name("memory", "organize"), handlers.on_memory_organize)
+    sio.on(event_name("memory", "list_pages"), handlers.on_get_wiki_pages)
 
     logger.info("WebSocket routes registered")
     return handlers

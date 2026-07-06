@@ -2,10 +2,11 @@
 Persona event handlers — persona switching, personality mode.
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
+from animetta.config.persona import PersonaConfig, list_available_personas
 
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
@@ -16,10 +17,6 @@ if TYPE_CHECKING:
     from ..desktop import DesktopClientManager
     from ..live2d import Live2DManager
     from ..session import SessionManager
-
-# Default personas directory
-_PERSONAS_DIR = Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "personas"
-
 
 class PersonaHandlers(BaseSocketHandler):
     """Persona and personality mode event handlers.
@@ -56,25 +53,20 @@ class PersonaHandlers(BaseSocketHandler):
     async def on_get_available_personas(self, sid: str, data: dict) -> dict:
         """获取可用的人设列表"""
         try:
-            personas = []
-            if _PERSONAS_DIR.is_dir():
-                for yaml_file in sorted(_PERSONAS_DIR.glob("*.yaml")):
-                    personas.append(yaml_file.stem)
-
-            # If no personas found, return default
-            if not personas:
-                personas = ["default"]
+            personas = list_available_personas()
 
             # Get current persona's MBTI data
             mbti_data = None
             try:
-                from animetta.config.persona import PersonaConfig
-
-                logger.info(f"[{sid}] on_get_available_personas: global_config={self.global_config}")
-                if self.global_config:
-                    current_persona_name = self.global_config.persona
+                active_config = self.global_config
+                logger.info(f"[{sid}] on_get_available_personas: global_config={active_config}")
+                if active_config:
+                    current_persona_name = active_config.persona
                     logger.info(f"[{sid}] Loading persona: {current_persona_name}")
-                    current_persona = PersonaConfig.load(current_persona_name)
+                    if hasattr(active_config, "get_persona"):
+                        current_persona = active_config.get_persona()
+                    else:
+                        current_persona = PersonaConfig.load(current_persona_name)
                     if current_persona and current_persona.personality and current_persona.personality.mbti:
                         mbti = current_persona.personality.mbti
                         mbti_data = {
@@ -115,8 +107,6 @@ class PersonaHandlers(BaseSocketHandler):
         logger.info(f"[{sid}] 切换人设: {persona_name}")
 
         try:
-            from animetta.config.persona import PersonaConfig
-
             ctx = self.session_manager.get_context(sid)
             if not ctx:
                 await self.sio.emit(
@@ -139,7 +129,12 @@ class PersonaHandlers(BaseSocketHandler):
                 self.global_config.persona = persona_name
                 self.global_config._persona = None  # Invalidate cache
 
-            if ctx.llm_engine and ctx.core.config:
+            ctx_config = getattr(ctx, "config", None)
+            if ctx_config is None:
+                legacy_core = getattr(ctx, "core", None)
+                ctx_config = getattr(legacy_core, "config", None)
+
+            if ctx.llm_engine and ctx_config:
                 live2d_prompt = None
                 try:
                     from animetta.avatar.prompts import EmotionPromptBuilder
@@ -154,7 +149,7 @@ class PersonaHandlers(BaseSocketHandler):
                 except Exception as e:
                     logger.debug(f"[PersonaHandlers] Failed to build Live2D emotion prompt: {e}")
 
-                new_system_prompt = ctx.core.config.get_system_prompt(
+                new_system_prompt = ctx_config.get_system_prompt(
                     live2d_prompt=live2d_prompt
                 )
                 ctx.llm_engine.set_system_prompt(new_system_prompt)

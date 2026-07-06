@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from animetta.config.persona import PersonaConfig
-from animetta.config.persona.base import BehaviorRules, PersonalityTraits
+from animetta.config.persona import EnhancedPersonaBuilder, PersonaConfig
+from animetta.config.persona.base import (
+    BehaviorRules,
+    PersonalityTraits,
+    list_available_personas,
+)
 
 """Tests for PersonaConfig (config/persona/base.py)"""
 
@@ -473,6 +477,38 @@ class TestLoad:
         call_path = mock_from_yaml.call_args[0][0]
         assert "config" in call_path
         assert "personas" in call_path
+
+
+class TestPersonaCatalog:
+    """Tests for shared persona catalog helpers."""
+
+    def test_list_available_personas_returns_sorted_yaml_stems(self, tmp_path):
+        """list_available_personas returns sorted persona names from YAML files."""
+
+        (tmp_path / "zeta.yaml").write_text("name: Zeta", encoding="utf-8")
+        (tmp_path / "alpha.yaml").write_text("name: Alpha", encoding="utf-8")
+        (tmp_path / "notes.txt").write_text("ignore me", encoding="utf-8")
+
+        assert list_available_personas(tmp_path) == ["alpha", "zeta"]
+
+    def test_list_available_personas_falls_back_to_default_for_missing_dir(self, tmp_path):
+        """list_available_personas falls back to default when directory is absent."""
+
+        assert list_available_personas(tmp_path / "missing") == ["default"]
+
+
+class TestEnhancedPersonaBuilder:
+    """Tests for EnhancedPersonaBuilder persona loading."""
+
+    def test_from_yaml_uses_project_personas_dir_by_default(self):
+        """from_yaml(name) should load personas from the project config directory."""
+
+        builder = EnhancedPersonaBuilder.from_yaml("default")
+
+        assert builder.persona_path.name == "default.yaml"
+        assert builder.persona_path.parent.name == "personas"
+        assert builder.persona_path.parent.parent.name == "config"
+        assert builder.persona_data["name"]
 
 
 class TestAnimaV01Persona:

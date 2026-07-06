@@ -447,7 +447,6 @@ class AutonomousLoop:
             for e in state.entities:
                 if e.is_threat and e.distance < 30:
                     # Move 20 blocks away from threat
-                    dx = state.x - (state.x + e.distance)  # simplified: move in random safe direction
                     flee_x = int(state.x + (20 if state.x >= 0 else -20))
                     flee_z = int(state.z + (20 if state.z >= 0 else -20))
                     break

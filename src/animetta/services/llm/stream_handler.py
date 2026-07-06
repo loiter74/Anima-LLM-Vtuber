@@ -103,7 +103,5 @@ class OpenAIStreamHandler:
         except Exception as e:
             duration_s = time_module.perf_counter() - t_start
             self.llm._record_error(duration_s)
-            import traceback
-            logger.error(f"OpenAI streaming chat error: {type(e).__name__}: {e}")
-            logger.debug(f"OpenAI streaming traceback: {traceback.format_exc()}")
+            logger.exception(f"OpenAI streaming chat error: {type(e).__name__}: {e}")
             raise

@@ -23,7 +23,7 @@ def test_singing_module_imports():
 
 def test_config_module_imports():
     """Singing config models should be importable."""
-    from animetta.core.config.singing import (
+    from animetta.config.singing import (
         RVCConfig,
         SingingConfig,
     )
@@ -90,7 +90,7 @@ def test_pipeline_progress_creation():
 
 def test_singing_config_defaults():
     """SingingConfig should instantiate with all defaults."""
-    from animetta.core.config.singing import SingingConfig
+    from animetta.config.singing import SingingConfig
 
     cfg = SingingConfig()
     assert cfg.rvc.enabled is False
@@ -100,7 +100,7 @@ def test_singing_config_defaults():
 
 def test_rvc_config_disabled_by_default():
     """RVC should be opt-in only."""
-    from animetta.core.config.singing import RVCConfig
+    from animetta.config.singing import RVCConfig
 
     cfg = RVCConfig()
     assert cfg.enabled is False
@@ -108,7 +108,7 @@ def test_rvc_config_disabled_by_default():
 
 def test_singing_config_can_disable_rvc():
     """RVC can be toggled off — needed for smoke-test-safe instantiation."""
-    from animetta.core.config.singing import SingingConfig
+    from animetta.config.singing import SingingConfig
 
     cfg = SingingConfig(rvc={"enabled": False})
     assert cfg.rvc.enabled is False

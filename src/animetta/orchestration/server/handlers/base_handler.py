@@ -55,7 +55,7 @@ class BaseSocketHandler:
 
     # ── Shared utilities ─────────────────────────────────────────────
 
-    def _make_send_callback(self, sid: str):
+    def make_send_callback(self, sid: str):
         """Create a send callback for the orchestrator."""
 
         async def send_callback(data):
@@ -66,15 +66,27 @@ class BaseSocketHandler:
 
         return send_callback
 
+    def _make_send_callback(self, sid: str):
+        """Deprecated compatibility wrapper for old internal callers."""
+        return self.make_send_callback(sid)
+
+    def get_active_config(self):
+        """Return the active runtime config, loading from disk only as fallback."""
+        return self.global_config or AppConfig.load()
+
+    async def get_or_create_context(self, sid: str, send_callback=None):
+        """Create a session context using the shared handler config boundary."""
+        send_callback = send_callback or self.make_send_callback(sid)
+        return await self.session_manager.get_or_create_context(
+            sid, self.get_active_config(), send_callback
+        )
+
     async def _get_or_create_orchestrator(self, sid: str):
         """Get or create LangGraph orchestrator for a session."""
 
-        config = self.global_config or AppConfig.load()
-        send_callback = self._make_send_callback(sid)
+        send_callback = self.make_send_callback(sid)
 
-        ctx = await self.session_manager.get_or_create_context(
-            sid, config, send_callback
-        )
+        ctx = await self.get_or_create_context(sid, send_callback)
 
         live2d_config = get_live2d_config()
 

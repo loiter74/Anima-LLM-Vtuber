@@ -36,12 +36,11 @@
 
 `_INIT_DONE` Event guards against double-init on uvicorn reload. Order:
 1. Load `.env` (module top) → parse `--redis-url` → load `AppConfig` + `UserSettings` + log level.
-2. `init_tracing()` (OTel, non-fatal on failure).
-3. Add file logger `logs/animetta.log` (daily rotation, 7-day retention, for Loki).
-4. `_setup_checkpointer()` → if `--redis-url`: `AsyncRedisSaver` + `set_external_checkpointer`; else MemorySaver default.
-5. `create_server(config)` → `_server.set_user_settings(...)`.
-6. Background `asyncio.ensure_future` tasks: `model_manager.warmup()`, `prewarm_services()`, `InspectionScheduler.start()` (24h interval).
-7. `_INIT_DONE.set()` → wrap ASGI with FrontendServingMiddleware → return.
+2. Add file logger `logs/animetta.log` (daily rotation, 7-day retention, for Loki).
+3. `_setup_checkpointer()` → if `--redis-url`: `AsyncRedisSaver` + `set_external_checkpointer`; else MemorySaver default.
+4. `create_server(config)` → initializes tracing/routes/lifecycle, then `_server.set_user_settings(...)`.
+5. Background `asyncio.ensure_future` tasks: `model_manager.warmup()`, `prewarm_services()`, `InspectionScheduler.start()` (24h interval).
+6. `_INIT_DONE.set()` → wrap ASGI with FrontendServingMiddleware → return.
 
 `run_server()` (CLI path) calls `init_config()` then `uvicorn.run(..., factory=True)` which re-enters `get_asgi_app` in a subprocess — that's why `_INIT_DONE` is a `threading.Event`.
 
@@ -49,7 +48,7 @@
 
 - **Class-level state for ServicePool**: `_llm`/`_tts`/`_asr`/`_ready`/`_ctx` are classvars; `init()` is idempotent.
 - **Background tasks tracked in `_INIT_TASKS`** so stale ones from a prior init can be cancelled.
-- **Non-fatal init failures**: tracing, inspection scheduler, Redis — all log warning and continue.
+- **Non-fatal init failures**: inspection scheduler and Redis log warning and continue; tracing is delegated to `orchestration.server.websocket.create_server()`.
 - **Model loading is concurrent and awaitable**: `ModelSlot.wait(timeout=30)` raises the original error on failure.
 - **Checkpoints expire at 86400s** (24h); key shape `checkpoint:{thread_id}` + `checkpoint_writes:{thread_id}`.
 

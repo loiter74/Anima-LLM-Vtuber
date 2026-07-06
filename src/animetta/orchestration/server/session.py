@@ -191,9 +191,7 @@ class SessionManager:
                 return {"enable_tools": False, "config": {}}
 
         except Exception as e:
-            logger.error(f"[_load_tools_config] Failed to load tools config: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.exception(f"[_load_tools_config] Failed to load tools config: {e}")
             return {"enable_tools": False, "config": {}}
 
     def get_orchestrator(self, sid: str) -> Any | None:

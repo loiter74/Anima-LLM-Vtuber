@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from ...socket_events import EVENTS
-from ....tools.minecraft.core.tools import init_bridge, cleanup_bridge
+from ....tools.minecraft.core import tools as mc_tools
 from ....tools.minecraft.core.bridge import get_bridge
 from ....tools.minecraft.core.config import MinecraftConfig
 from ....tools.minecraft.core.state_collector import StateCollector
-from ....tools.minecraft.core import tools as mc_tools
+from ....tools.minecraft.core.tools import cleanup_bridge, init_bridge
+from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -75,6 +75,7 @@ class MinecraftHandlers:
         try:
             # Load full minecraft config from tools.yaml (includes runtime path/entrypoint)
             from pathlib import Path
+
             import yaml
             config_path = Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "tools.yaml"
             mc_cfg_dict: dict = {}

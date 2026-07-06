@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for WebSocketServer — server init, routes, lifecycle, and prewarm."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -47,7 +48,7 @@ class TestWebSocketServerInit:
             config = MagicMock()
             server = WebSocketServer(config=config)
 
-            assert server.core.config is config
+            assert server.config is config
             assert server.sio is not None
             assert server.asgi_app is not None
             assert server.model_manager is not None
@@ -80,7 +81,7 @@ class TestWebSocketServerInit:
 
             cfg = MagicMock()
             server = WebSocketServer(config=cfg)
-            assert server.core.config is cfg
+            assert server.config is cfg
 
     def test_get_app_returns_asgi_app(self, websocket_server):
         """get_app returns the Starlette ASGI app."""
@@ -153,14 +154,14 @@ class TestSetConfig:
 
         websocket_server.set_config(new_config)
 
-        assert websocket_server.core.config is new_config
+        assert websocket_server.config is new_config
         h.set_global_config.assert_called_once_with(new_config)
 
     def test_set_config_no_handlers(self, websocket_server):
         """set_config works when route_handlers is None."""
         cfg = MagicMock()
         websocket_server.set_config(cfg)
-        assert websocket_server.core.config is cfg
+        assert websocket_server.config is cfg
 
 
 # ── WebSocketServer — setup_routes ─────────────────────────────────
@@ -193,6 +194,27 @@ class TestSetupRoutes:
             websocket_server.setup_routes()
 
             assert websocket_server.model_manager._socketio is websocket_server.sio
+
+    def test_setup_routes_uses_app_config_bilibili(self, websocket_server):
+        """Bilibili startup config should come from AppConfig.bilibili."""
+        websocket_server.config = SimpleNamespace(
+            bilibili=SimpleNamespace(
+                enabled=True,
+                room_id=12345,
+                sessdata="sess",
+            )
+        )
+
+        with patch("animetta.orchestration.server.websocket.register_routes") as mock_reg:
+            mock_reg.return_value = MagicMock()
+
+            websocket_server.setup_routes()
+
+            assert mock_reg.call_args.kwargs["bilibili_config"] == {
+                "enabled": True,
+                "room_id": 12345,
+                "sessdata": "sess",
+            }
 
 
 # ── WebSocketServer — setup_lifecycle ──────────────────────────────
@@ -233,7 +255,7 @@ class TestPrewarmServices:
             await websocket_server.prewarm_services()
 
             mock_pool.init.assert_called_once_with(
-                websocket_server.core.config,
+                websocket_server.config,
                 model_manager=websocket_server.model_manager,
             )
 

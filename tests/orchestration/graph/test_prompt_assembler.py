@@ -2,7 +2,6 @@
 
 from animetta.orchestration.prompting.assembler import assemble
 from animetta.orchestration.prompting.types import (
-    CompiledPrompt,
     PromptSection,
     SectionPriority,
     SectionRole,

@@ -56,8 +56,13 @@ class ServicePool:
             await ctx.load_from_config(config)
         except Exception as e:
             logger.error(f"[ServicePool] Initialization failed: {e}")
-            # Close whatever was opened
-            await ctx.close()
+            try:
+                await ctx.close()
+            finally:
+                await cls._close_partially_initialized_shared_engines(ctx)
+                cls._llm = cls._tts = cls._asr = None
+                cls._ready = False
+                cls._ctx = None
             raise
 
         cls._llm = ctx.llm_engine
@@ -130,3 +135,19 @@ class ServicePool:
     @classmethod
     def is_ready(cls) -> bool:
         return cls._ready
+
+    @staticmethod
+    async def _close_partially_initialized_shared_engines(ctx: Any) -> None:
+        """Close shared engines that were opened before pool init failed."""
+        for attr in ("llm_engine", "tts_engine", "asr_engine"):
+            engine = getattr(ctx, attr, None)
+            if engine is None:
+                continue
+            try:
+                await engine.close()
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"[ServicePool] Failed to close partial {attr}: {cleanup_error}"
+                )
+            finally:
+                setattr(ctx, attr, None)

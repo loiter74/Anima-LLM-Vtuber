@@ -1,0 +1,6 @@
+# Default Animetta development/runtime dependency entrypoint.
+#
+# Local AI backends remain optional; install requirements-local-ai.txt only
+# when running torch/whisper/kokoro/RVC style providers locally.
+-r requirements-core.txt
+-r requirements-dev.txt

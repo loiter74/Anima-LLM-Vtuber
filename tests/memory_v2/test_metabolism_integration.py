@@ -29,11 +29,33 @@ class TestMetabolismIntegration:
         ))
 
         # Run tick
-        await system._run_metabolism_tick()
+        await system.run_metabolism_tick()
 
         high = await system.store.get("high")
         low = await system.store.get("low")
         assert high.salience > low.salience  # High confidence → higher salience
+
+        await system.shutdown()
+
+    async def test_public_metabolism_tick_api_decays_salience(self):
+        """Callers outside memory should use the public metabolism tick API."""
+        system = LivingMemorySystem(db_path=":memory:")
+        await system.initialize()
+
+        await system.store.create(MemoryAtom(
+            id="public-high", layer=Layer.RAW, content="important",
+            occurred_at=datetime.now(UTC), confidence=0.9, salience=0.9,
+        ))
+        await system.store.create(MemoryAtom(
+            id="public-low", layer=Layer.RAW, content="trivial",
+            occurred_at=datetime.now(UTC), confidence=0.1, salience=0.1,
+        ))
+
+        await system.run_metabolism_tick()
+
+        high = await system.store.get("public-high")
+        low = await system.store.get("public-low")
+        assert high.salience > low.salience
 
         await system.shutdown()
 
@@ -88,7 +110,7 @@ class TestMetabolismIntegration:
             ))
 
         # Run metabolism tick
-        await system._run_metabolism_tick()
+        await system.run_metabolism_tick()
 
         # Check if any EPISODIC atoms were created
         all_atoms = await system.store.get_all_active()

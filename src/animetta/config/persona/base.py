@@ -4,11 +4,33 @@ Supports defining LLM character personas via YAML files
 Merged functionality from the original CharacterConfig
 """
 
+from pathlib import Path
 
 from pydantic import Field, field_validator
 
 from ..core.base import BaseConfig
 
+DEFAULT_PERSONAS_DIR = Path(__file__).resolve().parents[4] / "config" / "personas"
+
+
+def resolve_personas_dir(personas_dir: str | Path | None = None) -> Path:
+    """Resolve the shared project personas directory."""
+    return DEFAULT_PERSONAS_DIR if personas_dir is None else Path(personas_dir)
+
+
+def list_available_personas(
+    personas_dir: str | Path | None = None,
+    *,
+    fallback_to_default: bool = True,
+) -> list[str]:
+    """Return sorted persona names from the shared persona catalog."""
+    personas_path = resolve_personas_dir(personas_dir)
+    personas = []
+    if personas_path.is_dir():
+        personas = sorted(path.stem for path in personas_path.glob("*.yaml"))
+    if not personas and fallback_to_default:
+        return ["default"]
+    return personas
 
 # ── Context-safety / anti-leak section ───────────────────────────────
 # Appended to every persona's system prompt as the final block. Stops the
@@ -364,13 +386,7 @@ class PersonaConfig(BaseConfig):
         Returns:
             PersonaConfig: Persona configuration object
         """
-        from pathlib import Path
-
-        if personas_dir is None:
-            # Default path
-            personas_path = Path(__file__).parent.parent.parent.parent.parent / "config" / "personas"
-        else:
-            personas_path = Path(personas_dir)
+        personas_path = resolve_personas_dir(personas_dir)
 
         # Attempt to load
         yaml_path = personas_path / f"{name}.yaml"

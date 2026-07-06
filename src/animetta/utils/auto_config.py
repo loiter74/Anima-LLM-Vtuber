@@ -349,7 +349,7 @@ def main():
             logger.info("")
             logger.info("✅ Environment configuration complete!")
             logger.info("")
-            logger.info("Next step: python -m animetta.socketio_server")
+            logger.info("Next step: python -m animetta.core.socketio_server")
         sys.exit(0 if success else 1)
 
     else:

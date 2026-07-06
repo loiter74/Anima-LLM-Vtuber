@@ -94,6 +94,7 @@ export const Events = {
     STOP: socketEvents.minecraft.stop.name,
     STATUS: socketEvents.minecraft.status.name,
     SPECTATE: socketEvents.minecraft.spectate.name,
+    COMMAND: socketEvents.minecraft.command.name,
     VIEWER_STATUS: socketEvents.minecraft.viewer_status.name,
     BOT_STATE: socketEvents.minecraft.bot_state.name,
     COMMAND_RESULT: socketEvents.minecraft.command_result.name,

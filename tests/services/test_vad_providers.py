@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.providers.vad.mock import MockVADConfig
+from animetta.config.providers.vad.mock import MockVADConfig
 from animetta.services.vad import MockVAD, VADFactory, VADInterface, VADResult, VADState
 from animetta.services.vad import mock_vad as mv_mod
 from animetta.services.vad import silero_vad as sv_mod

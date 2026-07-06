@@ -2,7 +2,8 @@ from __future__ import annotations
 
 """Tests for WebSocket route handlers — event dispatch and registration."""
 
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 
@@ -55,12 +56,26 @@ class TestRouteHandlersInit:
         assert handlers.live2d_manager is l2d
 
     def test_set_global_config(self, mock_socketio, mock_session_manager):
-        """set_global_config is a no-op (empty body in source)."""
+        """set_global_config stores and propagates the config."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         config = MagicMock()
         handlers.set_global_config(config)
-        # Current implementation has empty body — global_config stays None
-        assert handlers.global_config is None
+        assert handlers.global_config is config
+        assert handlers.base.global_config is config
+        assert handlers.chat.global_config is config
+        assert handlers.persona.global_config is config
+
+    def test_global_config_assignment_updates_shared_base(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Backward-compatible direct assignment updates shared handler state."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        config = MagicMock()
+
+        handlers.global_config = config
+
+        assert handlers.base.global_config is config
+        assert handlers.config_handlers.global_config is config
 
     def test_set_user_settings(self, mock_socketio, mock_session_manager):
         """set_user_settings stores settings reference."""
@@ -69,10 +84,73 @@ class TestRouteHandlersInit:
         handlers.set_user_settings(settings)
         assert handlers.user_settings is settings
 
+    def test_user_settings_assignment_updates_shared_base(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Backward-compatible direct assignment updates shared user settings."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        settings = MagicMock()
+
+        handlers.user_settings = settings
+
+        assert handlers.base.user_settings is settings
+        assert handlers.config_handlers.user_settings is settings
+
+    def test_memory_events_are_owned_by_memory_handler(
+        self, mock_socketio, mock_session_manager
+    ):
+        """RouteHandlers remains a facade for memory/wiki events."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        assert handlers.memory.global_config is handlers.global_config
+
     def test_setup_live2d_callback_sets_execute_callback(self, mock_socketio, mock_session_manager):
         """_setup_live2d_callback registers an async callback on the Live2D manager."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         assert handlers.live2d_manager._execute_callback is not None
+
+    @pytest.mark.asyncio
+    async def test_base_exposes_public_send_callback(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Routes should use the public callback factory, not private helpers."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        send_callback = handlers.base.make_send_callback("sid1")
+        await send_callback({"type": "chat:sentence", "text": "hello"})
+
+        mock_socketio.emit.assert_called_once_with(
+            "chat:sentence",
+            {"type": "chat:sentence", "text": "hello"},
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_base_orchestrator_reuses_context_send_callback(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """Context and orchestrator setup should share the same send callback."""
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.base_handler.get_live2d_config",
+            MagicMock(return_value=MagicMock()),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(MagicMock())
+        ctx = MagicMock()
+        orchestrator = MagicMock()
+        mock_session_manager.get_or_create_context = AsyncMock(return_value=ctx)
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(
+            return_value=orchestrator
+        )
+        mock_session_manager.get_or_create_audio_processor = AsyncMock()
+
+        await handlers.base._get_or_create_orchestrator("sid1")
+
+        context_callback = mock_session_manager.get_or_create_context.await_args.args[2]
+        orchestrator_callback = (
+            mock_session_manager.get_or_create_orchestrator.await_args.args[2]
+        )
+        assert context_callback is orchestrator_callback
 
 
 # ── RouteHandlers — Handler dispatch ───────────────────────────────
@@ -90,8 +168,8 @@ class TestRouteHandlersDispatch:
         mock_orch.process_text = AsyncMock()
         mock_session_manager.get_or_create_orchestrator = AsyncMock(return_value=mock_orch)
 
-        monkeypatch.setattr("animetta.core.config.AppConfig.load", MagicMock)
-        monkeypatch.setattr("animetta.core.config.live2d.get_live2d_config", lambda: MagicMock())
+        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
+        monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: MagicMock())
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
@@ -144,8 +222,8 @@ class TestRouteHandlersDispatch:
         mock_processor.process_chunk = AsyncMock()
         mock_session_manager.get_audio_processor.return_value = mock_processor
 
-        monkeypatch.setattr("animetta.core.config.AppConfig.load", MagicMock)
-        monkeypatch.setattr("animetta.core.config.live2d.get_live2d_config", lambda: MagicMock())
+        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
+        monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: MagicMock())
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
@@ -216,6 +294,312 @@ class TestRouteHandlersDispatch:
             "type": "control",
             "text": "interrupted",
         }, to="sid1")
+
+    @pytest.mark.asyncio
+    async def test_on_get_config_lists_project_personas(
+        self, mock_socketio, mock_session_manager
+    ):
+        """config:get should list personas from the project config directory."""
+
+        config = SimpleNamespace(
+            persona="default",
+            services=SimpleNamespace(
+                asr="mock",
+                tts="mock",
+                agent="mock",
+                vad="mock",
+            ),
+            asr=SimpleNamespace(type="mock"),
+            tts=SimpleNamespace(type="mock"),
+            agent=SimpleNamespace(llm_config=SimpleNamespace(type="mock")),
+            vad=SimpleNamespace(type="mock"),
+            system=SimpleNamespace(host="localhost", port=12394, log_level="INFO"),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        await handlers.on_get_config("sid1", {})
+
+        payload = None
+        for call_args in mock_socketio.emit.call_args_list:
+            if call_args.args[0] == "config:data":
+                payload = call_args.args[1]
+                break
+
+        assert payload is not None
+        assert "default" in payload["available_personas"]
+
+    @pytest.mark.asyncio
+    async def test_on_get_config_uses_shared_active_config_boundary(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """config:get should use BaseSocketHandler config fallback in one place."""
+
+        config = SimpleNamespace(
+            persona="default",
+            services=SimpleNamespace(
+                asr="mock",
+                tts="mock",
+                agent="mock",
+                vad="mock",
+            ),
+            asr=SimpleNamespace(type="mock"),
+            tts=SimpleNamespace(type="mock"),
+            agent=SimpleNamespace(llm_config=SimpleNamespace(type="mock")),
+            vad=SimpleNamespace(type="mock"),
+            system=SimpleNamespace(host="localhost", port=12394, log_level="INFO"),
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.config_handlers.get_live2d_config",
+            MagicMock(return_value=SimpleNamespace(model=SimpleNamespace(path="/model.json"))),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.config_handlers.get_active_config = MagicMock(return_value=config)
+
+        await handlers.on_get_config("sid1", {})
+
+        handlers.config_handlers.get_active_config.assert_called_once_with()
+        mock_socketio.emit.assert_any_call(
+            "config:data",
+            {
+                "persona": "default",
+                "services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "agent": "mock",
+                    "vad": "mock",
+                },
+                "active_services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "llm": "mock",
+                    "vad": "mock",
+                },
+                "system": {
+                    "host": "localhost",
+                    "port": 12394,
+                    "log_level": "INFO",
+                },
+                "live2d": {
+                    "model_path": "/model.json",
+                    "enabled": True,
+                },
+                "available_personas": ANY,
+            },
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_bilibili_ai_reply_uses_current_service_context_config(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Bilibili reply integration should use ServiceContext.config directly."""
+
+        persona = SimpleNamespace(name="Anima")
+        config = MagicMock()
+        config.get_persona.return_value = persona
+        service_context = SimpleNamespace(config=config)
+        orchestrator = SimpleNamespace(
+            service_context=service_context,
+            process_text=AsyncMock(
+                return_value={
+                    "response_text": "hello back",
+                    "emotion": None,
+                    "tts_audio": None,
+                }
+            ),
+        )
+        message = SimpleNamespace(
+            text="hello",
+            user_name="viewer",
+            user_id=1001,
+            to_dict=lambda: {
+                "text": "hello",
+                "user_name": "viewer",
+                "user_id": 1001,
+            },
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.base._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
+
+        await handlers.bilibili._process_danmaku(message)
+
+        reply_payload = None
+        for call_args in mock_socketio.emit.call_args_list:
+            if call_args.args[0] == "bilibili:danmaku_ai_reply":
+                reply_payload = call_args.args[1]
+                break
+
+        assert reply_payload is not None
+        assert reply_payload["danmaku_text"] == "hello"
+        assert reply_payload["reply_text"] == "hello back"
+        assert reply_payload["user_name"] == "viewer"
+        assert reply_payload["character_name"] == "Anima"
+        assert isinstance(reply_payload["timestamp"], float)
+
+    @pytest.mark.asyncio
+    async def test_translation_configure_updates_shared_translation_state(
+        self, mock_socketio, mock_session_manager
+    ):
+        """translation:configure should update the shared translation state."""
+
+        from animetta.orchestration.graph.translation_state import translation_state
+
+        old_target = translation_state.target_language
+        try:
+            handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+            await handlers.on_translation_configure(
+                "sid1", {"target_language": "Japanese"}
+            )
+
+            assert translation_state.target_language == "Japanese"
+            mock_socketio.emit.assert_any_call(
+                "translation:status",
+                {"target_language": "Japanese", "enabled": translation_state.enabled},
+                to="sid1",
+            )
+        finally:
+            translation_state.target_language = old_target
+
+    @pytest.mark.asyncio
+    async def test_on_set_persona_uses_current_context_config(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """Persona switching should use ServiceContext.config directly."""
+
+        from animetta.config.persona import PersonaConfig
+
+        new_persona = SimpleNamespace(personality=None)
+        monkeypatch.setattr(PersonaConfig, "load", MagicMock(return_value=new_persona))
+        monkeypatch.setattr(
+            "animetta.config.live2d.get_live2d_config",
+            MagicMock(return_value=SimpleNamespace(enabled=False)),
+        )
+
+        llm = MagicMock()
+        config = MagicMock()
+        config.get_system_prompt.return_value = "new prompt"
+        ctx = SimpleNamespace(llm_engine=llm, config=config)
+        mock_session_manager.get_context.return_value = ctx
+        mock_session_manager.get_orchestrator.return_value = MagicMock()
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        await handlers.on_set_persona("sid1", {"persona_name": "anima"})
+
+        llm.set_system_prompt.assert_called_once_with("new prompt")
+        mock_socketio.emit.assert_any_call(
+            "persona:updated",
+            {"persona_name": "anima", "mbti": None},
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_get_available_personas_uses_active_config_persona_cache(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """persona:list should read MBTI from the active AppConfig persona cache."""
+
+        mbti = SimpleNamespace(
+            type="INTJ",
+            dimensions=SimpleNamespace(ei=20, sn=80, tf=75, jp=65),
+            description="cached profile",
+        )
+        current_persona = SimpleNamespace(
+            personality=SimpleNamespace(mbti=mbti),
+        )
+        config = SimpleNamespace(
+            persona="anima",
+            get_persona=MagicMock(return_value=current_persona),
+        )
+        direct_load = MagicMock(side_effect=RuntimeError("direct load should not run"))
+
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.list_available_personas",
+            MagicMock(return_value=["anima"]),
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.PersonaConfig.load",
+            direct_load,
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        result = await handlers.on_get_available_personas("sid1", {})
+
+        config.get_persona.assert_called_once_with()
+        direct_load.assert_not_called()
+        assert result == {
+            "personas": ["anima"],
+            "mbti": {
+                "type": "INTJ",
+                "dimensions": {"ei": 20, "sn": 80, "tf": 75, "jp": 65},
+                "description": "cached profile",
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_on_memory_organize_uses_public_metabolism_api(
+        self, mock_socketio, mock_session_manager
+    ):
+        """memory:organize should not reach into MemorySystem private methods."""
+
+        class PublicMemorySystem:
+            def __init__(self) -> None:
+                self.tick_called = False
+
+            async def run_metabolism_tick(self) -> None:
+                self.tick_called = True
+
+        memory = PublicMemorySystem()
+        mock_session_manager.get_or_create_context = AsyncMock(
+            return_value=SimpleNamespace(memory_system=memory)
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+
+        await handlers.on_memory_organize("sid1", {})
+
+        assert memory.tick_called
+        mock_socketio.emit.assert_any_call(
+            "memory:organize_result",
+            {"status": "ok", "message": "Memory organized"},
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_get_wiki_pages_uses_public_memory_api(
+        self, mock_socketio, mock_session_manager
+    ):
+        """memory:list_pages should not reach through MemorySystem into its store."""
+
+        pages = [{
+            "path": "raw-1",
+            "title": "Latte",
+            "content": "用户: 我喜欢拿铁",
+            "page_type": "source",
+            "tags": ["s1"],
+            "updated_at": "2026-07-06T00:00:00+00:00",
+        }]
+
+        class PublicMemorySystem:
+            async def list_wiki_pages(self, limit: int = 50) -> list[dict]:
+                assert limit == 50
+                return pages
+
+        mock_session_manager.get_or_create_context = AsyncMock(
+            return_value=SimpleNamespace(memory_system=PublicMemorySystem())
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+
+        assert await handlers.on_get_wiki_pages("sid1", {}) == {"pages": pages}
 
 
 # ── RouteHandlers — Broadcast ──────────────────────────────────────

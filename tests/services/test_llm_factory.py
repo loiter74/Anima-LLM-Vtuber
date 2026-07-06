@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.providers.llm import (
+from animetta.config.providers.llm import (
     GLMLLMConfig,
     MockLLMConfig,
     OllamaLLMConfig,

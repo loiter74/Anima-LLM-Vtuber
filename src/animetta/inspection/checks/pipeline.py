@@ -1,12 +1,11 @@
-"""Pipeline smoke test — end-to-end conversation via Socket.IO.
+"""Pipeline smoke test — Socket.IO conversation ingress via filtered probe.
 
 Connects to the Anima backend via Socket.IO client, sends a test message,
-collects all received events, and verifies that the full conversation
-pipeline (LLM → TTS → emotion → output) produced the expected events.
+collects all received events, and verifies that the backend connection and
+probe containment boundary are healthy.
 
-Actual event names verified against the codebase's emit() calls in:
-  - orchestration/graph/output_node.py  (expression, audio_with_expression, sentence, control)
-  - orchestration/graph/asr_node.py     (transcript)
+Inspection probes are intentionally filtered before LLM dispatch by
+core/message_filter.py, so this check must not expect LLM/TTS output events.
 """
 
 from __future__ import annotations
@@ -18,21 +17,30 @@ from typing import Any
 import socketio
 from loguru import logger
 
+from animetta.orchestration.socket_events import EVENTS
+
 from ..models import CheckResult
 
 # ── Constants ────────────────────────────────────────────────────────
 
 BACKEND_URL = "http://localhost:12394"
 CONNECTION_TIMEOUT = 5.0  # seconds
-COLLECTION_DURATION = 5.0  # seconds — events arrive as soon as LLM+TTS finish
+COLLECTION_DURATION = 5.0  # seconds — connection/probe events should arrive quickly
 _MIN_DURATION_MS = 0.1
 
-# Verified against actual codebase emit() calls (see module docstring).
-# These are the core events a text-mode conversation pipeline must produce.
+# Catalog-backed event used to inject the inspection probe.
+PROBE_INPUT_EVENT = EVENTS["chat"]["text"]["name"]
+
+# Required catalog-backed events for a filtered inspection probe.
 EXPECTED_EVENTS: frozenset[str] = frozenset({
-    "expression",            # emotion analysis result (output_node.py:97)
-    "audio_with_expression", # TTS audio data (output_node.py:163)
-    "sentence",              # LLM text response (output_node.py:59,62)
+    EVENTS["system"]["connection_established"]["name"],
+})
+
+# If any of these arrive for an inspection probe, the probe leaked into output.
+PROHIBITED_PROBE_EVENTS: frozenset[str] = frozenset({
+    EVENTS["chat"]["sentence"]["name"],
+    EVENTS["chat"]["expression"]["name"],
+    EVENTS["chat"]["audio_with_expression"]["name"],
 })
 
 
@@ -44,14 +52,16 @@ def _duration_ms_since(start_time: float) -> float:
 
 
 async def check_conversation_pipeline() -> CheckResult:
-    """Run an end-to-end pipeline smoke test via Socket.IO.
+    """Run a Socket.IO conversation ingress smoke test.
 
     Connects as a client, sends a test message, collects all events
     for COLLECTION_DURATION seconds, then verifies that the expected
-    core pipeline events were received.
+    connection event was received and the filtered probe did not reach
+    LLM/TTS output events.
 
     Returns:
-        CheckResult.passed if all EXPECTED_EVENTS received.
+        CheckResult.passed if all EXPECTED_EVENTS received and no
+        PROHIBITED_PROBE_EVENTS are received.
         CheckResult.failed with diagnostic detail otherwise.
     """
     start_time = time.perf_counter()
@@ -81,11 +91,11 @@ async def check_conversation_pipeline() -> CheckResult:
             )
 
         # ── Send test message ─────────────────────────────────────
-        # ``is_inspection`` tags this payload so ChatHandlers can drop it
-        # before LLM dispatch (see core/message_filter.py). The textual
-        # ``[inspection]`` prefix is a redundant backstop in case an older
-        # handler is in play.
-        await sio.emit("chat:text", {
+        # ``is_inspection`` tags this payload so the chat handler drops it before
+        # LLM dispatch (see core/message_filter.py). The textual
+        # ``[inspection]`` prefix is a redundant backstop in case older code is
+        # in play.
+        await sio.emit(PROBE_INPUT_EVENT, {
             "text": "[inspection] ping",
             "mode": "text",
             "is_inspection": True,
@@ -101,9 +111,10 @@ async def check_conversation_pipeline() -> CheckResult:
 
         # ── Evaluate results ──────────────────────────────────────
         missing = EXPECTED_EVENTS - received_events
+        leaked = PROHIBITED_PROBE_EVENTS & received_events
         duration_ms = _duration_ms_since(start_time)
 
-        if not missing:
+        if not missing and not leaked:
             logger.info(
                 f"[inspection:pipeline] PASSED — all {len(EXPECTED_EVENTS)} "
                 f"expected events received: {sorted(received_events)}"
@@ -113,18 +124,25 @@ async def check_conversation_pipeline() -> CheckResult:
                 duration_ms=duration_ms,
                 received=sorted(received_events),
                 missing=[],
+                leaked=[],
             )
 
+        error_parts = []
+        if missing:
+            error_parts.append(f"missing expected events: {sorted(missing)}")
+        if leaked:
+            error_parts.append(f"probe leaked to output events: {sorted(leaked)}")
         logger.warning(
-            f"[inspection:pipeline] FAILED — missing events: {sorted(missing)}. "
+            f"[inspection:pipeline] FAILED — {'; '.join(error_parts)}. "
             f"Received: {sorted(received_events)}"
         )
         return CheckResult.failed(
             name="pipeline/conversation",
             duration_ms=duration_ms,
-            error=f"Missing expected events: {sorted(missing)}",
+            error="; ".join(error_parts),
             received=sorted(received_events),
             missing=sorted(missing),
+            leaked=sorted(leaked),
         )
 
     except Exception as exc:
@@ -135,4 +153,5 @@ async def check_conversation_pipeline() -> CheckResult:
             error=f"Exception during pipeline check: {exc}",
             received=sorted(received_events),
             missing=sorted(EXPECTED_EVENTS - received_events),
+            leaked=sorted(PROHIBITED_PROBE_EVENTS & received_events),
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from animetta.core.config.core.registry import ProviderRegistry
-from animetta.core.config.persona import PersonaConfig
+from animetta.config.core.registry import ProviderRegistry
+from animetta.config.persona import PersonaConfig
 
 """Tests for AppConfig - application configuration loading."""
 
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from animetta.core.config.app import (
+from animetta.config.app import (
     AppConfig,
     ServicesConfig,
     _load_env_file,
@@ -33,7 +33,7 @@ def clean_config_globals():
         _services_config_logged (logged service set)
         expand_env_vars.replace_var attrs (GLM_API_KEY logging)
     """
-    import animetta.core.config.app as app_module
+    import animetta.config.app as app_module
 
     app_module._env_file_loaded = False
     app_module._services_yaml_cache = None
@@ -164,7 +164,7 @@ class TestExpandEnvVars:
 class TestLoadEnvFile:
     """Tests for _load_env_file function."""
 
-    @patch("animetta.core.config.app.load_dotenv")
+    @patch("animetta.config.app.load_dotenv")
     @patch("pathlib.Path.exists", return_value=True)
     def test_idempotent_loading(self, mock_exists, mock_load_dotenv):
         """_load_env_file is idempotent — second call does not reload."""
@@ -172,7 +172,7 @@ class TestLoadEnvFile:
         _load_env_file()
         assert mock_load_dotenv.call_count == 1
 
-    @patch("animetta.core.config.app.load_dotenv")
+    @patch("animetta.config.app.load_dotenv")
     @patch("pathlib.Path.exists", return_value=True)
     def test_loads_when_file_exists(self, mock_exists, mock_load_dotenv):
         """load_dotenv is called when a .env file is found."""
@@ -182,8 +182,8 @@ class TestLoadEnvFile:
         assert "dotenv_path" in kwargs
         assert kwargs["dotenv_path"].endswith(".env")
 
-    @patch("animetta.core.config.app.logger.warning")
-    @patch("animetta.core.config.app.load_dotenv")
+    @patch("animetta.config.app.logger.warning")
+    @patch("animetta.config.app.load_dotenv")
     @patch("pathlib.Path.exists", return_value=False)
     def test_warning_when_no_env_file(
         self, mock_exists, mock_load_dotenv, mock_logger_warning
@@ -194,7 +194,7 @@ class TestLoadEnvFile:
         mock_logger_warning.assert_called_once()
         assert "No .env file found" in str(mock_logger_warning.call_args)
 
-    @patch("animetta.core.config.app.load_dotenv")
+    @patch("animetta.config.app.load_dotenv")
     @patch("pathlib.Path.exists", return_value=False)
     def test_loads_anima_env_file_var(
          self, mock_exists, mock_load_dotenv
@@ -203,7 +203,7 @@ class TestLoadEnvFile:
          with patch.dict(os.environ, {"ANIMETTA_ENV_FILE": "/custom/path/.env"}, clear=False):
              _load_env_file()
 
-    @patch("animetta.core.config.app.load_dotenv")
+    @patch("animetta.config.app.load_dotenv")
     @patch("pathlib.Path.exists", return_value=True)
     def test_priority_anima_env_file_first(self, mock_exists, mock_load_dotenv):
          """ANIMETTA_ENV_FILE path has highest priority — checked first."""
@@ -222,7 +222,7 @@ class TestLoadEnvFile:
 class TestLoadServiceConfig:
     """Tests for _load_service_config function."""
 
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists", return_value=True)
     def test_loads_from_unified_yaml(self, mock_exists, mock_load_yaml):
         """Loads service config from unified services.yaml."""
@@ -232,7 +232,7 @@ class TestLoadServiceConfig:
         result = _load_service_config("asr", "mock")
         assert result == {"type": "mock"}
 
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists", return_value=True)
     def test_cache_behavior(self, mock_exists, mock_load_yaml):
         """Unified YAML is loaded only once; subsequent calls use cache."""
@@ -249,7 +249,7 @@ class TestLoadServiceConfig:
         assert result2 == {"type": "other"}
         assert mock_load_yaml.call_count == 1  # still 1
 
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists", return_value=True)
     def test_fallback_to_old_format(self, mock_exists, mock_load_yaml):
         """Falls back to config/services/{type}/{name}.yaml when unified missing."""
@@ -269,7 +269,7 @@ class TestLoadServiceConfig:
         with pytest.raises(FileNotFoundError, match="Service configuration not found"):
             _load_service_config("asr", "nonexistent")
 
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists", return_value=True)
     def test_logs_service_once(self, mock_exists, mock_load_yaml):
         """Each service config key is logged only once."""
@@ -277,7 +277,7 @@ class TestLoadServiceConfig:
             "asr": {"mock": {"type": "mock"}},
         }
 
-        with patch("animetta.core.config.app.logger.debug") as mock_log:
+        with patch("animetta.config.app.logger.debug") as mock_log:
             _load_service_config("asr", "mock")
             _load_service_config("asr", "mock")
             # Should only log once
@@ -386,9 +386,9 @@ class TestAppConfig:
 class TestFromYaml:
     """Tests for AppConfig.from_yaml classmethod."""
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_full_cycle_with_mocked_yaml(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -446,9 +446,9 @@ class TestFromYaml:
         with pytest.raises(FileNotFoundError, match="Configuration file not found"):
             AppConfig.from_yaml("/nonexistent/path.yaml")
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_env_var_expansion_in_config(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -482,9 +482,9 @@ class TestFromYaml:
         assert config.asr is not None
         assert config.asr.api_key == "expanded_value"
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_env_override_llm_api_key(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -517,9 +517,9 @@ class TestFromYaml:
         assert config.agent is not None
         assert config.agent.llm_config.api_key == "overridden_key"
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_env_override_system_host_port(
          self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -554,9 +554,9 @@ class TestFromYaml:
          assert config.system.host == "1.2.3.4"
          assert config.system.port == 8888
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_env_override_service_selection(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -607,9 +607,9 @@ class TestFromYaml:
         assert config.agent is not None
         assert config.agent.llm_config.type == "mock"
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_env_override_asr_tts_api_key(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -648,9 +648,9 @@ class TestFromYaml:
         assert config.tts is not None
         assert config.tts.api_key == "tts_key_override"
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_local_llm_loaded_when_specified(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -694,9 +694,53 @@ class TestFromYaml:
         # local_llm extracts the inner llm_config
         assert config.local_llm.type == "ollama"
 
-    @patch("animetta.core.config.app._load_env_file")
-    @patch("animetta.core.config.app._load_service_config")
-    @patch("animetta.core.config.app._load_yaml_file")
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
+    @patch("pathlib.Path.exists")
+    def test_bilibili_yaml_loaded_when_present(
+        self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
+    ):
+        """Bilibili config is loaded from config/bilibili.yaml."""
+        mock_exists.return_value = True
+        mock_load_yaml.side_effect = [
+            {
+                "persona": "default",
+                "services": {
+                    "asr": "mock",
+                    "tts": "mock",
+                    "agent": "mock",
+                    "vad": "mock",
+                },
+                "system": {"host": "localhost", "port": 12394},
+            },
+            {"enabled": True, "room_id": 12345, "sessdata": "sess"},
+        ]
+
+        def load_service_side(service_type, service_name):
+            configs = {
+                ("asr", "mock"): {"type": "mock"},
+                ("tts", "mock"): {"type": "mock"},
+                ("llm", "mock"): {
+                    "memory_enabled": False,
+                    "llm_config": {"type": "mock"},
+                },
+                ("vad", "mock"): {"type": "mock"},
+            }
+            return configs.get((service_type, service_name), {"type": "mock"})
+
+        mock_load_service.side_effect = load_service_side
+
+        config = AppConfig.from_yaml("/fake/path.yaml")
+
+        assert config.bilibili is not None
+        assert config.bilibili.enabled is True
+        assert config.bilibili.room_id == 12345
+        assert config.bilibili.sessdata == "sess"
+
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
     def test_known_fields_only(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
@@ -707,7 +751,7 @@ class TestFromYaml:
             "persona": "default",
             "services": {"asr": "mock", "tts": "mock", "agent": "mock", "vad": "mock"},
             "system": {"host": "localhost", "port": 12394},
-            "bilibili": {"room_id": 123},  # unknown key — should be stripped
+            "bilibili": {"room_id": 123},  # ignored; loaded from bilibili.yaml
             "unknown_tool": {"key": "val"},
         }
 
@@ -885,7 +929,7 @@ class TestValidate:
         PR = self._get_provider_registry()
         with (
             patch.object(PR, "list_services", side_effect=lambda cat: ["mock"]),
-            patch("animetta.core.config.app.logger.warning") as mock_logger_warning,
+            patch("animetta.config.app.logger.warning") as mock_logger_warning,
         ):
             config = AppConfig()
             config.services = ServicesConfig(
@@ -899,7 +943,7 @@ class TestValidate:
         PR = self._get_provider_registry()
         with (
             patch.object(PR, "list_services", return_value=[]),
-            patch("animetta.core.config.app.logger.warning") as mock_logger_warning,
+            patch("animetta.config.app.logger.warning") as mock_logger_warning,
         ):
             config = AppConfig()
             config.services = ServicesConfig(
@@ -916,7 +960,7 @@ class TestValidate:
             return registered.get(cat, [])
         with (
             patch.object(PR, "list_services", side_effect=list_services_side),
-            patch("animetta.core.config.app.logger.warning") as mock_logger_warning,
+            patch("animetta.config.app.logger.warning") as mock_logger_warning,
         ):
             config = AppConfig()
             config.services = ServicesConfig(
@@ -933,7 +977,7 @@ class TestValidate:
         PR = self._get_provider_registry()
         with (
             patch.object(PR, "list_services", return_value=[]),
-            patch("animetta.core.config.app.logger.warning") as mock_logger_warning,
+            patch("animetta.config.app.logger.warning") as mock_logger_warning,
         ):
             config = AppConfig()
             config.services = ServicesConfig(

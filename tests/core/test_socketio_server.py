@@ -11,6 +11,7 @@ public/private function in isolation.
 
 import argparse
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -55,7 +56,7 @@ def mod():
     with (
         patch("dotenv.load_dotenv"),
         patch(
-            "animetta.core.config.user.UserSettings._load",
+            "animetta.config.user.UserSettings._load",
             return_value={"log_level": "INFO"},
         ),
     ):
@@ -66,6 +67,17 @@ def mod():
 
 
 # ── TestParseServerArgs ─────────────────────────────────────────────
+
+
+class TestUserSettingsRuntimePath:
+    """Runtime user settings location."""
+
+    def test_user_settings_uses_project_root(self, mod):
+        """User settings should live at project root, not under src/."""
+
+        project_root = Path(__file__).resolve().parents[2]
+
+        assert mod.user_settings.config_file == project_root / ".user_settings.yaml"
 
 
 class TestParseServerArgs:
@@ -288,6 +300,25 @@ class TestGetAsgiApp:
             mod.get_asgi_app()
 
         mock_init.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_asgi_app_delegates_tracing_to_server_factory(self, mod):
+        """Tracing bootstrap is owned by create_server(), not the core ASGI factory."""
+        self._reset_module_state(mod)
+        mod.global_config = MagicMock()
+
+        mock_server = MagicMock()
+        mock_server.model_manager = MagicMock()
+        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
+        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+
+        with (
+            patch("animetta.core.socketio_server._setup_checkpointer"),
+            patch("animetta.core.socketio_server.create_server", return_value=mock_server),
+        ):
+            mod.get_asgi_app()
+
+        assert not hasattr(mod, "init_tracing")
 
 
 # ── TestModuleLevelVars ─────────────────────────────────────────────

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from animetta.tools.minecraft.other.trace_recorder import ActionTrace, TaskTrace
 from animetta.tools.minecraft.skill.extractor import (
     _FEW_SHOT_EXAMPLES,
     _FULL_SYSTEM_PROMPT,
@@ -16,7 +17,6 @@ from animetta.tools.minecraft.skill.extractor import (
     _format_trace_steps,
 )
 from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillStep
-from animetta.tools.minecraft.other.trace_recorder import ActionTrace, TaskTrace
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
