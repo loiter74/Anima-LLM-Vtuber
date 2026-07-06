@@ -66,6 +66,7 @@ class PersonaHandlers(BaseSocketHandler):
 
             # Get current persona's MBTI data
             mbti_data = None
+            current_persona_name = None
             try:
                 active_config = self.global_config
                 logger.debug(
@@ -100,7 +101,11 @@ class PersonaHandlers(BaseSocketHandler):
             except Exception as e:
                 logger.error(f"[{sid}] 获取当前人格MBTI数据失败: {e}", exc_info=True)
 
-            return {"personas": personas, "mbti": mbti_data}
+            return {
+                "personas": personas,
+                "current_persona": current_persona_name,
+                "mbti": mbti_data,
+            }
         except Exception as e:
             logger.error(f"[{sid}] 获取人设列表失败: {e}")
             return {"personas": ["default"], "error": str(e)}

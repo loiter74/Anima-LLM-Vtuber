@@ -5,7 +5,7 @@ import { usePersonalityStore } from '@/stores/personality'
 const personalityStore = usePersonalityStore()
 
 const personaName = computed(() => {
-  return personalityStore.availablePersonas[0] || 'Anima'
+  return personalityStore.currentPersona || personalityStore.availablePersonas[0] || 'Anima'
 })
 
 const personaTraits = ['friendly', 'curious', 'helpful', 'creative']

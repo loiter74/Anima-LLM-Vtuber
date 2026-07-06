@@ -6,6 +6,7 @@ import { Events } from '@/constants/socket-events'
 export const usePersonalityStore = defineStore('personality', () => {
   const currentMode = ref<'default' | 'streaming'>('default')
   const currentMood = ref<string | null>(null)
+  const currentPersona = ref<string | null>(null)
   const availablePersonas = ref<string[]>([])
   const memoryInfluence = ref(0.3)
   const mbtiType = ref<string | null>(null)
@@ -23,6 +24,7 @@ export const usePersonalityStore = defineStore('personality', () => {
     if (!socket) return
 
     socket.on(Events.PERSONA.UPDATED, (data: { persona_name: string; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
+      currentPersona.value = data.persona_name
       if (data.mbti) {
         mbtiType.value = data.mbti.type
         mbtiDimensions.value = data.mbti.dimensions
@@ -43,8 +45,9 @@ export const usePersonalityStore = defineStore('personality', () => {
     const socket = getSocket()
     if (!socket) return
 
-    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[]; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
+    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[]; current_persona?: string | null; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
       availablePersonas.value = response.personas ?? []
+      currentPersona.value = response.current_persona ?? availablePersonas.value[0] ?? null
       // Also update MBTI data from initial fetch
       if (response.mbti) {
         mbtiType.value = response.mbti.type
@@ -81,6 +84,7 @@ export const usePersonalityStore = defineStore('personality', () => {
       })
 
       personaSuccess.value = true
+      currentPersona.value = name
       setTimeout(() => {
         personaSuccess.value = false
       }, 1000)
@@ -147,6 +151,7 @@ export const usePersonalityStore = defineStore('personality', () => {
   return {
     currentMode,
     currentMood,
+    currentPersona,
     availablePersonas,
     memoryInfluence,
     mbtiType,

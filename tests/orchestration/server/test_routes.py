@@ -568,6 +568,7 @@ class TestRouteHandlersDispatch:
         direct_load.assert_not_called()
         assert result == {
             "personas": ["anima"],
+            "current_persona": "anima",
             "mbti": {
                 "type": "INTJ",
                 "dimensions": {"ei": 20, "sn": 80, "tf": 75, "jp": 65},
@@ -610,7 +611,11 @@ class TestRouteHandlersDispatch:
 
         result = await handlers.on_get_available_personas("sid1", {})
 
-        assert result == {"personas": ["anima"], "mbti": None}
+        assert result == {
+            "personas": ["anima"],
+            "current_persona": "anima",
+            "mbti": None,
+        }
         logged = "\n".join(
             str(call.args) + str(call.kwargs)
             for log in (info, debug)

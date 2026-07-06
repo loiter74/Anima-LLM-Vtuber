@@ -277,6 +277,14 @@ file still exposed an unused `SystemModelStatusPayload` with the older
 `{model_name, status, progress}` shape, leaving two incompatible TypeScript
 contracts for the same event.
 
+### Persona card current-persona drift
+
+`PersonaCard` displayed the first available persona instead of the active
+runtime persona. The frontend personality store only tracked
+`availablePersonas`, while `persona:list` returned no explicit current-persona
+field. A backend using a non-first configured persona could therefore show a
+different persona in the drawer than the active runtime config and MBTI data.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -316,6 +324,7 @@ contracts for the same event.
 | Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
 | Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
 | Removed the unused stale frontend `SystemModelStatusPayload` shape so `system:model_status` has one active frontend contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts` |
+| Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 
 Behavior preserved:
 
@@ -369,6 +378,9 @@ Behavior preserved:
   reload is asserted to update existing session contexts.
 - `system:model_status` behavior is unchanged; the frontend now keeps only the
   active `{service, name, status, error?}` payload type used by the store.
+- Persona switching behavior is unchanged; the frontend now receives and
+  displays the active persona explicitly instead of inferring it from the
+  catalog order.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

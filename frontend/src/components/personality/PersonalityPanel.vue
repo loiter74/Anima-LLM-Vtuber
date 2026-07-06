@@ -103,8 +103,10 @@ const dimensions = computed(() => {
   ]
 })
 
-watch(() => store.availablePersonas, (personas) => {
-  if (personas.length > 0 && !selectedPersona.value) {
+watch([() => store.availablePersonas, () => store.currentPersona], ([personas, currentPersona]) => {
+  if (currentPersona) {
+    selectedPersona.value = currentPersona
+  } else if (personas.length > 0 && !selectedPersona.value) {
     selectedPersona.value = personas[0]
   }
 }, { immediate: true })
