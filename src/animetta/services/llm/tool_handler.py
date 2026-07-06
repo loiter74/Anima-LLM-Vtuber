@@ -204,7 +204,5 @@ class OpenAIToolHandler:
         except Exception as e:
             duration_s = time_module.perf_counter() - t_start if 't_start' in dir() else 0
             self.llm._record_error(duration_s)
-            import traceback
-            logger.error(f"[OpenAI] Tool call failed: {type(e).__name__}: {e}")
-            logger.debug(f"[OpenAI] Tool call traceback: {traceback.format_exc()}")
+            logger.exception(f"[OpenAI] Tool call failed: {type(e).__name__}: {e}")
             raise

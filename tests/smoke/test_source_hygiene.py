@@ -33,3 +33,13 @@ def test_runtime_code_does_not_print_tracebacks_to_stdout() -> None:
     ]
 
     assert offenders == []
+
+
+def test_runtime_code_uses_logger_exception_instead_of_traceback_module() -> None:
+    offenders = [
+        str(path.relative_to(ROOT))
+        for path in _runtime_python_sources()
+        if "import traceback" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
