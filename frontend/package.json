@@ -4,12 +4,7 @@
   "description": "Animetta Desktop - AI Virtual Companion with Live2D",
   "type": "module",
   "main": "electron/main.cjs",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ]
-  },
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite",
     "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:3000 && electron .\"",
