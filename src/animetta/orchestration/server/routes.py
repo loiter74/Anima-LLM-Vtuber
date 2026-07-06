@@ -10,7 +10,7 @@ from loguru import logger
 
 from animetta.config.app import AppConfig
 
-from ..socket_events import EVENTS
+from ..socket_events import EVENTS, event_name
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -361,62 +361,62 @@ def register_routes(
     sio.on("disconnect", handlers.on_disconnect)
 
     # Conversation events
-    sio.on(EVENTS.get("chat", {}).get("text", {}).get("name", "chat:text"), handlers.on_text_input)
-    sio.on(EVENTS.get("chat", {}).get("audio", {}).get("name", "chat:audio"), handlers.on_raw_audio_data)
-    sio.on(EVENTS.get("chat", {}).get("audio_end", {}).get("name", "chat:audio_end"), handlers.on_mic_audio_end)
-    sio.on(EVENTS.get("chat", {}).get("interrupt", {}).get("name", "chat:interrupt"), handlers.on_interrupt_signal)
+    sio.on(event_name("chat", "text"), handlers.on_text_input)
+    sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
+    sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
+    sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)
 
     # History events
-    sio.on(EVENTS.get("history", {}).get("list", {}).get("name", "history:list"), handlers.on_fetch_history_list)
-    sio.on(EVENTS.get("history", {}).get("fetch", {}).get("name", "history:fetch"), handlers.on_fetch_history)
-    sio.on(EVENTS.get("history", {}).get("clear", {}).get("name", "history:clear"), handlers.on_clear_history)
-    sio.on(EVENTS.get("history", {}).get("create", {}).get("name", "history:create"), handlers.on_create_new_history)
+    sio.on(event_name("history", "list"), handlers.on_fetch_history_list)
+    sio.on(event_name("history", "fetch"), handlers.on_fetch_history)
+    sio.on(event_name("history", "clear"), handlers.on_clear_history)
+    sio.on(event_name("history", "create"), handlers.on_create_new_history)
 
     # Config events
-    sio.on(EVENTS.get("config", {}).get("switch", {}).get("name", "config:switch"), handlers.on_switch_config)
-    sio.on(EVENTS.get("config", {}).get("log_level", {}).get("name", "config:log_level"), handlers.on_set_log_level)
-    sio.on(EVENTS.get("config", {}).get("get", {}).get("name", "config:get"), handlers.on_get_config)
+    sio.on(event_name("config", "switch"), handlers.on_switch_config)
+    sio.on(event_name("config", "log_level"), handlers.on_set_log_level)
+    sio.on(event_name("config", "get"), handlers.on_get_config)
 
     # Heartbeat
-    sio.on(EVENTS.get("system", {}).get("heartbeat", {}).get("name", "system:heartbeat"), handlers.on_heartbeat)
+    sio.on(event_name("system", "heartbeat"), handlers.on_heartbeat)
 
     # Desktop client events
-    sio.on(EVENTS.get("desktop", {}).get("register", {}).get("name", "desktop:register"), handlers.on_desktop_register)
-    sio.on(EVENTS.get("desktop", {}).get("live2d_action", {}).get("name", "desktop:live2d_action"), handlers.on_desktop_live2d_action)
-    sio.on(EVENTS.get("desktop", {}).get("chat_message", {}).get("name", "desktop:chat_message"), handlers.on_desktop_chat_message)
-    sio.on(EVENTS.get("desktop", {}).get("voice_start", {}).get("name", "desktop:voice_start"), handlers.on_desktop_voice_start)
-    sio.on(EVENTS.get("desktop", {}).get("voice_stop", {}).get("name", "desktop:voice_stop"), handlers.on_desktop_voice_stop)
+    sio.on(event_name("desktop", "register"), handlers.on_desktop_register)
+    sio.on(event_name("desktop", "live2d_action"), handlers.on_desktop_live2d_action)
+    sio.on(event_name("desktop", "chat_message"), handlers.on_desktop_chat_message)
+    sio.on(event_name("desktop", "voice_start"), handlers.on_desktop_voice_start)
+    sio.on(event_name("desktop", "voice_stop"), handlers.on_desktop_voice_stop)
 
     # Bilibili frontend control events
-    sio.on(EVENTS.get("bilibili", {}).get("connect", {}).get("name", "bilibili:connect"), handlers.on_bilibili_connect)
-    sio.on(EVENTS.get("bilibili", {}).get("disconnect", {}).get("name", "bilibili:disconnect"), handlers.on_bilibili_disconnect)
-    sio.on(EVENTS.get("bilibili", {}).get("update_room", {}).get("name", "bilibili:update_room"), handlers.on_bilibili_update_room)
+    sio.on(event_name("bilibili", "connect"), handlers.on_bilibili_connect)
+    sio.on(event_name("bilibili", "disconnect"), handlers.on_bilibili_disconnect)
+    sio.on(event_name("bilibili", "update_room"), handlers.on_bilibili_update_room)
 
     # Minecraft bot control events
-    sio.on(EVENTS.get("minecraft", {}).get("start", {}).get("name", "minecraft:start"), handlers.on_minecraft_start)
-    sio.on(EVENTS.get("minecraft", {}).get("stop", {}).get("name", "minecraft:stop"), handlers.on_minecraft_stop)
-    sio.on(EVENTS.get("minecraft", {}).get("spectate", {}).get("name", "minecraft:spectate"), handlers.on_minecraft_spectate)
-    sio.on("minecraft:command", handlers.on_minecraft_command)
+    sio.on(event_name("minecraft", "start"), handlers.on_minecraft_start)
+    sio.on(event_name("minecraft", "stop"), handlers.on_minecraft_stop)
+    sio.on(event_name("minecraft", "spectate"), handlers.on_minecraft_spectate)
+    sio.on(event_name("minecraft", "command"), handlers.on_minecraft_command)
 
     # Translation configuration events
-    sio.on(EVENTS.get("translation", {}).get("configure", {}).get("name", "translation:configure"), handlers.on_translation_configure)
+    sio.on(event_name("translation", "configure"), handlers.on_translation_configure)
 
     # Persona runtime switching
-    sio.on(EVENTS.get("persona", {}).get("list", {}).get("name", "persona:list"), handlers.on_get_available_personas)
-    sio.on(EVENTS.get("persona", {}).get("set", {}).get("name", "persona:set"), handlers.on_set_persona)
+    sio.on(event_name("persona", "list"), handlers.on_get_available_personas)
+    sio.on(event_name("persona", "set"), handlers.on_set_persona)
 
     # Personality mode runtime switching
-    sio.on(EVENTS.get("persona", {}).get("set_mode", {}).get("name", "persona:set_mode"), handlers.on_set_personality_mode)
+    sio.on(event_name("persona", "set_mode"), handlers.on_set_personality_mode)
 
     # Singing module events
-    sio.on(EVENTS.get("sing", {}).get("process", {}).get("name", "sing:process"), handlers.on_sing_process)
-    sio.on(EVENTS.get("sing", {}).get("confirm_lyrics", {}).get("name", "sing:confirm_lyrics"), handlers.on_sing_confirm_lyrics)
-    sio.on(EVENTS.get("sing", {}).get("cancel", {}).get("name", "sing:cancel"), handlers.on_sing_cancel)
-    sio.on(EVENTS.get("sing", {}).get("subtitle_sync", {}).get("name", "sing:subtitle_sync"), handlers.on_sing_subtitle_sync)
+    sio.on(event_name("sing", "process"), handlers.on_sing_process)
+    sio.on(event_name("sing", "confirm_lyrics"), handlers.on_sing_confirm_lyrics)
+    sio.on(event_name("sing", "cancel"), handlers.on_sing_cancel)
+    sio.on(event_name("sing", "subtitle_sync"), handlers.on_sing_subtitle_sync)
 
     # Memory: wiki pages (legacy compat — delegates to V2)
-    sio.on(EVENTS.get("memory", {}).get("organize", {}).get("name", "memory:organize"), handlers.on_memory_organize)
-    sio.on(EVENTS.get("memory", {}).get("list_pages", {}).get("name", "memory:list_pages"), handlers.on_get_wiki_pages)
+    sio.on(event_name("memory", "organize"), handlers.on_memory_organize)
+    sio.on(event_name("memory", "list_pages"), handlers.on_get_wiki_pages)
 
     logger.info("WebSocket routes registered")
     return handlers

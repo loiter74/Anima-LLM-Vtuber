@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.live2d import (
+from animetta.config.live2d import (
     Live2DConfig,
     Live2DLipSyncConfig,
     Live2DModelConfig,
@@ -316,7 +316,7 @@ class TestGetLive2DConfig:
         """Reset global singleton before each test"""
         reset_live2d_config()
 
-    @patch("animetta.core.config.live2d.Live2DConfig.from_yaml")
+    @patch("animetta.config.live2d.Live2DConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_loads_from_yaml_when_config_exists(self, mock_exists, mock_from_yaml):
         """get_live2d_config loads from YAML file when config file exists"""
@@ -335,7 +335,7 @@ class TestGetLive2DConfig:
         assert isinstance(config, Live2DConfig)
         assert config.enabled is True
 
-    @patch("animetta.core.config.live2d.Live2DConfig.from_yaml")
+    @patch("animetta.config.live2d.Live2DConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_singleton_returns_same_instance(self, mock_exists, mock_from_yaml):
         """get_live2d_config returns the same cached instance on repeated calls"""
@@ -348,7 +348,7 @@ class TestGetLive2DConfig:
         # from_yaml should be called only once
         assert mock_from_yaml.call_count == 1
 
-    @patch("animetta.core.config.live2d.Live2DConfig.from_yaml")
+    @patch("animetta.config.live2d.Live2DConfig.from_yaml")
     @patch("pathlib.Path.exists", return_value=True)
     def test_reset_creates_new_instance(self, mock_exists, mock_from_yaml):
         """After reset_live2d_config, get_live2d_config creates new instance"""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.core.registry import ProviderRegistry
+from animetta.config.core.registry import ProviderRegistry
 
 """Tests for ProviderRegistry (config/core/registry.py)"""
 
@@ -11,7 +11,7 @@ from typing import Literal
 
 import pytest
 
-from animetta.core.config.core.base import ProviderConfig
+from animetta.config.core.base import ProviderConfig
 
 # Ensure src/ is on the Python path
 _src_path = str(Path(__file__).resolve().parent.parent.parent / "src")

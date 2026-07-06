@@ -21,7 +21,6 @@ from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
 from animetta.orchestration.graph.builder import set_external_checkpointer
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
-from animetta.tracing.bootstrap import init_tracing
 from animetta.utils.logger_manager import logger_manager
 
 # Load environment variables from .env file (must be before other imports)
@@ -156,13 +155,6 @@ def get_asgi_app():
         global global_config
         if global_config is None:
             init_config()
-
-        # ── Initialize OpenTelemetry tracing + metrics pipeline ──
-        try:
-            init_tracing()
-            logger.info("[Tracing] OTel pipeline initialized")
-        except Exception as e:
-            logger.warning(f"[Tracing] OTel init failed (non-fatal): {e}")
 
         # ── File logging for Loki ingestion ─────────────────────
         logs_dir = Path(__file__).parent.parent.parent.parent / "logs"

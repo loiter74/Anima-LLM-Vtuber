@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.core.config.user import UserSettings
+from animetta.config.user import UserSettings
 
 """Tests for UserSettings (config.user.py)"""
 
@@ -22,7 +22,7 @@ if _src_path not in sys.path:
 class TestUserSettingsInit:
     """Tests for UserSettings.__init__"""
 
-    @patch("animetta.core.config.user.UserSettings._load")
+    @patch("animetta.config.user.UserSettings._load")
     def test_creates_config_file_from_root_dir(self, mock_load):
         """__init__ stores config_file as root_dir/.user_settings.yaml"""
         mock_load.return_value = {"log_level": "INFO"}
@@ -30,9 +30,9 @@ class TestUserSettingsInit:
         settings = UserSettings(root)
 
         expected_path = root / ".user_settings.yaml"
-        assert settings.core.config_file == expected_path
+        assert settings.config_file == expected_path
 
-    @patch("animetta.core.config.user.UserSettings._load")
+    @patch("animetta.config.user.UserSettings._load")
     def test_calls_load_on_init(self, mock_load):
         """__init__ calls _load to populate settings"""
         mock_load.return_value = {"log_level": "DEBUG"}
@@ -50,7 +50,7 @@ class TestUserSettingsLoad:
     def test_returns_defaults_when_file_missing(self, mock_exists):
         """_load returns default settings when config file doesn't exist"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
 
         result = settings._load()
 
@@ -61,7 +61,7 @@ class TestUserSettingsLoad:
     def test_loads_yaml_when_file_exists(self, mock_exists, mock_file):
         """_load reads and parses YAML from the config file"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
 
         result = settings._load()
 
@@ -72,7 +72,7 @@ class TestUserSettingsLoad:
     def test_falls_back_on_read_error(self, mock_exists, mock_open_file):
         """_load returns defaults when reading the file raises an exception"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
 
         result = settings._load()
 
@@ -83,7 +83,7 @@ class TestUserSettingsLoad:
     def test_falls_back_on_yaml_parse_error(self, mock_exists, mock_file):
         """_load returns defaults when YAML parsing fails"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
 
         result = settings._load()
 
@@ -94,7 +94,7 @@ class TestUserSettingsLoad:
     def test_handles_empty_file(self, mock_exists, mock_file):
         """_load returns {} for empty file (safe_load returns None)"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
 
         result = settings._load()
 
@@ -127,13 +127,13 @@ class TestUserSettingsSave:
     def test_writes_yaml_to_file(self, mock_safe_dump, mock_file):
         """save writes settings as YAML to the config file"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
         settings.settings = {"log_level": "WARN"}
 
         settings.save()
 
         mock_file.assert_called_once_with(
-            settings.core.config_file, 'w', encoding='utf-8'
+            settings.config_file, 'w', encoding='utf-8'
         )
         mock_safe_dump.assert_called_once_with(
             {"log_level": "WARN"}, mock_file(), allow_unicode=True
@@ -144,7 +144,7 @@ class TestUserSettingsSave:
     def test_handles_write_error(self, mock_safe_dump, mock_file):
         """save does not raise when writing fails (logs error)"""
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/fake/.user_settings.yaml")
+        settings.config_file = Path("/fake/.user_settings.yaml")
         settings.settings = {"log_level": "DEBUG"}
 
         # Should not raise
@@ -154,7 +154,7 @@ class TestUserSettingsSave:
 class TestUserSettingsGetLogLevel:
     """Tests for UserSettings.get_log_level"""
 
-    @patch("animetta.core.config.user.UserSettings._load")
+    @patch("animetta.config.user.UserSettings._load")
     def test_returns_from_settings(self, mock_load):
         """get_log_level returns the currently configured log level"""
         mock_load.return_value = {"log_level": "DEBUG"}
@@ -162,7 +162,7 @@ class TestUserSettingsGetLogLevel:
 
         assert settings.get_log_level() == "DEBUG"
 
-    @patch("animetta.core.config.user.UserSettings._load")
+    @patch("animetta.config.user.UserSettings._load")
     def test_returns_default_when_not_set(self, mock_load):
         """get_log_level returns 'INFO' when level not in settings"""
         mock_load.return_value = {}
@@ -176,7 +176,7 @@ class TestUserSettingsGetLogLevel:
         """New UserSettings with default load returns 'INFO'"""
         # Use isolated instance to avoid file system
         settings = UserSettings.__new__(UserSettings)
-        settings.core.config_file = Path("/nonexistent/.user_settings.yaml")
+        settings.config_file = Path("/nonexistent/.user_settings.yaml")
         settings.settings = {"log_level": "INFO"}
 
         assert settings.get_log_level() == "INFO"
@@ -185,7 +185,7 @@ class TestUserSettingsGetLogLevel:
 class TestUserSettingsSetLogLevel:
     """Tests for UserSettings.set_log_level"""
 
-    @patch("animetta.core.config.user.UserSettings.save")
+    @patch("animetta.config.user.UserSettings.save")
     def test_updates_setting_and_calls_save(self, mock_save):
         """set_log_level updates the setting and calls save"""
         settings = UserSettings.__new__(UserSettings)
@@ -196,7 +196,7 @@ class TestUserSettingsSetLogLevel:
         assert settings.settings["log_level"] == "ERROR"
         mock_save.assert_called_once()
 
-    @patch("animetta.core.config.user.UserSettings.save")
+    @patch("animetta.config.user.UserSettings.save")
     def test_save_called_after_update(self, mock_save):
         """save is called exactly once after setting log level"""
         settings = UserSettings.__new__(UserSettings)
@@ -206,7 +206,7 @@ class TestUserSettingsSetLogLevel:
 
         assert mock_save.call_count == 1
 
-    @patch("animetta.core.config.user.UserSettings.save")
+    @patch("animetta.config.user.UserSettings.save")
     def test_round_trip(self, mock_save):
         """set_log_level then get_log_level returns the new value"""
         settings = UserSettings.__new__(UserSettings)

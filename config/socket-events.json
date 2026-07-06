@@ -277,6 +277,14 @@
         "username?": "string"
       }
     },
+    "command": {
+      "name": "minecraft:command",
+      "payload": {
+        "action?": "string",
+        "params?": "object",
+        "timeout?": "number"
+      }
+    },
     "viewer_status": {
       "name": "minecraft:viewer_status",
       "payload": {
