@@ -159,9 +159,10 @@
     "model_status": {
       "name": "system:model_status",
       "payload": {
-        "model_name": "string",
+        "service": "string",
+        "name": "string",
         "status": "string",
-        "progress": "number"
+        "error?": "string"
       }
     },
     "error": {

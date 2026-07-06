@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from animetta.orchestration.socket_events import event_name
+from animetta.orchestration.socket_events import EVENTS, event_name
 
 
 def test_event_name_returns_configured_event_name() -> None:
@@ -11,6 +11,16 @@ def test_event_name_returns_configured_event_name() -> None:
 
 def test_event_name_includes_minecraft_command_event() -> None:
     assert event_name("minecraft", "command") == "minecraft:command"
+
+
+def test_model_status_payload_matches_runtime_contract() -> None:
+    """Catalog payload should match ModelLoadingManager and frontend store."""
+    assert EVENTS["system"]["model_status"]["payload"] == {
+        "service": "string",
+        "name": "string",
+        "status": "string",
+        "error?": "string",
+    }
 
 
 def test_event_name_rejects_missing_event_definition() -> None:

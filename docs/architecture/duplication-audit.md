@@ -268,14 +268,15 @@ unit coverage for applying reloaded config to active contexts, but the assembled
 HTTP route itself could drift out of the ASGI route table without failing the
 fast health gate.
 
-### Duplicate frontend model-status payload shape
+### Duplicate model-status payload shape
 
 The backend `ModelLoadingManager` emits `system:model_status` with
 `{service, name, status, error?}`, and the active frontend store consumes that
 shape through `frontend/src/types/model-loading.ts`. The socket event constants
-file still exposed an unused `SystemModelStatusPayload` with the older
-`{model_name, status, progress}` shape, leaving two incompatible TypeScript
-contracts for the same event.
+file still exposed an unused `SystemModelStatusPayload`, and
+`config/socket-events.json` still documented the older
+`{model_name, status, progress}` payload, leaving the catalog and frontend
+contract incompatible with the runtime event.
 
 ### Persona card current-persona drift
 
@@ -356,7 +357,7 @@ catalog-valid events, but no server-side business boundary received them.
 | Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |
 | Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
 | Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
-| Removed the unused stale frontend `SystemModelStatusPayload` shape so `system:model_status` has one active frontend contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts` |
+| Removed the unused stale frontend `SystemModelStatusPayload` shape and aligned the event catalog payload with the runtime `{service, name, status, error?}` contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts`, `config/socket-events.json`, `tests/orchestration/test_socket_events.py` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
@@ -413,8 +414,9 @@ Behavior preserved:
 - Runtime config reload behavior is unchanged; the no-active-config route
   response is now part of the lightweight route smoke gate, and successful HTTP
   reload is asserted to update existing session contexts.
-- `system:model_status` behavior is unchanged; the frontend now keeps only the
-  active `{service, name, status, error?}` payload type used by the store.
+- `system:model_status` behavior is unchanged; the frontend and event catalog
+  now keep only the active `{service, name, status, error?}` payload contract
+  used by the store and `ModelLoadingManager`.
 - Persona switching behavior is unchanged; the frontend now receives and
   displays the active persona explicitly instead of inferring it from the
   catalog order.
