@@ -6,6 +6,24 @@ import scripts.health_check as health_check
 from scripts.health_check import _python_command, build_gates, redact_output
 
 
+def test_requirements_entrypoint_includes_core_and_dev() -> None:
+    requirements = (health_check.ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert "-r requirements-core.txt" in requirements
+    assert "-r requirements-dev.txt" in requirements
+
+
+def test_requirement_files_are_ascii_for_windows_pip() -> None:
+    for name in (
+        "requirements.txt",
+        "requirements-core.txt",
+        "requirements-dev.txt",
+        "requirements-local-ai.txt",
+    ):
+        data = (health_check.ROOT / name).read_bytes()
+        data.decode("ascii")
+
+
 def test_build_gates_includes_required_health_domains() -> None:
     gate_ids = {gate.id for gate in build_gates()}
 
@@ -86,3 +104,33 @@ def test_python_command_skips_py_launcher_without_metrics_dependency(monkeypatch
     monkeypatch.setattr(health_check.subprocess, "run", fake_run)
 
     assert _python_command() == ("current-python",)
+
+
+def test_pnpm_command_uses_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("ANIMETTA_PNPM", "corepack pnpm")
+
+    assert health_check._pnpm_command() == ("corepack", "pnpm")
+
+
+def test_pnpm_command_prefers_windows_pnpm_cmd(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMETTA_PNPM", raising=False)
+    monkeypatch.setattr(health_check.os, "name", "nt")
+
+    def fake_which(name: str) -> str | None:
+        return "C:/node/pnpm.cmd" if name == "pnpm.cmd" else None
+
+    monkeypatch.setattr(health_check.shutil, "which", fake_which)
+
+    assert health_check._pnpm_command() == ("C:/node/pnpm.cmd",)
+
+
+def test_pnpm_command_falls_back_to_corepack(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMETTA_PNPM", raising=False)
+    monkeypatch.setattr(health_check.os, "name", "nt")
+
+    def fake_which(name: str) -> str | None:
+        return "C:/node/corepack.cmd" if name == "corepack.cmd" else None
+
+    monkeypatch.setattr(health_check.shutil, "which", fake_which)
+
+    assert health_check._pnpm_command() == ("C:/node/corepack.cmd", "pnpm")

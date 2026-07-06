@@ -109,10 +109,28 @@ def _python(*args: str) -> tuple[str, ...]:
     return (*_python_command(), *args)
 
 
-def _bin(name: str) -> str:
-    if os.name == "nt" and name == "pnpm":
-        return "pnpm.cmd"
-    return name
+def _pnpm_command() -> tuple[str, ...]:
+    override = os.environ.get("ANIMETTA_PNPM")
+    if override:
+        return tuple(shlex.split(override, posix=os.name != "nt"))
+
+    pnpm_names = ("pnpm.cmd", "pnpm") if os.name == "nt" else ("pnpm",)
+    for name in pnpm_names:
+        executable = shutil.which(name)
+        if executable:
+            return (executable,)
+
+    corepack_names = ("corepack.cmd", "corepack") if os.name == "nt" else ("corepack",)
+    for name in corepack_names:
+        executable = shutil.which(name)
+        if executable:
+            return (executable, "pnpm")
+
+    return ("pnpm.cmd",) if os.name == "nt" else ("pnpm",)
+
+
+def _pnpm(*args: str) -> tuple[str, ...]:
+    return (*_pnpm_command(), *args)
 
 
 def _frontend_coverage_validation() -> str:
@@ -150,9 +168,9 @@ def build_gates() -> list[Gate]:
                 "--cov=src/animetta",
             ),
         ),
-        Gate("frontend:typecheck", "Frontend type check", (_bin("pnpm"), "run", "typecheck"), FRONTEND),
-        Gate("frontend:tests", "Frontend tests", (_bin("pnpm"), "run", "test:run"), FRONTEND),
-        Gate("frontend:build", "Frontend production build", (_bin("pnpm"), "run", "build"), FRONTEND),
+        Gate("frontend:typecheck", "Frontend type check", _pnpm("run", "typecheck"), FRONTEND),
+        Gate("frontend:tests", "Frontend tests", _pnpm("run", "test:run"), FRONTEND),
+        Gate("frontend:build", "Frontend production build", _pnpm("run", "build"), FRONTEND),
         Gate(
             "frontend:coverage-script",
             "Frontend coverage script validation",
@@ -180,8 +198,7 @@ def build_gates() -> list[Gate]:
         Gate(
             "dependencies:frontend-audit",
             "Frontend npm audit against official registry",
-            (
-                _bin("pnpm"),
+            _pnpm(
                 "audit",
                 "--json",
                 "--registry=https://registry.npmjs.org",
