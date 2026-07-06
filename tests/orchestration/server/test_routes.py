@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for WebSocket route handlers — event dispatch and registration."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -218,6 +219,36 @@ class TestRouteHandlersDispatch:
             "type": "control",
             "text": "interrupted",
         }, to="sid1")
+
+    @pytest.mark.asyncio
+    async def test_on_memory_organize_uses_public_metabolism_api(
+        self, mock_socketio, mock_session_manager
+    ):
+        """memory:organize should not reach into MemorySystem private methods."""
+
+        class PublicMemorySystem:
+            def __init__(self) -> None:
+                self.tick_called = False
+
+            async def run_metabolism_tick(self) -> None:
+                self.tick_called = True
+
+        memory = PublicMemorySystem()
+        mock_session_manager.get_or_create_context = AsyncMock(
+            return_value=SimpleNamespace(memory_system=memory)
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+
+        await handlers.on_memory_organize("sid1", {})
+
+        assert memory.tick_called
+        mock_socketio.emit.assert_any_call(
+            "memory:organize_result",
+            {"status": "ok", "message": "Memory organized"},
+            to="sid1",
+        )
 
 
 # ── RouteHandlers — Broadcast ──────────────────────────────────────

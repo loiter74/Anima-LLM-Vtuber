@@ -43,3 +43,10 @@ def test_runtime_code_uses_logger_exception_instead_of_traceback_module() -> Non
     ]
 
     assert offenders == []
+
+
+def test_server_routes_do_not_call_memory_private_methods() -> None:
+    routes = SOURCE_ROOT / "orchestration" / "server" / "routes.py"
+    content = routes.read_text(encoding="utf-8")
+
+    assert "._run_metabolism_tick" not in content

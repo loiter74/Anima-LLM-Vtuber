@@ -285,7 +285,7 @@ class RouteHandlers:
 
             await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
                 {"text": "Running metabolism tick...", "progress": 30}, to=sid)
-            await mem._run_metabolism_tick()
+            await mem.run_metabolism_tick()
 
             await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
                 {"text": "Compiling RAW → EPISODIC...", "progress": 60}, to=sid)

@@ -106,11 +106,15 @@ class LivingMemorySystem:
         while True:
             try:
                 await asyncio.sleep(self._metabolism_interval)
-                await self._run_metabolism_tick()
+                await self.run_metabolism_tick()
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.warning(f"Metabolism tick failed: {e}")
+
+    async def run_metabolism_tick(self) -> None:
+        """Execute one metabolism tick through the public memory API."""
+        await self._run_metabolism_tick()
 
     async def _run_metabolism_tick(self) -> None:
         """Execute one metabolism tick: decay + compile + forget."""
