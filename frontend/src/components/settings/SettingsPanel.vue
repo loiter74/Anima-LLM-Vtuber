@@ -58,6 +58,23 @@ function handleBilibiliDisconnect(): void {
   socket.emit(Events.BILIBILI.DISCONNECT)
 }
 
+function handleSubtitleToggle(): void {
+  subtitleStore.toggle()
+  const socket = getSocket()
+  if (socket) {
+    socket.emit(Events.TRANSLATION.CONFIGURE, { enabled: subtitleStore.enabled })
+  }
+}
+
+function handleTargetLanguageChange(event: Event): void {
+  const lang = (event.target as HTMLSelectElement).value
+  subtitleStore.setTargetLanguage(lang)
+  const socket = getSocket()
+  if (socket) {
+    socket.emit(Events.TRANSLATION.CONFIGURE, { target_language: lang })
+  }
+}
+
 const activeSection = ref<'status' | 'background' | 'controls' | 'live' | 'subtitle' | 'theme'>('status')
 
 // Theme toggle
@@ -362,7 +379,7 @@ onUnmounted(() => {
           <button
             class="w-10 h-5 rounded-full transition-colors relative"
             :class="subtitleStore.enabled ? 'bg-c-accent' : 'bg-c-bg/60 border border-c-border/40'"
-            @click="subtitleStore.toggle()"
+            @click="handleSubtitleToggle"
           >
             <span
               class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
@@ -434,12 +451,7 @@ onUnmounted(() => {
             :value="subtitleStore.targetLanguage"
             class="w-full px-3 py-2 rounded-xl bg-c-bg/60 border border-c-border/40 text-sm text-c-text
                    focus:outline-none focus:border-c-accent/50 transition-colors appearance-none cursor-pointer"
-            @change="(e) => {
-              const lang = (e.target as HTMLSelectElement).value
-              subtitleStore.setTargetLanguage(lang)
-              const socket = getSocket()
-              if (socket) socket.emit(Events.TRANSLATION.CONFIGURE, { target_language: lang })
-            }"
+            @change="handleTargetLanguageChange"
           >
             <option value="English">English (英语)</option>
             <option value="日本語">日本語 (日语)</option>

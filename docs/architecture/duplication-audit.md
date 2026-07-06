@@ -278,6 +278,14 @@ file still exposed an unused `SystemModelStatusPayload`, and
 `{model_name, status, progress}` payload, leaving the catalog and frontend
 contract incompatible with the runtime event.
 
+### Translation configure payload drift
+
+`translation:configure` documented both `enabled` and `target_language` as
+required fields, while the frontend settings panel only sent
+`target_language` when the language changed. The backend also ignored
+`enabled`, so the subtitle enable toggle stayed local-only and the shared
+translation state had no runtime update path for that field.
+
 ### Persona card current-persona drift
 
 `PersonaCard` displayed the first available persona instead of the active
@@ -358,6 +366,7 @@ catalog-valid events, but no server-side business boundary received them.
 | Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
 | Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
 | Removed the unused stale frontend `SystemModelStatusPayload` shape and aligned the event catalog payload with the runtime `{service, name, status, error?}` contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts`, `config/socket-events.json`, `tests/orchestration/test_socket_events.py` |
+| Aligned `translation:configure` with partial updates and wired the subtitle enable toggle to the shared backend translation state. | `config/socket-events.json`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `frontend/src/components/settings/SettingsPanel.vue`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
@@ -417,6 +426,9 @@ Behavior preserved:
 - `system:model_status` behavior is unchanged; the frontend and event catalog
   now keep only the active `{service, name, status, error?}` payload contract
   used by the store and `ModelLoadingManager`.
+- `translation:configure` keeps the same event name and status response; callers
+  can now update either `enabled`, `target_language`, or both without sending
+  stale required fields.
 - Persona switching behavior is unchanged; the frontend now receives and
   displays the active persona explicitly instead of inferring it from the
   catalog order.

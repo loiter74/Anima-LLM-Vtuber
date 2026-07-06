@@ -328,8 +328,8 @@
     "configure": {
       "name": "translation:configure",
       "payload": {
-        "enabled": "boolean",
-        "target_language": "string"
+        "enabled?": "boolean",
+        "target_language?": "string"
       }
     },
     "status": {

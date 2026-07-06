@@ -142,25 +142,21 @@ class ConfigHandlers(BaseSocketHandler):
     async def on_translation_configure(self, sid: str, data: dict) -> None:
         """Update translation configuration at runtime."""
         target_language = data.get("target_language")
+        if "enabled" in data:
+            translation_state.enabled = bool(data["enabled"])
+            logger.info(
+                f"[{sid}] Translation enabled updated to: {translation_state.enabled}"
+            )
         if target_language:
             translation_state.target_language = target_language
             logger.info(
                 f"[{sid}] Translation target language updated to: {target_language}"
             )
-            await self.sio.emit(
-                EVENTS["translation"]["status"]["name"],
-                {
-                    "target_language": translation_state.target_language,
-                    "enabled": translation_state.enabled,
-                },
-                to=sid,
-            )
-        else:
-            await self.sio.emit(
-                EVENTS["translation"]["status"]["name"],
-                {
-                    "target_language": translation_state.target_language,
-                    "enabled": translation_state.enabled,
-                },
-                to=sid,
-            )
+        await self.sio.emit(
+            EVENTS["translation"]["status"]["name"],
+            {
+                "target_language": translation_state.target_language,
+                "enabled": translation_state.enabled,
+            },
+            to=sid,
+        )

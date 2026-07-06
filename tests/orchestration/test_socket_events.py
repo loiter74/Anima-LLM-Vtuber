@@ -23,6 +23,14 @@ def test_model_status_payload_matches_runtime_contract() -> None:
     }
 
 
+def test_translation_configure_payload_accepts_partial_updates() -> None:
+    """translation:configure supports target-language or enabled updates."""
+    assert EVENTS["translation"]["configure"]["payload"] == {
+        "enabled?": "boolean",
+        "target_language?": "string",
+    }
+
+
 def test_event_name_rejects_missing_event_definition() -> None:
     with pytest.raises(KeyError):
         event_name("missing", "event")

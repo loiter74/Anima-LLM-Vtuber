@@ -488,21 +488,24 @@ class TestRouteHandlersDispatch:
         from animetta.orchestration.graph.translation_state import translation_state
 
         old_target = translation_state.target_language
+        old_enabled = translation_state.enabled
         try:
             handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
             await handlers.on_translation_configure(
-                "sid1", {"target_language": "Japanese"}
+                "sid1", {"target_language": "Japanese", "enabled": False}
             )
 
             assert translation_state.target_language == "Japanese"
+            assert translation_state.enabled is False
             mock_socketio.emit.assert_any_call(
                 "translation:status",
-                {"target_language": "Japanese", "enabled": translation_state.enabled},
+                {"target_language": "Japanese", "enabled": False},
                 to="sid1",
             )
         finally:
             translation_state.target_language = old_target
+            translation_state.enabled = old_enabled
 
     @pytest.mark.asyncio
     async def test_on_set_persona_uses_current_context_config(
