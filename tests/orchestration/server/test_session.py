@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Tests for SessionManager — context, orchestrator, audio processor lifecycle."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
@@ -246,6 +246,46 @@ class TestGetOrCreateOrchestrator:
     def test_get_orchestrator_returns_none_for_missing(self, session_manager):
         """get_orchestrator returns None for unknown sid."""
         assert session_manager.get_orchestrator("nonexistent") is None
+
+
+class TestLoadToolsConfig:
+    """Tool configuration loading."""
+
+    @pytest.mark.asyncio
+    async def test_logging_does_not_leak_tool_config_secret(
+        self, session_manager, monkeypatch
+    ):
+        """Tool config diagnostics must not log full config content."""
+        info = MagicMock()
+        monkeypatch.setattr("animetta.orchestration.server.session.logger.info", info)
+        monkeypatch.setattr(
+            "pathlib.Path.exists",
+            MagicMock(return_value=True),
+        )
+        monkeypatch.setattr(
+            "yaml.safe_load",
+            MagicMock(
+                return_value={
+                    "tool_settings": {
+                        "enable_tools": True,
+                        "mcp_token": "sk-tools-config-secret",
+                    },
+                    "mcp_servers": {
+                        "private": {"token": "sk-tools-config-secret"},
+                    },
+                }
+            ),
+        )
+
+        with patch("builtins.open", mock_open(read_data="tool_settings: {}")):
+            result = await session_manager._load_tools_config()
+
+        assert result["enable_tools"] is True
+        logged = "\n".join(
+            str(call.args) + str(call.kwargs)
+            for call in info.call_args_list
+        )
+        assert "sk-tools-config-secret" not in logged
 
 
 # ── SessionManager — cleanup_session ───────────────────────────────

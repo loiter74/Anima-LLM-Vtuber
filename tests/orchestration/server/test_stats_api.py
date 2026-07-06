@@ -10,6 +10,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from animetta.inspection.models import CheckResult
 from animetta.orchestration.server.stats_api import _get_gpu_info, get_stats_routes
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -84,6 +85,44 @@ class TestHealthEndpoint:
         resp = client.get("/health")
         data = resp.json()
         assert data["service"] == "anima"
+
+    def test_health_returns_500_when_probe_runner_crashes(self):
+        """Health check infrastructure failures must not look HTTP-healthy."""
+        with patch(
+            "animetta.orchestration.server.stats_api.check_all_components",
+            AsyncMock(side_effect=RuntimeError("probe runner crashed")),
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/health")
+
+        assert resp.status_code == 500
+        data = resp.json()
+        assert data["status"] == "error"
+        assert data["service"] == "anima"
+        assert "probe runner crashed" in data["error"]
+
+    def test_health_returns_503_when_component_check_fails(self):
+        """A degraded health body must also be unhealthy at the HTTP layer."""
+        with patch(
+            "animetta.orchestration.server.stats_api.check_all_components",
+            AsyncMock(
+                return_value={
+                    "llm_available": CheckResult.failed(
+                        "llm_available",
+                        error="probe returned False",
+                    )
+                }
+            ),
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/health")
+
+        assert resp.status_code == 503
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert data["checks"]["llm_available"]["ok"] is False
 
     def test_gpu_info_accepts_current_torch_total_memory_property(self, monkeypatch):
         """GPU probe handles torch device properties exposing total_memory."""

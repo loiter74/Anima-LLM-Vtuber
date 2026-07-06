@@ -1,5 +1,6 @@
 """Conftest for integration tests."""
 
+import json
 import os
 import subprocess
 import sys
@@ -30,7 +31,9 @@ def _wait_for_http_health(process: subprocess.Popen, timeout: float = 60.0) -> N
             raise RuntimeError(f"server exited early with code {process.returncode}")
         try:
             with urllib.request.urlopen(f"{URL}/health", timeout=2) as response:
-                if response.status == 200:
+                body = response.read().decode()
+                data = json.loads(body)
+                if response.status == 200 and data.get("status") == "ok":
                     return
         except Exception as exc:
             last_error = exc

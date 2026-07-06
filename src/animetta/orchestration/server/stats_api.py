@@ -155,15 +155,18 @@ async def health_check(request):
                 for name, result in checks.items()
             },
         }
-        return JSONResponse(payload)
+        return JSONResponse(payload, status_code=200 if all_ok else 503)
     except Exception as e:
         logger.error(f"[health] Health check failed: {e}")
-        return JSONResponse({
-            "status": "error",
-            "service": "anima",
-            "timestamp": timestamp,
-            "error": str(e),
-        })
+        return JSONResponse(
+            {
+                "status": "error",
+                "service": "anima",
+                "timestamp": timestamp,
+                "error": str(e),
+            },
+            status_code=500,
+        )
 
 
 def _get_gpu_info() -> dict[str, Any]:

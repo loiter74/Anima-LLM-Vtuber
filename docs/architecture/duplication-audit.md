@@ -180,6 +180,20 @@ state between the shared route handler base and the extracted persona handler.
 That made the server-handler boundary noisy and could leak provider/API-key
 details through object `repr()` output in runtime logs.
 
+### Config expansion debug logging leak
+
+`AppConfig._apply_env_expansion()` logged full provider config dumps before and
+after environment expansion, and `expand_env_vars()` logged API-key prefixes
+for GLM. This made debug logs a second copy of provider secrets after
+environment expansion.
+
+### Tool config logging leak
+
+`SessionManager` logged full tool configuration values while creating
+orchestrators and while loading `config/tools.yaml`. Tool settings may include
+MCP credentials or provider tokens, so INFO logs should only expose routing
+metadata such as enabled state and key names.
+
 ### Direct config load boundary classification
 
 The remaining production `AppConfig.load()` calls are now classified by timing:
@@ -202,6 +216,14 @@ LLM dispatch, so expecting LLM/TTS output was impossible. Separately,
 file logging to `logs/animetta.log` and treated the absence of recent user
 conversation traces as a consistency failure, even when the idle StatsStore was
 reachable.
+
+### Health endpoint status-code drift
+
+`/health` returned JSON bodies with `status: "degraded"` or `status: "error"`
+when component checks failed or the health-check runner itself crashed, but the
+HTTP response still defaulted to 200. That weakened the runtime contract used by
+Docker and external probes, because unhealthy states could look HTTP-healthy
+unless the response body was also parsed.
 
 ## Fixed In This Patch
 
@@ -232,7 +254,10 @@ reachable.
 | Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
 | Re-aligned inspection checks with the current probe filter, Socket.IO event catalog, runtime log filename, and idle-safe StatsStore reachability semantics. | `src/animetta/inspection/checks/pipeline.py`, `src/animetta/inspection/checks/consistency.py`, `tests/inspection/test_pipeline.py`, `tests/inspection/test_consistency.py` |
 | Routed `persona:list` MBTI extraction through the active `AppConfig.get_persona()` cache instead of reloading the current persona by name. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
-| Sanitized persona-handler config diagnostics so they report propagation state without logging full config object representations. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Sanitized persona-handler config diagnostics, including `persona:list`, so they report propagation state without logging full config object representations. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Made `/health` return HTTP 503 for degraded component checks and HTTP 500 when the health-check runner itself crashes instead of returning 200 with an unhealthy body. | `src/animetta/orchestration/server/stats_api.py`, `tests/orchestration/server/test_stats_api.py` |
+| Replaced full config dumps and API-key prefix logging during config env expansion with provider type and key-length diagnostics. | `src/animetta/config/app.py`, `tests/config/test_app_config.py` |
+| Replaced full tool-config logging during orchestrator creation and `tools.yaml` loading with enabled-state and key-name diagnostics. | `src/animetta/orchestration/server/session.py`, `tests/orchestration/server/test_session.py` |
 
 Behavior preserved:
 
@@ -262,8 +287,16 @@ Behavior preserved:
   `config/personas/*.yaml` catalog; `persona:list` keeps its `default` fallback.
 - `persona:list` still returns current MBTI data when available, now from the
   active config persona cache.
-- Persona handler config propagation is unchanged; diagnostics now log booleans
-  only instead of full config object representations.
+- Persona handler config propagation and `persona:list` behavior are unchanged;
+  diagnostics now log booleans/names instead of full config object
+  representations.
+- Config environment expansion behavior is unchanged; debug diagnostics now log
+  provider type and secret length only, never secret values or prefixes.
+- Tool configuration behavior is unchanged; diagnostics now log enabled state
+  and key names only, never raw tool or MCP credential values.
+- `/health` still returns HTTP 200 with `status: "ok"` when all component
+  probes pass; degraded checks now return 503 and infrastructure-level
+  health-check crashes return 500.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

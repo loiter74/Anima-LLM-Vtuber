@@ -486,6 +486,60 @@ class TestFromYaml:
     @patch("animetta.config.app._load_service_config")
     @patch("animetta.config.app._load_yaml_file")
     @patch("pathlib.Path.exists")
+    def test_env_expansion_logging_does_not_leak_secret_values(
+        self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env, monkeypatch
+    ):
+        """Expanded provider secrets must not be written to config debug logs."""
+        mock_exists.return_value = True
+        mock_load_yaml.return_value = {
+            "persona": "default",
+            "services": {
+                "asr": "mock",
+                "tts": "mock",
+                "agent": "deepseek",
+                "vad": "mock",
+            },
+            "system": {"host": "localhost", "port": 12394},
+        }
+
+        def load_service_side(service_type, service_name):
+            configs = {
+                ("asr", "mock"): {"type": "mock"},
+                ("tts", "mock"): {"type": "mock"},
+                ("llm", "deepseek"): {
+                    "memory_enabled": False,
+                    "llm_config": {
+                        "type": "deepseek",
+                        "api_key": "${TEST_SECRET_KEY}",
+                    },
+                },
+                ("vad", "mock"): {"type": "mock"},
+            }
+            return configs.get((service_type, service_name), {"type": "mock"})
+
+        debug = MagicMock()
+        monkeypatch.setattr("animetta.config.app.logger.debug", debug)
+        mock_load_service.side_effect = load_service_side
+
+        with patch.dict(
+            os.environ,
+            {"TEST_SECRET_KEY": "sk-config-debug-secret"},
+            clear=False,
+        ):
+            config = AppConfig.from_yaml("/fake/path.yaml")
+
+        assert config.agent is not None
+        assert config.agent.llm_config.api_key == "sk-config-debug-secret"
+        logged = "\n".join(
+            str(call.args) + str(call.kwargs)
+            for call in debug.call_args_list
+        )
+        assert "sk-config-debug-secret" not in logged
+
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
+    @patch("pathlib.Path.exists")
     def test_env_override_llm_api_key(
         self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
     ):

@@ -68,7 +68,11 @@ class PersonaHandlers(BaseSocketHandler):
             mbti_data = None
             try:
                 active_config = self.global_config
-                logger.info(f"[{sid}] on_get_available_personas: global_config={active_config}")
+                logger.debug(
+                    "[{}] on_get_available_personas: has_config={}",
+                    sid,
+                    active_config is not None,
+                )
                 if active_config:
                     current_persona_name = active_config.persona
                     logger.info(f"[{sid}] Loading persona: {current_persona_name}")

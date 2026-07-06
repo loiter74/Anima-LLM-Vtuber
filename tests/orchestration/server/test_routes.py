@@ -576,6 +576,49 @@ class TestRouteHandlersDispatch:
         }
 
     @pytest.mark.asyncio
+    async def test_on_get_available_personas_logging_does_not_leak_config_repr(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """persona:list diagnostics must not log the full config object."""
+
+        class SecretConfig:
+            persona = "anima"
+
+            def get_persona(self):
+                return SimpleNamespace(personality=None)
+
+            def __repr__(self) -> str:
+                return "SecretConfig(api_key='sk-persona-list-secret')"
+
+        info = MagicMock()
+        debug = MagicMock()
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.logger.info",
+            info,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.logger.debug",
+            debug,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.persona_handlers.list_available_personas",
+            MagicMock(return_value=["anima"]),
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(SecretConfig())
+
+        result = await handlers.on_get_available_personas("sid1", {})
+
+        assert result == {"personas": ["anima"], "mbti": None}
+        logged = "\n".join(
+            str(call.args) + str(call.kwargs)
+            for log in (info, debug)
+            for call in log.call_args_list
+        )
+        assert "sk-persona-list-secret" not in logged
+
+    @pytest.mark.asyncio
     async def test_on_memory_organize_uses_public_metabolism_api(
         self, mock_socketio, mock_session_manager
     ):

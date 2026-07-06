@@ -124,13 +124,16 @@ class SessionManager:
             # Create LangGraph Orchestrator
             from ..graph.orchestrator import LangGraphOrchestrator
 
-            # Verbose debug logging
-            logger.info(f"[{sid}] tools_config full return value: {tools_config}")
-            logger.info(f"[{sid}] tools_config.get('enable_tools', False): {tools_config.get('enable_tools', False)}")
-
             # Ensure enable_tools is correctly passed
             enable_tools = tools_config.get("enable_tools", False)
-            logger.info(f"[{sid}] Tool config status: enable_tools={enable_tools}, type={type(enable_tools)}")
+            raw_config = tools_config.get("config", tools_config)
+            config_keys = list(raw_config.keys()) if isinstance(raw_config, dict) else []
+            logger.info(
+                "[{}] Tool config status: enable_tools={}, config_keys={}",
+                sid,
+                bool(enable_tools),
+                config_keys,
+            )
 
             orchestrator = await LangGraphOrchestrator.create(
                 session_id=sid,
@@ -166,17 +169,34 @@ class SessionManager:
                     tools_config = yaml.safe_load(f)
 
                     # Verbose debug logging
-                    logger.info(f"[_load_tools_config] Raw YAML parse result type: {type(tools_config)}")
-                    logger.info(f"[_load_tools_config] YAML top-level keys: {list(tools_config.keys()) if isinstance(tools_config, dict) else 'NOT A DICT'}")
+                    top_level_keys = (
+                        list(tools_config.keys())
+                        if isinstance(tools_config, dict)
+                        else []
+                    )
+                    logger.info(
+                        "[_load_tools_config] Raw YAML parse result type: {}",
+                        type(tools_config),
+                    )
+                    logger.info(
+                        "[_load_tools_config] YAML top-level keys: {}",
+                        top_level_keys,
+                    )
 
                     # Check if tools are explicitly enabled - fix config path
                     tool_settings = tools_config.get("tool_settings", {})
-                    logger.info(f"[_load_tools_config] tool_settings content: {tool_settings}")
-                    logger.info(f"[_load_tools_config] tool_settings type: {type(tool_settings)}")
+                    logger.info(
+                        "[_load_tools_config] tool_settings type: {}, keys={}",
+                        type(tool_settings),
+                        list(tool_settings.keys()) if isinstance(tool_settings, dict) else [],
+                    )
 
                     enable_tools = tool_settings.get("enable_tools", False)
-                    logger.info(f"[_load_tools_config] enable_tools raw value: {enable_tools}")
-                    logger.info(f"[_load_tools_config] enable_tools type: {type(enable_tools)}")
+                    logger.info(
+                        "[_load_tools_config] enable_tools={}, type={}",
+                        bool(enable_tools),
+                        type(enable_tools),
+                    )
 
                     logger.info(f"[_load_tools_config] Tool calls {'enabled' if enable_tools else 'disabled'}")
 

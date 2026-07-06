@@ -1,5 +1,6 @@
 """Integration: health check + metrics HTTP endpoints."""
 
+import json
 import urllib.request
 
 PORT = 12394
@@ -7,7 +8,7 @@ PORT = 12394
 
 class TestHealth:
     def test_health_endpoint(self, server):
-        """GET /health should return 200."""
+        """GET /health should return 200 with an ok health payload."""
         try:
             resp = urllib.request.urlopen(f"http://localhost:{PORT}/health", timeout=5)
             body = resp.read().decode()
@@ -17,6 +18,8 @@ class TestHealth:
             body = str(e)
         print(f"/health → {status}: {body[:200]}")
         assert status == 200, f"Expected 200, got {status}: {body}"
+        data = json.loads(body)
+        assert data["status"] == "ok"
 
     def test_metrics_endpoint(self, server):
         """GET /metrics should return Prometheus metrics."""

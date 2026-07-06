@@ -50,7 +50,10 @@ def expand_env_vars(value):
             # Only log API key status on first load
             if var_name == "GLM_API_KEY":
                 if env_value and not hasattr(replace_var, '_logged'):
-                    logger.debug(f"[expand_env_vars] GLM_API_KEY loaded: {env_value[:20]}...")
+                    logger.debug(
+                        "[expand_env_vars] GLM_API_KEY loaded: length={}",
+                        len(env_value),
+                    )
                     replace_var._logged = True
                 elif not env_value and not hasattr(replace_var, '_error_logged'):
                     logger.error("[expand_env_vars] GLM_API_KEY not set!")
@@ -323,9 +326,15 @@ class AppConfig(BaseConfig):
         """Recursively expand environment variables in all service configs."""
         # Pre-expansion debug logging
         if self.agent:
-            logger.debug(f"Agent config before expansion: {self.agent.model_dump()}")
+            logger.debug(
+                "Agent config before expansion: llm_type={}",
+                getattr(self.agent.llm_config, "type", None),
+            )
         if self.local_llm:
-            logger.debug(f"Local LLM config before expansion: {self.local_llm.model_dump()}")
+            logger.debug(
+                "Local LLM config before expansion: type={}",
+                getattr(self.local_llm, "type", None),
+            )
 
         # Core expansion loop — model_dump → expand_env_vars → validate
         for label, adapter, use_adapter in [
@@ -349,7 +358,10 @@ class AppConfig(BaseConfig):
         if self.tts:
             logger.debug(f"TTS config after expansion: type={self.tts.type}")
         if self.agent:
-            logger.debug(f"Agent config after expansion: {self.agent.model_dump()}")
+            logger.debug(
+                "Agent config after expansion: llm_type={}",
+                getattr(self.agent.llm_config, "type", None),
+            )
             if self.agent.llm_config:
                 logger.debug(f"Agent LLM type: {self.agent.llm_config.type}")
                 logger.debug(f"Agent LLM Config class: {type(self.agent.llm_config).__name__}")
@@ -359,17 +371,26 @@ class AppConfig(BaseConfig):
                 if needs_api_key and hasattr(self.agent.llm_config, 'api_key'):
                     api_key = self.agent.llm_config.api_key
                     if api_key:
-                        logger.debug(f"[AppConfig] Agent LLM API Key set: {api_key[:20]}... (length: {len(api_key)})")
+                        logger.debug(
+                            "[AppConfig] Agent LLM API Key set: length={}",
+                            len(api_key),
+                        )
                     else:
                         logger.error(f"[AppConfig] Agent LLM API Key is empty! LLM type: {self.agent.llm_config.type} requires API Key")
                 elif not needs_api_key:
                     logger.debug(f"[AppConfig] Using local LLM: {self.agent.llm_config.type}")
         if self.local_llm:
-            logger.debug(f"Local LLM config after expansion: {self.local_llm.model_dump()}")
+            logger.debug(
+                "Local LLM config after expansion: type={}",
+                getattr(self.local_llm, "type", None),
+            )
             if hasattr(self.local_llm, 'api_key'):
                 api_key = self.local_llm.api_key
                 if api_key:
-                    logger.debug(f"[AppConfig] Local LLM API Key set: {api_key[:20]}... (length: {len(api_key)})")
+                    logger.debug(
+                        "[AppConfig] Local LLM API Key set: length={}",
+                        len(api_key),
+                    )
                 else:
                     logger.debug("[AppConfig] Local LLM does not need API Key (local model)")
 
