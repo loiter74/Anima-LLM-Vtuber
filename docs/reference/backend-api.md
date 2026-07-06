@@ -972,13 +972,27 @@ graph_node_duration_seconds_bucket{node="llm_node",le="0.1"} 100
 **响应**:
 ```json
 {
-  "timestamp": "2026-06-13T12:00:00Z",
-  "status": "ok",
+  "run_id": "c2ba934e-91c7-42b5-82dc-ef87fb5f76fc",
+  "started_at": 1783353518.986623,
+  "finished_at": 1783353524.161326,
+  "overall_ok": true,
   "checks": {
-    "database": { "ok": true, "message": "SQLite connected" },
-    "chroma": { "ok": true, "message": "ChromaDB ready" },
-    "llm": { "ok": true, "message": "LLM provider available" }
-  }
+    "stats_store": {
+      "name": "stats_store",
+      "ok": true,
+      "duration_ms": 2.15,
+      "detail": {},
+      "error": null
+    },
+    "chroma": {
+      "name": "chroma",
+      "ok": true,
+      "duration_ms": 0.59,
+      "detail": {},
+      "error": null
+    }
+  },
+  "created_at": 1783353524.2
 }
 ```
 

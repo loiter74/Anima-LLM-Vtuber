@@ -52,6 +52,16 @@ def mock_store():
             {"span_id": "s2", "parent_span_id": "s1", "name": "tts_call"},
         ],
     })
+    store.get_latest_inspection_report = AsyncMock(return_value={
+        "run_id": "inspection-1",
+        "started_at": 1000.0,
+        "finished_at": 1001.0,
+        "overall_ok": True,
+        "checks": {
+            "stats_store": {"name": "stats_store", "ok": True},
+        },
+        "created_at": 1001.5,
+    })
     return store
 
 
@@ -297,6 +307,58 @@ class TestStatsTraceTree:
             with TestClient(app) as c:
                 resp = c.get("/api/stats/traces/missing/tree")
             assert resp.status_code == 404
+
+
+# ── Inspection Latest ──────────────────────────────────────────────
+
+
+class TestStatsInspectionLatest:
+    """GET /api/stats/inspection/latest"""
+
+    def test_inspection_latest_returns_latest_report(self, client, mock_store):
+        """Inspection endpoint returns the latest persisted report."""
+        resp = client.get("/api/stats/inspection/latest")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["run_id"] == "inspection-1"
+        assert data["overall_ok"] is True
+        assert data["checks"]["stats_store"]["ok"] is True
+        mock_store.get_latest_inspection_report.assert_called_once()
+
+    def test_inspection_latest_returns_404_when_no_report(self):
+        """Missing inspection reports return a stable 404 payload."""
+        store = MagicMock()
+        store.get_latest_inspection_report = AsyncMock(return_value=None)
+
+        with patch(
+            "animetta.orchestration.server.stats_api.get_stats_store",
+            AsyncMock(return_value=store),
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/api/stats/inspection/latest")
+
+        assert resp.status_code == 404
+        assert resp.json() == {"error": "No inspection reports yet"}
+
+    def test_inspection_latest_returns_500_on_store_error(self):
+        """Store failures are surfaced as HTTP 500."""
+        store = MagicMock()
+        store.get_latest_inspection_report = AsyncMock(
+            side_effect=RuntimeError("db fail")
+        )
+
+        with patch(
+            "animetta.orchestration.server.stats_api.get_stats_store",
+            AsyncMock(return_value=store),
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/api/stats/inspection/latest")
+
+        assert resp.status_code == 500
+        assert "db fail" in resp.json()["error"]
 
 
 # ── Route Registration ─────────────────────────────────────────────

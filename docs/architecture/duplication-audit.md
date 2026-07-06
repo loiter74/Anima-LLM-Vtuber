@@ -236,6 +236,14 @@ HTTP response still defaulted to 200. That weakened the runtime contract used by
 Docker and external probes, because unhealthy states could look HTTP-healthy
 unless the response body was also parsed.
 
+### Inspection latest API documentation drift
+
+`GET /api/stats/inspection/latest` returns the latest persisted
+`inspection_reports` row from `StatsStore`, including `run_id`, timestamps,
+`overall_ok`, and deserialized per-check results. The reference API example
+still documented an older synthetic `{timestamp, status, checks}` shape, and the
+stats API tests did not cover this route.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -270,6 +278,7 @@ unless the response body was also parsed.
 | Made `/health` return HTTP 503 for degraded component checks and HTTP 500 when the health-check runner itself crashes instead of returning 200 with an unhealthy body. | `src/animetta/orchestration/server/stats_api.py`, `tests/orchestration/server/test_stats_api.py` |
 | Replaced full config dumps and API-key prefix logging during config env expansion with provider type and key-length diagnostics. | `src/animetta/config/app.py`, `tests/config/test_app_config.py` |
 | Replaced full tool-config logging during orchestrator creation and `tools.yaml` loading with enabled-state and key-name diagnostics. | `src/animetta/orchestration/server/session.py`, `tests/orchestration/server/test_session.py` |
+| Covered `/api/stats/inspection/latest` and updated the API reference to the persisted StatsStore report shape. | `tests/orchestration/server/test_stats_api.py`, `docs/reference/backend-api.md` |
 
 Behavior preserved:
 
@@ -311,6 +320,9 @@ Behavior preserved:
 - `/health` still returns HTTP 200 with `status: "ok"` when all component
   probes pass; degraded checks now return 503 and infrastructure-level
   health-check crashes return 500.
+- `/api/stats/inspection/latest` keeps returning the latest persisted
+  inspection report, now with explicit route coverage and matching reference
+  documentation.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.
