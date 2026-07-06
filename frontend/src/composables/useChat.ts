@@ -94,6 +94,10 @@ export function useChat() {
   }
 
   async function sendInterrupt(): Promise<void> {
+    const socket = getSocket()
+    if (socket) {
+      socket.emit(Events.CHAT.INTERRUPT, {})
+    }
     store.finalizeResponse()
   }
 

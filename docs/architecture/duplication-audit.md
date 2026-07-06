@@ -294,6 +294,15 @@ that state and the handler intentionally left the previous state unchanged.
 Manual spectate failures could therefore leave the settings panel showing stale
 `waiting`, `joined`, or `left` state.
 
+### Chat interrupt event chain gap
+
+The backend registers `chat:interrupt` and `ChatHandlers.on_interrupt_signal`
+sets the shared interrupt handler before emitting `chat:stop_audio` and a
+control event. The frontend interrupt button called `sendInterrupt()`, but that
+function only finalized the local streaming message and never emitted
+`chat:interrupt`, so the visible UI stopped while backend generation/audio could
+continue.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -335,6 +344,7 @@ Manual spectate failures could therefore leave the settings panel showing stale
 | Removed the unused stale frontend `SystemModelStatusPayload` shape so `system:model_status` has one active frontend contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
+| Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
 
 Behavior preserved:
 
@@ -393,6 +403,8 @@ Behavior preserved:
   catalog order.
 - Minecraft start/stop/spectate event names are unchanged; viewer spectate
   failures now update visible frontend state instead of leaving stale state.
+- Chat interrupt UI behavior still finalizes the local message immediately,
+  and now also notifies the backend interrupt handler.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.
