@@ -250,6 +250,35 @@ class TestRouteHandlersDispatch:
             to="sid1",
         )
 
+    @pytest.mark.asyncio
+    async def test_on_get_wiki_pages_uses_public_memory_api(
+        self, mock_socketio, mock_session_manager
+    ):
+        """memory:list_pages should not reach through MemorySystem into its store."""
+
+        pages = [{
+            "path": "raw-1",
+            "title": "Latte",
+            "content": "用户: 我喜欢拿铁",
+            "page_type": "source",
+            "tags": ["s1"],
+            "updated_at": "2026-07-06T00:00:00+00:00",
+        }]
+
+        class PublicMemorySystem:
+            async def list_wiki_pages(self, limit: int = 50) -> list[dict]:
+                assert limit == 50
+                return pages
+
+        mock_session_manager.get_or_create_context = AsyncMock(
+            return_value=SimpleNamespace(memory_system=PublicMemorySystem())
+        )
+
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+
+        assert await handlers.on_get_wiki_pages("sid1", {}) == {"pages": pages}
+
 
 # ── RouteHandlers — Broadcast ──────────────────────────────────────
 

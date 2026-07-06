@@ -116,6 +116,29 @@ class LivingMemorySystem:
         """Execute one metabolism tick through the public memory API."""
         await self._run_metabolism_tick()
 
+    async def list_wiki_pages(self, limit: int = 50) -> list[dict[str, object]]:
+        """Return active memory atoms as frontend-compatible wiki pages."""
+        atoms = await self.store.get_all_active(limit=limit)
+        return [self._atom_to_wiki_page(atom) for atom in atoms]
+
+    @staticmethod
+    def _atom_to_wiki_page(atom: MemoryAtom) -> dict[str, object]:
+        layer_to_type = {
+            Layer.RAW: "source",
+            Layer.EPISODIC: "entity",
+            Layer.SEMANTIC: "concept",
+            Layer.EMERGENT: "synthesis",
+        }
+        updated_at = atom.rewritten_at or atom.occurred_at
+        return {
+            "path": atom.id,
+            "title": atom.summary or atom.content[:80],
+            "content": atom.content,
+            "page_type": layer_to_type.get(atom.layer, atom.layer.name.lower()),
+            "tags": atom.tags or [],
+            "updated_at": updated_at.isoformat() if updated_at else "",
+        }
+
     async def _run_metabolism_tick(self) -> None:
         """Execute one metabolism tick: decay + compile + forget."""
         # Get all active atoms

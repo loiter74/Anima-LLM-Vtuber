@@ -308,25 +308,8 @@ class RouteHandlers:
                 logger.warning(f"[wiki_pages] memory_system is None for sid={sid}")
                 return {"pages": [], "error": "Memory system not available"}
 
-            atoms = await mem.store.get_all_active(limit=50)
-            logger.info(f"[wiki_pages] sid={sid} atoms={len(atoms)}")
-            pages = []
-            for a in atoms:
-                # Map layer to page_type for frontend compatibility
-                layer_to_type = {
-                    "RAW": "source",
-                    "EPISODIC": "entity",
-                    "SEMANTIC": "concept",
-                    "EMERGENT": "synthesis",
-                }
-                pages.append({
-                    "path": a.id,
-                    "title": a.summary or a.content[:80],
-                    "content": a.content,
-                    "page_type": layer_to_type.get(a.layer.name, a.layer.name.lower()),
-                    "tags": a.tags or [],
-                    "updated_at": (a.rewritten_at or a.occurred_at).isoformat() if (a.rewritten_at or a.occurred_at) else "",
-                })
+            pages = await mem.list_wiki_pages(limit=50)
+            logger.info(f"[wiki_pages] sid={sid} pages={len(pages)}")
             return {"pages": pages}
         except Exception as e:
             logger.exception(f"[wiki_pages] ERROR: {e}")

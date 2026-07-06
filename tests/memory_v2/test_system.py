@@ -62,6 +62,25 @@ class TestLivingMemorySystem:
         assert abs(atom.emotion_valence) < 0.1
         assert abs(atom.emotion_arousal) < 0.1
 
+    async def test_list_wiki_pages_maps_atoms_for_frontend(self, system):
+        atom = await system.encode(
+            user_input="我喜欢拿铁",
+            agent_response="记住了，拿铁是偏好。",
+            emotion_vad=VAD_MAP["happy"],
+            session_id="s1",
+        )
+
+        pages = await system.list_wiki_pages(limit=50)
+
+        assert pages == [{
+            "path": atom.id,
+            "title": atom.content[:80],
+            "content": atom.content,
+            "page_type": "source",
+            "tags": ["s1"],
+            "updated_at": atom.rewritten_at.isoformat(),
+        }]
+
     async def test_encode_with_sad_emotion(self, system):
         atom = await system.encode(
             user_input="今天心情不好",
