@@ -27,7 +27,9 @@ def _make_lightweight_server() -> WebSocketServer:
         patch("animetta.orchestration.server.websocket.Live2DManager") as mock_live2d,
         patch("animetta.orchestration.server.websocket.LifecycleManager") as mock_lifecycle,
     ):
-        mock_mlm.return_value = MagicMock()
+        mock_model_manager = MagicMock()
+        mock_model_manager.get_status.return_value = {}
+        mock_mlm.return_value = mock_model_manager
         mock_sessions.return_value = MagicMock()
         mock_desktop.return_value = MagicMock()
         mock_live2d.return_value = MagicMock()
@@ -39,6 +41,11 @@ def run_smoke_probes() -> list[ProbeResult]:
     server = _make_lightweight_server()
     probes = [
         ("/metrics", 200),
+        ("/api/stats/overview", 200),
+        ("/api/stats/nodes", 200),
+        ("/api/stats/traces", 200),
+        ("/api/stats/traces/__missing__", 404),
+        ("/api/stats/traces/__missing__/tree", 404),
         ("/api/singing/recent", 200),
         ("/api/singing/audio/__missing__.wav", 404),
         ("/api/singing/subtitle/__missing__.ass", 404),

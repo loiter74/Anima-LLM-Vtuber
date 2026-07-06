@@ -14,3 +14,16 @@ def test_route_smoke_covers_metrics_endpoint() -> None:
     results = run_smoke_probes()
 
     assert any(result.path == "/metrics" for result in results)
+
+
+def test_route_smoke_covers_stats_api_routes() -> None:
+    results = run_smoke_probes()
+    paths = {result.path for result in results}
+
+    assert {
+        "/api/stats/overview",
+        "/api/stats/nodes",
+        "/api/stats/traces",
+        "/api/stats/traces/__missing__",
+        "/api/stats/traces/__missing__/tree",
+    }.issubset(paths)

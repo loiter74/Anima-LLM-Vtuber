@@ -252,6 +252,14 @@ runtime observability endpoint outside the lightweight ASGI route gate even
 though the integration tests and Docker protocol rely on route probes for early
 startup regressions.
 
+### Stats API route smoke coverage gap
+
+The stats API had endpoint-level tests, but `scripts/route_smoke.py` did not
+probe the stats routes through the assembled lightweight `WebSocketServer`
+ASGI app. A route registration or mount regression could therefore pass the
+fast health gate while breaking `/api/stats/overview`, `/api/stats/nodes`,
+`/api/stats/traces`, or trace detail/tree routing in the assembled app.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -288,6 +296,7 @@ startup regressions.
 | Replaced full tool-config logging during orchestrator creation and `tools.yaml` loading with enabled-state and key-name diagnostics. | `src/animetta/orchestration/server/session.py`, `tests/orchestration/server/test_session.py` |
 | Covered `/api/stats/inspection/latest` and updated the API reference to the persisted StatsStore report shape. | `tests/orchestration/server/test_stats_api.py`, `docs/reference/backend-api.md` |
 | Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |
+| Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
 
 Behavior preserved:
 
@@ -334,6 +343,8 @@ Behavior preserved:
   documentation.
 - `/metrics` behavior is unchanged; it is now part of the lightweight route
   smoke gate when `prometheus-client` is installed.
+- Stats API behavior is unchanged; overview, nodes, traces, and missing trace
+  detail/tree routes are now part of the lightweight route smoke gate.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.
