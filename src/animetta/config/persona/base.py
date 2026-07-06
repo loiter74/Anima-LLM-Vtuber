@@ -9,7 +9,6 @@ from pydantic import Field, field_validator
 
 from ..core.base import BaseConfig
 
-
 # ── Context-safety / anti-leak section ───────────────────────────────
 # Appended to every persona's system prompt as the final block. Stops the
 # "历史串台虫" / prompt-injection class of attacks where a user feeds the

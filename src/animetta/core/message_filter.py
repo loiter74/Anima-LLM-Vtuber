@@ -78,10 +78,7 @@ def should_skip_llm(text: str) -> bool:
     if any(stripped.startswith(prefix) for prefix in _PROBE_PREFIXES):
         return True
 
-    if lowered in _PROBE_TOKENS:
-        return True
-
-    return False
+    return lowered in _PROBE_TOKENS
 
 
 def is_inspection_probe(data: dict[str, Any]) -> bool:
@@ -107,10 +104,7 @@ def is_inspection_probe(data: dict[str, Any]) -> bool:
     if data.get("is_probe") is True:
         return True
 
-    if data.get("mode") == "inspection":
-        return True
-
-    return False
+    return data.get("mode") == "inspection"
 
 
 def is_probe_message(data: dict[str, Any]) -> bool:
@@ -129,7 +123,4 @@ def is_probe_message(data: dict[str, Any]) -> bool:
         return True
 
     text = data.get("text", "")
-    if isinstance(text, str) and should_skip_llm(text):
-        return True
-
-    return False
+    return isinstance(text, str) and should_skip_llm(text)

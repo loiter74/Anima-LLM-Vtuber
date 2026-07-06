@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from animetta.orchestration.prompting.pipeline import compile as compile_prompt
-from animetta.orchestration.prompting.types import CompiledPrompt
 
 
 @pytest.mark.asyncio

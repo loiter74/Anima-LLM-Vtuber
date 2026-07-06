@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import scripts.health_check as health_check
 from scripts.health_check import _python_command, build_gates, redact_output
 
 
@@ -47,3 +50,39 @@ def test_python_command_uses_env_override(monkeypatch) -> None:
     monkeypatch.setenv("ANIMETTA_PYTHON", "py -3.13")
 
     assert _python_command() == ("py", "-3.13")
+
+
+def test_python_command_skips_unusable_repo_venv(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("ANIMETTA_PYTHON", raising=False)
+    monkeypatch.setattr(health_check, "ROOT", tmp_path)
+    monkeypatch.setattr(health_check.os, "name", "nt")
+    monkeypatch.setattr(health_check.shutil, "which", lambda name: None)
+    monkeypatch.setattr(health_check.sys, "executable", "current-python")
+
+    repo_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    repo_python.parent.mkdir(parents=True)
+    repo_python.touch()
+
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(returncode=0 if command[0] == "current-python" else 1)
+
+    monkeypatch.setattr(health_check.subprocess, "run", fake_run)
+
+    assert _python_command() == ("current-python",)
+
+
+def test_python_command_skips_py_launcher_without_metrics_dependency(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMETTA_PYTHON", raising=False)
+    monkeypatch.setattr(health_check.os, "name", "nt")
+    monkeypatch.setattr(health_check.shutil, "which", lambda name: "py.exe")
+    monkeypatch.setattr(health_check.sys, "executable", "current-python")
+
+    def fake_run(command, **kwargs):
+        probe = command[-1]
+        if command[0] == "py" and "prometheus_client" not in probe:
+            return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=0 if command[0] == "current-python" else 1)
+
+    monkeypatch.setattr(health_check.subprocess, "run", fake_run)
+
+    assert _python_command() == ("current-python",)

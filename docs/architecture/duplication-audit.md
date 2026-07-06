@@ -89,6 +89,29 @@ shape. Current LLM providers expose their configuration directly, so LangChain
 adapter construction could lose the model name or fail when only the current
 provider shape was present.
 
+### Health gate interpreter drift
+
+`scripts/health_check.py` selected an existing repository `.venv` before
+checking whether that interpreter could import the modules required by the
+health gates. A stale or partial `.venv` caused backend tests, secret scanning,
+and route smoke probes to fail even when the active Codex interpreter had the
+needed test/runtime packages.
+
+### Optional VC provider import drift
+
+`animetta.services.vc.__init__` eagerly imported the RVC provider, which forced
+optional audio dependencies such as `soundfile` to exist even when callers only
+needed `VCFactory` or `MockVC`. This broke the mock/factory path and made the VC
+package import depend on a heavy provider that should be loaded on demand.
+
+### Stale `core.config` test shape
+
+Several tests still asserted removed wrapper shapes such as
+`ServiceContext.core.config`, `WebSocketServer.core.config`,
+`PositionBasedStrategy.core.config`, and `VisemeLipSync.core.config`. The
+runtime objects now expose their configuration directly via `config`, so the
+tests were preserving a deleted boundary rather than verifying current behavior.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -104,6 +127,9 @@ provider shape was present.
 | Fixed DuckDuckGo fallback import to the current LangChain Community tools namespace and added a no-network fallback test. | `src/animetta/tools/base.py`, `tests/tools/test_base.py` |
 | Moved stale tools tests from `animetta.core.tools` / `*.core.tools` wrapper expectations to the current `animetta.tools` and flat `ToolManager` shape. | `tests/tools/`, `tests/orchestration/graph/test_tool_manager.py` |
 | Fixed LangChain adapter model-name detection to prefer current provider `.config` metadata while retaining legacy `.core.config` fallback. | `src/animetta/services/llm/langchain_adapter.py`, `tests/services/test_langchain_adapter.py` |
+| Made `health_check.py` skip stale Python interpreters that cannot import required health-gate dependencies. | `scripts/health_check.py`, `tests/smoke/test_health_check.py` |
+| Made the RVC VC provider lazy so `VCFactory` and `MockVC` do not require optional RVC/audio dependencies at package import time. | `src/animetta/services/vc/__init__.py`, `src/animetta/services/vc/factory.py`, `tests/services/vc/test_vc_factory.py` |
+| Updated stale tests from removed `.core.config` wrapper assertions to the current direct `.config` attributes and current handler config propagation. | `tests/core/test_service_context.py`, `tests/orchestration/server/test_websocket.py`, `tests/avatar/test_position_strategy.py`, `tests/services/test_live2d_viseme_sync.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -118,6 +144,9 @@ Behavior preserved:
   DuckDuckGo fallback when Tavily is absent.
 - LangChain chat model construction preserves model metadata for current LLM
   providers and still accepts legacy wrappers exposing `core.config`.
+- Health checks no longer fail solely because a stale repository `.venv` exists.
+- Importing the VC package no longer loads the heavy RVC provider unless RVC is
+  explicitly requested.
 
 ## Left For Later
 

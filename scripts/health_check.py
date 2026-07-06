@@ -13,10 +13,12 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
+REQUIRED_PYTHON_MODULES = ("pytest", "yaml", "starlette", "prometheus_client")
 
 SECRET_PATTERNS = [
     (
@@ -64,17 +66,43 @@ def _python_command() -> tuple[str, ...]:
     if override:
         return tuple(shlex.split(override, posix=os.name != "nt"))
 
+    candidates: list[tuple[str, ...]] = []
     if os.name == "nt":
         for candidate in (
             ROOT / ".venv" / "Scripts" / "python.exe",
             ROOT / "venv" / "Scripts" / "python.exe",
         ):
             if candidate.exists():
-                return (str(candidate),)
+                candidates.append((str(candidate),))
         if shutil.which("py"):
-            return ("py", "-3.13")
+            candidates.append(("py", "-3.13"))
+
+    candidates.append((sys.executable,))
+    for candidate in candidates:
+        if _python_has_health_dependencies(candidate):
+            return candidate
 
     return (sys.executable,)
+
+
+@cache
+def _python_has_health_dependencies(command: tuple[str, ...]) -> bool:
+    probe = (
+        *command,
+        "-c",
+        "; ".join(f"import {module}" for module in REQUIRED_PYTHON_MODULES),
+    )
+    try:
+        completed = subprocess.run(
+            probe,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
 
 
 def _python(*args: str) -> tuple[str, ...]:

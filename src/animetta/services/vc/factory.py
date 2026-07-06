@@ -36,6 +36,9 @@ class VCFactory:
             return MockVC()
 
         try:
+            if provider == "rvc":
+                from . import rvc_vc  # noqa: F401
+
             svc = ProviderRegistry.create_service("vc", config)
             return TracingProxy(svc, service_name="vc")
         except Exception as e:

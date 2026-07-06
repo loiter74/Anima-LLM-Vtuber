@@ -6,8 +6,8 @@ Covers:
 - Step sequence correctness per skill
 """
 
-from animetta.tools.minecraft.skill.predefined import get_predefined_skills
 from animetta.tools.minecraft.skill.library import Skill
+from animetta.tools.minecraft.skill.predefined import get_predefined_skills
 
 # ── Fixtures ──
 

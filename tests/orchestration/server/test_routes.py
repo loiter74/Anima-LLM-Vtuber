@@ -55,12 +55,14 @@ class TestRouteHandlersInit:
         assert handlers.live2d_manager is l2d
 
     def test_set_global_config(self, mock_socketio, mock_session_manager):
-        """set_global_config is a no-op (empty body in source)."""
+        """set_global_config stores and propagates the config."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         config = MagicMock()
         handlers.set_global_config(config)
-        # Current implementation has empty body — global_config stays None
-        assert handlers.global_config is None
+        assert handlers.global_config is config
+        assert handlers.base.global_config is config
+        assert handlers.chat.global_config is config
+        assert handlers.persona.global_config is config
 
     def test_set_user_settings(self, mock_socketio, mock_session_manager):
         """set_user_settings stores settings reference."""

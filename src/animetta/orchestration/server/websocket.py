@@ -10,9 +10,9 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
+from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_pool import ServicePool
-from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
 from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager

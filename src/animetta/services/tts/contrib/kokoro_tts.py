@@ -233,7 +233,6 @@ class KokoroTTS(TTSInterface):
         """
         import wave
 
-        import torch
 
         # Ensure 1D and convert to int16
         if audio_tensor.dim() > 1:

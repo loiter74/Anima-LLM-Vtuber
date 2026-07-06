@@ -47,7 +47,7 @@ class TestWebSocketServerInit:
             config = MagicMock()
             server = WebSocketServer(config=config)
 
-            assert server.core.config is config
+            assert server.config is config
             assert server.sio is not None
             assert server.asgi_app is not None
             assert server.model_manager is not None
@@ -80,7 +80,7 @@ class TestWebSocketServerInit:
 
             cfg = MagicMock()
             server = WebSocketServer(config=cfg)
-            assert server.core.config is cfg
+            assert server.config is cfg
 
     def test_get_app_returns_asgi_app(self, websocket_server):
         """get_app returns the Starlette ASGI app."""
@@ -153,14 +153,14 @@ class TestSetConfig:
 
         websocket_server.set_config(new_config)
 
-        assert websocket_server.core.config is new_config
+        assert websocket_server.config is new_config
         h.set_global_config.assert_called_once_with(new_config)
 
     def test_set_config_no_handlers(self, websocket_server):
         """set_config works when route_handlers is None."""
         cfg = MagicMock()
         websocket_server.set_config(cfg)
-        assert websocket_server.core.config is cfg
+        assert websocket_server.config is cfg
 
 
 # ── WebSocketServer — setup_routes ─────────────────────────────────
@@ -233,7 +233,7 @@ class TestPrewarmServices:
             await websocket_server.prewarm_services()
 
             mock_pool.init.assert_called_once_with(
-                websocket_server.core.config,
+                websocket_server.config,
                 model_manager=websocket_server.model_manager,
             )
 

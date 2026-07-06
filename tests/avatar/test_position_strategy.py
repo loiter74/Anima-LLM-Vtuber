@@ -20,14 +20,14 @@ class TestPositionBasedStrategyInit:
         """Default init should create valid strategy."""
         strategy = PositionBasedStrategy()
         assert strategy._enable_smoothing is True
-        assert strategy.core.config.default_emotion == "neutral"
+        assert strategy.config.default_emotion == "neutral"
 
     def test_custom_config(self):
         """Custom config should be honored."""
         config = TimelineConfig(default_emotion="happy", min_segment_duration=0.5)
         strategy = PositionBasedStrategy(config=config)
-        assert strategy.core.config.default_emotion == "happy"
-        assert strategy.core.config.min_segment_duration == 0.5
+        assert strategy.config.default_emotion == "happy"
+        assert strategy.config.min_segment_duration == 0.5
 
     def test_smoothing_disabled(self):
         """Smoothing can be disabled."""

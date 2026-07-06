@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from animetta.tools.minecraft.autonomous.loop import AutonomousLoop
 from animetta.tools.minecraft.autonomous.rules_engine import RulesEngine
-from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillResult
 from animetta.tools.minecraft.other.world_state import WorldState
+from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillResult
 
 # ── Helpers ──
 

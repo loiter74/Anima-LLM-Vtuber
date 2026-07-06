@@ -8,7 +8,7 @@ Covers the behavioral contracts from design.md Decision 3 and spec requirements:
 - Fallback translation restores LLM history or skips when safety cannot be guaranteed.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,7 +18,6 @@ from animetta.orchestration.graph.subtitle_translator import (
 )
 from animetta.services.llm.interface import LLMInterface
 from animetta.tracing.proxy import TracingProxy
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 

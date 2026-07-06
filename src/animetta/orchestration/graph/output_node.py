@@ -321,7 +321,4 @@ def _is_unpersistable_response(state: AgentState, response_text: str) -> bool:
             return True
 
     metadata = state.get("metadata", {}) or {}
-    if metadata.get("error_type") == "timeout":
-        return True
-
-    return False
+    return metadata.get("error_type") == "timeout"
