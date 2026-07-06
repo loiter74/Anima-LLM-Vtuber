@@ -37,7 +37,7 @@ Animetta 不是又一个 "ChatGPT + TTS" 的简单拼接。它是一个**工程�
 └──────────────────────────┬──────────────────────────────────────┘
                            │ Socket.IO / REST
 ┌──────────────────────────▼──────────────────────────────────────┐
-│                    WebSocket Server (FastAPI + Socket.IO)        │
+│                WebSocket Server (Starlette + Socket.IO ASGI)     │
 │                Session Management · Desktop App · Live2D Events │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -200,7 +200,7 @@ otlp:
 
 ```bash
 pip install -r requirements.txt
-cd frontend && npm install
+cd frontend && pnpm install
 ```
 
 ### 2. 配置
@@ -237,7 +237,7 @@ export OPENAI_API_KEY="your-openai-api-key"
 python -m animetta.core.socketio_server
 
 # 前端 (另一个终端)
-cd frontend && npm run dev
+cd frontend && pnpm dev
 ```
 
 ### Docker Compose 快速启动
@@ -403,7 +403,7 @@ async def my_tool(query: str) -> str:
 | 层级 | 技术 |
 |------|------|
 | **编排** | LangGraph · LangChain |
-| **后端** | FastAPI · Socket.IO · Starlette |
+| **后端** | Starlette · Socket.IO ASGI |
 | **前端** | Vue 3 · Vite · TypeScript · pixi.js · Live2D Cubism SDK |
 | **记忆** | ChromaDB · SQLite FTS5 · Markdown Wiki |
 | **追踪** | OpenTelemetry · Prometheus · Langfuse |
