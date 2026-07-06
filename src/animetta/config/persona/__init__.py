@@ -11,6 +11,7 @@ from .base import (
     MBTIProfile,
     PersonaConfig,
     PersonalityTraits,
+    list_available_personas,
 )
 from .enhanced import (
     EnhancedPersonaBuilder,
@@ -26,4 +27,5 @@ __all__ = [
     'MBTIDimensionDelta',
     'EnhancedPersonaBuilder',
     'create_enhanced_system_prompt',
+    'list_available_personas',
 ]

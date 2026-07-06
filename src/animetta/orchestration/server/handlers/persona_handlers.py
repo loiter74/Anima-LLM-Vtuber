@@ -2,10 +2,11 @@
 Persona event handlers — persona switching, personality mode.
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
+from animetta.config.persona import PersonaConfig, list_available_personas
 
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
@@ -16,10 +17,6 @@ if TYPE_CHECKING:
     from ..desktop import DesktopClientManager
     from ..live2d import Live2DManager
     from ..session import SessionManager
-
-# Default personas directory
-_PERSONAS_DIR = Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "personas"
-
 
 class PersonaHandlers(BaseSocketHandler):
     """Persona and personality mode event handlers.
@@ -56,20 +53,11 @@ class PersonaHandlers(BaseSocketHandler):
     async def on_get_available_personas(self, sid: str, data: dict) -> dict:
         """获取可用的人设列表"""
         try:
-            personas = []
-            if _PERSONAS_DIR.is_dir():
-                for yaml_file in sorted(_PERSONAS_DIR.glob("*.yaml")):
-                    personas.append(yaml_file.stem)
-
-            # If no personas found, return default
-            if not personas:
-                personas = ["default"]
+            personas = list_available_personas()
 
             # Get current persona's MBTI data
             mbti_data = None
             try:
-                from animetta.config.persona import PersonaConfig
-
                 logger.info(f"[{sid}] on_get_available_personas: global_config={self.global_config}")
                 if self.global_config:
                     current_persona_name = self.global_config.persona
@@ -115,8 +103,6 @@ class PersonaHandlers(BaseSocketHandler):
         logger.info(f"[{sid}] 切换人设: {persona_name}")
 
         try:
-            from animetta.config.persona import PersonaConfig
-
             ctx = self.session_manager.get_context(sid)
             if not ctx:
                 await self.sio.emit(

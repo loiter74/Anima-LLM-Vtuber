@@ -2,19 +2,17 @@
 Configuration event handlers — config switching, log level, heartbeat, translation.
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from animetta.config.live2d import get_live2d_config
+from animetta.config.persona import list_available_personas
 from animetta.utils.logger_manager import logger_manager
 
 from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
-
-_PERSONAS_DIR = Path(__file__).resolve().parents[5] / "config" / "personas"
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -93,11 +91,7 @@ class ConfigHandlers(BaseSocketHandler):
 
         config = self.get_active_config()
 
-        available_personas = []
-        if _PERSONAS_DIR.is_dir():
-            available_personas = sorted(
-                path.stem for path in _PERSONAS_DIR.glob("*.yaml")
-            )
+        available_personas = list_available_personas(fallback_to_default=False)
 
         # Read live2d config
         try:

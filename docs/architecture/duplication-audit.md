@@ -163,6 +163,13 @@ After `BaseSocketHandler` gained the shared `get_active_config()` helper,
 `self.global_config or AppConfig.load()` fallback. That left two server-handler
 config fallback entrypoints and made future handler moves more likely to drift.
 
+### Duplicated persona catalog path and listing logic
+
+Persona loading, enhanced persona prompt loading, `config:get`, and
+`persona:list` each carried their own project `config/personas` path or `*.yaml`
+listing logic. That made the persona catalog boundary drift-prone and left
+server handlers responsible for filesystem details already owned by config.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -189,6 +196,7 @@ config fallback entrypoints and made future handler moves more likely to drift.
 | Closed partially initialized pooled LLM/TTS/ASR engines when `ServicePool` initialization fails. | `src/animetta/core/service_pool.py`, `tests/core/test_service_pool.py` |
 | Moved Memory/Wiki socket business logic out of the route facade and routed it through the shared handler config/context boundary. | `src/animetta/orchestration/server/routes.py`, `src/animetta/orchestration/server/handlers/base_handler.py`, `src/animetta/orchestration/server/handlers/memory_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Routed `config:get` through the shared handler `get_active_config()` fallback instead of a second direct `AppConfig.load()` call. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
 
 Behavior preserved:
 
@@ -214,6 +222,8 @@ Behavior preserved:
   now delegated from `RouteHandlers` to `MemoryHandlers`.
 - `config:get` keeps the same sanitized response shape while using the shared
   server-handler config fallback.
+- Persona loading and persona listing still read the same project
+  `config/personas/*.yaml` catalog; `persona:list` keeps its `default` fallback.
 
 ## Left For Later
 
