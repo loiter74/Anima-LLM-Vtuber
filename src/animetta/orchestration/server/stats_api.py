@@ -180,7 +180,11 @@ def _get_gpu_info() -> dict[str, Any]:
             return {"available": False}
 
         device_name = torch.cuda.get_device_name(0)
-        total = torch.cuda.get_device_properties(0).total_mem / (1024 * 1024)
+        properties = torch.cuda.get_device_properties(0)
+        total_bytes = getattr(properties, "total_memory", None)
+        if total_bytes is None:
+            total_bytes = getattr(properties, "total_mem")
+        total = total_bytes / (1024 * 1024)
         reserved = torch.cuda.memory_reserved(0) / (1024 * 1024)
         allocated = torch.cuda.memory_allocated(0) / (1024 * 1024)
         free = total - reserved

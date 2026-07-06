@@ -2,13 +2,15 @@ from __future__ import annotations
 
 """Tests for stats API endpoints — health check, overview, nodes, traces."""
 
+import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from animetta.orchestration.server.stats_api import get_stats_routes
+from animetta.orchestration.server.stats_api import _get_gpu_info, get_stats_routes
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -82,6 +84,28 @@ class TestHealthEndpoint:
         resp = client.get("/health")
         data = resp.json()
         assert data["service"] == "anima"
+
+    def test_gpu_info_accepts_current_torch_total_memory_property(self, monkeypatch):
+        """GPU probe handles torch device properties exposing total_memory."""
+        mib = 1024 * 1024
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(
+                is_available=lambda: True,
+                get_device_name=lambda index: "Test GPU",
+                get_device_properties=lambda index: SimpleNamespace(total_memory=8 * mib),
+                memory_reserved=lambda index: 2 * mib,
+                memory_allocated=lambda index: 1 * mib,
+            )
+        )
+        monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+        assert _get_gpu_info() == {
+            "available": True,
+            "name": "Test GPU",
+            "memory_total_mb": 8.0,
+            "memory_used_mb": 1.0,
+            "memory_free_mb": 6.0,
+        }
 
 
 # ── Stats Overview ─────────────────────────────────────────────────
