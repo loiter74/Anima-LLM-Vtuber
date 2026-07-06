@@ -285,6 +285,15 @@ runtime persona. The frontend personality store only tracked
 field. A backend using a non-first configured persona could therefore show a
 different persona in the drawer than the active runtime config and MBTI data.
 
+### Minecraft viewer error state drift
+
+The backend `minecraft:viewer_status` event can emit `{status: "error",
+error: ...}` when spectate fails or the bot is not running. The frontend store
+declared the payload as supporting `error`, but `viewerStatus` could not hold
+that state and the handler intentionally left the previous state unchanged.
+Manual spectate failures could therefore leave the settings panel showing stale
+`waiting`, `joined`, or `left` state.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -325,6 +334,7 @@ different persona in the drawer than the active runtime config and MBTI data.
 | Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
 | Removed the unused stale frontend `SystemModelStatusPayload` shape so `system:model_status` has one active frontend contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
+| Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 
 Behavior preserved:
 
@@ -381,6 +391,8 @@ Behavior preserved:
 - Persona switching behavior is unchanged; the frontend now receives and
   displays the active persona explicitly instead of inferring it from the
   catalog order.
+- Minecraft start/stop/spectate event names are unchanged; viewer spectate
+  failures now update visible frontend state instead of leaving stale state.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

@@ -36,7 +36,7 @@ export const useMinecraftStore = defineStore('minecraft', () => {
   const error = ref('')
 
   // Viewer spectator state
-  const viewerStatus = ref<'idle' | 'waiting' | 'joined' | 'left'>('idle')
+  const viewerStatus = ref<'idle' | 'waiting' | 'joined' | 'left' | 'error'>('idle')
   const viewerUsername = ref('')
 
   // Bot state (real-time HUD data)
@@ -72,13 +72,18 @@ export const useMinecraftStore = defineStore('minecraft', () => {
       if (data.status === 'waiting') {
         viewerStatus.value = 'waiting'
         viewerUsername.value = data.username || ''
+        error.value = ''
       } else if (data.status === 'joined') {
         viewerStatus.value = 'joined'
         if (data.username) viewerUsername.value = data.username
+        error.value = ''
       } else if (data.status === 'left') {
         viewerStatus.value = 'left'
+      } else if (data.status === 'error') {
+        viewerStatus.value = 'error'
+        if (data.username) viewerUsername.value = data.username
+        error.value = data.error || 'Minecraft viewer error'
       }
-      // 'error' status doesn't change viewerStatus
     }
 
     const botStateHandler = (data: Record<string, unknown>) => {
