@@ -137,6 +137,15 @@ persisted to `src/.user_settings.yaml` instead of the project root.
 created two competing configuration entrypoints and prevented the parsed
 runtime config object from controlling Bilibili auto-start.
 
+### ServicePool failure cleanup ownership drift
+
+`ServicePool.init()` uses a temporary `ServiceContext` to initialize pooled
+LLM/TTS/ASR engines, then keeps those shared engines alive on the success path.
+`ServiceContext.close()` therefore intentionally does not close those shared
+engines. The failure path still relied on `ctx.close()` to "close whatever was
+opened", so a partially initialized LLM/TTS/ASR engine could leak if
+`load_from_config()` failed after assigning it to the context.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -160,6 +169,7 @@ runtime config object from controlling Bilibili auto-start.
 | Fixed `config:get` to list personas from the project config directory and to load Live2D settings through the current `get_live2d_config()` entrypoint. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Fixed enhanced persona prompt loading to use the project `config/personas` directory by default. | `src/animetta/config/persona/enhanced.py`, `tests/config/test_persona.py` |
 | Centralized the Socket.IO entrypoint project root path so user settings, `.env`, logs, and frontend serving resolve from the same project root. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
+| Closed partially initialized pooled LLM/TTS/ASR engines when `ServicePool` initialization fails. | `src/animetta/core/service_pool.py`, `tests/core/test_service_pool.py` |
 
 Behavior preserved:
 
@@ -179,6 +189,8 @@ Behavior preserved:
   explicitly requested.
 - Bilibili auto-start still receives the same `enabled`, `room_id`, and
   `sessdata` fields, now from the parsed runtime config object.
+- Successful service-pool initialization still keeps LLM/TTS/ASR alive for
+  sharing; only failed partial initialization now closes those engines.
 
 ## Left For Later
 

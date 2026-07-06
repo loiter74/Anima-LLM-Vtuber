@@ -213,9 +213,8 @@ class TestInit:
     @patch("animetta.core.service_context.ServiceContext")
     async def test_error_closes_context(self, MockServiceContext):
         """When load_from_config raises, init() calls ctx.close() and re-raises."""
-        mock_ctx = MagicMock()
-        mock_ctx.load_from_config = AsyncMock(side_effect=RuntimeError("boom"))
-        mock_ctx.close = AsyncMock()
+        mock_ctx = _mock_context_base(None, None, None)
+        mock_ctx.load_from_config.side_effect = RuntimeError("boom")
         MockServiceContext.return_value = mock_ctx
 
         with pytest.raises(RuntimeError, match="boom"):
@@ -227,9 +226,8 @@ class TestInit:
     @patch("animetta.core.service_context.ServiceContext")
     async def test_error_does_not_set_ready(self, MockServiceContext):
         """When load_from_config fails, _ready stays False."""
-        mock_ctx = MagicMock()
-        mock_ctx.load_from_config = AsyncMock(side_effect=ValueError("fail"))
-        mock_ctx.close = AsyncMock()
+        mock_ctx = _mock_context_base(None, None, None)
+        mock_ctx.load_from_config.side_effect = ValueError("fail")
         MockServiceContext.return_value = mock_ctx
 
         with pytest.raises(ValueError):
@@ -241,9 +239,8 @@ class TestInit:
     @patch("animetta.core.service_context.ServiceContext")
     async def test_error_does_not_set_engines(self, MockServiceContext):
         """After a failed init, _llm / _tts / _asr remain None."""
-        mock_ctx = MagicMock()
-        mock_ctx.load_from_config = AsyncMock(side_effect=ValueError("fail"))
-        mock_ctx.close = AsyncMock()
+        mock_ctx = _mock_context_base(None, None, None)
+        mock_ctx.load_from_config.side_effect = ValueError("fail")
         MockServiceContext.return_value = mock_ctx
 
         with pytest.raises(ValueError):
@@ -252,6 +249,63 @@ class TestInit:
         assert ServicePool._llm is None
         assert ServicePool._tts is None
         assert ServicePool._asr is None
+
+    @pytest.mark.asyncio
+    @patch("animetta.core.service_context.ServiceContext")
+    async def test_error_closes_partially_initialized_shared_engines(
+        self, MockServiceContext, mock_llm, mock_tts, mock_asr
+    ):
+        """Engines opened before a failed init are closed instead of leaked."""
+        mock_ctx = _mock_context_base(None, None, None)
+
+        async def fail_after_shared_engines(_config):
+            mock_ctx.llm_engine = mock_llm
+            mock_ctx.tts_engine = mock_tts
+            mock_ctx.asr_engine = mock_asr
+            raise RuntimeError("boom")
+
+        mock_ctx.load_from_config.side_effect = fail_after_shared_engines
+        MockServiceContext.return_value = mock_ctx
+
+        with pytest.raises(RuntimeError, match="boom"):
+            await ServicePool.init(MagicMock())
+
+        mock_ctx.close.assert_awaited_once()
+        mock_llm.close.assert_awaited_once()
+        mock_tts.close.assert_awaited_once()
+        mock_asr.close.assert_awaited_once()
+        assert ServicePool._llm is None
+        assert ServicePool._tts is None
+        assert ServicePool._asr is None
+        assert ServicePool._ready is False
+
+    @pytest.mark.asyncio
+    @patch("animetta.core.service_context.ServiceContext")
+    async def test_error_preserves_original_exception_when_engine_close_fails(
+        self, MockServiceContext, mock_llm, mock_tts, mock_asr
+    ):
+        """Cleanup failures do not hide the original initialization error."""
+        mock_ctx = _mock_context_base(None, None, None)
+        mock_llm.close.side_effect = RuntimeError("close failed")
+
+        async def fail_after_shared_engines(_config):
+            mock_ctx.llm_engine = mock_llm
+            mock_ctx.tts_engine = mock_tts
+            mock_ctx.asr_engine = mock_asr
+            raise RuntimeError("load failed")
+
+        mock_ctx.load_from_config.side_effect = fail_after_shared_engines
+        MockServiceContext.return_value = mock_ctx
+
+        with pytest.raises(RuntimeError, match="load failed"):
+            await ServicePool.init(MagicMock())
+
+        mock_llm.close.assert_awaited_once()
+        mock_tts.close.assert_awaited_once()
+        mock_asr.close.assert_awaited_once()
+        assert mock_ctx.llm_engine is None
+        assert mock_ctx.tts_engine is None
+        assert mock_ctx.asr_engine is None
 
     # ── Per-session service cleanup ─────────────────────────────
 
