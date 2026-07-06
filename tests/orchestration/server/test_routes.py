@@ -237,6 +237,40 @@ class TestRouteHandlersDispatch:
         }, to="sid1")
 
     @pytest.mark.asyncio
+    async def test_on_get_config_lists_project_personas(
+        self, mock_socketio, mock_session_manager
+    ):
+        """config:get should list personas from the project config directory."""
+
+        config = SimpleNamespace(
+            persona="default",
+            services=SimpleNamespace(
+                asr="mock",
+                tts="mock",
+                agent="mock",
+                vad="mock",
+            ),
+            asr=SimpleNamespace(type="mock"),
+            tts=SimpleNamespace(type="mock"),
+            agent=SimpleNamespace(llm_config=SimpleNamespace(type="mock")),
+            vad=SimpleNamespace(type="mock"),
+            system=SimpleNamespace(host="localhost", port=12394, log_level="INFO"),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(config)
+
+        await handlers.on_get_config("sid1", {})
+
+        payload = None
+        for call_args in mock_socketio.emit.call_args_list:
+            if call_args.args[0] == "config:data":
+                payload = call_args.args[1]
+                break
+
+        assert payload is not None
+        assert "default" in payload["available_personas"]
+
+    @pytest.mark.asyncio
     async def test_bilibili_ai_reply_uses_current_service_context_config(
         self, mock_socketio, mock_session_manager
     ):

@@ -2,18 +2,20 @@
 Configuration event handlers — config switching, log level, heartbeat, translation.
 """
 
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from animetta.config.app import AppConfig
-from animetta.config.live2d import Live2DConfig
+from animetta.config.live2d import get_live2d_config
 from animetta.utils.logger_manager import logger_manager
 
 from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
+
+_PERSONAS_DIR = Path(__file__).resolve().parents[5] / "config" / "personas"
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -92,25 +94,15 @@ class ConfigHandlers(BaseSocketHandler):
 
         config = self.global_config or AppConfig.load()
 
-        # Read available personas from filesystem
-        personas_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "config",
-            "personas",
-        )
         available_personas = []
-        if os.path.isdir(personas_dir):
+        if _PERSONAS_DIR.is_dir():
             available_personas = sorted(
-                [
-                    f.replace(".yaml", "")
-                    for f in os.listdir(personas_dir)
-                    if f.endswith(".yaml")
-                ]
+                path.stem for path in _PERSONAS_DIR.glob("*.yaml")
             )
 
         # Read live2d config
         try:
-            live2d_cfg = Live2DConfig.load()
+            live2d_cfg = get_live2d_config()
             live2d_model_path = live2d_cfg.model.path
         except Exception as e:
             logger.warning(f"[ConfigHandlers] Failed to load Live2D config, using fallback: {e}")
