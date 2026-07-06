@@ -62,7 +62,10 @@ The handler already existed, so this was catalog drift, not a new public event.
 `src/animetta`, so helper scripts and integration tests could keep using
 removed event names such as `text_input`, `raw_audio_data`, `sentence`,
 `audio_with_expression`, `expression`, and `transcript` without failing the
-event gate. Those callers no longer matched the catalog-backed runtime events.
+event gate. The same gate also only checked that the frontend constants file
+referenced every catalog entry; it did not reject hard-coded frontend
+`socket.emit(...)` / `socket.on(...)` literals. Those callers no longer matched
+the catalog-backed runtime events.
 
 ### Duplicate tracing bootstrap ownership
 
@@ -241,7 +244,7 @@ unless the response body was also parsed.
 | Replaced inbound route-registration fallback strings with `event_name(...)`. | `src/animetta/orchestration/server/routes.py` |
 | Added `minecraft.command` to the shared JSON catalog and frontend constants. | `config/socket-events.json`, `frontend/src/constants/socket-events.ts` |
 | Added focused tests for configured lookup, missing lookup, and the Minecraft command catalog entry. | `tests/orchestration/test_socket_events.py` |
-| Expanded event validation to cover Python socket listeners and helper/test scripts, then updated stale script and integration-test event names to the catalog-backed `chat:*` / `system:error` names. | `scripts/validate-events.py`, `scripts/bench.py`, `scripts/test_mc_e2e.py`, `tests/smoke/conversation_e2e.py`, `tests/smoke/test_validate_events.py`, `tests/integration/` |
+| Expanded event validation to cover frontend socket literals, Python socket listeners, and helper/test scripts, then updated stale script and integration-test event names to the catalog-backed `chat:*` / `system:error` names. | `scripts/validate-events.py`, `scripts/bench.py`, `scripts/test_mc_e2e.py`, `tests/smoke/conversation_e2e.py`, `tests/smoke/test_validate_events.py`, `tests/integration/` |
 | Delegated tracing bootstrap solely to `create_server()` and added an entrypoint boundary test. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 | Moved stale `animetta.core.config` references to `animetta.config` without reintroducing the deleted namespace. | `src/animetta/__init__.py`, config/service tests |
 | Updated startup docs and stale CLI prompt text to the current entrypoint. | `src/animetta/core/AGENTS.md`, `src/animetta/utils/auto_config.py` |

@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EVENTS_JSON = ROOT / "config" / "socket-events.json"
 TS_FILE = ROOT / "frontend" / "src" / "constants" / "socket-events.ts"
+FRONTEND_SRC_DIR = ROOT / "frontend" / "src"
 SRC_DIR = ROOT / "src" / "animetta"
 PYTHON_EVENT_DIRS = [
     SRC_DIR,
@@ -65,6 +66,39 @@ def validate_ts_file(events: dict[str, str]) -> list[str]:
         ts_ref = f"socketEvents.{module}.{action}.name"
         if ts_ref not in ts_content:
             errors.append(f"TS file missing reference to '{key}' (expected '{ts_ref}')")
+
+    return errors
+
+
+def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
+    """Check frontend socket event literals use event names from the JSON."""
+    if not FRONTEND_SRC_DIR.exists():
+        return []
+
+    event_names = set(events.values())
+    errors = []
+    call_pattern = re.compile(
+        r'\b(?:socket|sock)(?:\.value)?\.(emit|on|off|once)\(\s*["\']([^"\']+)["\']'
+    )
+
+    for source_file in FRONTEND_SRC_DIR.rglob("*"):
+        if source_file.suffix not in {".ts", ".vue"}:
+            continue
+        if source_file.resolve() == TS_FILE.resolve():
+            continue
+        content = source_file.read_text(encoding="utf-8", errors="ignore")
+        for match in call_pattern.finditer(content):
+            operation = match.group(1)
+            event_name = match.group(2)
+            if event_name.startswith("{") or event_name.startswith("$"):
+                continue
+            if event_name in BUILTIN_SOCKET_EVENTS:
+                continue
+            if event_name not in event_names:
+                rel = source_file.relative_to(ROOT).as_posix()
+                errors.append(
+                    f"{rel}: {operation}('{event_name}') not in socket-events.json"
+                )
 
     return errors
 
@@ -149,6 +183,16 @@ def main() -> int:
             print("  [OK] TypeScript file references all events")
     else:
         print("  [SKIP] TypeScript file not found (skipping TS validation)")
+
+    if FRONTEND_SRC_DIR.exists():
+        frontend_errors = validate_frontend_event_literals(events)
+        all_errors.extend(frontend_errors)
+        if frontend_errors:
+            print(f"  [FAIL] {len(frontend_errors)} frontend event mismatches")
+            for err in frontend_errors:
+                print(f"    - {err}")
+        else:
+            print("  [OK] All frontend socket event literals use valid event names")
 
     # 3. Validate Python socket event literals
     if any(path.exists() for path in PYTHON_EVENT_DIRS):
