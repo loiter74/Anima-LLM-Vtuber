@@ -13,6 +13,7 @@ from .chat_handlers import ChatHandlers
 from .config_handlers import ConfigHandlers
 from .lifecycle_handlers import LifecycleHandlers
 from .live2d_handlers import Live2DHandlers
+from .memory_handlers import MemoryHandlers
 from .persona_handlers import PersonaHandlers
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     "ConfigHandlers",
     "LifecycleHandlers",
     "Live2DHandlers",
+    "MemoryHandlers",
     "PersonaHandlers",
 ]

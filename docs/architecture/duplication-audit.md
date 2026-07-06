@@ -146,6 +146,16 @@ engines. The failure path still relied on `ctx.close()` to "close whatever was
 opened", so a partially initialized LLM/TTS/ASR engine could leak if
 `load_from_config()` failed after assigning it to the context.
 
+### Memory/Wiki handler split residue
+
+`routes.py` is documented as a thin facade after the server handler split, but
+`memory:organize` and `memory:list_pages` still kept their V2 memory business
+logic in the facade. Those methods also loaded config directly instead of using
+the shared handler context boundary. At the same boundary, `RouteHandlers`
+copied `global_config` and `user_settings` from `BaseSocketHandler` as plain
+attributes, so backward-compatible direct assignment could diverge from the
+state seen by extracted handlers.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -170,6 +180,7 @@ opened", so a partially initialized LLM/TTS/ASR engine could leak if
 | Fixed enhanced persona prompt loading to use the project `config/personas` directory by default. | `src/animetta/config/persona/enhanced.py`, `tests/config/test_persona.py` |
 | Centralized the Socket.IO entrypoint project root path so user settings, `.env`, logs, and frontend serving resolve from the same project root. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 | Closed partially initialized pooled LLM/TTS/ASR engines when `ServicePool` initialization fails. | `src/animetta/core/service_pool.py`, `tests/core/test_service_pool.py` |
+| Moved Memory/Wiki socket business logic out of the route facade and routed it through the shared handler config/context boundary. | `src/animetta/orchestration/server/routes.py`, `src/animetta/orchestration/server/handlers/base_handler.py`, `src/animetta/orchestration/server/handlers/memory_handlers.py`, `tests/orchestration/server/test_routes.py` |
 
 Behavior preserved:
 
@@ -191,6 +202,8 @@ Behavior preserved:
   `sessdata` fields, now from the parsed runtime config object.
 - Successful service-pool initialization still keeps LLM/TTS/ASR alive for
   sharing; only failed partial initialization now closes those engines.
+- `memory:organize` and `memory:list_pages` keep the same public event behavior,
+  now delegated from `RouteHandlers` to `MemoryHandlers`.
 
 ## Left For Later
 

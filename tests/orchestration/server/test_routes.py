@@ -65,12 +65,44 @@ class TestRouteHandlersInit:
         assert handlers.chat.global_config is config
         assert handlers.persona.global_config is config
 
+    def test_global_config_assignment_updates_shared_base(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Backward-compatible direct assignment updates shared handler state."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        config = MagicMock()
+
+        handlers.global_config = config
+
+        assert handlers.base.global_config is config
+        assert handlers.config_handlers.global_config is config
+
     def test_set_user_settings(self, mock_socketio, mock_session_manager):
         """set_user_settings stores settings reference."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         settings = MagicMock()
         handlers.set_user_settings(settings)
         assert handlers.user_settings is settings
+
+    def test_user_settings_assignment_updates_shared_base(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Backward-compatible direct assignment updates shared user settings."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        settings = MagicMock()
+
+        handlers.user_settings = settings
+
+        assert handlers.base.user_settings is settings
+        assert handlers.config_handlers.user_settings is settings
+
+    def test_memory_events_are_owned_by_memory_handler(
+        self, mock_socketio, mock_session_manager
+    ):
+        """RouteHandlers remains a facade for memory/wiki events."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        assert handlers.memory.global_config is handlers.global_config
 
     def test_setup_live2d_callback_sets_execute_callback(self, mock_socketio, mock_session_manager):
         """_setup_live2d_callback registers an async callback on the Live2D manager."""
@@ -92,6 +124,33 @@ class TestRouteHandlersInit:
             {"type": "chat:sentence", "text": "hello"},
             to="sid1",
         )
+
+    @pytest.mark.asyncio
+    async def test_base_orchestrator_reuses_context_send_callback(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """Context and orchestrator setup should share the same send callback."""
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.base_handler.get_live2d_config",
+            MagicMock(return_value=MagicMock()),
+        )
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_global_config(MagicMock())
+        ctx = MagicMock()
+        orchestrator = MagicMock()
+        mock_session_manager.get_or_create_context = AsyncMock(return_value=ctx)
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(
+            return_value=orchestrator
+        )
+        mock_session_manager.get_or_create_audio_processor = AsyncMock()
+
+        await handlers.base._get_or_create_orchestrator("sid1")
+
+        context_callback = mock_session_manager.get_or_create_context.await_args.args[2]
+        orchestrator_callback = (
+            mock_session_manager.get_or_create_orchestrator.await_args.args[2]
+        )
+        assert context_callback is orchestrator_callback
 
 
 # ── RouteHandlers — Handler dispatch ───────────────────────────────

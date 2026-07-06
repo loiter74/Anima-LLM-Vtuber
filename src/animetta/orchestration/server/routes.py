@@ -8,9 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from animetta.config.app import AppConfig
-
-from ..socket_events import EVENTS, event_name
+from ..socket_events import event_name
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -18,6 +16,7 @@ from .handlers.chat_handlers import ChatHandlers
 from .handlers.config_handlers import ConfigHandlers
 from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
+from .handlers.memory_handlers import MemoryHandlers
 from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
@@ -61,6 +60,7 @@ class RouteHandlers:
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
         self.chat = ChatHandlers(sio, session_manager, self.base)
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
+        self.memory = MemoryHandlers(sio, session_manager, self.base)
         self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
@@ -72,16 +72,48 @@ class RouteHandlers:
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
 
-        # Backward-compat: expose global_config/user_settings from base
-        self.global_config = self.base.global_config
-        self.user_settings = self.base.user_settings
-
         # Wire up Live2D callback
         self.live2d._setup_live2d_callback()
 
     # ── Config setters (backward compat) ──────────────────────────────
 
     # ── Backward-compat properties for internal state moved to handlers ─
+
+    @property
+    def global_config(self):
+        """Backward-compat: shared config now lives on BaseSocketHandler."""
+        return self.base.global_config
+
+    @global_config.setter
+    def global_config(self, value) -> None:
+        self.base.global_config = value
+        for handler in self._domain_handlers():
+            handler.global_config = value
+
+    @property
+    def user_settings(self):
+        """Backward-compat: shared user settings now live on BaseSocketHandler."""
+        return self.base.user_settings
+
+    @user_settings.setter
+    def user_settings(self, value) -> None:
+        self.base.user_settings = value
+        for handler in self._domain_handlers():
+            if hasattr(handler, "user_settings"):
+                handler.user_settings = value
+
+    def _domain_handlers(self) -> list[Any]:
+        return [
+            self.config_handlers,
+            self.bilibili,
+            self.chat,
+            self.live2d,
+            self.memory,
+            self.minecraft,
+            self.persona,
+            self.lifecycle,
+            self.singing,
+        ]
 
     @property
     def _bilibili_service(self):
@@ -105,26 +137,11 @@ class RouteHandlers:
 
     def set_global_config(self, config) -> None:
         """Set global config — delegates to domain handlers."""
-        self.base.set_global_config(config)
-        self.global_config = self.base.global_config
-        for h in [
-            self.config_handlers,
-            self.bilibili,
-            self.chat,
-            self.live2d,
-            self.minecraft,
-            self.persona,
-            self.lifecycle,
-            self.singing,
-        ]:
-            h.global_config = config
+        self.global_config = config
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings — delegates to domain handlers."""
-        self.base.set_user_settings(user_settings)
-        self.user_settings = self.base.user_settings
-        for h in [self.config_handlers, self.persona, self.lifecycle]:
-            h.user_settings = user_settings
+        self.user_settings = user_settings
 
     # ── Shared utility (backward compat) ─────────────────────────────
 
@@ -271,49 +288,10 @@ class RouteHandlers:
     # ── Memory / Wiki (V2 bridge) ────────────────────────────────────
 
     async def on_memory_organize(self, sid: str, data: dict) -> None:
-        """Trigger V2 memory metabolism + compile, emit progress."""
-        try:
-            config = self.global_config or AppConfig.load()
-            ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base.make_send_callback(sid)
-            )
-            mem = getattr(ctx, "memory_system", None)
-            if not mem:
-                await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                    {"status": "error", "message": "Memory system not available"}, to=sid)
-                return
-
-            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
-                {"text": "Running metabolism tick...", "progress": 30}, to=sid)
-            await mem.run_metabolism_tick()
-
-            await self.sio.emit(EVENTS["memory"]["organize_progress"]["name"],
-                {"text": "Compiling RAW → EPISODIC...", "progress": 60}, to=sid)
-
-            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                {"status": "ok", "message": "Memory organized"}, to=sid)
-        except Exception as e:
-            await self.sio.emit(EVENTS["memory"]["organize_result"]["name"],
-                {"status": "error", "message": str(e)}, to=sid)
+        return await self.memory.on_memory_organize(sid, data)
 
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
-        """Return memory atoms as wiki page data for frontend."""
-        try:
-            config = self.global_config or AppConfig.load()
-            ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base.make_send_callback(sid)
-            )
-            mem = getattr(ctx, "memory_system", None)
-            if not mem:
-                logger.warning(f"[wiki_pages] memory_system is None for sid={sid}")
-                return {"pages": [], "error": "Memory system not available"}
-
-            pages = await mem.list_wiki_pages(limit=50)
-            logger.info(f"[wiki_pages] sid={sid} pages={len(pages)}")
-            return {"pages": pages}
-        except Exception as e:
-            logger.exception(f"[wiki_pages] ERROR: {e}")
-            return {"pages": [], "error": str(e)}
+        return await self.memory.on_get_wiki_pages(sid, data)
 
 
 def register_routes(
