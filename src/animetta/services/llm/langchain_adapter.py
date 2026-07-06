@@ -192,10 +192,26 @@ def create_chat_model_from_service(
     if hasattr(llm_service, "_target"):
         llm_service = llm_service._target
 
-    model_name = "unknown"
-    if hasattr(llm_service, "config") and hasattr(llm_service.core.config, "model"):
-        model_name = llm_service.core.config.model
-    elif hasattr(llm_service, "config") and hasattr(llm_service.core.config, "type"):
-        model_name = llm_service.core.config.type
+    model_name = _model_name_from_service(llm_service)
 
     return LLMChatModelAdapter(llm_service=llm_service, model_name=model_name)
+
+
+def _model_name_from_service(llm_service: Any) -> str:
+    config = getattr(llm_service, "config", None)
+    if config is None:
+        core = getattr(llm_service, "core", None)
+        config = getattr(core, "config", None)
+
+    if config is None:
+        return "unknown"
+
+    for attr in ("model", "type"):
+        try:
+            value = getattr(config, attr)
+        except AttributeError:
+            continue
+        if value:
+            return str(value)
+
+    return "unknown"

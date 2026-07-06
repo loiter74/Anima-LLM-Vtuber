@@ -81,6 +81,14 @@ directly. `web_search` had the same kind of external package drift for
 DuckDuckGo fallback, importing `langchain_community.core.tools` instead of the
 current `langchain_community.tools`.
 
+### LLM adapter config shape drift
+
+`create_chat_model_from_service()` checked for the current `llm_service.config`
+attribute but then read model metadata from the legacy `llm_service.core.config`
+shape. Current LLM providers expose their configuration directly, so LangChain
+adapter construction could lose the model name or fail when only the current
+provider shape was present.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -95,6 +103,7 @@ current `langchain_community.tools`.
 | Fixed MCP tool discovery to use the current SDK `ListToolsResult.tools` field and added a regression test. | `src/animetta/tools/mcp_bridge.py`, `tests/tools/test_mcp_bridge.py` |
 | Fixed DuckDuckGo fallback import to the current LangChain Community tools namespace and added a no-network fallback test. | `src/animetta/tools/base.py`, `tests/tools/test_base.py` |
 | Moved stale tools tests from `animetta.core.tools` / `*.core.tools` wrapper expectations to the current `animetta.tools` and flat `ToolManager` shape. | `tests/tools/`, `tests/orchestration/graph/test_tool_manager.py` |
+| Fixed LangChain adapter model-name detection to prefer current provider `.config` metadata while retaining legacy `.core.config` fallback. | `src/animetta/services/llm/langchain_adapter.py`, `tests/services/test_langchain_adapter.py` |
 
 Behavior preserved:
 
@@ -107,6 +116,8 @@ Behavior preserved:
   LangChain tools instead of being silently treated as empty.
 - `web_search` still prefers Tavily when configured and now reaches its
   DuckDuckGo fallback when Tavily is absent.
+- LangChain chat model construction preserves model metadata for current LLM
+  providers and still accepts legacy wrappers exposing `core.config`.
 
 ## Left For Later
 

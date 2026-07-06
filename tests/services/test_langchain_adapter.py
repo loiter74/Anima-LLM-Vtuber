@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from animetta.services.llm import LLMInterface
-
 """Tests for LangChain ChatModel adapter.
 
 Covers ``create_chat_model_from_service`` and ``LLMChatModelAdapter``
@@ -9,12 +5,16 @@ which wrap existing LLMInterface implementations as LangChain's
 ``BaseChatModel`` for tool binding and streaming compatibility.
 """
 
+from __future__ import annotations
+
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatResult
 
+from animetta.services.llm import LLMInterface
 from animetta.services.llm.langchain_adapter import (
     LLMChatModelAdapter,
     create_chat_model_from_service,
@@ -43,10 +43,8 @@ def _make_llm_service_mock():
 
     mock.chat_stream = _stream
 
-    # Give it a config-like object for model name detection
-    mock.core.config = MagicMock()
-    mock.core.config.model = "test-model"
-    mock.core.config.type = "test-type"
+    # Give it the config shape used by current LLM providers.
+    mock.config = SimpleNamespace(model="test-model", type="test-type")
     return mock
 
 
@@ -91,14 +89,11 @@ class TestCreateChatModelFromService:
         """When ``llm_service`` has ``_target``, the adapter uses the inner service's config."""
 
         inner_svc = _make_llm_service_mock()
-        # Simulate TracingProxy wrapper (plain MagicMock is OK here — it is checked
-        # for _target BEFORE Pydantic validation)
+        # Simulate TracingProxy wrapper (plain MagicMock is OK here - it is checked
+        # for _target before Pydantic validation).
         outer = MagicMock(spec=LLMInterface)
         outer._target = inner_svc
-        # Note: after unwrapping, the code reads model_name from the INNER service's config,
-        # which has model="test-model" from _make_llm_service_mock()
-        outer.core.config = MagicMock()
-        outer.core.config.model = "inner-model"
+        outer.config = SimpleNamespace(model="outer-model")
 
         adapter = create_chat_model_from_service(outer)
 
@@ -111,12 +106,21 @@ class TestCreateChatModelFromService:
         mock_svc = MagicMock(spec=LLMInterface)
         mock_svc.close = AsyncMock()
         mock_svc.set_system_prompt = MagicMock()
-        mock_svc.core.config = MagicMock(spec=[])
-        # 'model' not set on config so hasattr returns False
-        mock_svc.core.config.type = "fallback-type"
+        mock_svc.config = SimpleNamespace(type="fallback-type")
 
         adapter = create_chat_model_from_service(mock_svc)
         assert adapter.model_name == "fallback-type"
+
+    def test_supports_legacy_core_config_shape(self):
+        """Legacy service wrappers may still expose model metadata under ``core.config``."""
+
+        mock_svc = MagicMock(spec=LLMInterface)
+        mock_svc.close = AsyncMock()
+        mock_svc.set_system_prompt = MagicMock()
+        mock_svc.core = SimpleNamespace(config=SimpleNamespace(model="legacy-model"))
+
+        adapter = create_chat_model_from_service(mock_svc)
+        assert adapter.model_name == "legacy-model"
 
     def test_default_model_name_when_no_config(self):
         """When service has no ``config``, model_name is ``unknown``."""
@@ -127,7 +131,7 @@ class TestCreateChatModelFromService:
         mock_svc.set_system_prompt = MagicMock()
         # Ensure no config attribute
         if hasattr(mock_svc, "config"):
-            del mock_svc.core.config
+            del mock_svc.config
 
         adapter = create_chat_model_from_service(mock_svc)
         # Should still create the adapter with default model_name
