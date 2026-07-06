@@ -55,7 +55,7 @@ class BaseSocketHandler:
 
     # ── Shared utilities ─────────────────────────────────────────────
 
-    def _make_send_callback(self, sid: str):
+    def make_send_callback(self, sid: str):
         """Create a send callback for the orchestrator."""
 
         async def send_callback(data):
@@ -66,11 +66,15 @@ class BaseSocketHandler:
 
         return send_callback
 
+    def _make_send_callback(self, sid: str):
+        """Deprecated compatibility wrapper for old internal callers."""
+        return self.make_send_callback(sid)
+
     async def _get_or_create_orchestrator(self, sid: str):
         """Get or create LangGraph orchestrator for a session."""
 
         config = self.global_config or AppConfig.load()
-        send_callback = self._make_send_callback(sid)
+        send_callback = self.make_send_callback(sid)
 
         ctx = await self.session_manager.get_or_create_context(
             sid, config, send_callback

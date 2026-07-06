@@ -275,7 +275,7 @@ class RouteHandlers:
         try:
             config = self.global_config or AppConfig.load()
             ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base._make_send_callback(sid)
+                sid, config, self.base.make_send_callback(sid)
             )
             mem = getattr(ctx, "memory_system", None)
             if not mem:
@@ -301,7 +301,7 @@ class RouteHandlers:
         try:
             config = self.global_config or AppConfig.load()
             ctx = await self.session_manager.get_or_create_context(
-                sid, config, self.base._make_send_callback(sid)
+                sid, config, self.base.make_send_callback(sid)
             )
             mem = getattr(ctx, "memory_system", None)
             if not mem:

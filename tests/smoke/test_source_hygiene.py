@@ -57,3 +57,10 @@ def test_server_routes_do_not_call_memory_store_directly() -> None:
     content = routes.read_text(encoding="utf-8")
 
     assert ".store.get_all_active" not in content
+
+
+def test_server_routes_do_not_call_base_private_methods() -> None:
+    routes = SOURCE_ROOT / "orchestration" / "server" / "routes.py"
+    content = routes.read_text(encoding="utf-8")
+
+    assert "base._" not in content

@@ -77,6 +77,22 @@ class TestRouteHandlersInit:
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         assert handlers.live2d_manager._execute_callback is not None
 
+    @pytest.mark.asyncio
+    async def test_base_exposes_public_send_callback(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Routes should use the public callback factory, not private helpers."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        send_callback = handlers.base.make_send_callback("sid1")
+        await send_callback({"type": "chat:sentence", "text": "hello"})
+
+        mock_socketio.emit.assert_called_once_with(
+            "chat:sentence",
+            {"type": "chat:sentence", "text": "hello"},
+            to="sid1",
+        )
+
 
 # ── RouteHandlers — Handler dispatch ───────────────────────────────
 
