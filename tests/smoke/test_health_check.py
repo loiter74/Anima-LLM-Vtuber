@@ -24,6 +24,17 @@ def test_requirement_files_are_ascii_for_windows_pip() -> None:
         data.decode("ascii")
 
 
+def test_dev_requirements_include_socketio_websocket_transport() -> None:
+    requirements = (health_check.ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    requirement_lines = [
+        line.strip()
+        for line in requirements.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    assert any(line.startswith("websocket-client") for line in requirement_lines)
+
+
 def test_build_gates_includes_required_health_domains() -> None:
     gate_ids = {gate.id for gate in build_gates()}
 
