@@ -260,6 +260,14 @@ ASGI app. A route registration or mount regression could therefore pass the
 fast health gate while breaking `/api/stats/overview`, `/api/stats/nodes`,
 `/api/stats/traces`, or trace detail/tree routing in the assembled app.
 
+### Runtime config reload route smoke coverage gap
+
+`WebSocketServer` mounts `POST /api/config/reload`, but the lightweight route
+smoke gate only exercised GET endpoints. The reload implementation already had
+unit coverage for applying reloaded config to active contexts, but the assembled
+HTTP route itself could drift out of the ASGI route table without failing the
+fast health gate.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -297,6 +305,7 @@ fast health gate while breaking `/api/stats/overview`, `/api/stats/nodes`,
 | Covered `/api/stats/inspection/latest` and updated the API reference to the persisted StatsStore report shape. | `tests/orchestration/server/test_stats_api.py`, `docs/reference/backend-api.md` |
 | Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |
 | Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
+| Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
 
 Behavior preserved:
 
@@ -345,6 +354,9 @@ Behavior preserved:
   smoke gate when `prometheus-client` is installed.
 - Stats API behavior is unchanged; overview, nodes, traces, and missing trace
   detail/tree routes are now part of the lightweight route smoke gate.
+- Runtime config reload behavior is unchanged; the no-active-config route
+  response is now part of the lightweight route smoke gate, and successful HTTP
+  reload is asserted to update existing session contexts.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

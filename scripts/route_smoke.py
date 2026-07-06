@@ -13,6 +13,7 @@ from animetta.orchestration.server.websocket import WebSocketServer
 
 @dataclass(frozen=True)
 class ProbeResult:
+    method: str
     path: str
     status_code: int
     ok: bool
@@ -40,23 +41,25 @@ def _make_lightweight_server() -> WebSocketServer:
 def run_smoke_probes() -> list[ProbeResult]:
     server = _make_lightweight_server()
     probes = [
-        ("/metrics", 200),
-        ("/api/stats/overview", 200),
-        ("/api/stats/nodes", 200),
-        ("/api/stats/traces", 200),
-        ("/api/stats/traces/__missing__", 404),
-        ("/api/stats/traces/__missing__/tree", 404),
-        ("/api/singing/recent", 200),
-        ("/api/singing/audio/__missing__.wav", 404),
-        ("/api/singing/subtitle/__missing__.ass", 404),
+        ("GET", "/metrics", 200),
+        ("GET", "/api/stats/overview", 200),
+        ("GET", "/api/stats/nodes", 200),
+        ("GET", "/api/stats/traces", 200),
+        ("GET", "/api/stats/traces/__missing__", 404),
+        ("GET", "/api/stats/traces/__missing__/tree", 404),
+        ("GET", "/api/singing/recent", 200),
+        ("GET", "/api/singing/audio/__missing__.wav", 404),
+        ("GET", "/api/singing/subtitle/__missing__.ass", 404),
+        ("POST", "/api/config/reload", 400),
     ]
     results: list[ProbeResult] = []
 
     with TestClient(server.get_app()) as client:
-        for path, expected_status in probes:
-            response = client.get(path)
+        for method, path, expected_status in probes:
+            response = client.request(method, path)
             results.append(
                 ProbeResult(
+                    method=method,
                     path=path,
                     status_code=response.status_code,
                     expected_status=expected_status,
@@ -74,7 +77,7 @@ def main() -> int:
     for result in results:
         status = "OK" if result.ok else "FAIL"
         print(
-            f"[{status}] {result.path} -> {result.status_code} "
+            f"[{status}] {result.method} {result.path} -> {result.status_code} "
             f"(expected {result.expected_status})"
         )
 

@@ -27,3 +27,14 @@ def test_route_smoke_covers_stats_api_routes() -> None:
         "/api/stats/traces/__missing__",
         "/api/stats/traces/__missing__/tree",
     }.issubset(paths)
+
+
+def test_route_smoke_covers_config_reload_route() -> None:
+    results = run_smoke_probes()
+
+    assert any(
+        result.method == "POST"
+        and result.path == "/api/config/reload"
+        and result.expected_status == 400
+        for result in results
+    )
