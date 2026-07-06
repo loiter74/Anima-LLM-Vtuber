@@ -19,13 +19,13 @@ class TestTranslation:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {"text": "Hello! How are you?", "user_id": "tr", "from_name": "TR"},
         )
         await asyncio.sleep(30)
         await sio.disconnect()
-        subs = ev.get("subtitle.translation", [])
-        errs = ev.get("error", [])
+        subs = ev.get("chat:subtitle_translation", [])
+        errs = ev.get("system:error", [])
         print(f"subtitle_events={len(subs)} errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

@@ -26,7 +26,7 @@ class TestMemorySystem:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {
                 "text": "My name is Alice and I love coffee.",
                 "user_id": "mem_test",
@@ -36,10 +36,10 @@ class TestMemorySystem:
         await asyncio.sleep(30)
         await sio.disconnect()
 
-        errs = events.get("error", [])
+        errs = events.get("system:error", [])
         has_sentence = any(
             isinstance(d, dict) and d.get("text")
-            for d in events.get("sentence", [])
+            for d in events.get("chat:sentence", [])
         )
         print(f"encode_ok={has_sentence} errors={errs}")
         assert "system:connection_established" in events, "connect"
@@ -57,7 +57,7 @@ class TestMemorySystem:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {
                 "text": "What is my name and what do I like to drink?",
                 "user_id": "mem_test",
@@ -69,11 +69,11 @@ class TestMemorySystem:
 
         sentences = [
             d.get("text", "")
-            for d in events.get("sentence", [])
+            for d in events.get("chat:sentence", [])
             if isinstance(d, dict)
         ]
         full = " ".join(sentences)
-        errs = events.get("error", [])
+        errs = events.get("system:error", [])
         print(f"response={full[:200]} errors={errs}")
         assert "system:connection_established" in events, "connect"
         assert not errs, f"errors: {errs}"

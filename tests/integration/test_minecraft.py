@@ -21,7 +21,7 @@ class TestMinecraft:
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await asyncio.sleep(15)
         await sio.disconnect()
-        errs = ev.get("error", [])
+        errs = ev.get("system:error", [])
         print(f"errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

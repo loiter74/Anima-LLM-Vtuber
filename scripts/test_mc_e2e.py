@@ -1,7 +1,7 @@
 """End-to-end test: text input → LLM → mc tool call → bot execution."""
 import asyncio
+
 import socketio
-import sys
 
 SERVER = "http://localhost:12394"
 
@@ -47,9 +47,9 @@ async def main():
     async def on_expression(data):
         log("chat:expression", data)
 
-    @sio.on("transcript")
+    @sio.on("chat:transcript")
     async def on_transcript(data):
-        log("transcript", data)
+        log("chat:transcript", data)
 
     print(f"[1] Connecting to {SERVER} ...")
     await sio.connect(SERVER, transports=["websocket"])
@@ -76,7 +76,7 @@ async def main():
         await sio.disconnect()
         return
 
-    print(f"\n[3] Bot connected! Sending text instruction ...")
+    print("\n[3] Bot connected! Sending text instruction ...")
     # Send a text that should trigger an mc_* tool call
     await sio.emit("chat:text", {"text": "帮我看看周围有什么方块，然后挖1个橡木", "from_name": "测试员"})
 

@@ -19,7 +19,7 @@ class TestLive2D:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {
                 "text": "Say a long sentence so your mouth moves!",
                 "user_id": "v",
@@ -28,11 +28,11 @@ class TestLive2D:
         )
         await asyncio.sleep(30)
         await sio.disconnect()
-        audio = ev.get("audio_with_expression", [])
+        audio = ev.get("chat:audio_with_expression", [])
         visemes = ev.get("viseme", []) or ev.get("live2d.viseme", [])
         has_vol = any(isinstance(a, dict) and a.get("volumes") for a in audio)
         len(visemes) > 0
-        errs = ev.get("error", [])
+        errs = ev.get("system:error", [])
         vcount = len(audio[0].get("volumes", [])) if has_vol and audio else 0
         vc = len(visemes)
         print(

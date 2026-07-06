@@ -265,7 +265,7 @@ class Benchmark:
         async def on_connect():
             print(f"  ✅ Connected")
 
-        @sio.on("sentence")
+        @sio.on("chat:sentence")
         async def on_sentence(data):
             if data.get("is_complete"):
                 responses.append("".join(current_chunks))
@@ -274,12 +274,12 @@ class Benchmark:
             else:
                 current_chunks.append(data.get("text", ""))
 
-        @sio.on("audio_with_expression")
+        @sio.on("chat:audio_with_expression")
         async def on_audio(data):
             if not done.is_set() and not current_chunks:
                 done.set()  # audio-only response
 
-        @sio.on("error")
+        @sio.on("system:error")
         async def on_error(data):
             print(f"  ❌ Server error: {data}")
             done.set()
@@ -297,7 +297,7 @@ class Benchmark:
             done.clear()
             current_chunks.clear()
             start = time.perf_counter()
-            await sio.emit("text_input", {"text": text, "user_id": "bench", "from_name": "Bench"})
+            await sio.emit("chat:text", {"text": text, "user_id": "bench", "from_name": "Bench"})
             try:
                 await asyncio.wait_for(done.wait(), timeout=120)
                 elapsed = (time.perf_counter() - start) * 1000

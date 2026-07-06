@@ -19,7 +19,7 @@ class TestTools:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {
                 "text": "What is 123+456? Use calculator.",
                 "user_id": "c",
@@ -30,10 +30,10 @@ class TestTools:
         await sio.disconnect()
         txt = " ".join(
             d.get("text", "")
-            for d in ev.get("sentence", [])
+            for d in ev.get("chat:sentence", [])
             if isinstance(d, dict)
         )
-        errs = ev.get("error", [])
+        errs = ev.get("system:error", [])
         print(f"response={txt[:200]} errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"
@@ -48,7 +48,7 @@ class TestTools:
 
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit(
-            "text_input",
+            "chat:text",
             {
                 "text": "What time is it? Use get_current_time.",
                 "user_id": "t",
@@ -59,10 +59,10 @@ class TestTools:
         await sio.disconnect()
         txt = " ".join(
             d.get("text", "")
-            for d in ev.get("sentence", [])
+            for d in ev.get("chat:sentence", [])
             if isinstance(d, dict)
         )
-        errs = ev.get("error", [])
+        errs = ev.get("system:error", [])
         print(f"response={txt[:200]} errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

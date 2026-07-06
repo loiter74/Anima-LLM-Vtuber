@@ -74,7 +74,7 @@ async def main():
         print(f"[FATAL] Connection error: {data}")
         sys.exit(1)
 
-    @sio.on("sentence")
+    @sio.on("chat:sentence")
     async def _sentence(data):
         stats["sentences"] += 1
         text = data.get("text", "")
@@ -82,14 +82,14 @@ async def main():
         if data.get("is_complete"):
             complete.set()
 
-    @sio.on("audio_with_expression")
+    @sio.on("chat:audio_with_expression")
     def _audio(data):
         stats["audio"] += 1
-        expr = data.get("expression", "?")
+        expr = data.get("chat:expression", "?")
         size = len(data.get("audio", b""))
         print(f"  [TTS] expr={expr} size={size}B")
 
-    @sio.on("expression")
+    @sio.on("chat:expression")
     def _expr(data):
         stats["expressions"] += 1
 
@@ -108,7 +108,7 @@ async def main():
     for i, msg in enumerate(messages, 1):
         complete.clear()
         print(f"\n[{i}/{args.rounds}] >>> {msg}")
-        await sio.emit("text_input", {"text": msg})
+        await sio.emit("chat:text", {"text": msg})
 
         try:
             await asyncio.wait_for(complete.wait(), timeout=args.timeout)

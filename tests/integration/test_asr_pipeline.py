@@ -14,10 +14,10 @@ class TestASR:
         @sio.on("*")
         async def _(e, d=None): ev.setdefault(e, []).append(d)
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
-        await sio.emit("raw_audio_data", {"audio": [], "sample_rate": 16000})
+        await sio.emit("chat:audio", {"audio": [], "sample_rate": 16000})
         await asyncio.sleep(10)
         await sio.disconnect()
-        errs = ev.get("error",[])
+        errs = ev.get("system:error",[])
         print(f"events={sorted(ev.keys())} errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

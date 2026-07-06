@@ -14,12 +14,12 @@ class TestEmotion:
         @sio.on("*")
         async def _(e, d=None): ev.setdefault(e, []).append(d)
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
-        await sio.emit("text_input", {"text": "I am so happy today!", "user_id": "e", "from_name": "E"})
+        await sio.emit("chat:text", {"text": "I am so happy today!", "user_id": "e", "from_name": "E"})
         await asyncio.sleep(30)
         await sio.disconnect()
         expr = ev.get("chat:expression",[])
         mot = ev.get("chat:live2d_action",[])
-        errs = ev.get("error",[])
+        errs = ev.get("system:error",[])
         em = expr[0].get("emotion","") if expr else ""
         mi = mot[0].get("index",-1) if mot else -1
         print(f"emotion={em} motion={mi} errors={errs}")

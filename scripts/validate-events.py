@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parent.parent
 EVENTS_JSON = ROOT / "config" / "socket-events.json"
 TS_FILE = ROOT / "frontend" / "src" / "constants" / "socket-events.ts"
 SRC_DIR = ROOT / "src" / "animetta"
+PYTHON_EVENT_DIRS = [
+    SRC_DIR,
+    ROOT / "scripts",
+    ROOT / "tests",
+]
+BUILTIN_SOCKET_EVENTS = {"*", "connect", "disconnect", "connect_error", "error"}
 
 
 def load_events() -> dict[str, str]:
@@ -64,28 +70,51 @@ def validate_ts_file(events: dict[str, str]) -> list[str]:
 
 
 def validate_python_emits(events: dict[str, str]) -> list[str]:
-    """Check that Python emit calls use event names from the JSON."""
+    """Check that Python socket event literals use event names from the JSON."""
     event_names = set(events.values())
     errors = []
 
-    # Pattern: sio.emit("event_name", ...) or await sio.emit("event_name", ...)
-    emit_pattern = re.compile(r'(?:await\s+)?sio\.emit\(\s*["\']([^"\']+)["\']')
+    # Patterns:
+    #   sio.emit("event_name", ...)
+    #   client.on("event_name", ...)
+    #   @sio.on("event_name")
+    call_pattern = re.compile(
+        r'(?:await\s+)?(?:sio|socket|client)\.(emit|on|off|once)\(\s*["\']([^"\']+)["\']'
+    )
+    decorator_pattern = re.compile(
+        r'@(?:sio|socket|client)\.on\(\s*["\']([^"\']+)["\']'
+    )
 
-    for py_file in SRC_DIR.rglob("*.py"):
-        content = py_file.read_text(encoding="utf-8", errors="ignore")
-        for match in emit_pattern.finditer(content):
-            event_name = match.group(1)
-            # Skip dynamic event names (variables, f-strings)
-            if event_name.startswith("{") or event_name.startswith("$"):
+    for event_dir in PYTHON_EVENT_DIRS:
+        if not event_dir.exists():
+            continue
+        for py_file in event_dir.rglob("*.py"):
+            if py_file.resolve() == Path(__file__).resolve():
                 continue
-            # Skip config-loaded events (e.g. events["chat"]["text"]["name"])
-            if "events[" in event_name:
-                continue
-            if event_name not in event_names:
-                rel = py_file.relative_to(ROOT)
-                errors.append(
-                    f"{rel}: emit('{event_name}') not in socket-events.json"
-                )
+            content = py_file.read_text(encoding="utf-8", errors="ignore")
+            for match in call_pattern.finditer(content):
+                operation = match.group(1)
+                event_name = match.group(2)
+                if event_name.startswith("{") or event_name.startswith("$"):
+                    continue
+                if event_name in BUILTIN_SOCKET_EVENTS:
+                    continue
+                if event_name not in event_names:
+                    rel = py_file.relative_to(ROOT).as_posix()
+                    errors.append(
+                        f"{rel}: {operation}('{event_name}') not in socket-events.json"
+                    )
+            for match in decorator_pattern.finditer(content):
+                event_name = match.group(1)
+                if event_name.startswith("{") or event_name.startswith("$"):
+                    continue
+                if event_name in BUILTIN_SOCKET_EVENTS:
+                    continue
+                if event_name not in event_names:
+                    rel = py_file.relative_to(ROOT).as_posix()
+                    errors.append(
+                        f"{rel}: on('{event_name}') not in socket-events.json"
+                    )
 
     return errors
 
@@ -121,16 +150,16 @@ def main() -> int:
     else:
         print("  [SKIP] TypeScript file not found (skipping TS validation)")
 
-    # 3. Validate Python emits
-    if SRC_DIR.exists():
+    # 3. Validate Python socket event literals
+    if any(path.exists() for path in PYTHON_EVENT_DIRS):
         py_errors = validate_python_emits(events)
         all_errors.extend(py_errors)
         if py_errors:
-            print(f"  [FAIL] {len(py_errors)} Python emit mismatches")
+            print(f"  [FAIL] {len(py_errors)} Python event mismatches")
             for err in py_errors:
                 print(f"    - {err}")
         else:
-            print("  [OK] All Python emit calls use valid event names")
+            print("  [OK] All Python socket event literals use valid event names")
 
     if all_errors:
         print(f"\nFAILED: {len(all_errors)} validation errors")
