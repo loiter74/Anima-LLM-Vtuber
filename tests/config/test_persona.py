@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from animetta.config.persona import PersonaConfig
+from animetta.config.persona import EnhancedPersonaBuilder, PersonaConfig
 from animetta.config.persona.base import BehaviorRules, PersonalityTraits
 
 """Tests for PersonaConfig (config/persona/base.py)"""
@@ -473,6 +473,20 @@ class TestLoad:
         call_path = mock_from_yaml.call_args[0][0]
         assert "config" in call_path
         assert "personas" in call_path
+
+
+class TestEnhancedPersonaBuilder:
+    """Tests for EnhancedPersonaBuilder persona loading."""
+
+    def test_from_yaml_uses_project_personas_dir_by_default(self):
+        """from_yaml(name) should load personas from the project config directory."""
+
+        builder = EnhancedPersonaBuilder.from_yaml("default")
+
+        assert builder.persona_path.name == "default.yaml"
+        assert builder.persona_path.parent.name == "personas"
+        assert builder.persona_path.parent.parent.name == "config"
+        assert builder.persona_data["name"]
 
 
 class TestAnimaV01Persona:

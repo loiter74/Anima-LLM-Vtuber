@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+_DEFAULT_PERSONAS_DIR = Path(__file__).resolve().parents[4] / "config" / "personas"
+
 
 class EnhancedPersonaBuilder:
     """
@@ -446,10 +448,7 @@ class EnhancedPersonaBuilder:
         Returns:
             EnhancedPersonaBuilder: Persona builder instance
         """
-        if personas_dir is None:
-            personas_path = Path(__file__).parent.parent.parent.parent / "config" / "personas"
-        else:
-            personas_path = Path(personas_dir)
+        personas_path = _DEFAULT_PERSONAS_DIR if personas_dir is None else Path(personas_dir)
 
         persona_path = personas_path / f"{persona_name}.yaml"
 

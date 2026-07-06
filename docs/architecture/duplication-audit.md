@@ -122,7 +122,9 @@ importing them, and Bilibili/persona handlers still reached through removed
 The config response path also drifted after the split: `config:get` read
 personas from `src/animetta/config/personas` instead of the project
 `config/personas` directory and called the removed `Live2DConfig.load()`
-entrypoint instead of the current `get_live2d_config()`.
+entrypoint instead of the current `get_live2d_config()`. The enhanced persona
+builder had the same root-directory drift and resolved default personas under
+`src/config/personas`.
 
 ### Duplicate Bilibili configuration entrypoint
 
@@ -153,6 +155,7 @@ runtime config object from controlling Bilibili auto-start.
 | Fixed split server handlers that still relied on missing imports or removed `.core.config` wrappers in Bilibili, translation, and persona event paths. | `src/animetta/orchestration/server/handlers/bilibili_handlers.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Routed Bilibili auto-start through the active `AppConfig.bilibili` object instead of re-reading YAML from `WebSocketServer`. | `src/animetta/orchestration/server/websocket.py`, `tests/orchestration/server/test_websocket.py` |
 | Fixed `config:get` to list personas from the project config directory and to load Live2D settings through the current `get_live2d_config()` entrypoint. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Fixed enhanced persona prompt loading to use the project `config/personas` directory by default. | `src/animetta/config/persona/enhanced.py`, `tests/config/test_persona.py` |
 
 Behavior preserved:
 
