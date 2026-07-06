@@ -303,6 +303,14 @@ function only finalized the local streaming message and never emitted
 `chat:interrupt`, so the visible UI stopped while backend generation/audio could
 continue.
 
+### Memory organize refresh no-op
+
+`useChat.organizeMemory()` emitted `memory:organize` and then listened for
+`memory:organize_result`, but its intended wiki refresh sent a bare
+`memory:list_pages` event without the callback required by the frontend memory
+store. The backend returned pages through the Socket.IO ack path, so the
+post-organize refresh never updated `wikiPages`.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -345,6 +353,7 @@ continue.
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
+| Routed memory organize completion through the frontend memory store refresh instead of a no-op `memory:list_pages` emit. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
 
 Behavior preserved:
 
@@ -405,6 +414,9 @@ Behavior preserved:
   failures now update visible frontend state instead of leaving stale state.
 - Chat interrupt UI behavior still finalizes the local message immediately,
   and now also notifies the backend interrupt handler.
+- Memory organize still emits the same backend event and clears the organizing
+  state on completion; the wiki list now refreshes through the memory store ack
+  path.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

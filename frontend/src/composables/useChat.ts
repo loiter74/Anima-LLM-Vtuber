@@ -1,11 +1,13 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import { useMemoryStore } from '@/stores/memory'
 import type { LlmChunk, Transcript } from '@/types/chat'
 import { getSocket } from './useSocket'
 import { Events } from '@/constants/socket-events'
 
 export function useChat() {
   const store = useChatStore()
+  const memoryStore = useMemoryStore()
 
   // Store callback refs so onUnmounted removes ONLY our callbacks
   let _onSentence: ((data: { text: string; seq: number }) => void) | null = null
@@ -109,11 +111,11 @@ export function useChat() {
     socket.emit(Events.MEMORY.ORGANIZE, {})
 
     // Listen for result to reset state and refresh memory list
-    const onResult = (_data: any) => {
+    const onResult = async (_data: unknown) => {
       console.log('[useChat] memory.organize.result received, refreshing wiki pages')
       store.memoryOrganizing = false
       socket.off(Events.MEMORY.ORGANIZE_RESULT, onResult)
-      socket.emit(Events.MEMORY.LIST_PAGES, { session_id: 'default' })
+      await memoryStore.fetchWikiPages('default')
     }
     socket.on(Events.MEMORY.ORGANIZE_RESULT, onResult)
   }

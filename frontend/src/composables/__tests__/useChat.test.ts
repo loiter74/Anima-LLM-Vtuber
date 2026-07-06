@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChat } from '@/composables/useChat'
 import { Events } from '@/constants/socket-events'
+import { useMemoryStore } from '@/stores/memory'
 
 const socket = {
   on: vi.fn(),
@@ -41,5 +42,27 @@ describe('useChat', () => {
 
     expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.INTERRUPT, {})
     expect(store.lastMessage?.status).toBe('complete')
+  })
+
+  it('refreshes wiki pages when memory organize completes', async () => {
+    const memoryStore = useMemoryStore()
+    const fetchWikiPages = vi.spyOn(memoryStore, 'fetchWikiPages').mockResolvedValue()
+    const { store, organizeMemory } = useChat()
+
+    await organizeMemory()
+
+    expect(store.memoryOrganizing).toBe(true)
+    expect(socket.emit).toHaveBeenCalledWith(Events.MEMORY.ORGANIZE, {})
+
+    const onResult = socket.on.mock.calls.find(
+      ([event]) => event === Events.MEMORY.ORGANIZE_RESULT,
+    )?.[1]
+    expect(onResult).toBeTypeOf('function')
+
+    await onResult({ status: 'ok' })
+
+    expect(store.memoryOrganizing).toBe(false)
+    expect(socket.off).toHaveBeenCalledWith(Events.MEMORY.ORGANIZE_RESULT, onResult)
+    expect(fetchWikiPages).toHaveBeenCalledWith('default')
   })
 })
