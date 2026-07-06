@@ -7,8 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from animetta.inspection.checks.pipeline import EXPECTED_EVENTS, check_conversation_pipeline
+from animetta.inspection.checks.pipeline import (
+    EXPECTED_EVENTS,
+    PROBE_INPUT_EVENT,
+    PROHIBITED_PROBE_EVENTS,
+    check_conversation_pipeline,
+)
 from animetta.inspection.models import CheckResult
+from animetta.orchestration.socket_events import EVENTS
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -48,11 +54,11 @@ def _create_mock_client(
 
 
 class TestSuccessfulPipeline:
-    """Happy path: all expected events received."""
+    """Happy path: the backend receives and contains an inspection probe."""
 
     @pytest.mark.asyncio
     async def test_all_expected_events_received(self):
-        """Pipeline smoke test passes when all EXPECTED_EVENTS arrive."""
+        """Pipeline smoke test passes when all required probe events arrive."""
         wildcard_handler: list = [None]
 
         mock_client = _create_mock_client(
@@ -89,12 +95,13 @@ class TestSuccessfulPipeline:
         )
         assert result.detail.get("missing") == []
 
-        # Verify the test message was emitted
+        # Verify the test probe was emitted and remains flagged as a probe.
         mock_client.emit.assert_called_once()
         call_args = mock_client.emit.call_args
-        assert call_args[0][0] == "chat:text"
+        assert call_args[0][0] == PROBE_INPUT_EVENT
         assert call_args[0][1]["text"] == "[inspection] ping"
         assert call_args[0][1]["mode"] == "text"
+        assert call_args[0][1]["is_inspection"] is True
 
     @pytest.mark.asyncio
     async def test_extra_events_do_not_break_success(self):
@@ -110,8 +117,8 @@ class TestSuccessfulPipeline:
         async def _mock_sleep(duration: float) -> None:
             handler = wildcard_handler[0]
             if handler is not None:
-                # Send expected events plus extras
-                for event_name in ["control", *sorted(EXPECTED_EVENTS), "live2d.action"]:
+                # Send expected events plus non-output extras
+                for event_name in ["chat:control", *sorted(EXPECTED_EVENTS), "desktop:registered"]:
                     await handler(event_name, {})
             await original_sleep(0)
 
@@ -176,7 +183,7 @@ class TestConnectionTimeout:
 
 
 class TestMissingEvents:
-    """Partial pipeline: some expected events not received."""
+    """Probe connectivity failures are reported with diagnostics."""
 
     @pytest.mark.asyncio
     async def test_missing_events_returns_failed(self):
@@ -192,8 +199,8 @@ class TestMissingEvents:
         async def _mock_sleep(duration: float) -> None:
             handler = wildcard_handler[0]
             if handler is not None:
-                # Only send expression — audio_with_expression and sentence are missing
-                await handler("expression", {})
+                # Only send an unrelated event — the required connection event is missing.
+                await handler("chat:control", {})
             await original_sleep(0)
 
         with (
@@ -213,10 +220,8 @@ class TestMissingEvents:
         missing = set(result.detail.get("missing", []))
         received = set(result.detail.get("received", []))
 
-        # Verify only expression was received, others are missing
-        assert "expression" in received
-        assert "audio_with_expression" in missing
-        assert "sentence" in missing
+        assert "chat:control" in received
+        assert EVENTS["system"]["connection_established"]["name"] in missing
 
     @pytest.mark.asyncio
     async def test_no_events_received(self):
@@ -245,6 +250,38 @@ class TestMissingEvents:
         assert result.ok is False
         assert len(result.detail.get("received", [])) == 0
         assert len(result.detail.get("missing", [])) == len(EXPECTED_EVENTS)
+
+    @pytest.mark.asyncio
+    async def test_probe_output_events_fail_as_leakage(self):
+        """Probe check fails if filtered inspection traffic reaches output events."""
+        wildcard_handler: list = [None]
+
+        mock_client = _create_mock_client(
+            wildcard_handler_container=wildcard_handler,
+        )
+
+        original_sleep = asyncio.sleep
+
+        async def _mock_sleep(duration: float) -> None:
+            handler = wildcard_handler[0]
+            if handler is not None:
+                for event_name in sorted(EXPECTED_EVENTS):
+                    await handler(event_name, {})
+                await handler(EVENTS["chat"]["sentence"]["name"], {})
+            await original_sleep(0)
+
+        with (
+            patch(
+                "animetta.inspection.checks.pipeline.socketio.AsyncClient",
+                return_value=mock_client,
+            ),
+            patch("animetta.inspection.checks.pipeline.asyncio.sleep", _mock_sleep),
+        ):
+            result = await check_conversation_pipeline()
+
+        assert result.ok is False
+        assert "leaked" in result.error.lower()
+        assert EVENTS["chat"]["sentence"]["name"] in result.detail["leaked"]
 
 
 class TestExceptionDuringConnection:
@@ -303,27 +340,29 @@ class TestExceptionDuringConnection:
 
 
 class TestEventNames:
-    """Verify that EXPECTED_EVENTS match actual codebase emits."""
+    """Verify that probe event sets match the shared event catalog."""
 
-    def test_expected_events_are_from_codebase(self):
-        """EXPECTED_EVENTS must contain only verified event names.
-
-        These names are verified against actual Socket.IO emit() calls
-        in the orchestration graph nodes (output_node.py, asr_node.py).
-        """
+    def test_expected_events_are_from_event_catalog(self):
+        """EXPECTED_EVENTS must contain catalog-backed probe events."""
         # Must be a frozenset (immutable, hashable)
         assert isinstance(EXPECTED_EVENTS, frozenset)
+        assert frozenset({
+            EVENTS["system"]["connection_established"]["name"],
+        }) == EXPECTED_EVENTS
 
-        # All three core pipeline events must be present
-        assert "expression" in EXPECTED_EVENTS
-        assert "audio_with_expression" in EXPECTED_EVENTS
-        assert "sentence" in EXPECTED_EVENTS
+    def test_probe_input_event_is_from_event_catalog(self):
+        """The emitted probe input event must come from the shared catalog."""
+        assert EVENTS["chat"]["text"]["name"] == PROBE_INPUT_EVENT
 
-        # Must match the expected count (currently 3)
-        assert len(EXPECTED_EVENTS) == 3, (
-            f"EXPECTED_EVENTS has {len(EXPECTED_EVENTS)} entries; "
-            f"verify against codebase emit() calls before changing"
-        )
+    def test_probe_output_events_are_from_event_catalog(self):
+        """Output events are forbidden for the filtered inspection probe."""
+
+        assert isinstance(PROHIBITED_PROBE_EVENTS, frozenset)
+        assert frozenset({
+            EVENTS["chat"]["sentence"]["name"],
+            EVENTS["chat"]["expression"]["name"],
+            EVENTS["chat"]["audio_with_expression"]["name"],
+        }) == PROHIBITED_PROBE_EVENTS
 
 
 class TestCheckResultShape:
@@ -343,7 +382,7 @@ class TestCheckResultShape:
         async def _mock_sleep(duration: float) -> None:
             handler = wildcard_handler[0]
             if handler is not None:
-                await handler("expression", {})
+                await handler("chat:control", {})
             await original_sleep(0)
 
         with (
@@ -359,14 +398,16 @@ class TestCheckResultShape:
         detail = result.detail
         assert "received" in detail
         assert "missing" in detail
+        assert "leaked" in detail
         assert isinstance(detail["received"], list)
         assert isinstance(detail["missing"], list)
-        assert "expression" in detail["received"]
-        assert "audio_with_expression" in detail["missing"]
+        assert isinstance(detail["leaked"], list)
+        assert "chat:control" in detail["received"]
+        assert EVENTS["system"]["connection_established"]["name"] in detail["missing"]
 
     @pytest.mark.asyncio
     async def test_passed_result_has_empty_missing(self):
-        """Passed results have empty 'missing' list."""
+        """Passed results have empty 'missing' and 'leaked' lists."""
         wildcard_handler: list = [None]
 
         mock_client = _create_mock_client(
@@ -393,4 +434,5 @@ class TestCheckResultShape:
 
         assert result.ok is True
         assert result.detail.get("missing") == []
+        assert result.detail.get("leaked") == []
         assert len(result.detail.get("received", [])) >= len(EXPECTED_EVENTS)

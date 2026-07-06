@@ -1,9 +1,10 @@
 """Data consistency checks — StatsStore, Chroma, log files.
 
 Probes:
+  - stats_store_responds() — verify StatsStore SQLite reachability
   - has_trace_in_last(minutes) — query traces table for recent activity
   - chroma_responds() — check ChromaDB reachability
-  - log_file_stale(minutes) — verify log file freshness
+  - log_file_stale(minutes) — verify server log file freshness
   - check_data_consistency() — aggregate all probes into CheckResult
 """
 
@@ -20,6 +21,26 @@ from ..models import CheckResult
 
 # Project root relative to this file: 5 levels up
 _PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+
+async def stats_store_responds() -> bool:
+    """Check if StatsStore is reachable with a lightweight SQLite query.
+
+    Returns:
+        True if the StatsStore connection is initialized and can answer a
+        simple read query.
+    """
+    try:
+        store = await get_stats_store()
+        if store._db is None:
+            logger.warning("[consistency] StatsStore database not initialized")
+            return False
+        cursor = await store._db.execute("SELECT 1")
+        row = await cursor.fetchone()
+        return row is not None and row[0] == 1
+    except Exception as e:
+        logger.error(f"[consistency] stats_store_responds failed: {e}")
+        return False
 
 
 async def has_trace_in_last(minutes: int) -> bool:
@@ -76,7 +97,7 @@ async def chroma_responds() -> bool:
 def log_file_stale(minutes: int) -> bool:
     """Check if the log file is stale (missing or older than N minutes).
 
-    Uses the same log path as the main server: <project_root>/logs/anima.log.
+    Uses the same log path as the main server: <project_root>/logs/animetta.log.
 
     Args:
         minutes: Maximum allowed age in minutes.
@@ -85,7 +106,7 @@ def log_file_stale(minutes: int) -> bool:
         True if the log file is missing or its mtime exceeds the threshold.
     """
     try:
-        log_path = _PROJECT_ROOT / "logs" / "anima.log"
+        log_path = _PROJECT_ROOT / "logs" / "animetta.log"
         if not log_path.exists():
             logger.warning(f"[consistency] Log file missing: {log_path}")
             return True
@@ -106,9 +127,10 @@ async def check_data_consistency() -> CheckResult:
     """Run all data consistency probes and return a CheckResult.
 
     Probes:
-      1. Recent traces in StatsStore (last 60 minutes)
-      2. ChromaDB reachability
-      3. Log file freshness (last 60 minutes)
+      1. StatsStore SQLite reachability
+      2. Recent traces in StatsStore (diagnostic only)
+      3. ChromaDB reachability
+      4. Log file freshness (last 60 minutes)
 
     Returns:
         CheckResult.passed if all probes healthy, CheckResult.failed with
@@ -118,19 +140,23 @@ async def check_data_consistency() -> CheckResult:
     issues: list[str] = []
     detail: dict[str, object] = {}
 
-    # ── Probe 1: StatsStore recent traces ──
-    has_traces = await has_trace_in_last(minutes=60)
-    detail["stats_has_recent_trace"] = has_traces
-    if not has_traces:
-        issues.append("stats_no_recent_trace")
+    # ── Probe 1: StatsStore reachability ──
+    stats_ok = await stats_store_responds()
+    detail["stats_store_ok"] = stats_ok
+    if not stats_ok:
+        issues.append("stats_store_unreachable")
 
-    # ── Probe 2: ChromaDB reachability ──
+    # ── Probe 2: StatsStore recent traces (diagnostic only) ──
+    has_traces = await has_trace_in_last(minutes=60) if stats_ok else False
+    detail["stats_has_recent_trace"] = has_traces
+
+    # ── Probe 3: ChromaDB reachability ──
     chroma_ok = await chroma_responds()
     detail["chroma_ok"] = chroma_ok
     if not chroma_ok:
         issues.append("chroma_unreachable")
 
-    # ── Probe 3: Log file freshness ──
+    # ── Probe 4: Log file freshness ──
     stale = log_file_stale(minutes=60)
     detail["log_file_stale"] = stale
     if stale:

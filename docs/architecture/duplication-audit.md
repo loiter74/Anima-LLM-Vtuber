@@ -170,6 +170,18 @@ Persona loading, enhanced persona prompt loading, `config:get`, and
 listing logic. That made the persona catalog boundary drift-prone and left
 server handlers responsible for filesystem details already owned by config.
 
+### Inspection check drift from runtime boundaries
+
+The scheduled conversation inspection still expected legacy bare output events
+(`sentence`, `expression`, `audio_with_expression`) while current Socket.IO
+events are catalog-backed (`chat:*`). The same check also sent
+`is_inspection=True`, which the current ingress filter correctly drops before
+LLM dispatch, so expecting LLM/TTS output was impossible. Separately,
+`data_consistency` checked `logs/anima.log` after the runtime entrypoint moved
+file logging to `logs/animetta.log` and treated the absence of recent user
+conversation traces as a consistency failure, even when the idle StatsStore was
+reachable.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -197,6 +209,7 @@ server handlers responsible for filesystem details already owned by config.
 | Moved Memory/Wiki socket business logic out of the route facade and routed it through the shared handler config/context boundary. | `src/animetta/orchestration/server/routes.py`, `src/animetta/orchestration/server/handlers/base_handler.py`, `src/animetta/orchestration/server/handlers/memory_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Routed `config:get` through the shared handler `get_active_config()` fallback instead of a second direct `AppConfig.load()` call. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
+| Re-aligned inspection checks with the current probe filter, Socket.IO event catalog, runtime log filename, and idle-safe StatsStore reachability semantics. | `src/animetta/inspection/checks/pipeline.py`, `src/animetta/inspection/checks/consistency.py`, `tests/inspection/test_pipeline.py`, `tests/inspection/test_consistency.py` |
 
 Behavior preserved:
 
@@ -224,6 +237,12 @@ Behavior preserved:
   server-handler config fallback.
 - Persona loading and persona listing still read the same project
   `config/personas/*.yaml` catalog; `persona:list` keeps its `default` fallback.
+- Inspection probes still avoid dispatching internal pings to the LLM; the
+  conversation check now verifies connection/probe containment instead of
+  expecting output events from a filtered probe.
+- Data consistency still checks StatsStore, Chroma, and log freshness; recent
+  user traces are now diagnostic only, so an otherwise healthy idle service does
+  not fail inspection.
 
 ## Left For Later
 
