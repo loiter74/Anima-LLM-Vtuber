@@ -268,6 +268,15 @@ unit coverage for applying reloaded config to active contexts, but the assembled
 HTTP route itself could drift out of the ASGI route table without failing the
 fast health gate.
 
+### Duplicate frontend model-status payload shape
+
+The backend `ModelLoadingManager` emits `system:model_status` with
+`{service, name, status, error?}`, and the active frontend store consumes that
+shape through `frontend/src/types/model-loading.ts`. The socket event constants
+file still exposed an unused `SystemModelStatusPayload` with the older
+`{model_name, status, progress}` shape, leaving two incompatible TypeScript
+contracts for the same event.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -306,6 +315,7 @@ fast health gate.
 | Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |
 | Added stats API paths to lightweight ASGI route smoke and tightened route registration assertions for dynamic trace/detail routes. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_stats_api.py` |
 | Added method-aware route smoke coverage for `POST /api/config/reload` and asserted that successful HTTP reload applies the reloaded config to existing contexts. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py`, `tests/orchestration/server/test_config_reload_api.py` |
+| Removed the unused stale frontend `SystemModelStatusPayload` shape so `system:model_status` has one active frontend contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts` |
 
 Behavior preserved:
 
@@ -357,6 +367,8 @@ Behavior preserved:
 - Runtime config reload behavior is unchanged; the no-active-config route
   response is now part of the lightweight route smoke gate, and successful HTTP
   reload is asserted to update existing session contexts.
+- `system:model_status` behavior is unchanged; the frontend now keeps only the
+  active `{service, name, status, error?}` payload type used by the store.
 - Inspection probes still avoid dispatching internal pings to the LLM; the
   conversation check now verifies connection/probe containment instead of
   expecting output events from a filtered probe.

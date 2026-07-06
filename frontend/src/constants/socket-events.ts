@@ -206,12 +206,6 @@ export interface MinecraftStatusPayload {
   error?: string
 }
 
-export interface SystemModelStatusPayload {
-  model_name: string
-  status: string
-  progress: number
-}
-
 export interface SystemErrorPayload {
   type: string
   message: string
