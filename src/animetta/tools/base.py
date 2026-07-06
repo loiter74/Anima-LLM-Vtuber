@@ -46,7 +46,7 @@ async def web_search(query: str, num_results: int = 5) -> str:
 
     # DuckDuckGo fallback
     try:
-        from langchain_community.core.tools import DuckDuckGoSearchRun
+        from langchain_community.tools import DuckDuckGoSearchRun
         search = DuckDuckGoSearchRun()
         import asyncio
         loop = asyncio.get_event_loop()

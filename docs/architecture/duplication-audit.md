@@ -2,8 +2,9 @@
 
 Date: 2026-07-06
 
-Scope: Phase 1 boundary cleanup. This pass only documents duplicated or drifting
-architecture boundaries and fixes low-risk event-catalog, startup, and config
+Scope: Boundary cleanup across the first architecture pass and follow-up tool
+chain verification. This pass documents duplicated or drifting architecture
+boundaries and fixes low-risk event-catalog, startup, config namespace, and tool
 namespace drift. It does not rewrite LangGraph, memory, provider registration,
 or frontend behavior.
 
@@ -70,6 +71,16 @@ lazy exports and several tests still referenced the removed
 `animetta.core.config` namespace. The old directory no longer exists, so those
 references were stale migration residue rather than a compatibility layer.
 
+### Removed tools namespace and external package drift
+
+The current tools package lives at `src/animetta/tools/`, but several tool and
+ToolManager tests still referenced the removed `animetta.core.tools` namespace
+or the old `ToolManager.core.tools` wrapper shape. The MCP bridge also read
+`ListToolsResult.core.tools`, while the current MCP SDK exposes `tools`
+directly. `web_search` had the same kind of external package drift for
+DuckDuckGo fallback, importing `langchain_community.core.tools` instead of the
+current `langchain_community.tools`.
+
 ## Fixed In This Patch
 
 | Fix | Files |
@@ -81,6 +92,9 @@ references were stale migration residue rather than a compatibility layer.
 | Delegated tracing bootstrap solely to `create_server()` and added an entrypoint boundary test. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 | Moved stale `animetta.core.config` references to `animetta.config` without reintroducing the deleted namespace. | `src/animetta/__init__.py`, config/service tests |
 | Updated startup docs and stale CLI prompt text to the current entrypoint. | `src/animetta/core/AGENTS.md`, `src/animetta/utils/auto_config.py` |
+| Fixed MCP tool discovery to use the current SDK `ListToolsResult.tools` field and added a regression test. | `src/animetta/tools/mcp_bridge.py`, `tests/tools/test_mcp_bridge.py` |
+| Fixed DuckDuckGo fallback import to the current LangChain Community tools namespace and added a no-network fallback test. | `src/animetta/tools/base.py`, `tests/tools/test_base.py` |
+| Moved stale tools tests from `animetta.core.tools` / `*.core.tools` wrapper expectations to the current `animetta.tools` and flat `ToolManager` shape. | `tests/tools/`, `tests/orchestration/graph/test_tool_manager.py` |
 
 Behavior preserved:
 
@@ -89,6 +103,10 @@ Behavior preserved:
 - `minecraft:command` remains registered, now through the shared catalog.
 - Config models remain exported from package root lazy attributes, now through
   the current `animetta.config` package.
+- MCP servers that return tools through the current SDK shape now populate
+  LangChain tools instead of being silently treated as empty.
+- `web_search` still prefers Tavily when configured and now reaches its
+  DuckDuckGo fallback when Tavily is absent.
 
 ## Left For Later
 

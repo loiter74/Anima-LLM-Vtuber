@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from animetta.core.tools import MCPManager
-from animetta.core.tools.mcp_bridge import MCPClient, _parse_type, mcp_tool_to_langchain
+from animetta.tools import MCPManager
+from animetta.tools.mcp_bridge import MCPClient, _parse_type, mcp_tool_to_langchain
 
 """Tests for MCP bridge graceful degradation when Docker is unavailable."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -41,6 +42,20 @@ class TestMCPClient:
         client = MCPClient(name="test", transport="stdio", command="echo")
         tools = await client.list_tools()
         assert tools == []
+
+    @pytest.mark.asyncio
+    async def test_list_tools_returns_tools_from_mcp_result(self):
+        """list_tools returns tools from the MCP SDK ListToolsResult shape."""
+
+        client = MCPClient(name="test", transport="stdio", command="echo")
+        expected_tools = [SimpleNamespace(name="tool_one")]
+        client.session = SimpleNamespace(
+            list_tools=AsyncMock(return_value=SimpleNamespace(tools=expected_tools))
+        )
+
+        tools = await client.list_tools()
+
+        assert tools == expected_tools
 
     @pytest.mark.asyncio
     async def test_call_tool_without_session(self):
@@ -252,7 +267,7 @@ class TestMCPManagerAdvanced:
         # Should not raise with no clients
         await mgr.close_all()
         assert len(mgr.clients) == 0
-        assert len(mgr.core.tools) == 0
+        assert len(mgr.tools) == 0
 
     @pytest.mark.asyncio
     async def test_load_sse_transport_without_mcp(self):

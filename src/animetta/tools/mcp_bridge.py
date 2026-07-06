@@ -101,8 +101,9 @@ class MCPClient:
             return []
         try:
             response = await self.session.list_tools()
-            logger.info(f"[MCP:{self.name}] Found {len(response.core.tools)} tools")
-            return response.core.tools
+            tools = response.tools
+            logger.info(f"[MCP:{self.name}] Found {len(tools)} tools")
+            return tools
         except Exception as e:
             logger.warning(f"[MCP:{self.name}] Failed to get tool list: {e}")
             return []
