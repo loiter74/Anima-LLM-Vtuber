@@ -62,6 +62,13 @@ def test_persona_updated_payload_matches_runtime_contract() -> None:
     }
 
 
+def test_persona_personality_updated_payload_matches_handler_contract() -> None:
+    """persona:personality_updated should document the emitted mode response."""
+    assert EVENTS["persona"]["personality_updated"]["payload"] == {
+        "mode": "string",
+    }
+
+
 def test_event_name_rejects_missing_event_definition() -> None:
     with pytest.raises(KeyError):
         event_name("missing", "event")

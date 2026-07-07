@@ -599,6 +599,25 @@ class TestRouteHandlersDispatch:
         )
 
     @pytest.mark.asyncio
+    async def test_on_set_personality_mode_emits_mode_response(
+        self, mock_socketio, mock_session_manager
+    ):
+        """persona:set_mode should emit the selected personality mode."""
+
+        orchestrator = SimpleNamespace()
+        mock_session_manager.get_orchestrator.return_value = orchestrator
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        await handlers.on_set_personality_mode("sid1", {"mode": "streaming"})
+
+        assert orchestrator._personality_mode == {"mode": "streaming"}
+        mock_socketio.emit.assert_any_call(
+            "persona:personality_updated",
+            {"mode": "streaming"},
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
     async def test_on_get_available_personas_uses_active_config_persona_cache(
         self, mock_socketio, mock_session_manager, monkeypatch
     ):

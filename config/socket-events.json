@@ -373,7 +373,7 @@
     "personality_updated": {
       "name": "persona:personality_updated",
       "payload": {
-        "persona_name": "string"
+        "mode": "string"
       }
     }
   },

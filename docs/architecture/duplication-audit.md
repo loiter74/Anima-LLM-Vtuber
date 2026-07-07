@@ -315,6 +315,14 @@ different persona in the drawer than the active runtime config and MBTI data.
 The active frontend personality store consumes the runtime `mbti` shape, so the
 catalog still described an older or unused response field.
 
+### Persona personality mode payload drift
+
+`persona:personality_updated` documented `persona_name`, but
+`PersonaHandlers.on_set_personality_mode()` emits the selected `mode`. The
+frontend sends `persona:set_mode` with `mode` and updates local state from the
+ack path, so the completion event catalog had drifted from the backend
+handler's actual response shape.
+
 ### Minecraft viewer error state drift
 
 The backend `minecraft:viewer_status` event can emit `{status: "error",
@@ -392,6 +400,7 @@ catalog-valid events, but no server-side business boundary received them.
 | Aligned `config:log_level_changed` with the runtime success/message completion response emitted by the config handler. | `config/socket-events.json`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Aligned `persona:updated` with the runtime `persona_name` plus optional MBTI payload consumed by the frontend personality store. | `config/socket-events.json`, `tests/orchestration/test_socket_events.py` |
+| Aligned `persona:personality_updated` with the runtime personality-mode completion payload emitted by the persona handler. | `config/socket-events.json`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
 | Routed memory organize completion through the frontend memory store refresh instead of a no-op `memory:list_pages` emit. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
@@ -463,6 +472,8 @@ Behavior preserved:
   catalog order.
 - `persona:updated` behavior is unchanged; the catalog now documents the MBTI
   payload already emitted by the backend and consumed by the frontend.
+- `persona:personality_updated` behavior is unchanged; the catalog now
+  documents the selected `mode` response already emitted by the backend.
 - Minecraft start/stop/spectate event names are unchanged; viewer spectate
   failures now update visible frontend state instead of leaving stale state.
 - Chat interrupt UI behavior still finalizes the local message immediately,
