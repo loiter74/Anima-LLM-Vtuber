@@ -293,6 +293,13 @@ translation state had no runtime update path for that field.
 completion event had the inverse drift: `config:switched` documented
 `config_name`, while the backend emitted only `type` and `message`.
 
+### Config log-level completion payload drift
+
+`config:log_level_changed` documented only `level`, while
+`ConfigHandlers.on_set_log_level()` emits a structured completion response with
+`type`, `success`, `level`, and `message`. This left catalog consumers unable
+to distinguish successful updates from rejected log-level changes.
+
 ### Persona card current-persona drift
 
 `PersonaCard` displayed the first available persona instead of the active
@@ -375,6 +382,7 @@ catalog-valid events, but no server-side business boundary received them.
 | Removed the unused stale frontend `SystemModelStatusPayload` shape and aligned the event catalog payload with the runtime `{service, name, status, error?}` contract. | `frontend/src/constants/socket-events.ts`, `frontend/src/types/model-loading.ts`, `config/socket-events.json`, `tests/orchestration/test_socket_events.py` |
 | Aligned `translation:configure` with partial updates and wired the subtitle enable toggle to the shared backend translation state. | `config/socket-events.json`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `frontend/src/components/settings/SettingsPanel.vue`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
 | Aligned `config:switch` / `config:switched` payloads with the catalog while retaining the legacy `file` input fallback. | `config/socket-events.json`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
+| Aligned `config:log_level_changed` with the runtime success/message completion response emitted by the config handler. | `config/socket-events.json`, `tests/orchestration/server/test_routes.py`, `tests/orchestration/test_socket_events.py` |
 | Added `current_persona` to `persona:list`, tracked it in the frontend personality store, and rendered the drawer persona card from the active persona instead of the first catalog entry. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `frontend/src/stores/personality.ts`, `frontend/src/components/layout/PersonaCard.vue`, `frontend/src/components/personality/PersonalityPanel.vue` |
 | Routed Minecraft viewer error events into frontend state and surfaced them in the settings panel with retry enabled. | `frontend/src/stores/minecraft.ts`, `frontend/src/components/settings/SettingsPanel.vue`, `frontend/src/stores/__tests__/minecraft.test.ts` |
 | Reconnected the frontend interrupt button to the backend `chat:interrupt` handler while keeping local response finalization. | `frontend/src/composables/useChat.ts`, `frontend/src/composables/__tests__/useChat.test.ts` |
@@ -440,6 +448,8 @@ Behavior preserved:
 - `config:switch` still accepts the legacy `file` payload, and now also accepts
   the catalog `config_name` field while reporting the selected name in
   `config:switched`.
+- `config:log_level` still accepts the same `level` input; the completion event
+  now documents the existing success state and message returned by the backend.
 - Persona switching behavior is unchanged; the frontend now receives and
   displays the active persona explicitly instead of inferring it from the
   catalog order.

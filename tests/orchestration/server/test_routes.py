@@ -277,6 +277,41 @@ class TestRouteHandlersDispatch:
         )
 
     @pytest.mark.asyncio
+    async def test_on_set_log_level_emits_success_response(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """config:log_level should report success state and persisted level."""
+
+        set_level = MagicMock(return_value=True)
+        get_level = MagicMock(return_value="DEBUG")
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.config_handlers.logger_manager.set_level",
+            set_level,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.config_handlers.logger_manager.get_level",
+            get_level,
+        )
+        settings = MagicMock()
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.set_user_settings(settings)
+
+        await handlers.on_set_log_level("sid1", {"level": "debug"})
+
+        set_level.assert_called_once_with("DEBUG")
+        settings.set_log_level.assert_called_once_with("DEBUG")
+        mock_socketio.emit.assert_any_call(
+            "config:log_level_changed",
+            {
+                "type": "config:log_level_changed",
+                "success": True,
+                "level": "DEBUG",
+                "message": "Log level set to DEBUG",
+            },
+            to="sid1",
+        )
+
+    @pytest.mark.asyncio
     async def test_on_raw_audio_data_processes_chunk(
         self, mock_socketio, mock_session_manager, monkeypatch
     ):

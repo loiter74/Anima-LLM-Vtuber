@@ -134,7 +134,10 @@
     "log_level_changed": {
       "name": "config:log_level_changed",
       "payload": {
-        "level": "string"
+        "type?": "string",
+        "success": "boolean",
+        "level": "string",
+        "message": "string"
       }
     },
     "data": {

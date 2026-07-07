@@ -44,6 +44,16 @@ def test_config_switch_payload_matches_handler_contract() -> None:
     }
 
 
+def test_config_log_level_changed_payload_matches_handler_contract() -> None:
+    """config:log_level_changed should document the emitted response shape."""
+    assert EVENTS["config"]["log_level_changed"]["payload"] == {
+        "type?": "string",
+        "success": "boolean",
+        "level": "string",
+        "message": "string",
+    }
+
+
 def test_event_name_rejects_missing_event_definition() -> None:
     with pytest.raises(KeyError):
         event_name("missing", "event")
