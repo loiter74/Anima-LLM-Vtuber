@@ -3,6 +3,7 @@ from __future__ import annotations
 """Tests for LLM reasoning node — tool-calling and streaming paths."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,6 +15,7 @@ from animetta.orchestration.graph.llm_node import (
     _enforce_persona_verbal_tics,
 )
 from animetta.orchestration.graph.state import create_initial_state
+from animetta.services.humor import HumorConfig
 
 
 def _make_config(service_context=None, enable_tools=False, chat_model=None):
@@ -28,6 +30,61 @@ def _make_config(service_context=None, enable_tools=False, chat_model=None):
     # Prevent MemoryMiddleware auto-creation from mock memory_system
     configurable["memory_middleware"] = None
     return RunnableConfig(configurable=configurable)
+
+
+def _humor_json(candidate: str, *, risk: str = "safe") -> str:
+    return json.dumps(
+        {
+            "scene": "work_fatigue",
+            "emotion": "tired_complaint",
+            "humor_anchor": "work as dungeon",
+            "worldview_mapping": "office = low-budget demon castle",
+            "style": "affiliative",
+            "candidate_response": candidate,
+            "risk": risk,
+        },
+        ensure_ascii=False,
+    )
+
+
+class _GraphHumorLLM:
+    """LLM double that supports the normal reply path and internal humor calls."""
+
+    def __init__(
+        self,
+        *,
+        stream_chunks: list[str] | None = None,
+        tool_response: str | None = None,
+        humor_response: str | None = None,
+    ) -> None:
+        self.stream_chunks = stream_chunks or ["普通回复"]
+        self.tool_response = tool_response
+        self.humor_response = humor_response or _humor_json("幽默回复")
+        self.history: list[dict[str, str]] = []
+        self.chat_messages_calls = 0
+
+    async def chat_stream(self, user_text: str, system_prompt: str = ""):
+        self.history.append({"role": "user", "content": user_text})
+        for chunk in self.stream_chunks:
+            yield chunk
+        self.history.append({"role": "assistant", "content": "".join(self.stream_chunks)})
+
+    async def chat_with_tools(self, user_input: str, tools, langchain_history, system_prompt=""):
+        content = self.tool_response or "".join(self.stream_chunks)
+        self.history.append({"role": "user", "content": user_input})
+        self.history.append({"role": "assistant", "content": content})
+        return {"content": content}
+
+    async def chat_messages(self, messages: list[dict], **kwargs) -> str:
+        self.chat_messages_calls += 1
+        self.last_humor_messages = messages
+        return self.humor_response
+
+    def get_history(self) -> list[dict]:
+        return [msg.copy() for msg in self.history]
+
+    def clear_history(self) -> None:
+        self.history.clear()
 
 
 # ── Empty / error inputs ──────────────────────────────────────────
@@ -107,6 +164,7 @@ class TestLLMNodeWithoutTools:
         assert result.get("response_text") == "Hello world"
         assert result["response_chunks"] == ["Hello", " world"]
         assert result["tool_calls"] is None
+        assert "messages" not in result
 
     @pytest.mark.asyncio
     async def test_streaming_empty_response(self, mock_service_context):
@@ -128,7 +186,7 @@ class TestLLMNodeWithoutTools:
 
         assert result.get("response_text") == ""
         assert result["response_chunks"] == []
-        assert result["messages"] is not None
+        assert "messages" not in result
 
     @pytest.mark.asyncio
     async def test_streaming_injects_system_prompt(self, mock_service_context):
@@ -242,6 +300,7 @@ class TestLLMNodeWithTools:
 
         assert result["tool_calls"] is None
         assert result["response_text"] == "The weather is sunny today!"
+        assert "messages" not in result
 
     @pytest.mark.asyncio
     async def test_tool_text_enforces_explicit_nya_suffix(self, mock_service_context):
@@ -269,6 +328,7 @@ class TestLLMNodeWithTools:
         result = await llm_node(state, config)
 
         assert result["response_text"] == "不是我卡了，是后厨又进虫子了喵。旅人稍等一下喵。"
+        assert "messages" not in result
 
     @pytest.mark.asyncio
     async def test_tool_call_error_falls_back_to_streaming(self, mock_service_context):
@@ -302,6 +362,116 @@ class TestLLMNodeWithTools:
 
         assert result["tool_calls"] is None
         assert result["response_text"] == "Fallback response"
+        assert "messages" not in result
+
+
+class TestLLMNodeHumorAgent:
+    """LLM node defers Humor Agent work to graph-visible humor nodes."""
+
+    @pytest.mark.asyncio
+    async def test_streaming_does_not_apply_humor_inside_llm_node(self, mock_service_context):
+        normal = "工作压力大时会感到疲惫，需要休息。"
+        llm = _GraphHumorLLM(
+            stream_chunks=[normal],
+            humor_response=_humor_json("这条不应该由 llm_node 使用。"),
+        )
+        mock_service_context.llm_engine = llm
+
+        state = create_initial_state(
+            session_id="test-humor-stream",
+            user_text="上班好累",
+        )
+        config = _make_config(service_context=mock_service_context)
+        config["configurable"]["humor_config"] = HumorConfig(enabled=True)
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == normal
+        assert result["response_chunks"] == [normal]
+        assert "messages" not in result
+        assert "humor_agent" not in result.get("metadata", {})
+        assert llm.chat_messages_calls == 0
+        assert llm.history[-1]["content"] == normal
+
+    @pytest.mark.asyncio
+    async def test_tool_text_does_not_apply_humor_inside_llm_node(self, mock_service_context):
+        normal = "The weather is sunny today."
+        llm = _GraphHumorLLM(
+            tool_response=normal,
+            humor_response=_humor_json("这条不应该由 llm_node 使用。"),
+        )
+        mock_service_context.llm_engine = llm
+
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = []
+
+        state = create_initial_state(
+            session_id="test-humor-tool",
+            user_text="What is the weather?",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+        config["configurable"]["humor_config"] = HumorConfig(enabled=True)
+
+        result = await llm_node(state, config)
+
+        assert result["tool_calls"] is None
+        assert result["response_text"] == normal
+        assert result["response_chunks"] == [normal]
+        assert "messages" not in result
+        assert "humor_agent" not in result.get("metadata", {})
+        assert llm.chat_messages_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_disabled_humor_still_defers_message_finalization(self, mock_service_context):
+        normal = "工作压力大时会感到疲惫，需要休息。"
+        llm = _GraphHumorLLM(
+            stream_chunks=[normal],
+            humor_response=_humor_json("这条不应该出现。"),
+        )
+        mock_service_context.llm_engine = llm
+
+        state = create_initial_state(
+            session_id="test-humor-disabled",
+            user_text="上班好累",
+        )
+        config = _make_config(service_context=mock_service_context)
+        config["configurable"]["humor_config"] = HumorConfig(enabled=False)
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == normal
+        assert result["response_chunks"] == [normal]
+        assert "messages" not in result
+        assert "humor_agent" not in result.get("metadata", {})
+        assert llm.chat_messages_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_rejected_humor_is_not_decided_inside_llm_node(self, mock_service_context):
+        normal = "工作压力大时会感到疲惫，需要休息。"
+        llm = _GraphHumorLLM(
+            stream_chunks=[normal],
+            humor_response=_humor_json("你真是废物，闭嘴吧。", risk="safe"),
+        )
+        mock_service_context.llm_engine = llm
+
+        state = create_initial_state(
+            session_id="test-humor-rejected",
+            user_text="上班好累",
+        )
+        config = _make_config(service_context=mock_service_context)
+        config["configurable"]["humor_config"] = HumorConfig(enabled=True)
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == normal
+        assert result["response_chunks"] == [normal]
+        assert "messages" not in result
+        assert "humor_agent" not in result.get("metadata", {})
+        assert llm.chat_messages_calls == 0
 
 
 # ── Timeout / Error Resilience ────────────────────────────────────
@@ -332,6 +502,7 @@ class TestLLMTimeout:
         assert result["response_text"] == FALLBACK_RESPONSE
         assert result["response_chunks"] == [FALLBACK_RESPONSE]
         assert result["tool_calls"] is None
+        assert "messages" not in result
         assert result.get("metadata", {}).get("error_type") == "timeout"
 
     @pytest.mark.asyncio

@@ -6,7 +6,7 @@
 > Parent: [../AGENTS.md](../AGENTS.md) — root project conventions and anti-patterns.
 
 ## OVERVIEW
-Python backend for Anima VTuber — FastAPI + LangGraph + Socket.IO orchestration with plugin-based provider architecture. ~423 files, 30K+ lines, max depth 3.
+Python backend for Anima VTuber — Starlette + LangGraph + Socket.IO ASGI orchestration with plugin-based provider architecture. ~423 files, 30K+ lines, max depth 3.
 
 ## STRUCTURE
 ```
@@ -49,7 +49,7 @@ src/animetta/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Main server entry | `core/socketio_server.py` | FastAPI + Socket.IO ASGI app |
+| Main server entry | `core/socketio_server.py` | Starlette + Socket.IO ASGI app |
 | Service lifecycle | `core/service_pool.py` | Shared engines (LLM/TTS/ASR), per-session VAD/memory |
 | Model loading | `core/model_loading_manager.py` | Loads all models, don't block on failures |
 | Provider registration | `config/core/registry.py` | `@ProviderRegistry.register_service` decorator |

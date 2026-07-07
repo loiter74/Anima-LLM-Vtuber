@@ -95,7 +95,7 @@ docker compose down
 
 ## 技术栈
 
-- **后端**: Python, FastAPI, Socket.IO
+- **后端**: Python, Starlette + Socket.IO ASGI
 - **前端**: Electron, Vue 3 + TypeScript + Vite
 - **LLM**: GLM, OpenAI, Ollama
 - **ASR**: FasterWhisper, GLM

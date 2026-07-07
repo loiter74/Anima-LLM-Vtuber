@@ -17,6 +17,7 @@ from animetta.config.app import (
     _load_service_config,
     expand_env_vars,
 )
+from animetta.services.humor import HumorConfig
 
 # =============================================================================
 # Autouse Fixtures
@@ -355,6 +356,8 @@ class TestAppConfig:
         assert cfg.services.agent == "mock"
         assert cfg.services.local_llm is None
         assert cfg.services.vad == "mock"
+        assert isinstance(cfg.humor, HumorConfig)
+        assert cfg.humor.enabled is False
 
     def test_optional_service_fields_default_to_none(self):
         """AI service fields (asr, tts, agent, local_llm, vad) default to None."""
@@ -376,6 +379,22 @@ class TestAppConfig:
         """AppConfig accepts custom persona name."""
         cfg = AppConfig(persona="anime_girl")
         assert cfg.persona == "anime_girl"
+
+    def test_humor_config_accepts_explicit_controls(self):
+        """AppConfig accepts conservative Humor Agent controls."""
+        cfg = AppConfig(
+            humor={
+                "enabled": True,
+                "max_candidate_chars": 120,
+                "candidate_count": 1,
+                "timeout_seconds": 5.0,
+                "allowed_styles": ["affiliative"],
+                "worldview_hints": ["cyber tavern"],
+            }
+        )
+        assert cfg.humor.enabled is True
+        assert cfg.humor.max_candidate_chars == 120
+        assert cfg.humor.allowed_styles == ["affiliative"]
 
 
 # =============================================================================
@@ -826,6 +845,49 @@ class TestFromYaml:
         config = AppConfig.from_yaml("/fake/path.yaml")
         # Should not raise ValidationError despite extra keys
         assert config.persona == "default"
+
+    @patch("animetta.config.app._load_env_file")
+    @patch("animetta.config.app._load_service_config")
+    @patch("animetta.config.app._load_yaml_file")
+    @patch("pathlib.Path.exists")
+    def test_humor_config_loaded_from_yaml(
+        self, mock_exists, mock_load_yaml, mock_load_service, mock_load_env
+    ):
+        """Top-level humor config is preserved during services-mode loading."""
+        mock_exists.return_value = True
+        mock_load_yaml.return_value = {
+            "persona": "default",
+            "services": {"asr": "mock", "tts": "mock", "agent": "mock", "vad": "mock"},
+            "system": {"host": "localhost", "port": 12394},
+            "humor": {
+                "enabled": True,
+                "max_candidate_chars": 140,
+                "candidate_count": 1,
+                "timeout_seconds": 4.0,
+                "allowed_styles": ["self-enhancing"],
+                "worldview_hints": ["working AI"],
+            },
+        }
+
+        def load_service_side(service_type, service_name):
+            configs = {
+                ("asr", "mock"): {"type": "mock"},
+                ("tts", "mock"): {"type": "mock"},
+                ("llm", "mock"): {
+                    "memory_enabled": False,
+                    "llm_config": {"type": "mock"},
+                },
+                ("vad", "mock"): {"type": "mock"},
+            }
+            return configs.get((service_type, service_name), {"type": "mock"})
+
+        mock_load_service.side_effect = load_service_side
+
+        config = AppConfig.from_yaml("/fake/path.yaml")
+
+        assert config.humor.enabled is True
+        assert config.humor.max_candidate_chars == 140
+        assert config.humor.worldview_hints == ["working AI"]
 
 
 # =============================================================================

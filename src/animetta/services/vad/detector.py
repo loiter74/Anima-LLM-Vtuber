@@ -65,10 +65,18 @@ class SileroDetector:
         Returns:
             float: Speech probability (0.0 to 1.0)
         """
-        import torch
-        chunk_tensor = torch.Tensor(audio_chunk)
-        with torch.no_grad():
-            return self.model(chunk_tensor, self.sample_rate).item()
+        try:
+            import torch
+        except ImportError:
+            result = self.model(audio_chunk, self.sample_rate)
+        else:
+            chunk_tensor = torch.Tensor(audio_chunk)
+            with torch.no_grad():
+                result = self.model(chunk_tensor, self.sample_rate)
+
+        if hasattr(result, "item"):
+            result = result.item()
+        return float(result)
 
     def detect(self, audio_data: list | np.ndarray, vad_instance) -> VADResult:
         """

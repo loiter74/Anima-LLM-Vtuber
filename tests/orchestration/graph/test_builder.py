@@ -86,7 +86,7 @@ class TestRouteInput:
 
 
 class TestShouldUseTools:
-    """should_use_tools() decides between tools and tts."""
+    """should_use_tools() decides between tools and humor rewrite."""
 
     def test_with_tool_calls_returns_tools(self):
         """When tool_calls is populated, route to 'tools'."""
@@ -94,14 +94,14 @@ class TestShouldUseTools:
         assert should_use_tools(state) == "tools"
 
     def test_without_tool_calls_returns_tts(self):
-        """When tool_calls is None or empty, route to 'tts'."""
+        """When tool_calls is None, route to 'humor_rewrite'."""
         state = _make_state({"tool_calls": None})
-        assert should_use_tools(state) == "tts"
+        assert should_use_tools(state) == "humor_rewrite"
 
     def test_empty_tool_calls_returns_tts(self):
-        """Empty list also routes to 'tts'."""
+        """Empty list also routes to 'humor_rewrite'."""
         state = _make_state({"tool_calls": []})
-        assert should_use_tools(state) == "tts"
+        assert should_use_tools(state) == "humor_rewrite"
 
 
 # ── External checkpointer ───────────────────────────────────
@@ -158,13 +158,22 @@ class TestBuildGraph:
         graph.compile.assert_called_once_with(checkpointer=None)
 
     def test_build_graph_registers_core_nodes(self, mock_state_graph):
-        """All 6 core nodes are registered (tools disabled)."""
+        """All core nodes are registered (tools disabled)."""
         graph, compiled = mock_state_graph
         with patch("animetta.orchestration.graph.builder.StateGraph", return_value=graph):
             build_graph()
 
         node_names = [c.args[0] for c in graph.add_node.call_args_list]
-        assert node_names == ["asr", "personality", "llm", "tts", "emotion", "output"]
+        assert node_names == [
+            "asr",
+            "personality",
+            "llm",
+            "humor_rewrite",
+            "humor_validation",
+            "tts",
+            "emotion",
+            "output",
+        ]
 
     def test_build_graph_registers_tool_node(self, mock_state_graph, mock_tools):
         """When enable_tools=True, the 'tools' node is also registered."""
@@ -174,7 +183,7 @@ class TestBuildGraph:
 
         node_names = [c.args[0] for c in graph.add_node.call_args_list]
         assert "tools" in node_names
-        assert len(node_names) == 7
+        assert len(node_names) == 9
 
     def test_build_graph_sets_conditional_entry_point(self, mock_state_graph):
         """Entry point is set with route_input and asr/llm mapping."""
@@ -187,24 +196,25 @@ class TestBuildGraph:
         )
 
     def test_build_graph_edges_without_tools(self, mock_state_graph):
-        """Without tools: llm -> tts edge is direct."""
+        """Without tools: direct replies pass through humor nodes before TTS."""
         graph, compiled = mock_state_graph
         with patch("animetta.orchestration.graph.builder.StateGraph", return_value=graph):
             build_graph()
 
-        # Check the key edge: llm -> tts (no conditional)
-        # add_edge calls should include ("llm", "tts")
         edge_calls = graph.add_edge.call_args_list
         assert call("asr", "personality") in edge_calls
         assert call("personality", "llm") in edge_calls
-        assert call("llm", "tts") in edge_calls  # direct edge without tools
+        assert call("llm", "humor_rewrite") in edge_calls
+        assert call("humor_rewrite", "humor_validation") in edge_calls
+        assert call("humor_validation", "tts") in edge_calls
+        assert call("llm", "tts") not in edge_calls
         assert call("tts", "emotion") in edge_calls
         assert call("emotion", "output") in edge_calls
         # END edge
         assert call("output", ANY) in edge_calls
 
     def test_build_graph_edges_with_tools(self, mock_state_graph, mock_tools):
-        """With tools: conditional edges replace llm->tts, plus tools->llm loop."""
+        """With tools: conditional edges choose tools or humor rewrite, plus tools->llm loop."""
         graph, compiled = mock_state_graph
         with patch("animetta.orchestration.graph.builder.StateGraph", return_value=graph):
             build_graph(enable_tools=True, tools=mock_tools)
@@ -214,9 +224,11 @@ class TestBuildGraph:
         assert call("llm", "tts") not in edge_calls
         # Instead, conditional edges and tools loop
         graph.add_conditional_edges.assert_called_once_with(
-            "llm", should_use_tools, {"tools": "tools", "tts": "tts"}
+            "llm", should_use_tools, {"tools": "tools", "humor_rewrite": "humor_rewrite"}
         )
         assert call("tools", "llm") in edge_calls
+        assert call("humor_rewrite", "humor_validation") in edge_calls
+        assert call("humor_validation", "tts") in edge_calls
 
     def test_build_graph_passes_checkpointer(self, mock_state_graph):
         """Compile receives the supplied checkpointer."""

@@ -406,15 +406,13 @@ async def _llm_with_tools(
                 full_response = _extract_and_update_affinity(state, full_response)
                 original_response = full_response
                 full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
-                ai_message = AIMessage(content=full_response)
-
+                response_chunks = [full_response if full_response != original_response else original_response]
                 # after_llm_call notification (non-blocking)
                 _notify_middleware_after(session_id, user_text, full_response, config)
 
                 return {
                     "response_text": _strip_emotion_tags(full_response),
-                    "response_chunks": [full_response if full_response != original_response else original_response],
-                    "messages": [ai_message],
+                    "response_chunks": response_chunks,
                     "tool_calls": None,
                     "metadata": {**state.get("metadata", {})},
                 }
@@ -482,11 +480,9 @@ async def _llm_without_tools(
         # Note: no affinity marker in the FALLBACK_RESPONSE, so the value
         # carries over from the previous turn (correct behavior — we did not
         # actually talk to the 旅人, affection shouldn't shift).
-        ai_message = AIMessage(content=full_response)
         return {
             "response_text": _strip_emotion_tags(full_response),
             "response_chunks": chunks,
-            "messages": [ai_message],
             "tool_calls": None,
             "metadata": {**state.get("metadata", {}), "error_type": "timeout"},
         }
@@ -511,15 +507,12 @@ async def _llm_without_tools(
         _AFFINITY_MARKER_RE.sub("", c) for c in chunks
     ]
 
-    ai_message = AIMessage(content=full_response)
-
     # after_llm_call notification (non-blocking)
     _notify_middleware_after(session_id, user_text, full_response, config)
 
     return {
         "response_text": _strip_emotion_tags(full_response),
         "response_chunks": chunks,
-        "messages": [ai_message],
         "tool_calls": None,
         "metadata": {**state.get("metadata", {})},
     }

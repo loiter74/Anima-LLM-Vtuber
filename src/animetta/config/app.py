@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from loguru import logger
 from pydantic import Field, PrivateAttr, TypeAdapter
 
+from animetta.services.humor.config import HumorConfig
+
 from .agent import AgentConfig
 from .core.base import BaseConfig
 from .persona import PersonaConfig
@@ -208,6 +210,9 @@ class AppConfig(BaseConfig):
     # System configuration
     system: SystemConfig = Field(default_factory=SystemConfig)
 
+    # Humor Agent configuration
+    humor: HumorConfig = Field(default_factory=HumorConfig)
+
     # AI service configuration (loaded from service config files)
     asr: ASRConfig | None = Field(default=None)
     tts: TTSConfig | None = Field(default=None)
@@ -307,7 +312,18 @@ class AppConfig(BaseConfig):
 
         # Build complete configuration
         # Strip keys that aren't Pydantic fields
-        known_fields = {"persona", "services", "system", "asr", "tts", "agent", "local_llm", "vad", "bilibili"}
+        known_fields = {
+            "persona",
+            "services",
+            "system",
+            "humor",
+            "asr",
+            "tts",
+            "agent",
+            "local_llm",
+            "vad",
+            "bilibili",
+        }
         filtered = {k: v for k, v in main_config.items() if k in known_fields}
         filtered["services"] = services_config
         merged = {

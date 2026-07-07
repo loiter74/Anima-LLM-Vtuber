@@ -52,7 +52,6 @@ export default defineConfig({
     },
     fontFamily: {
       sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans SC", "Microsoft YaHei", sans-serif',
-      quicksand: '"Quicksand", sans-serif',
     }
   },
   shortcuts: {

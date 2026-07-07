@@ -40,6 +40,7 @@ class SimpleVADProcessor:
         self._is_speech = False
         self._speech_start_time = None
         self._silence_start_time = None
+        self._silence_transition_count = 0
         self._total_chunks = 0
 
         # Get raw probability from Silero VAD model
@@ -53,17 +54,21 @@ class SimpleVADProcessor:
             return 0.0
 
         try:
-            import torch
-            # Convert to tensor
-            chunk_tensor = torch.from_numpy(np.array(audio_data, dtype=np.float32))
+            audio_np = np.array(audio_data, dtype=np.float32)
+            try:
+                import torch
 
-            # Silero VAD model expects (batch, samples) format
-            if chunk_tensor.ndim == 1:
-                chunk_tensor = chunk_tensor.unsqueeze(0)
+                # Silero VAD model expects (batch, samples) format.
+                chunk = torch.from_numpy(audio_np)
+                if chunk.ndim == 1:
+                    chunk = chunk.unsqueeze(0)
+                with torch.no_grad():
+                    result = self._silero_model(chunk, self.sample_rate)
+            except ImportError:
+                chunk = audio_np.reshape(1, -1) if audio_np.ndim == 1 else audio_np
+                result = self._silero_model(chunk, self.sample_rate)
 
-            with torch.no_grad():
-                prob = self._silero_model(chunk_tensor, self.sample_rate).item()
-            return prob
+            return float(result.item() if hasattr(result, "item") else result)
         except Exception as e:
             logger.error(f"Error getting speech prob: {e}")
             return 0.0
@@ -94,6 +99,7 @@ class SimpleVADProcessor:
                 self._is_speech = True
                 self._speech_start_time = current_time
                 self._silence_start_time = None
+                self._silence_transition_count = 0
                 logger.info(f"[{self.session_id}] 🎤 Speech started")
 
             self._silence_start_time = None
@@ -102,6 +108,7 @@ class SimpleVADProcessor:
             if self._is_speech:
                 if self._silence_start_time is None:
                     self._silence_start_time = current_time
+                    self._silence_transition_count += 1
 
                 silence_duration = current_time - self._silence_start_time
                 speech_duration = current_time - self._speech_start_time if self._speech_start_time else 0
@@ -123,6 +130,15 @@ class SimpleVADProcessor:
 
                     if self.on_speech_end:
                         await self.on_speech_end(speech_buffer)
+                elif (
+                    self._silence_transition_count >= 3
+                    and speech_duration <= self.min_speech_duration
+                ):
+                    # Treat rapid alternating speech/silence as VAD jitter, not an utterance.
+                    self._is_speech = False
+                    self._speech_start_time = None
+                    self._silence_start_time = None
+                    self._silence_transition_count = 0
 
     async def process_end(self) -> None:
         """Manual end"""
@@ -143,3 +159,4 @@ class SimpleVADProcessor:
         self._is_speech = False
         self._speech_start_time = None
         self._silence_start_time = None
+        self._silence_transition_count = 0

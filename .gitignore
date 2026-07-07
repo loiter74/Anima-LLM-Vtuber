@@ -105,6 +105,7 @@ C:tmp_pip/
 # Testing artifacts
 .pytest_cache/
 .playwright-mcp/
+artifacts/health/
 
 # Temp files
 *.tmp

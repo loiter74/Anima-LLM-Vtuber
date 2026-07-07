@@ -6,7 +6,16 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from loguru import logger
 
-from . import asr_node, emotion_node, llm_node, output_node, tool_node, tts_node
+from . import (
+    asr_node,
+    emotion_node,
+    humor_rewrite_node,
+    humor_validation_node,
+    llm_node,
+    output_node,
+    tool_node,
+    tts_node,
+)
 from .personality_node import personality_node
 from .state import AgentState
 
@@ -38,14 +47,14 @@ def route_input(state: AgentState) -> Literal["asr", "llm"]:
     return "llm"
 
 
-def should_use_tools(state: AgentState) -> Literal["tools", "tts"]:
+def should_use_tools(state: AgentState) -> Literal["tools", "humor_rewrite"]:
     """Check if LLM requested tool calls"""
     tool_calls = state.get("tool_calls")
     if tool_calls:
         logger.debug("[Router] LLM requested tool calls -> Tool node")
         return "tools"
-    logger.debug("[Router] LLM direct reply -> TTS node")
-    return "tts"
+    logger.debug("[Router] LLM direct reply -> Humor rewrite node")
+    return "humor_rewrite"
 
 
 def build_graph(
@@ -70,9 +79,11 @@ def build_graph(
                                |                 |
                          (tool call)    (direct reply)
                                |                 |
-                           [tool_node]        [tts_node]
+                           [tool_node]   [humor_rewrite_node]
                                |                 |
                                +-------+---------+
+                                       |
+                            [humor_validation_node]
                                        |
                                   [tts_node]
                                        |
@@ -93,11 +104,22 @@ def build_graph(
     graph.add_node("asr", asr_node)
     graph.add_node("personality", personality_node)
     graph.add_node("llm", llm_node)
+    graph.add_node("humor_rewrite", humor_rewrite_node)
+    graph.add_node("humor_validation", humor_validation_node)
     graph.add_node("tts", tts_node)
     graph.add_node("emotion", emotion_node)
     graph.add_node("output", output_node)
 
-    registered_nodes = ["asr", "personality", "llm", "tts", "emotion", "output"]
+    registered_nodes = [
+        "asr",
+        "personality",
+        "llm",
+        "humor_rewrite",
+        "humor_validation",
+        "tts",
+        "emotion",
+        "output",
+    ]
     if enable_tools:
         graph.add_node("tools", tool_node)
         registered_nodes.append("tools")
@@ -113,12 +135,18 @@ def build_graph(
     graph.add_edge("personality", "llm")
 
     if enable_tools:
-        graph.add_conditional_edges("llm", should_use_tools, {"tools": "tools", "tts": "tts"})
+        graph.add_conditional_edges(
+            "llm",
+            should_use_tools,
+            {"tools": "tools", "humor_rewrite": "humor_rewrite"},
+        )
         graph.add_edge("tools", "llm")
         logger.info("[LangGraph] Tool loop configured: llm -> tools -> llm")
     else:
-        graph.add_edge("llm", "tts")
+        graph.add_edge("llm", "humor_rewrite")
 
+    graph.add_edge("humor_rewrite", "humor_validation")
+    graph.add_edge("humor_validation", "tts")
     graph.add_edge("tts", "emotion")
     graph.add_edge("emotion", "output")
     graph.add_edge("output", END)

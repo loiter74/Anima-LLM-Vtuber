@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import scripts.health_check as health_check
@@ -33,27 +34,47 @@ def test_dev_requirements_include_socketio_websocket_transport() -> None:
     ]
 
     assert any(line.startswith("websocket-client") for line in requirement_lines)
+    assert any(line.startswith("pytest-cov") for line in requirement_lines)
 
 
 def test_build_gates_includes_required_health_domains() -> None:
-    gate_ids = {gate.id for gate in build_gates()}
+    gate_ids = {gate.id for gate in build_gates("full")}
 
     assert {
         "backend:ruff",
         "backend:mypy",
+        "backend:pytest-collect",
         "backend:tests",
         "backend:coverage",
         "frontend:typecheck",
         "frontend:tests",
         "frontend:build",
         "frontend:coverage-script",
+        "frontend:font-policy",
+        "docs:backend-framework",
         "events:validate",
-        "docker:compose-gpu-config",
-        "docker:compose-cpu-config",
         "security:secrets",
         "dependencies:pip-check",
+        "dependencies:frontend-audit",
         "routes:smoke",
     }.issubset(gate_ids)
+
+
+def test_build_gates_exposes_quick_full_and_docker_profiles() -> None:
+    quick_ids = {gate.id for gate in build_gates("quick")}
+    full_ids = {gate.id for gate in build_gates("full")}
+    docker_ids = {gate.id for gate in build_gates("docker")}
+
+    assert "backend:ruff" in quick_ids
+    assert "frontend:build" not in quick_ids
+    assert "frontend:build" in full_ids
+    assert {
+        "docker:compose-gpu-config",
+        "docker:compose-cpu-config",
+        "docker:health-endpoint",
+        "docker:frontend-endpoint",
+        "docker:logs-clean",
+    }.issubset(docker_ids)
 
 
 def test_redact_output_masks_secret_like_values() -> None:
@@ -145,3 +166,72 @@ def test_pnpm_command_falls_back_to_corepack(monkeypatch) -> None:
     monkeypatch.setattr(health_check.shutil, "which", fake_which)
 
     assert health_check._pnpm_command() == ("C:/node/corepack.cmd", "pnpm")
+
+
+def test_python_runtime_preflight_marks_supported_noncanonical_as_degraded(monkeypatch) -> None:
+    monkeypatch.setattr(health_check, "_python_command", lambda: ("python",))
+
+    def fake_probe(command, code):
+        return {"major": 3, "minor": 11, "micro": 9, "executable": "python"}
+
+    monkeypatch.setattr(health_check, "_run_json_python_probe", fake_probe)
+
+    check = health_check.check_python_runtime()
+
+    assert check.status == health_check.HEALTH_DEGRADED
+    assert check.warning is not None
+    assert check.warning["id"] == "python:runtime-degraded"
+
+
+def test_pytest_plugin_preflight_reports_missing_plugins(monkeypatch) -> None:
+    monkeypatch.setattr(health_check, "_python_command", lambda: ("python",))
+
+    def fake_probe(command, code):
+        return {"missing": ["pytest-xdist", "pytest-timeout"]}
+
+    monkeypatch.setattr(health_check, "_run_json_python_probe", fake_probe)
+
+    check = health_check.check_pytest_plugins()
+
+    assert check.status == health_check.HEALTH_FAIL
+    assert "pytest-xdist" in check.message
+    assert "requirements-dev.txt" in check.remediation
+
+
+def test_frontend_audit_registry_failure_is_degraded() -> None:
+    gate = next(gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit")
+
+    status, remediation, warnings = health_check._classify_gate(
+        gate,
+        1,
+        "ERR_PNPM_AUDIT FetchError: request to registry.npmjs.org advisories fetch failed",
+    )
+
+    assert status == health_check.HEALTH_DEGRADED
+    assert "registry" in remediation.lower()
+    assert warnings[0]["id"] == "dependencies:frontend-audit-registry"
+
+
+def test_summary_contains_contract_fields(tmp_path: Path) -> None:
+    gate = build_gates("quick")[0]
+    result = health_check.GateResult(
+        gate=gate,
+        returncode=0,
+        output="",
+        duration_s=0.1,
+        status=health_check.HEALTH_PASS,
+        remediation="",
+    )
+
+    summary = health_check.build_summary(
+        "quick",
+        [health_check.PreflightCheck("python:runtime", health_check.HEALTH_PASS, "ok")],
+        [result],
+    )
+    output = tmp_path / "health.json"
+    health_check.write_summary(output, summary)
+
+    saved = output.read_text(encoding="utf-8")
+    assert '"health_statuses"' in saved
+    assert '"accepted_warning_ledger"' in saved
+    assert '"gates"' in saved

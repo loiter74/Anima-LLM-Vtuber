@@ -11,7 +11,7 @@ graph TB
     User([User])
     subgraph "Animetta System"
         FE[Vue3 Frontend<br/>Electron + Web]
-        BE[FastAPI Backend<br/>Socket.IO + REST]
+        BE[Starlette ASGI Backend<br/>Socket.IO + REST]
         LG[LangGraph Engine<br/>State Graph]
     end
     subgraph "External Services"
@@ -47,7 +47,7 @@ graph TB
         L2D[Live2D Renderer<br/>pixi-live2d-display]
         DASH[Dashboard<br/>Chart.js + vue-chartjs]
     end
-    subgraph "Backend (FastAPI + Socket.IO)"
+    subgraph "Backend (Starlette + Socket.IO ASGI)"
         SIO[Socket.IO Server<br/>Event Router]
         SM[Session Manager<br/>Per-user Orchestrator]
         LG[LangGraph Engine<br/>6 Graph Nodes]
@@ -81,7 +81,7 @@ graph TB
 sequenceDiagram
     actor User
     participant FE as Vue3 Frontend
-    participant BE as FastAPI Backend
+    participant BE as Starlette ASGI Backend
     participant LG as LangGraph Engine
     participant Mem as Memory System
     participant LLM as LLM Provider
@@ -228,7 +228,7 @@ Three tool sources:
 
 ### 5. WebSocket Server (`src/animetta/orchestration/server/`)
 
-FastAPI + Socket.IO ASGI app:
+Starlette + Socket.IO ASGI app:
 - Event-based communication (`text_input`, `raw_audio_data`, `interrupt_signal`)
 - Session management (per-user orchestrator instances via `SessionManager`)
 - Desktop client tracking (`DesktopClientManager`)
