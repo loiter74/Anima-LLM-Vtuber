@@ -54,6 +54,14 @@ def test_config_log_level_changed_payload_matches_handler_contract() -> None:
     }
 
 
+def test_persona_updated_payload_matches_runtime_contract() -> None:
+    """persona:updated should match PersonaHandlers and the frontend store."""
+    assert EVENTS["persona"]["updated"]["payload"] == {
+        "persona_name": "string",
+        "mbti?": "object",
+    }
+
+
 def test_event_name_rejects_missing_event_definition() -> None:
     with pytest.raises(KeyError):
         event_name("missing", "event")

@@ -367,7 +367,7 @@
       "name": "persona:updated",
       "payload": {
         "persona_name": "string",
-        "display_name": "string"
+        "mbti?": "object"
       }
     },
     "personality_updated": {
