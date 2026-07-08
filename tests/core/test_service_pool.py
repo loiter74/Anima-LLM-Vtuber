@@ -564,3 +564,40 @@ class TestApplyLlmConfig:
         assert engine.temperature == 0.7
         assert engine.top_p == 0.8
         assert engine.max_tokens == 256
+
+    def test_updates_pooled_llm_prompt_without_recreating_shared_engines(self):
+        class Engine:
+            model = "old-model"
+            temperature = 0.1
+            top_p = 0.2
+            max_tokens = 64
+
+            def __init__(self):
+                self.system_prompt = "old prompt"
+
+            def set_system_prompt(self, prompt: str) -> None:
+                self.system_prompt = prompt
+
+        class Config:
+            model = "new-model"
+            temperature = 0.7
+            top_p = 0.8
+            max_tokens = 256
+
+        engine = Engine()
+        tts = object()
+        asr = object()
+        ServicePool._llm = engine
+        ServicePool._tts = tts
+        ServicePool._asr = asr
+
+        ServicePool.apply_llm_config(Config(), system_prompt="new prompt")
+
+        assert ServicePool._llm is engine
+        assert ServicePool._tts is tts
+        assert ServicePool._asr is asr
+        assert engine.model == "new-model"
+        assert engine.temperature == 0.7
+        assert engine.top_p == 0.8
+        assert engine.max_tokens == 256
+        assert engine.system_prompt == "new prompt"

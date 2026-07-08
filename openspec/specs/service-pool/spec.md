@@ -1,8 +1,6 @@
 ## Purpose
 Defines the accepted behavior and requirements for the service-pool capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: LLM/TTS/ASR engines are globally shared
 The system SHALL maintain a single shared instance of LLM, TTS, and ASR engines that all sessions reuse. The MinecraftBridge SHALL access the shared LLM engine via ServicePool for skill extraction.
 
@@ -25,3 +23,28 @@ The system SHALL maintain a single shared instance of LLM, TTS, and ASR engines 
 - **THEN** _start_autonomous() SHALL log a warning
 - **AND** create AutonomousLoop without learning components (current behavior)
 - **AND** the bot SHALL still function with pure rule-based behavior
+
+### Requirement: Shared LLM receives runtime reload updates
+The service pool SHALL apply successful runtime reload updates to the shared LLM engine without requiring engine recreation.
+
+#### Scenario: Lightweight LLM fields update on reload
+- **WHEN** runtime reload succeeds with changed lightweight LLM settings
+- **THEN** the shared LLM engine SHALL receive supported updates for model, temperature, top-p, max tokens, and provider-specific thinking settings
+- **THEN** future sessions using the pool SHALL observe those updated settings
+
+#### Scenario: Shared LLM prompt updates on reload
+- **WHEN** runtime reload succeeds and the shared LLM engine supports `set_system_prompt`
+- **THEN** the service pool SHALL apply the effective reloaded system prompt to the shared LLM engine
+
+### Requirement: Runtime reload preserves shared engine lifecycle
+The service pool SHALL not restart or close shared LLM, TTS, or ASR engines as part of lightweight runtime reload.
+
+#### Scenario: Reload does not recreate shared engines
+- **WHEN** runtime reload succeeds
+- **THEN** the shared LLM, TTS, and ASR engine object identities SHALL remain unchanged
+- **THEN** only supported lightweight fields and prompts SHALL be updated
+
+#### Scenario: Reload failure leaves shared engines unchanged
+- **WHEN** runtime reload fails validation
+- **THEN** the shared LLM, TTS, and ASR engines SHALL retain their previous settings and prompt
+

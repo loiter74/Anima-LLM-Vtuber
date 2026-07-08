@@ -6,7 +6,11 @@ import pytest
 
 from animetta.config.app import AppConfig
 from animetta.config.persona.base import PersonaConfig
-from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
+from animetta.config.runtime_reload import (
+    RuntimeConfigReloader,
+    apply_lightweight_llm_config,
+    apply_runtime_config_to_contexts,
+)
 from animetta.tracing.proxy import TracingProxy
 
 
@@ -96,6 +100,7 @@ speaking_style: 新语气
     assert result.version == 2
     assert "persona" in result.refreshed
     assert "llm" in result.refreshed
+    assert result.to_dict()["preserved"] is False
     assert reloader.config.get_system_prompt().find("新人设") >= 0
     assert reloader.config.get_system_prompt().find("旧人设") == -1
 
@@ -117,6 +122,25 @@ def test_reload_invalid_persona_preserves_previous_config(runtime_config_env):
     assert "旧人设" in reloader.config.get_system_prompt()
 
 
+def test_reload_missing_persona_preserves_previous_config(runtime_config_env):
+    config_path, personas_dir, _ = runtime_config_env
+    current = AppConfig.load(str(config_path))
+    current._persona = PersonaConfig.load(current.persona, personas_dir=str(personas_dir))
+    previous_prompt = current.get_system_prompt()
+
+    (personas_dir / "test_anima.yaml").unlink()
+
+    reloader = RuntimeConfigReloader(current, config_path=str(config_path), personas_dir=str(personas_dir))
+    result = reloader.reload()
+
+    assert result.ok is False
+    assert result.version == 1
+    assert result.error
+    assert reloader.config is current
+    assert reloader.config.get_system_prompt() == previous_prompt
+    assert result.to_dict()["preserved"] is True
+
+
 def test_reload_invalid_llm_config_preserves_previous_llm(runtime_config_env):
     config_path, _, app_module = runtime_config_env
     current = AppConfig.load(str(config_path))
@@ -134,6 +158,105 @@ def test_reload_invalid_llm_config_preserves_previous_llm(runtime_config_env):
     assert result.version == 1
     assert reloader.config.agent.llm_config is previous_llm
     assert reloader.config.agent.llm_config.top_p == 0.93
+
+
+def test_reload_failure_does_not_mutate_shared_llm_settings(runtime_config_env):
+    config_path, personas_dir, _ = runtime_config_env
+    current = AppConfig.load(str(config_path))
+    current._persona = PersonaConfig.load(current.persona, personas_dir=str(personas_dir))
+
+    class Engine:
+        model = "old-model"
+        temperature = 0.1
+        top_p = 0.2
+        max_tokens = 64
+
+        def __init__(self) -> None:
+            self.system_prompt = "old prompt"
+
+        def set_system_prompt(self, prompt: str) -> None:
+            self.system_prompt = prompt
+
+    engine = Engine()
+    ctx = type(
+        "Ctx",
+        (),
+        {"config": current, "runtime_config_version": 1, "llm_engine": engine},
+    )()
+
+    (personas_dir / "test_anima.yaml").write_text("name: [broken", encoding="utf-8")
+
+    reloader = RuntimeConfigReloader(current, config_path=str(config_path), personas_dir=str(personas_dir))
+    result = reloader.reload()
+    if result.ok:
+        apply_runtime_config_to_contexts(reloader.config, result.version, [ctx])
+
+    assert result.ok is False
+    assert engine.model == "old-model"
+    assert engine.temperature == 0.1
+    assert engine.top_p == 0.2
+    assert engine.max_tokens == 64
+    assert engine.system_prompt == "old prompt"
+    assert ctx.config is current
+    assert ctx.runtime_config_version == 1
+
+
+def test_apply_runtime_config_replaces_active_session_config_version_and_prompt(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "animetta.config.live2d.get_live2d_config",
+        lambda: type("Live2DConfig", (), {"enabled": False})(),
+    )
+
+    class Config:
+        model = "new-model"
+        temperature = 0.7
+        top_p = 0.8
+        max_tokens = 256
+
+    class Engine:
+        model = "old-model"
+        temperature = 0.1
+        top_p = 0.2
+        max_tokens = 64
+
+        def __init__(self) -> None:
+            self.system_prompt = "old prompt"
+
+        def set_system_prompt(self, prompt: str) -> None:
+            self.system_prompt = prompt
+
+    runtime_config = type(
+        "RuntimeConfig",
+        (),
+        {
+            "persona": "test_anima",
+            "agent": type("Agent", (), {"llm_config": Config()})(),
+            "get_system_prompt": lambda self, live2d_prompt=None: "new prompt",
+        },
+    )()
+    old_config = object()
+    engine = Engine()
+    ctx = type(
+        "Ctx",
+        (),
+        {"config": old_config, "runtime_config_version": 1, "llm_engine": engine},
+    )()
+
+    result = apply_runtime_config_to_contexts(runtime_config, 2, [ctx])
+
+    assert ctx.config is runtime_config
+    assert ctx.runtime_config_version == 2
+    assert engine.model == "new-model"
+    assert engine.temperature == 0.7
+    assert engine.top_p == 0.8
+    assert engine.max_tokens == 256
+    assert engine.system_prompt == "new prompt"
+    assert result.to_dict() == {
+        "version": 2,
+        "persona": "test_anima",
+        "sessions": 1,
+        "prompt_warnings": [],
+    }
 
 
 def test_reload_result_redacts_secrets(runtime_config_env, monkeypatch: pytest.MonkeyPatch):

@@ -101,3 +101,38 @@ The prompt pipeline SHALL include a concise live improvisation control layer for
 - **WHEN** live improvisation and memory sections are both present
 - **THEN** the live improvisation section SHALL appear before the memory section
 - **THEN** memory context SHALL NOT be the final style-setting instruction
+
+### Requirement: Base persona prompt is derived from active config
+The prompt pipeline SHALL derive the base persona prompt from the active runtime configuration when a service context is available, using state-provided prompt text only as a compatibility fallback.
+
+#### Scenario: Service context config provides persona prompt
+- **WHEN** the prompt pipeline compiles a prompt and `RunnableConfig.configurable.service_context.config` is available
+- **THEN** the persona section SHALL be built from that active config's persona
+- **THEN** the compiled prompt SHALL not depend on a separately precomputed orchestrator prompt string
+
+#### Scenario: State prompt remains fallback for isolated callers
+- **WHEN** the prompt pipeline compiles a prompt without an active service context config
+- **THEN** it SHALL use `state["system_prompt"]` as the base persona prompt when present
+- **THEN** it SHALL preserve the existing missing-persona warning behavior when no fallback exists
+
+### Requirement: Live2D prompt is included consistently
+The prompt pipeline SHALL include Live2D emotion instructions in the same base persona prompt path used by streaming and tool-calling modes.
+
+#### Scenario: Live2D is enabled
+- **WHEN** Live2D config is enabled and exposes valid emotions
+- **THEN** the base persona prompt SHALL include the generated Live2D emotion instruction prompt
+- **THEN** streaming and tool-calling LLM modes SHALL receive equivalent Live2D instructions
+
+#### Scenario: Live2D prompt generation fails
+- **WHEN** Live2D prompt generation fails during prompt compilation
+- **THEN** the prompt pipeline SHALL continue compiling the persona prompt without Live2D instructions
+- **THEN** the compiled prompt metadata SHALL include a warning for the omitted Live2D source
+
+### Requirement: Runtime config version is reflected in compiled prompts
+The prompt pipeline SHALL expose the runtime config version used to compile each prompt.
+
+#### Scenario: Prompt compiled after reload
+- **WHEN** runtime reload succeeds and a subsequent conversation turn compiles a prompt
+- **THEN** the compiled prompt metadata SHALL include the new runtime config version
+- **THEN** the persona prompt content SHALL come from the reloaded persona data
+

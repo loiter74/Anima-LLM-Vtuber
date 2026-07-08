@@ -10,7 +10,11 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
-from animetta.config.runtime_reload import RuntimeConfigReloader, apply_lightweight_llm_config
+from animetta.config.runtime_reload import (
+    RuntimeConfigReloader,
+    apply_runtime_config_to_contexts,
+    build_runtime_system_prompt,
+)
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_pool import ServicePool
 from animetta.tracing.bootstrap import init_tracing
@@ -128,7 +132,11 @@ class WebSocketServer:
 
             result = self.runtime_reloader.reload()
             if result.ok:
-                await self._apply_reloaded_config(self.runtime_reloader.config, result.version)
+                apply_result = await self._apply_reloaded_config(
+                    self.runtime_reloader.config,
+                    result.version,
+                )
+                result.applied = apply_result.to_dict()
             return JSONResponse(result.to_dict(), status_code=200 if result.ok else 400)
 
         config_routes = [
@@ -164,7 +172,7 @@ class WebSocketServer:
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
 
-    async def _apply_reloaded_config(self, config, version: int) -> None:
+    async def _apply_reloaded_config(self, config, version: int):
         """Apply a successfully reloaded config to active runtime holders."""
         self.config = config
         if self.runtime_reloader is not None:
@@ -174,11 +182,19 @@ class WebSocketServer:
             self.route_handlers.set_global_config(config)
 
         llm_config = config.agent.llm_config if config.agent else None
-        ServicePool.apply_llm_config(llm_config)
-        for ctx in self.session_manager.contexts.values():
-            ctx.config = config
-            ctx.runtime_config_version = version
-            apply_lightweight_llm_config(getattr(ctx, "llm_engine", None), llm_config)
+        runtime_prompt = build_runtime_system_prompt(config)
+        ServicePool.apply_llm_config(llm_config, system_prompt=runtime_prompt.system_prompt)
+        apply_result = apply_runtime_config_to_contexts(
+            config,
+            version,
+            self.session_manager.contexts.values(),
+            runtime_prompt=runtime_prompt,
+        )
+
+        for warning in apply_result.prompt_warnings:
+            logger.warning("[RuntimeConfigReload] {}", warning)
+
+        return apply_result
 
     def set_user_settings(self, user_settings) -> None:
         """Set user settings"""

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ChatMessage, MessageRole, MessageStatus } from '@/types/chat'
 import { useMessageStore } from '@/composables/useMessageStore'
+import { usePersonalityStore } from '@/stores/personality'
 
 let messageIdCounter = 0
 type ReloadConfigStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -12,6 +13,13 @@ interface ReloadConfigResponse {
   persona: string
   refreshed: string[]
   error?: string | null
+  preserved?: boolean
+  applied?: {
+    version?: number
+    persona?: string
+    sessions?: number
+    prompt_warnings?: string[]
+  }
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -24,6 +32,10 @@ export const useChatStore = defineStore('chat', () => {
   const reloadConfigMessage = ref('')
   const reloadConfigVersion = ref<number | null>(null)
   const reloadConfigPersona = ref('')
+  const reloadConfigRefreshed = ref<string[]>([])
+  const reloadConfigPreserved = ref(false)
+  const reloadConfigAppliedSessions = ref<number | null>(null)
+  const reloadConfigPromptWarnings = ref<string[]>([])
 
   // Persistence via IndexedDB
   const messageStore = useMessageStore()
@@ -156,22 +168,45 @@ export const useChatStore = defineStore('chat', () => {
     }, delay)
   }
 
+  function recordReloadConfigMetadata(payload: ReloadConfigResponse): void {
+    reloadConfigVersion.value = payload.version
+    reloadConfigPersona.value = payload.persona
+    reloadConfigRefreshed.value = payload.refreshed || []
+    reloadConfigPreserved.value = Boolean(payload.preserved)
+    reloadConfigAppliedSessions.value = payload.applied?.sessions ?? null
+    reloadConfigPromptWarnings.value = payload.applied?.prompt_warnings || []
+  }
+
+  async function refreshPersonaStateAfterReload(): Promise<void> {
+    try {
+      await usePersonalityStore().fetchAvailablePersonas()
+    } catch (error) {
+      console.warn('[chat] Failed to refresh personas after config reload:', error)
+    }
+  }
+
   async function reloadRuntimeConfig(): Promise<ReloadConfigResponse> {
     reloadConfigStatus.value = 'loading'
     reloadConfigMessage.value = '正在重载配置...'
+    reloadConfigPreserved.value = false
+    reloadConfigAppliedSessions.value = null
+    reloadConfigPromptWarnings.value = []
 
     try {
       const response = await fetch('/api/config/reload', { method: 'POST' })
       const payload = await response.json() as ReloadConfigResponse
+      recordReloadConfigMetadata(payload)
 
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || `配置重载失败 (${response.status})`)
       }
 
       reloadConfigStatus.value = 'success'
-      reloadConfigVersion.value = payload.version
-      reloadConfigPersona.value = payload.persona
-      reloadConfigMessage.value = `已加载 ${payload.persona} · v${payload.version}`
+      const sessionsText = typeof payload.applied?.sessions === 'number'
+        ? ` · ${payload.applied.sessions} 个会话`
+        : ''
+      reloadConfigMessage.value = `已加载 ${payload.persona} · v${payload.version}${sessionsText}`
+      await refreshPersonaStateAfterReload()
       return payload
     } catch (error) {
       reloadConfigStatus.value = 'error'
@@ -191,6 +226,10 @@ export const useChatStore = defineStore('chat', () => {
     reloadConfigMessage,
     reloadConfigVersion,
     reloadConfigPersona,
+    reloadConfigRefreshed,
+    reloadConfigPreserved,
+    reloadConfigAppliedSessions,
+    reloadConfigPromptWarnings,
     lastMessage,
     createMessage,
     resetResponse,

@@ -60,6 +60,7 @@ class PromptContext:
     # Default 50 (neutral); updated each turn from the LLM's [affinity:N] marker.
     affinity: int = 50
     config_version: int = 1
+    base_system_prompt_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass

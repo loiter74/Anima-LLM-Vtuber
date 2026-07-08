@@ -17,7 +17,7 @@ class PersonaPromptSource:
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         content = ctx.base_system_prompt
-        warnings = []
+        warnings = list(ctx.base_system_prompt_warnings)
         if not content:
             warnings.append("No base persona prompt available")
         return [PromptSection(

@@ -129,6 +129,151 @@ async def test_config_version_metadata_flows_into_compiled_prompt():
 
 
 @pytest.mark.asyncio
+async def test_active_service_context_config_overrides_state_prompt():
+    """Runtime service context config is the source of truth for persona prompt."""
+    class RuntimeConfig:
+        def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
+            return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
+
+    class ServiceContext:
+        config = RuntimeConfig()
+        runtime_config_version = 11
+
+    state = {
+        "session_id": "test",
+        "system_prompt": "STATE-PROMPT",
+        "metadata": {},
+    }
+
+    result = await compile_prompt(
+        state,
+        config={"configurable": {"service_context": ServiceContext()}},
+    )
+
+    assert "CONFIG-PROMPT" in result.system_prompt
+    assert "STATE-PROMPT" not in result.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_state_prompt_is_fallback_without_service_context_config():
+    """Isolated prompt compilation still accepts state system_prompt."""
+    state = {
+        "session_id": "test",
+        "system_prompt": "STATE-FALLBACK-PROMPT",
+        "metadata": {},
+    }
+
+    result = await compile_prompt(state, config={"configurable": {}})
+
+    assert "STATE-FALLBACK-PROMPT" in result.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_live2d_prompt_is_included_from_runtime_config(monkeypatch: pytest.MonkeyPatch):
+    """Base persona prompt includes the generated Live2D expression guide."""
+    class RuntimeConfig:
+        def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
+            return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
+
+    class ServiceContext:
+        config = RuntimeConfig()
+        runtime_config_version = 12
+
+    class Live2DConfig:
+        enabled = True
+        valid_emotions = ["happy"]
+
+    class Live2DPromptBuilder:
+        def build_prompt(self) -> str:
+            return "LIVE2D-PROMPT"
+
+    from animetta.avatar.prompts import EmotionPromptBuilder
+
+    monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: Live2DConfig())
+    monkeypatch.setattr(
+        EmotionPromptBuilder,
+        "from_config",
+        classmethod(lambda cls, config: Live2DPromptBuilder()),
+    )
+
+    state = {
+        "session_id": "test",
+        "system_prompt": "STATE-PROMPT",
+        "metadata": {},
+    }
+
+    result = await compile_prompt(
+        state,
+        config={"configurable": {"service_context": ServiceContext()}},
+    )
+
+    assert "CONFIG-PROMPT::LIVE2D-PROMPT" in result.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_live2d_prompt_failure_keeps_prompt_and_warns(monkeypatch: pytest.MonkeyPatch):
+    """Live2D prompt errors do not block persona prompt compilation."""
+    class RuntimeConfig:
+        def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
+            return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
+
+    class ServiceContext:
+        config = RuntimeConfig()
+        runtime_config_version = 13
+
+    class Live2DConfig:
+        enabled = True
+        valid_emotions = ["happy"]
+
+    from animetta.avatar.prompts import EmotionPromptBuilder
+
+    def fail_from_config(cls, config):
+        raise RuntimeError("live2d boom")
+
+    monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: Live2DConfig())
+    monkeypatch.setattr(EmotionPromptBuilder, "from_config", classmethod(fail_from_config))
+
+    state = {
+        "session_id": "test",
+        "system_prompt": "STATE-PROMPT",
+        "metadata": {},
+    }
+
+    result = await compile_prompt(
+        state,
+        config={"configurable": {"service_context": ServiceContext()}},
+    )
+
+    assert "CONFIG-PROMPT::NO-LIVE2D" in result.system_prompt
+    assert any("live2d" in warning.lower() for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_service_context_runtime_config_version_flows_into_compiled_prompt():
+    """Runtime config version falls back to active service context metadata."""
+    class RuntimeConfig:
+        def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
+            return "CONFIG-PROMPT"
+
+    class ServiceContext:
+        config = RuntimeConfig()
+        runtime_config_version = 14
+
+    state = {
+        "session_id": "test",
+        "system_prompt": "STATE-PROMPT",
+        "metadata": {},
+    }
+
+    result = await compile_prompt(
+        state,
+        config={"configurable": {"service_context": ServiceContext()}},
+    )
+
+    assert result.config_version == 14
+
+
+@pytest.mark.asyncio
 async def test_section_names_in_metadata():
     """Metadata includes section names."""
     state = {

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.config.persona import PersonaConfig, list_available_personas
+from animetta.config.runtime_reload import apply_runtime_llm_config, build_runtime_system_prompt
 
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
@@ -134,7 +135,7 @@ class PersonaHandlers(BaseSocketHandler):
                 )
                 return
 
-            new_persona = PersonaConfig.load(persona_name)
+            new_persona = PersonaConfig.load(persona_name, strict=True)
             if not new_persona:
                 await self.sio.emit(
                     EVENTS["system"]["error"]["name"],
@@ -143,34 +144,34 @@ class PersonaHandlers(BaseSocketHandler):
                 )
                 return
 
-            if self.global_config:
-                self.global_config.persona = persona_name
-                self.global_config._persona = None  # Invalidate cache
+            active_global_config = self.global_config
+            if active_global_config:
+                active_global_config.persona = persona_name
+                active_global_config._persona = new_persona
 
             ctx_config = getattr(ctx, "config", None)
             if ctx_config is None:
                 legacy_core = getattr(ctx, "core", None)
                 ctx_config = getattr(legacy_core, "config", None)
 
+            if ctx_config and ctx_config is not active_global_config:
+                ctx_config.persona = persona_name
+                ctx_config._persona = new_persona
+
             if ctx.llm_engine and ctx_config:
-                live2d_prompt = None
-                try:
-                    from animetta.avatar.prompts import EmotionPromptBuilder
-                    from animetta.config.live2d import get_live2d_config
-
-                    live2d_cfg = get_live2d_config()
-                    if live2d_cfg and live2d_cfg.enabled:
-                        builder = EmotionPromptBuilder.from_config(
-                            {"valid_emotions": live2d_cfg.valid_emotions}
-                        )
-                        live2d_prompt = builder.build_prompt()
-                except Exception as e:
-                    logger.debug(f"[PersonaHandlers] Failed to build Live2D emotion prompt: {e}")
-
-                new_system_prompt = ctx_config.get_system_prompt(
-                    live2d_prompt=live2d_prompt
+                runtime_prompt = build_runtime_system_prompt(ctx_config)
+                llm_config = (
+                    ctx_config.agent.llm_config
+                    if getattr(ctx_config, "agent", None)
+                    else None
                 )
-                ctx.llm_engine.set_system_prompt(new_system_prompt)
+                apply_runtime_llm_config(
+                    ctx.llm_engine,
+                    llm_config,
+                    runtime_prompt.system_prompt,
+                )
+                for warning in runtime_prompt.warnings:
+                    logger.warning("[PersonaHandlers] {}", warning)
                 logger.info(f"[{sid}] 已更新 LLM 系统提示词")
 
             orchestrator = self.session_manager.get_orchestrator(sid)

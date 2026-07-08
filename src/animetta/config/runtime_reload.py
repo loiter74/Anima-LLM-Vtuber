@@ -20,6 +20,8 @@ class ReloadResult:
     persona: str
     refreshed: list[str] = field(default_factory=list)
     error: str | None = None
+    preserved: bool = False
+    applied: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -28,6 +30,34 @@ class ReloadResult:
             "persona": self.persona,
             "refreshed": list(self.refreshed),
             "error": _redact(self.error) if self.error else None,
+            "preserved": self.preserved,
+            "applied": dict(self.applied),
+        }
+
+
+@dataclass(frozen=True)
+class RuntimePrompt:
+    """Effective runtime prompt plus non-fatal build diagnostics."""
+
+    system_prompt: str
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RuntimeConfigApplyResult:
+    """Metadata returned after applying a runtime config to active contexts."""
+
+    version: int
+    persona: str
+    sessions: int
+    prompt_warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "persona": self.persona,
+            "sessions": self.sessions,
+            "prompt_warnings": list(self.prompt_warnings),
         }
 
 
@@ -56,7 +86,11 @@ class RuntimeConfigReloader:
         try:
             clear_config_caches()
             next_config = AppConfig.load(self.config_path)
-            persona = PersonaConfig.load(next_config.persona, personas_dir=self.personas_dir)
+            persona = PersonaConfig.load(
+                next_config.persona,
+                personas_dir=self.personas_dir,
+                strict=True,
+            )
             next_config._persona = persona
 
             self.version += 1
@@ -80,6 +114,7 @@ class RuntimeConfigReloader:
                 persona=self._config.persona,
                 refreshed=[],
                 error=str(exc),
+                preserved=True,
             )
 
 
@@ -103,6 +138,95 @@ def apply_lightweight_llm_config(llm_engine: Any, llm_config: Any) -> None:
     thinking = getattr(llm_config, "thinking", None)
     if thinking and hasattr(target, "extra_body"):
         setattr(target, "extra_body", {"thinking": {"type": thinking}})
+
+
+def build_runtime_system_prompt(config: Any) -> RuntimePrompt:
+    """Build the effective runtime system prompt from the active AppConfig."""
+    if config is None:
+        return RuntimePrompt(system_prompt="", warnings=[])
+
+    live2d_prompt, warnings = build_live2d_prompt()
+    try:
+        prompt = config.get_system_prompt(live2d_prompt=live2d_prompt)
+    except TypeError:
+        prompt = config.get_system_prompt()
+    if not isinstance(prompt, str):
+        warnings.append(
+            f"Runtime system prompt unavailable: expected str, got {type(prompt).__name__}"
+        )
+        prompt = ""
+    return RuntimePrompt(system_prompt=prompt, warnings=warnings)
+
+
+def build_live2d_prompt() -> tuple[str | None, list[str]]:
+    """Build the Live2D prompt fragment, returning warnings instead of raising."""
+    try:
+        from animetta.avatar.prompts import EmotionPromptBuilder
+        from animetta.config.live2d import get_live2d_config
+
+        live2d_config = get_live2d_config()
+        if live2d_config is None or not getattr(live2d_config, "enabled", False):
+            return None, []
+
+        builder = EmotionPromptBuilder.from_config(
+            {"valid_emotions": list(getattr(live2d_config, "valid_emotions", []) or [])}
+        )
+        return builder.build_prompt(), []
+    except Exception as exc:
+        warning = f"Live2D prompt unavailable: {_redact(str(exc))}"
+        logger.warning("[RuntimePrompt] {}", warning)
+        return None, [warning]
+
+
+def apply_runtime_llm_config(
+    llm_engine: Any,
+    llm_config: Any,
+    system_prompt: str | None = None,
+) -> None:
+    """Apply reload-safe LLM fields and prompt to an existing engine."""
+    if llm_engine is None:
+        return
+
+    apply_lightweight_llm_config(llm_engine, llm_config)
+    if system_prompt is None:
+        return
+
+    target = _unwrap_service_proxy(llm_engine)
+    set_prompt = getattr(target, "set_system_prompt", None)
+    if callable(set_prompt):
+        set_prompt(system_prompt)
+    elif hasattr(target, "system_prompt"):
+        setattr(target, "system_prompt", system_prompt)
+
+
+def apply_runtime_config_to_contexts(
+    config: Any,
+    version: int,
+    contexts: Any,
+    *,
+    runtime_prompt: RuntimePrompt | None = None,
+) -> RuntimeConfigApplyResult:
+    """Apply a validated runtime config to active session contexts."""
+    runtime_prompt = runtime_prompt or build_runtime_system_prompt(config)
+    llm_config = config.agent.llm_config if getattr(config, "agent", None) else None
+    sessions = 0
+
+    for ctx in contexts:
+        ctx.config = config
+        ctx.runtime_config_version = version
+        apply_runtime_llm_config(
+            getattr(ctx, "llm_engine", None),
+            llm_config,
+            runtime_prompt.system_prompt,
+        )
+        sessions += 1
+
+    return RuntimeConfigApplyResult(
+        version=version,
+        persona=getattr(config, "persona", ""),
+        sessions=sessions,
+        prompt_warnings=runtime_prompt.warnings,
+    )
 
 
 def _unwrap_service_proxy(service: Any) -> Any:

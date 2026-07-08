@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChatStore } from '@/stores/chat'
 
+const fetchAvailablePersonasMock = vi.hoisted(() => vi.fn())
+
 // Mock IndexedDB-backed message store — IndexedDB is not available in happy-dom
 vi.mock('@/composables/useMessageStore', () => ({
   useMessageStore: () => ({
@@ -12,10 +14,18 @@ vi.mock('@/composables/useMessageStore', () => ({
   }),
 }))
 
+vi.mock('@/stores/personality', () => ({
+  usePersonalityStore: () => ({
+    fetchAvailablePersonas: fetchAvailablePersonasMock,
+  }),
+}))
+
 describe('useChatStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.unstubAllGlobals()
+    fetchAvailablePersonasMock.mockReset()
+    fetchAvailablePersonasMock.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -306,8 +316,46 @@ describe('useChatStore', () => {
       expect(store.reloadConfigStatus).toBe('success')
       expect(store.reloadConfigVersion).toBe(3)
       expect(store.reloadConfigPersona).toBe('anima.v0.1')
+      expect(store.reloadConfigRefreshed).toEqual(['persona', 'llm'])
+      expect(store.reloadConfigPreserved).toBe(false)
+      expect(store.reloadConfigAppliedSessions).toBeNull()
+      expect(store.reloadConfigPromptWarnings).toEqual([])
       expect(store.reloadConfigMessage).toBe('已加载 anima.v0.1 · v3')
+      expect(fetchAvailablePersonasMock).toHaveBeenCalledTimes(1)
       expect(store.messages).toHaveLength(0)
+    })
+
+    it('records structured reload application metadata', async () => {
+      const store = useChatStore()
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          ok: true,
+          version: 4,
+          persona: 'anima.v0.1',
+          refreshed: ['persona', 'llm'],
+          preserved: false,
+          applied: {
+            version: 4,
+            persona: 'anima.v0.1',
+            sessions: 2,
+            prompt_warnings: ['Live2D prompt unavailable: template missing'],
+          },
+        }),
+      }))
+
+      await store.reloadRuntimeConfig()
+
+      expect(store.reloadConfigVersion).toBe(4)
+      expect(store.reloadConfigPersona).toBe('anima.v0.1')
+      expect(store.reloadConfigRefreshed).toEqual(['persona', 'llm'])
+      expect(store.reloadConfigPreserved).toBe(false)
+      expect(store.reloadConfigAppliedSessions).toBe(2)
+      expect(store.reloadConfigPromptWarnings).toEqual([
+        'Live2D prompt unavailable: template missing',
+      ])
+      expect(store.reloadConfigMessage).toBe('已加载 anima.v0.1 · v4 · 2 个会话')
+      expect(fetchAvailablePersonasMock).toHaveBeenCalledTimes(1)
     })
 
     it('records API failure without adding chat messages', async () => {
@@ -320,13 +368,19 @@ describe('useChatStore', () => {
           persona: 'anima.v0.1',
           refreshed: [],
           error: 'persona yaml invalid',
+          preserved: true,
         }),
       }))
 
       await expect(store.reloadRuntimeConfig()).rejects.toThrow('persona yaml invalid')
 
       expect(store.reloadConfigStatus).toBe('error')
+      expect(store.reloadConfigVersion).toBe(1)
+      expect(store.reloadConfigPersona).toBe('anima.v0.1')
+      expect(store.reloadConfigRefreshed).toEqual([])
+      expect(store.reloadConfigPreserved).toBe(true)
       expect(store.reloadConfigMessage).toBe('重载失败，仍使用上一份有效配置：persona yaml invalid')
+      expect(fetchAvailablePersonasMock).not.toHaveBeenCalled()
       expect(store.messages).toHaveLength(0)
     })
   })

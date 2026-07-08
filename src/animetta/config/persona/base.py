@@ -375,13 +375,21 @@ class PersonaConfig(BaseConfig):
         return cls(**data)
 
     @classmethod
-    def load(cls, name: str = "default", personas_dir: str | None = None) -> "PersonaConfig":
+    def load(
+        cls,
+        name: str = "default",
+        personas_dir: str | None = None,
+        *,
+        strict: bool = False,
+    ) -> "PersonaConfig":
         """
         Load persona by name
 
         Args:
             name: Persona name (without .yaml suffix)
             personas_dir: Personas directory path, defaults to config/personas/
+            strict: Raise when the named persona file is missing instead of
+                falling back to the default persona.
 
         Returns:
             PersonaConfig: Persona configuration object
@@ -393,8 +401,8 @@ class PersonaConfig(BaseConfig):
         if yaml_path.exists():
             return cls.from_yaml(str(yaml_path))
 
-        # If not found, return default
-        if name != "default":
+        # If not found, return default unless the caller needs validation.
+        if name != "default" and not strict:
             return cls()
 
         raise FileNotFoundError(f"Persona configuration not found: {name}")

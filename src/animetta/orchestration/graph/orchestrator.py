@@ -287,11 +287,9 @@ class LangGraphOrchestrator:
         }
 
     def _get_system_prompt(self) -> str | None:
-        """Get system prompt from persona config."""
+        """Get a compatibility fallback; per-turn prompt ownership is in the pipeline."""
         if self.service_context and self.service_context.config:
-            persona = self.service_context.config.get_persona()
-            if persona:
-                return persona.build_system_prompt()
+            return self.service_context.config.get_system_prompt()
         return None
 
     def _get_persona_dict(self) -> dict[str, Any] | None:

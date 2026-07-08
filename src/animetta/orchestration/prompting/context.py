@@ -6,6 +6,8 @@ from typing import Any
 
 from langgraph.types import RunnableConfig
 
+from animetta.config.runtime_reload import build_runtime_system_prompt
+
 from .types import PromptContext
 
 
@@ -20,9 +22,11 @@ def build_context(
     Does not modify state or config.
     """
     metadata = state.get("metadata", {})
+    service_context = _get_service_context(config)
+    base_system_prompt, base_warnings = _build_base_system_prompt(state, service_context)
     return PromptContext(
         session_id=state.get("session_id", "unknown"),
-        base_system_prompt=state.get("system_prompt") or "",
+        base_system_prompt=base_system_prompt,
         personality_overlay=metadata.get("personality_overlay", ""),
         personality_mode=metadata.get("personality_mode", "default"),
         personality_mood=metadata.get("personality_mood"),
@@ -43,6 +47,36 @@ def build_context(
         ),
         config_version=metadata.get(
             "config_version",
-            state.get("config_version", 1),
+            getattr(service_context, "runtime_config_version", state.get("config_version", 1)),
         ),
+        base_system_prompt_warnings=base_warnings,
     )
+
+
+def _get_service_context(config: RunnableConfig | None) -> Any | None:
+    """Extract the active ServiceContext from a LangGraph RunnableConfig."""
+    if not config:
+        return None
+
+    if isinstance(config, dict):
+        configurable = config.get("configurable") or {}
+    else:
+        configurable = getattr(config, "configurable", {}) or {}
+
+    if isinstance(configurable, dict):
+        return configurable.get("service_context")
+    return getattr(configurable, "service_context", None)
+
+
+def _build_base_system_prompt(
+    state: dict[str, Any],
+    service_context: Any | None,
+) -> tuple[str, list[str]]:
+    """Build persona prompt from active runtime config with state fallback."""
+    active_config = getattr(service_context, "config", None)
+    if active_config is not None:
+        runtime_prompt = build_runtime_system_prompt(active_config)
+        if runtime_prompt.system_prompt:
+            return runtime_prompt.system_prompt, runtime_prompt.warnings
+        return state.get("system_prompt") or "", runtime_prompt.warnings
+    return state.get("system_prompt") or "", []

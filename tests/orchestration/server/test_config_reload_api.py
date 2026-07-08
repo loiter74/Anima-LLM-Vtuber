@@ -10,9 +10,24 @@ from animetta.config.runtime_reload import ReloadResult
 from animetta.orchestration.server.websocket import WebSocketServer
 
 
+def _make_runtime_config(
+    *,
+    persona: str = "anima.v0.1",
+    llm_config=None,
+    system_prompt: str = "test runtime prompt",
+):
+    return SimpleNamespace(
+        persona=persona,
+        agent=SimpleNamespace(llm_config=llm_config),
+        get_system_prompt=lambda live2d_prompt=None: system_prompt,
+    )
+
+
 def test_reload_config_endpoint_returns_structured_success():
-    server = WebSocketServer(config=MagicMock())
+    reloaded_config = _make_runtime_config()
+    server = WebSocketServer(config=reloaded_config)
     server.runtime_reloader = MagicMock()
+    server.runtime_reloader.config = reloaded_config
     server.runtime_reloader.reload.return_value = ReloadResult(
         ok=True,
         version=3,
@@ -30,13 +45,20 @@ def test_reload_config_endpoint_returns_structured_success():
         "persona": "anima.v0.1",
         "refreshed": ["persona", "llm"],
         "error": None,
+        "preserved": False,
+        "applied": {
+            "version": 3,
+            "persona": "anima.v0.1",
+            "sessions": 0,
+            "prompt_warnings": [],
+        },
     }
 
 
 def test_reload_config_endpoint_applies_reloaded_config_to_contexts():
     llm_config = SimpleNamespace(model="updated-model")
-    new_config = SimpleNamespace(agent=SimpleNamespace(llm_config=llm_config))
-    server = WebSocketServer(config=SimpleNamespace(agent=None))
+    new_config = _make_runtime_config(llm_config=llm_config)
+    server = WebSocketServer(config=_make_runtime_config(llm_config=None))
     server.runtime_reloader = MagicMock()
     server.runtime_reloader.config = new_config
     server.runtime_reloader.reload.return_value = ReloadResult(
