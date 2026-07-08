@@ -26,6 +26,13 @@ FALLBACK_RESPONSE = "I need a moment to think about that."
 # switch). Keeping these regexes separate prevents the emotion stripper from
 # clobbering a marker that the affinity parser deliberately preserved.
 _EMOTION_TAG_RE = re.compile(r"\s*\[[\w-]+\]\s*")
+_THINKING_BLOCK_RE = re.compile(
+    r"(?is)<(?:think|thinking)\b[^>]*>.*?</(?:think|thinking)>"
+    r"|\[(?:think|thinking)\].*?\[/(?:think|thinking)\]"
+)
+_ORPHAN_THINKING_PREFIX_RE = re.compile(
+    r"(?is)^.*?(?:</(?:think|thinking)>|\[/(?:think|thinking)\])\s*"
+)
 
 # Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
 # The LLM emits this at the end of each reply per the AffinityPromptSource
@@ -38,6 +45,16 @@ _SENTENCE_END_RE = re.compile(r"([^。！？!?]+)([。！？!?])")
 def _strip_emotion_tags(text: str) -> str:
     """Remove emotion tags like [happy], [neutral] from LLM output."""
     return _EMOTION_TAG_RE.sub(" ", text).strip()
+
+
+def _strip_model_thinking(text: str) -> str:
+    """Remove provider-emitted thinking blocks before exposing visible replies."""
+    if not text:
+        return text
+
+    stripped = _THINKING_BLOCK_RE.sub("", text)
+    stripped = _ORPHAN_THINKING_PREFIX_RE.sub("", stripped, count=1)
+    return stripped.strip()
 
 
 def _enforce_persona_verbal_tics(response_text: str, system_prompt: str | None) -> str:
@@ -387,19 +404,21 @@ async def _llm_with_tools(
                     for tc in tool_calls
                 ]
 
-                ai_message = AIMessage(content=_strip_emotion_tags(response.get("content", "") or "Calling tools..."), tool_calls=tool_calls)
+                visible_content = _strip_model_thinking(response.get("content", "") or "Calling tools...")
+                visible_content = _strip_emotion_tags(visible_content)
+                ai_message = AIMessage(content=visible_content, tool_calls=tool_calls)
 
                 # after_llm_call notification (non-blocking)
-                _notify_middleware_after(session_id, user_text, response.get("content", ""), config)
+                _notify_middleware_after(session_id, user_text, visible_content, config)
 
                 return {
-                    "response_text": _strip_emotion_tags(response.get("content", "") or "Calling tools..."),
-                    "response_chunks": [response.get("content", "") or ""],
+                    "response_text": visible_content,
+                    "response_chunks": [visible_content],
                     "messages": [ai_message],
                     "tool_calls": formatted_tool_calls,
                 }
             else:
-                full_response = response.get("content", "")
+                full_response = _strip_model_thinking(response.get("content", ""))
                 logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
 
                 # ── Affinity marker parsing ── (same as streaming path)
@@ -498,12 +517,14 @@ async def _llm_without_tools(
     # from the visible text. Done before AIMessage construction so the chat
     # history (used for roleplay-guard drift detection next turn) doesn't
     # carry stale markers.
+    raw_response = full_response
+    full_response = _strip_model_thinking(full_response)
     full_response = _extract_and_update_affinity(state, full_response)
     original_response = full_response
     full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
     # Also strip any chunks that may contain the marker (defensive — the
     # streaming chunks accumulate the raw marker).
-    chunks = [full_response] if full_response != original_response else [
+    chunks = [full_response] if full_response != raw_response or full_response != original_response else [
         _AFFINITY_MARKER_RE.sub("", c) for c in chunks
     ]
 

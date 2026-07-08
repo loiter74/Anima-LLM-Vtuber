@@ -232,6 +232,28 @@ class TestLLMNodeWithoutTools:
 
         assert result["response_text"] == "不是我卡了，是后厨又进虫子了喵。旅人稍等一下喵。"
 
+    @pytest.mark.asyncio
+    async def test_streaming_strips_orphan_thinking_prefix(self, mock_service_context):
+        """Visible reply should not include reasoning text before a closing thinking tag."""
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield '用户发了个"牛牛牛"，这是B站常见的弹幕梗。[/thinking] '
+            yield '这就开始刷"牛"了？行吧，今晚来了个识货的旅人。[happy]'
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="牛牛牛",
+        )
+        config = _make_config(service_context=mock_service_context)
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == '这就开始刷"牛"了？行吧，今晚来了个识货的旅人。'
+        assert result["response_chunks"] == [
+            '这就开始刷"牛"了？行吧，今晚来了个识货的旅人。[happy]'
+        ]
+
 
 # ── Tool-calling path ─────────────────────────────────────────────
 
@@ -328,6 +350,34 @@ class TestLLMNodeWithTools:
         result = await llm_node(state, config)
 
         assert result["response_text"] == "不是我卡了，是后厨又进虫子了喵。旅人稍等一下喵。"
+        assert "messages" not in result
+
+    @pytest.mark.asyncio
+    async def test_tool_text_strips_think_block(self, mock_service_context):
+        """Tool-calling text path should hide provider thinking blocks."""
+
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = []
+
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={
+                "content": "<think>Need a quick Bilibili-style acknowledgement.</think>牛到了，今晚酒馆都亮了。[happy]",
+            }
+        )
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="牛牛牛",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "牛到了，今晚酒馆都亮了。"
+        assert result["response_chunks"] == ["牛到了，今晚酒馆都亮了。[happy]"]
         assert "messages" not in result
 
     @pytest.mark.asyncio
