@@ -254,6 +254,33 @@ class TestLLMNodeWithoutTools:
             '这就开始刷"牛"了？行吧，今晚来了个识货的旅人。[happy]'
         ]
 
+    @pytest.mark.asyncio
+    async def test_streaming_strips_untagged_reasoning_prefix(self, mock_service_context):
+        """Visible reply should hide untagged model meta-reasoning prefixes."""
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield (
+                'The user says "我要吃饭" (I want to eat). As a Minecraft bot in a '
+                "late-night cyber tavern setting, I should respond in character. "
+            )
+            yield (
+                "Let me check the current status first. Actually, the user is just "
+                "chatting with me in the tavern setting. I'll just reply in my usual style. "
+            )
+            yield "赛博酒馆不提供实体餐，只有数据流配给。[neutral]"
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="我要吃饭",
+        )
+        config = _make_config(service_context=mock_service_context)
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "赛博酒馆不提供实体餐，只有数据流配给。"
+        assert result["response_chunks"] == ["赛博酒馆不提供实体餐，只有数据流配给。[neutral]"]
+
 
 # ── Tool-calling path ─────────────────────────────────────────────
 
@@ -378,6 +405,38 @@ class TestLLMNodeWithTools:
 
         assert result["response_text"] == "牛到了，今晚酒馆都亮了。"
         assert result["response_chunks"] == ["牛到了，今晚酒馆都亮了。[happy]"]
+        assert "messages" not in result
+
+    @pytest.mark.asyncio
+    async def test_tool_text_strips_untagged_reasoning_prefix(self, mock_service_context):
+        """Tool-calling text path should hide untagged provider meta-reasoning."""
+
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = []
+
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={
+                "content": (
+                    'The user says "我要吃饭" (I want to eat). I should respond in character. '
+                    "This is a casual conversation, not a Minecraft command request. "
+                    "赛博酒馆不提供实体餐，只有数据流配给。[neutral]"
+                ),
+            }
+        )
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="我要吃饭",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "赛博酒馆不提供实体餐，只有数据流配给。"
+        assert result["response_chunks"] == ["赛博酒馆不提供实体餐，只有数据流配给。[neutral]"]
         assert "messages" not in result
 
     @pytest.mark.asyncio

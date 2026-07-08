@@ -33,6 +33,16 @@ _THINKING_BLOCK_RE = re.compile(
 _ORPHAN_THINKING_PREFIX_RE = re.compile(
     r"(?is)^.*?(?:</(?:think|thinking)>|\[/(?:think|thinking)\])\s*"
 )
+_UNTAGGED_REASONING_PREFIX_RE = re.compile(
+    r"(?is)^\s*"
+    r"(?=(?:the user\s+(?:says|said|asks|asked|wants|is)\b|"
+    r"user\s+(?:says|said|asks|asked|wants|is)\b|"
+    r"as an?\b|i should\b|let me\b))"
+    r"(?=.*\b(?:i should|let me|actually|respond in character|"
+    r"not a minecraft command|usual style)\b)"
+    r".*[.!?]\s+"
+    r"(?P<answer>[\u4e00-\u9fff][\s\S]*)$"
+)
 
 # Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
 # The LLM emits this at the end of each reply per the AffinityPromptSource
@@ -54,6 +64,9 @@ def _strip_model_thinking(text: str) -> str:
 
     stripped = _THINKING_BLOCK_RE.sub("", text)
     stripped = _ORPHAN_THINKING_PREFIX_RE.sub("", stripped, count=1)
+    match = _UNTAGGED_REASONING_PREFIX_RE.match(stripped)
+    if match:
+        stripped = match.group("answer")
     return stripped.strip()
 
 
