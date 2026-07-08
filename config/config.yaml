@@ -13,12 +13,15 @@ persona: "anima.v0.1"
 
 services:
   asr: mock  # 使用 mock ASR（funasr 未安装）
+  # asr: mimo-asr   # 小米 MiMo ASR（MIMO_API_KEY）
   tts: mock   # 测试用，无 TTS 依赖
+  # tts: mimo-tts   # 小米 MiMo TTS（MIMO_API_KEY）
   # tts: alice_vc   # 有珠 Qwen TTS 声音克隆
   agent: deepseek  # 底座LLM（测试用，DEEPSEEK_API_KEY 可用）
   # agent: mimo  # 底座LLM：小米 MiMo Pro 2
   # local_llm: local_lora  # 本地LLM：LocalLoraLLM（简单应答，无persona，保留LoRA效果）- 已禁用
   vad: silero   # vad: silero / mock
+  # vad: mimo-vad   # 小米 MiMo VAD（本地端点 + MiMo ASR 确认）
 
 # ============================================
 # 系统配置

@@ -34,6 +34,7 @@ from .providers.asr import (
     FasterWhisperASRConfig,
     FunASRConfig,
     GLMASRConfig,
+    MimoASRConfig,
     MockASRConfig,
     OpenAIASRConfig,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "MockASRConfig",
     "OpenAIASRConfig",
     "GLMASRConfig",
+    "MimoASRConfig",
     "FasterWhisperASRConfig",
     "FunASRConfig",
     # TTS Providers

@@ -8,6 +8,7 @@ in lightweight/core deployments.
 from .factory import ASRFactory
 from .glm_asr import GLMASR
 from .interface import ASRInterface
+from .mimo_asr import MimoASR
 
 # Core implementations (lightweight dependencies)
 from .mock_asr import MockASR
@@ -29,6 +30,7 @@ __all__ = [
     # Core (always available)
     "MockASR",
     "GLMASR",
+    "MimoASR",
     # Optional (may be None if deps missing)
     "FasterWhisperASR",
     "FunASRASR",

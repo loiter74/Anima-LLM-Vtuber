@@ -19,6 +19,7 @@ from animetta.config.providers.tts import (
     EdgeTTSConfig,
     GPTSoVITSConfig,
     KokoroTTSConfig,
+    MimoTTSConfig,
     MockTTSConfig,
     OpenAITTSConfig,
     Qwen3TTSConfig,
@@ -27,6 +28,7 @@ from animetta.config.providers.tts import (
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import TTSInterface
+from .mimo_tts import MimoTTS  # noqa: F401 - ensure provider registration
 from .mock_tts import MockTTS
 
 
@@ -85,6 +87,16 @@ class TTSFactory:
                     response_format=kwargs.get("response_format", "wav"),
                     speed=kwargs.get("speed", 1.0),
                     volume=kwargs.get("volume", 1.0),
+                )
+            elif provider in ("mimo", "mimo_tts", "mimo-tts"):
+                return MimoTTSConfig(
+                    api_key=kwargs.get("api_key"),
+                    model=kwargs.get("model", "mimo-v2.5-tts"),
+                    voice=kwargs.get("voice", "mimo_default"),
+                    base_url=kwargs.get("base_url", "https://api.xiaomimimo.com/v1"),
+                    response_format=kwargs.get("response_format", "wav"),
+                    style_prompt=kwargs.get("style_prompt"),
+                    timeout=kwargs.get("timeout", 60.0),
                 )
             elif provider == "chattts":
                 return ChatTTSConfig(

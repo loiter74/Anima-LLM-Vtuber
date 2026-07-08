@@ -8,9 +8,11 @@ from .interface import VADInterface, VADResult, VADState
 
 # Import implementations to trigger ProviderRegistry registration
 try:
+    from .mimo_vad import MimoVAD
     from .mock_vad import MockVAD
     from .silero_vad import SileroStateMachine, SileroVAD
 except ImportError:
+    MimoVAD = None  # type: ignore
     SileroVAD = None  # type: ignore
     SileroStateMachine = None  # type: ignore
     MockVAD = None  # type: ignore
@@ -24,4 +26,5 @@ __all__ = [
     "SileroVAD",
     "SileroStateMachine",
     "MockVAD",
+    "MimoVAD",
 ]

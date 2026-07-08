@@ -9,6 +9,7 @@ from .edge import EdgeTTSConfig  # noqa: F401
 from .glm import GLMTTSConfig  # noqa: F401
 from .gpt_sovits import GPTSoVITSConfig  # noqa: F401
 from .kokoro import KokoroTTSConfig  # noqa: F401
+from .mimo import MimoTTSConfig  # noqa: F401
 from .mock import MockTTSConfig  # noqa: F401
 from .openai import OpenAITTSConfig  # noqa: F401
 from .qwen3 import Qwen3TTSConfig  # noqa: F401
@@ -20,4 +21,5 @@ TTSConfig = ProviderRegistry.create_union_type("tts")
 __all__ = [
     "TTSBaseConfig",
     "TTSConfig",
+    "MimoTTSConfig",
 ]

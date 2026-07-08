@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
+from animetta.services.vad import VADState
+from animetta.services.vad.interface import VADResult
+from animetta.services.vad.mock_vad import MockVAD
 
 
 class _TensorLike:
@@ -63,6 +66,74 @@ class TestSimpleVADProcessor:
             on_speech_end=AsyncMock(),
         )
         assert p._get_speech_prob([0.1, 0.2]) == 0.0
+
+    @pytest.mark.asyncio
+    async def test_vad_interface_without_model_triggers_manual_end(self, mock_callbacks):
+        """A stateful VADInterface without .model still drives speech callbacks."""
+        vad = MockVAD(min_speech_duration=2, min_silence_duration=2)
+        p = SimpleVADProcessor(
+            session_id="test",
+            vad_engine=vad,
+            on_speech_end=mock_callbacks,
+            sample_rate=16000,
+        )
+
+        await p.process_chunk([0.2] * 512)
+        await p.process_chunk([0.2] * 512)
+        await p.process_chunk([0.2] * 512)
+        await p.process_end()
+
+        mock_callbacks.assert_awaited_once()
+        assert len(mock_callbacks.await_args.args[0]) > 0
+        assert vad.get_current_state().name == "IDLE"
+
+    @pytest.mark.asyncio
+    async def test_vad_interface_without_model_uses_speech_end_event(self, mock_callbacks):
+        """VADResult speech_end emits the callback without wall-clock silence."""
+        vad = MockVAD(min_speech_duration=2, min_silence_duration=2)
+        p = SimpleVADProcessor(
+            session_id="test",
+            vad_engine=vad,
+            on_speech_end=mock_callbacks,
+            sample_rate=16000,
+        )
+
+        for _ in range(3):
+            await p.process_chunk([0.2] * 512)
+        for _ in range(2):
+            await p.process_chunk([0.0] * 512)
+
+        mock_callbacks.assert_awaited_once()
+        assert len(mock_callbacks.await_args.args[0]) > 0
+
+    @pytest.mark.asyncio
+    async def test_vad_interface_discards_unconfirmed_speech_end(self, mock_callbacks):
+        """speech_detected=False should reset state without calling downstream ASR."""
+        vad = MagicMock(spec=VADInterface)
+        vad.detect_speech.side_effect = [
+            VADResult(is_speech_start=True, state=VADState.ACTIVE, speech_detected=True),
+            VADResult(
+                is_speech_end=True,
+                state=VADState.IDLE,
+                speech_detected=False,
+                metadata={"provider": "mimo"},
+            ),
+        ]
+        vad.reset = MagicMock()
+        p = SimpleVADProcessor(
+            session_id="test",
+            vad_engine=vad,
+            on_speech_end=mock_callbacks,
+            sample_rate=16000,
+        )
+
+        await p.process_chunk([0.2] * 512)
+        await p.process_chunk([0.0] * 512)
+
+        mock_callbacks.assert_not_called()
+        assert p._is_speech is False
+        assert p._audio_buffer == []
+        vad.reset.assert_called_once()
 
     def test_get_speech_prob_with_model(self, mock_vad):
         """_get_speech_prob delegates to the Silero model."""

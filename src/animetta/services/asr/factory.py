@@ -11,6 +11,7 @@ from animetta.config.providers.asr import (
     FasterWhisperASRConfig,
     FunASRConfig,
     GLMASRConfig,
+    MimoASRConfig,
     MockASRConfig,
     OpenAIASRConfig,
 )
@@ -56,15 +57,16 @@ class ASRFactory:
     @staticmethod
     def _build_config(provider: str, kwargs: dict):
         """Build a config Pydantic object from kwargs, or None if unknown."""
+        normalized_provider = provider.replace("_", "-")
         try:
-            if provider == "openai":
+            if normalized_provider == "openai":
                 return OpenAIASRConfig(
                     api_key=kwargs.get("api_key"),
                     model=kwargs.get("model", "whisper-1"),
                     language=kwargs.get("language", "zh"),
                     base_url=kwargs.get("base_url"),
                 )
-            elif provider == "funasr":
+            elif normalized_provider == "funasr":
                 return FunASRConfig(
                     model=kwargs.get("model", "paraformer-zh"),
                     language=kwargs.get("language", "zh"),
@@ -77,13 +79,23 @@ class ASRFactory:
                     model_hub=kwargs.get("model_hub", "ms"),
                     disable_update=kwargs.get("disable_update", True),
                 )
-            elif provider == "glm":
+            elif normalized_provider == "glm":
                 return GLMASRConfig(
                     api_key=kwargs.get("api_key"),
                     model=kwargs.get("model", "glm-asr"),
                     stream=kwargs.get("stream", False),
                 )
-            elif provider == "faster_whisper":
+            elif normalized_provider in {"mimo", "mimo-asr"}:
+                return MimoASRConfig(
+                    api_key=kwargs.get("api_key"),
+                    model=kwargs.get("model", "mimo-v2.5-asr"),
+                    language=kwargs.get("language", "auto"),
+                    base_url=kwargs.get("base_url", "https://api.xiaomimimo.com/v1"),
+                    sample_rate=kwargs.get("sample_rate", 16000),
+                    input_audio_format=kwargs.get("input_audio_format", "pcm_s16le"),
+                    timeout=kwargs.get("timeout", 30.0),
+                )
+            elif normalized_provider == "faster-whisper":
                 return FasterWhisperASRConfig(
                     model=kwargs.get("model", "distil-large-v3"),
                     language=kwargs.get("language", "zh"),
@@ -94,7 +106,7 @@ class ASRFactory:
                     vad_filter=kwargs.get("vad_filter", True),
                     vad_parameters=kwargs.get("vad_parameters", {}),
                 )
-            elif provider == "mock":
+            elif normalized_provider == "mock":
                 return MockASRConfig()
             else:
                 return None

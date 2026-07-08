@@ -9,7 +9,7 @@ from collections.abc import Callable
 import numpy as np
 from loguru import logger
 
-from ..vad import VADInterface
+from ..vad import VADInterface, VADState
 
 
 class SimpleVADProcessor:
@@ -73,6 +73,85 @@ class SimpleVADProcessor:
             logger.error(f"Error getting speech prob: {e}")
             return 0.0
 
+    async def _process_vad_event_chunk(self, audio_data: list[float]) -> None:
+        """Process a chunk using a stateful VADInterface without probability model."""
+        try:
+            result = self.vad_engine.detect_speech(audio_data)
+        except Exception as e:
+            logger.error(f"Error detecting speech: {e}")
+            return
+
+        current_time = time.time()
+        state = getattr(result, "state", None)
+
+        if result.is_speech_start or state == VADState.ACTIVE:
+            if not self._is_speech:
+                self._is_speech = True
+                self._speech_start_time = current_time
+                self._silence_start_time = None
+                self._silence_transition_count = 0
+                logger.info(f"[{self.session_id}] 🎤 Speech started")
+
+            self._silence_start_time = None
+            self._audio_buffer.extend(audio_data)
+        elif self._is_speech:
+            self._audio_buffer.extend(audio_data)
+
+        if result.is_speech_end:
+            if getattr(result, "speech_detected", True) is False:
+                self._discard_unconfirmed_speech()
+                return
+
+            speech_buffer = self._samples_from_vad_result(result)
+            if not speech_buffer:
+                speech_buffer = list(self._audio_buffer)
+            await self._finish_speech(speech_buffer)
+
+    def _samples_from_vad_result(self, result) -> list[float]:
+        """Convert byte audio carried by VADResult into float samples."""
+        audio_bytes = getattr(result, "audio_data", b"")
+        if not audio_bytes:
+            return []
+
+        try:
+            samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        except ValueError:
+            return []
+        return (samples / 32768.0).tolist()
+
+    async def _finish_speech(self, speech_buffer: list[float]) -> None:
+        """Reset speech state and invoke the speech-end callback once."""
+        self._is_speech = False
+        self._speech_start_time = None
+        self._silence_start_time = None
+        self._silence_transition_count = 0
+        self._audio_buffer.clear()
+
+        reset = getattr(self.vad_engine, "reset", None)
+        if callable(reset):
+            try:
+                reset()
+            except Exception as e:
+                logger.debug(f"[{self.session_id}] VAD reset skipped: {e}")
+
+        if self.on_speech_end:
+            await self.on_speech_end(speech_buffer)
+
+    def _discard_unconfirmed_speech(self) -> None:
+        """Reset speech state without invoking callbacks."""
+        self._is_speech = False
+        self._speech_start_time = None
+        self._silence_start_time = None
+        self._silence_transition_count = 0
+        self._audio_buffer.clear()
+
+        reset = getattr(self.vad_engine, "reset", None)
+        if callable(reset):
+            try:
+                reset()
+            except Exception as e:
+                logger.debug(f"[{self.session_id}] VAD reset skipped: {e}")
+
     async def process_chunk(self, audio_data: list[float]) -> None:
         """Process audio data chunk"""
         if not audio_data:
@@ -83,6 +162,10 @@ class SimpleVADProcessor:
         # Output every 500 chunks
         if self._total_chunks % 500 == 0:
             logger.info(f"[{self.session_id}] Audio chunks: {self._total_chunks}")
+
+        if self._silero_model is None and hasattr(self.vad_engine, "detect_speech"):
+            await self._process_vad_event_chunk(audio_data)
+            return
 
         # Get speech probability
         prob = self._get_speech_prob(audio_data)
@@ -128,8 +211,7 @@ class SimpleVADProcessor:
                         f"speech={speech_duration:.2f}s, silence={silence_duration:.2f}s, prob={prob:.3f}"
                     )
 
-                    if self.on_speech_end:
-                        await self.on_speech_end(speech_buffer)
+                    await self._finish_speech(speech_buffer)
                 elif (
                     self._silence_transition_count >= 3
                     and speech_duration <= self.min_speech_duration
@@ -143,15 +225,11 @@ class SimpleVADProcessor:
     async def process_end(self) -> None:
         """Manual end"""
         if self._is_speech and self._audio_buffer:
-            # Reset state BEFORE callback to prevent duplicate triggers
-            self._is_speech = False
             speech_buffer = list(self._audio_buffer)
-            self._audio_buffer.clear()
 
             logger.info(f"[{self.session_id}] Manual end of speech input")
 
-            if self.on_speech_end:
-                await self.on_speech_end(speech_buffer)
+            await self._finish_speech(speech_buffer)
 
     def reset(self) -> None:
         """Reset"""

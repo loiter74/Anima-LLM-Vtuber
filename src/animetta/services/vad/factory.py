@@ -63,7 +63,8 @@ class VADFactory:
         Raises:
             ValueError: Unknown provider
         """
-        if provider == "silero":
+        normalized_provider = provider.replace("_", "-")
+        if normalized_provider == "silero":
             try:
                 from .silero_vad import SileroVAD
                 return SileroVAD(
@@ -90,7 +91,28 @@ class VADFactory:
                 return MockVAD(
                     sample_rate=kwargs.get("sample_rate", 16000),
                 )
-        elif provider == "mock":
+        elif normalized_provider in {"mimo", "mimo-vad"}:
+            try:
+                from .mimo_vad import MimoVAD
+                return MimoVAD(
+                    api_key=kwargs.get("api_key"),
+                    model=kwargs.get("model", "mimo-v2.5-asr"),
+                    base_url=kwargs.get("base_url", "https://api.xiaomimimo.com/v1"),
+                    language=kwargs.get("language", "auto"),
+                    audio_format=kwargs.get("audio_format", "wav"),
+                    sample_rate=kwargs.get("sample_rate", 16000),
+                    db_threshold=kwargs.get("db_threshold", -35.0),
+                    min_speech_duration=kwargs.get("min_speech_duration", 2),
+                    min_silence_duration=kwargs.get("min_silence_duration", 8),
+                    confirm_with_asr=kwargs.get("confirm_with_asr", True),
+                    timeout=kwargs.get("timeout", 15.0),
+                    http_client=kwargs.get("http_client"),
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize MiMo VAD, falling back to Mock VAD: {e}")
+                from .mock_vad import MockVAD
+                return MockVAD(sample_rate=kwargs.get("sample_rate", 16000))
+        elif normalized_provider == "mock":
             from .mock_vad import MockVAD
             return MockVAD(
                 sample_rate=kwargs.get("sample_rate", 16000),
@@ -106,4 +128,4 @@ class VADFactory:
     @staticmethod
     def get_available_configs() -> list[str]:
         """Get a list of all available providers"""
-        return ["mock", "silero"]
+        return ["mock", "silero", "mimo-vad"]

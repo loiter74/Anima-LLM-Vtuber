@@ -114,7 +114,9 @@ class VADAudioProcessor(AudioProcessorInterface):
             if result.is_speech_start:
                 await self._handle_speech_start()
 
-            if result.is_speech_end and len(self._audio_buffer) > 1024:
+            if result.is_speech_end and getattr(result, "speech_detected", True) is False:
+                self._discard_unconfirmed_speech()
+            elif result.is_speech_end and len(self._audio_buffer) > 1024:
                 await self._handle_speech_end()
 
             # Force timeout check: regardless of VAD state, end if exceeds max duration
@@ -198,6 +200,15 @@ class VADAudioProcessor(AudioProcessorInterface):
             logger.debug(f"[{self.session_id}] Clearing VAD active state after {self._vad_chunk_count} chunks")
             self._vad_active_start_time = None
             self._vad_chunk_count = 0
+
+    def _discard_unconfirmed_speech(self) -> None:
+        """Discard a locally detected segment that remote VAD/ASR rejected."""
+        logger.info(f"[{self.session_id}] Discarding unconfirmed speech segment")
+        self._audio_buffer.clear()
+        self._is_speaking = False
+        self._first_audio_time = None
+        self._last_speech_time = None
+        self._clear_vad_state()
 
     async def _handle_speech_start(self) -> None:
         """Handle speech start"""

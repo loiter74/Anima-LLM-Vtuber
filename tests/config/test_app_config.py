@@ -25,7 +25,7 @@ from animetta.services.humor import HumorConfig
 
 
 @pytest.fixture(autouse=True)
-def clean_config_globals():
+def clean_config_globals(monkeypatch: pytest.MonkeyPatch):
     """Clean module-level state between tests to avoid cross-test pollution.
 
     Resets:
@@ -39,6 +39,14 @@ def clean_config_globals():
     app_module._env_file_loaded = False
     app_module._services_yaml_cache = None
     app_module._services_config_logged = set()
+    for name in (
+        "ANIMETTA_ASR",
+        "ANIMETTA_TTS",
+        "ANIMETTA_LLM",
+        "ANIMETTA_LOCAL_LLM",
+        "ANIMETTA_VAD",
+    ):
+        monkeypatch.setenv(name, "")
 
 
 @pytest.fixture

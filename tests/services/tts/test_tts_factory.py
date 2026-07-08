@@ -29,16 +29,19 @@ class TestTTSFactory:
 
 class TestMockTTS:
     @pytest.mark.asyncio
-    async def test_synthesize_returns_string(self):
+    async def test_synthesize_returns_wav_bytes(self):
         tts = MockTTS()
         result = await tts.synthesize("Hello world")
-        assert isinstance(result, str)
+        assert isinstance(result, bytes)
+        assert result.startswith(b"RIFF")
 
     @pytest.mark.asyncio
-    async def test_synthesize_with_output_path(self):
+    async def test_synthesize_with_output_path(self, tmp_path):
         tts = MockTTS()
-        result = await tts.synthesize("Hello", output_path="/tmp/test.wav")
-        assert result == "/tmp/test.wav"
+        output_path = tmp_path / "test.wav"
+        result = await tts.synthesize("Hello", output_path=output_path)
+        assert result == str(output_path)
+        assert output_path.read_bytes().startswith(b"RIFF")
 
     @pytest.mark.asyncio
     async def test_close_does_not_raise(self):

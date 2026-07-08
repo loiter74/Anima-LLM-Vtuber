@@ -70,6 +70,14 @@ def runtime_config_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     config_path = _write_runtime_config(tmp_path, persona_identity="旧人设")
     config_dir = tmp_path / "config"
+    for name in (
+        "ANIMETTA_ASR",
+        "ANIMETTA_TTS",
+        "ANIMETTA_LLM",
+        "ANIMETTA_LOCAL_LLM",
+        "ANIMETTA_VAD",
+    ):
+        monkeypatch.setenv(name, "")
     monkeypatch.setattr(app_module, "CONFIG_DIR", config_dir)
     monkeypatch.setattr(app_module, "SERVICES_DIR", config_dir / "services")
     app_module.clear_config_caches()

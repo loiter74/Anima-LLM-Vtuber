@@ -6,6 +6,7 @@ VAD (Voice Activity Detection) interface definition
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Any
 
 import numpy as np
 
@@ -25,12 +26,16 @@ class VADResult:
         audio_data: bytes = b"",
         is_speech_start: bool = False,
         is_speech_end: bool = False,
-        state: VADState = VADState.IDLE
+        state: VADState = VADState.IDLE,
+        speech_detected: bool | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.audio_data = audio_data
         self.is_speech_start = is_speech_start
         self.is_speech_end = is_speech_end
         self.state = state
+        self.speech_detected = speech_detected
+        self.metadata = metadata or {}
 
     @property
     def is_special_signal(self) -> bool:

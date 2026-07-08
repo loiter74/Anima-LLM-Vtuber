@@ -4,6 +4,14 @@
 # 更多服务示例见 config/services-examples.yaml
 
 asr:
+  mimo-asr:
+    type: mimo
+    api_key: ${MIMO_API_KEY}
+    model: mimo-v2.5-asr
+    base_url: https://api.xiaomimimo.com/v1
+    language: auto
+    sample_rate: 16000
+    input_audio_format: pcm_s16le
   mock:
     type: mock
 
@@ -50,6 +58,13 @@ tts:
   edge:
     type: edge
     voice: zh-CN-XiaoxiaoNeural
+  mimo-tts:
+    type: mimo
+    api_key: ${MIMO_API_KEY}
+    model: mimo-v2.5-tts
+    base_url: https://api.xiaomimimo.com/v1
+    voice: mimo_default
+    response_format: wav
   mock:
     type: mock
 
@@ -89,6 +104,17 @@ llm:
       type: mock
 
 vad:
+  mimo-vad:
+    type: mimo
+    api_key: ${MIMO_API_KEY}
+    model: mimo-v2.5-asr
+    base_url: https://api.xiaomimimo.com/v1
+    language: auto
+    sample_rate: 16000
+    db_threshold: -35.0
+    min_speech_duration: 2
+    min_silence_duration: 8
+    confirm_with_asr: true
   silero:
     type: silero
     sample_rate: 16000

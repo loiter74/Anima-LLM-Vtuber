@@ -13,6 +13,7 @@ from .edge_tts import EdgeTTS
 from .factory import TTSFactory
 from .gpt_sovits_tts import GPTSoVITSTTS
 from .interface import TTSInterface
+from .mimo_tts import MimoTTS
 
 # Core implementations (lightweight dependencies)
 from .mock_tts import MockTTS
@@ -46,6 +47,7 @@ __all__ = [
     "MockTTS",
     "EdgeTTS",
     "GPTSoVITSTTS",
+    "MimoTTS",
     # Optional (may be None if deps missing)
     "Qwen3TTSTTS",
     "GLMTTS",

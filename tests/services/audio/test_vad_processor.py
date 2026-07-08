@@ -121,6 +121,28 @@ class TestVADAudioProcessor:
         on_end.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_unconfirmed_speech_end_discards_buffer(self, processor, mock_vad, mock_callbacks):
+        """speech_detected=False should clear state without invoking on_speech_end."""
+        on_start, on_end = mock_callbacks
+        mock_vad.detect_speech.side_effect = [
+            _active_result(is_speech_start=True),
+            VADResult(
+                is_speech_end=True,
+                state=VADState.IDLE,
+                speech_detected=False,
+                metadata={"provider": "mimo"},
+            ),
+        ]
+
+        await processor.process_chunk([0.1] * 600)
+        await processor.process_chunk([0.0] * 600)
+
+        on_start.assert_awaited_once()
+        on_end.assert_not_called()
+        assert processor.is_speaking() is False
+        assert processor._audio_buffer == []
+
+    @pytest.mark.asyncio
     async def test_speech_end_not_duplicated(self, processor, mock_vad, mock_callbacks):
         """After speech end, _is_speaking is False so another end should not fire."""
         on_start, on_end = mock_callbacks
