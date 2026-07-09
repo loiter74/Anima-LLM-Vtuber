@@ -82,13 +82,47 @@ Archive a completed change in the experimental workflow.
    mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
    ```
 
-6. **Display summary**
+6. **Finalize Git state**
+
+   After the archive move succeeds, commit the archive-related changes, push the working branch to the remote, then merge it into the main branch.
+
+   First identify the current branch:
+   ```bash
+   git branch --show-current
+   ```
+
+   Stage only files touched by this archive operation:
+   ```bash
+   git add -A openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
+   git add <synced-main-spec-paths-if-any>
+   ```
+
+   Do not stage unrelated worktree changes. If `git status --short` shows unrelated modified or untracked files, leave them unstaged and mention them in the summary.
+
+   Commit and push the current branch:
+   ```bash
+   git commit -m "archive: <change-name>"
+   git push -u origin <current-branch>
+   ```
+
+   Merge the pushed branch into main:
+   ```bash
+   git checkout main
+   git pull --ff-only origin main
+   git merge --no-ff <current-branch>
+   git push origin main
+   ```
+
+   If the main branch has uncommitted changes, STOP before merging and report the dirty files. If merge conflicts occur, STOP after Git reports the conflicts and tell the user which files need resolution. Do not force-push and do not delete the working branch.
+
+7. **Display summary**
 
    Show archive completion summary including:
    - Change name
    - Schema that was used
    - Archive location
    - Spec sync status (synced / sync skipped / no delta specs)
+   - Git status (committed branch, pushed remote branch, merged/pushed main)
    - Note about any warnings (incomplete artifacts/tasks)
 
 **Output On Success**
@@ -100,6 +134,7 @@ Archive a completed change in the experimental workflow.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
+**Git:** Committed and pushed `<current-branch>`, merged into `main`, pushed `origin/main`
 
 All artifacts complete. All tasks complete.
 ```
@@ -113,6 +148,7 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** No delta specs
+**Git:** Committed and pushed `<current-branch>`, merged into `main`, pushed `origin/main`
 
 All artifacts complete. All tasks complete.
 ```
@@ -126,6 +162,7 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
+**Git:** Committed and pushed `<current-branch>`, merged into `main`, pushed `origin/main`
 
 **Warnings:**
 - Archived with 2 incomplete artifacts
@@ -157,5 +194,8 @@ Target archive directory already exists.
 - Don't block archive on warnings - just inform and confirm
 - Preserve .openspec.yaml when moving to archive (it moves with the directory)
 - Show clear summary of what happened
+- Finalize Git after a successful archive: commit the archive-related changes, push the current branch to origin, merge it into `main`, then push `origin/main`
+- Do not stage unrelated worktree changes; only stage the archive move and synced spec files produced by this archive
+- Stop before merging if `main` is dirty, and stop on merge conflicts without force-pushing
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
