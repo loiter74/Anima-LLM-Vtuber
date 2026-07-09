@@ -36,6 +36,20 @@ def test_pnpm_workspace_allows_required_frontend_build_scripts() -> None:
     assert "onlyBuiltDependencies" not in content
 
 
+def test_docker_frontend_build_skips_electron_binary_download() -> None:
+    offenders: list[str] = []
+
+    for name in DOCKERFILES:
+        content = (ROOT / name).read_text(encoding="utf-8")
+        if (
+            "ELECTRON_SKIP_BINARY_DOWNLOAD=1" not in content
+            or "npm_config_electron_skip_binary_download=true" not in content
+        ):
+            offenders.append(name)
+
+    assert offenders == []
+
+
 def test_frontend_npmrc_does_not_use_legacy_pnpm_build_policy() -> None:
     content = (ROOT / "frontend" / ".npmrc").read_text(encoding="utf-8")
 

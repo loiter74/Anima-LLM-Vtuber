@@ -22,6 +22,11 @@ RUN corepack enable \
 
 WORKDIR /build/frontend
 
+# Docker only needs the Vite web bundle; the Electron desktop binary is not
+# used in the nginx runtime image and is large/flaky to fetch during builds.
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
+ENV npm_config_electron_skip_binary_download=true
+
 COPY frontend/.npmrc frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 
 RUN pnpm install --frozen-lockfile

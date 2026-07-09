@@ -20,6 +20,8 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 DEFAULT_SUMMARY_FILE = ROOT / "artifacts" / "health" / "latest.json"
@@ -271,6 +273,86 @@ def _frontend_font_policy_validation() -> None:
     print("frontend font policy: no Google Fonts or Quicksand tokens in active files")
 
 
+def _parse_pnpm_package_key(package_key: str) -> tuple[str, str] | None:
+    key = package_key.lstrip("/").split("(", 1)[0]
+    name, separator, version = key.rpartition("@")
+    if not separator or not name or not version:
+        return None
+    return name, version.split("(", 1)[0]
+
+
+def _collect_pnpm_lock_versions(lockfile: Path) -> dict[str, list[str]]:
+    data = yaml.safe_load(lockfile.read_text(encoding="utf-8")) or {}
+    versions: dict[str, set[str]] = {}
+    for package_key in data.get("packages", {}):
+        parsed = _parse_pnpm_package_key(str(package_key))
+        if parsed is None:
+            continue
+        name, version = parsed
+        versions.setdefault(name, set()).add(version)
+    return {name: sorted(package_versions) for name, package_versions in sorted(versions.items())}
+
+
+def _npm_bulk_advisories_from_lock(lockfile: Path) -> dict[str, Any]:
+    package_versions = _collect_pnpm_lock_versions(lockfile)
+    if not package_versions:
+        raise RuntimeError(f"No package versions found in {lockfile}")
+
+    body = json.dumps(package_versions).encode("utf-8")
+    request = urllib.request.Request(
+        "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+        data=body,
+        headers={
+            "content-type": "application/json",
+            "content-length": str(len(body)),
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = response.read().decode("utf-8")
+    return json.loads(payload)
+
+
+def _frontend_audit_validation() -> None:
+    command = (
+        *_pnpm_command(),
+        "audit",
+        "--json",
+        "--registry=https://registry.npmjs.org",
+        "--audit-level=moderate",
+    )
+    completed = subprocess.run(
+        command,
+        cwd=FRONTEND,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=180,
+    )
+    output = completed.stdout.strip()
+    if completed.returncode == 0:
+        print(output or "pnpm audit: no vulnerabilities found")
+        return
+
+    if not _is_registry_failure(output):
+        raise SystemExit(output or "pnpm audit failed")
+
+    print("pnpm audit registry fetch failed; using official npm bulk advisory fallback")
+    try:
+        advisories = _npm_bulk_advisories_from_lock(FRONTEND / "pnpm-lock.yaml")
+    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, RuntimeError) as exc:
+        raise SystemExit(f"{output}\nFallback registry advisory fetch failed: {exc}") from exc
+
+    affected = {name: items for name, items in advisories.items() if items}
+    if affected:
+        print(json.dumps(affected, ensure_ascii=False, indent=2))
+        raise SystemExit("frontend audit found advisories at or above the configured audit level")
+    print("frontend audit fallback: no advisories reported by official npm bulk endpoint")
+
+
 def _docs_backend_framework_validation() -> None:
     files = (
         ROOT / "docs" / "README.md",
@@ -453,12 +535,7 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
         Gate(
             "dependencies:frontend-audit",
             "Frontend npm audit against official registry",
-            _pnpm(
-                "audit",
-                "--json",
-                "--registry=https://registry.npmjs.org",
-                "--audit-level=moderate",
-            ),
+            _python("-c", "from scripts.health_check import _frontend_audit_validation as f; f()"),
             FRONTEND,
             profiles=("full",),
             remediation="Fix confirmed advisories; retry registry/network failures before treating them as vulnerabilities.",
@@ -718,6 +795,8 @@ def _is_registry_failure(output: str) -> bool:
 def _classify_gate(gate: Gate, returncode: int, output: str) -> tuple[str, str, tuple[dict[str, str], ...]]:
     if returncode == 0:
         return HEALTH_PASS, "", ()
+    if gate.id == "dependencies:frontend-audit" and "frontend audit found advisories" in output.lower():
+        return HEALTH_FAIL, gate.remediation, ()
     if gate.id == "dependencies:frontend-audit" and _is_registry_failure(output):
         warning = accepted_warning("dependencies:frontend-audit-registry")
         return HEALTH_DEGRADED, warning["remediation"], (warning,)

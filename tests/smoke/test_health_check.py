@@ -121,8 +121,9 @@ def test_python_command_skips_unusable_repo_venv(tmp_path, monkeypatch) -> None:
     assert _python_command() == ("current-python",)
 
 
-def test_python_command_skips_py_launcher_without_metrics_dependency(monkeypatch) -> None:
+def test_python_command_skips_py_launcher_without_metrics_dependency(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("ANIMETTA_PYTHON", raising=False)
+    monkeypatch.setattr(health_check, "ROOT", tmp_path)
     monkeypatch.setattr(health_check.os, "name", "nt")
     monkeypatch.setattr(health_check.shutil, "which", lambda name: "py.exe")
     monkeypatch.setattr(health_check.sys, "executable", "current-python")
@@ -210,6 +211,67 @@ def test_frontend_audit_registry_failure_is_degraded() -> None:
     assert status == health_check.HEALTH_DEGRADED
     assert "registry" in remediation.lower()
     assert warnings[0]["id"] == "dependencies:frontend-audit-registry"
+
+
+def test_frontend_audit_gate_uses_python_validator() -> None:
+    gate = next(gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit")
+
+    assert "_frontend_audit_validation" in " ".join(gate.command)
+
+
+def test_collect_pnpm_lock_versions(tmp_path: Path) -> None:
+    lockfile = tmp_path / "pnpm-lock.yaml"
+    lockfile.write_text(
+        """
+lockfileVersion: '9.0'
+packages:
+  vue@3.5.0: {}
+  '@scope/pkg@1.2.3(peer@4.5.6)': {}
+""",
+        encoding="utf-8",
+    )
+
+    versions = health_check._collect_pnpm_lock_versions(lockfile)
+
+    assert versions["vue"] == ["3.5.0"]
+    assert versions["@scope/pkg"] == ["1.2.3"]
+
+
+def test_frontend_audit_uses_bulk_fallback_after_pnpm_fetch_failure(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    (tmp_path / "pnpm-lock.yaml").write_text(
+        """
+lockfileVersion: '9.0'
+packages:
+  vue@3.5.0: {}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(health_check, "FRONTEND", tmp_path)
+    monkeypatch.setattr(health_check, "_pnpm_command", lambda: ("pnpm",))
+
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(returncode=1, stdout='{"error":{"message":"fetch failed"}}')
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    monkeypatch.setattr(health_check.subprocess, "run", fake_run)
+    monkeypatch.setattr(health_check.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    health_check._frontend_audit_validation()
+
+    assert "bulk advisory fallback" in capsys.readouterr().out
 
 
 def test_summary_contains_contract_fields(tmp_path: Path) -> None:
