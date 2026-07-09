@@ -525,6 +525,6 @@ class TestAnimaV01Persona:
         assert "虫子" in prompt
         assert "作为 AI" in config.behavior.forbidden_phrases
         assert "我理解你的意思" in config.behavior.forbidden_phrases
-        assert "主播你又卡了" in prompt
-        assert "主播你好菜" in prompt
-        assert "你说错了" in prompt
+        assert "今天直播累不累？" in prompt
+        assert "帮我写个代码" in prompt
+        assert "需求文档呢？没有文档就想要输出" in prompt
