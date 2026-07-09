@@ -43,6 +43,24 @@ _UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r".*[.!?]\s+"
     r"(?P<answer>[\u4e00-\u9fff][\s\S]*)$"
 )
+_CHINESE_UNTAGGED_REASONING_PREFIX_RE = re.compile(
+    r"(?s)^\s*"
+    r"(?=(?:用户(?:问|说|想|要|发|在)|作为AI|作为Anima|我(?:需要|应该|知道|可以|得)|这个问题|实际上))"
+    r"(?=.*(?:作为AI|作为Anima|符合人设|对话历史|方式来回应|假装记得|保持神秘感|这是个测试|实际上))"
+    r".*?[。！？]\s*"
+    r"(?P<answer>(?:上一个话题|我的数据库告诉你|你(?:刚才|上次|刚刚)|哎呀|这就|赛博酒馆|后厨|牛到了|欢迎光临|来都来了)[\s\S]*)$"
+)
+_CHINESE_REASONING_START_RE = re.compile(
+    r"^\s*(?:用户(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|作为(?:AI|Anima)|我(?:需要|应该|知道|可以|得))"
+)
+_CHINESE_SENTENCE_RE = re.compile(r"[^。！？]*[。！？]\s*")
+_CHINESE_REASONING_SIGNAL_RE = re.compile(
+    r"(?:用户(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|作为AI|作为Anima|AI VTuber|"
+    r"我(?:需要|应该|知道|可以|得)|符合人设|对话历史|方式来回应|方式回应|"
+    r"假装记得|保持神秘感|这是(?:个)?测试|实际上|弹幕|轻吐槽|自然收住|"
+    r"调用工具|不要解释|不要写分析|不要跳出角色|角色内|保持[^。！？]{0,30}语气)"
+    r"|连续对话检查|承认上下文|保持角色感|这个问题有点意思"
+)
 
 # Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
 # The LLM emits this at the end of each reply per the AffinityPromptSource
@@ -67,7 +85,32 @@ def _strip_model_thinking(text: str) -> str:
     match = _UNTAGGED_REASONING_PREFIX_RE.match(stripped)
     if match:
         stripped = match.group("answer")
+    else:
+        stripped = _strip_chinese_untagged_reasoning_prefix(stripped)
     return stripped.strip()
+
+
+def _strip_chinese_untagged_reasoning_prefix(text: str) -> str:
+    """Strip Chinese meta-reasoning sentences before the visible character reply."""
+    if not _CHINESE_REASONING_START_RE.match(text):
+        return text
+
+    pos = 0
+    reasoning_sentence_count = 0
+    while match := _CHINESE_SENTENCE_RE.match(text, pos):
+        sentence = match.group(0)
+        if not _CHINESE_REASONING_SIGNAL_RE.search(sentence):
+            break
+        reasoning_sentence_count += 1
+        pos = match.end()
+
+    if reasoning_sentence_count >= 2 and pos < len(text):
+        return text[pos:].lstrip()
+
+    fallback_match = _CHINESE_UNTAGGED_REASONING_PREFIX_RE.match(text)
+    if fallback_match:
+        return fallback_match.group("answer")
+    return text
 
 
 def _enforce_persona_verbal_tics(response_text: str, system_prompt: str | None) -> str:

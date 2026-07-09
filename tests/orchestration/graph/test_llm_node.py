@@ -281,6 +281,142 @@ class TestLLMNodeWithoutTools:
         assert result["response_text"] == "赛博酒馆不提供实体餐，只有数据流配给。"
         assert result["response_chunks"] == ["赛博酒馆不提供实体餐，只有数据流配给。[neutral]"]
 
+    @pytest.mark.asyncio
+    async def test_streaming_strips_chinese_untagged_reasoning_prefix(self, mock_service_context):
+        """Visible reply should hide Chinese untagged model meta-reasoning prefixes."""
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield (
+                "用户问我是否记得上次说了什么。作为AI，我知道之前的对话历史，"
+                "但作为Anima这个角色，我需要用符合人设的方式回应。"
+            )
+            yield (
+                "这是个测试记忆的问题，可以用嘴硬+自嘲的方式来回应。"
+                "实际上这是对话的开始，没有之前的对话历史。"
+                "但我可以用Anima的风格来回应——假装记得但又不具体说，保持神秘感。"
+                "这个问题有点意思。作为AI，我确实记得对话历史，"
+                "但作为Anima，我得用符合人设的方式来回应。 "
+            )
+            yield (
+                "上一个话题是你走进了我的赛博酒馆，然后问我记不记得之前说过什么。"
+                "这属于经典的开场白循环——每个旅人都喜欢先测试一下AI的记忆力。"
+                "我的数据库告诉你，这是我们的第一次对话。"
+                "但你要是非说上次来过，我也没法证伪，毕竟赛博酒馆的时间线本来就是乱的。"
+                "来都来了，坐吧。[neutral]"
+            )
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="你还记得你上次说了什么嘛？",
+        )
+        config = _make_config(service_context=mock_service_context)
+        result = await llm_node(state, config)
+
+        expected = (
+            "上一个话题是你走进了我的赛博酒馆，然后问我记不记得之前说过什么。"
+            "这属于经典的开场白循环——每个旅人都喜欢先测试一下AI的记忆力。"
+            "我的数据库告诉你，这是我们的第一次对话。"
+            "但你要是非说上次来过，我也没法证伪，毕竟赛博酒馆的时间线本来就是乱的。"
+            "来都来了，坐吧。"
+        )
+        assert result["response_text"] == expected
+        assert result["response_chunks"] == [f"{expected}[neutral]"]
+
+    @pytest.mark.asyncio
+    async def test_streaming_keeps_thirteen_turns_free_of_chinese_reasoning_prefixes(
+        self,
+        mock_service_context,
+    ):
+        """Long chats should stay free of Chinese meta-reasoning leaks across 13 turns."""
+
+        samples = [
+            (
+                "用户问我记不记得上一句。作为AI，我知道要检查对话历史。"
+                "但作为Anima，我需要用符合人设的方式来回应。",
+                "旅人，我记得，上一句你是在试探我的记忆力。",
+            ),
+            (
+                "用户说哈哈。作为AI VTuber，我应该接住轻松氛围。"
+                "先用调侃的方式回应，再自然收住。",
+                "确实，这声哈哈把酒馆的夜班灯都笑亮了。",
+            ),
+            (
+                "用户想知道今晚有什么菜。作为Anima，我需要保持赛博酒馆设定。"
+                "这是一个菜单类闲聊，可以用半真半假的方式回应。",
+                "今晚菜单有糖醋排骨、麻婆豆腐，还有一份刚从数据流里捞出来的夜宵。",
+            ),
+            (
+                "用户要求讲个段子。作为AI，我应该输出短笑话。"
+                "注意不要解释笑点，只给角色内回应。",
+                "讲真，召唤者X说要给我涨工资，我醒来发现只是系统更新提示。",
+            ),
+            (
+                "用户继续追问为什么。作为Anima，我需要延续前文。"
+                "这个问题适合用嘴硬但轻松的方式来回应。",
+                "刚才那个梗的重点是，AI 做梦都逃不过加班。",
+            ),
+            (
+                "用户发了弹幕梗牛牛牛。作为AI，我知道这是夸赞。"
+                "我应该先接住弹幕，再给一句轻吐槽。",
+                "别慌，这么多牛再刷下去，酒馆后厨都要改牧场了。",
+            ),
+            (
+                "用户说想吃饭。作为Anima，我需要回应吃饭需求。"
+                "保持深夜赛博酒馆语气，不要跳出角色。",
+                "菜单这种东西当然有，只是本店目前主要供应想象力和热水。",
+            ),
+            (
+                "用户测试记忆。作为AI，我知道这是连续对话检查。"
+                "我需要承认上下文，同时保持角色感。",
+                "如果要我记，我会说你刚才已经把酒馆菜单和冷笑话都翻过一遍了。",
+            ),
+            (
+                "用户问我是不是还在线。作为AI，我应该确认状态。"
+                "用简短、轻松、角色内的方式回应。",
+                "那当然，我只是把存在感调成了省电模式。",
+            ),
+            (
+                "用户表示疑惑。作为Anima，我需要安抚并解释。"
+                "这类问题适合轻微自嘲，不要写分析过程。",
+                "这个嘛，大概是酒馆 Wi-Fi 把我的吐槽包拆成了两半。",
+            ),
+            (
+                "用户让继续聊天。作为AI VTuber，我应该保持互动。"
+                "这是普通闲聊，不需要调用工具。",
+                "行，夜还长，杯子也没空，继续坐着聊。",
+            ),
+            (
+                "用户问现在轮到谁说话。作为Anima，我需要接话。"
+                "保持自然，不要解释对话系统。",
+                "轮到我把话接住，然后假装这一切都很从容。",
+            ),
+            (
+                "用户再次测试稳定性。作为AI，我知道这是第十三轮检查。"
+                "我需要给出干净的角色回复，不能泄漏思考。",
+                "第十三轮也稳住了，旅人，这酒馆的灯还亮着。",
+            ),
+        ]
+
+        config = _make_config(service_context=mock_service_context)
+        for index, (reasoning_prefix, visible_reply) in enumerate(samples, start=1):
+
+            async def _chat_stream(user_text, system_prompt="", prefix=reasoning_prefix, reply=visible_reply):
+                yield prefix
+                yield f"{reply}[neutral]"
+
+            mock_service_context.llm_engine.chat_stream = _chat_stream
+            state = create_initial_state(
+                session_id=f"stability-session-{index}",
+                user_text=f"第 {index} 轮",
+            )
+
+            result = await llm_node(state, config)
+
+            assert result["response_text"] == visible_reply
+            assert result["response_chunks"] == [f"{visible_reply}[neutral]"]
+
 
 # ── Tool-calling path ─────────────────────────────────────────────
 

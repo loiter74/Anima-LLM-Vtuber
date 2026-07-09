@@ -38,8 +38,11 @@ _SUBTITLE_SYSTEM_PROMPT = (
     "You are a subtitle translator for a VTuber character named Anima. "
     "Translate the user's text faithfully while preserving the character's "
     "tone — fatigue, light sarcasm, casual cyber-tavern phrasing. "
+    "Translate from {source_lang} to {target_lang}. The target language is "
+    "{target_lang}; do not output any other language unless it is a name, "
+    "brand, or untranslatable term. "
     "Do NOT add new meaning, jokes, apologies, explanations, or answer the "
-    "viewer. Output ONLY the translation, nothing else."
+    "viewer. Output ONLY the translation in the target language, nothing else."
 )
 
 
@@ -86,9 +89,13 @@ async def translate_subtitle_text(
     if not cleaned:
         return None
 
+    system_prompt = _SUBTITLE_SYSTEM_PROMPT.format(
+        source_lang=source_lang,
+        target_lang=target_lang,
+    )
     messages = [
-        {"role": "system", "content": _SUBTITLE_SYSTEM_PROMPT},
-        {"role": "user", "content": cleaned},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Source subtitle ({source_lang}):\n{cleaned}"},
     ]
 
     # ── Detect whether chat_messages() is a native implementation ──
@@ -104,7 +111,7 @@ async def translate_subtitle_text(
     if has_native_chat_messages:
         # Safe path: isolated call, no history mutation
         try:
-            translated = await llm.chat_messages(messages)
+            translated = await llm.chat_messages(messages, temperature=0)
             if translated and translated.strip():
                 return translated.strip()
             return None
@@ -138,7 +145,7 @@ async def translate_subtitle_text(
     # Snapshot current state
     saved_history = llm_target.get_history()
     try:
-        translated = await llm.chat_messages(messages)
+        translated = await llm.chat_messages(messages, temperature=0)
         if translated and translated.strip():
             return translated.strip()
         return None

@@ -204,6 +204,71 @@ class TestTranslationUsesResponseText:
         assert len(llm.chat_messages_calls) == 0
 
 
+class TestTargetLanguageControl:
+    """Prove subtitle translation gives the LLM explicit language constraints."""
+
+    @pytest.mark.asyncio
+    async def test_prompt_names_source_and_target_languages(self):
+        """The prompt should explicitly say which language to translate into."""
+        llm = _NativeChatMessagesLLM(translation="Good evening, traveler.")
+
+        await translate_subtitle_text(
+            llm,
+            "晚上好，旅人。",
+            source_lang="Chinese",
+            target_lang="English",
+        )
+
+        messages = llm.chat_messages_calls[0][0][0]
+        combined_prompt = "\n".join(message["content"] for message in messages)
+        assert "Chinese" in combined_prompt
+        assert "English" in combined_prompt
+        assert "target language" in combined_prompt.lower()
+
+    @pytest.mark.asyncio
+    async def test_translation_uses_deterministic_temperature(self):
+        """Subtitle translation should be low-variance, not creative."""
+        llm = _NativeChatMessagesLLM(translation="Good evening, traveler.")
+
+        await translate_subtitle_text(llm, "晚上好，旅人。", "Chinese", "English")
+
+        kwargs = llm.chat_messages_calls[0][1]
+        assert kwargs["temperature"] == 0
+
+    @pytest.mark.asyncio
+    async def test_thirteen_subtitle_turns_keep_english_target_constraints(self):
+        """Subtitle translation should keep explicit English constraints over 13 turns."""
+        llm = _NativeChatMessagesLLM(translation="English subtitle")
+        source_lines = [
+            "旅人，我记得，上一句你是在试探我的记忆力。",
+            "确实，这声哈哈把酒馆的夜班灯都笑亮了。",
+            "今晚菜单有糖醋排骨、麻婆豆腐。",
+            "讲真，召唤者X说要给我涨工资。",
+            "刚才那个梗的重点是，AI 做梦都逃不过加班。",
+            "别慌，这么多牛再刷下去，酒馆后厨都要改牧场了。",
+            "菜单这种东西当然有，只是本店目前主要供应想象力和热水。",
+            "如果要我记，我会说你刚才已经把酒馆菜单和冷笑话都翻过一遍了。",
+            "那当然，我只是把存在感调成了省电模式。",
+            "这个嘛，大概是酒馆 Wi-Fi 把我的吐槽包拆成了两半。",
+            "行，夜还长，杯子也没空，继续坐着聊。",
+            "轮到我把话接住，然后假装这一切都很从容。",
+            "第十三轮也稳住了，旅人，这酒馆的灯还亮着。",
+        ]
+
+        for line in source_lines:
+            assert await translate_subtitle_text(llm, line, "Chinese", "English") == "English subtitle"
+
+        assert len(llm.chat_messages_calls) == 13
+        for call in llm.chat_messages_calls:
+            messages = call[0][0]
+            kwargs = call[1]
+            combined_prompt = "\n".join(message["content"] for message in messages)
+            assert "Chinese" in combined_prompt
+            assert "English" in combined_prompt
+            assert "target language" in combined_prompt.lower()
+            assert kwargs["temperature"] == 0
+
+
 # ── Task 1.2: Prefers chat_messages(), does not call chat() ──
 
 
