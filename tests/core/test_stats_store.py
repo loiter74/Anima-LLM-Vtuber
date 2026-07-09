@@ -107,6 +107,55 @@ class TestStatsStore:
         assert span["output_summary"] == "你好呀"
 
     @pytest.mark.asyncio
+    async def test_store_conversation_turn_keeps_full_dialogue_text(self, store):
+        """conversation_turns stores full user and assistant text for analysis."""
+        trace_id = str(uuid.uuid4())
+        long_user_text = "用户输入" * 80
+        long_assistant_text = "助手回复" * 120
+
+        await store.create_trace(trace_id, "session-1", "text", long_user_text)
+        await store.store_conversation_turn(
+            trace_id=trace_id,
+            session_id="session-1",
+            input_type="text",
+            user_text=long_user_text,
+            assistant_text=long_assistant_text,
+            status="success",
+            metadata={"channel_id": "local"},
+        )
+
+        turn = await store.get_conversation_turn(trace_id)
+
+        assert turn is not None
+        assert turn["trace_id"] == trace_id
+        assert turn["user_text"] == long_user_text
+        assert turn["assistant_text"] == long_assistant_text
+        assert turn["metadata"]["channel_id"] == "local"
+
+    @pytest.mark.asyncio
+    async def test_init_backfills_conversation_turns_from_legacy_traces(self, tmp_path):
+        """Existing trace rows are copied into conversation_turns on startup."""
+        db_path = str(tmp_path / "legacy_stats.db")
+        trace_id = str(uuid.uuid4())
+        first_store = StatsStore(db_path=db_path)
+        await first_store.init()
+        await first_store.create_trace(trace_id, "session-legacy", "text", "legacy prompt")
+        await first_store.finish_trace(trace_id, 42.0, "success")
+        await first_store.close()
+
+        second_store = StatsStore(db_path=db_path)
+        await second_store.init()
+        try:
+            turn = await second_store.get_conversation_turn(trace_id)
+        finally:
+            await second_store.close()
+
+        assert turn is not None
+        assert turn["user_text"] == "legacy prompt"
+        assert turn["assistant_text"] == ""
+        assert turn["metadata"]["source"] == "legacy_traces"
+
+    @pytest.mark.asyncio
     async def test_span_with_parent(self, store):
         """span 支持 parent_span_id"""
         trace_id = str(uuid.uuid4())

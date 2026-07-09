@@ -5,6 +5,7 @@ LangGraph Orchestrator
 
 from __future__ import annotations
 
+import json
 import time as time_module
 from typing import Any
 
@@ -17,6 +18,7 @@ from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
 from .state import AgentState, create_initial_state
 from .stats_handler import StatsCallbackHandler
+from .stats_store import get_stats_store
 from .tool_manager import ToolManager
 
 
@@ -41,7 +43,8 @@ class LangGraphOrchestrator:
         self.enable_memory = enable_memory
         self.tools_config = tools_config or {}
 
-        self.session_id = getattr(service_context, "session_id", "unknown")
+        raw_session_id = getattr(service_context, "session_id", None)
+        self.session_id = raw_session_id if isinstance(raw_session_id, str) and raw_session_id else "unknown"
 
         self.graph = None
         self._is_running = False
@@ -266,6 +269,13 @@ class LangGraphOrchestrator:
             result = await self.graph.ainvoke(initial_state, config=run_config)
             duration_ms = (time_module.perf_counter() - t_start) * 1000
             logger.info(f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms")
+            await self._persist_conversation_observation(
+                trace_id=trace_id,
+                initial_state=initial_state,
+                final_state=result,
+                status="success",
+                error_msg=None,
+            )
             self._stats_handler.finish_trace(status="success")
             return result
         except Exception as e:
@@ -275,6 +285,154 @@ class LangGraphOrchestrator:
             raise
         finally:
             detach_trace_context(_token)
+
+    async def _persist_conversation_observation(
+        self,
+        trace_id: str,
+        initial_state: AgentState,
+        final_state: dict[str, Any],
+        status: str,
+        error_msg: str | None,
+    ) -> None:
+        """Persist full turn text and deterministic node snapshots for debugging."""
+
+        try:
+            store = await get_stats_store()
+            input_type = initial_state.get("input_type", "text")
+            user_text = (
+                final_state.get("user_text")
+                or initial_state.get("user_text")
+                or ""
+            )
+            assistant_text = final_state.get("response_text") or ""
+            metadata = {
+                **initial_state.get("metadata", {}),
+                **final_state.get("metadata", {}),
+                "channel_id": initial_state.get("channel_id"),
+                "user_id": initial_state.get("user_id"),
+                "user_name": initial_state.get("user_name"),
+                "config_version": initial_state.get("config_version"),
+            }
+
+            await store.create_trace(trace_id, self.session_id, input_type, user_text)
+            await store.store_conversation_turn(
+                trace_id=trace_id,
+                session_id=self.session_id,
+                input_type=input_type,
+                user_text=user_text,
+                assistant_text=assistant_text,
+                status=status,
+                error_msg=error_msg,
+                metadata=metadata,
+            )
+            await self._persist_node_snapshot_spans(
+                trace_id=trace_id,
+                initial_state=initial_state,
+                final_state=final_state,
+                status=status,
+            )
+        except Exception as e:
+            logger.warning(f"[{self.session_id}] [LangGraph] Failed to persist conversation observation: {e}")
+
+    async def _persist_node_snapshot_spans(
+        self,
+        trace_id: str,
+        initial_state: AgentState,
+        final_state: dict[str, Any],
+        status: str,
+    ) -> None:
+        store = await get_stats_store()
+        existing = await store.get_trace_detail(trace_id)
+        if existing and existing.get("spans"):
+            return
+
+        user_text = final_state.get("user_text") or initial_state.get("user_text") or ""
+        response_text = final_state.get("response_text") or ""
+        emotion = final_state.get("emotion") or ""
+        tts_audio = final_state.get("tts_audio")
+        timings = final_state.get("_timings") or []
+
+        snapshots = [
+            {
+                "node": "input",
+                "input": user_text,
+                "output": user_text,
+                "duration_ms": 0.0,
+                "status": "success" if user_text else "skipped",
+            },
+            {
+                "node": "llm",
+                "input": user_text,
+                "output": response_text,
+                "duration_ms": self._timing_total(timings, "llm"),
+                "status": "success" if response_text else status,
+            },
+            {
+                "node": "tts",
+                "input": response_text,
+                "output": self._summarize_tts_audio(tts_audio),
+                "duration_ms": self._timing_total(timings, "tts"),
+                "status": "success" if tts_audio else "skipped",
+            },
+            {
+                "node": "emotion",
+                "input": response_text,
+                "output": emotion,
+                "duration_ms": self._timing_total(timings, "emotion"),
+                "status": "success" if emotion else "skipped",
+            },
+            {
+                "node": "output",
+                "input": response_text,
+                "output": response_text,
+                "duration_ms": self._timing_total(timings, "output"),
+                "status": "success" if response_text else "skipped",
+            },
+        ]
+
+        for snapshot in snapshots:
+            span_id = f"{trace_id}:snapshot:{snapshot['node']}"
+            await store.create_span(
+                span_id=span_id,
+                trace_id=trace_id,
+                node_name=snapshot["node"],
+                input_summary=self._clip_payload(snapshot["input"]),
+            )
+            await store.finish_span(
+                span_id=span_id,
+                duration_ms=snapshot["duration_ms"],
+                status=snapshot["status"],
+                output_summary=self._clip_payload(snapshot["output"]),
+            )
+
+    @staticmethod
+    def _timing_total(timings: list[dict[str, Any]], prefix: str) -> float:
+        total = 0.0
+        for timing in timings:
+            step = str(timing.get("step", ""))
+            if step == prefix or step.startswith(f"{prefix}."):
+                total += float(timing.get("duration_ms") or 0.0)
+        return round(total, 2)
+
+    @staticmethod
+    def _summarize_tts_audio(tts_audio: Any) -> str:
+        if tts_audio is None:
+            return ""
+        if isinstance(tts_audio, bytes):
+            return f"audio bytes: {len(tts_audio)}"
+        if isinstance(tts_audio, str):
+            return tts_audio
+        try:
+            return json.dumps(tts_audio, ensure_ascii=False, default=str)[:500]
+        except TypeError:
+            return str(tts_audio)[:500]
+
+    @staticmethod
+    def _clip_payload(value: Any, limit: int = 2000) -> str:
+        if value is None:
+            return ""
+        text = value if isinstance(value, str) else str(value)
+        return text[:limit]
 
     def _clean_result(self, final_state: dict[str, Any]) -> dict[str, Any]:
         """Clean up return value"""

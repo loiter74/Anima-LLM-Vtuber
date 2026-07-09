@@ -88,10 +88,7 @@ async def stats_trace_tree(request: Request) -> JSONResponse:
         spans: list[dict[str, Any]] = detail.get("spans", [])
         tree = _build_span_tree(spans)
         return JSONResponse({
-            "trace_id": trace_id,
-            "total_duration_ms": detail.get("total_duration_ms"),
-            "status": detail.get("status"),
-            "created_at": detail.get("created_at"),
+            **detail,
             "spans": spans,
             "tree": tree,
         })

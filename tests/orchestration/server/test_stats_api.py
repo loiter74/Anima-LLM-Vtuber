@@ -47,6 +47,17 @@ def mock_store():
         "trace_id": "abc",
         "status": "ok",
         "total_duration_ms": 500,
+        "conversation_turn": {
+            "trace_id": "abc",
+            "session_id": "desktop",
+            "input_type": "text",
+            "user_text": "full user text",
+            "assistant_text": "full assistant text",
+            "status": "ok",
+            "error_msg": None,
+            "metadata": {"source": "test"},
+            "created_at": "2026-07-09T10:00:00",
+        },
         "spans": [
             {"span_id": "s1", "parent_span_id": None, "name": "llm_call"},
             {"span_id": "s2", "parent_span_id": "s1", "name": "tts_call"},
@@ -295,6 +306,8 @@ class TestStatsTraceTree:
         assert data["tree"][0]["span_id"] == "s1"
         assert len(data["tree"][0]["children"]) == 1
         assert data["tree"][0]["children"][0]["span_id"] == "s2"
+        assert data["conversation_turn"]["user_text"] == "full user text"
+        assert data["conversation_turn"]["assistant_text"] == "full assistant text"
 
     def test_trace_tree_returns_404_when_not_found(self):
         """Missing trace tree returns 404."""

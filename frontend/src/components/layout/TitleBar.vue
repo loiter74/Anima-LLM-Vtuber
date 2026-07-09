@@ -14,18 +14,34 @@ const statusColors: Record<string, string> = {
 }
 
 const statusLabels: Record<string, string> = {
-  connected: 'Connected',
-  disconnected: 'Disconnected',
-  connecting: 'Connecting...',
-  error: 'Connection Error'
+  connected: 'CONNECTED',
+  disconnected: 'DISCONNECTED',
+  connecting: 'CONNECTING',
+  error: 'CONNECTION ERROR'
 }
 
-function goTo(name: string) {
-  if (route.name === name) {
-    router.push('/')
-  } else {
-    router.push('/' + (name === 'chat' ? '' : name))
+const navItems = [
+  { key: 'chat', label: 'Chat', routeName: 'chat', path: '/' },
+  { key: 'memory', label: 'Memory', panelTab: 'memory', path: '/' },
+  { key: 'dashboard', label: 'Trace', routeName: 'dashboard', path: '/dashboard' },
+  { key: 'settings', label: 'Settings', panelTab: 'settings', path: '/' },
+] as const
+
+type PanelTab = 'memory' | 'settings'
+
+function goTo(item: typeof navItems[number]) {
+  if ('panelTab' in item) {
+    router.push(item.path)
+    window.dispatchEvent(new CustomEvent<PanelTab>('animetta:panel-tab', {
+      detail: item.panelTab,
+    }))
+    return
   }
+  router.push(item.path)
+}
+
+function isActive(item: typeof navItems[number]) {
+  return 'routeName' in item && route.name === item.routeName
 }
 </script>
 
@@ -41,30 +57,18 @@ function goTo(name: string) {
       <div class="brand">Anima<span class="brand-dot">.</span></div>
     </div>
 
-    <!-- Center: nav buttons -->
-    <div class="titlebar-center">
+    <nav class="titlebar-center" aria-label="Main sections">
       <button
-        @click="goTo('music')"
+        v-for="item in navItems"
+        :key="item.key"
+        :data-testid="`nav-${item.key}`"
         class="nav-btn"
-        :class="{ active: route.name === 'music' }"
+        :class="{ active: isActive(item) }"
+        @click="goTo(item)"
       >
-        Music
+        {{ item.label }}
       </button>
-      <button
-        @click="goTo('meme-review')"
-        class="nav-btn"
-        :class="{ active: route.name === 'meme-review' }"
-      >
-        Meme
-      </button>
-      <button
-        @click="goTo('dashboard')"
-        class="nav-btn"
-        :class="{ active: route.name === 'dashboard' }"
-      >
-        {{ route.name === 'dashboard' ? 'Chat' : 'Dashboard' }}
-      </button>
-    </div>
+    </nav>
 
     <!-- Right: connection status -->
     <div class="titlebar-right">
@@ -131,9 +135,10 @@ function goTo(name: string) {
 .brand {
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   margin-left: var(--s-3);
   color: var(--c-text);
+  white-space: nowrap;
 }
 
 .brand-dot {
@@ -143,6 +148,9 @@ function goTo(name: string) {
 .titlebar-center {
   display: flex;
   gap: var(--s-1);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .nav-btn {
@@ -178,6 +186,10 @@ function goTo(name: string) {
   display: flex;
   align-items: center;
   gap: var(--s-2);
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--c-text) 3%, transparent);
 }
 
 .status-dot {
@@ -193,5 +205,22 @@ function goTo(name: string) {
   font-family: monospace;
   letter-spacing: 0.05em;
   white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .titlebar-center {
+    position: static;
+    transform: none;
+    margin-left: auto;
+  }
+
+  .titlebar-right {
+    display: none;
+  }
+
+  .nav-btn {
+    padding-left: var(--s-2);
+    padding-right: var(--s-2);
+  }
 }
 </style>

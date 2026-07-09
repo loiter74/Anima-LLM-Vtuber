@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import LiveChatPanel from '@/components/chat/LiveChatPanel.vue'
 import SettingsPanel from '@/components/settings/SettingsPanel.vue'
@@ -23,7 +23,16 @@ const emit = defineEmits<{
 const { isMobile } = useMobile()
 const chatStore = useChatStore()
 const isCollapsed = ref(false)
-const activeTab = ref<'chat' | 'live' | 'memory' | 'personality' | 'singing' | 'settings'>('chat')
+type PanelNavigationTab = 'chat' | 'live' | 'memory' | 'personality' | 'singing' | 'settings'
+const activeTab = ref<PanelNavigationTab>('chat')
+const panelNavigationTabs: readonly PanelNavigationTab[] = [
+  'chat',
+  'live',
+  'memory',
+  'personality',
+  'singing',
+  'settings',
+]
 const reloadHint = computed(() => chatStore.reloadConfigMessage || '重载人格配置')
 const isReloading = computed(() => chatStore.reloadConfigStatus === 'loading')
 
@@ -34,6 +43,21 @@ async function reloadConfig(): Promise<void> {
     // Store owns the visible error state.
   }
 }
+
+function handlePanelNavigation(event: Event): void {
+  const tab = (event as CustomEvent<PanelNavigationTab>).detail
+  if (panelNavigationTabs.includes(tab)) {
+    activeTab.value = tab
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('animetta:panel-tab', handlePanelNavigation)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('animetta:panel-tab', handlePanelNavigation)
+})
 
 // Mobile tab definitions (icon-only)
 const mobileTabs = [

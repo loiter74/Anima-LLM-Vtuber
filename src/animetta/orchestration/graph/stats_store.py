@@ -1,6 +1,7 @@
 """Pipeline stats data storage - SQLite"""
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,10 @@ class StatsStoreProtocol(ABC):
     async def get_recent_traces(self, *args, **kwargs): ...
     @abstractmethod
     async def get_trace_detail(self, trace_id: str) -> dict[str, Any] | None: ...
+    @abstractmethod
+    async def store_conversation_turn(self, *args, **kwargs): ...
+    @abstractmethod
+    async def get_conversation_turn(self, trace_id: str) -> dict[str, Any] | None: ...
 
 
 def _retry_on_locked(max_retries: int = 3, delay: float = 0.5):
@@ -79,6 +84,7 @@ class StatsStore(StatsStoreProtocol):
             await self._db.commit()
             await self._create_tables()
             await self._migrate_schema()
+            await self._backfill_conversation_turns_from_traces()
         logger.info(f"[StatsStore] Database initialized: {self.db_path}")
 
     async def _migrate_schema(self):
@@ -94,6 +100,30 @@ class StatsStore(StatsStoreProtocol):
                 await self._db.commit()
             except Exception as e:
                 logger.debug(f"[StatsStore] Migration column already exists (safe skip): {e}")
+
+    async def _backfill_conversation_turns_from_traces(self) -> None:
+        """Seed the full-turn table with legacy trace prompts where possible."""
+
+        await self._db.execute(
+            """
+            INSERT OR IGNORE INTO conversation_turns (
+                trace_id, session_id, input_type, user_text, assistant_text,
+                status, error_msg, metadata_json, created_at
+            )
+            SELECT
+                trace_id,
+                session_id,
+                input_type,
+                COALESCE(user_text, ''),
+                '',
+                COALESCE(status, 'success'),
+                error_msg,
+                '{"source":"legacy_traces"}',
+                created_at
+            FROM traces
+            """
+        )
+        await self._db.commit()
 
     async def _create_tables(self):
         await self._db.executescript("""
@@ -120,9 +150,25 @@ class StatsStore(StatsStoreProtocol):
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS conversation_turns (
+                trace_id TEXT PRIMARY KEY REFERENCES traces(trace_id),
+                session_id TEXT,
+                input_type TEXT,
+                user_text TEXT,
+                assistant_text TEXT,
+                status TEXT DEFAULT 'success',
+                error_msg TEXT,
+                metadata_json TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_traces_created ON traces(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_spans_trace ON spans(trace_id);
             CREATE INDEX IF NOT EXISTS idx_spans_node ON spans(node_name);
+            CREATE INDEX IF NOT EXISTS idx_conversation_turns_created
+                ON conversation_turns(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversation_turns_session
+                ON conversation_turns(session_id);
 
             CREATE TABLE IF NOT EXISTS inspection_reports (
                 run_id TEXT PRIMARY KEY,
@@ -145,7 +191,7 @@ class StatsStore(StatsStoreProtocol):
         truncated = user_text[:100] if user_text else ""
         async with self._write_lock:
             await self._db.execute(
-                "INSERT INTO traces (trace_id, session_id, input_type, user_text) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO traces (trace_id, session_id, input_type, user_text) VALUES (?, ?, ?, ?)",
                 (trace_id, session_id, input_type, truncated),
             )
             await self._db.commit()
@@ -176,7 +222,7 @@ class StatsStore(StatsStoreProtocol):
     ) -> None:
         async with self._write_lock:
             await self._db.execute(
-                "INSERT INTO spans (span_id, trace_id, parent_span_id, node_name, input_summary) VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO spans (span_id, trace_id, parent_span_id, node_name, input_summary) VALUES (?, ?, ?, ?, ?)",
                 (span_id, trace_id, parent_span_id, node_name, input_summary),
             )
             await self._db.commit()
@@ -195,6 +241,74 @@ class StatsStore(StatsStoreProtocol):
                 (duration_ms, status, output_summary, span_id),
             )
             await self._db.commit()
+
+    @_retry_on_locked(max_retries=3, delay=0.5)
+    async def store_conversation_turn(
+        self,
+        trace_id: str,
+        session_id: str,
+        input_type: str,
+        user_text: str,
+        assistant_text: str,
+        status: str = "success",
+        error_msg: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist the full user/assistant turn for later maintenance analysis."""
+
+        metadata_json = json.dumps(metadata or {}, ensure_ascii=False, default=str)
+        async with self._write_lock:
+            await self._db.execute(
+                """
+                INSERT OR REPLACE INTO conversation_turns (
+                    trace_id, session_id, input_type, user_text, assistant_text,
+                    status, error_msg, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    trace_id,
+                    session_id,
+                    input_type,
+                    user_text or "",
+                    assistant_text or "",
+                    status,
+                    error_msg,
+                    metadata_json,
+                ),
+            )
+            await self._db.commit()
+
+    async def get_conversation_turn(self, trace_id: str) -> dict[str, Any] | None:
+        """Return the full stored user/assistant turn for a trace."""
+
+        cursor = await self._db.execute(
+            """
+            SELECT trace_id, session_id, input_type, user_text, assistant_text,
+                   status, error_msg, metadata_json, created_at
+            FROM conversation_turns WHERE trace_id=?
+            """,
+            (trace_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        metadata_json = row[7] or "{}"
+        try:
+            metadata = json.loads(metadata_json)
+        except json.JSONDecodeError:
+            metadata = {}
+
+        return {
+            "trace_id": row[0],
+            "session_id": row[1],
+            "input_type": row[2],
+            "user_text": row[3],
+            "assistant_text": row[4],
+            "status": row[5],
+            "error_msg": row[6],
+            "metadata": metadata,
+            "created_at": row[8],
+        }
 
     async def get_overview(self) -> dict[str, Any]:
         cursor = await self._db.execute("""
@@ -310,6 +424,7 @@ class StatsStore(StatsStoreProtocol):
             }
             for s in await span_cursor.fetchall()
         ]
+        conversation_turn = await self.get_conversation_turn(trace_id)
 
         return {
             "trace_id": row[0],
@@ -321,6 +436,7 @@ class StatsStore(StatsStoreProtocol):
             "error_msg": row[6],
             "created_at": row[7],
             "spans": spans,
+            "conversation_turn": conversation_turn,
         }
 
     @_retry_on_locked(max_retries=3, delay=0.5)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from animetta.orchestration.graph import stats_store
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
+from animetta.orchestration.graph.stats_store import StatsStore, close_stats_store
 
 """Tests for LangGraph orchestrator — initialization and input processing."""
 
@@ -89,6 +91,49 @@ class TestOrchestratorProcessText:
         )
         assert "response_text" in result
         assert result["response_text"] == "mock reply"
+
+    @pytest.mark.asyncio
+    async def test_process_text_persists_dialogue_and_node_snapshots(
+        self, orchestrator, mock_graph, tmp_path
+    ):
+        """process_text stores conversation text and per-node debug spans."""
+        await close_stats_store()
+        store = StatsStore(db_path=str(tmp_path / "stats.db"))
+        await store.init()
+        stats_store._store = store
+        mock_graph.ainvoke.return_value = {
+            "user_text": "为什么一直未采集？",
+            "response_text": "因为之前没有把节点快照写进 stats.db。",
+            "response_chunks": ["因为之前没有把节点快照写进 stats.db。"],
+            "tts_audio": b"RIFF....",
+            "emotion": "thinking",
+            "_timings": [
+                {"step": "llm.api_call", "duration_ms": 1234.5, "detail": "chat_stream"},
+                {"step": "tts.synthesize", "duration_ms": 456.7, "detail": "edge_tts"},
+            ],
+        }
+
+        try:
+            await orchestrator.start()
+            result = await orchestrator.process_text(text="为什么一直未采集？")
+            trace_id = orchestrator._stats_handler._trace_id
+
+            turn = await store.get_conversation_turn(trace_id)
+            detail = await store.get_trace_detail(trace_id)
+
+            assert result["response_text"] == "因为之前没有把节点快照写进 stats.db。"
+            assert turn is not None
+            assert turn["user_text"] == "为什么一直未采集？"
+            assert turn["assistant_text"] == "因为之前没有把节点快照写进 stats.db。"
+            assert detail is not None
+            spans = {span["node_name"]: span for span in detail["spans"]}
+            assert spans["llm"]["input_summary"] == "为什么一直未采集？"
+            assert spans["llm"]["output_summary"] == "因为之前没有把节点快照写进 stats.db。"
+            assert spans["tts"]["input_summary"] == "因为之前没有把节点快照写进 stats.db。"
+            assert spans["emotion"]["output_summary"] == "thinking"
+            assert spans["output"]["output_summary"] == "因为之前没有把节点快照写进 stats.db。"
+        finally:
+            await close_stats_store()
 
 
 class TestOrchestratorProcessAudio:
