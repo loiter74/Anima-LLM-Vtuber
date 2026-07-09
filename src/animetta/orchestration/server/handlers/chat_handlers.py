@@ -10,6 +10,11 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.core.message_filter import is_probe_message
+from animetta.services.effects import (
+    EffectPlanner,
+    create_default_effect_runtime,
+)
+from animetta.services.meme.styles import get_meme_style, parse_meme_invocation
 
 from ...socket_events import EVENTS
 
@@ -59,6 +64,9 @@ class ChatHandlers:
         if not text:
             return
 
+        if await self._handle_explicit_meme_invocation(sid, text):
+            return
+
         # OTel metrics: session messages counter
         try:
 
@@ -99,6 +107,59 @@ class ChatHandlers:
             await self.sio.emit(
                 EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )
+
+    async def _handle_explicit_meme_invocation(self, sid: str, text: str) -> bool:
+        invocation = parse_meme_invocation(text)
+        if invocation is None:
+            return False
+
+        style = get_meme_style(invocation.style_id)
+        if style is None:
+            await self.sio.emit(
+                EVENTS["system"]["error"]["name"],
+                {"type": "error", "message": f"Unknown meme style: {invocation.style_id}"},
+                to=sid,
+            )
+            return True
+
+        runtime = create_default_effect_runtime()
+        response_plan = EffectPlanner().plan(user_text=text)
+        response = await runtime.run(response_plan)
+        if not response.effects or not response.effects[0].success:
+            message = (
+                response.effects[0].error
+                if response.effects and response.effects[0].error
+                else f"Unsupported meme style: {style.id}"
+            )
+            await self.sio.emit(
+                EVENTS["system"]["error"]["name"],
+                {"type": "error", "message": message},
+                to=sid,
+            )
+            return True
+
+        await self.sio.emit(
+            EVENTS["chat"]["control"]["name"], {"signal": "conversation-start"}, to=sid
+        )
+        await self.sio.emit(
+            EVENTS["chat"]["sentence"]["name"],
+            {
+                "text": response.text,
+                "seq": 0,
+                "lang": "zh",
+                "metadata": response.to_metadata(),
+            },
+            to=sid,
+        )
+        await self.sio.emit(
+            EVENTS["chat"]["sentence"]["name"],
+            {"text": "", "is_complete": True},
+            to=sid,
+        )
+        await self.sio.emit(
+            EVENTS["chat"]["control"]["name"], {"signal": "conversation-end"}, to=sid
+        )
+        return True
 
     # ── Audio / VAD ───────────────────────────────────────────────────
 

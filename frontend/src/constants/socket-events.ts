@@ -154,6 +154,7 @@ export interface ChatSentencePayload {
   seq: number
   lang: string
   is_complete?: boolean
+  metadata?: Record<string, unknown>
 }
 
 export interface ChatTranscriptPayload {

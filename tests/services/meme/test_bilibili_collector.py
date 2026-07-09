@@ -74,6 +74,24 @@ class TestMemeCandidateRaw:
         assert d["frequency"] == 3
         assert d["source_videos"] == ["BV1xx", "BV2xx"]
 
+    def test_style_metadata_to_dict(self):
+        m = MemeCandidate(
+            text="吾闻先王设职...",
+            format_id="zhouli",
+            format_slots={"modern_event": "今天不想上班"},
+            format_confidence=0.91,
+            rendered_text="吾闻先王设职，此岂不合乎周礼？",
+            mode="quip",
+        )
+
+        d = m.to_dict()
+
+        assert d["format_id"] == "zhouli"
+        assert d["format_slots"] == {"modern_event": "今天不想上班"}
+        assert d["format_confidence"] == 0.91
+        assert d["rendered_text"].endswith("周礼？")
+        assert d["mode"] == "quip"
+
 
 class TestBilibiliMemeCollector:
     """Suite for BilibiliMemeCollector."""
@@ -185,6 +203,29 @@ class TestBilibiliMemeCollector:
         assert len(candidates) == 1
         assert candidates[0].text == "valid梗"
 
+    def test_build_candidates_preserves_style_metadata(self):
+        videos = [CollectedVideo(bvid="BV1xx", title="Test")]
+        parsed = [{
+            "text": "吾闻先王设职...",
+            "context_hint": "不想上班时",
+            "frequency": 3,
+            "tags": ["周礼体"],
+            "format_id": "zhouli",
+            "format_slots": {"modern_event": "今天不想上班"},
+            "format_confidence": 0.88,
+            "rendered_text": "吾闻先王设职，此岂不合乎周礼？",
+            "mode": "quip",
+        }]
+
+        candidates = MemeCollector._build_candidates(parsed, videos)
+
+        assert len(candidates) == 1
+        assert candidates[0].format_id == "zhouli"
+        assert candidates[0].format_slots == {"modern_event": "今天不想上班"}
+        assert candidates[0].format_confidence == 0.88
+        assert candidates[0].rendered_text.endswith("周礼？")
+        assert candidates[0].mode == "quip"
+
     # ── _parse_llm_json ──────────────────────────────────────────────
 
     def test_parse_llm_json_list(self):
@@ -241,3 +282,25 @@ class TestBilibiliMemeCollector:
         result = await c._identify_meme_candidates(videos, {})
         assert len(result) == 1
         assert result[0].text == "梗1"
+
+    @pytest.mark.asyncio
+    async def test_identify_prompt_includes_style_guidance(self, mock_llm):
+        mock_llm.chat_messages.return_value = {
+            "content": (
+                '[{"text": "吾闻先王设职...", "frequency": 2, '
+                '"format_id": "zhouli", '
+                '"format_slots": {"modern_event": "今天不想上班"}, '
+                '"format_confidence": 0.9, '
+                '"rendered_text": "吾闻先王设职，此岂不合乎周礼？"}]'
+            )
+        }
+        c = MemeCollector(llm_client=mock_llm)
+        videos = [CollectedVideo(bvid="BV1", title="Test")]
+
+        result = await c._identify_meme_candidates(videos, {})
+
+        _, kwargs = mock_llm.chat_messages.await_args
+        prompt_text = "\n".join(message["content"] for message in kwargs["messages"])
+        assert "周礼体" in prompt_text
+        assert "format_slots" in prompt_text
+        assert result[0].format_id == "zhouli"

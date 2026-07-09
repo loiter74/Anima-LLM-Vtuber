@@ -222,6 +222,43 @@ class TestRouteHandlersDispatch:
         assert kwargs["text"] == "hello"
 
     @pytest.mark.asyncio
+    async def test_on_text_input_handles_explicit_zhouli_without_orchestrator(
+        self, mock_socketio, mock_session_manager
+    ):
+        """meme:zhouli should be handled as a style tool command before LLM dispatch."""
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+        mock_orch = AsyncMock()
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(return_value=mock_orch)
+
+        await handlers.on_text_input("sid1", {"text": "meme:zhouli 今天不想上班"})
+
+        mock_session_manager.get_or_create_orchestrator.assert_not_called()
+        mock_orch.process_text.assert_not_called()
+        mock_socketio.emit.assert_any_call(
+            "chat:control", {"signal": "conversation-start"}, to="sid1"
+        )
+        sentence_payloads = [
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:sentence" and call.args[1].get("text")
+        ]
+        assert sentence_payloads
+        assert "今天不想上班" in sentence_payloads[0]["text"]
+        assert "此岂不合乎周礼？" in sentence_payloads[0]["text"]
+        metadata = sentence_payloads[0]["metadata"]
+        assert metadata["response_plan"]["effects"][0]["id"] == "meme:zhouli"
+        assert metadata["effects"][0]["format_id"] == "zhouli"
+        assert {event["type"] for event in metadata["effect_events"]} >= {
+            "voice",
+            "face",
+            "overlay",
+        }
+        mock_socketio.emit.assert_any_call(
+            "chat:control", {"signal": "conversation-end"}, to="sid1"
+        )
+
+    @pytest.mark.asyncio
     async def test_on_text_input_empty_text_returns_early(
         self, mock_socketio, mock_session_manager
     ):
@@ -781,7 +818,17 @@ class TestRouteHandlersDispatch:
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
         add_result = await handlers.on_add_meme(
-            "sid1", {"text": "电子榨菜", "source": "user", "tags": ["bilibili"]}
+            "sid1",
+            {
+                "text": "电子榨菜",
+                "source": "user",
+                "tags": ["bilibili"],
+                "format_id": "zhouli",
+                "format_slots": {"modern_event": "想吃电子榨菜"},
+                "format_confidence": 0.8,
+                "rendered_text": "吾闻古人佐餐，此岂不合乎周礼？",
+                "mode": "quip",
+            },
         )
         meme_id = add_result["meme"]["id"]
 
@@ -793,8 +840,11 @@ class TestRouteHandlersDispatch:
 
         assert add_result["ok"] is True
         assert list_result["memes"][0]["text"] == "电子榨菜"
+        assert list_result["memes"][0]["format_id"] == "zhouli"
+        assert list_result["memes"][0]["format_slots"] == {"modern_event": "想吃电子榨菜"}
         assert review_result == {"ok": True, "feedback": "已收录为好梗"}
         assert dataset_result["memes"][0]["review_status"] == "good"
+        assert dataset_result["memes"][0]["format_id"] == "zhouli"
         mock_socketio.emit.assert_any_call("meme:list", list_result, to="sid1")
         mock_socketio.emit.assert_any_call("meme:review", review_result, to="sid1")
         mock_socketio.emit.assert_any_call("meme:dataset", dataset_result, to="sid1")

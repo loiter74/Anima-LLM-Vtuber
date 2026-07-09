@@ -59,6 +59,31 @@ class TestMemeCognitiveAnalyzer:
         assert result.persona_fit_score == 0.8
 
     @pytest.mark.asyncio
+    async def test_analyze_preserves_style_metadata_and_rendered_usage_example(
+        self, analyzer, mock_llm
+    ):
+        """Formatted meme metadata should survive cognitive analysis."""
+        mock_llm.chat_messages.return_value = {"content": _MOCK_VALID_JSON}
+
+        result = await analyzer.analyze(
+            text="吾闻先王设职...",
+            context_hint="不想上班时",
+            tags=["周礼体"],
+            format_id="zhouli",
+            format_slots={"modern_event": "今天不想上班"},
+            format_confidence=0.92,
+            rendered_text="吾闻先王设职，并非使人困死案牍。此岂不合乎周礼？",
+            mode="quip",
+        )
+
+        assert result.format_id == "zhouli"
+        assert result.format_slots == {"modern_event": "今天不想上班"}
+        assert result.format_confidence == 0.92
+        assert result.rendered_text.endswith("周礼？")
+        assert result.mode == "quip"
+        assert result.usage_example.endswith("周礼？")
+
+    @pytest.mark.asyncio
     async def test_analyze_passes_correct_prompt(self, analyzer, mock_llm):
         """The LLM should receive system + user prompt with the meme text."""
         mock_llm.chat_messages.return_value = {"content": _MOCK_VALID_JSON}
@@ -115,6 +140,35 @@ class TestMemeCognitiveAnalyzer:
         assert result is mock_meme
         mock_meme_pool.add_from_candidate.assert_called_once()
         mock_meme_pool.store.update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_analyze_and_ingest_preserves_style_metadata(
+        self, analyzer, mock_llm, mock_meme_pool
+    ):
+        """Styled memes should be stored with style metadata and format tag."""
+        mock_llm.chat_messages.return_value = {"content": _MOCK_VALID_JSON}
+        mock_meme = MagicMock()
+        mock_meme.id = "meme_zhouli"
+        mock_meme.tags = []
+        mock_meme_pool.add_from_candidate.return_value = mock_meme
+
+        result = await analyzer.analyze_and_ingest(
+            text="吾闻先王设职...",
+            tags=["周礼体"],
+            format_id="zhouli",
+            format_slots={"modern_event": "今天不想上班"},
+            format_confidence=0.9,
+            rendered_text="吾闻先王设职，此岂不合乎周礼？",
+            mode="quip",
+        )
+
+        assert result is mock_meme
+        assert mock_meme.format_id == "zhouli"
+        assert mock_meme.format_slots == {"modern_event": "今天不想上班"}
+        assert mock_meme.format_confidence == 0.9
+        assert mock_meme.rendered_text.endswith("周礼？")
+        assert mock_meme.mode == "quip"
+        assert "format:zhouli" in mock_meme.tags
 
     @pytest.mark.asyncio
     async def test_analyze_and_ingest_rejects_low_fit(self, analyzer, mock_llm, mock_meme_pool):

@@ -35,6 +35,11 @@ class CognitiveAnalysis(dict):
         persona_fit_score: float = 0.0,
         usage_example: str = "",
         source_url: str = "",
+        format_id: str = "",
+        format_slots: dict[str, str] | None = None,
+        format_confidence: float | None = None,
+        rendered_text: str = "",
+        mode: str = "",
     ) -> None:
         super().__init__(
             humor_mechanism=humor_mechanism,
@@ -43,6 +48,11 @@ class CognitiveAnalysis(dict):
             persona_fit_score=persona_fit_score,
             usage_example=usage_example,
             source_url=source_url,
+            format_id=format_id,
+            format_slots=format_slots or {},
+            format_confidence=format_confidence,
+            rendered_text=rendered_text,
+            mode=mode,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -66,6 +76,11 @@ class Meme:
     tags: list[str] = field(default_factory=list)
     cognitive_analysis: CognitiveAnalysis | None = None
     source_platform: str = ""
+    format_id: str = ""
+    format_slots: dict[str, str] = field(default_factory=dict)
+    format_confidence: float | None = None
+    rendered_text: str = ""
+    mode: str = ""
     created_at: float = field(default_factory=time.time)
 
 
@@ -81,6 +96,11 @@ class MemePool:
         context_hint: str = "",
         confidence: float = 0.0,
         tags: list[str] | None = None,
+        format_id: str = "",
+        format_slots: dict[str, str] | None = None,
+        format_confidence: float | None = None,
+        rendered_text: str = "",
+        mode: str = "",
     ) -> Meme | None:
         """Create and store a Meme from a candidate string."""
         meme = Meme(
@@ -89,6 +109,11 @@ class MemePool:
             context_hint=context_hint,
             confidence=confidence,
             tags=tags or [],
+            format_id=format_id,
+            format_slots=format_slots or {},
+            format_confidence=format_confidence,
+            rendered_text=rendered_text,
+            mode=mode,
         )
         if self.store is not None:
             self.store.update(meme)
@@ -171,6 +196,11 @@ class MemeCognitiveAnalyzer:
         source: str = "bilibili",
         tags: list[str] | None = None,
         source_url: str = "",
+        format_id: str = "",
+        format_slots: dict[str, str] | None = None,
+        format_confidence: float | None = None,
+        rendered_text: str = "",
+        mode: str = "",
     ) -> CognitiveAnalysis | None:
         """Analyze a single meme candidate and return structured cognitive analysis.
 
@@ -178,7 +208,16 @@ class MemeCognitiveAnalyzer:
         """
         if not self._llm:
             logger.debug("[MemeCognitiveAnalyzer] No LLM client, returning basic analysis")
-            return self._basic_analysis(text, context_hint)
+            return self._basic_analysis(
+                text,
+                context_hint,
+                source_url,
+                format_id=format_id,
+                format_slots=format_slots,
+                format_confidence=format_confidence,
+                rendered_text=rendered_text,
+                mode=mode,
+            )
 
         # Determine LLM interface: prefer chat_messages, fall back to chat
         system_content = COGNITIVE_ANALYSIS_SYSTEM_PROMPT
@@ -209,7 +248,16 @@ class MemeCognitiveAnalyzer:
                 logger.warning(
                     "[MemeCognitiveAnalyzer] LLM has neither chat_messages nor chat()"
                 )
-                return self._basic_analysis(text, context_hint, source_url)
+                return self._basic_analysis(
+                    text,
+                    context_hint,
+                    source_url,
+                    format_id=format_id,
+                    format_slots=format_slots,
+                    format_confidence=format_confidence,
+                    rendered_text=rendered_text,
+                    mode=mode,
+                )
 
             content = result.get("content", "") if isinstance(result, dict) else str(result)
             parsed = self._parse_json(content)
@@ -219,15 +267,29 @@ class MemeCognitiveAnalyzer:
                     "[MemeCognitiveAnalyzer] Invalid analysis for '%s', using basic fallback",
                     text[:30],
                 )
-                return self._basic_analysis(text, context_hint, source_url)
+                return self._basic_analysis(
+                    text,
+                    context_hint,
+                    source_url,
+                    format_id=format_id,
+                    format_slots=format_slots,
+                    format_confidence=format_confidence,
+                    rendered_text=rendered_text,
+                    mode=mode,
+                )
 
             analysis = CognitiveAnalysis(
                 humor_mechanism=parsed.get("humor_mechanism", ""),
                 context_trigger=parsed.get("context_trigger", context_hint),
                 emotional_tone=parsed.get("emotional_tone", ""),
                 persona_fit_score=float(parsed.get("persona_fit_score", 0.5)),
-                usage_example=parsed.get("usage_example", ""),
+                usage_example=rendered_text or parsed.get("usage_example", ""),
                 source_url=source_url,
+                format_id=format_id,
+                format_slots=format_slots,
+                format_confidence=format_confidence,
+                rendered_text=rendered_text,
+                mode=mode,
             )
             logger.info(
                 "[MemeCognitiveAnalyzer] Analyzed '%s': mechanism=%s, fit=%.2f",
@@ -237,7 +299,16 @@ class MemeCognitiveAnalyzer:
 
         except Exception as e:
             logger.warning("[MemeCognitiveAnalyzer] LLM analysis failed: %s", e)
-            return self._basic_analysis(text, context_hint, source_url)
+            return self._basic_analysis(
+                text,
+                context_hint,
+                source_url,
+                format_id=format_id,
+                format_slots=format_slots,
+                format_confidence=format_confidence,
+                rendered_text=rendered_text,
+                mode=mode,
+            )
 
     async def analyze_and_ingest(
         self,
@@ -245,6 +316,11 @@ class MemeCognitiveAnalyzer:
         context_hint: str = "",
         tags: list[str] | None = None,
         source_url: str = "",
+        format_id: str = "",
+        format_slots: dict[str, str] | None = None,
+        format_confidence: float | None = None,
+        rendered_text: str = "",
+        mode: str = "",
     ) -> Meme | None:
         """Analyze a meme candidate and ingest into MemePool if confidence is sufficient.
 
@@ -256,6 +332,11 @@ class MemeCognitiveAnalyzer:
             source="bilibili",
             tags=tags,
             source_url=source_url,
+            format_id=format_id,
+            format_slots=format_slots,
+            format_confidence=format_confidence,
+            rendered_text=rendered_text,
+            mode=mode,
         )
 
         if analysis is None:
@@ -266,6 +347,11 @@ class MemeCognitiveAnalyzer:
                     context_hint=context_hint,
                     confidence=0.4,
                     tags=tags,
+                    format_id=format_id,
+                    format_slots=format_slots,
+                    format_confidence=format_confidence,
+                    rendered_text=rendered_text,
+                    mode=mode,
                 )
             return None
 
@@ -277,16 +363,29 @@ class MemeCognitiveAnalyzer:
             return None
 
         if self._meme_pool:
+            extra_tags = list(tags or [])
+            if format_id:
+                extra_tags.append(f"format:{format_id}")
             meme = self._meme_pool.add_from_candidate(
                 text=text,
                 context_hint=analysis.context_trigger or context_hint,
                 confidence=analysis.persona_fit_score,
-                tags=(tags or []) + [f"mechanism:{analysis.humor_mechanism}"],
+                tags=extra_tags + [f"mechanism:{analysis.humor_mechanism}"],
+                format_id=format_id,
+                format_slots=format_slots,
+                format_confidence=format_confidence,
+                rendered_text=rendered_text,
+                mode=mode,
             )
             if meme:
                 meme.cognitive_analysis = analysis
                 meme.source_platform = "bilibili"
-                meme.tags = list(set(meme.tags))
+                meme.format_id = format_id
+                meme.format_slots = format_slots or {}
+                meme.format_confidence = format_confidence
+                meme.rendered_text = rendered_text
+                meme.mode = mode
+                meme.tags = list(set(list(getattr(meme, "tags", []) or []) + extra_tags))
                 # Update the stored meme with cognitive analysis
                 self._meme_pool.store.update(meme)
                 logger.info(
@@ -339,6 +438,11 @@ class MemeCognitiveAnalyzer:
         text: str,
         context_hint: str = "",
         source_url: str = "",
+        format_id: str = "",
+        format_slots: dict[str, str] | None = None,
+        format_confidence: float | None = None,
+        rendered_text: str = "",
+        mode: str = "",
     ) -> CognitiveAnalysis:
         """Create a basic CognitiveAnalysis without LLM (degraded mode)."""
         return CognitiveAnalysis(
@@ -346,6 +450,11 @@ class MemeCognitiveAnalyzer:
             context_trigger=context_hint,
             emotional_tone="",
             persona_fit_score=0.5,
-            usage_example="",
+            usage_example=rendered_text or "",
             source_url=source_url,
+            format_id=format_id,
+            format_slots=format_slots,
+            format_confidence=format_confidence,
+            rendered_text=rendered_text,
+            mode=mode,
         )

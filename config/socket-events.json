@@ -32,7 +32,8 @@
         "seq": "number",
         "lang": "string",
         "is_complete?": "boolean",
-        "turn_id?": "string"
+        "turn_id?": "string",
+        "metadata?": "object"
       }
     },
     "control": {

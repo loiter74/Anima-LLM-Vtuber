@@ -68,6 +68,11 @@ def _meme_to_payload(meme: Meme) -> dict[str, Any]:
         "source_platform": meme.source_platform,
         "base_score": meme.confidence,
         "cognitive_analysis": _analysis_to_payload(meme.cognitive_analysis),
+        "format_id": meme.format_id,
+        "format_slots": meme.format_slots,
+        "format_confidence": meme.format_confidence,
+        "rendered_text": meme.rendered_text,
+        "mode": meme.mode,
     }
 
 
@@ -108,6 +113,11 @@ class MemeHandlers(BaseSocketHandler):
             context_hint=str(data.get("context_hint") or ""),
             tags=list(data.get("tags") or []),
             source_url=str(data.get("source_url") or ""),
+            format_id=str(data.get("format_id") or ""),
+            format_slots=dict(data.get("format_slots") or {}),
+            format_confidence=data.get("format_confidence"),
+            rendered_text=str(data.get("rendered_text") or ""),
+            mode=str(data.get("mode") or ""),
         )
         source = str(data.get("source") or "user")
         if meme:
@@ -119,6 +129,11 @@ class MemeHandlers(BaseSocketHandler):
                 context_hint=str(data.get("context_hint") or ""),
                 confidence=0.4,
                 tags=list(data.get("tags") or []),
+                format_id=str(data.get("format_id") or ""),
+                format_slots=dict(data.get("format_slots") or {}),
+                format_confidence=data.get("format_confidence"),
+                rendered_text=str(data.get("rendered_text") or ""),
+                mode=str(data.get("mode") or ""),
             )
             if meme:
                 meme.source_platform = source
@@ -170,6 +185,11 @@ class MemeHandlers(BaseSocketHandler):
                     context_hint=candidate.context_hint,
                     confidence=min(max(candidate.frequency / 10, 0.1), 1.0),
                     tags=candidate.tags,
+                    format_id=candidate.format_id,
+                    format_slots=candidate.format_slots,
+                    format_confidence=candidate.format_confidence,
+                    rendered_text=candidate.rendered_text,
+                    mode=candidate.mode,
                 )
                 if meme:
                     meme.source_platform = "bilibili"

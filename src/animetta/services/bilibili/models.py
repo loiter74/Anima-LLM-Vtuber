@@ -131,6 +131,11 @@ class MemeCandidate:
     frequency: int = 1
     source_videos: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    format_id: str = ""
+    format_slots: dict[str, str] = field(default_factory=dict)
+    format_confidence: float | None = None
+    rendered_text: str = ""
+    mode: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -139,6 +144,11 @@ class MemeCandidate:
             "frequency": self.frequency,
             "source_videos": self.source_videos,
             "tags": self.tags,
+            "format_id": self.format_id,
+            "format_slots": self.format_slots,
+            "format_confidence": self.format_confidence,
+            "rendered_text": self.rendered_text,
+            "mode": self.mode,
         }
 
 

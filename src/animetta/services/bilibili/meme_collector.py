@@ -12,7 +12,7 @@ from collections import Counter
 from typing import Any
 
 from .api import fetch_comments, fetch_live_danmaku, fetch_trending_videos, fetch_video_danmaku
-from .meme_prompts import MEME_IDENTIFY_SYSTEM_PROMPT, MEME_IDENTIFY_USER_PROMPT
+from .meme_prompts import MEME_IDENTIFY_SYSTEM_PROMPT, get_meme_identify_user_prompt
 from .meme_utils import build_candidates, extract_semantic_phrases, parse_llm_json
 from .models import CollectedComment, CollectedDanmaku, CollectedVideo, MemeCandidate
 from .text_utils import STOPWORDS, extract_title_phrases, parse_tags
@@ -353,14 +353,14 @@ class MemeCollector:
                 result = await self._llm.chat_messages(
                     messages=[
                         {"role": "system", "content": MEME_IDENTIFY_SYSTEM_PROMPT},
-                        {"role": "user", "content": MEME_IDENTIFY_USER_PROMPT.format(
+                        {"role": "user", "content": get_meme_identify_user_prompt(
                             video_data=combined, danmaku_section=danmaku_section,
                         )},
                     ],
                     response_format={"type": "json_object"},
                 )
             else:
-                user_text = MEME_IDENTIFY_SYSTEM_PROMPT + "\n\n" + MEME_IDENTIFY_USER_PROMPT.format(
+                user_text = MEME_IDENTIFY_SYSTEM_PROMPT + "\n\n" + get_meme_identify_user_prompt(
                     video_data=combined, danmaku_section=danmaku_section,
                 )
                 result = await self._llm.chat(

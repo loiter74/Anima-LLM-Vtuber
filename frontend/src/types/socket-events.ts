@@ -21,6 +21,8 @@ export interface SentenceEvent {
   target_lang?: string
   /** Turn identity for matching subtitle translations to their source turn */
   turn_id?: string
+  /** Optional workflow/effect metadata for expression effects. */
+  metadata?: Record<string, unknown>
 }
 
 /** Payload for `chat:subtitle_translation` server-to-client event */
