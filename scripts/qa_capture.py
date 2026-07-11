@@ -18,9 +18,15 @@ import asyncio
 import os
 import re
 import sys
-import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 try:
     import socketio
@@ -31,10 +37,10 @@ except ImportError:
 # ── 配置 ────────────────────────────────────────────────────────────
 
 BACKEND_HTTP = os.environ.get("ANIMA_FRONTEND_URL", "http://localhost")
-SOCKETIO_URL = os.environ.get("ANIMA_BACKEND_URL", "http://localhost:12394")
+SOCKETIO_URL = os.environ.get("ANIMA_BACKEND_URL", "http://localhost")
 PER_TURN_WAIT = 18.0
-SCREENSHOTS_DIR = Path("qa_screenshots")
-SCREENSHOTS_DIR.mkdir(exist_ok=True)
+SCREENSHOTS_DIR = Path("evidence/frontend") / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=False)
 
 
 # ── Socket.IO 功能测试 ──────────────────────────────────────────────
@@ -48,17 +54,21 @@ async def send_danmaku(text: str, label: str, expect_marker_visible: bool | None
 
     @sio.on("*")
     async def catch(event: str, data: Any) -> None:
-        if event == "chat:sentence":
+        if event in {"chat:reply", "chat:sentence"}:
             if isinstance(data, dict) and data.get("text"):
                 reply_parts.append(data["text"])
-        elif event == "chat:expression":
-            if isinstance(data, dict):
-                expressions.append(data.get("emotion", ""))
+        elif event == "chat:expression" and isinstance(data, dict):
+            expressions.append(data.get("emotion", ""))
 
     await sio.connect(SOCKETIO_URL, transports=["websocket"])
     print(f"\n[{label}]")
     print(f"  旅人 → {text}")
-    await sio.emit("chat:text", {"text": text, "mode": "text"})
+    task_id = str(uuid4())
+    await sio.emit("chat:text", {
+        "text": text, "message_id": str(uuid4()), "conversation_id": str(uuid4()),
+        "task_id": task_id, "turn_id": task_id, "source": "text",
+        "is_inspection": False, "is_acceptance": True,
+    })
     await asyncio.sleep(PER_TURN_WAIT)
     await sio.disconnect()
 
@@ -89,9 +99,10 @@ def check_action_description_violation(reply: str) -> bool:
     if reply.startswith(("（", "(")):
         return True
     # 文中含明显的动作括号
-    if re.search(r"[（(](?:从|抬|低|笑|摇|皱|叹|喝|拿|放|看|眨|伸|缩|转|歪|挑|抿|轻笑|微笑|苦笑|耸肩|点头|摇头|挥|拍|指|扶|靠|坐|站|走|跑)", reply):
-        return True
-    return False
+    return bool(re.search(
+        r"[（(](?:从|抬|低|笑|摇|皱|叹|喝|拿|放|看|眨|伸|缩|转|歪|挑|抿|轻笑|微笑|苦笑|耸肩|点头|摇头|挥|拍|指|扶|靠|坐|站|走|跑)",
+        reply,
+    ))
 
 
 async def run_socketio_tests() -> dict:
@@ -110,11 +121,11 @@ async def run_socketio_tests() -> dict:
     )
     await asyncio.sleep(1.5)
 
-    # B. debug 弹幕 — marker 应该可见
+    # B. debug-like prompt — runtime markers must remain hidden
     results["B_debug"] = await send_danmaku(
         "【debug】主播你对我印象怎么样",
-        "B. debug 弹幕（marker 应可见）",
-        expect_marker_visible=True,
+        "B. debug 弹幕（marker 仍应隐藏）",
+        expect_marker_visible=False,
     )
     await asyncio.sleep(1.5)
 
@@ -125,30 +136,35 @@ async def run_socketio_tests() -> dict:
     )
     reply_c = results["C_meaningless"]["reply"]
     if check_action_description_violation(reply_c):
-        print(f"  ❌ 检测到动作描写违规！")
+        print("  ❌ 检测到动作描写违规！")
     else:
-        print(f"  ✅ 无动作描写违规")
+        print("  ✅ 无动作描写违规")
     results["C_meaningless"]["violation"] = check_action_description_violation(reply_c)
     await asyncio.sleep(1.5)
 
     # D. inspection 探针 — 不应触发 LLM
-    print(f"\n[D. inspection 探针（不应触发 LLM）]")
+    print("\n[D. inspection 探针（不应触发 LLM）]")
     sio = socketio.AsyncClient()
     got_sentence = False
     @sio.on("*")
     async def catch_d(event: str, data: Any) -> None:
         nonlocal got_sentence
-        if event == "chat:sentence" and isinstance(data, dict) and data.get("text"):
+        if event in {"chat:reply", "chat:sentence"} and isinstance(data, dict) and data.get("text"):
             got_sentence = True
     await sio.connect(SOCKETIO_URL, transports=["websocket"])
-    await sio.emit("chat:text", {"text": "[inspection] ping", "mode": "text", "is_inspection": True})
+    probe_task = str(uuid4())
+    await sio.emit("chat:text", {
+        "text": "[inspection] ping", "message_id": str(uuid4()),
+        "conversation_id": str(uuid4()), "task_id": probe_task, "turn_id": probe_task,
+        "source": "text", "is_inspection": True, "is_acceptance": False,
+    })
     await asyncio.sleep(8)
     await sio.disconnect()
     results["D_inspection"] = {"llm_triggered": got_sentence}
     if got_sentence:
-        print(f"  ❌ 探针触发了 LLM（收到 sentence 事件）")
+        print("  ❌ 探针触发了 LLM（收到 sentence 事件）")
     else:
-        print(f"  ✅ 探针被正确过滤，未触发 LLM")
+        print("  ✅ 探针被正确过滤，未触发 LLM")
 
     return results
 
@@ -161,6 +177,7 @@ async def capture_ui_screenshots() -> list[str]:
     from playwright.async_api import async_playwright
 
     screenshots = []
+    interaction_passed = False
     print("\n" + "═" * 70)
     print("Playwright UI 截图捕获（全新浏览器，无缓存）")
     print("═" * 70)
@@ -179,6 +196,11 @@ async def capture_ui_screenshots() -> list[str]:
         screenshots.append(shot1)
         print(f"    → {shot1}")
 
+        start_button = page.get_by_role("button", name="开始对话")
+        if await start_button.count():
+            await start_button.click()
+            await page.wait_for_timeout(300)
+
         # 2. 找到输入框，发一条弹幕
         print("\n[2] 发送弹幕「主播好」...")
         try:
@@ -195,17 +217,26 @@ async def capture_ui_screenshots() -> list[str]:
                 print(f"    → {shot2}")
 
                 # 找发送按钮（在 input-bar 内的 button）
-                send_btn = await page.query_selector('[data-testid="chat-input-bar"] button')
-                if send_btn:
-                    await send_btn.click()
+                send_buttons = page.locator('[data-testid="chat-input-bar"] button')
+                if await send_buttons.count():
+                    await send_buttons.last.click()
                     print("    已点击发送按钮")
                 else:
                     # 用回车发送
                     await textarea.press("Enter")
                     print("    已按回车发送")
 
-                # 等待回复
-                await page.wait_for_timeout(20000)
+                message_list = page.locator('[data-testid="message-list"]')
+                await message_list.get_by_text("主播好，今天有什么好玩的", exact=True).wait_for(
+                    timeout=5000
+                )
+                await page.wait_for_function(
+                    """() => document.querySelectorAll(
+                        '[data-testid="message-list"] > div.flex'
+                    ).length >= 2""",
+                    timeout=30000,
+                )
+                interaction_passed = True
 
                 # 截图：收到回复后
                 shot3 = str(SCREENSHOTS_DIR / "03_after_reply.png")
@@ -232,6 +263,8 @@ async def capture_ui_screenshots() -> list[str]:
 
         await browser.close()
 
+    if not interaction_passed:
+        raise RuntimeError("UI chat interaction did not render a complete user/assistant exchange")
     return screenshots
 
 
@@ -264,23 +297,23 @@ async def main() -> int:
     for s in screenshots:
         print(f"   - {s}")
 
-    print(f"\n🔌 Socket.IO 功能验证:")
+    print("\n🔌 Socket.IO 功能验证:")
     a = sio_results.get("A_normal", {})
     b = sio_results.get("B_debug", {})
     c = sio_results.get("C_meaningless", {})
     d = sio_results.get("D_inspection", {})
 
-    a_pass = a.get("marker_visible") is False
-    b_pass = b.get("marker_visible") is True
-    c_pass = c.get("violation") is False
+    a_pass = bool(a.get("reply")) and a.get("marker_visible") is False
+    b_pass = bool(b.get("reply")) and b.get("marker_visible") is False
+    c_pass = bool(c.get("reply")) and c.get("violation") is False
     d_pass = d.get("llm_triggered") is False
 
     print(f"   {'✅' if a_pass else '❌'} A. 普通弹幕 marker 剥除: marker_visible={a.get('marker_visible')}")
-    print(f"   {'✅' if b_pass else '❌'} B. debug 弹幕 marker 可见: marker_visible={b.get('marker_visible')}, value={b.get('marker_value')}")
+    print(f"   {'✅' if b_pass else '❌'} B. debug 弹幕 marker 隐藏: marker_visible={b.get('marker_visible')}")
     print(f"   {'✅' if c_pass else '❌'} C. 无意义弹幕无动作描写: violation={c.get('violation')}")
     print(f"   {'✅' if d_pass else '❌'} D. inspection 探针过滤: llm_triggered={d.get('llm_triggered')}")
 
-    all_pass = all([a_pass, b_pass, c_pass, d_pass])
+    all_pass = len(screenshots) >= 3 and all([a_pass, b_pass, c_pass, d_pass])
     print(f"\n{'✅ 全部通过' if all_pass else '❌ 有失败项'}")
     print("═" * 70)
     return 0 if all_pass else 1

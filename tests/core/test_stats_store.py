@@ -310,6 +310,19 @@ class TestStatsCallbackHandler:
         assert isinstance(trace_id, str)
         assert len(trace_id) == 36  # UUID format
 
+    def test_start_trace_reuses_task_id_as_trace_id(self):
+        """Golden chat task identity is also the persisted trace identity."""
+        handler = StatsCallbackHandler()
+        handler._schedule_async = lambda coroutine: coroutine.close()
+        task_id = str(uuid.uuid4())
+
+        trace_id = handler.start_trace(
+            "session-1", "text", "你好", trace_id=task_id
+        )
+
+        assert trace_id == task_id
+        assert handler._trace_id == task_id
+
     def test_summarize_input(self):
         """输入摘要应截断到 200 字符"""
 

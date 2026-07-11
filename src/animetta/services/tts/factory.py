@@ -32,37 +32,67 @@ from .mimo_tts import MimoTTS  # noqa: F401 - ensure provider registration
 from .mock_tts import MockTTS
 
 
+def _unwrap_tracing_proxy(service: object) -> object:
+    """Return the concrete service behind any nested tracing proxies."""
+    while isinstance(service, TracingProxy):
+        service = object.__getattribute__(service, "_target")
+    return service
+
+
 class TTSFactory:
     """TTS service factory class"""
 
     @staticmethod
-    def create(provider: str, **kwargs) -> TTSInterface:
+    def create(
+        provider: str,
+        *,
+        strict: bool = False,
+        **kwargs,
+    ) -> TTSInterface:
         """
         Creates TTS instance by provider via ProviderRegistry.
 
         Args:
             provider: Provider name
+            strict: Reject unknown providers and propagate creation failures
             **kwargs: Parameters passed to build the config object
 
         Returns:
             TTSInterface: TTS instance
 
-        Falls back to MockTTS on failure.
+        Falls back to MockTTS on failure unless ``strict`` is enabled.
         """
-        config = TTSFactory._build_config(provider, kwargs)
+        config = TTSFactory._build_config(provider, kwargs, strict=strict)
         if config is None:
+            if strict:
+                raise ValueError(f"Unknown TTS provider: {provider}")
             logger.warning(f"Unknown TTS provider: {provider}, using Mock implementation")
             return MockTTS()
 
         try:
             svc = ProviderRegistry.create_service("tts", config)
+            if (
+                strict
+                and provider != "mock"
+                and isinstance(_unwrap_tracing_proxy(svc), MockTTS)
+            ):
+                raise RuntimeError(
+                    "Strict TTS provider creation returned MockTTS "
+                    "for a non-mock config"
+                )
             return TracingProxy(svc, service_name="tts")
         except Exception as e:
+            if strict:
+                logger.error(
+                    "Strict TTS service creation failed: "
+                    f"type={provider}, error={type(e).__name__}"
+                )
+                raise
             logger.warning(f"TTS provider '{provider}' failed to initialize: {e}, falling back to MockTTS")
             return MockTTS()
 
     @staticmethod
-    def _build_config(provider: str, kwargs: dict):
+    def _build_config(provider: str, kwargs: dict, *, strict: bool = False):
         """Build a config Pydantic object from kwargs, or None if unknown."""
         try:
             if provider == "openai":
@@ -171,6 +201,8 @@ class TTSFactory:
             else:
                 return None
         except ImportError as e:
+            if strict:
+                raise
             logger.warning(f"Config class not available for {provider}: {e}")
             return None
 

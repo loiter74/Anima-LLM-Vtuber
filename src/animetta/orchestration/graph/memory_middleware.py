@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 class MemoryMiddleware:
     """Automatic memory injection middleware — V2 unified recall()."""
 
-    def __init__(self, memory_system: Any | None = None):
+    def __init__(self, memory_system: Any | None = None, mode: str = "read_write"):
         self._memory_system = memory_system
+        self._mode = mode
 
     async def recall_structured(
         self,
@@ -38,7 +39,7 @@ class MemoryMiddleware:
 
         Returns: (memory_context_text, metadata_dict).
         """
-        if not self._memory_system:
+        if not self._memory_system or self._mode == "off":
             logger.debug("[MemoryMiddleware] MemorySystem not configured, skipping structured recall")
             return "", {}
 
@@ -114,7 +115,7 @@ class MemoryMiddleware:
 
         Returns: (enriched_prompt, metadata_dict).
         """
-        if not self._memory_system:
+        if not self._memory_system or self._mode == "off":
             logger.debug("[MemoryMiddleware] MemorySystem not configured, skipping")
             return base_prompt or "", None
 

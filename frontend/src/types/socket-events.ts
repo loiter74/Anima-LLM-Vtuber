@@ -5,11 +5,27 @@ export interface ConnectionStatusPayload {
   message?: string
 }
 
+export interface ChatIdentity {
+  message_id: string
+  conversation_id: string
+  task_id: string
+  turn_id: string
+}
+
+export interface ChatCommandPayload extends ChatIdentity {
+  text: string
+  source: 'text'
+  is_inspection: false
+  is_acceptance: boolean
+  user_id?: string
+  from_name?: string
+}
+
 /**
  * Payload for the `sentence` socket event (LLM streaming response).
  * Extended with optional translation fields for bilingual subtitle support.
  */
-export interface SentenceEvent {
+export interface SentenceEvent extends ChatIdentity {
   text: string
   seq: number
   is_complete?: boolean
@@ -19,18 +35,38 @@ export interface SentenceEvent {
   translation?: string
   /** Target language code (e.g. "en", "ja") */
   target_lang?: string
-  /** Turn identity for matching subtitle translations to their source turn */
-  turn_id?: string
   /** Optional workflow/effect metadata for expression effects. */
   metadata?: Record<string, unknown>
 }
 
 /** Payload for `chat:subtitle_translation` server-to-client event */
-export interface SubtitleTranslationEvent {
+export interface SubtitleTranslationEvent extends ChatIdentity {
   translation: string
   target_lang?: string
-  /** Turn identity — matches the originating sentence turn */
-  turn_id?: string
+}
+
+export interface ChatControlEvent extends ChatIdentity {
+  signal?: 'conversation-start' | 'conversation-end'
+  type?: string
+  text?: string
+  status?: 'degraded'
+}
+
+export interface AudioWithExpressionEvent extends ChatIdentity {
+  audio_data: string
+  format: string
+  volumes?: number[]
+  use_parameter_mapping?: boolean
+  expressions?: { frames?: unknown[] }
+}
+
+export interface ChatErrorEvent extends ChatIdentity {
+  type: 'validation_error' | 'processing_error' | 'timeout' | 'interrupted' | 'internal_error'
+  message: string
+  component: string
+  phase: string
+  retryable: boolean
+  terminal: boolean
 }
 
 /** Payload for `translation.configure` client-to-server event */

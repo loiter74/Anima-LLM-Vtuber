@@ -5,7 +5,7 @@ import time as time_module
 from typing import Any
 
 from langchain_core.messages import ToolMessage
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from .state import AgentState

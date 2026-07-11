@@ -15,6 +15,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -225,8 +229,8 @@ class TestGetAsgiApp:
         mock_server = MagicMock()
         mock_server.get_app.return_value = mock_asgi_app
         mock_server.model_manager = MagicMock()
-        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
-        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+        mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
+        mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
         with (
             patch("animetta.core.socketio_server._setup_checkpointer") as mock_check,
@@ -248,8 +252,8 @@ class TestGetAsgiApp:
         mock_server = MagicMock()
         mock_server.get_app.return_value = mock_asgi_app
         mock_server.model_manager = MagicMock()
-        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
-        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+        mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
+        mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
         with (
             patch("animetta.core.socketio_server._setup_checkpointer"),
@@ -269,8 +273,8 @@ class TestGetAsgiApp:
 
         mock_server = MagicMock()
         mock_server.model_manager = MagicMock()
-        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
-        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+        mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
+        mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
         with (
             patch("animetta.core.socketio_server.init_config") as mock_init,
@@ -289,8 +293,8 @@ class TestGetAsgiApp:
 
         mock_server = MagicMock()
         mock_server.model_manager = MagicMock()
-        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
-        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+        mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
+        mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
         with (
             patch("animetta.core.socketio_server.init_config") as mock_init,
@@ -309,8 +313,8 @@ class TestGetAsgiApp:
 
         mock_server = MagicMock()
         mock_server.model_manager = MagicMock()
-        mock_server.model_manager.warmup = MagicMock(return_value=_noop_coro())
-        mock_server.prewarm_services = MagicMock(return_value=_noop_coro())
+        mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
+        mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
         with (
             patch("animetta.core.socketio_server._setup_checkpointer"),
@@ -345,3 +349,32 @@ class TestModuleLevelVars:
     def test_server_exists(self, mod):
         """_server module-level variable exists (lazy init)."""
         assert hasattr(mod, "_server")
+
+
+class TestFrontendServingMiddleware:
+    """The SPA fallback must not swallow operational endpoints."""
+
+    def test_ready_path_passes_through_instead_of_returning_index(
+        self,
+        mod,
+        tmp_path,
+    ):
+        frontend_dist = tmp_path / "frontend" / "dist"
+        frontend_dist.mkdir(parents=True)
+        (frontend_dist / "index.html").write_text(
+            "<html>spa fallback</html>",
+            encoding="utf-8",
+        )
+
+        async def ready_endpoint(_request):
+            return JSONResponse({"ready": False}, status_code=503)
+
+        app = Starlette(routes=[Route("/ready", ready_endpoint)])
+        with patch.object(mod, "_PROJECT_ROOT", tmp_path):
+            wrapped = mod._wrap_with_frontend_serving(app)
+            with TestClient(wrapped) as client:
+                response = client.get("/ready")
+
+        assert response.status_code == 503
+        assert response.headers["content-type"].startswith("application/json")
+        assert response.json() == {"ready": False}

@@ -12,6 +12,10 @@
 | 延迟太高直播感消失 | 高 | 记录每轮延迟≤8秒 | 待监控 |
 | 一直调工程缺少可展示Demo | 高 | 月底必须录屏 | 待监控 |
 | 拿Neuro-sama当短期标准导致挫败 | 中 | 设定合理预期 | 待监控 |
+| 契约漂移或双事件导致重复回答 | 高 | catalog validator + canonical/legacy 单发集成门禁 | 已缓解 |
+| Mock 或 provider 替换污染验收 | 高 | golden fail-closed readiness + soak/log 扫描 | 已缓解 |
+| Qwen 单轮失败拖垮聊天 | 高 | 20 秒 typed degradation、保留文字/Live2D、下一轮重试 | 已缓解 |
+| 旧截图或无关联日志被当作证据 | 高 | 时间戳 QA、task/trace 关联、失败早期落盘 | 已缓解 |
 
 ## 风险应对原则
 
@@ -42,4 +46,4 @@
 2. 考虑是否需要调整Scope
 3. 是否需要寻求外部帮助
 
-*Last updated: 2026-07-04*
+*Last updated: 2026-07-11*

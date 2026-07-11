@@ -9,6 +9,7 @@ from animetta.orchestration.graph.stats_store import StatsStore, close_stats_sto
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 
 @pytest.fixture
@@ -23,8 +24,8 @@ def mock_graph():
     return graph
 
 
-@pytest.fixture
-def orchestrator(mock_service_context, mock_socketio, mock_graph, monkeypatch):
+@pytest_asyncio.fixture
+async def orchestrator(mock_service_context, mock_socketio, mock_graph, monkeypatch):
     """Create an orchestrator with mocked dependencies."""
     monkeypatch.setattr(
         "animetta.orchestration.graph.orchestrator.create_default_graph",
@@ -44,7 +45,10 @@ def orchestrator(mock_service_context, mock_socketio, mock_graph, monkeypatch):
         socketio=mock_socketio,
         enable_tools=False,
     )
-    return orch
+    try:
+        yield orch
+    finally:
+        await close_stats_store()
 
 
 class TestOrchestratorInit:
@@ -132,6 +136,41 @@ class TestOrchestratorProcessText:
             assert spans["tts"]["input_summary"] == "因为之前没有把节点快照写进 stats.db。"
             assert spans["emotion"]["output_summary"] == "thinking"
             assert spans["output"]["output_summary"] == "因为之前没有把节点快照写进 stats.db。"
+        finally:
+            await close_stats_store()
+
+    @pytest.mark.asyncio
+    async def test_golden_stats_persist_identity_and_status_without_content(
+        self, orchestrator, mock_graph, tmp_path
+    ):
+        await close_stats_store()
+        store = StatsStore(db_path=str(tmp_path / "golden-stats.db"))
+        await store.init()
+        stats_store._store = store
+        orchestrator.service_context.config.system.runtime_profile = "golden"
+        mock_graph.ainvoke.return_value = {
+            "user_text": "private user text",
+            "response_text": "private assistant text",
+            "metadata": {"dialogue_status": "composer"},
+        }
+        try:
+            await orchestrator.start()
+            await orchestrator.process_text(
+                text="private user text",
+                message_id="11111111-1111-4111-8111-111111111111",
+                conversation_id="22222222-2222-4222-8222-222222222222",
+                task_id="33333333-3333-4333-8333-333333333333",
+                turn_id="33333333-3333-4333-8333-333333333333",
+            )
+            trace_id = orchestrator._stats_handler._trace_id
+            turn = await store.get_conversation_turn(trace_id)
+            detail = await store.get_trace_detail(trace_id)
+            assert turn["user_text"] == ""
+            assert turn["assistant_text"] == ""
+            serialized = repr(detail)
+            assert "private user text" not in serialized
+            assert "private assistant text" not in serialized
+            assert turn["metadata"]["task_id"] == trace_id
         finally:
             await close_stats_store()
 

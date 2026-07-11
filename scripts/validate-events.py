@@ -22,6 +22,10 @@ PYTHON_EVENT_DIRS = [
     ROOT / "tests",
 ]
 BUILTIN_SOCKET_EVENTS = {"*", "connect", "disconnect", "connect_error", "error"}
+LEGACY_ADAPTER_FILES = {
+    SRC_DIR / "orchestration" / "server" / "routes.py",
+    SRC_DIR / "orchestration" / "chat_delivery.py",
+}
 
 
 def load_events() -> dict[str, str]:
@@ -36,6 +40,45 @@ def load_events() -> dict[str, str]:
                 key = f"{module}.{action}"
                 events[key] = config["name"]
     return events
+
+
+def load_aliases() -> set[str]:
+    """Load declared legacy aliases; aliases are not ordinary event names."""
+    with open(EVENTS_JSON, encoding="utf-8") as f:
+        data = json.load(f)
+    return {
+        alias
+        for actions in data.values()
+        for definition in actions.values()
+        if isinstance(definition, dict)
+        for alias in definition.get("aliases", [])
+        if isinstance(alias, str) and alias
+    }
+
+
+def validate_legacy_alias_boundaries(aliases: set[str]) -> list[str]:
+    """Reject direct legacy Socket.IO calls outside the declared adapters."""
+    errors: list[str] = []
+    call_pattern = re.compile(
+        r'(?:@)?(?:sio|socket|sock|client)(?:\.value)?\.(?:emit|on|off|once)\(\s*["\']([^"\']+)["\']'
+    )
+    source_files = list(SRC_DIR.rglob("*.py")) if SRC_DIR.exists() else []
+    if FRONTEND_SRC_DIR.exists():
+        source_files.extend(
+            path for path in FRONTEND_SRC_DIR.rglob("*") if path.suffix in {".ts", ".vue"}
+        )
+    allowed = {path.resolve() for path in LEGACY_ADAPTER_FILES}
+    for source_file in source_files:
+        if source_file.resolve() in allowed:
+            continue
+        content = source_file.read_text(encoding="utf-8", errors="ignore")
+        for match in call_pattern.finditer(content):
+            if match.group(1) in aliases:
+                rel = source_file.relative_to(ROOT).as_posix()
+                errors.append(
+                    f"{rel}: legacy event '{match.group(1)}' is outside the adapter boundary"
+                )
+    return errors
 
 
 def validate_json_structure(events: dict[str, str]) -> list[str]:
@@ -161,6 +204,7 @@ def main() -> int:
         return 1
 
     events = load_events()
+    aliases = load_aliases()
     print(f"  Found {len(events)} event definitions")
 
     all_errors: list[str] = []
@@ -204,6 +248,15 @@ def main() -> int:
                 print(f"    - {err}")
         else:
             print("  [OK] All Python socket event literals use valid event names")
+
+    alias_errors = validate_legacy_alias_boundaries(aliases)
+    all_errors.extend(alias_errors)
+    if alias_errors:
+        print(f"  [FAIL] {len(alias_errors)} legacy alias boundary violations")
+        for err in alias_errors:
+            print(f"    - {err}")
+    else:
+        print("  [OK] Legacy aliases are confined to declared adapters")
 
     if all_errors:
         print(f"\nFAILED: {len(all_errors)} validation errors")

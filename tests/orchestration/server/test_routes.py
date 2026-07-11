@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 
+from animetta.orchestration.chat_contracts import ChatTransportMode, ChatTurnCommand
 from animetta.orchestration.server.desktop import DesktopClientManager
 from animetta.orchestration.server.live2d import Live2DManager
 from animetta.orchestration.server.routes import RouteHandlers, register_routes
@@ -235,9 +237,12 @@ class TestRouteHandlersDispatch:
 
         mock_session_manager.get_or_create_orchestrator.assert_not_called()
         mock_orch.process_text.assert_not_called()
-        mock_socketio.emit.assert_any_call(
-            "chat:control", {"signal": "conversation-start"}, to="sid1"
-        )
+        control_payloads = [
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:control"
+        ]
+        assert control_payloads[0]["signal"] == "conversation-start"
         sentence_payloads = [
             call.args[1]
             for call in mock_socketio.emit.call_args_list
@@ -254,9 +259,14 @@ class TestRouteHandlersDispatch:
             "face",
             "overlay",
         }
-        mock_socketio.emit.assert_any_call(
-            "chat:control", {"signal": "conversation-end"}, to="sid1"
-        )
+        assert control_payloads[-1]["signal"] == "conversation-end"
+        identity = {
+            field: sentence_payloads[0][field]
+            for field in ("message_id", "conversation_id", "task_id", "turn_id")
+        }
+        assert identity["turn_id"] == identity["task_id"]
+        for payload in (*control_payloads, *sentence_payloads):
+            assert all(payload[field] == value for field, value in identity.items())
 
     @pytest.mark.asyncio
     async def test_on_text_input_empty_text_returns_early(
@@ -286,10 +296,14 @@ class TestRouteHandlersDispatch:
 
         await handlers.on_text_input("sid1", {"text": "hello"})
 
-        mock_socketio.emit.assert_any_call("system:error", {
-            "type": "error",
-            "message": "test error",
-        }, to="sid1")
+        error_payload = next(
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "system:error"
+        )
+        assert error_payload["type"] == "internal_error"
+        assert error_payload["message"] == "test error"
+        assert error_payload["turn_id"] == error_payload["task_id"]
 
     @pytest.mark.asyncio
     async def test_on_switch_config_accepts_catalog_config_name(
@@ -412,11 +426,9 @@ class TestRouteHandlersDispatch:
         """on_interrupt_signal calls interrupt handler and emits stop/control events."""
         mock_interrupt = MagicMock()
         mock_interrupt_handler = MagicMock(return_value=mock_interrupt)
-        # get_interrupt_handler is used as bare name in chat_handlers without import
         monkeypatch.setattr(
             "animetta.orchestration.server.handlers.chat_handlers.get_interrupt_handler",
             mock_interrupt_handler,
-            raising=False,
         )
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -424,11 +436,20 @@ class TestRouteHandlersDispatch:
         await handlers.on_interrupt_signal("sid1", {"text": "stop please"})
 
         mock_interrupt.set_interrupt.assert_called_once_with("sid1")
-        mock_socketio.emit.assert_any_call("chat:stop_audio", {}, to="sid1")
-        mock_socketio.emit.assert_any_call("chat:control", {
-            "type": "control",
-            "text": "interrupted",
-        }, to="sid1")
+        stop_payload = next(
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:stop_audio"
+        )
+        control_payload = next(
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:control"
+        )
+        assert control_payload["type"] == "control"
+        assert control_payload["text"] == "interrupted"
+        for field in ("message_id", "conversation_id", "task_id", "turn_id"):
+            assert stop_payload[field] == control_payload[field]
 
     @pytest.mark.asyncio
     async def test_on_get_config_lists_project_personas(
@@ -559,6 +580,18 @@ class TestRouteHandlersDispatch:
         handlers.base._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
 
         await handlers.bilibili._process_danmaku(message)
+
+        process_kwargs = orchestrator.process_text.await_args.kwargs
+        assert process_kwargs["turn_id"] == process_kwargs["task_id"]
+        golden_payloads = [
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] in {"chat:control", "chat:sentence"}
+        ]
+        assert golden_payloads
+        for payload in golden_payloads:
+            for field in ("message_id", "conversation_id", "task_id", "turn_id"):
+                assert payload[field] == process_kwargs[field]
 
         reply_payload = None
         for call_args in mock_socketio.emit.call_args_list:
@@ -935,6 +968,69 @@ class TestRouteHandlersConnection:
 class TestRegisterRoutes:
     """register_routes function binds events to handler methods."""
 
+    async def test_registered_chat_text_reaches_orchestrator_and_records_metric(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        """A normal chat:text payload should traverse the registered route cleanly."""
+        mock_orchestrator = AsyncMock()
+        mock_orchestrator.process_text = AsyncMock(return_value={})
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(
+            return_value=mock_orchestrator
+        )
+        session_messages = MagicMock()
+        chat_logger = MagicMock()
+
+        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
+        monkeypatch.setattr(
+            "animetta.config.live2d.get_live2d_config", lambda: MagicMock()
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.handlers.chat_handlers.logger",
+            chat_logger,
+        )
+        monkeypatch.setattr(
+            "animetta.tracing.metrics._SESSION_MESSAGES", session_messages
+        )
+
+        handlers = register_routes(mock_socketio, mock_session_manager)
+        handlers.global_config = MagicMock()
+        chat_text_handler = next(
+            call.args[1]
+            for call in mock_socketio.on.call_args_list
+            if call.args[0] == "chat:text"
+        )
+
+        await chat_text_handler(
+            "sid1",
+            {
+                "text": "hello",
+                "user_id": "user1",
+                "from_name": "User",
+                "message_id": str(uuid4()),
+                "conversation_id": str(uuid4()),
+                "task_id": str(uuid4()),
+            },
+        )
+
+        mock_orchestrator.process_text.assert_awaited_once_with(
+            text="hello",
+            user_id="user1",
+            user_name="User",
+            channel_id="sid1",
+            message_id=ANY,
+            conversation_id=ANY,
+            task_id=ANY,
+            turn_id=ANY,
+            transport_mode="canonical",
+        )
+        undefined_helper_logs = [
+            str(call.args[0])
+            for call in chat_logger.debug.call_args_list
+            if "not defined" in str(call.args[0])
+        ]
+        assert undefined_helper_logs == []
+        session_messages.add.assert_called_once_with(1)
+
     def test_register_routes_binds_events(self, mock_socketio, mock_session_manager):
         """register_routes calls sio.on() for every event."""
         handlers = register_routes(mock_socketio, mock_session_manager)
@@ -962,6 +1058,51 @@ class TestRegisterRoutes:
         events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
         for event in ("chat:text", "chat:audio", "chat:audio_end", "chat:interrupt"):
             assert event in events_bound, f"{event} should be registered"
+
+    @pytest.mark.asyncio
+    async def test_catalog_text_aliases_share_one_normalized_command_handler(
+        self, mock_socketio, mock_session_manager
+    ):
+        handlers = register_routes(mock_socketio, mock_session_manager)
+        handlers.chat.on_text_command = AsyncMock()
+        registered = {
+            call.args[0]: call.args[1] for call in mock_socketio.on.call_args_list
+        }
+        identity = {
+            "message_id": str(uuid4()),
+            "conversation_id": str(uuid4()),
+            "task_id": str(uuid4()),
+        }
+
+        await registered["chat:text"]("canonical-sid", {"text": "hello", **identity})
+        await registered["text_input"]("legacy-sid", {"text": "legacy"})
+
+        assert handlers.chat.on_text_command.await_count == 2
+        canonical = handlers.chat.on_text_command.await_args_list[0].args
+        legacy = handlers.chat.on_text_command.await_args_list[1].args
+        assert canonical[0] == "canonical-sid"
+        assert isinstance(canonical[1], ChatTurnCommand)
+        assert canonical[1].transport_mode is ChatTransportMode.CANONICAL
+        assert legacy[0] == "legacy-sid"
+        assert isinstance(legacy[1], ChatTurnCommand)
+        assert legacy[1].transport_mode is ChatTransportMode.LEGACY
+
+    def test_text_alias_registration_is_catalog_backed(
+        self, mock_socketio, mock_session_manager, monkeypatch
+    ):
+        monkeypatch.setitem(
+            __import__(
+                "animetta.orchestration.socket_events", fromlist=["EVENTS"]
+            ).EVENTS["chat"]["text"],
+            "aliases",
+            ["legacy_chat_input"],
+        )
+
+        register_routes(mock_socketio, mock_session_manager)
+
+        events_bound = {call.args[0] for call in mock_socketio.on.call_args_list}
+        assert "legacy_chat_input" in events_bound
+        assert "text_input" not in events_bound
 
     def test_register_routes_binds_meme_events(
         self, mock_socketio, mock_session_manager

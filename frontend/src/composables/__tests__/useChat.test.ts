@@ -33,15 +33,35 @@ describe('useChat', () => {
 
   it('emits chat interrupt before finalizing the local response', async () => {
     const { store, sendInterrupt } = useChat()
-    store.createMessage('assistant', 'partial response')
+    const identity = {
+      message_id: '11111111-1111-4111-8111-111111111111',
+      conversation_id: '22222222-2222-4222-8222-222222222222',
+      task_id: '33333333-3333-4333-8333-333333333333',
+      turn_id: '33333333-3333-4333-8333-333333333333',
+    }
+    store.registerTask(identity)
+    store.createMessage('assistant', 'partial response', undefined, identity)
     if (store.lastMessage) {
       store.lastMessage.status = 'streaming'
     }
 
     await sendInterrupt()
 
-    expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.INTERRUPT, {})
+    expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.INTERRUPT, identity)
     expect(store.lastMessage?.status).toBe('complete')
+  })
+
+  it('sends canonical identity payload and keys the user bubble by message_id', async () => {
+    const { store, sendText } = useChat()
+
+    await sendText('hello')
+
+    const [event, payload] = socket.emit.mock.calls[0]
+    expect(event).toBe(Events.CHAT.TEXT)
+    expect(payload.turn_id).toBe(payload.task_id)
+    expect(payload.message_id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(payload.conversation_id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(store.messages[0].id).toBe(payload.message_id)
   })
 
   it('refreshes wiki pages when memory organize completes', async () => {

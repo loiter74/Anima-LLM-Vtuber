@@ -1,0 +1,15 @@
+{
+  "ordinary_continuity": {
+    "fault_injection": false,
+    "prompts": ["晚上好，我今天工作有点累。", "还记得我刚才说累吗？给我一个明早能执行的建议。"]
+  },
+  "humor_worldview": {
+    "fault_injection": false,
+    "prompts": ["如果普通加班发生在你的酒馆世界里，会是什么场景？", "用不过分的冷幽默评价它。"]
+  },
+  "tts_degradation_recovery": {
+    "fault_injection": true,
+    "isolated_from_clean_soak": true,
+    "prompts": ["这一轮用于验证音频降级但保留文字和 Live2D。", "故障已撤销，请用正常语音确认恢复。"]
+  }
+}

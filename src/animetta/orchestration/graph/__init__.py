@@ -13,6 +13,13 @@ Node principles:
 """
 
 from .asr_node import asr_node
+from .delivery_nodes import conversation_start_node, performance_output_node, reply_output_node
+from .dialogue_nodes import (
+    anima_composer_node,
+    conversation_finalizer_node,
+    reasoner_node,
+    response_guard_node,
+)
 from .emotion_node import emotion_node
 from .humor_rewrite_node import humor_rewrite_node
 from .humor_validation_node import humor_validation_node
@@ -30,4 +37,11 @@ __all__ = [
     "emotion_node",
     "output_node",
     "tool_node",
+    "reasoner_node",
+    "anima_composer_node",
+    "response_guard_node",
+    "conversation_finalizer_node",
+    "conversation_start_node",
+    "reply_output_node",
+    "performance_output_node",
 ]

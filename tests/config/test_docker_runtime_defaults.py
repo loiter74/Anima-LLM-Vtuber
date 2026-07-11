@@ -20,7 +20,7 @@ def _compose_env(path: str) -> dict[str, str]:
 def test_docker_defaults_use_real_llm_provider():
     for compose_file in ("docker-compose.yml", "docker-compose.cpu.yml"):
         env = _compose_env(compose_file)
-        assert env["ANIMETTA_LLM"] == "${ANIMETTA_LLM:-deepseek}"
+        assert env["ANIMETTA_LLM"] == "deepseek"
 
 
 def test_default_runtime_persona_is_anima_v01():

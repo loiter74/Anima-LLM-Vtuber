@@ -1,13 +1,14 @@
 """Emotion analysis node"""
 
+import time
 from typing import Any
 
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.memory.v2.emotion_field import VAD_MAP
 
-from .state import AgentState
+from .state import AgentState, log_timing
 
 
 def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
@@ -23,6 +24,11 @@ def _emotion_result(emotion: str) -> dict[str, Any]:
     return {"emotion": emotion, "emotion_vad": vad.to_tuple()}
 
 
+def _timed_result(state: AgentState, started: float, emotion: str) -> dict[str, Any]:
+    log_timing(state, "emotion.analyze", (time.perf_counter() - started) * 1000)
+    return _emotion_result(emotion)
+
+
 async def emotion_node(
     state: AgentState,
     config: RunnableConfig | None = None,
@@ -34,6 +40,7 @@ async def emotion_node(
     Output: state["emotion"]
     """
     session_id = state.get("session_id", "unknown")
+    started = time.perf_counter()
     # Prefer response_chunks (raw text with [emotion] tags intact) over
     # response_text (tags already stripped by llm_node).
     response_chunks = state.get("response_chunks") or []
@@ -43,7 +50,7 @@ async def emotion_node(
 
     if not response_text:
         logger.warning(f"[{session_id}] [EmotionNode] No response text, using default emotion")
-        return _emotion_result("neutral")
+        return _timed_result(state, started, "neutral")
 
     # Get emotion_analyzer from config
     emotion_analyzer = _get_from_config(config, "emotion_analyzer")
@@ -56,7 +63,7 @@ async def emotion_node(
 
     if not emotion_analyzer:
         logger.debug(f"[{session_id}] [EmotionNode] No emotion analyzer, using default emotion")
-        return _emotion_result("neutral")
+        return _timed_result(state, started, "neutral")
 
     try:
         logger.debug(f"[{session_id}] [EmotionNode] Calling emotion analyzer...")
@@ -65,10 +72,12 @@ async def emotion_node(
         primary_emotion = result.primary
         confidence = result.confidence
 
-        logger.info(f"[{session_id}] [EmotionNode] Analysis result: {primary_emotion} (confidence: {confidence:.2f})")
+        logger.info(
+            f"[{session_id}] [EmotionNode] Analysis result: {primary_emotion} (confidence: {confidence:.2f})"
+        )
 
-        return _emotion_result(primary_emotion)
+        return _timed_result(state, started, primary_emotion)
 
     except Exception as e:
         logger.error(f"[{session_id}] [EmotionNode] Analysis failed: {e}")
-        return _emotion_result("neutral")
+        return _timed_result(state, started, "neutral")

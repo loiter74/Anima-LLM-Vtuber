@@ -8,12 +8,15 @@ incoming danmaku messages through the AI orchestrator.
 import asyncio
 import time
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from loguru import logger
 
 from animetta.services.bilibili import DanmakuService
 from animetta.utils.tempfiles import write_temp_bytes
 
+from ...chat_contracts import ChatIdentity, ChatTransportMode
+from ...chat_delivery import ChatDelivery
 from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 
@@ -105,6 +108,16 @@ class BilibiliHandlers:
 
         # 2. Process with AI (use a dedicated "bilibili" session)
         try:
+            task_id = str(uuid4())
+            identity = ChatIdentity(
+                message_id=str(uuid4()),
+                conversation_id=str(uuid4()),
+                task_id=task_id,
+                turn_id=task_id,
+            )
+            delivery = ChatDelivery(
+                self.sio, identity, ChatTransportMode.CANONICAL
+            )
             orchestrator = await self.admin._get_or_create_orchestrator(
                 "bilibili"
             )
@@ -114,12 +127,19 @@ class BilibiliHandlers:
                 user_name=msg.user_name,
                 channel_id="bilibili",
                 source=EVENTS["bilibili"]["danmaku"]["name"],
+                message_id=identity.message_id,
+                conversation_id=identity.conversation_id,
+                task_id=identity.task_id,
+                turn_id=identity.task_id,
+                transport_mode=ChatTransportMode.CANONICAL.value,
             )
 
             reply_text = result.get("response_text", "")
 
             # Broadcast conversation-start
-            await self.sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-start"})
+            await delivery.emit(
+                "chat", "control", {"signal": "conversation-start"}
+            )
 
             # Broadcast text response via sentence events
             if reply_text:
@@ -128,9 +148,16 @@ class BilibiliHandlers:
                     "seq": 0,
                     "lang": translation_state.source_language.lower()[:2],
                 }
-                await self.sio.emit(EVENTS["chat"]["sentence"]["name"], sentence_payload)
-                await self.sio.emit(
-                    EVENTS["chat"]["sentence"]["name"], {"text": "", "is_complete": True}
+                await delivery.emit("chat", "sentence", sentence_payload)
+                await delivery.emit(
+                    "chat",
+                    "sentence",
+                    {
+                        "text": "",
+                        "seq": 1,
+                        "lang": sentence_payload["lang"],
+                        "is_complete": True,
+                    },
                 )
 
                 # ── Run translation in background (non-blocking) ──
@@ -160,8 +187,9 @@ class BilibiliHandlers:
                                     t_lang = (
                                         translation_state.target_language.lower()[:2]
                                     )
-                                    await self.sio.emit(
-                                        EVENTS["chat"]["subtitle_translation"]["name"],
+                                    await delivery.emit(
+                                        "chat",
+                                        "subtitle_translation",
                                         {
                                             "translation": t,
                                             "target_lang": t_lang,
@@ -181,15 +209,17 @@ class BilibiliHandlers:
             # Broadcast emotion
             emotion = result.get("emotion")
             if emotion:
-                await self.sio.emit(EVENTS["chat"]["expression"]["name"], {"emotion": emotion})
+                await delivery.emit("chat", "expression", {"emotion": emotion})
 
             # Broadcast audio
             tts_audio = result.get("tts_audio")
             if tts_audio:
-                await self._broadcast_danmaku_audio(tts_audio)
+                await self._broadcast_danmaku_audio(tts_audio, delivery)
 
             # Broadcast conversation-end
-            await self.sio.emit(EVENTS["chat"]["control"]["name"], {"signal": "conversation-end"})
+            await delivery.emit(
+                "chat", "control", {"signal": "conversation-end"}
+            )
 
             # Also emit danmaku.ai_reply for the chat message integration
             if reply_text:
@@ -218,7 +248,11 @@ class BilibiliHandlers:
 
     # ── Audio broadcasting ────────────────────────────────────────────
 
-    async def _broadcast_danmaku_audio(self, tts_audio) -> None:
+    async def _broadcast_danmaku_audio(
+        self,
+        tts_audio,
+        delivery: ChatDelivery,
+    ) -> None:
         """Process TTS audio and broadcast to all clients."""
         import base64
         import os
@@ -258,7 +292,7 @@ class BilibiliHandlers:
                 payload = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
-                await self.sio.emit(EVENTS["chat"]["audio_with_expression"]["name"], payload)
+                await delivery.emit("chat", "audio_with_expression", payload)
 
         except Exception as e:
             logger.error(f"[Bilibili] Audio broadcasting failed: {e}")

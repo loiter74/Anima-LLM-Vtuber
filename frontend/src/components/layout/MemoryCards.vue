@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { useChatStore } from '@/stores/chat'
 import { Events } from '@/constants/socket-events'
+import { sendCanonicalChatText } from '@/composables/chatTransport'
 
 /** Priority level determines the top-bar color */
 type Priority = 'high' | 'medium' | 'low'
@@ -29,22 +30,16 @@ const topics = ref<MemoryTopic[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// NOTE: We deliberately do NOT use useChat() here even though we need to send
-// text. useChat() registers a chat:sentence listener in onMounted — if a
-// non-chat component (like this sidebar) also calls it, every backend
-// sentence event gets processed twice, which races finalizeResponse() and
-// produces duplicate AI bubbles in the chat panel. Instead we inline the
-// minimal send logic: create the user message in the shared store + emit the
-// socket event. The single chat:sentence listener owned by ChatPanel handles
-// the reply.
+// Keep listener ownership in ChatPanel; this component only calls the shared
+// side-effect-limited canonical sender.
 const chatStore = useChatStore()
 
 function sendText(text: string): void {
   const socket = getSocket()
   if (!socket) return
-  chatStore.createMessage('user', text, 'text')
+  const command = sendCanonicalChatText(socket, text)
+  chatStore.createMessage('user', text, 'text', command)
   chatStore.isTyping = true
-  socket.emit(Events.CHAT.TEXT, { text })
 }
 
 /** Fetch memory topics from backend */

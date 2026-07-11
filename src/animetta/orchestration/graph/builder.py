@@ -7,12 +7,19 @@ from langgraph.graph import END, StateGraph
 from loguru import logger
 
 from . import (
+    anima_composer_node,
     asr_node,
+    conversation_finalizer_node,
+    conversation_start_node,
     emotion_node,
     humor_rewrite_node,
     humor_validation_node,
     llm_node,
     output_node,
+    performance_output_node,
+    reasoner_node,
+    reply_output_node,
+    response_guard_node,
     tool_node,
     tts_node,
 )
@@ -62,6 +69,7 @@ def build_graph(
     enable_tools: bool = False,
     tools: list[Any] | None = None,
     tools_map: dict[str, Any] | None = None,
+    golden_profile: bool = False,
 ) -> StateGraph:
     """
     Build the LangGraph state graph
@@ -103,6 +111,32 @@ def build_graph(
     # Register nodes
     graph.add_node("asr", asr_node)
     graph.add_node("personality", personality_node)
+
+    if golden_profile:
+        graph.add_node("reasoner", reasoner_node)
+        graph.add_node("anima_composer", anima_composer_node)
+        graph.add_node("response_guard", response_guard_node)
+        graph.add_node("conversation_finalizer", conversation_finalizer_node)
+        graph.add_node("conversation_start", conversation_start_node)
+        graph.add_node("reply_output", reply_output_node)
+        graph.add_node("performance_output", performance_output_node)
+        graph.add_node("tts", tts_node)
+        graph.add_node("emotion", emotion_node)
+        graph.set_conditional_entry_point(route_input, {"asr": "asr", "llm": "conversation_start"})
+        graph.add_edge("asr", "conversation_start")
+        graph.add_edge("conversation_start", "personality")
+        graph.add_edge("personality", "reasoner")
+        graph.add_edge("reasoner", "anima_composer")
+        graph.add_edge("anima_composer", "response_guard")
+        graph.add_edge("response_guard", "reply_output")
+        graph.add_edge("reply_output", "tts")
+        graph.add_edge("tts", "emotion")
+        graph.add_edge("emotion", "performance_output")
+        graph.add_edge("performance_output", "conversation_finalizer")
+        graph.add_edge("conversation_finalizer", END)
+        logger.info("[LangGraph] Golden two-pass graph built")
+        return graph.compile(checkpointer=None)
+
     graph.add_node("llm", llm_node)
     graph.add_node("humor_rewrite", humor_rewrite_node)
     graph.add_node("humor_validation", humor_validation_node)
@@ -163,6 +197,7 @@ def create_default_graph(
     enable_tools: bool = False,
     tools: list[Any] | None = None,
     tools_map: dict[str, Any] | None = None,
+    golden_profile: bool = False,
 ) -> StateGraph:
     """
     Create a state graph with default configuration
@@ -197,6 +232,7 @@ def create_default_graph(
         enable_tools=enable_tools,
         tools=tools,
         tools_map=tools_map,
+        golden_profile=golden_profile,
     )
 
 

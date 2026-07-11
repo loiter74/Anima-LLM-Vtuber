@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for WebSocketServer — server init, routes, lifecycle, and prewarm."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -57,6 +58,10 @@ class TestWebSocketServerInit:
             assert server.live2d_manager is not None
             assert server.lifecycle is not None
             assert server.route_handlers is None
+            assert server._background_tasks == set()
+            assert server.frontend_readiness["state"] in {"ready", "failed"}
+            assert isinstance(server.frontend_readiness["ready"], bool)
+            assert "path" not in server.frontend_readiness
 
             mock_sio_cls.assert_called_once_with(
                 async_mode="asgi",
@@ -291,19 +296,112 @@ class TestCleanup:
         websocket_server.route_handlers = route_handlers
         websocket_server.session_manager.cleanup_all = AsyncMock()
 
-        await websocket_server._cleanup_all_resources()
+        with patch(
+            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+            new=AsyncMock(),
+        ) as shutdown:
+            await websocket_server._cleanup_all_resources()
 
         route_handlers.stop_bilibili.assert_called_once()
         websocket_server.session_manager.cleanup_all.assert_called_once()
+        shutdown.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_stop_calls_cleanup(self, websocket_server):
         """stop() triggers _cleanup_all_resources."""
         websocket_server.session_manager.cleanup_all = AsyncMock()
 
-        await websocket_server.stop()
+        with patch(
+            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+            new=AsyncMock(),
+        ) as shutdown:
+            await websocket_server.stop()
 
         websocket_server.session_manager.cleanup_all.assert_called_once()
+        shutdown.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_still_shuts_pool_when_session_cleanup_fails(
+        self,
+        websocket_server,
+    ):
+        websocket_server.session_manager.cleanup_all = AsyncMock(
+            side_effect=RuntimeError("sensitive-session-error")
+        )
+
+        with patch(
+            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+            new=AsyncMock(),
+        ) as shutdown, patch(
+            "animetta.orchestration.server.websocket.logger.warning"
+        ) as warning:
+            await websocket_server._cleanup_all_resources()
+
+        shutdown.assert_awaited_once_with()
+        rendered = repr(warning.call_args_list)
+        assert "RuntimeError" in rendered
+        assert "sensitive-session-error" not in rendered
+
+
+class TestBackgroundTaskSupervisor:
+    """Tracked startup tasks are drained and stopped deterministically."""
+
+    @pytest.mark.asyncio
+    async def test_background_failure_is_drained_with_type_only_log(
+        self,
+        websocket_server,
+    ):
+        async def fail() -> None:
+            raise RuntimeError("sensitive-background-error")
+
+        with patch(
+            "animetta.orchestration.server.websocket.logger.warning"
+        ) as warning:
+            task = websocket_server.supervise_background(
+                fail(),
+                name="service-prewarm",
+            )
+            await asyncio.gather(task, return_exceptions=True)
+            await asyncio.sleep(0)
+
+        assert task not in websocket_server._background_tasks
+        rendered = repr(warning.call_args_list)
+        assert "RuntimeError" in rendered
+        assert "sensitive-background-error" not in rendered
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_and_awaits_background_tasks(
+        self,
+        websocket_server,
+    ):
+        entered = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def pending() -> None:
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        task = websocket_server.supervise_background(
+            pending(),
+            name="service-prewarm",
+        )
+        await entered.wait()
+        websocket_server.session_manager.cleanup_all = AsyncMock()
+
+        with patch(
+            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+            new=AsyncMock(),
+        ) as shutdown:
+            await websocket_server.stop()
+
+        assert cancelled.is_set()
+        assert task.cancelled()
+        assert websocket_server._background_tasks == set()
+        shutdown.assert_awaited_once_with()
 
 
 # ── WebSocketServer — start ────────────────────────────────────────

@@ -2,7 +2,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { getSocket } from './useSocket'
 import { Events } from '@/constants/socket-events'
-import type { SentenceEvent, SubtitleTranslationEvent } from '@/types/socket-events'
+import type { AudioWithExpressionEvent, ChatControlEvent, ChatIdentity, SentenceEvent, SubtitleTranslationEvent } from '@/types/socket-events'
+import { activateChatTask, isCurrentChatTask } from './chatTaskGate'
 
 export function useSubtitle() {
   const store = useSubtitleStore()
@@ -22,8 +23,6 @@ export function useSubtitle() {
   let hideTimeout: ReturnType<typeof setTimeout> | null = null
   let accumulatedText = ''
   let accumulatedTranslation = ''
-  /** The turn_id of the currently active subtitle turn (task 5.2) */
-  let currentTurnId: string | null = null
 
   function scheduleHide(delay = 6000): void {
     if (hideTimeout) clearTimeout(hideTimeout)
@@ -31,7 +30,6 @@ export function useSubtitle() {
       visible.value = false
       text.value = ''
       translation.value = ''
-      currentTurnId = null
     }, delay)
   }
 
@@ -49,12 +47,6 @@ export function useSubtitle() {
     sourceLang.value = lang || ''
     targetLang.value = tLang || ''
     visible.value = true
-  }
-
-  /** Payload for audio_with_expression event (we only need audio metadata) */
-  interface AudioWithExpressionEvent {
-    audio_data?: string
-    format?: string
   }
 
   /** Estimate audio duration in seconds from base64 data.
@@ -87,8 +79,8 @@ export function useSubtitle() {
 
   // Store refs so socket.off removes ONLY our callbacks
   let _onSentence: ((data: SentenceEvent) => void) | null = null
-  let _onControl: ((data: { signal: string }) => void) | null = null
-  let _onStopAudio: (() => void) | null = null
+  let _onControl: ((data: ChatControlEvent) => void) | null = null
+  let _onStopAudio: ((data: ChatIdentity) => void) | null = null
   let _onSubtitleTranslation: ((data: SubtitleTranslationEvent) => void) | null = null
   let _onAudioWithExpression: ((data: AudioWithExpressionEvent) => void) | null = null
   let _onSingSubtitle: ((data: { text: string; translation: string; lang?: string }) => void) | null = null
@@ -100,10 +92,8 @@ export function useSubtitle() {
     _onSentence = (data: SentenceEvent) => {
       if (!store.enabled) return
 
-      // Track current turn_id (task 5.2)
-      if (data.turn_id) {
-        currentTurnId = data.turn_id
-      }
+      if (data.seq === 0) activateChatTask(data)
+      if (!isCurrentChatTask(data)) return
 
       // Final / complete signal
       if (data.is_complete || data.text === '') {
@@ -134,7 +124,8 @@ export function useSubtitle() {
       }
     }
 
-    _onControl = (data: { signal: string }) => {
+    _onControl = (data: ChatControlEvent) => {
+      if (!isCurrentChatTask(data)) return
       if (data.signal === 'conversation-end') {
         isStreaming.value = false
         // Don't hide immediately — wait for 6s timeout or stop_audio
@@ -142,24 +133,15 @@ export function useSubtitle() {
     }
 
     // Hide subtitle early when audio stops (TTS finished playing)
-    _onStopAudio = () => {
+    _onStopAudio = (data: ChatIdentity) => {
+      if (!isCurrentChatTask(data)) return
       scheduleHide(1500)
     }
 
     // Receive translation asynchronously (non-blocking backend)
     // Tasks 5.3-5.5: Only display when turn_id matches, ignore stale
     _onSubtitleTranslation = (data: SubtitleTranslationEvent) => {
-      // Task 5.5: Legacy behavior — no turn identity known
-      if (!data.turn_id && !currentTurnId) {
-        translation.value = data.translation
-        targetLang.value = data.target_lang || ''
-        cancelHide()
-        scheduleHide(6000)
-        return
-      }
-
-      // Task 5.3: Display only when turn_id matches current subtitle turn
-      if (data.turn_id && data.turn_id === currentTurnId) {
+      if (isCurrentChatTask(data)) {
         translation.value = data.translation
         targetLang.value = data.target_lang || ''
         cancelHide()
@@ -174,9 +156,9 @@ export function useSubtitle() {
     // When TTS audio arrives, cancel the 6s fallback timer and
     // schedule hide based on actual audio duration instead.
     _onAudioWithExpression = (data: AudioWithExpressionEvent) => {
-      if (!data.audio_data) return
+      if (!isCurrentChatTask(data) || !data.audio_data) return
       cancelHide()
-      const estDurationSec = estimateAudioDurationSec(data.audio_data, data.format || 'wav')
+      const estDurationSec = estimateAudioDurationSec(data.audio_data, data.format)
       // Audio duration + 1s safety buffer, minimum 3s floor
       const hideDelay = Math.max(Math.round(estDurationSec * 1000) + 1000, 3000)
       scheduleHide(hideDelay)

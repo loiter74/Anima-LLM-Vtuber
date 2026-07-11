@@ -5,18 +5,33 @@ Handles user text/audio input, VAD processing, interrupt signals,
 and conversation history operations.
 """
 
-from typing import TYPE_CHECKING
+import asyncio
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 from loguru import logger
 
 from animetta.core.message_filter import is_probe_message
+from animetta.orchestration.chat_contracts import (
+    ChatErrorComponent,
+    ChatErrorPayload,
+    ChatErrorPhase,
+    ChatErrorType,
+    ChatIdentity,
+    ChatTransportMode,
+    ChatTurnCommand,
+    normalize_chat_command,
+)
+from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
 from animetta.services.effects import (
     EffectPlanner,
     create_default_effect_runtime,
 )
 from animetta.services.meme.styles import get_meme_style, parse_meme_invocation
+from animetta.tracing.metrics import get_session_messages, get_websocket_errors
 
-from ...socket_events import EVENTS
+from ...socket_events import EVENTS, resolve_socket_event
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -42,83 +57,188 @@ class ChatHandlers:
         self.session_manager = session_manager
         self.admin = admin
         self._raw_audio_first_sids: set = set()
+        self._conversation_locks: dict[str, asyncio.Lock] = {}
 
     # ── Text input ────────────────────────────────────────────────────
 
-    async def on_text_input(self, sid: str, data: dict) -> None:
-        """Handle text input."""
-        text = data.get("text", "")
+    @staticmethod
+    def _correlation_identity(data: Any) -> ChatIdentity:
+        payload = data if isinstance(data, dict) else {}
 
-        # ── Ingress filter — drop probes before they reach the LLM ──
-        # Stops the "历史串台虫": inspection pings and health probes must
-        # never be dispatched as real conversation turns. See
-        # core/message_filter.py for the canonical detection logic.
+        def valid_uuid(field: str) -> str | None:
+            value = payload.get(field)
+            if not isinstance(value, str):
+                return None
+            try:
+                parsed = UUID(value)
+            except ValueError:
+                return None
+            return value if str(parsed) == value else None
+
+        task_id = valid_uuid("task_id") or valid_uuid("turn_id") or str(uuid4())
+        return ChatIdentity(
+            message_id=valid_uuid("message_id") or str(uuid4()),
+            conversation_id=valid_uuid("conversation_id") or str(uuid4()),
+            task_id=task_id,
+            turn_id=task_id,
+        )
+
+    async def _emit_command_error(
+        self,
+        sid: str,
+        identity: ChatIdentity,
+        *,
+        error_type: ChatErrorType,
+        message: str,
+        component: ChatErrorComponent,
+        phase: ChatErrorPhase,
+        transport_mode: ChatTransportMode = ChatTransportMode.CANONICAL,
+    ) -> None:
+        safe_message = (message.strip() or error_type.value)[:512]
+        payload = ChatErrorPayload(
+            message_id=identity.message_id,
+            conversation_id=identity.conversation_id,
+            task_id=identity.task_id,
+            turn_id=identity.turn_id,
+            type=error_type,
+            message=safe_message,
+            component=component,
+            phase=phase,
+            retryable=False,
+            terminal=True,
+        )
+        delivery = ChatDelivery(self.sio, identity, transport_mode)
+        await delivery.emit(
+            "system",
+            "error",
+            payload.model_dump(
+                mode="json",
+                exclude={"message_id", "conversation_id", "task_id", "turn_id"},
+            ),
+            to=sid,
+        )
+
+    async def on_text_event(self, sid: str, event: str, data: dict) -> None:
+        """Filter and normalize one canonical or catalog-declared text event."""
         if is_probe_message(data):
-            logger.debug(
-                f"[{sid}] Dropping inspection/health probe before LLM dispatch: {text!r}"
+            logger.debug("[{}] Dropping inspection/health probe before normalization", sid)
+            return
+        try:
+            command = normalize_chat_command(event, data)
+        except (TypeError, ValueError) as exc:
+            try:
+                transport_mode = (
+                    ChatTransportMode.LEGACY
+                    if resolve_socket_event(event).is_legacy
+                    else ChatTransportMode.CANONICAL
+                )
+            except KeyError:
+                transport_mode = ChatTransportMode.CANONICAL
+            await self._emit_command_error(
+                sid,
+                self._correlation_identity(data),
+                error_type=ChatErrorType.VALIDATION,
+                message=str(exc),
+                component=ChatErrorComponent.TRANSPORT,
+                phase=ChatErrorPhase.VALIDATION,
+                transport_mode=transport_mode,
             )
             return
+        await self.on_text_command(sid, command)
 
-        logger.info(f"[{sid}] Received text input: {text}")
+    async def on_text_command(self, sid: str, command: ChatTurnCommand) -> None:
+        """Serialize and dispatch one transport-normalized text command."""
+        lock = self._conversation_locks.setdefault(
+            command.conversation_id,
+            asyncio.Lock(),
+        )
+        async with lock:
+            await self._process_text_command(sid, command)
 
-        if not text:
+    async def _process_text_command(self, sid: str, command: ChatTurnCommand) -> None:
+        text = command.text
+        logger.info("[{}] Received normalized text input: {}", sid, text)
+        delivery = ChatDelivery(self.sio, command, command.transport_mode)
+
+        if await self._handle_explicit_meme_invocation(sid, text, delivery):
             return
 
-        if await self._handle_explicit_meme_invocation(sid, text):
-            return
-
-        # OTel metrics: session messages counter
         try:
-
             sm = get_session_messages()
             if sm is not None:
                 sm.add(1)
-        except Exception as e:
-            logger.debug(f"[ChatHandlers] OTel session_messages metric failed: {e}")
+        except Exception as exc:
+            logger.debug("[ChatHandlers] session_messages metric failed: {}", exc)
 
         try:
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
             result = await orchestrator.process_text(
                 text=text,
-                user_id=data.get("user_id", "user"),
-                user_name=data.get("from_name", "User"),
+                user_id=command.user_id or "user",
+                user_name=command.from_name or "User",
                 channel_id=sid,
+                message_id=command.message_id,
+                conversation_id=command.conversation_id,
+                task_id=command.task_id,
+                turn_id=command.task_id,
+                transport_mode=command.transport_mode.value,
             )
-
-            # Check if process_text returned an error dict (silent failure)
             if isinstance(result, dict) and result.get("error"):
-                error_msg = result["error"]
-                logger.error(f"[{sid}] process_text returned error: {error_msg}")
-                await self.sio.emit(
-                    EVENTS["system"]["error"]["name"], {"type": "error", "message": error_msg}, to=sid
+                await self._emit_command_error(
+                    sid,
+                    command,
+                    error_type=ChatErrorType.PROCESSING,
+                    message=str(result["error"]),
+                    component=ChatErrorComponent.WORKFLOW,
+                    phase=ChatErrorPhase.WORKFLOW,
+                    transport_mode=command.transport_mode,
                 )
-
-        except Exception as e:
-            logger.error(f"[{sid}] Error processing text input: {e}")
-
-            # OTel metrics: websocket errors counter
+        except Exception as exc:
             try:
-
-                we = get_websocket_errors()
-                if we is not None:
-                    we.add(1)
-            except Exception as metric_err:
-                logger.debug(f"[ChatHandlers] OTel websocket_errors metric failed: {metric_err}")
-            await self.sio.emit(
-                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
+                metric = get_websocket_errors()
+                if metric is not None:
+                    metric.add(1)
+            except Exception as metric_exc:
+                logger.debug("[ChatHandlers] websocket_errors metric failed: {}", metric_exc)
+            await self._emit_command_error(
+                sid,
+                command,
+                error_type=ChatErrorType.INTERNAL,
+                message=str(exc),
+                component=ChatErrorComponent.WORKFLOW,
+                phase=ChatErrorPhase.WORKFLOW,
+                transport_mode=command.transport_mode,
             )
 
-    async def _handle_explicit_meme_invocation(self, sid: str, text: str) -> bool:
+    async def on_text_input(self, sid: str, data: dict) -> None:
+        """Compatibility facade for internal callers that predate named routes."""
+        if is_probe_message(data):
+            return
+        command = normalize_chat_command("text_input", data).model_copy(
+            update={"transport_mode": ChatTransportMode.CANONICAL}
+        )
+        await self.on_text_command(sid, command)
+
+    async def _handle_explicit_meme_invocation(
+        self,
+        sid: str,
+        text: str,
+        delivery: ChatDelivery,
+    ) -> bool:
         invocation = parse_meme_invocation(text)
         if invocation is None:
             return False
 
         style = get_meme_style(invocation.style_id)
         if style is None:
-            await self.sio.emit(
-                EVENTS["system"]["error"]["name"],
-                {"type": "error", "message": f"Unknown meme style: {invocation.style_id}"},
-                to=sid,
+            await self._emit_command_error(
+                sid,
+                delivery.identity,
+                error_type=ChatErrorType.VALIDATION,
+                message=f"Unknown meme style: {invocation.style_id}",
+                component=ChatErrorComponent.WORKFLOW,
+                phase=ChatErrorPhase.WORKFLOW,
+                transport_mode=delivery.transport_mode,
             )
             return True
 
@@ -131,18 +251,21 @@ class ChatHandlers:
                 if response.effects and response.effects[0].error
                 else f"Unsupported meme style: {style.id}"
             )
-            await self.sio.emit(
-                EVENTS["system"]["error"]["name"],
-                {"type": "error", "message": message},
-                to=sid,
+            await self._emit_command_error(
+                sid,
+                delivery.identity,
+                error_type=ChatErrorType.PROCESSING,
+                message=message,
+                component=ChatErrorComponent.WORKFLOW,
+                phase=ChatErrorPhase.WORKFLOW,
+                transport_mode=delivery.transport_mode,
             )
             return True
 
-        await self.sio.emit(
-            EVENTS["chat"]["control"]["name"], {"signal": "conversation-start"}, to=sid
-        )
-        await self.sio.emit(
-            EVENTS["chat"]["sentence"]["name"],
+        await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=sid)
+        await delivery.emit(
+            "chat",
+            "sentence",
             {
                 "text": response.text,
                 "seq": 0,
@@ -151,14 +274,13 @@ class ChatHandlers:
             },
             to=sid,
         )
-        await self.sio.emit(
-            EVENTS["chat"]["sentence"]["name"],
-            {"text": "", "is_complete": True},
+        await delivery.emit(
+            "chat",
+            "sentence",
+            {"text": "", "seq": 1, "lang": "zh", "is_complete": True},
             to=sid,
         )
-        await self.sio.emit(
-            EVENTS["chat"]["control"]["name"], {"signal": "conversation-end"}, to=sid
-        )
+        await delivery.emit("chat", "control", {"signal": "conversation-end"}, to=sid)
         return True
 
     # ── Audio / VAD ───────────────────────────────────────────────────
@@ -198,8 +320,13 @@ class ChatHandlers:
 
         except Exception as e:
             logger.error(f"[{sid}] Error processing audio: {e}")
-            await self.sio.emit(
-                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
+            await self._emit_command_error(
+                sid,
+                self._correlation_identity(data),
+                error_type=ChatErrorType.PROCESSING,
+                message=str(e),
+                component=ChatErrorComponent.WORKFLOW,
+                phase=ChatErrorPhase.WORKFLOW,
             )
 
     # ── Interrupt ─────────────────────────────────────────────────────
@@ -216,10 +343,11 @@ class ChatHandlers:
         interrupt_handler = get_interrupt_handler()
         interrupt_handler.set_interrupt(sid)
 
-        await self.sio.emit(EVENTS["chat"]["stop_audio"]["name"], {}, to=sid)
-
-        await self.sio.emit(
-            EVENTS["chat"]["control"]["name"], {"type": "control", "text": "interrupted"}, to=sid
+        identity = self._correlation_identity(data)
+        delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
+        await delivery.emit("chat", "stop_audio", {}, to=sid)
+        await delivery.emit(
+            "chat", "control", {"type": "control", "text": "interrupted"}, to=sid
         )
 
     # ── History ────────────────────────────────────────────────────────

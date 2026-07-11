@@ -42,7 +42,7 @@ RUN pnpm exec vite build
 # ---------------------------------------------------------------------------
 # Stage 2: Python dependency builder
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS python-builder
+FROM python:3.13-slim-bookworm AS python-builder
 ARG DEBIAN_MIRROR
 ARG DEBIAN_SECURITY_MIRROR
 
@@ -52,7 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     sed -i "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
-    && apt-get install -y --no-install-recommends gcc \
+    && apt-get install -y --no-install-recommends gcc g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Disable proxy during build to avoid SOCKS dependency issues
@@ -86,14 +86,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         sed -i "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
     fi \
     && apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg nginx curl \
+    && apt-get install -y --no-install-recommends ffmpeg nginx curl sox build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python 3.12 binary and shared libraries from builder
+# Copy Python 3.13 binary and shared libraries from builder
 COPY --from=python-builder /usr/local/bin /usr/local/bin
 COPY --from=python-builder /usr/local/include /usr/local/include
 COPY --from=python-builder /usr/local/lib /usr/local/lib
-RUN echo /usr/local/lib > /etc/ld.so.conf.d/python312.conf && ldconfig
+RUN echo /usr/local/lib > /etc/ld.so.conf.d/python313.conf && ldconfig
 RUN ln -sf /usr/local/bin/python3 /usr/bin/python3 \
     && ln -sf /usr/local/bin/python3 /usr/bin/python
 
@@ -102,6 +102,8 @@ COPY src/ src/
 COPY config/ config/
 COPY scripts/ scripts/
 COPY .env.example .env.example
+RUN mkdir -p /app/config/personas/voices \
+    && touch /app/config/personas/voices/alice_ref.wav
 
 # 验证 Socket.IO 事件名一致性
 RUN python scripts/validate-events.py
@@ -127,7 +129,7 @@ ENV ANIMETTA_LOG_LEVEL=INFO
 EXPOSE 80 12394
 
 # Health check via nginx
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:80/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=180s \
+    CMD curl --fail --silent http://localhost:80/ready || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]

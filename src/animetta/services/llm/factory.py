@@ -13,6 +13,7 @@ from animetta.config.providers.llm import (
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
+from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import LLMInterface
@@ -32,13 +33,19 @@ class LLMFactory:
     """
 
     @staticmethod
-    def create_from_config(config: LLMConfig, system_prompt: str = "") -> LLMInterface:
+    def create_from_config(
+        config: LLMConfig,
+        system_prompt: str = "",
+        *,
+        strict: bool = False,
+    ) -> LLMInterface:
         """
         Automatically create an LLM service instance from a config object
 
         Args:
             config: LLM config object (Discriminated Union)
             system_prompt: System prompt
+            strict: Propagate creation failures instead of substituting MockLLM
 
         Returns:
             LLMInterface: LLM service instance
@@ -51,9 +58,28 @@ class LLMFactory:
         try:
             # Use Registry to automatically find and instantiate
             llm = ProviderRegistry.create_service("llm", config, system_prompt=system_prompt)
+            concrete = unwrap_tracing_proxy(llm)
+            from .openai_llm import OpenAILLM
+
+            if isinstance(concrete, OpenAILLM):
+                concrete._bind_provider_identity(config.type)
+            if strict and config.type != "mock":
+                from .mock_llm import MockLLM
+
+                if isinstance(concrete, MockLLM):
+                    raise RuntimeError(
+                        "Strict LLM provider creation returned MockLLM "
+                        "for a non-mock config"
+                    )
             logger.info(f"LLM service created successfully: type={config.type}, instance={type(llm).__name__}")
             return TracingProxy(llm, service_name="llm")
         except Exception as e:
+            if strict:
+                logger.error(
+                    "Strict LLM service creation failed: "
+                    f"type={config.type}, error={type(e).__name__}"
+                )
+                raise
             # Catch all exceptions (ValueError, TypeError, ImportError, ConnectionError, etc.)
             logger.error(f"Failed to create LLM service (type={config.type}): {type(e).__name__}: {e}")
             # Fall back to Mock implementation
@@ -62,13 +88,20 @@ class LLMFactory:
             return MockLLM(system_prompt=system_prompt)
 
     @staticmethod
-    def create(provider: str, system_prompt: str = "", **kwargs) -> LLMInterface:
+    def create(
+        provider: str,
+        system_prompt: str = "",
+        *,
+        strict: bool = False,
+        **kwargs,
+    ) -> LLMInterface:
         """
         Create an LLM service instance by provider name (backward compatible)
 
         Args:
             provider: Provider name
             system_prompt: System prompt
+            strict: Reject unknown providers and propagate creation failures
             **kwargs: Parameters passed to the concrete implementation
 
         Returns:
@@ -103,12 +136,18 @@ class LLMFactory:
 
         config_factory = config_map.get(provider)
         if config_factory is None:
+            if strict:
+                raise ValueError(f"Unknown LLM provider: {provider}")
             logger.warning(f"Unknown LLM provider: {provider}, using Mock implementation")
             config = MockLLMConfig()
         else:
             config = config_factory()
 
-        return LLMFactory.create_from_config(config, system_prompt)
+        return LLMFactory.create_from_config(
+            config,
+            system_prompt,
+            strict=strict,
+        )
 
     @staticmethod
     def get_available_configs() -> list:

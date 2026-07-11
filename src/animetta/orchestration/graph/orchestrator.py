@@ -14,6 +14,7 @@ from loguru import logger
 from animetta.tracing.context import attach_trace_context, detach_trace_context
 
 from .builder import create_default_graph
+from .conversation_session import ConversationSessionState
 from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
 from .state import AgentState, create_initial_state
@@ -49,6 +50,7 @@ class LangGraphOrchestrator:
         self.graph = None
         self._is_running = False
         self._processing_audio = False  # guard against concurrent audio processing
+        self.conversation_session = ConversationSessionState()
 
         # Initialize tool manager
         self.tool_manager: ToolManager | None = None
@@ -60,6 +62,7 @@ class LangGraphOrchestrator:
                 "socketio": socketio,
                 "emotion_analyzer": emotion_analyzer,
                 "thread_id": self.session_id,
+                "conversation_session": self.conversation_session,
             }
         }
 
@@ -105,6 +108,7 @@ class LangGraphOrchestrator:
                 enable_tools=self.enable_tools,
                 tools=self.tool_manager.tools if self.tool_manager else None,
                 tools_map=self.tool_manager.tools_map if self.tool_manager else None,
+                golden_profile=self._is_golden_profile(),
             )
 
             self._is_running = True
@@ -127,6 +131,10 @@ class LangGraphOrchestrator:
             self.enable_tools = False
             logger.warning(f"[{self.session_id}] [LangGraph] Tool loading failed, tool calls disabled")
 
+    def _is_golden_profile(self) -> bool:
+        system = getattr(getattr(self.service_context, "config", None), "system", None)
+        return getattr(system, "runtime_profile", None) == "golden"
+
     async def stop(self) -> None:
         """Stop the orchestrator"""
         if not self._is_running:
@@ -144,6 +152,10 @@ class LangGraphOrchestrator:
         user_id: str | None = None,
         user_name: str | None = None,
         channel_id: str | None = None,
+        message_id: str | None = None,
+        conversation_id: str | None = None,
+        task_id: str | None = None,
+        turn_id: str | None = None,
         **metadata,
     ) -> dict[str, Any]:
         """Process text input"""
@@ -162,6 +174,10 @@ class LangGraphOrchestrator:
                 channel_id=channel_id,
                 user_id=user_id,
                 user_name=user_name,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                turn_id=turn_id,
                 metadata=metadata,
             )
             final_state = await self._run_graph(initial_state)
@@ -221,6 +237,10 @@ class LangGraphOrchestrator:
         user_id: str | None = None,
         user_name: str | None = None,
         metadata: dict | None = None,
+        message_id: str | None = None,
+        conversation_id: str | None = None,
+        task_id: str | None = None,
+        turn_id: str | None = None,
     ) -> AgentState:
         """Create initial state"""
         initial_state = create_initial_state(
@@ -233,6 +253,10 @@ class LangGraphOrchestrator:
             channel_id=channel_id,
             user_id=user_id,
             user_name=user_name,
+            message_id=message_id,
+            conversation_id=conversation_id,
+            task_id=task_id,
+            turn_id=turn_id,
         )
 
         if metadata:
@@ -243,6 +267,10 @@ class LangGraphOrchestrator:
         initial_state["metadata"] = {
             **initial_state.get("metadata", {}),
             "config_version": config_version,
+            "message_id": message_id,
+            "conversation_id": conversation_id,
+            "task_id": task_id,
+            "turn_id": turn_id,
         }
 
         return initial_state
@@ -252,7 +280,12 @@ class LangGraphOrchestrator:
         # Start trace
         input_type = initial_state.get("input_type", "text")
         user_text = initial_state.get("user_text", "")
-        trace_id = self._stats_handler.start_trace(self.session_id, input_type, user_text)
+        trace_id = self._stats_handler.start_trace(
+            self.session_id,
+            input_type,
+            user_text,
+            trace_id=initial_state.get("task_id"),
+        )
 
         # Attach OTel context so TracingProxy spans inherit this trace_id
         _token = attach_trace_context(trace_id)
@@ -305,22 +338,50 @@ class LangGraphOrchestrator:
                 or ""
             )
             assistant_text = final_state.get("response_text") or ""
-            metadata = {
+            content_allowed = not self._is_golden_profile()
+            persisted_user_text = user_text if content_allowed else ""
+            persisted_assistant_text = assistant_text if content_allowed else ""
+            metadata_candidates = {
                 **initial_state.get("metadata", {}),
                 **final_state.get("metadata", {}),
-                "channel_id": initial_state.get("channel_id"),
-                "user_id": initial_state.get("user_id"),
-                "user_name": initial_state.get("user_name"),
+                "message_id": initial_state.get("message_id"),
+                "conversation_id": initial_state.get("conversation_id"),
+                "task_id": initial_state.get("task_id"),
+                "turn_id": initial_state.get("turn_id"),
                 "config_version": initial_state.get("config_version"),
             }
+            allowed_metadata = (
+                "message_id",
+                "conversation_id",
+                "task_id",
+                "turn_id",
+                "config_version",
+                "source",
+                "is_acceptance",
+                "transport_mode",
+                "dialogue_status",
+                "reasoner_provider",
+                "composer_provider",
+                "tts_provider",
+                "media_status",
+                "composer_rejection",
+                "degradation_reason",
+            )
+            metadata = {
+                field: metadata_candidates[field]
+                for field in allowed_metadata
+                if metadata_candidates.get(field) is not None
+            }
 
-            await store.create_trace(trace_id, self.session_id, input_type, user_text)
+            await store.create_trace(
+                trace_id, self.session_id, input_type, persisted_user_text
+            )
             await store.store_conversation_turn(
                 trace_id=trace_id,
                 session_id=self.session_id,
                 input_type=input_type,
-                user_text=user_text,
-                assistant_text=assistant_text,
+                user_text=persisted_user_text,
+                assistant_text=persisted_assistant_text,
                 status=status,
                 error_msg=error_msg,
                 metadata=metadata,
@@ -351,6 +412,9 @@ class LangGraphOrchestrator:
         emotion = final_state.get("emotion") or ""
         tts_audio = final_state.get("tts_audio")
         timings = final_state.get("_timings") or []
+        if self._is_golden_profile():
+            user_text = "input_present" if user_text else "input_absent"
+            response_text = "response_present" if response_text else "response_absent"
 
         snapshots = [
             {
@@ -442,6 +506,10 @@ class LangGraphOrchestrator:
             "tts_audio": final_state.get("tts_audio"),
             "emotion": final_state.get("emotion"),
             "error": final_state.get("error"),
+            "message_id": final_state.get("message_id"),
+            "conversation_id": final_state.get("conversation_id"),
+            "task_id": final_state.get("task_id"),
+            "turn_id": final_state.get("turn_id"),
         }
 
     def _get_system_prompt(self) -> str | None:

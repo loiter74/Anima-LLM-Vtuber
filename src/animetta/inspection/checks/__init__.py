@@ -10,11 +10,12 @@ Each check returns a CheckResult:
 from .consistency import check_data_consistency
 from .health import check_all_components
 from .metrics import check_metrics_pipeline
-from .pipeline import check_conversation_pipeline
+from .pipeline import check_conversation_pipeline, check_golden_conversation_pipeline
 
 __all__ = [
     "check_all_components",
     "check_conversation_pipeline",
+    "check_golden_conversation_pipeline",
     "check_data_consistency",
     "check_metrics_pipeline",
 ]

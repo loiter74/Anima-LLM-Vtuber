@@ -2,6 +2,8 @@ import { onMounted, onUnmounted, type Ref } from 'vue'
 import type { Live2DAction } from '@/types/live2d'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
+import type { AudioWithExpressionEvent, ChatIdentity } from '@/types/socket-events'
+import { isCurrentChatTask } from '@/composables/chatTaskGate'
 
 // ===== Public exports for backward compatibility =====
 export { MODEL_PATH } from './useLive2DModel'
@@ -102,16 +104,17 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
       executeAction(data as Live2DAction)
     })
 
-    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, (data: unknown) => {
-      const d = data as any
-      if (d.use_parameter_mapping && d.expressions?.frames) {
-        playParameterTimeline(d)
+    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, (data: AudioWithExpressionEvent) => {
+      if (!isCurrentChatTask(data)) return
+      if (data.use_parameter_mapping && data.expressions?.frames) {
+        playParameterTimeline({ ...data, expressions: data.expressions })
       } else {
-        playAudio(d)
+        playAudio(data)
       }
     })
 
-    socket.on(Events.CHAT.STOP_AUDIO, () => {
+    socket.on(Events.CHAT.STOP_AUDIO, (data: ChatIdentity) => {
+      if (!isCurrentChatTask(data)) return
       stopAudio()
     })
   }

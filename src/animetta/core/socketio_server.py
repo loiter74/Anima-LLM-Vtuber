@@ -181,18 +181,33 @@ def get_asgi_app():
         # Start background model warmup (non-blocking - models load while server accepts connections)
         # warmup() is safe to call even if no services are registered yet
         logger.info("Starting background model warmup...")
-        _INIT_TASKS.append(asyncio.ensure_future(_server.model_manager.warmup()))
+        _INIT_TASKS.append(
+            _server.supervise_background(
+                _server.model_manager.warmup,
+                name="model-warmup",
+            )
+        )
 
         # Pre-warm all services so the first real user request doesn't pay cold-start cost.
         # This creates a throwaway ServiceContext that triggers all imports and model loading.
         logger.info("Starting service pre-warmup (cold-start mitigation)...")
-        _INIT_TASKS.append(asyncio.ensure_future(_server.prewarm_services()))
+        _INIT_TASKS.append(
+            _server.supervise_background(
+                _server.prewarm_services,
+                name="service-prewarm",
+            )
+        )
 
         # ── Start daily inspection scheduler ────────────────────────
         try:
 
             _inspection_scheduler = InspectionScheduler(interval_hours=24)
-            _INIT_TASKS.append(asyncio.ensure_future(_inspection_scheduler.start()))
+            _INIT_TASKS.append(
+                _server.supervise_background(
+                    _inspection_scheduler.start,
+                    name="inspection-scheduler",
+                )
+            )
             logger.info("[Inspection] Daily inspection scheduler registered")
         except Exception as e:
             logger.warning(
@@ -245,7 +260,11 @@ def _wrap_with_frontend_serving(app):
             path = request.url.path
 
             # API and WebSocket routes — pass through to backend
-            if path.startswith("/api/") or path.startswith("/socket.io") or path == "/metrics" or path == "/health":
+            if (
+                path.startswith("/api/")
+                or path.startswith("/socket.io")
+                or path in {"/metrics", "/health", "/ready"}
+            ):
                 return await call_next(request)
 
             # Try to serve exact file match from frontend/dist

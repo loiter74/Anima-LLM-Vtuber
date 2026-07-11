@@ -44,6 +44,16 @@ validate_env() {
     echo "[entrypoint] Environment validation: OK"
 }
 
+run_static_preflight() {
+    echo "[entrypoint] Running golden static preflight..."
+    python scripts/baseline_golden_path.py \
+        --config "${ANIMETTA_CONFIG:-/app/config/config.golden.yaml}" \
+        --project-root /app \
+        --output-dir /app/data/baseline \
+        --static-only
+    echo "[entrypoint] Golden static preflight: OK"
+}
+
 # ---------------------------------------------------------------------------
 # Phase 1: Optional service detection
 # ---------------------------------------------------------------------------
@@ -104,6 +114,7 @@ trap cleanup SIGTERM SIGINT
 # --- Run phases ---
 validate_env
 detect_optional_services
+run_static_preflight
 
 # Start nginx in background
 echo "[entrypoint] Starting nginx..."

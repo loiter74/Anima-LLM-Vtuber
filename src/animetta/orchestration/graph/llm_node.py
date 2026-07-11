@@ -6,7 +6,7 @@ import time as time_module
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.tracing.metrics import get_rag_chunks, get_rag_duration, get_rag_top_score

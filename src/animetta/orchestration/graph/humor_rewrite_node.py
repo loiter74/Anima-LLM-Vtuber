@@ -1,10 +1,8 @@
 """Graph-visible Humor Agent candidate generation node."""
 
-from __future__ import annotations
-
 from typing import Any
 
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.services.humor import HumorAgent, HumorRewriteRequest

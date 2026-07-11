@@ -6,34 +6,35 @@ services:
     ports:
       - "80:80"
       - "${ANIMETTA_PORT:-12394}:12394"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - ANIMETTA_HOST=0.0.0.0
       - ANIMETTA_PORT=12394
       - ANIMETTA_LOG_LEVEL=${ANIMETTA_LOG_LEVEL:-INFO}
+      - ANIMETTA_CONFIG=/app/config/config.golden.yaml
       - ANIMETTA_DEVICE=cuda
-      - ANIMETTA_ASR=${ANIMETTA_ASR:-mock}
-      - ANIMETTA_TTS=${ANIMETTA_TTS:-mock}
-      - ANIMETTA_LLM=${ANIMETTA_LLM:-deepseek}
-      - ANIMETTA_VAD=${ANIMETTA_VAD:-mock}
-      - GLM_API_KEY=${GLM_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - ANIMETTA_ASR=mock
+      - ANIMETTA_TTS=alice_vc
+      - ANIMETTA_LLM=deepseek
+      - ANIMETTA_VAD=silero
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
       - HF_HOME=/root/.cache/huggingface
     volumes:
       - animetta-memory-db:/app/memory_db
       - animetta-data:/app/data
-      - ./.env:/app/.env:ro
-      - ./config:/app/config:ro
-      - D:/huggingface_cache:/root/.cache/huggingface:ro
+      - ${HF_CACHE_DIR:?Set HF_CACHE_DIR to the host Hugging Face cache}:/root/.cache/huggingface:ro
+      - ${ALICE_REF_AUDIO:?Set ALICE_REF_AUDIO to Alice reference WAV}:/app/config/personas/voices/alice_ref.wav:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:80/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 180s
     deploy:
       resources:
         reservations:

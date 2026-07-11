@@ -126,9 +126,16 @@ class StatsCallbackHandler(BaseCallbackHandler):
         self._lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
 
-    def start_trace(self, session_id: str, input_type: str, user_text: str) -> str:
+    def start_trace(
+        self,
+        session_id: str,
+        input_type: str,
+        user_text: str,
+        *,
+        trace_id: str | None = None,
+    ) -> str:
         """Start a trace (called from orchestrator layer)"""
-        self._trace_id = str(uuid.uuid4())
+        self._trace_id = trace_id or str(uuid.uuid4())
         self._trace_start = time.perf_counter()
         self._active_spans.clear()
         # Capture the running event loop for later _schedule_async calls

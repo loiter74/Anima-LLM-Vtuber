@@ -16,9 +16,16 @@ Tests cover:
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from animetta.services.llm.mock_llm import MockLLM
+from animetta.services.llm.openai_llm import OpenAILLM
+from animetta.services.tts.mock_tts import MockTTS
+from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
+from animetta.tracing.proxy import TracingProxy
 
 # ═══════════════════════════════════════════════════════════════════
 # Fixtures
@@ -147,6 +154,29 @@ def app_config(mock_agent_config, mock_persona_config):
     cfg.local_llm.type = "mock"
     cfg.vad = MagicMock()
     cfg.vad.type = "mock"
+    return cfg
+
+
+@pytest.fixture
+def golden_app_config(app_config):
+    """App config whose provider lifecycle must fail closed."""
+    app_config.system = SimpleNamespace(runtime_profile="golden")
+    return app_config
+
+
+@pytest.fixture
+def qwen_tts_config():
+    """Minimal CUDA Qwen config used to exercise golden TTS creation."""
+    cfg = MagicMock()
+    cfg.type = "qwen3"
+    cfg.model = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+    cfg.model_dump = MagicMock(return_value={
+        "model": cfg.model,
+        "device": "cuda:0",
+        "ref_audio_path": "config/assets/alice.wav",
+        "ref_text": "Alice reference text",
+        "x_vector_only": False,
+    })
     return cfg
 
 
@@ -303,6 +333,26 @@ class TestServiceContextLoadFromConfig:
         await ctx.load_from_config(app_config)
         mock_mgr.warmup.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_golden_pool_bootstrap_rejects_missing_required_engines(
+        self, ctx, golden_app_config
+    ):
+        ctx.init_asr = AsyncMock()
+        ctx.init_tts = AsyncMock()
+        ctx.init_llm = AsyncMock()
+        ctx.init_local_llm = AsyncMock()
+        ctx.init_vad = AsyncMock()
+        ctx.init_audio_processor = AsyncMock()
+        ctx.init_memory = AsyncMock()
+        ctx.init_emotion_analyzer = AsyncMock()
+        ctx._preload_tokenizers = AsyncMock()
+
+        with pytest.raises(RuntimeError, match="Golden profile requires a real LLM"):
+            await ctx.load_from_config(golden_app_config)
+
+        assert ctx.llm_engine is None
+        assert ctx.tts_engine is None
+
 
 # ═══════════════════════════════════════════════════════════════════
 # load_cache
@@ -341,6 +391,137 @@ class TestServiceContextLoadCache:
         assert ctx.tts_engine is None
         assert ctx.llm_engine is None
         assert ctx.send_text is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("missing_engine", ["llm", "tts"])
+    async def test_golden_rejects_missing_required_cached_engine(
+        self, ctx, golden_app_config, missing_engine
+    ):
+        llm = object.__new__(OpenAILLM)
+        llm._provider_identity = "deepseek"
+        tts = object.__new__(Qwen3TTSTTS)
+        if missing_engine == "llm":
+            llm = None
+        else:
+            tts = None
+
+        with pytest.raises(RuntimeError, match=f"Golden profile requires a real {missing_engine.upper()}"):
+            await ctx.load_cache(
+                config=golden_app_config,
+                llm_engine=llm,
+                tts_engine=tts,
+            )
+
+        assert ctx.llm_engine is None
+        assert ctx.tts_engine is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("service_name", ["LLM", "TTS"])
+    async def test_golden_rejects_mock_cached_engine(
+        self, ctx, golden_app_config, service_name
+    ):
+        llm = object.__new__(OpenAILLM)
+        llm._provider_identity = "deepseek"
+        tts = object.__new__(Qwen3TTSTTS)
+        if service_name == "LLM":
+            llm = TracingProxy(MockLLM(), service_name="llm")
+        else:
+            tts = TracingProxy(MockTTS(), service_name="tts")
+
+        with pytest.raises(RuntimeError, match=f"Golden profile requires a real {service_name}"):
+            await ctx.load_cache(
+                config=golden_app_config,
+                llm_engine=llm,
+                tts_engine=tts,
+            )
+
+        assert ctx.llm_engine is None
+        assert ctx.tts_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_accepts_real_cached_llm_and_tts_without_asr(
+        self, ctx, golden_app_config
+    ):
+        llm = object.__new__(OpenAILLM)
+        llm._provider_identity = "deepseek"
+        tts = object.__new__(Qwen3TTSTTS)
+        traced_llm = TracingProxy(
+            TracingProxy(llm, service_name="inner"),
+            service_name="outer",
+        )
+        traced_tts = TracingProxy(
+            TracingProxy(tts, service_name="inner"),
+            service_name="outer",
+        )
+
+        await ctx.load_cache(
+            config=golden_app_config,
+            llm_engine=traced_llm,
+            tts_engine=traced_tts,
+        )
+
+        assert ctx.llm_engine is traced_llm
+        assert ctx.tts_engine is traced_tts
+        assert ctx.asr_engine is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("wrong_service", ["llm", "tts"])
+    async def test_golden_rejects_wrong_concrete_cached_engine_type(
+        self,
+        ctx,
+        golden_app_config,
+        wrong_service,
+    ):
+        llm = object.__new__(OpenAILLM)
+        llm._provider_identity = "deepseek"
+        tts = object.__new__(Qwen3TTSTTS)
+        if wrong_service == "llm":
+            llm = MagicMock()
+        else:
+            tts = MagicMock()
+
+        with pytest.raises(
+            RuntimeError,
+            match=f"Golden profile requires a real {wrong_service.upper()}",
+        ):
+            await ctx.load_cache(
+                config=golden_app_config,
+                llm_engine=llm,
+                tts_engine=tts,
+            )
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_openai_identity_on_deepseek_cached_engine(
+        self,
+        ctx,
+        golden_app_config,
+    ):
+        llm = object.__new__(OpenAILLM)
+        llm._provider_identity = "openai"
+        tts = object.__new__(Qwen3TTSTTS)
+
+        with pytest.raises(RuntimeError, match="DeepSeek provider identity"):
+            await ctx.load_cache(
+                config=golden_app_config,
+                llm_engine=llm,
+                tts_engine=tts,
+            )
+
+    @pytest.mark.asyncio
+    async def test_golden_malformed_proxy_fails_closed_as_missing_engine(
+        self,
+        ctx,
+        golden_app_config,
+    ):
+        malformed = object.__new__(TracingProxy)
+        tts = object.__new__(Qwen3TTSTTS)
+
+        with pytest.raises(RuntimeError, match="real LLM"):
+            await ctx.load_cache(
+                config=golden_app_config,
+                llm_engine=malformed,
+                tts_engine=tts,
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -479,6 +660,95 @@ class TestServiceContextInitTTS:
             "tts", engine_with_preload.preload, "tts"
         )
 
+    @pytest.mark.asyncio
+    async def test_golden_passes_strict_mode_to_factory(
+        self, ctx, golden_app_config, qwen_tts_config, engine_without_preload
+    ):
+        ctx.config = golden_app_config
+
+        with patch(
+            "animetta.core.service_context.TTSFactory.create",
+            return_value=engine_without_preload,
+        ) as mock_create:
+            await ctx.init_tts(qwen_tts_config)
+
+        assert mock_create.call_args.kwargs["strict"] is True
+        assert ctx.tts_engine is engine_without_preload
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_explicit_mock_before_factory(
+        self, ctx, golden_app_config, mock_tts_config
+    ):
+        ctx.config = golden_app_config
+
+        with (
+            patch("animetta.core.service_context.TTSFactory.create") as mock_create,
+            pytest.raises(RuntimeError, match="MockTTS is forbidden"),
+        ):
+            await ctx.init_tts(mock_tts_config)
+
+        mock_create.assert_not_called()
+        assert ctx.tts_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_factory_error_propagates_without_cpu_retry(
+        self, ctx, golden_app_config, qwen_tts_config
+    ):
+        ctx.config = golden_app_config
+        provider_error = RuntimeError("CUDA initialization failed")
+
+        with (
+            patch(
+                "animetta.core.service_context.TTSFactory.create",
+                side_effect=provider_error,
+            ) as mock_create,
+            pytest.raises(RuntimeError) as exc_info,
+        ):
+            await ctx.init_tts(qwen_tts_config)
+
+        assert exc_info.value is provider_error
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["strict"] is True
+        assert ctx.tts_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_unexpected_traced_mock_without_cpu_retry(
+        self, ctx, golden_app_config, qwen_tts_config
+    ):
+        ctx.config = golden_app_config
+        unexpected_mock = TracingProxy(MockTTS(), service_name="tts")
+
+        with (
+            patch(
+                "animetta.core.service_context.TTSFactory.create",
+                return_value=unexpected_mock,
+            ) as mock_create,
+            pytest.raises(RuntimeError, match="MockTTS is forbidden"),
+        ):
+            await ctx.init_tts(qwen_tts_config)
+
+        mock_create.assert_called_once()
+        assert ctx.tts_engine is None
+
+    @pytest.mark.asyncio
+    async def test_development_keeps_cuda_to_cpu_fallback(
+        self, ctx, qwen_tts_config, engine_without_preload
+    ):
+        ctx.config = SimpleNamespace(
+            system=SimpleNamespace(runtime_profile="development")
+        )
+
+        with patch(
+            "animetta.core.service_context.TTSFactory.create",
+            side_effect=[MockTTS(), engine_without_preload],
+        ) as mock_create:
+            await ctx.init_tts(qwen_tts_config)
+
+        assert mock_create.call_count == 2
+        assert mock_create.call_args_list[0].kwargs["device"] == "cuda:0"
+        assert mock_create.call_args_list[1].kwargs["device"] == "cpu"
+        assert ctx.tts_engine is engine_without_preload
+
 
 # ═══════════════════════════════════════════════════════════════════
 # init_llm
@@ -559,6 +829,94 @@ class TestServiceContextInitLLM:
             "llm", engine.preload, "llm"
         )
 
+    @pytest.mark.asyncio
+    async def test_golden_passes_strict_mode_to_factory(
+        self, ctx, golden_app_config, mock_agent_config, engine_without_preload
+    ):
+        mock_agent_config.llm_config.type = "openai"
+        mock_agent_config.llm_config.model = "deepseek-v4-flash"
+
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config",
+            return_value=engine_without_preload,
+        ) as mock_create:
+            await ctx.init_llm(
+                mock_agent_config,
+                golden_app_config.get_persona(),
+                app_config=golden_app_config,
+            )
+
+        assert mock_create.call_args.kwargs["strict"] is True
+        assert ctx.llm_engine is engine_without_preload
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_explicit_mock_before_factory(
+        self, ctx, golden_app_config, mock_agent_config
+    ):
+        with (
+            patch(
+                "animetta.core.service_context.LLMFactory.create_from_config",
+            ) as mock_create,
+            pytest.raises(RuntimeError, match="MockLLM is forbidden"),
+        ):
+            await ctx.init_llm(
+                mock_agent_config,
+                golden_app_config.get_persona(),
+                app_config=golden_app_config,
+            )
+
+        mock_create.assert_not_called()
+        assert ctx.llm_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_factory_error_propagates_without_mock_assignment(
+        self, ctx, golden_app_config, mock_agent_config
+    ):
+        mock_agent_config.llm_config.type = "openai"
+        mock_agent_config.llm_config.model = "deepseek-v4-flash"
+        provider_error = RuntimeError("provider initialization failed")
+
+        with (
+            patch(
+                "animetta.core.service_context.LLMFactory.create_from_config",
+                side_effect=provider_error,
+            ) as mock_create,
+            pytest.raises(RuntimeError) as exc_info,
+        ):
+            await ctx.init_llm(
+                mock_agent_config,
+                golden_app_config.get_persona(),
+                app_config=golden_app_config,
+            )
+
+        assert exc_info.value is provider_error
+        mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["strict"] is True
+        assert ctx.llm_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_unexpected_traced_mock(
+        self, ctx, golden_app_config, mock_agent_config
+    ):
+        mock_agent_config.llm_config.type = "openai"
+        mock_agent_config.llm_config.model = "deepseek-v4-flash"
+        unexpected_mock = TracingProxy(MockLLM(), service_name="llm")
+
+        with (
+            patch(
+                "animetta.core.service_context.LLMFactory.create_from_config",
+                return_value=unexpected_mock,
+            ),
+            pytest.raises(RuntimeError, match="MockLLM is forbidden"),
+        ):
+            await ctx.init_llm(
+                mock_agent_config,
+                golden_app_config.get_persona(),
+                app_config=golden_app_config,
+            )
+
+        assert ctx.llm_engine is None
+
 
 # ═══════════════════════════════════════════════════════════════════
 # init_local_llm
@@ -606,6 +964,44 @@ class TestServiceContextInitLocalLLM:
 
         mock_create.assert_not_called()
         assert ctx.local_llm_engine is existing
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_explicit_local_mock_before_factory(
+        self, ctx, golden_app_config
+    ):
+        llm_config = MagicMock()
+        llm_config.type = "mock"
+        llm_config.model = "mock-model"
+
+        with (
+            patch(
+                "animetta.core.service_context.LLMFactory.create_from_config",
+            ) as mock_create,
+            pytest.raises(RuntimeError, match="MockLLM is forbidden"),
+        ):
+            await ctx.init_local_llm(llm_config, app_config=golden_app_config)
+
+        mock_create.assert_not_called()
+        assert ctx.local_llm_engine is None
+
+    @pytest.mark.asyncio
+    async def test_golden_rejects_non_mock_local_llm_before_factory(
+        self, ctx, golden_app_config
+    ):
+        llm_config = MagicMock()
+        llm_config.type = "openai"
+        llm_config.model = "auxiliary-model"
+
+        with (
+            patch(
+                "animetta.core.service_context.LLMFactory.create_from_config",
+            ) as mock_create,
+            pytest.raises(RuntimeError, match="Local LLM is forbidden"),
+        ):
+            await ctx.init_local_llm(llm_config, app_config=golden_app_config)
+
+        mock_create.assert_not_called()
+        assert ctx.local_llm_engine is None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -718,6 +1114,7 @@ class TestServiceContextInitMemory:
     @pytest.mark.asyncio
     async def test_missing_config_file_graceful(self, ctx):
         """When memory.yaml does not exist, should not crash."""
+        ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write"))
         with patch("pathlib.Path.exists", return_value=False):
             await ctx.init_memory()
 
@@ -727,18 +1124,20 @@ class TestServiceContextInitMemory:
 
     @pytest.mark.asyncio
     async def test_disabled_in_config(self, ctx):
-        """When LivingMemorySystem creation fails, memory_system is None."""
-        with patch("animetta.memory.v2.system.LivingMemorySystem",
-                   side_effect=RuntimeError("memory disabled")):
+        """Off mode never constructs LivingMemorySystem."""
+        ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="off"))
+        with patch("animetta.memory.v2.system.LivingMemorySystem") as memory_cls:
             await ctx.init_memory()
 
         assert ctx.memory_system is None
+        memory_cls.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_enabled_creates_memory_system(self, ctx):
         """When LivingMemorySystem creation succeeds, memory_system is set."""
         mock_memory_system = MagicMock()
         mock_memory_system.initialize = AsyncMock()
+        ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write"))
 
         with patch("animetta.memory.v2.system.LivingMemorySystem",
                    return_value=mock_memory_system):
@@ -750,6 +1149,7 @@ class TestServiceContextInitMemory:
     @pytest.mark.asyncio
     async def test_exception_graceful(self, ctx):
         """When LivingMemorySystem creation raises, engine is set to None."""
+        ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write"))
         with patch("animetta.memory.v2.system.LivingMemorySystem",
                    side_effect=RuntimeError("corrupt db")):
             await ctx.init_memory()
