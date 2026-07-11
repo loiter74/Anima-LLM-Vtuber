@@ -39,6 +39,7 @@ class OpenAILLM(LLMInterface):
         top_p: float = 0.9,
         max_tokens: int = 1000,
         extra_body: dict | None = None,
+        provider_identity: str = "openai",
         **kwargs
     ):
         """
@@ -62,6 +63,7 @@ class OpenAILLM(LLMInterface):
         self.top_p = top_p
         self.max_tokens = max_tokens
         self.extra_body = extra_body or {}
+        self._provider_identity = provider_identity
 
         # Conversation history
         self.history: list[dict[str, str]] = []
@@ -131,7 +133,22 @@ class OpenAILLM(LLMInterface):
             top_p=top_p,
             max_tokens=max_tokens,
             extra_body=extra_body,
+            provider_identity=getattr(config, "type", "openai"),
         )
+
+    @property
+    def provider_identity(self) -> str:
+        """Return the factory-bound provider provenance for readiness checks."""
+        return self._provider_identity
+
+    def _bind_provider_identity(self, provider: str) -> None:
+        """Bind registry provenance once, rejecting contradictory identities."""
+        if provider not in {"openai", "deepseek"}:
+            raise ValueError("Unsupported OpenAI-compatible provider identity")
+        current = getattr(self, "_provider_identity", None)
+        if current not in {None, provider}:
+            raise RuntimeError("OpenAI-compatible provider identity mismatch")
+        self._provider_identity = provider
 
     def _build_messages(self, user_input: str, system_prompt: str | None = None) -> list[dict[str, str]]:
         """

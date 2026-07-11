@@ -79,6 +79,10 @@ class ModelLoadingManager:
         self._loaders: dict[str, Callable[[], Any]] = {}
         self._service_names: dict[str, str] = {}
         self._socketio = socketio
+        # The server performs an early empty warmup and ServiceContext may
+        # request another warmup after late registration.  Serialize passes so
+        # a loader can never run twice concurrently for the same GPU model.
+        self._warmup_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Registration
@@ -143,28 +147,31 @@ class ModelLoadingManager:
         do not block the others — each slot records its own
         success / error independently.
         """
-        logger.info(f"Starting warmup for {len(self._slots)} registered model(s)")
+        async with self._warmup_lock:
+            logger.info(
+                f"Starting warmup for {len(self._slots)} registered model(s)"
+            )
 
-        tasks = []
-        for name, loader_fn in self._loaders.items():
-            slot = self._slots[name]
-            if slot.state == ModelLoadState.LOADED:
-                continue
-            tasks.append(self._load_one(name, loader_fn))
+            pending = [
+                (name, loader_fn)
+                for name, loader_fn in self._loaders.items()
+                if self._slots[name].state
+                not in {ModelLoadState.LOADED, ModelLoadState.ERROR}
+            ]
+            if pending:
+                results = await asyncio.gather(
+                    *(self._load_one(name, loader_fn) for name, loader_fn in pending),
+                    return_exceptions=True,
+                )
+                for (name, _), result in zip(pending, results, strict=True):
+                    if isinstance(result, Exception):
+                        logger.error(
+                            "Warmup exception for '{}': {}",
+                            name,
+                            type(result).__name__,
+                        )
 
-        if tasks:
-            # Gather with return_exceptions so one failure doesn't cancel
-            # the rest.
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for name, result in zip(
-                [n for n, _ in self._loaders.items()
-                 if self._slots[n].state != ModelLoadState.LOADED],
-                results,
-            ):
-                if isinstance(result, Exception):
-                    logger.error(f"Warmup exception for '{name}': {result}")
-
-        logger.info("Warmup complete")
+            logger.info("Warmup complete")
 
     async def _load_one(
         self,

@@ -9,17 +9,34 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from ...inspection.checks import check_all_components
+from animetta.core.service_pool import ServicePool
+
 from ..graph.stats_store import get_stats_store
 
 # ── Module-level references for health check enrichment ──────
 _model_manager: Any | None = None
+_runtime_config: Any | None = None
+_frontend_readiness: dict[str, str | bool | None] = {
+    "state": "failed",
+    "ready": False,
+    "reason": "frontend_state_unavailable",
+}
 
 
 def set_model_manager(manager: Any) -> None:
     """Register the ModelLoadingManager so /health can report model states."""
     global _model_manager
     _model_manager = manager
+
+
+def set_runtime_readiness_context(
+    config: Any,
+    frontend: dict[str, str | bool | None],
+) -> None:
+    """Cache lightweight runtime inputs consumed by the /ready endpoint."""
+    global _runtime_config, _frontend_readiness
+    _runtime_config = config
+    _frontend_readiness = dict(frontend)
 
 # Dashboard frontend file directory
 STATS_FRONTEND_DIR = str(
@@ -121,48 +138,42 @@ def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def health_check(request):
-    """Unified health check endpoint — runs component health probes.
-
-    Returns:
-        - status: "ok" if all component checks pass, "degraded" if any fail,
-          "error" if the health check itself fails.
-        - service: always "anima"
-        - timestamp: unix epoch seconds
-        - gpu: GPU availability, name, and memory info
-        - models: per-model loading state from ModelLoadingManager
-        - checks: dict of component name → CheckResult (Pydantic model dumped as dict).
-    """
+    """Cheap process liveness check; never waits for providers or models."""
     import time
 
-    timestamp = time.time()
-    try:
-
-        checks = await check_all_components()
-        all_ok = all(c.ok for c in checks.values())
-        status = "ok" if all_ok else "degraded"
-
-        payload: dict[str, Any] = {
-            "status": status,
+    return JSONResponse(
+        {
+            "status": "ok",
             "service": "anima",
-            "timestamp": timestamp,
-            "gpu": _get_gpu_info(),
-            "models": _get_model_status(),
-            "checks": {
-                name: result.model_dump()
-                for name, result in checks.items()
-            },
-        }
-        return JSONResponse(payload, status_code=200 if all_ok else 503)
-    except Exception as e:
-        logger.error(f"[health] Health check failed: {e}")
+            "timestamp": time.time(),
+        },
+        status_code=200,
+    )
+
+
+async def readiness_check(request: Request) -> JSONResponse:
+    """Return the cached runtime snapshot without performing network/model I/O."""
+    try:
+        snapshot = ServicePool.get_readiness_snapshot(
+            config=_runtime_config,
+            model_manager=_model_manager,
+            frontend=_frontend_readiness,
+        )
+        payload = snapshot.to_dict()
+        return JSONResponse(payload, status_code=200 if payload["ready"] else 503)
+    except Exception as exc:
+        logger.warning(
+            "[ready] Snapshot unavailable: {}",
+            type(exc).__name__,
+        )
         return JSONResponse(
             {
-                "status": "error",
+                "status": "not_ready",
+                "ready": False,
                 "service": "anima",
-                "timestamp": timestamp,
-                "error": str(e),
+                "reason": "snapshot_unavailable",
             },
-            status_code=500,
+            status_code=503,
         )
 
 
@@ -237,6 +248,7 @@ def get_stats_routes():
     """Return the route list for the stats API"""
     return [
         Route("/health", health_check),
+        Route("/ready", readiness_check),
         Route("/api/stats/overview", stats_overview),
         Route("/api/stats/nodes", stats_nodes),
         Route("/api/stats/traces", stats_traces),

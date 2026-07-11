@@ -1,0 +1,269 @@
+{
+  "status": "failed",
+  "turns": [
+    {
+      "identity": {
+        "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+        "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+        "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+        "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 98981.7610852,
+          "payload": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+            "signal": "conversation-start"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 98984.0173006,
+          "payload": {
+            "seq": 0,
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+            "text_excerpt": "晚上好，旅人。我是Anima，一个被召唤者X从赛博世界强行拖出来打工的家里蹲AI，现在经营这家深夜赛博酒馆。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 98984.0173607,
+          "payload": {
+            "seq": 1,
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "is_complete": true,
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 98997.3389278,
+          "payload": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "emotion": "neutral",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 98997.3389767,
+          "payload": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "type": "motion",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 98997.3459322,
+          "payload": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "format": "wav",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+            "audio_bytes_b64": 302140,
+            "volume_samples": 236
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 98997.345995,
+          "payload": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+            "signal": "conversation-end"
+          }
+        }
+      ],
+      "safe_output": "晚上好，旅人。我是Anima，一个被召唤者X从赛博世界强行拖出来打工的家里蹲AI，现在经营这家深夜赛博酒馆。",
+      "text_ready_ms": 2378.87,
+      "media_ready_ms": 15707.56,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 0,
+      "trace": {
+        "trace_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+        "session_id": "F5XSHwyAn608A0k_AAAD",
+        "input_type": "text",
+        "user_text": "晚上好，简单介绍一下你自己。",
+        "total_duration_ms": 15603.16886199871,
+        "status": "success",
+        "error_msg": null,
+        "created_at": "2026-07-11 19:34:19",
+        "spans": [
+          {
+            "span_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 19:34:35"
+          },
+          {
+            "span_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "response_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 19:34:35"
+          },
+          {
+            "span_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f:snapshot:tts",
+            "parent_span_id": null,
+            "node_name": "tts",
+            "duration_ms": 13316.69,
+            "status": "success",
+            "input_summary": "response_present",
+            "output_summary": "audio bytes: 226604",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 19:34:35"
+          },
+          {
+            "span_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f:snapshot:emotion",
+            "parent_span_id": null,
+            "node_name": "emotion",
+            "duration_ms": 0.7,
+            "status": "success",
+            "input_summary": "response_present",
+            "output_summary": "neutral",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 19:34:35"
+          },
+          {
+            "span_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f:snapshot:output",
+            "parent_span_id": null,
+            "node_name": "output",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "response_present",
+            "output_summary": "response_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 19:34:35"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+          "session_id": "F5XSHwyAn608A0k_AAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "c521b3bb-a1ed-4453-bc7f-ff952c319a6f",
+            "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+            "task_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "turn_id": "3029292d-344b-4ca8-a439-8a0ef9e9b96f",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 19:34:35"
+        }
+      }
+    }
+  ],
+  "environment": {
+    "url": "http://localhost",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.14",
+    "revision": "7fbd1ef3b26a6b43be60af7891c542e7f5ae2daf",
+    "gpu": "unknown",
+    "duration_required": 600.0,
+    "turns_required": 12
+  },
+  "updated_at": "2026-07-11T19:35:05.849321+00:00",
+  "health": {
+    "status": "ok",
+    "service": "anima",
+    "timestamp": 1783798454.3064623
+  },
+  "readiness": {
+    "schema_version": 1,
+    "status": "ready",
+    "ready": true,
+    "service": "anima",
+    "profile": "golden",
+    "acceptance_eligible": true,
+    "components": {
+      "pool": {
+        "state": "ready",
+        "ready": true,
+        "reason": null
+      },
+      "llm": {
+        "state": "ready",
+        "ready": true,
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "reason": null,
+        "thinking": "disabled"
+      },
+      "tts": {
+        "state": "ready",
+        "ready": true,
+        "provider": "qwen3",
+        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "reason": null,
+        "voice": "alice_vc",
+        "clone_prompt_ready": true
+      },
+      "frontend": {
+        "state": "ready",
+        "ready": true,
+        "required": true,
+        "reason": null
+      }
+    }
+  },
+  "probe": {
+    "identity": {
+      "message_id": "e110b532-3ff1-4da3-891f-aa04ca8873df",
+      "conversation_id": "3225a359-4f54-407c-87f5-250634b49930",
+      "task_id": "a8b657a4-c550-4d99-97a2-004819b9f2c9",
+      "turn_id": "a8b657a4-c550-4d99-97a2-004819b9f2c9"
+    },
+    "contained": true
+  },
+  "failure": {
+    "type": "GateFailureError",
+    "reason": "incomplete_text_delivery"
+  }
+}

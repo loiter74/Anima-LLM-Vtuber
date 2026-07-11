@@ -13,8 +13,11 @@ torch>=2.0.0
 torchaudio>=2.0.0
 
 # --- TTS: Kokoro (open-weight, 82M params) ---
-kokoro>=0.9.4
-misaki[zh]>=0.8.0
+# Kokoro 0.9.x currently declares Python <3.13. Keep it available for
+# compatible developer runtimes without making the Python 3.13 golden image
+# install a provider that is outside the July product path.
+kokoro>=0.9.4; python_version < "3.13"
+misaki[zh]>=0.8.0; python_version < "3.13"
 
 # --- TTS: Qwen3 (CustomVoice model) ---
 qwen-tts>=0.1.1

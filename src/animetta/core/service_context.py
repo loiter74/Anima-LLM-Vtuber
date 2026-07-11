@@ -20,6 +20,10 @@ from animetta.config.providers.asr import ASRConfig
 from animetta.config.providers.tts import TTSConfig
 from animetta.config.providers.vad import VADConfig
 from animetta.core.model_loading_manager import ModelLoadingManager
+from animetta.core.readiness import (
+    canonical_deepseek_endpoint,
+    unwrap_tracing_proxy,
+)
 from animetta.services.asr import ASRFactory, ASRInterface
 from animetta.services.audio.processor import AudioProcessorInterface
 from animetta.services.llm import LLMFactory, LLMInterface
@@ -61,6 +65,16 @@ class ServiceContext:
         # Emotion analyzer
         self.emotion_analyzer: Any = None
 
+        # Cached startup connectivity probe.  Public snapshots contain only
+        # lifecycle state, a reason code, and optional latency.
+        self._llm_connectivity_status: dict[str, str | bool | float | None] = {
+            "state": "pending",
+            "ready": False,
+            "reason": None,
+        }
+        self._llm_connectivity_task: asyncio.Task[dict[str, Any]] | None = None
+        self._model_warmup_task: asyncio.Task[None] | None = None
+
     def __str__(self) -> str:
         return (
             f"ServiceContext(\n"
@@ -72,6 +86,57 @@ class ServiceContext:
             f"  is_processing={self.is_processing}\n"
             f")"
         )
+
+    @staticmethod
+    def _is_golden_profile(config: AppConfig | None) -> bool:
+        """Return whether *config* selects fail-closed golden runtime behavior."""
+        if config is None:
+            return False
+        system = getattr(config, "system", None)
+        return getattr(system, "runtime_profile", None) == "golden"
+
+    @staticmethod
+    def _unwrap_tracing_proxy(engine: Any) -> Any:
+        """Return the concrete service hidden behind any tracing wrappers."""
+        return unwrap_tracing_proxy(engine)
+
+    @classmethod
+    def _is_mock_llm(cls, engine: Any) -> bool:
+        from animetta.services.llm.mock_llm import MockLLM
+
+        return isinstance(cls._unwrap_tracing_proxy(engine), MockLLM)
+
+    @classmethod
+    def _is_mock_tts(cls, engine: Any) -> bool:
+        from animetta.services.tts.mock_tts import MockTTS
+
+        return isinstance(cls._unwrap_tracing_proxy(engine), MockTTS)
+
+    @classmethod
+    def _validate_golden_cached_engines(
+        cls,
+        *,
+        llm_engine: LLMInterface | None,
+        tts_engine: TTSInterface | None,
+    ) -> None:
+        """Reject cached engines without the concrete golden provider identity."""
+        from animetta.services.llm.openai_llm import OpenAILLM
+        from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
+
+        concrete_llm = cls._unwrap_tracing_proxy(llm_engine)
+        concrete_tts = cls._unwrap_tracing_proxy(tts_engine)
+        if not isinstance(concrete_llm, OpenAILLM):
+            raise RuntimeError("Golden profile requires a real LLM engine")
+        try:
+            provider_identity = concrete_llm.provider_identity
+        except Exception:
+            provider_identity = None
+        if provider_identity != "deepseek":
+            raise RuntimeError(
+                "Golden profile requires DeepSeek provider identity"
+            )
+        if not isinstance(concrete_tts, Qwen3TTSTTS):
+            raise RuntimeError("Golden profile requires a real TTS engine")
 
     # Initialization methods
     async def load_from_config(self, config: AppConfig) -> None:
@@ -89,18 +154,35 @@ class ServiceContext:
         await self.init_memory()
         await self.init_emotion_analyzer(config)
 
+        if self._is_golden_profile(config):
+            self._validate_golden_cached_engines(
+                llm_engine=self.llm_engine,
+                tts_engine=self.tts_engine,
+            )
+
         # Preload conversation tokenizer to avoid download/load delay on first use
         await self._preload_tokenizers()
 
         # Trigger preload for all registered services via model manager
-        if self.model_manager is not None:
-            asyncio.create_task(self.model_manager.warmup())
+        if self.model_manager is not None and (
+            self._model_warmup_task is None
+            or self._model_warmup_task.done()
+        ):
+            self._model_warmup_task = asyncio.create_task(
+                self.model_manager.warmup()
+            )
 
         logger.info(f"[{self.session_id}] Services loaded")
         logger.info(get_availability_summary())
 
-        # Verify LLM API connectivity (non-blocking, populates health probe cache)
-        asyncio.create_task(self._verify_llm_connectivity())
+        # Verify remote OpenAI-compatible engines in a tracked startup task.
+        # Explicit mock/local development contexts remain pending instead of
+        # mutating the process-wide inspection cache.
+        from animetta.services.llm.openai_llm import OpenAILLM
+
+        concrete_llm = self._unwrap_tracing_proxy(self.llm_engine)
+        if self._is_golden_profile(config) or isinstance(concrete_llm, OpenAILLM):
+            self.start_llm_connectivity_probe()
 
     async def load_cache(
         self,
@@ -111,6 +193,11 @@ class ServiceContext:
         send_text: Callable | None = None,
     ) -> None:
         """Load services from cache (reuse existing instances)"""
+        if self._is_golden_profile(config):
+            self._validate_golden_cached_engines(
+                llm_engine=llm_engine,
+                tts_engine=tts_engine,
+            )
         self.config = config
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
@@ -168,12 +255,16 @@ class ServiceContext:
             logger.warning(f"[{self.session_id}] Tokenizer preload failed (does not affect operation): {e}")
 
     async def init_tts(self, tts_config: TTSConfig) -> None:
-        """Initialize TTS service with fallback chain: requested → CPU fallback → MockTTS."""
+        """Initialize TTS, retaining the legacy CPU/Mock chain outside golden mode."""
         if self.tts_engine is not None:
             logger.debug(f"[{self.session_id}] TTS already initialized, skipping")
             return
 
         provider = tts_config.type
+        golden = self._is_golden_profile(self.config)
+        if golden and provider == "mock":
+            raise RuntimeError("MockTTS is forbidden in the golden profile")
+
         model = getattr(tts_config, 'model', 'default')
         logger.info(f"[{self.session_id}] Initializing TTS: {provider}/{model}")
 
@@ -194,26 +285,30 @@ class ServiceContext:
 
         # --- Fallback chain ---
         # 1. Try requested config (e.g. kokoro + cuda)
-        self.tts_engine = TTSFactory.create(**tts_kwargs)
+        tts_engine = TTSFactory.create(**tts_kwargs, strict=golden)
+        if golden and self._is_mock_tts(tts_engine):
+            raise RuntimeError("MockTTS is forbidden in the golden profile")
+        self.tts_engine = tts_engine
 
         # 2. If GPU provider fell back to MockTTS, retry with CPU
         device = tts_kwargs.get("device", "")
-        if self.tts_engine is not None and device and "cuda" in str(device).lower():
-            from animetta.services.tts.mock_tts import MockTTS
-            # TracingProxy wraps the real engine in _target
-            inner = getattr(self.tts_engine, "_target", self.tts_engine)
-            if isinstance(inner, MockTTS) and provider != "mock":
-                logger.warning(
-                    f"[{self.session_id}] TTS provider '{provider}' failed with device='{device}', "
-                    f"retrying with device='cpu'"
-                )
-                fallback_kwargs = {**tts_kwargs, "device": "cpu"}
-                self.tts_engine = TTSFactory.create(**fallback_kwargs)
+        if (
+            not golden
+            and self.tts_engine is not None
+            and device
+            and "cuda" in str(device).lower()
+            and self._is_mock_tts(self.tts_engine)
+            and provider != "mock"
+        ):
+            logger.warning(
+                f"[{self.session_id}] TTS provider '{provider}' failed with device='{device}', "
+                f"retrying with device='cpu'"
+            )
+            fallback_kwargs = {**tts_kwargs, "device": "cpu"}
+            self.tts_engine = TTSFactory.create(**fallback_kwargs, strict=False)
 
         # 3. Log final fallback state
-        from animetta.services.tts.mock_tts import MockTTS
-        inner = getattr(self.tts_engine, "_target", self.tts_engine)
-        if isinstance(inner, MockTTS) and provider != "mock":
+        if self._is_mock_tts(self.tts_engine) and provider != "mock":
             logger.warning(
                 f"[{self.session_id}] TTS fallback: '{provider}' unavailable, using MockTTS (silent)"
             )
@@ -228,6 +323,11 @@ class ServiceContext:
             return
 
         llm_config = agent_config.llm_config
+        profile_config = app_config if app_config is not None else self.config
+        golden = self._is_golden_profile(profile_config)
+        if golden and llm_config.type == "mock":
+            raise RuntimeError("MockLLM is forbidden in the golden profile")
+
         logger.info(f"[{self.session_id}] Initializing LLM: {llm_config.type}/{llm_config.model}")
 
         if app_config:
@@ -238,7 +338,14 @@ class ServiceContext:
         else:
             system_prompt = self._build_system_prompt(agent_config, persona_config)
 
-        self.llm_engine = LLMFactory.create_from_config(config=llm_config, system_prompt=system_prompt)
+        llm_engine = LLMFactory.create_from_config(
+            config=llm_config,
+            system_prompt=system_prompt,
+            strict=golden,
+        )
+        if golden and self._is_mock_llm(llm_engine):
+            raise RuntimeError("MockLLM is forbidden in the golden profile")
+        self.llm_engine = llm_engine
         logger.info(f"[{self.session_id}] LLM created: {type(self.llm_engine).__name__}")
 
         if hasattr(self.llm_engine, 'preload') and self.model_manager is not None:
@@ -254,8 +361,20 @@ class ServiceContext:
             logger.info(f"[{self.session_id}] Local LLM config is empty, skipping initialization")
             return
 
+        profile_config = app_config if app_config is not None else self.config
+        golden = self._is_golden_profile(profile_config)
+        if golden:
+            if llm_config.type == "mock":
+                raise RuntimeError("MockLLM is forbidden in the golden profile")
+            raise RuntimeError("Local LLM is forbidden in the golden profile")
+
         logger.info(f"[{self.session_id}] Initializing local LLM: {llm_config.type}/{llm_config.model}")
-        self.local_llm_engine = LLMFactory.create_from_config(config=llm_config, system_prompt="")
+        local_llm_engine = LLMFactory.create_from_config(
+            config=llm_config,
+            system_prompt="",
+            strict=golden,
+        )
+        self.local_llm_engine = local_llm_engine
         logger.info(f"[{self.session_id}] Local LLM created: {type(self.local_llm_engine).__name__}")
 
     def _get_live2d_prompt(self) -> str | None:
@@ -313,6 +432,11 @@ class ServiceContext:
 
     async def init_memory(self) -> None:
         """Initialize LivingMemorySystem V2."""
+        system = getattr(self.config, "system", None)
+        if getattr(system, "long_term_memory_mode", "off") == "off":
+            self.memory_system = None
+            logger.info(f"[{self.session_id}] LivingMemory disabled by policy")
+            return
         try:
             from animetta.memory.v2.system import LivingMemorySystem
             self.memory_system = LivingMemorySystem(
@@ -351,6 +475,20 @@ class ServiceContext:
         """
         logger.info(f"[{self.session_id}] Shutting down service context...")
 
+        connectivity_task = self._llm_connectivity_task
+        if connectivity_task is not None:
+            if not connectivity_task.done():
+                connectivity_task.cancel()
+            await asyncio.gather(connectivity_task, return_exceptions=True)
+            self._llm_connectivity_task = None
+
+        warmup_task = self._model_warmup_task
+        if warmup_task is not None:
+            if not warmup_task.done():
+                warmup_task.cancel()
+            await asyncio.gather(warmup_task, return_exceptions=True)
+            self._model_warmup_task = None
+
         if self.memory_system:
             try:
                 await self.memory_system.shutdown()
@@ -371,74 +509,213 @@ class ServiceContext:
 
         logger.info(f"[{self.session_id}] Service context closed")
 
-    async def _verify_llm_connectivity(self) -> None:
-        """Verify LLM API endpoint is reachable with the configured API key.
+    @property
+    def llm_connectivity_status(self) -> dict[str, str | bool | float | None]:
+        """Return detached, content-free cached connectivity metadata."""
+        return dict(self._llm_connectivity_status)
 
-        Calls GET {base_url}/models with the API key, stores result in
-        the module-level cache used by the health probe.
-        Populates `inspection.checks.health._llm_connectivity_cache`.
+    def start_llm_connectivity_probe(self) -> asyncio.Task[dict[str, Any]]:
+        """Start the explicit startup probe once and retain its task."""
+        if self._llm_connectivity_task is None:
+            self._llm_connectivity_task = asyncio.create_task(
+                self.verify_llm_connectivity()
+            )
+        return self._llm_connectivity_task
+
+    async def wait_for_llm_connectivity(self) -> dict[str, Any]:
+        """Await the tracked startup probe and return its safe status."""
+        return await self.start_llm_connectivity_probe()
+
+    def _set_llm_connectivity_status(
+        self,
+        *,
+        state: str,
+        ready: bool,
+        reason: str | None = None,
+        latency_ms: float | None = None,
+    ) -> dict[str, Any]:
+        status: dict[str, Any] = {
+            "state": state,
+            "ready": ready,
+            "reason": reason,
+        }
+        if latency_ms is not None:
+            status["latency_ms"] = round(latency_ms, 1)
+        self._llm_connectivity_status = status
+
+        # Preserve the inspection cache contract without exposing endpoint,
+        # credentials, provider response bodies, or exception text.
+        from animetta.inspection.checks import health as health_checks
+
+        health_checks._llm_connectivity_cache = {
+            "ok": ready,
+            "status": state,
+            **({"error": reason} if reason else {}),
+            **(
+                {"latency_ms": round(latency_ms, 1)}
+                if latency_ms is not None
+                else {}
+            ),
+        }
+        return dict(status)
+
+    async def verify_llm_connectivity(
+        self,
+        *,
+        timeout: float = 5.0,
+    ) -> dict[str, Any]:
+        """Probe the configured client once during startup and cache the result.
+
+        The provider model list is deliberately discarded.  No network work is
+        performed by the readiness endpoint itself.
         """
         import time as time_mod
 
-        from animetta.inspection.checks import health as health_checks
-
-        llm = self.llm_engine
+        self._set_llm_connectivity_status(state="loading", ready=False)
+        llm = self._unwrap_tracing_proxy(self.llm_engine)
         if llm is None:
-            health_checks._llm_connectivity_cache = {
-                "ok": None, "status": "llm_not_initialized"
-            }
-            return
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason="probe_unavailable",
+            )
 
-        # Only probe remote APIs — skip local models
-        if not hasattr(llm, "base_url") or not llm.base_url:
-            health_checks._llm_connectivity_cache = {
-                "ok": True, "status": "local_model"
-            }
-            logger.info("[health] LLM connectivity: skipped (local model)")
-            return
+        golden = self._is_golden_profile(self.config)
+        expected_model: str | None = None
+        if golden:
+            try:
+                configured = self.config.agent.llm_config
+                configured_raw_endpoint = configured.base_url
+                engine_raw_endpoint = llm.base_url
+                expected_model = configured.model
+            except Exception:
+                return self._set_llm_connectivity_status(
+                    state="failed",
+                    ready=False,
+                    reason="endpoint_missing",
+                )
+            if not configured_raw_endpoint or not engine_raw_endpoint:
+                return self._set_llm_connectivity_status(
+                    state="failed",
+                    ready=False,
+                    reason="endpoint_missing",
+                )
+            configured_endpoint = canonical_deepseek_endpoint(
+                configured_raw_endpoint
+            )
+            engine_endpoint = canonical_deepseek_endpoint(engine_raw_endpoint)
+            if configured_endpoint is None or engine_endpoint is None:
+                return self._set_llm_connectivity_status(
+                    state="failed",
+                    ready=False,
+                    reason="endpoint_policy",
+                )
+            if configured_endpoint != engine_endpoint:
+                return self._set_llm_connectivity_status(
+                    state="failed",
+                    ready=False,
+                    reason="endpoint_mismatch",
+                )
 
-        api_key = getattr(llm, "api_key", None)
-        base_url = llm.base_url.rstrip("/")
-
-        if not api_key:
-            health_checks._llm_connectivity_cache = {
-                "ok": False, "error": "no_api_key"
-            }
-            logger.error("[health] LLM connectivity: FAILED — no API key configured")
-            return
+        if not getattr(llm, "base_url", None):
+            logger.info("[health] LLM connectivity: local provider, probe skipped")
+            return self._set_llm_connectivity_status(
+                state="ready",
+                ready=True,
+            )
+        if not getattr(llm, "api_key", None):
+            logger.error("[health] LLM connectivity failed: no API key")
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason="no_api_key",
+            )
 
         try:
-            import httpx
-            t0 = time_mod.perf_counter()
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-            latency_ms = (time_mod.perf_counter() - t0) * 1000
+            list_models = llm.client.models.list
+            if not callable(list_models):
+                raise TypeError("models.list is unavailable")
+        except Exception:
+            logger.error("[health] LLM connectivity failed: probe unavailable")
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason="probe_unavailable",
+            )
 
-            if resp.status_code == 200:
-                health_checks._llm_connectivity_cache = {
-                    "ok": True, "latency_ms": round(latency_ms, 1)
-                }
-                logger.info(f"[health] LLM connectivity: OK ({latency_ms:.0f}ms)")
-            elif resp.status_code == 401:
-                health_checks._llm_connectivity_cache = {
-                    "ok": False, "error": "invalid_api_key"
-                }
-                logger.error("[health] LLM connectivity: FAILED — invalid API key (401)")
-            else:
-                health_checks._llm_connectivity_cache = {
-                    "ok": False, "error": f"http_{resp.status_code}"
-                }
-                logger.warning(
-                    f"[health] LLM connectivity: returned HTTP {resp.status_code}"
+        started = time_mod.perf_counter()
+        try:
+            model_catalog = await asyncio.wait_for(
+                list_models(),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            logger.warning("[health] LLM connectivity timed out")
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason="timeout",
+            )
+        except Exception as exc:
+            reason = (
+                "unauthorized"
+                if getattr(exc, "status_code", None) == 401
+                else "request_failed"
+            )
+            logger.warning("[health] LLM connectivity failed: {}", reason)
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason=reason,
+            )
+
+        if golden and not self._model_catalog_contains(
+            model_catalog,
+            expected_model,
+        ):
+            logger.warning("[health] LLM configured model unavailable")
+            return self._set_llm_connectivity_status(
+                state="failed",
+                ready=False,
+                reason="model_unavailable",
+            )
+
+        latency_ms = (time_mod.perf_counter() - started) * 1000
+        logger.info("[health] LLM connectivity ready ({:.0f}ms)", latency_ms)
+        return self._set_llm_connectivity_status(
+            state="ready",
+            ready=True,
+            latency_ms=latency_ms,
+        )
+
+    @staticmethod
+    def _model_catalog_contains(catalog: Any, expected_model: str | None) -> bool:
+        """Check a provider response without retaining or serializing its content."""
+        if not expected_model:
+            return False
+        try:
+            entries = (
+                catalog.get("data")
+                if isinstance(catalog, dict)
+                else getattr(catalog, "data", None)
+            )
+            if not isinstance(entries, (list, tuple)):
+                return False
+            for entry in entries:
+                model_id = (
+                    entry.get("id")
+                    if isinstance(entry, dict)
+                    else getattr(entry, "id", None)
                 )
-        except Exception as e:
-            health_checks._llm_connectivity_cache = {
-                "ok": False, "error": f"connection_failed: {e}"
-            }
-            logger.error(f"[health] LLM connectivity: FAILED — {e}")
+                if model_id == expected_model:
+                    return True
+        except Exception:
+            return False
+        return False
+
+    async def _verify_llm_connectivity(self) -> dict[str, Any]:
+        """Backward-compatible alias for the tracked connectivity probe."""
+        return await self.verify_llm_connectivity()
 
     # Core business flow
     async def process_text_input(self, text: str) -> str:

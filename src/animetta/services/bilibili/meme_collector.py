@@ -12,7 +12,13 @@ from collections import Counter
 from typing import Any
 
 from .api import fetch_comments, fetch_live_danmaku, fetch_trending_videos, fetch_video_danmaku
-from .meme_prompts import MEME_IDENTIFY_SYSTEM_PROMPT, get_meme_identify_user_prompt
+from .meme_prompts import (
+    MEME_IDENTIFY_SYSTEM_PROMPT,
+    get_meme_identify_user_prompt,
+)
+from .meme_prompts import (
+    MEME_IDENTIFY_USER_PROMPT as MEME_IDENTIFY_USER_PROMPT,
+)
 from .meme_utils import build_candidates, extract_semantic_phrases, parse_llm_json
 from .models import CollectedComment, CollectedDanmaku, CollectedVideo, MemeCandidate
 from .text_utils import STOPWORDS, extract_title_phrases, parse_tags

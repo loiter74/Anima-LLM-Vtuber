@@ -3,6 +3,17 @@ import { ref, computed } from 'vue'
 import type { ChatMessage, MessageRole, MessageStatus } from '@/types/chat'
 import { useMessageStore } from '@/composables/useMessageStore'
 import { usePersonalityStore } from '@/stores/personality'
+import type {
+  ChatErrorEvent,
+  ChatIdentity,
+  SentenceEvent,
+  AudioWithExpressionEvent,
+} from '@/types/socket-events'
+
+export interface TaskMediaState {
+  status: 'pending' | 'ready' | 'degraded' | 'completed'
+  reason?: string
+}
 
 let messageIdCounter = 0
 type ReloadConfigStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -49,21 +60,50 @@ export const useChatStore = defineStore('chat', () => {
   const currentResponse = ref('')
   const currentResponseSeq = ref(0)
   const responseBuffer = new Map<number, string>()
+  const activeTaskId = ref<string | null>(null)
+  const activeIdentity = ref<ChatIdentity | null>(null)
+  const latestTaskId = ref<string | null>(null)
+  const mediaByTask = ref<Record<string, TaskMediaState>>({})
+  const completedTaskIds = new Set<string>()
+  const handledErrorTaskIds = new Set<string>()
   let flushTimeout: ReturnType<typeof setTimeout> | null = null
 
   const lastMessage = computed(() => messages.value[messages.value.length - 1])
 
-  function createMessage(role: MessageRole, text: string, source?: 'text' | 'voice'): ChatMessage {
+  function createMessage(
+    role: MessageRole,
+    text: string,
+    source?: 'text' | 'voice',
+    identity?: ChatIdentity,
+  ): ChatMessage {
+    const correlatedId = identity && role !== 'system'
+      ? (role === 'user' ? identity.message_id : identity.task_id)
+      : null
+    if (correlatedId) {
+      const existing = messages.value.find(message => message.id === correlatedId)
+      if (existing) return existing
+    }
     const msg: ChatMessage = {
-      id: `msg-${Date.now()}-${++messageIdCounter}`,
+      id: correlatedId ?? `msg-${Date.now()}-${++messageIdCounter}`,
       role,
       text,
       timestamp: Date.now(),
       status: 'complete',
-      source
+      source,
+      ...(identity ?? {}),
     }
     messages.value.push(msg)
     return msg
+  }
+
+  function registerTask(identity: ChatIdentity): void {
+    if (identity.turn_id !== identity.task_id) return
+    resetResponse(0)
+    activeTaskId.value = identity.task_id
+    latestTaskId.value = identity.task_id
+    activeIdentity.value = { ...identity }
+    mediaByTask.value[identity.task_id] = { status: 'pending' }
+    isSpeaking.value = false
   }
 
   function resetResponse(startSeq = 0): void {
@@ -77,6 +117,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function bufferChunk(seq: number, text: string): void {
+    if (seq < currentResponseSeq.value || responseBuffer.has(seq)) return
     responseBuffer.set(seq, text)
   }
 
@@ -96,26 +137,34 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function updateStreamingMessage(): void {
+  function updateStreamingMessage(identity = activeIdentity.value): void {
     if (!currentResponse.value) return
-    const last = messages.value[messages.value.length - 1]
-    if (last && last.role === 'assistant' && last.status === 'streaming') {
-      last.text = currentResponse.value
+    const existing = identity
+      ? messages.value.find(message => message.id === identity.task_id)
+      : messages.value[messages.value.length - 1]
+    if (existing && existing.role === 'assistant' && existing.status === 'streaming') {
+      existing.text = currentResponse.value
     } else {
       const msg: ChatMessage = {
-        id: `msg-${Date.now()}-${++messageIdCounter}`,
+        id: identity?.task_id ?? `msg-${Date.now()}-${++messageIdCounter}`,
         role: 'assistant',
         text: currentResponse.value,
         timestamp: Date.now(),
-        status: 'streaming'
+        status: 'streaming',
+        ...(identity ?? {}),
       }
       messages.value.push(msg)
     }
   }
 
-  function finalizeResponse(): void {
+  function finalizeResponse(taskId?: string): boolean {
+    if (taskId && completedTaskIds.has(taskId)) return false
+    if (taskId && activeTaskId.value !== taskId) return false
     processBufferedChunks(true)
-    const last = messages.value[messages.value.length - 1]
+    const identity = activeIdentity.value
+    const last = identity
+      ? messages.value.find(message => message.id === identity.task_id)
+      : messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant' && last.status === 'streaming') {
       last.text = currentResponse.value
       last.status = 'complete'
@@ -138,17 +187,23 @@ export const useChatStore = defineStore('chat', () => {
         // scheduleFlush (500ms) hasn't fired yet, so no streaming message exists.
         // Create the assistant message directly.
         const msg: ChatMessage = {
-          id: `msg-${Date.now()}-${++messageIdCounter}`,
+          id: identity?.task_id ?? `msg-${Date.now()}-${++messageIdCounter}`,
           role: 'assistant',
           text: currentResponse.value,
           timestamp: Date.now(),
-          status: 'complete'
+          status: 'complete',
+          ...(identity ?? {}),
         }
         messages.value.push(msg)
       }
     }
     currentResponse.value = ''
     isTyping.value = false
+    if (taskId) completedTaskIds.add(taskId)
+    if (!taskId || activeTaskId.value === taskId) {
+      activeTaskId.value = null
+      activeIdentity.value = null
+    }
 
     messageStore.saveMessages(messages.value).catch((e) =>
       console.warn('[chat] Failed to persist messages:', e)
@@ -156,6 +211,86 @@ export const useChatStore = defineStore('chat', () => {
     messageStore.pruneMessages(500).catch((e) =>
       console.warn('[chat] Failed to prune messages:', e)
     )
+    return true
+  }
+
+  function handleSentence(data: SentenceEvent): boolean {
+    if (data.turn_id !== data.task_id || completedTaskIds.has(data.task_id)) return false
+    if (activeTaskId.value === null && data.seq === 0) registerTask(data)
+    if (activeTaskId.value !== data.task_id) return false
+
+    if (data.is_complete || data.text === '') {
+      return finalizeResponse(data.task_id)
+    }
+    if (data.seq < currentResponseSeq.value || responseBuffer.has(data.seq)) return false
+    bufferChunk(data.seq, data.text)
+    processBufferedChunks()
+    updateStreamingMessage(data)
+    return true
+  }
+
+  function handleControl(data: ChatIdentity & { signal?: string }): boolean {
+    if (data.turn_id !== data.task_id || data.task_id !== latestTaskId.value) return false
+    const typed = data as ChatIdentity & {
+      signal?: string
+      type?: string
+      status?: string
+      reason?: string
+      text?: string
+    }
+    if (typed.type === 'media-degraded' && typed.status === 'degraded') {
+      if (mediaByTask.value[data.task_id]?.status === 'degraded') return false
+      mediaByTask.value[data.task_id] = { status: 'degraded', reason: typed.reason }
+      isSpeaking.value = false
+      createMessage('system', typed.text || 'Audio unavailable; continuing with text.', undefined, data)
+      const notice = messages.value[messages.value.length - 1]
+      if (notice?.role === 'system') notice.id = `degradation:${data.task_id}`
+      return true
+    }
+    if (data.signal !== 'conversation-end') return false
+    isSpeaking.value = false
+    if (mediaByTask.value[data.task_id]?.status !== 'degraded') {
+      mediaByTask.value[data.task_id] = { status: 'completed' }
+    }
+    return completedTaskIds.has(data.task_id) || finalizeResponse(data.task_id)
+  }
+
+  function handleMediaReady(data: AudioWithExpressionEvent): boolean {
+    if (data.turn_id !== data.task_id || data.task_id !== latestTaskId.value) return false
+    mediaByTask.value[data.task_id] = { status: 'ready' }
+    isSpeaking.value = true
+    return true
+  }
+
+  function handleStopAudio(data: ChatIdentity): boolean {
+    if (data.turn_id !== data.task_id || data.task_id !== latestTaskId.value) return false
+    isSpeaking.value = false
+    return true
+  }
+
+  function handleError(data: ChatErrorEvent): boolean {
+    if (
+      data.turn_id !== data.task_id
+      || handledErrorTaskIds.has(data.task_id)
+      || completedTaskIds.has(data.task_id)
+      || (activeTaskId.value !== null && activeTaskId.value !== data.task_id)
+    ) return false
+
+    handledErrorTaskIds.add(data.task_id)
+    if (activeTaskId.value === data.task_id) finalizeResponse(data.task_id)
+    messages.value.push({
+      id: `error:${data.task_id}`,
+      role: 'system',
+      text: data.message,
+      timestamp: Date.now(),
+      status: 'complete',
+      message_id: data.message_id,
+      conversation_id: data.conversation_id,
+      task_id: data.task_id,
+      turn_id: data.turn_id,
+    })
+    isTyping.value = false
+    return true
   }
 
   function scheduleFlush(callback: () => void, delay = 500): void {
@@ -230,13 +365,23 @@ export const useChatStore = defineStore('chat', () => {
     reloadConfigPreserved,
     reloadConfigAppliedSessions,
     reloadConfigPromptWarnings,
+    activeTaskId,
+    activeIdentity,
+    latestTaskId,
+    mediaByTask,
     lastMessage,
     createMessage,
+    registerTask,
     resetResponse,
     bufferChunk,
     processBufferedChunks,
     updateStreamingMessage,
     finalizeResponse,
+    handleSentence,
+    handleControl,
+    handleError,
+    handleMediaReady,
+    handleStopAudio,
     scheduleFlush,
     reloadRuntimeConfig
   }

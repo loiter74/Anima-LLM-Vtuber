@@ -8,6 +8,10 @@ export interface ChatMessage {
   timestamp: number
   status: MessageStatus
   source?: 'text' | 'voice'
+  message_id?: ChatIdentity['message_id']
+  conversation_id?: ChatIdentity['conversation_id']
+  task_id?: ChatIdentity['task_id']
+  turn_id?: ChatIdentity['turn_id']
 }
 
 export interface LlmChunk {
@@ -43,3 +47,4 @@ export interface DanmakuReply {
   character_name: string
   timestamp: number
 }
+import type { ChatIdentity } from './socket-events'

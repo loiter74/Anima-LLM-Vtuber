@@ -9,8 +9,8 @@ from loguru import logger
 
 from .checks import (
     check_all_components,
-    check_conversation_pipeline,
     check_data_consistency,
+    check_golden_conversation_pipeline,
     check_metrics_pipeline,
 )
 from .models import CheckResult, InspectionReport
@@ -55,7 +55,7 @@ async def run_full_inspection() -> InspectionReport:
     # ── 2. Pipeline smoke test ──────────────────────────────────
     try:
 
-        result = await check_conversation_pipeline()
+        result = await check_golden_conversation_pipeline()
         checks[result.name] = result
     except Exception as exc:
         logger.error(f"[inspection] check_conversation_pipeline crashed: {exc}")

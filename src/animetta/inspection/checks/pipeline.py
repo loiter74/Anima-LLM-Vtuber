@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Any
+from uuid import uuid4
 
 import socketio
 from loguru import logger
@@ -155,3 +156,84 @@ async def check_conversation_pipeline() -> CheckResult:
             missing=sorted(EXPECTED_EVENTS - received_events),
             leaked=sorted(PROHIBITED_PROBE_EVENTS & received_events),
         )
+
+
+async def check_golden_conversation_pipeline() -> CheckResult:
+    """Run a contained probe followed by one real correlated conversation."""
+    started = time.perf_counter()
+    client = socketio.AsyncClient(reconnection=False)
+    phase = "probe"
+    probe_leaks: list[str] = []
+    real_events: list[tuple[str, dict[str, Any]]] = []
+    terminal = asyncio.Event()
+    conversation_id = str(uuid4())
+
+    @client.on("*")
+    async def capture(event: str, payload: Any = None) -> None:
+        if not isinstance(payload, dict):
+            return
+        if phase == "probe" and event in PROHIBITED_PROBE_EVENTS:
+            probe_leaks.append(event)
+        elif phase == "real" and event.startswith(("chat:", "system:")):
+            real_events.append((event, payload))
+            if (
+                event == EVENTS["chat"]["control"]["name"]
+                and payload.get("signal") == "conversation-end"
+            ):
+                terminal.set()
+
+    try:
+        await asyncio.wait_for(
+            client.connect(BACKEND_URL, transports=["websocket"]), CONNECTION_TIMEOUT
+        )
+        probe_task = str(uuid4())
+        await client.emit(PROBE_INPUT_EVENT, {
+            "text": "[inspection] ping", "message_id": str(uuid4()),
+            "conversation_id": conversation_id, "task_id": probe_task,
+            "turn_id": probe_task, "source": "text", "is_inspection": True,
+            "is_acceptance": False,
+        })
+        await asyncio.sleep(COLLECTION_DURATION)
+        if probe_leaks:
+            return CheckResult.failed(
+                name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+                error="inspection probe leaked", leaked=probe_leaks,
+            )
+        phase = "real"
+        task_id = str(uuid4())
+        identity = {
+            "message_id": str(uuid4()), "conversation_id": conversation_id,
+            "task_id": task_id, "turn_id": task_id,
+        }
+        await client.emit(PROBE_INPUT_EVENT, {
+            **identity, "text": "请用一句话介绍你自己。", "source": "text",
+            "is_inspection": False, "is_acceptance": True,
+        })
+        await asyncio.wait_for(terminal.wait(), timeout=60.0)
+        required = {
+            EVENTS["chat"]["sentence"]["name"], EVENTS["chat"]["expression"]["name"],
+            EVENTS["chat"]["live2d_action"]["name"], EVENTS["chat"]["control"]["name"],
+        }
+        names = {event for event, _ in real_events}
+        mismatched = [event for event, payload in real_events if event in required and any(
+            payload.get(key) != value for key, value in identity.items()
+        )]
+        missing = required - names
+        if missing or mismatched:
+            return CheckResult.failed(
+                name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+                error="real golden conversation contract failed",
+                missing=sorted(missing), mismatched=mismatched,
+            )
+        return CheckResult.passed(
+            name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+            probe_contained=True, task_id=task_id, received=sorted(names),
+        )
+    except Exception as exc:
+        return CheckResult.failed(
+            name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+            error=f"golden pipeline failure: {type(exc).__name__}",
+        )
+    finally:
+        if client.connected:
+            await client.disconnect()

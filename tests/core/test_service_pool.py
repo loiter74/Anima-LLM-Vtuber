@@ -24,12 +24,29 @@ def reset_service_pool():
     variables are returned to their initial ``None`` / ``False``
     state so no test can accidentally leak state to the next one.
     """
+    def reset() -> None:
+        ServicePool._llm = None
+        ServicePool._tts = None
+        ServicePool._asr = None
+        ServicePool._ready = False
+        ServicePool._ctx = None
+        ServicePool._runtime_config = None
+        ServicePool._model_manager = None
+        ServicePool._init_state = "pending"
+        ServicePool._init_error = None
+        ServicePool._initializing_task = None
+        ServicePool._shutdown_task = None
+        ServicePool._shutdown_requested = False
+        ServicePool._shutdown_errors = ()
+        ServicePool._llm_connectivity = {
+            "state": "pending",
+            "ready": False,
+            "reason": None,
+        }
+
+    reset()
     yield
-    ServicePool._llm = None
-    ServicePool._tts = None
-    ServicePool._asr = None
-    ServicePool._ready = False
-    ServicePool._ctx = None
+    reset()
 
 
 # ── Helpers ─────────────────────────────────────────────────────────

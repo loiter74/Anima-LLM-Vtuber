@@ -1,0 +1,70 @@
+{
+  "status": "failed",
+  "turns": [],
+  "environment": {
+    "url": "http://localhost",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.14",
+    "revision": "7fbd1ef3b26a6b43be60af7891c542e7f5ae2daf",
+    "gpu": "unknown",
+    "duration_required": 600.0,
+    "turns_required": 12
+  },
+  "updated_at": "2026-07-11T19:28:16.536302+00:00",
+  "health": {
+    "status": "ok",
+    "service": "anima",
+    "timestamp": 1783798075.1114109
+  },
+  "readiness": {
+    "schema_version": 1,
+    "status": "ready",
+    "ready": true,
+    "service": "anima",
+    "profile": "golden",
+    "acceptance_eligible": true,
+    "components": {
+      "pool": {
+        "state": "ready",
+        "ready": true,
+        "reason": null
+      },
+      "llm": {
+        "state": "ready",
+        "ready": true,
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "reason": null,
+        "thinking": "disabled"
+      },
+      "tts": {
+        "state": "ready",
+        "ready": true,
+        "provider": "qwen3",
+        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "reason": null,
+        "voice": "alice_vc",
+        "clone_prompt_ready": true
+      },
+      "frontend": {
+        "state": "ready",
+        "ready": true,
+        "required": true,
+        "reason": null
+      }
+    }
+  },
+  "probe": {
+    "identity": {
+      "message_id": "1ce7ecf0-2cd8-4c08-91aa-1691c64af8fc",
+      "conversation_id": "50e851df-43fd-4010-acba-6c8926980089",
+      "task_id": "26ebc260-5ad3-45d4-9e82-e6107d90246d",
+      "turn_id": "26ebc260-5ad3-45d4-9e82-e6107d90246d"
+    },
+    "contained": true
+  },
+  "failure": {
+    "type": "GateFailureError",
+    "reason": "orphan_event:chat:control"
+  }
+}

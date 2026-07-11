@@ -1,6 +1,8 @@
 """WebSocket server - Socket.IO server initialization and configuration"""
 
+import asyncio
 import datetime
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ from animetta.config.runtime_reload import (
     build_runtime_system_prompt,
 )
 from animetta.core.model_loading_manager import ModelLoadingManager
+from animetta.core.readiness import frontend_asset_readiness
 from animetta.core.service_pool import ServicePool
 from animetta.tracing.bootstrap import init_tracing
 
@@ -24,7 +27,11 @@ from .lifecycle import LifecycleManager
 from .live2d import Live2DManager
 from .routes import RouteHandlers, register_routes
 from .session import SessionManager
-from .stats_api import get_stats_routes, set_model_manager
+from .stats_api import (
+    get_stats_routes,
+    set_model_manager,
+    set_runtime_readiness_context,
+)
 
 
 class WebSocketServer:
@@ -145,6 +152,7 @@ class WebSocketServer:
 
         # Frontend static files (production build)
         frontend_dist = Path(__file__).parent.parent.parent.parent.parent / "frontend" / "dist"
+        self.frontend_readiness = frontend_asset_readiness(frontend_dist)
         frontend_routes = []
         if frontend_dist.is_dir():
             from starlette.staticfiles import StaticFiles
@@ -156,11 +164,14 @@ class WebSocketServer:
         )
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
+        ServicePool.configure_runtime(self.config, self.model_manager)
+        set_runtime_readiness_context(self.config, self.frontend_readiness)
         self.session_manager = SessionManager(model_manager=self.model_manager)
         self.desktop_manager = DesktopClientManager()
         self.live2d_manager = Live2DManager()
         self.lifecycle = LifecycleManager()
         self.route_handlers: RouteHandlers | None = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         logger.info("[Socket.IO] Server created with async_mode='asgi'")
         logger.info("[Socket.IO] CORS enabled: origins=*")
@@ -169,6 +180,8 @@ class WebSocketServer:
         """Set application config"""
         self.config = config
         self.runtime_reloader = RuntimeConfigReloader(config)
+        ServicePool.configure_runtime(config, self.model_manager)
+        set_runtime_readiness_context(config, self.frontend_readiness)
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
 
@@ -259,15 +272,68 @@ class WebSocketServer:
         self.lifecycle.register_cleanup_callback(self._cleanup_all_resources)
         logger.info("Lifecycle manager set up")
 
+    def supervise_background(
+        self,
+        work: Coroutine[Any, Any, Any] | Callable[[], Coroutine[Any, Any, Any]],
+        *,
+        name: str,
+    ) -> asyncio.Task[Any]:
+        """Start, retain, and drain one background task safely."""
+        coroutine = work() if callable(work) else work
+        task = asyncio.ensure_future(coroutine)
+        self._background_tasks.add(task)
+
+        def on_done(completed: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(completed)
+            if completed.cancelled():
+                return
+            try:
+                error = completed.exception()
+            except asyncio.CancelledError:
+                return
+            if error is not None:
+                logger.warning(
+                    "[BackgroundTask] {} failed: error_type={}",
+                    name,
+                    type(error).__name__,
+                )
+
+        task.add_done_callback(on_done)
+        return task
+
+    async def _stop_background_tasks(self) -> None:
+        tasks = tuple(self._background_tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._background_tasks.clear()
+
     async def _cleanup_all_resources(self) -> None:
         """Clean up all resources"""
         logger.info("Starting to clean up all resources...")
 
-        # Stop Bilibili danmaku service
-        if self.route_handlers:
-            self.route_handlers.stop_bilibili()
+        await self._stop_background_tasks()
 
-        await self.session_manager.cleanup_all()
+        if self.route_handlers:
+            try:
+                self.route_handlers.stop_bilibili()
+            except Exception as exc:
+                logger.warning(
+                    "Bilibili cleanup failed: error_type={}",
+                    type(exc).__name__,
+                )
+
+        try:
+            await self.session_manager.cleanup_all()
+        except Exception as exc:
+            logger.warning(
+                "Session cleanup failed: error_type={}",
+                type(exc).__name__,
+            )
+
+        await ServicePool.shutdown()
         logger.info("All resources cleaned up")
 
     def get_app(self):

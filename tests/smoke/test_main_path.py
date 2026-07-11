@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from animetta.config.core.registry import ProviderRegistry
 from animetta.orchestration.graph.output_node import output_node
+from animetta.orchestration.graph.state import create_initial_state
 from animetta.services.llm import LLMFactory, MockLLM
 from animetta.services.vad import MockVAD, VADFactory
 
@@ -90,14 +91,8 @@ class TestOutputNodeExpression:
         mock_sio = AsyncMock()
         mock_sc = MagicMock(memory_system=None)
 
-        state = {
-            "session_id": "test",
-            "channel_id": "ch1",
-            "response_text": "你好",
-            "emotion": "happy",
-            "tts_audio": None,
-            "user_text": "hi",
-        }
+        state = create_initial_state(session_id="test", channel_id="ch1", user_text="hi")
+        state.update(response_text="你好", emotion="happy", tts_audio=None)
         config = {
             "configurable": {
                 "socketio": mock_sio,
@@ -125,20 +120,14 @@ class TestOutputNodeVolumes:
         """当 TTS 返回文件路径时，audio_with_expression 应包含 volumes"""
 
         # 创建一个假的音频文件（足够短，不需要真实音频内容）
-        audio_file = tmp_path / "test.mp3"
-        audio_file.write_bytes(b"\xff\xfb\x90\x00" * 500)
+        audio_file = tmp_path / "test.wav"
+        audio_file.write_bytes(b"RIFF" + b"\x00" * 1996)
 
         mock_sio = AsyncMock()
         mock_sc = MagicMock(memory_system=None)
 
-        state = {
-            "session_id": "test",
-            "channel_id": "ch1",
-            "response_text": "你好",
-            "emotion": None,
-            "user_text": "hi",
-            "tts_audio": str(audio_file),
-        }
+        state = create_initial_state(session_id="test", channel_id="ch1", user_text="hi")
+        state.update(response_text="你好", emotion=None, tts_audio=str(audio_file))
         config = {
             "configurable": {
                 "socketio": mock_sio,
@@ -146,7 +135,7 @@ class TestOutputNodeVolumes:
             }
         }
 
-        # mock AudioAnalyzer 因为假文件不是真正的 mp3
+        # mock AudioAnalyzer 因为假文件不是真正的 WAV
         with patch(
             "animetta.orchestration.graph.output_node._compute_volumes",
             return_value=[0.1, 0.5, 0.3]
@@ -174,14 +163,8 @@ class TestOutputNodeControlSignals:
         mock_sio = AsyncMock()
         mock_sc = MagicMock(memory_system=None)
 
-        state = {
-            "session_id": "test",
-            "channel_id": "ch1",
-            "response_text": "你好",
-            "emotion": None,
-            "tts_audio": None,
-            "user_text": "hi",
-        }
+        state = create_initial_state(session_id="test", channel_id="ch1", user_text="hi")
+        state.update(response_text="你好", emotion=None, tts_audio=None)
         config = {
             "configurable": {
                 "socketio": mock_sio,

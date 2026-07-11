@@ -3,6 +3,7 @@ from __future__ import annotations
 """Tests for output distribution node — Socket.IO + memory storage."""
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -72,6 +73,26 @@ class TestOutputNode:
         assert sentence_calls[0][0][1]["text"] == "Hello world"
 
     @pytest.mark.asyncio
+    async def test_golden_output_never_spends_third_llm_call_on_translation(
+        self, mock_socketio, monkeypatch
+    ):
+        translate = AsyncMock(return_value="translated")
+        monkeypatch.setattr(_output_node_module, "translate_subtitle_text", translate)
+        monkeypatch.setattr(_output_node_module.translation_state, "enabled", True)
+        context = SimpleNamespace(
+            config=SimpleNamespace(system=SimpleNamespace(runtime_profile="golden")),
+            llm_engine=object(),
+            memory_system=None,
+        )
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Hello world"
+        await output_node(state, RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": context,
+        }))
+        translate.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_emits_expression_for_emotion(self, mock_socketio, mock_service_context):
         """Emotion in state triggers expression event + Live2D motion."""
 
@@ -111,6 +132,8 @@ class TestOutputNode:
         )
         state["response_text"] = "Hello Alice!"
         state["emotion"] = "neutral"
+        state["metadata"] = {"dialogue_status": "composer"}
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
         config = RunnableConfig(configurable={
             "socketio": mock_socketio,
             "service_context": mock_service_context,
@@ -122,6 +145,107 @@ class TestOutputNode:
         call_kwargs = mock_service_context.memory_system.encode.call_args
         assert call_kwargs.kwargs["user_input"] == "Hi there"
         assert call_kwargs.kwargs["agent_response"] == "Hello Alice!"
+
+    @pytest.mark.asyncio
+    async def test_off_policy_never_encodes_living_memory(
+        self, mock_socketio, mock_service_context
+    ):
+        mock_service_context.memory_system.encode = AsyncMock()
+        mock_service_context.config.system.long_term_memory_mode = "off"
+        state = create_initial_state(session_id="test", user_text="private")
+        state["response_text"] = "final"
+        state["metadata"] = {"dialogue_status": "composer"}
+        await output_node(state, RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        }))
+        mock_service_context.memory_system.encode.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_every_success_event_has_one_shared_identity(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Hello"
+        state["emotion"] = "happy"
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        golden_events = {
+            "chat:control",
+            "chat:sentence",
+            "chat:expression",
+            "chat:live2d_action",
+        }
+        calls = [
+            call for call in mock_socketio.emit.call_args_list
+            if call.args[0] in golden_events
+        ]
+        assert calls
+        expected = {
+            "message_id": state["message_id"],
+            "conversation_id": state["conversation_id"],
+            "task_id": state["task_id"],
+            "turn_id": state["task_id"],
+        }
+        for call in calls:
+            payload = call.args[1]
+            assert all(payload[field] == value for field, value in expected.items())
+
+    @pytest.mark.asyncio
+    async def test_media_failure_emits_correlated_degradation(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Text survives"
+        state["tts_audio"] = b"\xff"
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        degradation = next(
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:control"
+            and call.args[1].get("status") == "degraded"
+        )
+        assert degradation["component"] == "tts"
+        assert degradation["reason"] == "provider_error"
+        assert degradation["task_id"] == state["task_id"]
+        assert degradation["turn_id"] == state["task_id"]
+
+    @pytest.mark.asyncio
+    async def test_legacy_turn_emits_only_declared_legacy_names(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "legacy"
+        state["metadata"] = {"transport_mode": "legacy"}
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        event_names = [call.args[0] for call in mock_socketio.emit.call_args_list]
+        assert "sentence" in event_names
+        assert "control" in event_names
+        assert "chat:sentence" not in event_names
+        assert "chat:control" not in event_names
 
 
 class TestUnpersistableResponseGuard:
@@ -226,6 +350,8 @@ class TestUnpersistableResponseGuard:
         # An Anima-flavored line that contains 'help' semantically but is
         # clearly in-character — must be persisted.
         state["response_text"] = "又来了。酒馆还没开门你就堵在门口，我帮你倒杯红茶？"
+        state["metadata"] = {"dialogue_status": "composer"}
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
         config = RunnableConfig(configurable={
             "socketio": mock_socketio,
             "service_context": mock_service_context,
@@ -313,8 +439,10 @@ class TestTurnIdentity:
         assert turn_id_text == turn_id_complete
 
     @pytest.mark.asyncio
-    async def test_turn_id_reused_from_metadata(self, mock_socketio, mock_service_context):
-        """When metadata contains turn_id, it should be reused (not regenerated)."""
+    async def test_first_class_task_id_overrides_stale_metadata_turn_id(
+        self, mock_socketio, mock_service_context
+    ):
+        """Delivery identity comes from AgentState, never mutable metadata."""
         state = create_initial_state(session_id="test")
         state["response_text"] = "你好"
         state["metadata"] = {"turn_id": "custom_turn_abc"}
@@ -328,7 +456,7 @@ class TestTurnIdentity:
             c for c in mock_socketio.emit.call_args_list
             if c[0][0] == "chat:sentence"
         ]
-        assert sentence_calls[0][0][1]["turn_id"] == "custom_turn_abc"
+        assert sentence_calls[0][0][1]["turn_id"] == state["task_id"]
 
     @pytest.mark.asyncio
     async def test_backward_compat_old_fields_preserved(self, mock_socketio, mock_service_context):

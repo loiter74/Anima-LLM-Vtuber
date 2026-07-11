@@ -3,9 +3,9 @@ from __future__ import annotations
 """
 Qwen3-TTS implementation - 通义千问 open-source TTS (CustomVoice model)
 
-Local inference mode: loads 1.7B model via qwen-tts package.
-Wraps synchronous HuggingFace generation in run_in_executor.
-Thread-safe lazy loading with asyncio guard for clean shutdown.
+Local inference mode: loads the configured model via the qwen-tts package.
+Runs synchronous model, prompt, generation, and audio work on one serial worker.
+Tracks the underlying worker Futures for cancellation-safe shutdown.
 
 CustomVoice features: 9 preset voices, instruction-based emotion/style control,
 10 languages, optional FlashAttention 2 acceleration.
@@ -18,16 +18,97 @@ For RTX 5090D: bfloat16 + FlashAttention 2 at ~4GB VRAM.
 
 import asyncio
 import gc
+import importlib
 import os
+import re
+import sys
 import threading
-from collections.abc import AsyncGenerator
+import wave
+from collections.abc import AsyncGenerator, Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
 
 from .interface import TTSInterface
+
+_HF_PATCH_LOCK = threading.Lock()
+
+
+def _resolve_cached_model_source(model: str) -> str:
+    """Resolve a Hub model id to its active local snapshot when available."""
+    if "/" not in model:
+        return model
+    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    model_root = hf_home / "hub" / f"models--{model.replace('/', '--')}"
+    refs_main = model_root / "refs" / "main"
+    snapshots_root = model_root / "snapshots"
+    try:
+        revision = refs_main.read_text(encoding="utf-8").strip()
+        if not revision or not re.fullmatch(r"[A-Za-z0-9._-]+", revision):
+            return model
+        snapshots_root = snapshots_root.resolve()
+        snapshot = (snapshots_root / revision).resolve()
+        if snapshot.is_relative_to(snapshots_root) and (snapshot / "config.json").is_file():
+            return str(snapshot)
+    except (OSError, UnicodeError, ValueError):
+        return model
+    return model
+
+
+class _LocalOnlyAutoProcessorFacade:
+    """Delegate Qwen processor APIs while forcing its nested load offline."""
+
+    def __init__(self, auto_processor: Any) -> None:
+        self._auto_processor = auto_processor
+
+    def from_pretrained(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs["fix_mistral_regex"] = False
+        kwargs["local_files_only"] = True
+        return self._auto_processor.from_pretrained(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._auto_processor, name)
+
+
+@contextmanager
+def _temporary_qwen_loader_patches(qwen_model_class: type[Any]) -> Iterator[None]:
+    """Make only Qwen's module-local processor binding load offline.
+
+    Qwen's loader reads ``AutoProcessor`` from the module that defines the
+    model class. Rebinding that one name avoids changing Transformers classes
+    observed by unrelated concurrent loaders. The exact module binding is
+    restored on every exit.
+    """
+    with _HF_PATCH_LOCK:
+        module_name = getattr(qwen_model_class, "__module__", None)
+        if not isinstance(module_name, str) or not module_name:
+            raise TypeError("Qwen model class must define a module name")
+        qwen_module = sys.modules.get(module_name)
+        if qwen_module is None:
+            qwen_module = importlib.import_module(module_name)
+        try:
+            original_auto_processor = vars(qwen_module)["AutoProcessor"]
+        except KeyError as exc:
+            raise AttributeError(
+                "Qwen model module does not define AutoProcessor"
+            ) from exc
+
+        facade = _LocalOnlyAutoProcessorFacade(original_auto_processor)
+        restore_binding = False
+        try:
+            # Set first so a fault-injecting module that mutates then raises is
+            # still repaired by the finally block.
+            restore_binding = True
+            setattr(qwen_module, "AutoProcessor", facade)
+            yield
+        finally:
+            if restore_binding:
+                setattr(qwen_module, "AutoProcessor", original_auto_processor)
 
 
 @ProviderRegistry.register_service("tts", "qwen3")
@@ -36,9 +117,9 @@ class Qwen3TTSTTS(TTSInterface):
     Qwen3-TTS implementation (local inference mode)
 
     Thread-safety guarantees:
-    - _load_model() guarded by threading.Lock (prevents double-load OOM)
-    - close() waits for in-flight synthesis via _synth_done event
-    - preload() uses run_in_executor (does not block event loop)
+    - one provider-owned worker serializes model load, prompt build, and generation
+    - cancellation preserves running work and cancels work that is still queued
+    - close() is queued behind submitted work and never force-unloads a busy model
     """
 
     def __init__(
@@ -57,7 +138,7 @@ class Qwen3TTSTTS(TTSInterface):
         ref_audio_path: str | None = None,
         ref_text: str | None = None,
         x_vector_only: bool = True,
-    ):
+    ) -> None:
         self.model = model
         self.speaker = speaker
         self.device = device
@@ -73,17 +154,166 @@ class Qwen3TTSTTS(TTSInterface):
         self.ref_text = ref_text
         self.x_vector_only = x_vector_only
         # Voice clone prompt cache (lazy, invalidated on close/model reload)
-        self._voice_clone_prompt: list | None = None
+        self._voice_clone_prompt: list[Any] | None = None
 
         self._model = None
         self._loaded = False
-        # Oracle fix #2: threading lock for concurrent model load guard
+        # Kept for compatibility with direct/internal model-load callers. Normal
+        # lifecycle work is additionally serialized by the provider executor.
         self._load_lock = threading.Lock()
-        # Oracle fix #4: asyncio event for close() to wait for in-flight synthesis
-        self._synth_done = asyncio.Event()
-        self._synth_done.set()  # Initially not synthesizing
+        # RLock also covers the rare case where a very short Future completes
+        # before add_done_callback() returns on the submitting thread.
+        self._lifecycle_lock = threading.RLock()
+        self._state_lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="animetta-qwen3-tts",
+        )
+        self._accepting_work = True
+        self._close_future: Future[None] | None = None
+        self._synthesis_futures: set[Future[Any]] = set()
+        # threading.Event reflects the actual concurrent.futures jobs, not the
+        # lifetime of possibly-cancelled asyncio wrappers.
+        self._synth_done = threading.Event()
+        self._synth_done.set()
+        self._preload_state = "pending"
+        self._preload_error: str | None = None
 
-    def _get_torch_dtype(self):
+    @property
+    def preload_status(self) -> dict[str, str | bool | None]:
+        """Return content-free preload metadata for runtime readiness checks."""
+        with self._state_lock:
+            return {
+                "state": self._preload_state,
+                "ready": self._preload_state == "ready",
+                "error": self._preload_error,
+            }
+
+    def _set_preload_state(self, state: str, error: Exception | None = None) -> None:
+        with self._state_lock:
+            # Shutdown is monotonic: work accepted before close() may finish,
+            # but it must never make a closing/closed provider ready again.
+            if self._preload_state == "closed":
+                return
+            if self._preload_state == "closing" and state != "closed":
+                return
+            self._preload_state = state
+            self._preload_error = type(error).__name__ if error is not None else None
+
+    def _validate_voice_clone_reference(self) -> None:
+        """Validate Alice voice-clone inputs before allocating the model."""
+        if not self.ref_audio_path:
+            return
+
+        reference = Path(self.ref_audio_path)
+        if not reference.is_file():
+            raise FileNotFoundError(f"Reference audio not found: {reference}")
+        if reference.stat().st_size == 0:
+            raise ValueError("Reference audio must be a non-empty valid WAV file")
+        if not self.x_vector_only and not (self.ref_text or "").strip():
+            raise ValueError("ref_text must be non-empty when x_vector_only is false")
+
+        try:
+            with wave.open(str(reference), "rb") as wav_file:
+                if (
+                    wav_file.getnchannels() <= 0
+                    or wav_file.getsampwidth() <= 0
+                    or wav_file.getframerate() <= 0
+                    or wav_file.getnframes() <= 0
+                ):
+                    raise ValueError("Reference audio must contain valid WAV frames")
+        except (EOFError, wave.Error) as exc:
+            raise ValueError("Reference audio must be a non-empty valid WAV file") from exc
+
+    def _submit_worker(
+        self,
+        function: Callable[[], Any],
+        *,
+        synthesis: bool = False,
+    ) -> Future[Any]:
+        """Submit work while atomically excluding a concurrent close()."""
+        with self._lifecycle_lock:
+            if not self._accepting_work:
+                raise RuntimeError("Qwen3-TTS provider is closing or closed")
+            future = self._executor.submit(function)
+            if synthesis:
+                self._synthesis_futures.add(future)
+                self._synth_done.clear()
+                future.add_done_callback(self._on_synthesis_done)
+            return future
+
+    def _on_synthesis_done(self, future: Future[Any]) -> None:
+        with self._lifecycle_lock:
+            self._synthesis_futures.discard(future)
+            if not self._synthesis_futures:
+                self._synth_done.set()
+
+    @staticmethod
+    def _drain_asyncio_future(future: asyncio.Future[Any]) -> None:
+        """Retrieve late exceptions from detached shielded waiters."""
+        if future.cancelled():
+            return
+        with suppress(asyncio.CancelledError):
+            future.exception()
+
+    async def _await_worker_future(
+        self,
+        future: Future[Any],
+        *,
+        cancel_if_queued: bool = False,
+    ) -> Any:
+        """Bridge a worker Future into asyncio with explicit cancellation rules."""
+        wrapped = asyncio.wrap_future(future)
+        wrapped.add_done_callback(self._drain_asyncio_future)
+        try:
+            if cancel_if_queued:
+                return await wrapped
+            return await asyncio.shield(wrapped)
+        except asyncio.CancelledError:
+            if cancel_if_queued:
+                future.cancel()
+            raise
+
+    def _ensure_preloaded_worker(self) -> None:
+        """Load the model and cache the clone prompt inside the serial worker."""
+        if (
+            self._loaded
+            and self._model is not None
+            and (not self.ref_audio_path or self._voice_clone_prompt is not None)
+        ):
+            self._set_preload_state("ready")
+            return
+
+        self._set_preload_state("loading")
+        try:
+            self._validate_voice_clone_reference()
+            self._load_model()
+            if self.ref_audio_path:
+                self._build_voice_clone_prompt()
+        except Exception as exc:
+            self._set_preload_state("failed", exc)
+            raise
+        self._set_preload_state("ready")
+
+    @staticmethod
+    def _enable_cuda_optimizations(torch_module: Any) -> None:
+        """Enable inference-safe CUDA backend flags."""
+        torch_module.backends.cudnn.benchmark = True
+        torch_module.backends.cuda.matmul.allow_tf32 = True
+        if hasattr(torch_module.backends.cuda, "enable_flash_sdp"):
+            torch_module.backends.cuda.enable_flash_sdp(True)
+        if hasattr(torch_module.backends.cuda, "enable_mem_efficient_sdp"):
+            torch_module.backends.cuda.enable_mem_efficient_sdp(True)
+
+    @staticmethod
+    def _is_flash_attention_error(error: Exception) -> bool:
+        message = str(error).lower()
+        return any(
+            marker in message
+            for marker in ("flash_attn", "flashattention", "attn_implementation")
+        )
+
+    def _get_torch_dtype(self) -> Any:
         """Convert dtype string to torch dtype, with Windows bf16 fallback"""
         import torch
         if self.dtype == "bfloat16":
@@ -95,19 +325,18 @@ class Qwen3TTSTTS(TTSInterface):
             return torch.float16
         return torch.float16
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Lazy-load the Qwen3-TTS model on first use. Thread-safe via _load_lock.
 
         Called under lock — no concurrent loads possible.
         This is a BLOCKING call (~30-60s for model download+load).
-        Always call from run_in_executor, never from the event loop directly.
+        Always call from the provider worker, never from the event loop directly.
         """
         with self._load_lock:
             if self._loaded and self._model is not None:
                 return
 
-            logger.info(f"Loading Qwen3-TTS model: {self.model} (device={self.device}, dtype={self.dtype})")
-            logger.info("First load downloads ~4GB model + tokenizer, may take 2-5 minutes depending on network...")
+            logger.info("Qwen3-TTS model load started")
             try:
                 import torch
                 from qwen_tts import Qwen3TTSModel
@@ -123,13 +352,8 @@ class Qwen3TTSTTS(TTSInterface):
 
             # GPU optimizations for inference speed
             if self.device.startswith("cuda"):
-                torch.backends.cudnn.benchmark.main = True
-                torch.backends.cuda.matmul.allow_tf32 = True
-                if hasattr(torch.backends.cuda, 'enable_flash_sdp'):
-                    torch.backends.cuda.enable_flash_sdp(True)
-                if hasattr(torch.backends.cuda, 'enable_mem_efficient_sdp'):
-                    torch.backends.cuda.enable_mem_efficient_sdp(True)
-                logger.debug("CUDA optimizations: cudnn.benchmark.main=ON, tf32=ON, flash_sdp=ON")
+                self._enable_cuda_optimizations(torch)
+                logger.debug("CUDA optimizations: cudnn.benchmark=ON, tf32=ON, flash_sdp=ON")
 
             # Check available VRAM
             if self.device.startswith("cuda"):
@@ -140,83 +364,50 @@ class Qwen3TTSTTS(TTSInterface):
                         "Consider using float16 dtype if bfloat16, or reducing max_new_tokens."
                     )
 
-            kwargs = {
+            base_kwargs = {
                 "device_map": self.device,
                 "dtype": self._get_torch_dtype(),
             }
+            kwargs = {**base_kwargs, "local_files_only": True}
             if self.use_flash_attn:
-                try:
-                    kwargs["attn_implementation"] = "flash_attention_2"
-                    logger.debug("FlashAttention 2 enabled")
-                except Exception:
-                    logger.warning("FlashAttention 2 not available, using default attention (higher VRAM usage)")
+                kwargs["attn_implementation"] = "flash_attention_2"
+                logger.debug("Qwen3-TTS FlashAttention requested")
 
             try:
-                # Force offline mode — must patch BEFORE from_pretrained calls.
-                # transformers.utils.hub._is_offline_mode is cached at import time,
-                # so setting env vars later has no effect. Patch the cached value directly.
-                import os
-
-                # Check if model is already cached
-                from pathlib import Path
-                cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
-                model_cache_path = cache_dir / f"models--{self.model.replace('/', '--')}"
-                is_cached = model_cache_path.exists()
-
-                # For Darwin-TTS model, download first if not cached
-                if "Darwin-TTS" in self.model and not is_cached:
-                    logger.info(f"Downloading Darwin-TTS model: {self.model}")
-                    self._model = Qwen3TTSModel.from_pretrained(
-                        self.model,
-                        device_map=self.device,
-                        dtype=self._get_torch_dtype(),
-                    )
-                    self._loaded = True
-                    logger.info("Darwin-TTS model downloaded and loaded successfully")
-                    return
-
-                # For other models, use offline mode
-                os.environ["HF_HUB_OFFLINE"] = "1"
-                os.environ["TRANSFORMERS_OFFLINE"] = "1"
-                import huggingface_hub.constants as hf_constants
-                hf_constants.HF_HUB_OFFLINE = True
-                import transformers.utils.hub as tf_hub
-                tf_hub._is_offline_mode = True
-
-                # Monkey-patch Qwen3TTSModel.from_pretrained to pass local_files_only
-                # to AutoProcessor.from_pretrained (upstream bug: kwargs not forwarded).
-                # Also strip fix_mistral_regex=True which triggers is_base_mistral() →
-                # model_info() network call that fails in offline mode.
-                import functools
-
-                from transformers import AutoProcessor as _AutoProcessor
-                _original_ap_fp = _AutoProcessor.from_pretrained
-                @functools.wraps(_original_ap_fp)
-                def _patched_ap_fp(*args, **ap_kwargs):
-                    ap_kwargs.setdefault("local_files_only", True)
-                    ap_kwargs.pop("fix_mistral_regex", None)  # triggers network in offline mode
-                    return _original_ap_fp(*args, **ap_kwargs)
-                _AutoProcessor.from_pretrained = _patched_ap_fp
-
-                # Patch _patch_mistral_regex to skip is_base_mistral() network call.
-                # is_base_mistral() calls model_info() which hits huggingface.co API.
-                from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-                _original_pmr = PreTrainedTokenizerBase._patch_mistral_regex
-                @classmethod
-                def _offline_pmr(cls, *args, **_pmr_kwargs):
-                    return args[0] if args else None  # return tokenizer unchanged
-                PreTrainedTokenizerBase._patch_mistral_regex = _offline_pmr
-
-                try:
-                    self._model = Qwen3TTSModel.from_pretrained(
-                        self.model,
-                        local_files_only=True,
-                        **kwargs,
-                    )
-                finally:
-                    # Restore original methods
-                    _AutoProcessor.from_pretrained = _original_ap_fp
-                    PreTrainedTokenizerBase._patch_mistral_regex = _original_pmr
+                model_source = _resolve_cached_model_source(self.model)
+                if "Darwin-TTS" in self.model and model_source == self.model:
+                    logger.info("Qwen3-TTS Darwin compatibility download started")
+                    # Darwin intentionally keeps its legacy online first load,
+                    # but must not cross another provider's temporary patch window.
+                    with _HF_PATCH_LOCK:
+                        self._model = Qwen3TTSModel.from_pretrained(
+                            self.model,
+                            **base_kwargs,
+                        )
+                else:
+                    with _temporary_qwen_loader_patches(Qwen3TTSModel):
+                        try:
+                            self._model = Qwen3TTSModel.from_pretrained(
+                                model_source,
+                                **kwargs,
+                            )
+                        except Exception as exc:
+                            if (
+                                "attn_implementation" not in kwargs
+                                or isinstance(exc, (torch.cuda.OutOfMemoryError, OSError))
+                                or not self._is_flash_attention_error(exc)
+                            ):
+                                raise
+                            logger.warning(
+                                "Qwen3-TTS FlashAttention fallback: error_type={}",
+                                type(exc).__name__,
+                            )
+                            kwargs.pop("attn_implementation")
+                            self.use_flash_attn = False
+                            self._model = Qwen3TTSModel.from_pretrained(
+                                model_source,
+                                **kwargs,
+                            )
                 self._loaded = True
                 logger.info("Qwen3-TTS model loaded successfully")
             except torch.cuda.OutOfMemoryError:
@@ -235,21 +426,11 @@ class Qwen3TTSTTS(TTSInterface):
                         "Free up disk space or set HF_HOME to a different location."
                     ) from e
                 raise
-            except Exception as e:
-                if "flash_attn" in str(e).lower() and "attn_implementation" in kwargs:
-                    logger.warning("FlashAttention not installed, retrying with default attention...")
-                    del kwargs["attn_implementation"]
-                    self.use_flash_attn = False
-                    self._model = Qwen3TTSModel.from_pretrained(self.model, **kwargs)
-                    self._loaded = True
-                    logger.info("Qwen3-TTS model loaded successfully (without FlashAttention)")
-                else:
-                    raise
 
-    def _build_voice_clone_prompt(self):
+    def _build_voice_clone_prompt(self) -> list[Any]:
         """Build and cache voice clone prompt from reference audio.
 
-        Thread-safe: called under _load_lock after model is loaded.
+        Thread-safe: called from the provider's serial worker after model load.
         Returns cached prompt on subsequent calls.
         """
         if self._voice_clone_prompt is not None:
@@ -261,13 +442,16 @@ class Qwen3TTSTTS(TTSInterface):
         if not os.path.exists(self.ref_audio_path):
             raise FileNotFoundError(f"Reference audio not found: {self.ref_audio_path}")
 
-        logger.info(f"Building voice clone prompt from: {self.ref_audio_path}")
+        logger.info("Qwen3-TTS voice clone prompt build started")
         self._voice_clone_prompt = self._model.create_voice_clone_prompt(
             ref_audio=self.ref_audio_path,
             ref_text=self.ref_text,
             x_vector_only_mode=self.x_vector_only,
         )
-        logger.debug(f"Voice clone prompt cached ({len(self._voice_clone_prompt)} items)")
+        logger.debug(
+            "Qwen3-TTS voice clone prompt cached: item_count={}",
+            len(self._voice_clone_prompt),
+        )
         return self._voice_clone_prompt
 
     @classmethod
@@ -315,42 +499,27 @@ class Qwen3TTSTTS(TTSInterface):
             logger.warning("Qwen3-TTS received empty text, skipping synthesis")
             return b"" if output_path is None else str(output_path)
 
-        self._synth_done.clear()
-
         try:
-            # Thread-safe model loading (blocking — must run in executor)
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._load_model)
-
             effective_speaker = speaker or self.speaker
             effective_language = kwargs.get("language", self.language)
             effective_instruct = instruct or self.default_instruct
 
-            logger.debug(
-                f"Qwen3-TTS synthesis: text_len={len(text)}, "
-                f"speaker={effective_speaker}, language={effective_language}"
-            )
+            logger.debug("Qwen3-TTS synthesis started: text_length={}", len(text))
 
-            if self.ref_audio_path:
-                # Voice clone mode
-                prompt = self._build_voice_clone_prompt()
-                wavs, sr = await loop.run_in_executor(
-                    None,
-                    lambda: self._model.generate_voice_clone(
+            def generate_and_encode() -> bytes | str:
+                self._ensure_preloaded_worker()
+                if self.ref_audio_path:
+                    wavs, sr = self._model.generate_voice_clone(
                         text=text,
                         language=effective_language,
-                        voice_clone_prompt=prompt,
+                        voice_clone_prompt=self._voice_clone_prompt,
                         max_new_tokens=kwargs.get("max_new_tokens", self.max_new_tokens),
                         top_p=kwargs.get("top_p", self.top_p),
                         temperature=kwargs.get("temperature", self.temperature),
                         repetition_penalty=kwargs.get("repetition_penalty", self.repetition_penalty),
-                    ),
-                )
-            else:
-                # Custom voice mode (existing behavior)
-                wavs, sr = await loop.run_in_executor(
-                    None,
-                    lambda: self._model.generate_custom_voice(
+                    )
+                else:
+                    wavs, sr = self._model.generate_custom_voice(
                         text=text,
                         language=effective_language,
                         speaker=effective_speaker,
@@ -358,37 +527,50 @@ class Qwen3TTSTTS(TTSInterface):
                         max_new_tokens=kwargs.get("max_new_tokens", self.max_new_tokens),
                         top_p=kwargs.get("top_p", self.top_p),
                         temperature=kwargs.get("temperature", self.temperature),
-                        repetition_penalty=kwargs.get("repetition_penalty", self.repetition_penalty),
-                    ),
+                        repetition_penalty=kwargs.get(
+                            "repetition_penalty",
+                            self.repetition_penalty,
+                        ),
+                    )
+
+                if not wavs or len(wavs) == 0:
+                    raise RuntimeError("Qwen3-TTS generated empty audio")
+
+                from io import BytesIO
+
+                import soundfile as sf
+
+                audio_data = wavs[0] if isinstance(wavs, list) else wavs
+                buffer = BytesIO()
+                sf.write(buffer, audio_data, sr, format="wav")
+                audio_bytes = buffer.getvalue()
+
+                logger.debug(
+                    "Qwen3-TTS synthesis completed: byte_count={}, sample_rate={}",
+                    len(audio_bytes),
+                    sr,
                 )
 
-            if not wavs or len(wavs) == 0:
-                raise RuntimeError("Qwen3-TTS generated empty audio")
+                if output_path:
+                    resolved_output = Path(output_path)
+                    resolved_output.parent.mkdir(parents=True, exist_ok=True)
+                    sf.write(str(resolved_output), audio_data, sr)
+                    logger.info("Qwen3-TTS audio output saved")
+                    return str(resolved_output)
+                return audio_bytes
 
-            from io import BytesIO
+            work_future = self._submit_worker(generate_and_encode, synthesis=True)
+            return await self._await_worker_future(
+                work_future,
+                cancel_if_queued=True,
+            )
 
-            import soundfile as sf
-
-            audio_data = wavs[0] if isinstance(wavs, list) else wavs
-            buffer = BytesIO()
-            sf.write(buffer, audio_data, sr, format="wav")
-            audio_bytes = buffer.getvalue()
-
-            logger.debug(f"Qwen3-TTS synthesis successful: {len(audio_bytes)} bytes, sr={sr}")
-
-            if output_path:
-                output_path = Path(output_path)
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                sf.write(str(output_path), audio_data, sr)
-                logger.info(f"Qwen3-TTS audio saved to: {output_path}")
-                return str(output_path)
-            return audio_bytes
-
-        except Exception as e:
-            logger.error(f"Qwen3-TTS synthesis failed: {e}")
+        except Exception as exc:
+            logger.error(
+                "Qwen3-TTS synthesis failed: error_type={}",
+                type(exc).__name__,
+            )
             raise
-        finally:
-            self._synth_done.set()
 
     async def synthesize_stream(
         self,
@@ -414,46 +596,56 @@ class Qwen3TTSTTS(TTSInterface):
     async def preload(self) -> None:
         """Preload model at startup (called by ModelLoadingManager).
 
-        IMPORTANT: _load_model() is BLOCKING (~30s). Must run in executor
-        to avoid freezing the event loop during server startup.
-        Pattern matches ChatTTS preload (chattts_tts.py:103-105).
+        Model loading and Alice prompt construction both run on the same
+        provider-owned worker used by synthesis.
         """
-        if self._loaded:
-            logger.debug("Qwen3-TTS model already loaded, skipping preload")
+        if self.preload_status["ready"]:
+            logger.debug("Qwen3-TTS model and voice prompt already preloaded")
             return
 
-        logger.info(f"Preloading Qwen3-TTS model: {self.model}...")
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._load_model)
+        logger.info("Qwen3-TTS preload started")
+        work_future = self._submit_worker(self._ensure_preloaded_worker)
+        # Shield startup work so cancelling its asyncio waiter cannot leave a
+        # half-loaded shared model or a permanently ambiguous readiness state.
+        await self._await_worker_future(work_future)
         logger.info("Qwen3-TTS model preloaded successfully")
 
-    async def close(self) -> None:
-        """Clean up model and GPU memory.
-
-        Waits for in-flight synthesis to complete (with 10s timeout)
-        before unloading the model, preventing use-after-free in executor threads.
-        """
-        if self._model is None:
-            return
-
-        # Oracle fix #4: wait for in-flight synthesis before unloading
-        if not self._synth_done.is_set():
-            logger.debug("Waiting for in-flight synthesis to complete before closing...")
-            try:
-                await asyncio.wait_for(self._synth_done.wait(), timeout=10.0)
-            except TimeoutError:
-                logger.warning("Timed out waiting for synthesis to complete. Force unloading.")
-
+    def _close_worker(self) -> None:
+        """Unload after all earlier jobs in the serial executor have finished."""
         logger.info("Unloading Qwen3-TTS model...")
-        self._model = None
-        self._loaded = False
-        self._voice_clone_prompt = None  # Invalidate cached prompt
-        gc.collect()
         try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.debug("GPU cache cleared after Qwen3-TTS unload")
-        except ImportError:
-            pass
+            self._model = None
+            self._loaded = False
+            self._voice_clone_prompt = None
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.debug("GPU cache cleared after Qwen3-TTS unload")
+            except ImportError:
+                pass
+        finally:
+            self._set_preload_state("closed")
         logger.info("Qwen3-TTS model unloaded")
+
+    async def close(self) -> None:
+        """Stop accepting work and queue safe, idempotent model cleanup.
+
+        The cleanup Future remains alive if this asyncio caller is cancelled.
+        Executor shutdown is non-blocking and preserves all already-submitted
+        jobs, so a busy model is never force-unloaded.
+        """
+        with self._lifecycle_lock:
+            if self._close_future is None:
+                # Lock order is always lifecycle -> state. Setting the state
+                # first is safe because submitters cannot pass lifecycle_lock
+                # until accepting_work has been disabled below.
+                self._set_preload_state("closing")
+                self._accepting_work = False
+                self._close_future = self._executor.submit(self._close_worker)
+                self._executor.shutdown(wait=False, cancel_futures=False)
+            close_future = self._close_future
+
+        await self._await_worker_future(close_future)

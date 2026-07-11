@@ -43,6 +43,7 @@ class TestAgentStateKeys:
             "response_text",
             "response_chunks",
             "tts_audio",
+            "media_status",
             "emotion",
             "emotion_vad",
             # Control
@@ -53,6 +54,10 @@ class TestAgentStateKeys:
             "channel_id",
             "user_id",
             "user_name",
+            "message_id",
+            "conversation_id",
+            "task_id",
+            "turn_id",
             "metadata",
             "config_version",
             # Error handling
@@ -72,6 +77,7 @@ class TestAgentStateKeys:
             "personality_mood",
             # Affinity (Galgame-style 好感度 overlay)
             "affinity",
+            "turn_scratch",
         }
         assert keys == expected, f"Missing or extra keys: {keys ^ expected}"
 

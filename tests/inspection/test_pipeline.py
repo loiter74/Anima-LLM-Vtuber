@@ -12,6 +12,7 @@ from animetta.inspection.checks.pipeline import (
     PROBE_INPUT_EVENT,
     PROHIBITED_PROBE_EVENTS,
     check_conversation_pipeline,
+    check_golden_conversation_pipeline,
 )
 from animetta.inspection.models import CheckResult
 from animetta.orchestration.socket_events import EVENTS
@@ -102,6 +103,34 @@ class TestSuccessfulPipeline:
         assert call_args[0][1]["text"] == "[inspection] ping"
         assert call_args[0][1]["mode"] == "text"
         assert call_args[0][1]["is_inspection"] is True
+
+    @pytest.mark.asyncio
+    async def test_runtime_golden_check_runs_probe_then_real_correlated_turn(self):
+        handlers: list = [None]
+        client = _create_mock_client(wildcard_handler_container=handlers)
+        client.connected = True
+
+        async def emit(event: str, payload: dict) -> None:
+            if payload.get("is_inspection"):
+                return
+            handler = handlers[0]
+            for event_name, extra in (
+                ("chat:sentence", {"text": "你好", "seq": 0}),
+                ("chat:expression", {"emotion": "neutral"}),
+                ("chat:live2d_action", {"type": "motion"}),
+                ("chat:control", {"signal": "conversation-end"}),
+            ):
+                await handler(event_name, {**payload, **extra})
+
+        client.emit = AsyncMock(side_effect=emit)
+        with (
+            patch("animetta.inspection.checks.pipeline.socketio.AsyncClient", return_value=client),
+            patch("animetta.inspection.checks.pipeline.asyncio.sleep", AsyncMock()),
+        ):
+            result = await check_golden_conversation_pipeline()
+        assert result.ok is True
+        assert result.detail["probe_contained"] is True
+        assert client.emit.await_count == 2
 
     @pytest.mark.asyncio
     async def test_extra_events_do_not_break_success(self):

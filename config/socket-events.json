@@ -2,11 +2,79 @@
   "chat": {
     "text": {
       "name": "chat:text",
+      "aliases": ["text_input"],
+      "identity": "command",
+      "golden_path": true,
       "payload": {
-        "text": "string",
-        "user_id?": "string",
-        "from_name?": "string",
-        "is_inspection?": "boolean"
+        "text": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "non_whitespace": true,
+          "min_length": 1,
+          "max_length": 4000
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "user_id?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 128
+        },
+        "from_name?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 128
+        },
+        "source?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["text"],
+          "default": "text",
+          "min_length": 1,
+          "max_length": 16
+        },
+        "is_inspection?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": false
+        },
+        "is_acceptance?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": false
+        }
       }
     },
     "audio": {
@@ -21,27 +89,279 @@
     },
     "interrupt": {
       "name": "chat:interrupt",
+      "aliases": ["interrupt_signal"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "text?": "string"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "text?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 4000
+        }
       }
     },
     "sentence": {
       "name": "chat:sentence",
+      "aliases": ["sentence"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "text": "string",
-        "seq": "number",
-        "lang": "string",
-        "is_complete?": "boolean",
-        "turn_id?": "string",
-        "metadata?": "object"
+        "text": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 0,
+          "max_length": 4000
+        },
+        "seq": {
+          "type": "integer",
+          "required": true,
+          "strict": true
+        },
+        "lang": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 16
+        },
+        "is_complete?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": false
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "metadata?": {
+          "type": "object",
+          "required": false,
+          "strict": true,
+          "default": null
+        }
+      },
+      "completion": {
+        "constants": {
+          "text": "",
+          "is_complete": true
+        },
+        "context_fields": [
+          "seq",
+          "lang",
+          "message_id",
+          "conversation_id",
+          "task_id",
+          "turn_id"
+        ]
       }
     },
     "control": {
       "name": "chat:control",
+      "aliases": ["control"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "signal?": "string",
-        "type?": "string",
-        "text?": "string"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "signal?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["conversation-start", "conversation-end"],
+          "default": null,
+          "min_length": 1,
+          "max_length": 64
+        },
+        "type?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 64
+        },
+        "text?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 256
+        },
+        "status?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["degraded"],
+          "default": null,
+          "min_length": 1,
+          "max_length": 32
+        },
+        "component?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["tts"],
+          "default": null,
+          "min_length": 1,
+          "max_length": 32
+        },
+        "phase?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["media"],
+          "default": null,
+          "min_length": 1,
+          "max_length": 32
+        },
+        "reason?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": [
+            "timeout",
+            "rate_limit",
+            "provider_error",
+            "empty_audio",
+            "unavailable"
+          ],
+          "default": null,
+          "min_length": 1,
+          "max_length": 64
+        },
+        "retryable?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": null
+        }
+      },
+      "degradation": {
+        "constants": {
+          "type": "media-degraded",
+          "status": "degraded",
+          "component": "tts",
+          "phase": "media"
+        },
+        "defaults": {
+          "retryable": true
+        },
+        "required_fields": [
+          "message_id",
+          "conversation_id",
+          "task_id",
+          "turn_id",
+          "type",
+          "status",
+          "component",
+          "phase",
+          "reason",
+          "retryable"
+        ],
+        "context_fields": [
+          "message_id",
+          "conversation_id",
+          "task_id",
+          "turn_id",
+          "reason",
+          "text"
+        ]
       }
     },
     "transcript": {
@@ -53,36 +373,263 @@
     },
     "stop_audio": {
       "name": "chat:stop_audio",
-      "payload": {}
+      "aliases": ["stop_audio"],
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        }
+      }
     },
     "audio_with_expression": {
       "name": "chat:audio_with_expression",
+      "aliases": ["audio_with_expression"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "audio_data": "string",
-        "format": "string",
-        "volumes": "number[]"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "audio_data": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 67108864
+        },
+        "format": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": ["wav"],
+          "min_length": 3,
+          "max_length": 8
+        },
+        "volumes": {
+          "type": "array",
+          "required": true,
+          "strict": true,
+          "items": "number"
+        }
       }
     },
     "subtitle_translation": {
       "name": "chat:subtitle_translation",
+      "aliases": ["subtitle.translation"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "translation": "string",
-        "target_lang": "string",
-        "turn_id?": "string"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "translation": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 4000
+        },
+        "target_lang": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 16
+        }
       }
     },
     "live2d_action": {
       "name": "chat:live2d_action",
+      "aliases": ["live2d.action"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "type": "string",
-        "group": "string",
-        "index": "number"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "type": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 64
+        },
+        "group": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 128
+        },
+        "index": {
+          "type": "integer",
+          "required": true,
+          "strict": true
+        }
       }
     },
     "expression": {
       "name": "chat:expression",
+      "aliases": ["expression"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "emotion": "string"
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "emotion": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 32
+        }
       }
     }
   },
@@ -174,9 +721,105 @@
     },
     "error": {
       "name": "system:error",
+      "aliases": ["error"],
+      "identity": "correlated",
+      "golden_path": true,
       "payload": {
-        "type": "string",
-        "message": "string"
+        "type": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "validation_error",
+            "processing_error",
+            "timeout",
+            "interrupted",
+            "internal_error"
+          ],
+          "min_length": 1,
+          "max_length": 64
+        },
+        "message": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 512
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "component": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "transport",
+            "workflow",
+            "reasoner",
+            "anima_composer",
+            "tts",
+            "emotion",
+            "live2d",
+            "delivery"
+          ],
+          "min_length": 1,
+          "max_length": 64
+        },
+        "phase": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "validation",
+            "reasoning",
+            "composition",
+            "workflow",
+            "media",
+            "delivery"
+          ],
+          "min_length": 1,
+          "max_length": 64
+        },
+        "retryable": {
+          "type": "boolean",
+          "required": true,
+          "strict": true
+        },
+        "terminal": {
+          "type": "boolean",
+          "required": true,
+          "strict": true
+        }
       }
     }
   },

@@ -657,8 +657,15 @@ class TestQwen3TTSTTS:
 
         # Use a temp file as mock reference audio
         import tempfile
+        import wave
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             ref_path = f.name
+        with wave.open(ref_path, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24000)
+            wav_file.writeframes(b"\x00\x00" * 32)
 
         try:
             tts = Qwen3TTSTTS(

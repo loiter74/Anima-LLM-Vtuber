@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from ..socket_events import event_name
+from ..socket_events import event_aliases, event_name
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -340,7 +340,17 @@ def register_routes(
     sio.on("disconnect", handlers.on_disconnect)
 
     # Conversation events
-    sio.on(event_name("chat", "text"), handlers.on_text_input)
+    text_events = (event_name("chat", "text"), *event_aliases("chat", "text"))
+    for text_event in text_events:
+
+        async def text_adapter(
+            sid: str,
+            data: dict,
+            _event: str = text_event,
+        ) -> None:
+            await handlers.chat.on_text_event(sid, _event, data)
+
+        sio.on(text_event, text_adapter)
     sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
     sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
     sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)

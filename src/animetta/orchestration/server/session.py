@@ -126,6 +126,9 @@ class SessionManager:
 
             # Ensure enable_tools is correctly passed
             enable_tools = tools_config.get("enable_tools", False)
+            system = getattr(getattr(ctx, "config", None), "system", None)
+            if getattr(system, "runtime_profile", None) == "golden":
+                enable_tools = False
             raw_config = tools_config.get("config", tools_config)
             config_keys = list(raw_config.keys()) if isinstance(raw_config, dict) else []
             logger.info(

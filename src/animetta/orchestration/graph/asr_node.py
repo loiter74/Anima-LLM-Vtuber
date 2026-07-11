@@ -3,7 +3,7 @@
 from typing import Any
 
 from langchain_core.messages import HumanMessage
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.orchestration.socket_events import EVENTS

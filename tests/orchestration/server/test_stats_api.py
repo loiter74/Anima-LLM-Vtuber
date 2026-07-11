@@ -10,7 +10,6 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from animetta.inspection.models import CheckResult
 from animetta.orchestration.server.stats_api import _get_gpu_info, get_stats_routes
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -107,43 +106,88 @@ class TestHealthEndpoint:
         data = resp.json()
         assert data["service"] == "anima"
 
-    def test_health_returns_500_when_probe_runner_crashes(self):
-        """Health check infrastructure failures must not look HTTP-healthy."""
+    def test_health_does_not_run_component_or_model_probes(self):
+        """Liveness remains cheap even while readiness work is failing."""
         with patch(
-            "animetta.orchestration.server.stats_api.check_all_components",
-            AsyncMock(side_effect=RuntimeError("probe runner crashed")),
-        ):
+            "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+            side_effect=RuntimeError("model readiness must not run"),
+        ) as readiness:
             app = _build_test_app()
             with TestClient(app) as c:
                 resp = c.get("/health")
 
-        assert resp.status_code == 500
+        assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "error"
+        assert data["status"] == "ok"
         assert data["service"] == "anima"
-        assert "probe runner crashed" in data["error"]
+        readiness.assert_not_called()
 
-    def test_health_returns_503_when_component_check_fails(self):
-        """A degraded health body must also be unhealthy at the HTTP layer."""
+    def test_ready_returns_503_for_pending_preload(self):
+        """Readiness is non-success while the real Qwen preload is pending."""
+        snapshot = MagicMock()
+        snapshot.to_dict.return_value = {
+            "status": "not_ready",
+            "ready": False,
+            "profile": "golden",
+            "acceptance_eligible": True,
+            "components": {
+                "tts": {"state": "loading", "ready": False, "reason": None},
+            },
+        }
         with patch(
-            "animetta.orchestration.server.stats_api.check_all_components",
-            AsyncMock(
-                return_value={
-                    "llm_available": CheckResult.failed(
-                        "llm_available",
-                        error="probe returned False",
-                    )
-                }
-            ),
+            "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+            return_value=snapshot,
+            create=True,
         ):
             app = _build_test_app()
             with TestClient(app) as c:
-                resp = c.get("/health")
+                resp = c.get("/ready")
 
         assert resp.status_code == 503
         data = resp.json()
-        assert data["status"] == "degraded"
-        assert data["checks"]["llm_available"]["ok"] is False
+        assert data["status"] == "not_ready"
+        assert data["components"]["tts"]["state"] == "loading"
+
+    def test_ready_returns_200_for_complete_real_runtime(self):
+        snapshot = MagicMock()
+        snapshot.to_dict.return_value = {
+            "status": "ready",
+            "ready": True,
+            "profile": "golden",
+            "acceptance_eligible": True,
+            "components": {},
+        }
+        with patch(
+            "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+            return_value=snapshot,
+            create=True,
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/ready")
+
+        assert resp.status_code == 200
+        assert resp.json()["ready"] is True
+
+    def test_ready_fails_closed_and_redacts_snapshot_errors(self):
+        with patch(
+            "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+            side_effect=RuntimeError(
+                "https://user:password@example.invalid?api_key=secret"
+            ),
+            create=True,
+        ):
+            app = _build_test_app()
+            with TestClient(app) as c:
+                resp = c.get("/ready")
+
+        assert resp.status_code == 503
+        assert resp.json() == {
+            "status": "not_ready",
+            "ready": False,
+            "service": "anima",
+            "reason": "snapshot_unavailable",
+        }
 
     def test_gpu_info_accepts_current_torch_total_memory_property(self, monkeypatch):
         """GPU probe handles torch device properties exposing total_memory."""
@@ -386,6 +430,7 @@ class TestRouteRegistration:
 
         path_set = {r.path for r in routes if hasattr(r, "path")}
         assert "/health" in path_set
+        assert "/ready" in path_set
         assert "/api/stats/overview" in path_set
         assert "/api/stats/nodes" in path_set
         assert "/api/stats/traces" in path_set

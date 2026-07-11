@@ -362,3 +362,10 @@ class TestPrintGraphStructure:
 
         mock_graph.get_graph.assert_called_once()
         mock_logger.info.assert_any_call("mock ascii art")
+
+
+def test_golden_graph_contains_only_two_pass_dialogue_branch() -> None:
+    graph = build_graph(golden_profile=True)
+    nodes = set(graph.get_graph().nodes)
+    assert {"reasoner", "anima_composer", "response_guard", "conversation_finalizer"} <= nodes
+    assert {"llm", "humor_rewrite", "humor_validation", "tools"}.isdisjoint(nodes)

@@ -52,9 +52,9 @@ class Qwen3TTSConfig(TTSBaseConfig):
     )
     max_new_tokens: int = Field(
         default=4096,
-        ge=128,
+        ge=32,
         le=16384,
-        description="Maximum audio tokens to generate",
+        description="Maximum audio tokens to generate (32 is about 2.7 seconds at 12 Hz)",
     )
     top_p: float = Field(
         default=0.9,

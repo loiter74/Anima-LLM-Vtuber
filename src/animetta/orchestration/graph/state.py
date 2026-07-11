@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from typing import Annotated, Any, TypedDict
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
@@ -33,6 +34,7 @@ class AgentState(TypedDict):
     response_text: str
     response_chunks: list[str]
     tts_audio: bytes | str | None
+    media_status: Any | None
     emotion: str | None
     emotion_vad: tuple[float, float, float] | None  # VAD vector from emotion_node
 
@@ -45,6 +47,10 @@ class AgentState(TypedDict):
     channel_id: str | None
     user_id: str | None
     user_name: str | None
+    message_id: str | None
+    conversation_id: str | None
+    task_id: str | None
+    turn_id: str | None
     metadata: dict[str, Any]
     config_version: int
 
@@ -73,6 +79,10 @@ class AgentState(TypedDict):
     # across sessions; resets to DEFAULT_AFFINITY on a fresh conversation.
     affinity: int
 
+    # Golden dialogue internals. Content is task-scoped and must be cleared by
+    # the finalizer; it is never copied into metadata or persistence sinks.
+    turn_scratch: dict[str, Any]
+
 
 def create_initial_state(
     session_id: str,
@@ -84,8 +94,16 @@ def create_initial_state(
     channel_id: str | None = None,
     user_id: str | None = None,
     user_name: str | None = None,
+    message_id: str | None = None,
+    conversation_id: str | None = None,
+    task_id: str | None = None,
+    turn_id: str | None = None,
 ) -> AgentState:
     """Create initial state"""
+    message_id = message_id or str(uuid4())
+    conversation_id = conversation_id or str(uuid4())
+    task_id = task_id or turn_id or str(uuid4())
+    turn_id = task_id
     return {
         "input_type": input_type,
         "raw_audio": raw_audio,
@@ -97,6 +115,7 @@ def create_initial_state(
         "response_text": "",
         "response_chunks": [],
         "tts_audio": None,
+        "media_status": None,
         "emotion": None,
         "emotion_vad": None,
         "control_signal": None,
@@ -105,6 +124,10 @@ def create_initial_state(
         "channel_id": channel_id,
         "user_id": user_id,
         "user_name": user_name,
+        "message_id": message_id,
+        "conversation_id": conversation_id,
+        "task_id": task_id,
+        "turn_id": turn_id,
         "metadata": {},
         "config_version": 1,
         "error": None,
@@ -122,6 +145,7 @@ def create_initial_state(
         "personality_mood": None,
         # Affinity — neutral first impression (DEFAULT_AFFINITY=50)
         "affinity": DEFAULT_AFFINITY,
+        "turn_scratch": {},
     }
 
 

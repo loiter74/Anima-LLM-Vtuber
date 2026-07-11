@@ -1,11 +1,9 @@
 """Graph-visible Humor Agent candidate validation node."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from langchain_core.messages import AIMessage
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.services.humor.filters import validate_humor_candidate

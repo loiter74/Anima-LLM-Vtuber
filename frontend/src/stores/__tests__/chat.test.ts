@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChatStore } from '@/stores/chat'
+import type { ChatIdentity, SentenceEvent } from '@/types/socket-events'
+import type { ChatMessage } from '@/types/chat'
 
 const fetchAvailablePersonasMock = vi.hoisted(() => vi.fn())
+const loadMessagesMock = vi.hoisted(() => vi.fn<() => Promise<ChatMessage[]>>(
+  () => Promise.resolve([]),
+))
 
 // Mock IndexedDB-backed message store — IndexedDB is not available in happy-dom
 vi.mock('@/composables/useMessageStore', () => ({
   useMessageStore: () => ({
-    loadMessages: () => Promise.resolve([]),
+    loadMessages: loadMessagesMock,
     saveMessages: () => Promise.resolve(),
     pruneMessages: () => Promise.resolve(),
     isReady: { value: false },
@@ -21,11 +26,19 @@ vi.mock('@/stores/personality', () => ({
 }))
 
 describe('useChatStore', () => {
+  const identity = (task = '00000000-0000-4000-8000-000000000003'): ChatIdentity => ({
+    message_id: '00000000-0000-4000-8000-000000000001',
+    conversation_id: '00000000-0000-4000-8000-000000000002',
+    task_id: task,
+    turn_id: task,
+  })
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.unstubAllGlobals()
     fetchAvailablePersonasMock.mockReset()
     fetchAvailablePersonasMock.mockResolvedValue(undefined)
+    loadMessagesMock.mockReset()
+    loadMessagesMock.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -33,6 +46,23 @@ describe('useChatStore', () => {
   })
 
   describe('initial state', () => {
+    it('loads legacy persisted messages without identity fields', async () => {
+      loadMessagesMock.mockResolvedValueOnce([{
+        id: 'legacy-1',
+        role: 'assistant',
+        text: 'old conversation',
+        timestamp: 1,
+        status: 'complete',
+      }])
+
+      const store = useChatStore()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(store.messages).toEqual([expect.objectContaining({ id: 'legacy-1' })])
+      expect(store.messages[0].task_id).toBeUndefined()
+    })
+
     it('starts with empty messages', () => {
       const store = useChatStore()
       expect(store.messages).toEqual([])
@@ -65,6 +95,15 @@ describe('useChatStore', () => {
   })
 
   describe('createMessage', () => {
+    it('keys correlated user messages by message_id', () => {
+      const store = useChatStore()
+      const ids = identity()
+
+      const msg = store.createMessage('user', 'Hello!', 'text', ids)
+
+      expect(msg.id).toBe(ids.message_id)
+      expect(msg.task_id).toBe(ids.task_id)
+    })
     it('creates a user message with complete status', () => {
       const store = useChatStore()
       const msg = store.createMessage('user', 'Hello!')
@@ -116,6 +155,131 @@ describe('useChatStore', () => {
       store.createMessage('user', 'first')
       store.createMessage('user', 'second')
       expect(store.lastMessage?.text).toBe('second')
+    })
+  })
+
+  describe('task media state', () => {
+    it('tracks text and media completion separately for the newest task', () => {
+      const store = useChatStore()
+      const ids = identity()
+      store.registerTask(ids)
+      store.handleSentence({ ...ids, text: 'final', seq: 0 })
+      store.handleSentence({ ...ids, text: '', seq: 1, is_complete: true })
+      expect(store.mediaByTask[ids.task_id].status).toBe('pending')
+
+      expect(store.handleMediaReady({
+        ...ids, audio_data: 'UklGRg==', format: 'wav', volumes: [],
+      })).toBe(true)
+      expect(store.isSpeaking).toBe(true)
+      expect(store.mediaByTask[ids.task_id].status).toBe('ready')
+
+      expect(store.handleControl({ ...ids, signal: 'conversation-end' })).toBe(true)
+      expect(store.isSpeaking).toBe(false)
+      expect(store.mediaByTask[ids.task_id].status).toBe('completed')
+    })
+
+    it('shows one degradation notice and recovers on the next task', () => {
+      const store = useChatStore()
+      const first = identity()
+      store.registerTask(first)
+      const degraded = {
+        ...first, type: 'media-degraded', status: 'degraded', reason: 'timeout',
+        text: 'Audio unavailable; continuing with text.',
+      }
+      expect(store.handleControl(degraded)).toBe(true)
+      expect(store.handleControl(degraded)).toBe(false)
+      expect(store.mediaByTask[first.task_id].status).toBe('degraded')
+      expect(store.messages.filter(message => message.id === `degradation:${first.task_id}`)).toHaveLength(1)
+
+      const second = identity('00000000-0000-4000-8000-000000000004')
+      store.registerTask(second)
+      expect(store.mediaByTask[second.task_id].status).toBe('pending')
+      expect(store.isSpeaking).toBe(false)
+    })
+
+    it('rejects stale audio and stop events', () => {
+      const store = useChatStore()
+      const old = identity()
+      const current = identity('00000000-0000-4000-8000-000000000004')
+      store.registerTask(old)
+      store.registerTask(current)
+      expect(store.handleMediaReady({
+        ...old, audio_data: 'UklGRg==', format: 'wav', volumes: [],
+      })).toBe(false)
+      expect(store.handleStopAudio(old)).toBe(false)
+      expect(store.isSpeaking).toBe(false)
+    })
+  })
+
+  describe('identity-aware delivery', () => {
+    const sentence = (
+      ids: ChatIdentity,
+      text: string,
+      seq: number,
+      isComplete = false,
+    ): SentenceEvent => ({
+      ...ids,
+      text,
+      seq,
+      lang: 'zh',
+      is_complete: isComplete,
+    })
+
+    it('keys the assistant bubble by task_id and handles completion idempotently', () => {
+      const store = useChatStore()
+      const ids = identity()
+      store.registerTask(ids)
+
+      expect(store.handleSentence(sentence(ids, 'Reply', 0))).toBe(true)
+      expect(store.handleSentence(sentence(ids, '', 1, true))).toBe(true)
+      expect(store.handleSentence(sentence(ids, '', 1, true))).toBe(false)
+
+      expect(store.messages).toHaveLength(1)
+      expect(store.messages[0].id).toBe(ids.task_id)
+      expect(store.messages[0].status).toBe('complete')
+    })
+
+    it('ignores stale task chunks after a newer task is registered', () => {
+      const store = useChatStore()
+      const oldIds = identity('00000000-0000-4000-8000-000000000003')
+      const newIds = identity('00000000-0000-4000-8000-000000000004')
+      store.registerTask(oldIds)
+      store.registerTask(newIds)
+
+      expect(store.handleSentence(sentence(oldIds, 'stale', 0))).toBe(false)
+      expect(store.messages).toHaveLength(0)
+    })
+
+    it('ignores duplicate sentence sequence numbers', () => {
+      const store = useChatStore()
+      const ids = identity()
+      store.registerTask(ids)
+
+      store.handleSentence(sentence(ids, 'Once', 0))
+      store.handleSentence(sentence(ids, 'Once', 0))
+      store.handleSentence(sentence(ids, '', 1, true))
+
+      expect(store.messages[0].text).toBe('Once')
+    })
+
+    it('handles a correlated terminal error once', () => {
+      const store = useChatStore()
+      const ids = identity()
+      store.registerTask(ids)
+      const error = {
+        ...ids,
+        type: 'processing_error' as const,
+        message: 'provider unavailable',
+        component: 'workflow',
+        phase: 'workflow',
+        retryable: false,
+        terminal: true,
+      }
+
+      expect(store.handleError(error)).toBe(true)
+      expect(store.handleError(error)).toBe(false)
+      expect(store.messages).toHaveLength(1)
+      expect(store.messages[0].id).toBe(`error:${ids.task_id}`)
     })
   })
 

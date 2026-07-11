@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for SessionManager — context, orchestrator, audio processor lifecycle."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
@@ -213,6 +214,28 @@ class TestGetOrCreateOrchestrator:
         )
 
         assert orch is existing
+
+    @pytest.mark.asyncio
+    async def test_golden_profile_forces_tools_off(self, session_manager, monkeypatch):
+        create_mock = AsyncMock(return_value=MagicMock())
+        monkeypatch.setattr(
+            "animetta.orchestration.graph.orchestrator.LangGraphOrchestrator.create",
+            create_mock,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.server.session.SessionManager._load_tools_config",
+            AsyncMock(return_value={"enable_tools": True, "config": {"tools": ["mc"]}}),
+        )
+        ctx = SimpleNamespace(
+            config=SimpleNamespace(system=SimpleNamespace(runtime_profile="golden")),
+            emotion_analyzer=None,
+        )
+
+        await session_manager.get_or_create_orchestrator(
+            "golden", ctx, MagicMock(), MagicMock(), socketio=MagicMock()
+        )
+
+        assert create_mock.await_args.kwargs["enable_tools"] is False
 
     @pytest.mark.asyncio
     async def test_orchestrator_lock_prevents_duplicates(self, session_manager, monkeypatch):

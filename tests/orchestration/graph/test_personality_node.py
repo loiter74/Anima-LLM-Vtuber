@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Tests for personality node — mode/mood detection and overlay prompt."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from animetta.orchestration.graph.personality_node import personality_node
@@ -27,6 +29,20 @@ class TestPersonalityNode:
         # No overlay for default mode without mood
         overlay = result["metadata"].get("personality_overlay", "")
         assert overlay == ""
+
+    @pytest.mark.asyncio
+    async def test_runtime_persona_prompt_is_forwarded_to_dialogue_chain(self):
+        state = create_initial_state(session_id="test", channel_id="bilibili_live")
+        context = SimpleNamespace(
+            llm_engine=SimpleNamespace(system_prompt="你是 Anima，酒馆的魔女。")
+        )
+
+        result = await personality_node(
+            state, {"configurable": {"service_context": context}}
+        )
+
+        assert result["system_prompt"].startswith("你是 Anima，酒馆的魔女。")
+        assert "直播模式" in result["system_prompt"]
 
     @pytest.mark.asyncio
     async def test_streaming_mode_for_bilibili(self):

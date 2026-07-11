@@ -1,7 +1,7 @@
 # Animetta 前端-后端接口文档
 
 **生成时间**: 2026-06-08
-**更新时间**: 2026-06-20
+**更新时间**: 2026-07-11
 **协议**: Socket.IO (WebSocket)
 
 ---
@@ -12,7 +12,22 @@ Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，
 
 ### ⚠️ 事件命名迁移 (v2.0)
 
-所有事件已统一为 `module:action` 格式。旧格式事件名已标记为 **[DEPRECATED]**。
+所有产品代码必须使用 `module:action` 格式。旧格式事件名仅是兼容适配器的输入/输出选择，不是可供业务代码调用的第二套 API。
+
+适配边界只有后端路由入口 `orchestration/server/routes.py` 和统一输出适配器 `orchestration/chat_delivery.py`。一次请求只选择 canonical 或 legacy 一种输出，禁止双发。`scripts/validate-events.py` 会拒绝适配边界外的 legacy Socket.IO 字面量。
+
+黄金路径的命令、文本、控制、错误、字幕、表情、动作和音频事件都携带以下关联字段：
+
+```json
+{
+  "message_id": "UUID",
+  "conversation_id": "UUID",
+  "task_id": "UUID",
+  "turn_id": "与 task_id 相同的 UUID"
+}
+```
+
+前端每次发送生成新的 `message_id` 与 `task_id`，在本地持久化稳定的 `conversation_id`。服务端不得以空值、短 ID 或隐式默认值替代这些字段。
 
 **事件常量文件**: `config/socket-events.json` (后端) / `frontend/src/constants/socket-events.ts` (前端)
 
@@ -67,8 +82,13 @@ Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，
 ```json
 {
   "text": "消息内容",
-  "user_id": "user",
-  "from_name": "User"
+  "message_id": "8c113f5d-4eb8-43ea-a166-05a8c62cb8ea",
+  "conversation_id": "17a505b8-ea4d-49c3-ac55-edf174e93ddb",
+  "task_id": "2a18273f-c66d-40aa-b8f2-0e958f90ef3a",
+  "turn_id": "2a18273f-c66d-40aa-b8f2-0e958f90ef3a",
+  "source": "text",
+  "is_inspection": false,
+  "is_acceptance": false
 }
 ```
 - **响应**: 通过 `chat:sentence` 事件流式返回

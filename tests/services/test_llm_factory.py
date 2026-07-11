@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from animetta.config.providers.llm import (
+    DeepSeekLLMConfig,
     GLMLLMConfig,
     MockLLMConfig,
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
 from animetta.services.llm import LLMFactory
+from animetta.services.llm.mock_llm import MockLLM
+from animetta.services.llm.openai_llm import OpenAILLM
+from animetta.tracing.proxy import TracingProxy
 
 """Tests for LLMFactory — provider-based LLM service instantiation.
 
@@ -16,6 +20,8 @@ and fallback behaviour.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers
@@ -80,6 +86,25 @@ class TestCreateFromConfig:
 
             mock_create.assert_called_once_with("llm", config, system_prompt="")
             assert result is mock_svc
+
+    def test_deepseek_config_binds_internal_provider_identity(self):
+        """Factory provenance distinguishes DeepSeek from generic OpenAI clients."""
+        service = object.__new__(OpenAILLM)
+        service._provider_identity = None
+
+        with patch(
+            "animetta.services.llm.factory.ProviderRegistry.create_service",
+            return_value=service,
+        ), patch(
+            "animetta.services.llm.factory.TracingProxy",
+            side_effect=lambda target, **_: target,
+        ):
+            result = LLMFactory.create_from_config(
+                DeepSeekLLMConfig(api_key="test"),
+                strict=True,
+            )
+
+        assert result.provider_identity == "deepseek"
 
     def test_glm_config(self):
         """GLMLLMConfig creates a service via ProviderRegistry."""
@@ -191,6 +216,70 @@ class TestCreateFromConfig:
             LLMFactory.create_from_config(config, system_prompt="Custom prompt")
 
             MockMockLLM.assert_called_once_with(system_prompt="Custom prompt")
+
+    def test_strict_registry_error_is_propagated_without_mock_fallback(self):
+        """Strict creation preserves the provider error and never constructs MockLLM."""
+        provider_error = RuntimeError("provider initialization failed")
+
+        with patch(
+            "animetta.services.llm.factory.ProviderRegistry.create_service",
+            side_effect=provider_error,
+        ), patch(
+            "animetta.services.llm.mock_llm.MockLLM",
+        ) as mock_llm:
+            config = OpenAILLMConfig(api_key="test")
+
+            with pytest.raises(RuntimeError) as exc_info:
+                LLMFactory.create_from_config(config, strict=True)
+
+        assert exc_info.value is provider_error
+        mock_llm.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "registry_result",
+        [
+            MockLLM(),
+            TracingProxy(MockLLM(), service_name="llm"),
+            TracingProxy(
+                TracingProxy(MockLLM(), service_name="llm"),
+                service_name="llm",
+            ),
+        ],
+        ids=["bare", "single-proxy", "nested-proxy"],
+    )
+    def test_strict_non_mock_config_rejects_registry_mock(self, registry_result):
+        """A registry bug cannot smuggle MockLLM through strict creation."""
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=registry_result,
+            ),
+            pytest.raises(
+                RuntimeError,
+                match="Strict LLM provider creation returned MockLLM",
+            ),
+        ):
+            LLMFactory.create_from_config(
+                OpenAILLMConfig(api_key="test"),
+                strict=True,
+            )
+
+    def test_explicit_mock_config_is_allowed_in_strict_factory_mode(self):
+        """Strict means no implicit fallback; an explicitly selected mock remains valid."""
+        mock_svc = MockLLM()
+
+        with patch(
+            "animetta.services.llm.factory.ProviderRegistry.create_service",
+            return_value=mock_svc,
+        ) as mock_create, patch(
+            "animetta.services.llm.factory.TracingProxy",
+            side_effect=lambda target, **_: target,
+        ):
+            config = MockLLMConfig()
+            result = LLMFactory.create_from_config(config, strict=True)
+
+        mock_create.assert_called_once_with("llm", config, system_prompt="")
+        assert result is mock_svc
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -320,6 +409,30 @@ class TestCreate:
                 LLMFactory.create("unknown_xyz")
 
                 mock_warn.assert_called_once()
+
+    def test_unknown_provider_raises_in_strict_mode(self):
+        """Strict provider lookup must not translate an unknown name into MockLLM."""
+        with (
+            patch(
+                "animetta.services.llm.factory.LLMFactory.create_from_config",
+            ) as mock_create,
+            pytest.raises(ValueError, match="Unknown LLM provider"),
+        ):
+            LLMFactory.create("nonexistent_provider", strict=True)
+
+        mock_create.assert_not_called()
+
+    def test_explicit_mock_provider_forwards_strict_mode(self):
+        """An explicit mock request is distinguishable from an implicit fallback."""
+        with patch(
+            "animetta.services.llm.factory.LLMFactory.create_from_config",
+            return_value=_mock_service(),
+        ) as mock_create:
+            LLMFactory.create("mock", strict=True)
+
+        config_arg = mock_create.call_args.args[0]
+        assert isinstance(config_arg, MockLLMConfig)
+        assert mock_create.call_args.kwargs["strict"] is True
 
 
 # ═══════════════════════════════════════════════════════════════════════

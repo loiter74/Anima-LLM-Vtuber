@@ -5,9 +5,12 @@ import { getSocket } from '@/composables/useSocket'
 import type { WikiPageEntry } from '@/stores/memory'
 import type { MemoryNode } from '@/types/memoryGraph'
 import { Events } from '@/constants/socket-events'
+import { sendCanonicalChatText } from '@/composables/chatTransport'
+import { useChatStore } from '@/stores/chat'
 import MemoryGraph from './MemoryGraph.vue'
 
 const store = useMemoryStore()
+const chatStore = useChatStore()
 
 const collapsed = ref(false)
 const sessionId = ref('default')
@@ -37,7 +40,9 @@ function closeNodeDetail(): void {
 function sendToChat(node: MemoryNode): void {
   const socket = getSocket()
   if (!socket) return
-  socket.emit(Events.CHAT.TEXT, { text: node.content })
+  const command = sendCanonicalChatText(socket, node.content)
+  chatStore.createMessage('user', node.content, 'text', command)
+  chatStore.isTyping = true
 }
 
 function switchView(mode: 'list' | 'graph'): void {

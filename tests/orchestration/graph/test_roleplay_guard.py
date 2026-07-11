@@ -3,6 +3,7 @@
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from animetta.orchestration.graph.conversation_session import ConversationSessionState
 from animetta.orchestration.graph.personality_node import (
     _detect_previous_turn_drift,
     personality_node,
@@ -190,3 +191,13 @@ class TestPersonalityNodeDriftWiring:
         state_for_prompt = {**state_clean, "metadata": md}
         compiled = await compile_prompt(state_for_prompt)
         assert "角色回归提醒" not in compiled.system_prompt
+
+
+def test_drift_detection_reads_latest_committed_session_response() -> None:
+    session = ConversationSessionState()
+    session.commit(
+        task_id="task", user_text="你好", final_response="作为 AI，我可以帮助你。"
+    )
+    config = {"configurable": {"conversation_session": session}}
+    result = _detect_previous_turn_drift({"messages": [], "metadata": {}}, config)
+    assert result == CORRECTION_SECTION

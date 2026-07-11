@@ -53,3 +53,34 @@ def test_frontend_event_validation_rejects_stale_emit_names(tmp_path, monkeypatc
     assert errors == [
         "frontend/src/Probe.vue: emit('text_input') not in socket-events.json"
     ]
+
+
+def test_legacy_alias_is_rejected_outside_adapter_boundary(tmp_path, monkeypatch):
+    module = _load_validate_events_module()
+    source_dir = tmp_path / "src" / "animetta"
+    source_dir.mkdir(parents=True)
+    (source_dir / "probe.py").write_text(
+        'await sio.' + 'emit("sentence", {"text": "stale"})\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "SRC_DIR", source_dir)
+    monkeypatch.setattr(module, "FRONTEND_SRC_DIR", tmp_path / "frontend" / "src")
+    monkeypatch.setattr(module, "LEGACY_ADAPTER_FILES", set())
+
+    assert module.validate_legacy_alias_boundaries({"sentence"}) == [
+        "src/animetta/probe.py: legacy event 'sentence' is outside the adapter boundary"
+    ]
+
+
+def test_legacy_alias_is_legal_inside_declared_adapter(tmp_path, monkeypatch):
+    module = _load_validate_events_module()
+    source_dir = tmp_path / "src" / "animetta"
+    adapter = source_dir / "adapter.py"
+    source_dir.mkdir(parents=True)
+    adapter.write_text('sio.' + 'on("text_input", handler)\n', encoding="utf-8")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "SRC_DIR", source_dir)
+    monkeypatch.setattr(module, "FRONTEND_SRC_DIR", tmp_path / "frontend" / "src")
+    monkeypatch.setattr(module, "LEGACY_ADAPTER_FILES", {adapter})
+
+    assert module.validate_legacy_alias_boundaries({"text_input"}) == []

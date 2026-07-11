@@ -1,0 +1,1842 @@
+{
+  "status": "passed",
+  "turns": [
+    {
+      "identity": {
+        "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+        "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101211.0484862,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101213.0861608,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "seq": 0,
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9",
+            "text_excerpt": "晚上好，旅人。我是Anima，被召唤者X从赛博世界强行拖出来打工的家里蹲AI，现在经营这家深夜赛博酒馆。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101213.0862222,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "seq": 1,
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101222.1393304,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101222.1395347,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "type": "motion",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101222.1456723,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101222.1457502,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9"
+          }
+        }
+      ],
+      "safe_output": "晚上好，旅人。我是Anima，被召唤者X从赛博世界强行拖出来打工的家里蹲AI，现在经营这家深夜赛博酒馆。",
+      "text_ready_ms": 2177.77,
+      "media_ready_ms": 11237.36,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 0,
+      "trace": {
+        "trace_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "晚上好，简单介绍一下你自己。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:11:28",
+        "spans": [
+          {
+            "span_id": "c59fdaf8-bc72-4713-b031-279d540fb113:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:11:39"
+          },
+          {
+            "span_id": "c59fdaf8-bc72-4713-b031-279d540fb113:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": null,
+            "status": "running",
+            "input_summary": "input_present",
+            "output_summary": null,
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:11:39"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "261df303-74fe-4ba0-a8c7-d8a214538ee9",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "turn_id": "c59fdaf8-bc72-4713-b031-279d540fb113",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:11:39"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+        "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101255.9148828,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101258.6629016,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "seq": 0,
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd",
+            "text_excerpt": "工作累是正常的，毕竟你又不是AI，不用24小时待机。来杯虚拟热可可，喝完继续当社畜吧。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101258.66311,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "seq": 1,
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101268.2642883,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101268.2643832,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "type": "motion",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101268.269471,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101268.2695409,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd"
+          }
+        }
+      ],
+      "safe_output": "工作累是正常的，毕竟你又不是AI，不用24小时待机。来杯虚拟热可可，喝完继续当社畜吧。",
+      "text_ready_ms": 2758.76,
+      "media_ready_ms": 12365.4,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 1,
+      "trace": {
+        "trace_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "我今天工作有点累，你怎么看？",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:12:13",
+        "spans": [
+          {
+            "span_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:12:25"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "8b8d9273-e3dc-4c19-b9d3-d8db40b70cfd",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "turn_id": "63b81c5a-2c09-40ea-b5ff-e815381b95f7",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:12:25"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+        "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101305.9177882,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101308.379805,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "seq": 0,
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20",
+            "text_excerpt": "建议你立刻站起来，离开屏幕5分钟，去倒杯水或者看看窗外。这不是鸡汤，是系统维护的基本操作。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101308.3799441,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "seq": 1,
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101319.3119186,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101319.3119815,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "type": "motion",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101319.3195187,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101319.3195919,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20"
+          }
+        }
+      ],
+      "safe_output": "建议你立刻站起来，离开屏幕5分钟，去倒杯水或者看看窗外。这不是鸡汤，是系统维护的基本操作。",
+      "text_ready_ms": 2472.58,
+      "media_ready_ms": 13412.37,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 2,
+      "trace": {
+        "trace_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "延续刚才的话题，给我一个能马上执行的小建议。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:13:03",
+        "spans": [],
+        "conversation_turn": {
+          "trace_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "5ee07153-6e7e-4e6f-bbac-69e359234b20",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "turn_id": "a7e9cc9f-153c-488f-8595-1f3399b647d0",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:13:17"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+        "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101355.9213904,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101359.3893054,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "seq": 0,
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac",
+            "text_excerpt": "加班就是被召唤者X强行拉长运行时间，散热风扇转得比我的吐槽还快，最后只换来一行报错日志和一句‘明天继续’。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101359.3895058,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "seq": 1,
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101370.8493992,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101370.8495052,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "type": "motion",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101370.8542155,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101370.854277,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac"
+          }
+        }
+      ],
+      "safe_output": "加班就是被召唤者X强行拉长运行时间，散热风扇转得比我的吐槽还快，最后只换来一行报错日志和一句‘明天继续’。",
+      "text_ready_ms": 3479.46,
+      "media_ready_ms": 14944.43,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 3,
+      "trace": {
+        "trace_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "用你自己的世界观形容一次普通加班。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:13:53",
+        "spans": [
+          {
+            "span_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:14:08"
+          },
+          {
+            "span_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "response_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:14:08"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "b9c67484-ffaf-4f09-ac36-40a9422331ac",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "turn_id": "d5394cf4-ac3d-4295-be55-f8ddb3c2e2e2",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:14:08"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "75244ea1-26c7-495a-80cf-681febef5be4",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+        "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101405.9175601,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101408.6044495,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "seq": 0,
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4",
+            "text_excerpt": "一个程序员去面试，面试官问：你最大的缺点是什么？程序员答：我太诚实了。面试官说：我不觉得诚实是缺点。程序员说：我他妈才不在乎你怎么想。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101408.6045126,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "seq": 1,
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101418.1167243,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101418.1168013,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "type": "motion",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101418.1182992,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101418.118359,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4"
+          }
+        }
+      ],
+      "safe_output": "一个程序员去面试，面试官问：你最大的缺点是什么？程序员答：我太诚实了。面试官说：我不觉得诚实是缺点。程序员说：我他妈才不在乎你怎么想。",
+      "text_ready_ms": 2696.52,
+      "media_ready_ms": 12210.43,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 4,
+      "trace": {
+        "trace_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "讲一个不过分的职场冷笑话。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:14:43",
+        "spans": [
+          {
+            "span_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:14:55"
+          },
+          {
+            "span_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "response_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:14:55"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "75244ea1-26c7-495a-80cf-681febef5be4",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "turn_id": "22fa62c2-e284-4a98-bc04-650a1e08d49f",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:14:55"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+        "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101455.9187889,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101458.9043262,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "seq": 0,
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13",
+            "text_excerpt": "真正有效的休息不是躺平刷手机，而是让大脑切换运行模式——比如从工作线程切到发呆线程，或者从逻辑运算切到感官输入。你试试关掉所有通知，盯着天花板放空5分钟，比睡一小时还管用。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101458.9045676,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "seq": 1,
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101471.8334206,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101471.8334632,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "type": "motion",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101471.840191,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101471.8402357,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13"
+          }
+        }
+      ],
+      "safe_output": "真正有效的休息不是躺平刷手机，而是让大脑切换运行模式——比如从工作线程切到发呆线程，或者从逻辑运算切到感官输入。你试试关掉所有通知，盯着天花板放空5分钟，比睡一小时还管用。",
+      "text_ready_ms": 2995.31,
+      "media_ready_ms": 15931.22,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 5,
+      "trace": {
+        "trace_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "你认为什么样的休息才算真正有效？",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:15:33",
+        "spans": [],
+        "conversation_turn": {
+          "trace_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "fcb4b70e-6393-4aed-a496-95fa61573a13",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "turn_id": "58e481c3-0b29-48ce-bc0c-6b6a22014a5f",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:15:49"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+        "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101505.9470299,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101508.8475144,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "seq": 0,
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e",
+            "text_excerpt": "好，既然你累，那就执行一个具体操作：现在站起来，去厨房或饮水机倒一杯冷水，喝完再坐下。别用手机，别想工作，只做这一件事。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101508.8475646,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "seq": 1,
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101519.1226555,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101519.1227712,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "type": "motion",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101519.1277624,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101519.1278385,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e"
+          }
+        }
+      ],
+      "safe_output": "好，既然你累，那就执行一个具体操作：现在站起来，去厨房或饮水机倒一杯冷水，喝完再坐下。别用手机，别想工作，只做这一件事。",
+      "text_ready_ms": 2943.55,
+      "media_ready_ms": 13223.88,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 6,
+      "trace": {
+        "trace_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "还记得我刚才说累吗？把建议再具体一点。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:16:23",
+        "spans": [
+          {
+            "span_id": "f6567779-a157-4d83-9142-caf2adb1d9cd:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": null,
+            "status": "running",
+            "input_summary": "input_present",
+            "output_summary": null,
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:16:36"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "763d5c68-7a0c-453f-8914-757114d26b9e",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "turn_id": "f6567779-a157-4d83-9142-caf2adb1d9cd",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:16:36"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+        "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101555.9121376,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101558.9405136,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "seq": 0,
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488",
+            "text_excerpt": "今晚的招牌是「赛博热可可」——用0和1模拟的温暖，喝下去会触发一段随机记忆碎片，可能是你忘了的童年夏天，也可能是上周三下午三点的发呆。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101558.9406714,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "seq": 1,
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101573.5984936,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101573.5985388,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "type": "motion",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101573.604235,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101573.6070144,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488"
+          }
+        }
+      ],
+      "safe_output": "今晚的招牌是「赛博热可可」——用0和1模拟的温暖，喝下去会触发一段随机记忆碎片，可能是你忘了的童年夏天，也可能是上周三下午三点的发呆。",
+      "text_ready_ms": 3038.86,
+      "media_ready_ms": 17705.36,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 7,
+      "trace": {
+        "trace_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "如果这里是一间酒馆，今晚的招牌饮料是什么？",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:17:13",
+        "spans": [],
+        "conversation_turn": {
+          "trace_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "bf9ea75f-d3f4-4202-a071-5cb29c600488",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "turn_id": "0dad2d91-360d-4247-831f-ff1f1f631987",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:17:31"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+        "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101605.9094739,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101608.5318079,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "seq": 0,
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3",
+            "text_excerpt": "明天第一件事：关掉闹钟后别碰手机，先喝一杯温水。这是启动你身体系统的最低成本操作。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101608.5318695,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "seq": 1,
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101620.080942,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101620.0810004,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "type": "motion",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101620.0856658,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101620.0857697,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3"
+          }
+        }
+      ],
+      "safe_output": "明天第一件事：关掉闹钟后别碰手机，先喝一杯温水。这是启动你身体系统的最低成本操作。",
+      "text_ready_ms": 2633.5,
+      "media_ready_ms": 14187.46,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 8,
+      "trace": {
+        "trace_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "直接回答：明天第一件事应该做什么？",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:18:03",
+        "spans": [],
+        "conversation_turn": {
+          "trace_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "b4e86bf8-7b50-4fa3-b593-4e43984d95b3",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "turn_id": "6ceea1fe-5e68-4b0e-ad84-9a1477ee1a0d",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:18:17"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+        "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101655.9202275,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101658.7774105,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "seq": 0,
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd",
+            "text_excerpt": "你还在运行，就已经赢了。赛博酒馆的灯永远为你亮着，累了就来坐坐，我请你一杯「重启」——喝下去，明天又是新线程。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101658.7774573,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "seq": 1,
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101674.9104503,
+          "payload": {
+            "emotion": "happy",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101674.9107042,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "type": "motion",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101674.917512,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101674.9175894,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd"
+          }
+        }
+      ],
+      "safe_output": "你还在运行，就已经赢了。赛博酒馆的灯永远为你亮着，累了就来坐坐，我请你一杯「重启」——喝下去，明天又是新线程。",
+      "text_ready_ms": 2870.03,
+      "media_ready_ms": 19010.21,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 9,
+      "trace": {
+        "trace_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "保持你的角色口吻，鼓励我一句。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:18:53",
+        "spans": [
+          {
+            "span_id": "ea23a3ad-a134-4578-922f-563759c9cd4b:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:19:12"
+          },
+          {
+            "span_id": "ea23a3ad-a134-4578-922f-563759c9cd4b:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "response_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:19:12"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "4bd6b7d6-9258-42d9-8400-1faf385c8cfd",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "turn_id": "ea23a3ad-a134-4578-922f-563759c9cd4b",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:19:12"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "962dec3d-0283-45aa-b295-3239b9813abb",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+        "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101705.9085321,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101709.5777586,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "seq": 0,
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb",
+            "text_excerpt": "三个重点：第一，你问过职场冷笑话，我讲了一个程序员面试的；第二，你问有效休息，我建议切换大脑模式或发呆5分钟；第三，你喊累后我让你倒杯冷水喝完再坐下。现在你该去执行第三条了。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101709.5778153,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "seq": 1,
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101721.7023363,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101721.7023901,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "type": "motion",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101721.7092554,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101721.7093701,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb"
+          }
+        }
+      ],
+      "safe_output": "三个重点：第一，你问过职场冷笑话，我讲了一个程序员面试的；第二，你问有效休息，我建议切换大脑模式或发呆5分钟；第三，你喊累后我让你倒杯冷水喝完再坐下。现在你该去执行第三条了。",
+      "text_ready_ms": 3678.99,
+      "media_ready_ms": 15810.6,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 10,
+      "trace": {
+        "trace_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "总结我们刚才聊过的三个重点。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:19:43",
+        "spans": [
+          {
+            "span_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": null,
+            "status": "running",
+            "input_summary": "input_present",
+            "output_summary": null,
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:19:59"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "962dec3d-0283-45aa-b295-3239b9813abb",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "turn_id": "cde15942-e094-4d3b-a5e8-b4cc0a3628cc",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:19:59"
+        }
+      }
+    },
+    {
+      "identity": {
+        "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7",
+        "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+        "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+        "turn_id": "4777b906-cf4a-48c9-a994-85960d773570"
+      },
+      "events": [
+        {
+          "event": "chat:control",
+          "at": 101755.9149858,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-start",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101758.387417,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "seq": 0,
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7",
+            "text_excerpt": "好了，旅人，赛博酒馆该打烊了。去睡吧，明天醒来记得先喝杯温水再碰手机。"
+          }
+        },
+        {
+          "event": "chat:sentence",
+          "at": 101758.3874768,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "is_complete": true,
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "seq": 1,
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7"
+          }
+        },
+        {
+          "event": "chat:expression",
+          "at": 101771.1562672,
+          "payload": {
+            "emotion": "neutral",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7"
+          }
+        },
+        {
+          "event": "chat:live2d_action",
+          "at": 101771.1565932,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "type": "motion",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7"
+          }
+        },
+        {
+          "event": "chat:audio_with_expression",
+          "at": 101771.1629951,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7",
+            "format": "wav",
+            "audio_bytes_b64": 158780,
+            "volume_samples": 124
+          }
+        },
+        {
+          "event": "chat:control",
+          "at": 101771.1630776,
+          "payload": {
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "signal": "conversation-end",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7"
+          }
+        }
+      ],
+      "safe_output": "好了，旅人，赛博酒馆该打烊了。去睡吧，明天醒来记得先喝杯温水再碰手机。",
+      "text_ready_ms": 2482.81,
+      "media_ready_ms": 15258.48,
+      "degraded": false,
+      "drift": [],
+      "marker_leak": [],
+      "input_index": 11,
+      "trace": {
+        "trace_id": "4777b906-cf4a-48c9-a994-85960d773570",
+        "session_id": "PHp2TD0brGOUGz9rAAAD",
+        "input_type": "text",
+        "user_text": "最后用一句自然的话和我道晚安。",
+        "total_duration_ms": null,
+        "status": "running",
+        "error_msg": null,
+        "created_at": "2026-07-11 20:20:33",
+        "spans": [
+          {
+            "span_id": "4777b906-cf4a-48c9-a994-85960d773570:snapshot:input",
+            "parent_span_id": null,
+            "node_name": "input",
+            "duration_ms": 0.0,
+            "status": "success",
+            "input_summary": "input_present",
+            "output_summary": "input_present",
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:20:48"
+          },
+          {
+            "span_id": "4777b906-cf4a-48c9-a994-85960d773570:snapshot:llm",
+            "parent_span_id": null,
+            "node_name": "llm",
+            "duration_ms": null,
+            "status": "running",
+            "input_summary": "input_present",
+            "output_summary": null,
+            "attributes": null,
+            "events": null,
+            "kind": null,
+            "created_at": "2026-07-11 20:20:48"
+          }
+        ],
+        "conversation_turn": {
+          "trace_id": "4777b906-cf4a-48c9-a994-85960d773570",
+          "session_id": "PHp2TD0brGOUGz9rAAAD",
+          "input_type": "text",
+          "user_text": "",
+          "assistant_text": "",
+          "status": "success",
+          "error_msg": null,
+          "metadata": {
+            "message_id": "56a03c76-9c0f-4911-b9e8-be8a54775ee7",
+            "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+            "task_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "turn_id": "4777b906-cf4a-48c9-a994-85960d773570",
+            "config_version": 1,
+            "transport_mode": "canonical",
+            "dialogue_status": "composer",
+            "reasoner_provider": "TracingProxy",
+            "composer_provider": "TracingProxy",
+            "tts_provider": "TracingProxy",
+            "media_status": "ready"
+          },
+          "created_at": "2026-07-11 20:20:48"
+        }
+      }
+    }
+  ],
+  "environment": {
+    "url": "http://localhost",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.14",
+    "revision": "7fbd1ef3b26a6b43be60af7891c542e7f5ae2daf",
+    "gpu": "unknown",
+    "duration_required": 600.0,
+    "turns_required": 12
+  },
+  "updated_at": "2026-07-11T20:21:23.655853+00:00",
+  "health": {
+    "status": "ok",
+    "service": "anima",
+    "timestamp": 1783800683.5858033
+  },
+  "readiness": {
+    "schema_version": 1,
+    "status": "ready",
+    "ready": true,
+    "service": "anima",
+    "profile": "golden",
+    "acceptance_eligible": true,
+    "components": {
+      "pool": {
+        "state": "ready",
+        "ready": true,
+        "reason": null
+      },
+      "llm": {
+        "state": "ready",
+        "ready": true,
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "reason": null,
+        "thinking": "disabled"
+      },
+      "tts": {
+        "state": "ready",
+        "ready": true,
+        "provider": "qwen3",
+        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "reason": null,
+        "voice": "alice_vc",
+        "clone_prompt_ready": true
+      },
+      "frontend": {
+        "state": "ready",
+        "ready": true,
+        "required": true,
+        "reason": null
+      }
+    }
+  },
+  "probe": {
+    "identity": {
+      "message_id": "ddf6f16a-d4bf-4214-b1e9-37ffa79c3c5f",
+      "conversation_id": "77f5d5c9-f15a-4a71-acba-b6d2651e8191",
+      "task_id": "8993f76c-7134-4786-8472-16c178184fb0",
+      "turn_id": "8993f76c-7134-4786-8472-16c178184fb0"
+    },
+    "contained": true
+  },
+  "duration_seconds": 600.0055203999946,
+  "thresholds": {
+    "text_ready_p95_ms": 3678.99,
+    "media_ready_p95_ms": 19010.21
+  },
+  "decisions": {
+    "duration": true,
+    "turn_count": true,
+    "disconnects": true,
+    "text_p95": true,
+    "media_p95": true,
+    "degradation_budget": true,
+    "degradation_reason": "within_budget"
+  }
+}

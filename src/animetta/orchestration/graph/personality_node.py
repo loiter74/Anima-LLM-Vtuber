@@ -4,12 +4,10 @@ Sits before llm_node in the graph to ensure personality context is available
 before memory injection and LLM inference.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 
-from langgraph.types import RunnableConfig
+from langchain_core.runnables import RunnableConfig
 
 from .state import AgentState
 
@@ -71,6 +69,13 @@ async def personality_node(
             overlay_parts.append(f"当前情绪：{desc}")
 
     personality_overlay = " ".join(overlay_parts) if overlay_parts else ""
+    configurable = config.get("configurable", {}) if config else {}
+    context = configurable.get("service_context")
+    llm = getattr(context, "llm_engine", None)
+    base_prompt = getattr(llm, "system_prompt", "") if llm is not None else ""
+    system_prompt = "\n\n".join(
+        part for part in (base_prompt, personality_overlay) if isinstance(part, str) and part.strip()
+    )
 
     # Extract character knowledge boundaries and MBTI from persona config
     character_known: list[str] = []
@@ -121,7 +126,7 @@ async def personality_node(
     # one-turn correction section so the prompt pipeline can pull her back
     # into character. ``has_drift`` is cheap substring matching; safe to run
     # every turn. See orchestration/prompting/roleplay_guard.py.
-    roleplay_correction = _detect_previous_turn_drift(state)
+    roleplay_correction = _detect_previous_turn_drift(state, config)
 
     if roleplay_correction:
         logger.info(
@@ -132,6 +137,7 @@ async def personality_node(
     return {
         "personality_mode": personality_mode,
         "personality_mood": personality_mood,
+        "system_prompt": system_prompt,
         "metadata": {
             **metadata,
             # Structured runtime personality (new pipeline)
@@ -156,7 +162,9 @@ async def personality_node(
     }
 
 
-def _detect_previous_turn_drift(state: AgentState) -> str:
+def _detect_previous_turn_drift(
+    state: AgentState, config: RunnableConfig | None = None
+) -> str:
     """Return CORRECTION_SECTION if the last AIMessage shows assistant drift.
 
     Returns "" when there is no prior turn or no drift detected.
@@ -169,6 +177,13 @@ def _detect_previous_turn_drift(state: AgentState) -> str:
         CORRECTION_SECTION,
         has_drift,
     )
+
+    if config:
+        session = config.get("configurable", {}).get("conversation_session")
+        window = getattr(session, "completed_window", ())
+        if window:
+            final_response = window[-1][1]
+            return CORRECTION_SECTION if has_drift(final_response) else ""
 
     messages = state.get("messages", []) or []
     for msg in reversed(messages):
