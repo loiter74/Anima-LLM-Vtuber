@@ -732,7 +732,9 @@ async def test_repeated_init_does_not_replace_initialized_but_unready_golden_poo
         await ServicePool.init(config, model_manager=manager)
 
     context_class.assert_called_once_with(model_manager=manager)
-    context.load_from_config.assert_awaited_once_with(config)
+    context.load_from_config.assert_awaited_once_with(
+        config, initialize_memory=False
+    )
     assert ServicePool._llm is first_llm
     assert ServicePool.is_ready() is False
 
@@ -750,7 +752,10 @@ async def test_concurrent_pool_init_shares_one_initialization_task() -> None:
     context.emotion_analyzer = None
     context.audio_processor = None
 
-    async def load_from_config(_config: object) -> None:
+    async def load_from_config(
+        _config: object, *, initialize_memory: bool
+    ) -> None:
+        assert initialize_memory is False
         entered.set()
         await release.wait()
 
@@ -773,7 +778,9 @@ async def test_concurrent_pool_init_shares_one_initialization_task() -> None:
         await asyncio.gather(first, second)
 
     context_class.assert_called_once_with(model_manager=None)
-    context.load_from_config.assert_awaited_once_with(config)
+    context.load_from_config.assert_awaited_once_with(
+        config, initialize_memory=False
+    )
 
 
 @pytest.mark.parametrize("stage", ["load", "warmup", "connectivity"])
@@ -797,7 +804,8 @@ async def test_cancelled_golden_init_cleans_every_partial_stage(stage: str) -> N
     context.audio_processor = None
     context.close = AsyncMock()
 
-    async def load(_config: object) -> None:
+    async def load(_config: object, *, initialize_memory: bool) -> None:
+        assert initialize_memory is False
         if stage == "load":
             entered.set()
             await blocker.wait()
@@ -868,7 +876,10 @@ async def test_shutdown_waits_for_inflight_init_before_final_cleanup() -> None:
         "reason": None,
     }
 
-    async def cancellation_resistant_load(_config: object) -> None:
+    async def cancellation_resistant_load(
+        _config: object, *, initialize_memory: bool
+    ) -> None:
+        assert initialize_memory is False
         entered.set()
         try:
             await release.wait()
@@ -1021,7 +1032,10 @@ async def test_shutdown_gate_prevents_cancellation_resistant_init_ready_writebac
         "reason": None,
     }
 
-    async def cancellation_resistant_load(_config: object) -> None:
+    async def cancellation_resistant_load(
+        _config: object, *, initialize_memory: bool
+    ) -> None:
+        assert initialize_memory is False
         entered.set()
         try:
             await release_init.wait()

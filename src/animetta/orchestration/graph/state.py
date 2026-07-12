@@ -37,6 +37,11 @@ class AgentState(TypedDict):
     media_status: Any | None
     emotion: str | None
     emotion_vad: tuple[float, float, float] | None  # VAD vector from emotion_node
+    # Explicit channels prevent a previous model response from biasing recall.
+    conversation_emotion: str | None
+    conversation_emotion_vad: tuple[float, float, float] | None
+    response_emotion: str | None
+    response_emotion_vad: tuple[float, float, float] | None
 
     # Control
     control_signal: str | None
@@ -118,6 +123,10 @@ def create_initial_state(
         "media_status": None,
         "emotion": None,
         "emotion_vad": None,
+        "conversation_emotion": None,
+        "conversation_emotion_vad": None,
+        "response_emotion": None,
+        "response_emotion_vad": None,
         "control_signal": None,
         "session_id": session_id,
         "persona": persona or {},

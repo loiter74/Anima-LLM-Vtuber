@@ -25,6 +25,12 @@ from .text_utils import STOPWORDS, extract_title_phrases, parse_tags
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "MEME_IDENTIFY_SYSTEM_PROMPT",
+    "MEME_IDENTIFY_USER_PROMPT",
+    "MemeCollector",
+]
+
 
 class MemeCollector:
     """从 B 站热门视频采集梗候选。

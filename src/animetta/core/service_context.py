@@ -52,6 +52,8 @@ class ServiceContext:
         # Memory system
         self.audio_processor: AudioProcessorInterface | None = None
         self.memory_system: LivingMemorySystem | None = None
+        self.memory_runtime: Any | None = None
+        self._owns_memory_system = True
 
         # Session state
         self.session_id: str | None = None
@@ -139,7 +141,12 @@ class ServiceContext:
             raise RuntimeError("Golden profile requires a real TTS engine")
 
     # Initialization methods
-    async def load_from_config(self, config: AppConfig) -> None:
+    async def load_from_config(
+        self,
+        config: AppConfig,
+        *,
+        initialize_memory: bool = True,
+    ) -> None:
         """Load all services from config"""
         self.config = config
         logger.info(f"[{self.session_id}] Loading services from config...")
@@ -151,7 +158,8 @@ class ServiceContext:
         await self.init_local_llm(config.local_llm, app_config=config)
         await self.init_vad(config.vad)
         await self.init_audio_processor()
-        await self.init_memory()
+        if initialize_memory:
+            await self.init_memory()
         await self.init_emotion_analyzer(config)
 
         if self._is_golden_profile(config):
@@ -443,10 +451,22 @@ class ServiceContext:
                 db_path="memory_db/living_memory.sqlite"
             )
             await self.memory_system.initialize()
+            self._owns_memory_system = True
             logger.info(f"[{self.session_id}] LivingMemory V2 initialized")
         except Exception as e:
             logger.warning(f"[{self.session_id}] Memory system initialization failed: {e}")
             self.memory_system = None
+
+    def attach_memory_system(
+        self,
+        memory_system: LivingMemorySystem,
+        *,
+        owned: bool = False,
+    ) -> None:
+        """Attach an initialized memory system with explicit ownership."""
+
+        self.memory_system = memory_system
+        self._owns_memory_system = owned
 
     async def init_emotion_analyzer(self, config: AppConfig) -> None:
         """Initialize emotion analyzer"""
@@ -489,13 +509,15 @@ class ServiceContext:
             await asyncio.gather(warmup_task, return_exceptions=True)
             self._model_warmup_task = None
 
-        if self.memory_system:
+        if self.memory_system and self._owns_memory_system:
             try:
                 await self.memory_system.shutdown()
                 self.memory_system = None
                 logger.info(f"[{self.session_id}] LivingMemory V2 closed")
             except Exception as e:
                 logger.warning(f"[{self.session_id}] Memory shutdown failed: {e}")
+        elif self.memory_system:
+            self.memory_system = None
 
         # Only close per-session engines (VAD), NOT shared engines from pool
         # Shared engines are managed by ServicePool and shared across sessions

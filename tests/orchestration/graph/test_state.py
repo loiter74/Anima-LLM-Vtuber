@@ -46,6 +46,10 @@ class TestAgentStateKeys:
             "media_status",
             "emotion",
             "emotion_vad",
+            "conversation_emotion",
+            "conversation_emotion_vad",
+            "response_emotion",
+            "response_emotion_vad",
             # Control
             "control_signal",
             # Metadata
@@ -119,6 +123,10 @@ class TestCreateInitialState:
         assert state["response_chunks"] == []
         assert state["tts_audio"] is None
         assert state["emotion"] is None
+        assert state["conversation_emotion"] is None
+        assert state["conversation_emotion_vad"] is None
+        assert state["response_emotion"] is None
+        assert state["response_emotion_vad"] is None
         assert state["control_signal"] is None
         assert state["persona"] == {}
         assert state["channel_id"] is None

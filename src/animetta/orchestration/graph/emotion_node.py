@@ -21,7 +21,15 @@ def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
 def _emotion_result(emotion: str) -> dict[str, Any]:
     """Build result dict with both discrete emotion and VAD vector."""
     vad = VAD_MAP.get(emotion, VAD_MAP["neutral"])
-    return {"emotion": emotion, "emotion_vad": vad.to_tuple()}
+    values = vad.to_tuple()
+    return {
+        # Compatibility aliases used by Live2D/output consumers.
+        "emotion": emotion,
+        "emotion_vad": values,
+        # Response emotion must not leak into the next turn's recall context.
+        "response_emotion": emotion,
+        "response_emotion_vad": values,
+    }
 
 
 def _timed_result(state: AgentState, started: float, emotion: str) -> dict[str, Any]:

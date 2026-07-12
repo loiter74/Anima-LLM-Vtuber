@@ -77,7 +77,8 @@ class TestLivingMemorySystem:
             "title": atom.content[:80],
             "content": atom.content,
             "page_type": "source",
-            "tags": ["s1"],
+            # Transport/session ids are trace metadata, never semantic tags.
+            "tags": [],
             "updated_at": atom.rewritten_at.isoformat(),
         }]
 

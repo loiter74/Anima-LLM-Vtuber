@@ -44,7 +44,12 @@ async def personality_node(
     personality_mode = "streaming" if "bilibili" in (channel_id or "").lower() else "default"
 
     # Determine mood
-    emotion = state.get("emotion") or metadata.get("emotion")
+    emotion = (
+        state.get("conversation_emotion")
+        or metadata.get("conversation_emotion")
+        or state.get("emotion")
+        or metadata.get("emotion")
+    )
     personality_mood = emotion if emotion and emotion in MOOD_ORDER else current_mood
 
     # Build personality overlay instruction
@@ -86,17 +91,14 @@ async def personality_node(
     mbti_jp: int = 50
 
     try:
-        config_store = state.get("_config", {})
-        persona_cfg = getattr(config_store, "persona_config", None)
-        if persona_cfg is None:
-            # Try loading from global config
-            persona_name = getattr(config_store, "persona_name", None)
-            if persona_name:
-                from animetta.config.persona.base import PersonaConfig
-                try:
-                    persona_cfg = PersonaConfig.load(persona_name)
-                except Exception:
-                    persona_cfg = None
+        configurable = config.get("configurable", {}) if config else {}
+        persona_cfg = configurable.get("persona_config")
+        service_context = configurable.get("service_context")
+        app_config = getattr(service_context, "config", None)
+        if persona_cfg is None and app_config is not None:
+            get_persona = getattr(app_config, "get_persona", None)
+            if callable(get_persona):
+                persona_cfg = get_persona()
 
         if persona_cfg:
             # Knowledge boundaries

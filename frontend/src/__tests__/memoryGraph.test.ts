@@ -256,6 +256,19 @@ describe('parseEdges', () => {
     expect(edges).toHaveLength(0)
   })
 
+  it('omits relations whose endpoint is outside the current page', () => {
+    const pages = [{
+      ...mockPages[0],
+      relations: [{
+        source_id: mockPages[0].path,
+        target_id: 'not-loaded-on-this-page',
+        relation_type: 'EXTENDS',
+      }],
+    }]
+
+    expect(parseEdges(pages)).toEqual([])
+  })
+
   it('generates human-readable labels', () => {
     const edges = parseEdges(mockPagesWithRelations)
 
@@ -275,6 +288,7 @@ describe('parseEdges', () => {
     const pages = [
       {
         ...mockPages[0],
+        path: 'a',
         relations: [
           {
             source_id: 'a',
@@ -283,6 +297,7 @@ describe('parseEdges', () => {
           },
         ],
       },
+      { ...mockPages[1], path: 'b', relations: [] },
     ]
 
     const edges = parseEdges(pages)

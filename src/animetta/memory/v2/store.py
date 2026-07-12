@@ -13,7 +13,13 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
-from animetta.memory.v2.atom import Layer, MemoryAtom, Relation
+from animetta.memory.v2.atom import (
+    Layer,
+    MemoryAtom,
+    MemoryScope,
+    MemoryVisibility,
+    Relation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,22 +40,47 @@ class AtomStore:
     Reuses existing SQLite patterns from storage/sqlite.py.
     """
 
-    def __init__(self, db_path: str = "memory_db/living_memory.sqlite"):
+    SCHEMA_VERSION = 1
+
+    def __init__(
+        self,
+        db_path: str = "memory_db/living_memory.sqlite",
+        *,
+        enable_chroma: bool = True,
+    ):
         self.db_path = db_path
+        self.enable_chroma = enable_chroma
         self._conn: sqlite3.Connection | None = None
         self._chroma_client: Any = None
         self._chroma_collection: Any = None
+        self._index_degraded = False
+        self._index_last_error = ""
 
     async def initialize(self) -> None:
         self._conn = sqlite3.connect(self.db_path)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        legacy_schema = self._is_legacy_schema()
         self._create_tables()
+        self._migrate_schema(legacy_schema=legacy_schema)
         self._init_chroma()
+
+    def _is_legacy_schema(self) -> bool:
+        assert self._conn is not None
+        exists = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_atoms'"
+        ).fetchone()
+        if not exists:
+            return False
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
+        }
+        return "scope" not in columns
 
     def _init_chroma(self) -> None:
         """Initialize Chroma vector store if available."""
-        if not _HAS_CHROMA:
+        if not self.enable_chroma or not _HAS_CHROMA:
             return
         try:
             self._chroma_client = chromadb.Client(Settings(
@@ -92,19 +123,17 @@ class AtomStore:
         """Add or update atom embedding in Chroma."""
         if not self._chroma_collection:
             return
-        try:
-            text = atom.summary or atom.content
-            self._chroma_collection.upsert(
-                ids=[atom.id],
-                documents=[text],
-                metadatas=[{
-                    "layer": atom.layer.value,
-                    "confidence": atom.confidence,
-                    "salience": atom.salience,
-                }],
-            )
-        except Exception as e:
-            logger.debug(f"Chroma upsert failed (non-fatal): {e}")
+        text = atom.summary or atom.content
+        self._chroma_collection.upsert(
+            ids=[atom.id],
+            documents=[text],
+            metadatas=[{
+                "layer": atom.layer.value,
+                "scope": atom.scope.value,
+                "confidence": atom.confidence,
+                "salience": atom.salience,
+            }],
+        )
 
     async def close(self) -> None:
         if self._conn:
@@ -133,6 +162,13 @@ class AtomStore:
                 source_ids TEXT DEFAULT '[]',
                 relations TEXT DEFAULT '[]',
                 tags TEXT DEFAULT '[]',
+                scope TEXT NOT NULL DEFAULT 'community',
+                visibility TEXT NOT NULL DEFAULT 'internal',
+                subject_ids TEXT NOT NULL DEFAULT '[]',
+                origin TEXT NOT NULL DEFAULT '{}',
+                trust_level REAL NOT NULL DEFAULT 0.5,
+                retention_policy TEXT NOT NULL DEFAULT 'standard',
+                index_state TEXT NOT NULL DEFAULT 'pending',
                 decay_rate REAL DEFAULT 0.1,
                 forget_at TEXT,
                 is_archived INTEGER DEFAULT 0
@@ -162,7 +198,220 @@ class AtomStore:
                 emotion_dominance REAL,
                 PRIMARY KEY (atom_id, version)
             );
+
+            CREATE TABLE IF NOT EXISTS memory_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_index_outbox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                atom_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         """)
+
+    def _migrate_schema(self, *, legacy_schema: bool) -> None:
+        """Apply additive migrations and preserve all legacy atom data."""
+
+        assert self._conn is not None
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
+        }
+        additions = {
+            "scope": "TEXT NOT NULL DEFAULT 'community'",
+            "visibility": "TEXT NOT NULL DEFAULT 'internal'",
+            "subject_ids": "TEXT NOT NULL DEFAULT '[]'",
+            "origin": "TEXT NOT NULL DEFAULT '{}'",
+            "trust_level": "REAL NOT NULL DEFAULT 0.5",
+            "retention_policy": "TEXT NOT NULL DEFAULT 'standard'",
+            "index_state": "TEXT NOT NULL DEFAULT 'pending'",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                self._conn.execute(
+                    f"ALTER TABLE memory_atoms ADD COLUMN {name} {declaration}"
+                )
+
+        if legacy_schema:
+            self._conn.execute(
+                "UPDATE memory_atoms SET origin = ? WHERE origin = '{}'",
+                (json.dumps({"legacy": True}),),
+            )
+            # A legacy database may not have populated the newly-created FTS table.
+            self._conn.execute("DELETE FROM memory_fts")
+            self._conn.execute(
+                "INSERT INTO memory_fts(rowid, content, summary) "
+                "SELECT rowid, content, COALESCE(summary, '') FROM memory_atoms"
+            )
+
+        self._conn.execute(
+            "INSERT OR IGNORE INTO memory_metadata(key, value) VALUES ('revision', '0')"
+        )
+        self._conn.execute(
+            "INSERT INTO memory_metadata(key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(self.SCHEMA_VERSION),),
+        )
+        self._conn.commit()
+
+    async def get_schema_version(self) -> int:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT value FROM memory_metadata WHERE key='schema_version'"
+        ).fetchone()
+        return int(row["value"]) if row else 0
+
+    async def get_revision(self) -> int:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT value FROM memory_metadata WHERE key='revision'"
+        ).fetchone()
+        return int(row["value"]) if row else 0
+
+    def _next_revision(self) -> int:
+        assert self._conn is not None
+        current = self._conn.execute(
+            "SELECT value FROM memory_metadata WHERE key='revision'"
+        ).fetchone()
+        revision = (int(current["value"]) if current else 0) + 1
+        self._conn.execute(
+            "INSERT INTO memory_metadata(key, value) VALUES ('revision', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(revision),),
+        )
+        return revision
+
+    def _enqueue_index(self, atom_id: str, operation: str, revision: int) -> None:
+        assert self._conn is not None
+        now = datetime.now(UTC).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO memory_index_outbox(
+                atom_id, operation, revision, status, created_at, updated_at
+            ) VALUES (?, ?, ?, 'pending', ?, ?)
+            """,
+            (atom_id, operation, revision, now, now),
+        )
+
+    async def get_index_backlog(self) -> int:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS count FROM memory_index_outbox WHERE status='pending'"
+        ).fetchone()
+        return int(row["count"])
+
+    def get_index_health(self) -> dict[str, object]:
+        """Return synchronous derived-index health for probes and runtime status."""
+
+        return {
+            "degraded": self._index_degraded,
+            "last_error": self._index_last_error,
+        }
+
+    async def process_index_outbox(self, limit: int = 100) -> dict[str, int]:
+        """Apply pending vector-index updates and retain failures for retry."""
+
+        assert self._conn is not None
+        rows = self._conn.execute(
+            "SELECT * FROM memory_index_outbox WHERE status='pending' "
+            "ORDER BY revision, id LIMIT ?",
+            (limit,),
+        ).fetchall()
+        succeeded = 0
+        failed = 0
+        for row in rows:
+            atom = await self.get(row["atom_id"])
+            if atom is None:
+                self._conn.execute(
+                    "UPDATE memory_index_outbox SET status='done', updated_at=? WHERE id=?",
+                    (datetime.now(UTC).isoformat(), row["id"]),
+                )
+                succeeded += 1
+                continue
+            try:
+                await self._upsert_chroma(atom)
+            except Exception as exc:
+                message = str(exc)
+                self._conn.execute(
+                    "UPDATE memory_index_outbox SET attempts=attempts+1, last_error=?, "
+                    "updated_at=? WHERE id=?",
+                    (message, datetime.now(UTC).isoformat(), row["id"]),
+                )
+                self._conn.execute(
+                    "UPDATE memory_atoms SET index_state='pending' WHERE id=?",
+                    (atom.id,),
+                )
+                self._index_degraded = True
+                self._index_last_error = message
+                logger.warning("Memory vector indexing failed for %s: %s", atom.id, message)
+                failed += 1
+            else:
+                self._conn.execute(
+                    "UPDATE memory_index_outbox SET status='done', last_error=NULL, "
+                    "updated_at=? WHERE id=?",
+                    (datetime.now(UTC).isoformat(), row["id"]),
+                )
+                self._conn.execute(
+                    "UPDATE memory_atoms SET index_state='ready' WHERE id=?",
+                    (atom.id,),
+                )
+                succeeded += 1
+
+        self._conn.commit()
+        if failed == 0 and await self.get_index_backlog() == 0:
+            self._index_degraded = False
+            self._index_last_error = ""
+        return {"processed": len(rows), "succeeded": succeeded, "failed": failed}
+
+    async def rebuild_indexes(self) -> int:
+        """Rebuild FTS5 and Chroma from canonical active SQLite atoms."""
+
+        assert self._conn is not None
+        atoms = await self.get_all_active()
+        self._conn.execute("DELETE FROM memory_fts")
+        self._conn.execute(
+            "INSERT INTO memory_fts(rowid, content, summary) "
+            "SELECT rowid, content, COALESCE(summary, '') "
+            "FROM memory_atoms WHERE is_archived=0"
+        )
+
+        failures: list[str] = []
+        for atom in atoms:
+            try:
+                await self._upsert_chroma(atom)
+            except Exception as exc:
+                failures.append(f"{atom.id}: {exc}")
+                self._conn.execute(
+                    "UPDATE memory_atoms SET index_state='pending' WHERE id=?",
+                    (atom.id,),
+                )
+            else:
+                self._conn.execute(
+                    "UPDATE memory_atoms SET index_state='ready' WHERE id=?",
+                    (atom.id,),
+                )
+
+        if failures:
+            self._index_degraded = True
+            self._index_last_error = "; ".join(failures)
+        else:
+            self._conn.execute(
+                "UPDATE memory_index_outbox SET status='done', last_error=NULL, "
+                "updated_at=? WHERE status='pending'",
+                (datetime.now(UTC).isoformat(),),
+            )
+            self._index_degraded = False
+            self._index_last_error = ""
+        self._conn.commit()
+        return len(atoms)
 
     # ── CRUD ──
 
@@ -172,9 +421,11 @@ class AtomStore:
             INSERT INTO memory_atoms (id, layer, content, summary, occurred_at,
                 rewritten_at, version, version_chain, confidence, salience,
                 retrieval_count, last_accessed_at, emotion_valence, emotion_arousal,
-                emotion_dominance, source_ids, relations, tags, decay_rate,
-                forget_at, is_archived)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                emotion_dominance, source_ids, relations, tags, scope, visibility,
+                subject_ids, origin, trust_level, retention_policy, index_state,
+                decay_rate, forget_at, is_archived)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?)
         """, (
             atom.id, atom.layer.value, atom.content, atom.summary,
             atom.occurred_at.isoformat(),
@@ -185,18 +436,23 @@ class AtomStore:
             atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance,
             json.dumps(atom.source_ids),
             json.dumps([self._relation_to_dict(r) for r in atom.relations]),
-            json.dumps(atom.tags), atom.decay_rate,
+            json.dumps(atom.tags), atom.scope.value, atom.visibility.value,
+            json.dumps(atom.subject_ids), json.dumps(atom.origin), atom.trust_level,
+            atom.retention_policy, atom.index_state, atom.decay_rate,
             atom.forget_at.isoformat() if atom.forget_at else None,
             1 if atom.is_archived else 0,
         ))
-        self._conn.commit()
         # Sync FTS5 index
+        rowid = self._conn.execute(
+            "SELECT rowid FROM memory_atoms WHERE id=?", (atom.id,)
+        ).fetchone()[0]
         self._conn.execute(
             "INSERT INTO memory_fts(rowid, content, summary) VALUES (?, ?, ?)",
-            (self._conn.execute("SELECT last_insert_rowid()").fetchone()[0],
-             atom.content, atom.summary or ''),
+            (rowid, atom.content, atom.summary or ''),
         )
-        await self._upsert_chroma(atom)
+        revision = self._next_revision()
+        self._enqueue_index(atom.id, "upsert", revision)
+        self._conn.commit()
         return atom.id
 
     async def get(self, atom_id: str) -> MemoryAtom | None:
@@ -215,7 +471,9 @@ class AtomStore:
                 version=?, version_chain=?, confidence=?, salience=?,
                 retrieval_count=?, last_accessed_at=?, emotion_valence=?,
                 emotion_arousal=?, emotion_dominance=?, decay_rate=?,
-                forget_at=?, is_archived=?, relations=?, tags=?, source_ids=?
+                forget_at=?, is_archived=?, relations=?, tags=?, source_ids=?,
+                scope=?, visibility=?, subject_ids=?, origin=?, trust_level=?,
+                retention_policy=?, index_state=?
             WHERE id=?
         """, (
             atom.content, atom.summary,
@@ -229,16 +487,20 @@ class AtomStore:
             1 if atom.is_archived else 0,
             json.dumps([self._relation_to_dict(r) for r in atom.relations]),
             json.dumps(atom.tags), json.dumps(atom.source_ids),
+            atom.scope.value, atom.visibility.value, json.dumps(atom.subject_ids),
+            json.dumps(atom.origin), atom.trust_level, atom.retention_policy,
+            atom.index_state,
             atom.id,
         ))
-        self._conn.commit()
         # Update FTS5 index
         self._conn.execute(
             "UPDATE memory_fts SET content=?, summary=? WHERE rowid=("
             "SELECT rowid FROM memory_atoms WHERE id=?)",
             (atom.content, atom.summary or '', atom.id),
         )
-        await self._upsert_chroma(atom)
+        revision = self._next_revision()
+        self._enqueue_index(atom.id, "upsert", revision)
+        self._conn.commit()
 
     async def create_version(
         self, atom_id: str, new_summary: str,
@@ -394,6 +656,13 @@ class AtomStore:
                 for d in json.loads(row["relations"])
             ],
             tags=json.loads(row["tags"]),
+            scope=MemoryScope(row["scope"]),
+            visibility=MemoryVisibility(row["visibility"]),
+            subject_ids=json.loads(row["subject_ids"]),
+            origin=json.loads(row["origin"]),
+            trust_level=row["trust_level"],
+            retention_policy=row["retention_policy"],
+            index_state=row["index_state"],
             decay_rate=row["decay_rate"],
             forget_at=(
                 datetime.fromisoformat(row["forget_at"])

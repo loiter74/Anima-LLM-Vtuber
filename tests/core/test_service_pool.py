@@ -275,7 +275,7 @@ class TestInit:
         """Engines opened before a failed init are closed instead of leaked."""
         mock_ctx = _mock_context_base(None, None, None)
 
-        async def fail_after_shared_engines(_config):
+        async def fail_after_shared_engines(_config, **_kwargs):
             mock_ctx.llm_engine = mock_llm
             mock_ctx.tts_engine = mock_tts
             mock_ctx.asr_engine = mock_asr
@@ -305,7 +305,7 @@ class TestInit:
         mock_ctx = _mock_context_base(None, None, None)
         mock_llm.close.side_effect = RuntimeError("close failed")
 
-        async def fail_after_shared_engines(_config):
+        async def fail_after_shared_engines(_config, **_kwargs):
             mock_ctx.llm_engine = mock_llm
             mock_ctx.tts_engine = mock_tts
             mock_ctx.asr_engine = mock_asr

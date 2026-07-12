@@ -9,10 +9,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langgraph.types import RunnableConfig
 
+from animetta.memory.v2.context import MemoryContext
 from animetta.orchestration.graph import llm_node
 from animetta.orchestration.graph.llm_node import (
     FALLBACK_RESPONSE,
     _enforce_persona_verbal_tics,
+    _get_recall_emotion,
+    _retrieve_memory_context,
 )
 from animetta.orchestration.graph.state import create_initial_state
 from animetta.services.humor import HumorConfig
@@ -45,6 +48,43 @@ def _humor_json(candidate: str, *, risk: str = "safe") -> str:
         },
         ensure_ascii=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_memory_context_forwards_stable_identity():
+    middleware = MagicMock()
+    middleware.before_llm_call = AsyncMock(return_value=("memory", {"revision": 3}))
+    context = MemoryContext(
+        actor_id="bilibili:42",
+        conversation_id="conversation-1",
+        stream_id="live-7",
+        persona_id="anima",
+        channel="bilibili",
+        connection_id="socket-a",
+    )
+    config = RunnableConfig(configurable={"memory_middleware": middleware})
+
+    result = await _retrieve_memory_context(
+        session_id="socket-a",
+        query="你记得我吗",
+        config=config,
+        context=context,
+    )
+
+    assert result == ("memory", {"revision": 3})
+    assert middleware.before_llm_call.await_args.kwargs["context"] is context
+
+
+def test_recall_emotion_never_reuses_previous_response_emotion():
+    state = create_initial_state(session_id="socket-a")
+    state["conversation_emotion_vad"] = (0.1, 0.2, 0.3)
+    state["response_emotion_vad"] = (0.9, 0.9, 0.9)
+    state["emotion_vad"] = (0.9, 0.9, 0.9)
+
+    emotion = _get_recall_emotion(state)
+
+    assert emotion is not None
+    assert emotion.to_tuple() == (0.1, 0.2, 0.3)
 
 
 class _GraphHumorLLM:

@@ -5,11 +5,8 @@
  * graph structures. Designed around the actual `on_get_wiki_pages` handler in
  * `src/animetta/orchestration/server/routes.py`.
  *
- * The API currently returns:
- *   { path, title, page_type, content, tags, updated_at }
- *
- * When relations and salience are added to the serialization, these parsers
- * will consume them transparently.
+ * The canonical API includes scope, provenance, confidence, salience and
+ * relations. Legacy wiki pages remain accepted during migration.
  */
 
 import type { SimulationNodeDatum } from 'd3-force'
@@ -22,7 +19,7 @@ export interface MemoryNode extends SimulationNodeDatum {
   category: string       // derived from page_type
   importance: number     // 0-1, determines node radius (8-32px)
   content: string        // full page content for detail panel
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 // ── Graph edge ─────────────────────────────────────────────────────────
@@ -45,6 +42,7 @@ export interface MemoryGraphData {
 // ── Internal: shape of a page from the API (with optional future fields)
 
 interface RawPage {
+  id?: string
   path: string
   title: string
   page_type: string
@@ -53,12 +51,15 @@ interface RawPage {
   updated_at: string
   // Optional: added when backend serializes atom.salience
   salience?: number
+  confidence?: number
+  scope?: string
+  origin?: Record<string, string>
   // Optional: added when backend serializes atom.relations
   relations?: Array<{
     source_id: string
     target_id: string
     relation_type: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }>
 }
 
@@ -68,7 +69,7 @@ interface RawRelation {
   source_id: string
   target_id: string
   relation_type: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 // ── Category mapping ──────────────────────────────────────────────────
@@ -144,6 +145,9 @@ function computeImportance(page: RawPage): number {
   if (typeof page.salience === 'number') {
     return Math.max(0, Math.min(1, page.salience))
   }
+  if (typeof page.confidence === 'number') {
+    return Math.max(0, Math.min(1, page.confidence))
+  }
 
   const tagSet = new Set(page.tags.map((t) => t.toLowerCase()))
 
@@ -196,6 +200,10 @@ export function parseNodes(pages: RawPage[]): MemoryNode[] {
       page_type: page.page_type,
       tags: page.tags,
       updated_at: page.updated_at,
+      scope: page.scope,
+      origin: page.origin,
+      confidence: page.confidence,
+      salience: page.salience,
     },
   }))
 }
@@ -214,6 +222,7 @@ export function parseNodes(pages: RawPage[]): MemoryNode[] {
  */
 export function parseEdges(pages: RawPage[]): MemoryEdge[] {
   const seen = new Map<string, MemoryEdge>()
+  const visibleIds = new Set(pages.map(page => page.id ?? page.path))
 
   for (const page of pages) {
     const relations: RawRelation[] = page.relations ?? []
@@ -221,6 +230,7 @@ export function parseEdges(pages: RawPage[]): MemoryEdge[] {
     for (const rel of relations) {
       // Skip self-referential relations
       if (rel.source_id === rel.target_id) continue
+      if (!visibleIds.has(rel.source_id) || !visibleIds.has(rel.target_id)) continue
 
       const key = edgeKey(rel.source_id, rel.target_id)
 

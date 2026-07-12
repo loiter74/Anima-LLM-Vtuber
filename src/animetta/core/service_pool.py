@@ -119,7 +119,7 @@ class ServicePool:
         ctx = ServiceContext(model_manager=model_manager)
         ctx.session_id = "__pool__"
         try:
-            await ctx.load_from_config(config)
+            await ctx.load_from_config(config, initialize_memory=False)
             cls._llm = ctx.llm_engine
             cls._tts = ctx.tts_engine
             cls._asr = ctx.asr_engine

@@ -14,9 +14,17 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from animetta.memory.v2.atom import Layer, MemoryAtom, Relation, RelationType
+from animetta.memory.v2.atom import (
+    Layer,
+    MemoryAtom,
+    MemoryScope,
+    MemoryVisibility,
+    Relation,
+    RelationType,
+)
 from animetta.memory.v2.character_filter import CharacterMemoryFilter
 from animetta.memory.v2.compile import COMPILE_TRIGGERS, CompileEngine
+from animetta.memory.v2.context import MemoryContext
 from animetta.memory.v2.emotion_field import EmotionalField, VADVector
 from animetta.memory.v2.metabolism import MetabolismScheduler
 from animetta.memory.v2.reconsolidation import get_reconsolidation_client
@@ -39,6 +47,7 @@ class RecallResult:
     atoms: list[MemoryAtom] = field(default_factory=list)
     profile: dict = field(default_factory=dict)
     memes: list[MemoryAtom] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
 
 class LivingMemorySystem:
@@ -121,6 +130,163 @@ class LivingMemorySystem:
         atoms = await self.store.get_all_active(limit=limit)
         return [self._atom_to_wiki_page(atom) for atom in atoms]
 
+    async def list_memories(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+        scope: str | None = None,
+    ) -> dict[str, object]:
+        """Return a revisioned, cursor-paginated canonical atom page."""
+        try:
+            offset = int(cursor or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("cursor must be a non-negative integer") from exc
+        if offset < 0:
+            raise ValueError("cursor must be a non-negative integer")
+        page_size = max(1, min(int(limit), 100))
+        atoms = await self.store.get_all_active(limit=1000)
+        if scope:
+            try:
+                expected_scope = MemoryScope(scope)
+            except ValueError as exc:
+                raise ValueError(f"unknown memory scope: {scope}") from exc
+            atoms = [atom for atom in atoms if atom.scope is expected_scope]
+        page = atoms[offset: offset + page_size]
+        next_offset = offset + len(page)
+        index_health = self.store.get_index_health()
+        return {
+            "items": [self.atom_to_dto(atom) for atom in page],
+            "revision": await self.store.get_revision(),
+            "next_cursor": str(next_offset) if next_offset < len(atoms) else None,
+            "total": len(atoms),
+            "health": {
+                "degraded": bool(index_health["degraded"]),
+                "last_error": index_health["last_error"] or "",
+                "index_backlog": await self.store.get_index_backlog(),
+            },
+        }
+
+    async def get_memory(self, atom_id: str) -> dict[str, object] | None:
+        atom = await self.store.get(atom_id)
+        return self.atom_to_dto(atom) if atom is not None else None
+
+    async def search_memories(
+        self,
+        query: str,
+        *,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        if not query.strip():
+            raise ValueError("query is required")
+        atoms = await self.store.hybrid_search(query, max(1, min(limit, 100)))
+        return {
+            "items": [self.atom_to_dto(atom) for atom in atoms],
+            "revision": await self.store.get_revision(),
+            "next_cursor": None,
+            "total": len(atoms),
+        }
+
+    async def pin_memory(
+        self,
+        atom_id: str,
+        *,
+        pinned: bool,
+    ) -> dict[str, object] | None:
+        atom = await self.store.get(atom_id)
+        if atom is None:
+            return None
+        atom.retention_policy = "pinned" if pinned else "standard"
+        if pinned:
+            atom.forget_at = None
+            atom.salience = max(atom.salience, 0.95)
+        await self.store.update(atom)
+        return self.atom_to_dto(atom)
+
+    async def forget_memory(self, atom_id: str) -> dict[str, object] | None:
+        atom = await self.store.get(atom_id)
+        if atom is None:
+            return None
+        atom.is_archived = True
+        await self.store.update(atom)
+        return self.atom_to_dto(atom)
+
+    async def change_memory(
+        self,
+        atom_id: str,
+        *,
+        summary: str,
+    ) -> dict[str, object] | None:
+        corrected = summary.strip()
+        if not corrected:
+            raise ValueError("summary is required")
+        atom = await self.store.get(atom_id)
+        if atom is None:
+            return None
+        updated = await self.store.create_version(
+            atom_id,
+            corrected,
+            max(atom.confidence, 0.9),
+            (
+                atom.emotion_valence,
+                atom.emotion_arousal,
+                atom.emotion_dominance,
+            ),
+        )
+        updated.origin = {**updated.origin, "corrected": True}
+        updated.trust_level = 1.0
+        await self.store.update(updated)
+        return self.atom_to_dto(updated)
+
+    @staticmethod
+    def atom_to_dto(atom: MemoryAtom) -> dict[str, object]:
+        """Serialize the single canonical backend/frontend atom contract."""
+        layer_to_type = {
+            Layer.RAW: "source",
+            Layer.EPISODIC: "entity",
+            Layer.SEMANTIC: "concept",
+            Layer.EMERGENT: "synthesis",
+        }
+        updated_at = atom.rewritten_at or atom.occurred_at
+        return {
+            "id": atom.id,
+            "path": atom.id,
+            "title": atom.summary or atom.content[:80],
+            "content": atom.content,
+            "summary": atom.summary,
+            "layer": atom.layer.name.lower(),
+            "page_type": layer_to_type.get(atom.layer, atom.layer.name.lower()),
+            "scope": atom.scope.value,
+            "visibility": atom.visibility.value,
+            "subject_ids": list(atom.subject_ids),
+            "origin": dict(atom.origin),
+            "confidence": float(atom.confidence),
+            "salience": float(atom.salience),
+            "trust_level": float(atom.trust_level),
+            "retention_policy": atom.retention_policy,
+            "index_state": atom.index_state,
+            "relations": [
+                {
+                    "source_id": relation.source_id,
+                    "target_id": relation.target_id,
+                    "relation_type": (
+                        relation.relation_type.value
+                        if hasattr(relation.relation_type, "value")
+                        else str(relation.relation_type)
+                    ),
+                    "created_at": relation.created_at.isoformat(),
+                    "metadata": dict(relation.metadata),
+                }
+                for relation in atom.relations
+            ],
+            "tags": list(atom.tags),
+            "source_ids": list(atom.source_ids),
+            "version": atom.version,
+            "is_archived": atom.is_archived,
+            "occurred_at": atom.occurred_at.isoformat(),
+            "updated_at": updated_at.isoformat(),
+        }
+
     @staticmethod
     def _atom_to_wiki_page(atom: MemoryAtom) -> dict[str, object]:
         layer_to_type = {
@@ -168,24 +334,31 @@ class LivingMemorySystem:
             trigger = COMPILE_TRIGGERS[source_layer]
             eligible = CompileEngine.get_eligible_atoms(atoms, source_layer, trigger)
 
-            if len(eligible) >= trigger.min_atoms:
+            partitions: dict[tuple[object, ...], list[MemoryAtom]] = {}
+            for atom in eligible:
+                key = self.compile_engine.boundary_key(atom)
+                partitions.setdefault(key, []).append(atom)
+
+            for partition in partitions.values():
+                if len(partition) < trigger.min_atoms:
+                    continue
                 compiled = await self.compile_engine.compile_layer(
-                    eligible, trigger.target_layer
+                    partition, trigger.target_layer
                 )
                 if compiled:
                     await self.store.create(compiled)
                     # Mark source atoms as compiled
-                    for a in eligible:
+                    for a in partition:
                         a.relations.append(Relation(
                             source_id=compiled.id, target_id=a.id,
                             relation_type=RelationType.DERIVES,
                         ))
                         await self.store.update(a)
                     logger.info(
-                        f"Compiled {len(eligible)} {source_layer.name} → "
+                        f"Compiled {len(partition)} {source_layer.name} → "
                         f"1 {trigger.target_layer.name}: {compiled.summary[:80]}"
                     )
-                    break  # One compilation per tick
+                    return  # One privacy partition per tick
 
     async def shutdown(self) -> None:
         await self.stop_metabolism()
@@ -199,6 +372,11 @@ class LivingMemorySystem:
         agent_response: str,
         emotion_vad: VADVector | None = None,
         session_id: str = "default",
+        *,
+        context: MemoryContext | None = None,
+        scope: MemoryScope | None = None,
+        visibility: MemoryVisibility | None = None,
+        retention_policy: str = "standard",
     ) -> MemoryAtom:
         """Encode a conversation turn as a RAW layer MemoryAtom.
 
@@ -213,6 +391,29 @@ class LivingMemorySystem:
 
         conf = EmotionalField.encoding_confidence(emotion_vad)
 
+        if scope is None:
+            if context and context.actor_id:
+                scope = MemoryScope.VIEWER
+            elif context and context.stream_id:
+                scope = MemoryScope.STREAM
+            else:
+                scope = MemoryScope.COMMUNITY
+        if visibility is None:
+            visibility = (
+                MemoryVisibility.PRIVATE
+                if scope is MemoryScope.VIEWER
+                else MemoryVisibility.INTERNAL
+            )
+        subject_ids = (
+            [context.actor_id]
+            if scope is MemoryScope.VIEWER and context and context.actor_id
+            else []
+        )
+        origin = context.to_origin() if context else {}
+        if not context and session_id != "default":
+            # Preserve legacy provenance without making transport IDs visible.
+            origin["legacy_session_id"] = session_id
+
         atom = MemoryAtom(
             id=f"raw-{uuid.uuid4().hex[:12]}",
             layer=Layer.RAW,
@@ -226,7 +427,12 @@ class LivingMemorySystem:
             emotion_valence=emotion_vad.valence,
             emotion_arousal=emotion_vad.arousal,
             emotion_dominance=emotion_vad.dominance,
-            tags=[session_id],
+            tags=[],
+            scope=scope,
+            visibility=visibility,
+            subject_ids=subject_ids,
+            origin=origin,
+            retention_policy=retention_policy,
         )
         await self.store.create(atom)
         return atom
@@ -245,6 +451,8 @@ class LivingMemorySystem:
         mbti_sn: int = 50,
         mbti_tf: int = 50,
         mbti_jp: int = 50,
+        *,
+        context: MemoryContext | None = None,
     ) -> RecallResult:
         """Recall memories relevant to the query, biased by current emotion.
 
@@ -260,11 +468,11 @@ class LivingMemorySystem:
         # Get matching atoms via hybrid search (Chroma vector + FTS5 keyword)
         all_active = await self.store.hybrid_search(query, limit * 3)
 
-        # Filter by session if specified
-        if session_id != "default":
-            all_active = [
-                a for a in all_active if session_id in a.tags
-            ]
+        # Scope policy is based on stable identities, never transport session IDs.
+        all_active = [
+            atom for atom in all_active
+            if self._is_visible_in_context(atom, context)
+        ]
 
         # Character persona filtering (pre-rank)
         if character_unknown:
@@ -278,23 +486,24 @@ class LivingMemorySystem:
         # Emotion-biased ranking
         ranked = MemorySearch.rank_by_emotion(all_active, current_emotion)
 
-        # Character MBTI re-ranking (post-emotion-rank)
-        if mbti_ei != 50 or mbti_sn != 50 or mbti_tf != 50 or mbti_jp != 50:
-            ranked = CharacterMemoryFilter.rank_by_persona(
-                ranked,
-                mbti_ei=mbti_ei,
-                mbti_sn=mbti_sn,
-                mbti_tf=mbti_tf,
-                mbti_jp=mbti_jp,
-            )
+        # Stable actor and stream matches refine relevance. MBTI belongs to
+        # personality presentation and deliberately does not rank facts.
+        ranked = self._rank_for_context(ranked, context)
 
         # Take top-K
         top_atoms = ranked[:limit]
 
         # Extract profile from SEMANTIC layer
-        profile_atoms = [a for a in top_atoms if a.layer == Layer.SEMANTIC]
-        profile = {a.tags[0] if a.tags else "unknown": a.summary or a.content
-                   for a in profile_atoms} if profile_atoms else {}
+        profile_atoms = [
+            atom for atom in top_atoms
+            if atom.layer == Layer.SEMANTIC
+            and atom.scope is MemoryScope.VIEWER
+            and context is not None
+            and context.actor_id in atom.subject_ids
+        ]
+        profile = {
+            atom.id: atom.summary or atom.content for atom in profile_atoms
+        }
 
         # Extract memes from EMERGENT layer
         meme_atoms = [a for a in ranked if a.layer == Layer.EMERGENT][:5]
@@ -303,6 +512,11 @@ class LivingMemorySystem:
             atoms=top_atoms,
             profile=profile,
             memes=meme_atoms,
+            metadata={
+                "revision": await self.store.get_revision(),
+                "scopes": sorted({atom.scope.value for atom in top_atoms}),
+                "actor_id": context.actor_id if context else None,
+            },
         )
 
         # Trigger async reconsolidation (fire-and-forget)
@@ -311,6 +525,60 @@ class LivingMemorySystem:
         )
 
         return result
+
+    @staticmethod
+    def _is_visible_in_context(
+        atom: MemoryAtom,
+        context: MemoryContext | None,
+    ) -> bool:
+        if atom.scope is MemoryScope.VIEWER:
+            return bool(
+                context
+                and context.actor_id
+                and context.actor_id in atom.subject_ids
+            )
+        if atom.scope is MemoryScope.STREAM:
+            return bool(
+                context
+                and context.stream_id
+                and atom.origin.get("stream_id") == context.stream_id
+            )
+        return atom.scope in {
+            MemoryScope.CHARACTER,
+            MemoryScope.COMMUNITY,
+            MemoryScope.WORLD,
+        }
+
+    @staticmethod
+    def _rank_for_context(
+        atoms: list[MemoryAtom],
+        context: MemoryContext | None,
+    ) -> list[MemoryAtom]:
+        total = max(1, len(atoms))
+
+        def score(item: tuple[int, MemoryAtom]) -> float:
+            index, atom = item
+            relevance = 1.0 - (index / total)
+            subject = 1.0 if context and context.actor_id in atom.subject_ids else 0.0
+            stream = 1.0 if (
+                context
+                and context.stream_id
+                and atom.origin.get("stream_id") == context.stream_id
+            ) else 0.0
+            return (
+                0.55 * relevance
+                + 0.18 * subject
+                + 0.10 * stream
+                + 0.10 * atom.trust_level
+                + 0.07 * atom.salience
+            )
+
+        return [
+            atom
+            for _, atom in sorted(
+                enumerate(atoms), key=score, reverse=True
+            )
+        ]
 
     # ── Reconsolidation (integrated) ──
 
@@ -393,17 +661,23 @@ class LivingMemorySystem:
         # Reduce decay rate (recalled memories decay slower)
         new_decay_rate = max(0.02, atom.decay_rate * 0.95)
 
-        # Write new version
-        atom.summary = new_summary
-        atom.confidence = new_confidence
-        atom.emotion_valence = new_emotion.valence
-        atom.emotion_arousal = new_emotion.arousal
-        atom.emotion_dominance = new_emotion.dominance
-        atom.decay_rate = new_decay_rate
-        atom.version += 1
-        atom.version_chain = list(atom.version_chain) + [atom.id]
-        atom.rewritten_at = datetime.now(UTC)
-        atom.retrieval_count += 1
-        atom.last_accessed_at = datetime.now(UTC)
+        # Version through the store so the previous evidence/summary remains
+        # auditable in memory_versions. RAW content is never rewritten.
+        if await self.store.get(atom.id) is None:
+            await self.store.create(atom)
+        updated = await self.store.create_version(
+            atom.id,
+            new_summary,
+            new_confidence,
+            (new_emotion.valence, new_emotion.arousal, new_emotion.dominance),
+        )
+        updated.decay_rate = new_decay_rate
+        await self.store.update(updated)
 
-        await self.store.update(atom)
+        # Keep the caller's in-memory object coherent for existing graph/tests.
+        for field_name in (
+            "summary", "confidence", "emotion_valence", "emotion_arousal",
+            "emotion_dominance", "decay_rate", "version", "version_chain",
+            "rewritten_at", "retrieval_count", "last_accessed_at",
+        ):
+            setattr(atom, field_name, getattr(updated, field_name))

@@ -293,6 +293,27 @@ class RouteHandlers:
     async def on_memory_organize(self, sid: str, data: dict) -> None:
         return await self.memory.on_memory_organize(sid, data)
 
+    async def on_memory_list(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_list(sid, data)
+
+    async def on_memory_get(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_get(sid, data)
+
+    async def on_memory_search(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_search(sid, data)
+
+    async def on_memory_pin(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_pin(sid, data)
+
+    async def on_memory_forget(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_forget(sid, data)
+
+    async def on_memory_change(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_change(sid, data)
+
+    async def on_memory_job(self, sid: str, data: dict) -> dict:
+        return await self.memory.on_job(sid, data)
+
     async def on_get_wiki_pages(self, sid: str, data: dict) -> dict:
         return await self.memory.on_get_wiki_pages(sid, data)
 
@@ -405,6 +426,13 @@ def register_routes(
 
     # Memory: wiki pages (legacy compat — delegates to V2)
     sio.on(event_name("memory", "organize"), handlers.on_memory_organize)
+    sio.on(event_name("memory", "list"), handlers.on_memory_list)
+    sio.on(event_name("memory", "get"), handlers.on_memory_get)
+    sio.on(event_name("memory", "search"), handlers.on_memory_search)
+    sio.on(event_name("memory", "pin"), handlers.on_memory_pin)
+    sio.on(event_name("memory", "forget"), handlers.on_memory_forget)
+    sio.on(event_name("memory", "change"), handlers.on_memory_change)
+    sio.on(event_name("memory", "job"), handlers.on_memory_job)
     sio.on(event_name("memory", "list_pages"), handlers.on_get_wiki_pages)
 
     # Meme review

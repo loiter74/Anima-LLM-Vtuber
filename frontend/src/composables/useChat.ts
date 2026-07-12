@@ -18,8 +18,6 @@ export function useChat() {
   let _onMedia: ((data: AudioWithExpressionEvent) => void) | null = null
   let _onStopAudio: ((data: ChatIdentity) => void) | null = null
   let _onTranscript: ((data: Transcript) => void) | null = null
-  let _onMemProgress: (() => void) | null = null
-  let _onMemResult: (() => void) | null = null
 
   onMounted(() => {
     const socket = getSocket()
@@ -44,24 +42,12 @@ export function useChat() {
       store.isTyping = true
     }
 
-    // Memory organize progress
-    _onMemProgress = () => {
-      // Handled in component for UI display
-    }
-
-    // Memory organize result
-    _onMemResult = () => {
-      store.memoryOrganizing = false
-    }
-
     socket.on(Events.CHAT.SENTENCE, _onSentence)
     socket.on(Events.CHAT.CONTROL, _onControl)
     socket.on(Events.SYSTEM.ERROR, _onError)
     socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, _onMedia)
     socket.on(Events.CHAT.STOP_AUDIO, _onStopAudio)
     socket.on(Events.CHAT.TRANSCRIPT, _onTranscript)
-    socket.on(Events.MEMORY.ORGANIZE_PROGRESS, _onMemProgress)
-    socket.on(Events.MEMORY.ORGANIZE_RESULT, _onMemResult)
   })
 
   onUnmounted(() => {
@@ -74,8 +60,6 @@ export function useChat() {
     if (_onMedia) socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, _onMedia)
     if (_onStopAudio) socket.off(Events.CHAT.STOP_AUDIO, _onStopAudio)
     if (_onTranscript) socket.off(Events.CHAT.TRANSCRIPT, _onTranscript)
-    if (_onMemProgress) socket.off(Events.MEMORY.ORGANIZE_PROGRESS, _onMemProgress)
-    if (_onMemResult) socket.off(Events.MEMORY.ORGANIZE_RESULT, _onMemResult)
   })
 
   async function sendText(text: string): Promise<void> {
@@ -98,20 +82,7 @@ export function useChat() {
   }
 
   async function organizeMemory(): Promise<void> {
-    const socket = getSocket()
-    if (!socket) return
-
-    store.memoryOrganizing = true
-    socket.emit(Events.MEMORY.ORGANIZE, {})
-
-    // Listen for result to reset state and refresh memory list
-    const onResult = async (_data: unknown) => {
-      console.log('[useChat] memory.organize.result received, refreshing wiki pages')
-      store.memoryOrganizing = false
-      socket.off(Events.MEMORY.ORGANIZE_RESULT, onResult)
-      await memoryStore.fetchWikiPages('default')
-    }
-    socket.on(Events.MEMORY.ORGANIZE_RESULT, onResult)
+    await memoryStore.organizeMemory()
   }
 
   return {

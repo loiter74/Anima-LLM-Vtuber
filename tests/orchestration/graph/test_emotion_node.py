@@ -22,6 +22,8 @@ class TestEmotionNode:
         state["response_text"] = ""
         result = await emotion_node(state)
         assert result["emotion"] == "neutral"
+        assert result["response_emotion"] == "neutral"
+        assert result["response_emotion_vad"] == result["emotion_vad"]
 
     @pytest.mark.asyncio
     async def test_no_analyzer_in_config_returns_neutral(self):

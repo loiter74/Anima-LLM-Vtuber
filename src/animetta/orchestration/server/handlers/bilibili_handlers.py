@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from animetta.memory.v2.context import normalize_actor_id
 from animetta.services.bilibili import DanmakuService
 from animetta.utils.tempfiles import write_temp_bytes
 
@@ -121,9 +122,12 @@ class BilibiliHandlers:
             orchestrator = await self.admin._get_or_create_orchestrator(
                 "bilibili"
             )
+            actor_id = normalize_actor_id(msg.user_id, "bilibili")
+            room_id = getattr(self._bilibili_service, "room_id", None)
+            stream_id = f"bilibili:{room_id}" if room_id else None
             result = await orchestrator.process_text(
                 text=f"{msg.user_name}说: {msg.text}",
-                user_id=str(msg.user_id),
+                user_id=actor_id,
                 user_name=msg.user_name,
                 channel_id="bilibili",
                 source=EVENTS["bilibili"]["danmaku"]["name"],
@@ -132,6 +136,8 @@ class BilibiliHandlers:
                 task_id=identity.task_id,
                 turn_id=identity.task_id,
                 transport_mode=ChatTransportMode.CANONICAL.value,
+                channel="bilibili",
+                stream_id=stream_id,
             )
 
             reply_text = result.get("response_text", "")

@@ -1,24 +1,34 @@
-"""
-Memory middleware: automatically handles memory before and after LLM calls.
-
-V2: Uses LivingMemorySystem.recall() for unified retrieval —
-replaces FuzzyLayer + UserProfile + MemePool with a single call.
-"""
+"""Bounded, fail-open memory recall for the live LLM path."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
+
+from animetta.memory.v2.context import MemoryContext
 
 logger = logging.getLogger(__name__)
 
 
 class MemoryMiddleware:
-    """Automatic memory injection middleware — V2 unified recall()."""
+    """Recall structured memory without allowing it to stall a live turn."""
 
-    def __init__(self, memory_system: Any | None = None, mode: str = "read_write"):
+    def __init__(
+        self,
+        memory_system: Any | None = None,
+        *,
+        mode: str = "read_write",
+        recall_timeout_ms: int = 150,
+        max_items: int = 8,
+        max_prompt_chars: int = 1500,
+    ) -> None:
         self._memory_system = memory_system
         self._mode = mode
+        self._recall_timeout_ms = max(1, recall_timeout_ms)
+        self._max_items = max(1, max_items)
+        self._max_prompt_chars = max(1, max_prompt_chars)
 
     async def recall_structured(
         self,
@@ -31,63 +41,91 @@ class MemoryMiddleware:
         mbti_sn: int = 50,
         mbti_tf: int = 50,
         mbti_jp: int = 50,
+        *,
+        context: MemoryContext | None = None,
     ) -> tuple[str, dict[str, Any]]:
-        """Structured recall: returns memory context text and metadata.
-
-        Unlike ``before_llm_call``, this method does NOT inject memory
-        into a system prompt. The prompt pipeline owns final assembly.
-
-        Returns: (memory_context_text, metadata_dict).
-        """
+        """Return a prompt fragment and deterministic recall diagnostics."""
+        del mbti_ei, mbti_sn, mbti_tf, mbti_jp
         if not self._memory_system or self._mode == "off":
             logger.debug("[MemoryMiddleware] MemorySystem not configured, skipping structured recall")
             return "", {}
 
-        metadata: dict[str, Any] = {}
-        injection_parts: list[str] = []
-
+        started = time.perf_counter()
         try:
-            result = await self._memory_system.recall(
-                query=user_input,
-                session_id=session_id,
-                current_emotion=current_emotion,
-                character_known=character_known,
-                character_unknown=character_unknown,
-                mbti_ei=mbti_ei,
-                mbti_sn=mbti_sn,
-                mbti_tf=mbti_tf,
-                mbti_jp=mbti_jp,
+            async with asyncio.timeout(self._recall_timeout_ms / 1000):
+                result = await self._memory_system.recall(
+                    query=user_input,
+                    session_id=session_id,
+                    current_emotion=current_emotion,
+                    character_known=character_known,
+                    character_unknown=character_unknown,
+                    context=context,
+                    limit=self._max_items,
+                )
+        except TimeoutError:
+            logger.warning(
+                "[MemoryMiddleware] recall deadline exceeded (%dms)",
+                self._recall_timeout_ms,
             )
-        except Exception as e:
-            logger.warning(f"[MemoryMiddleware] structured recall() failed: {e}")
-            metadata["warnings"] = [f"recall failed: {e}"]
-            return "", metadata
+            return "", {
+                "degraded": True,
+                "reason": "deadline_exceeded",
+                "deadline_ms": self._recall_timeout_ms,
+            }
+        except Exception as exc:
+            logger.warning("[MemoryMiddleware] recall failed: %s", exc)
+            return "", {
+                "degraded": True,
+                "reason": "recall_error",
+                "warnings": [str(exc)],
+            }
 
-        atom_count = 0
-        if result.atoms:
-            atom_count = len(result.atoms)
-            summaries = [a.summary or a.content for a in result.atoms[:5]]
-            injection_parts.append(
-                "## 相关记忆\n" + "\n".join(f"- {s}" for s in summaries)
-            )
+        atoms = list(result.atoms or [])
+        selected_atoms = atoms[: self._max_items]
+        sections: list[str] = []
+        if selected_atoms:
+            lines = []
+            for atom in selected_atoms:
+                scope = getattr(getattr(atom, "scope", None), "value", "unknown")
+                text = atom.summary or atom.content
+                lines.append(f"- [{scope}] {text}")
+            sections.append("## 相关记忆\n" + "\n".join(lines))
 
         if result.profile:
             profile_text = "\n".join(
-                f"- {k}: {v}" for k, v in result.profile.items()
+                f"- {key}: {value}" for key, value in result.profile.items()
             )
-            injection_parts.append(f"## 用户画像\n{profile_text}")
+            sections.append(f"## 用户画像\n{profile_text}")
 
         if result.memes:
             meme_text = "\n".join(
-                f"- {m.summary or m.content}" for m in result.memes[:3]
+                f"- {memory.summary or memory.content}"
+                for memory in result.memes[:3]
             )
-            injection_parts.append(f"## 活跃梗\n{meme_text}")
+            sections.append(f"## 活跃梗\n{meme_text}")
 
-        memory_context = "\n\n".join(injection_parts) if injection_parts else ""
-        metadata["atom_count"] = atom_count
-
-        logger.info(f"[MemoryMiddleware] structured recall: {atom_count} atoms")
-        return memory_context, metadata
+        unbounded_prompt = "\n\n".join(sections)
+        prompt = unbounded_prompt[: self._max_prompt_chars]
+        truncated = (
+            len(atoms) > len(selected_atoms)
+            or len(unbounded_prompt) > len(prompt)
+        )
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+        metadata = {
+            **(result.metadata or {}),
+            "candidate_count": len(atoms),
+            "atom_count": len(selected_atoms),
+            "prompt_chars": len(prompt),
+            "truncated": truncated,
+            "degraded": False,
+        }
+        logger.info(
+            "[MemoryMiddleware] recalled %d/%d atoms in %.2fms",
+            len(selected_atoms),
+            len(atoms),
+            elapsed_ms,
+        )
+        return prompt, metadata
 
     async def before_llm_call(
         self,
@@ -101,73 +139,28 @@ class MemoryMiddleware:
         mbti_sn: int = 50,
         mbti_tf: int = 50,
         mbti_jp: int = 50,
-    ) -> tuple[str, dict | None]:
-        """Before LLM call: retrieve memory via LivingMemorySystem.recall().
-
-        Args:
-            session_id: Current session identifier.
-            user_input: User's message text.
-            base_prompt: System prompt to enrich with memory.
-            current_emotion: Current VAD emotion vector.
-            character_known: Character's known knowledge domains (for filtering).
-            character_unknown: Character's unknown knowledge domains (excluded from recall).
-            mbti_ei, mbti_sn, mbti_tf, mbti_jp: MBTI dimensions for persona-biased ranking.
-
-        Returns: (enriched_prompt, metadata_dict).
-        """
+        *,
+        context: MemoryContext | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
         if not self._memory_system or self._mode == "off":
             logger.debug("[MemoryMiddleware] MemorySystem not configured, skipping")
             return base_prompt or "", None
 
-        metadata: dict[str, Any] = {}
-        injection_parts: list[str] = []
-
-        try:
-            result = await self._memory_system.recall(
-                query=user_input,
-                session_id=session_id,
-                current_emotion=current_emotion,
-                character_known=character_known,
-                character_unknown=character_unknown,
-                mbti_ei=mbti_ei,
-                mbti_sn=mbti_sn,
-                mbti_tf=mbti_tf,
-                mbti_jp=mbti_jp,
-            )
-        except Exception as e:
-            logger.warning(f"[MemoryMiddleware] recall() failed: {e}")
+        memory_context, metadata = await self.recall_structured(
+            session_id=session_id,
+            user_input=user_input,
+            current_emotion=current_emotion,
+            character_known=character_known,
+            character_unknown=character_unknown,
+            mbti_ei=mbti_ei,
+            mbti_sn=mbti_sn,
+            mbti_tf=mbti_tf,
+            mbti_jp=mbti_jp,
+            context=context,
+        )
+        if not memory_context:
             return base_prompt or "", metadata
-
-        # Build injection from unified result
-        if result.atoms:
-            summaries = [
-                a.summary or a.content for a in result.atoms[:5]
-            ]
-            injection_parts.append(
-                "## 相关记忆\n" + "\n".join(f"- {s}" for s in summaries)
-            )
-
-        if result.profile:
-            profile_text = "\n".join(
-                f"- {k}: {v}" for k, v in result.profile.items()
-            )
-            injection_parts.append(f"## 用户画像\n{profile_text}")
-
-        if result.memes:
-            meme_text = "\n".join(
-                f"- {m.summary or m.content}" for m in result.memes[:3]
-            )
-            injection_parts.append(f"## 活跃梗\n{meme_text}")
-
-        if not injection_parts:
-            logger.debug("[MemoryMiddleware] no memory to inject")
-            return base_prompt or "", metadata
-
-        injection_block = "\n\n".join(injection_parts)
-        enriched = self._inject_into_prompt(base_prompt or "", injection_block)
-
-        logger.info(f"[MemoryMiddleware] injected {len(result.atoms)} atoms")
-        return enriched, metadata
+        return self._inject_into_prompt(base_prompt or "", memory_context), metadata
 
     async def after_llm_call(
         self,
@@ -175,12 +168,10 @@ class MemoryMiddleware:
         user_input: str,
         agent_response: str,
     ) -> None:
-        """After LLM call: no-op. Encoding handled by output_node."""
-        pass
+        """Encoding is owned by the shared runtime after output validation."""
 
     @staticmethod
     def _inject_into_prompt(base_prompt: str, injection_block: str) -> str:
-        """Inject memory content into system prompt."""
         return (
             f"{base_prompt}\n\n---\n\n{injection_block}\n\n"
             "以上是相关记忆和用户画像，请自然地参考它们来回应。"

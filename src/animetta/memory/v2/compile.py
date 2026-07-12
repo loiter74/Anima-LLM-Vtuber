@@ -11,7 +11,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from animetta.memory.v2.atom import Layer, MemoryAtom, Relation, RelationType
+from animetta.memory.v2.atom import (
+    Layer,
+    MemoryAtom,
+    MemoryScope,
+    Relation,
+    RelationType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +104,11 @@ class CompileEngine:
         if not all(a.layer.value < target_layer.value for a in source_atoms):
             return None
 
+        boundary = self.boundary_key(source_atoms[0])
+        if any(self.boundary_key(atom) != boundary for atom in source_atoms[1:]):
+            logger.warning("Refusing to compile atoms across memory visibility boundaries")
+            return None
+
         # Build raw text from source atoms
         raw_texts = []
         for a in source_atoms:
@@ -165,6 +176,20 @@ class CompileEngine:
             emotion_dominance=avg_dominance,
             source_ids=[a.id for a in source_atoms],
             tags=list(set(tags)),
+            scope=source_atoms[0].scope,
+            visibility=source_atoms[0].visibility,
+            subject_ids=list(source_atoms[0].subject_ids),
+            origin={
+                key: value
+                for key, value in source_atoms[0].origin.items()
+                if key not in {"connection_id", "conversation_id"}
+            },
+            trust_level=min(atom.trust_level for atom in source_atoms),
+            retention_policy=(
+                "pinned"
+                if any(atom.retention_policy == "pinned" for atom in source_atoms)
+                else source_atoms[0].retention_policy
+            ),
         )
         # Fix relations to use actual compiled id
         compiled.relations = [
@@ -177,6 +202,18 @@ class CompileEngine:
         ]
 
         return compiled
+
+    @staticmethod
+    def boundary_key(atom: MemoryAtom) -> tuple[object, ...]:
+        """Return the privacy partition that may be compiled together."""
+        discriminator: object = None
+        if atom.scope is MemoryScope.VIEWER:
+            discriminator = tuple(sorted(atom.subject_ids))
+        elif atom.scope is MemoryScope.STREAM:
+            discriminator = atom.origin.get("stream_id")
+        elif atom.scope is MemoryScope.CHARACTER:
+            discriminator = atom.origin.get("persona_id")
+        return atom.scope, atom.visibility, discriminator
 
     @staticmethod
     def get_eligible_atoms(

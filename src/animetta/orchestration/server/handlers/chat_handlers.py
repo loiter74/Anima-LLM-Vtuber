@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from loguru import logger
 
 from animetta.core.message_filter import is_probe_message
+from animetta.memory.v2.context import normalize_actor_id
 from animetta.orchestration.chat_contracts import (
     ChatErrorComponent,
     ChatErrorPayload,
@@ -172,9 +173,10 @@ class ChatHandlers:
 
         try:
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
+            actor_id = normalize_actor_id(command.user_id or "user", "local")
             result = await orchestrator.process_text(
                 text=text,
-                user_id=command.user_id or "user",
+                user_id=actor_id,
                 user_name=command.from_name or "User",
                 channel_id=sid,
                 message_id=command.message_id,
@@ -182,6 +184,7 @@ class ChatHandlers:
                 task_id=command.task_id,
                 turn_id=command.task_id,
                 transport_mode=command.transport_mode.value,
+                channel="local",
             )
             if isinstance(result, dict) and result.get("error"):
                 await self._emit_command_error(

@@ -1,50 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed } from 'vue'
 import MessageList from './MessageList.vue'
 import InputBar from './InputBar.vue'
 import TypingIndicator from './TypingIndicator.vue'
 import SpeakingIndicator from './SpeakingIndicator.vue'
 import { useChat } from '@/composables/useChat'
 import { useChatStore } from '@/stores/chat'
-import { getSocket } from '@/composables/useSocket'
 import { useMobile } from '@/composables/useMobile'
-import { Events } from '@/constants/socket-events'
+import { useMemoryStore } from '@/stores/memory'
 
 const { sendText, sendInterrupt, organizeMemory } = useChat()
 const store = useChatStore()
+const memoryStore = useMemoryStore()
 const { isMobile } = useMobile()
 
-// Memory organize progress
-const memoryProgress = ref('')
-const memoryProgressPercent = ref(0)
-
-// Memory progress listener (via socket)
-onMounted(() => {
-  const socket = getSocket()
-  if (!socket) return
-  socket.on(Events.MEMORY.ORGANIZE_PROGRESS, (data: any) => {
-    memoryProgress.value = data.text || ''
-    memoryProgressPercent.value = data.progress || 0
-  })
-})
-
-onUnmounted(() => {
-  const socket = getSocket()
-  if (!socket) return
-  socket.off(Events.MEMORY.ORGANIZE_PROGRESS)
-})
+const memoryOrganizing = computed(() =>
+  memoryStore.job?.status === 'accepted' || memoryStore.job?.status === 'running',
+)
+const memoryProgress = computed(() => memoryStore.job?.text ?? '')
+const memoryProgressPercent = computed(() => memoryStore.job?.progress ?? 0)
 
 async function handleMemoryOrganize(): Promise<void> {
-  await organizeMemory()
-}
-
-// Reset memory progress when result comes
-watch(() => store.memoryOrganizing, (organizing) => {
-  if (!organizing) {
-    memoryProgress.value = ''
-    memoryProgressPercent.value = 0
+  try {
+    await organizeMemory()
+  } catch {
+    // The memory store exposes the structured error state.
   }
-})
+}
 </script>
 
 <template>
@@ -54,13 +36,13 @@ watch(() => store.memoryOrganizing, (organizing) => {
       <!-- Memory organize -->
       <button
         class="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
-        :class="store.memoryOrganizing
+        :class="memoryOrganizing
           ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
           : 'bg-c-bg/40 text-c-text-dim hover:bg-c-panel/50'"
         @click="handleMemoryOrganize"
       >
         <span>🧠</span>
-        <span>{{ store.memoryOrganizing ? '整理中...' : '记忆' }}</span>
+        <span>{{ memoryOrganizing ? '整理中...' : '记忆' }}</span>
       </button>
 
       <div class="flex-1" />

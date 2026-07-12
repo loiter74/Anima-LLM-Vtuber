@@ -3,8 +3,10 @@ from __future__ import annotations
 """Tests for personality node — mode/mood detection and overlay prompt."""
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+from langgraph.types import RunnableConfig
 
 from animetta.orchestration.graph.personality_node import personality_node
 from animetta.orchestration.graph.state import create_initial_state
@@ -12,6 +14,40 @@ from animetta.orchestration.graph.state import create_initial_state
 
 class TestPersonalityNode:
     """Personality node: determines mode and mood from state/metadata."""
+
+    @pytest.mark.asyncio
+    async def test_reads_persona_boundaries_from_runnable_service_context(self):
+        persona = SimpleNamespace(
+            knowledge_boundaries=SimpleNamespace(
+                known=["animation"],
+                unknown=["private viewer data"],
+            ),
+            personality=SimpleNamespace(
+                mbti=SimpleNamespace(
+                    dimensions=SimpleNamespace(ei=21, sn=62, tf=44, jp=77),
+                ),
+            ),
+        )
+        app_config = MagicMock()
+        app_config.get_persona.return_value = persona
+        service_context = SimpleNamespace(config=app_config)
+        config = RunnableConfig(configurable={"service_context": service_context})
+
+        result = await personality_node(
+            create_initial_state(session_id="socket-a"),
+            config,
+        )
+
+        metadata = result["metadata"]
+        assert metadata["character_known"] == ["animation"]
+        assert metadata["character_unknown"] == ["private viewer data"]
+        assert (
+            metadata["mbti_ei"],
+            metadata["mbti_sn"],
+            metadata["mbti_tf"],
+            metadata["mbti_jp"],
+        ) == (21, 62, 44, 77)
+        app_config.get_persona.assert_called_once_with()
 
     @pytest.mark.asyncio
     async def test_default_mode(self):

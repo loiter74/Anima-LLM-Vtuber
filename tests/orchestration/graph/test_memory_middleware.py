@@ -1,24 +1,35 @@
 from __future__ import annotations
 
-from animetta.orchestration.graph.memory_middleware import MemoryMiddleware
-
-"""Tests for MemoryMiddleware — memory injection before/after LLM."""
-
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from animetta.memory.v2.context import MemoryContext
+from animetta.memory.v2.system import RecallResult
+from animetta.orchestration.graph.memory_middleware import MemoryMiddleware
+
+
+def _atom(content: str, *, scope: str = "community") -> SimpleNamespace:
+    return SimpleNamespace(
+        content=content,
+        summary=None,
+        scope=SimpleNamespace(value=scope),
+        confidence=0.8,
+        salience=0.7,
+        origin={"channel": "bilibili"},
+    )
+
 
 class TestMemoryMiddleware:
-    """Memory middleware handles graceful degradation."""
+    """Memory recall is bounded and always fails open for the live path."""
 
     @pytest.mark.asyncio
     async def test_before_call_without_memory_system(self):
-        """Without memory system, returns base prompt unchanged."""
-
         mm = MemoryMiddleware(memory_system=None)
         enriched, metadata = await mm.before_llm_call(
-            session_id="test",
+            session_id="transport-1",
             user_input="hello",
             base_prompt="You are a helpful assistant.",
         )
@@ -27,71 +38,113 @@ class TestMemoryMiddleware:
 
     @pytest.mark.asyncio
     async def test_after_call_without_memory_system(self):
-        """Without memory system, after_llm_call does nothing."""
-
         mm = MemoryMiddleware(memory_system=None)
         await mm.after_llm_call(
-            session_id="test",
+            session_id="transport-1",
             user_input="hello",
             agent_response="Hi there!",
         )
-        # No exception = pass
 
     @pytest.mark.asyncio
-    async def test_before_call_with_memory_system(self):
-        """With memory system, enriches prompt with context."""
+    async def test_structured_recall_passes_stable_context_and_budgets_items(self):
+        context = MemoryContext(
+            actor_id="bilibili:42",
+            conversation_id="conversation-7",
+            stream_id="live-9",
+            channel="bilibili",
+            connection_id="socket-a",
+        )
+        memory = MagicMock()
+        memory.recall = AsyncMock(return_value=RecallResult(
+            atoms=[_atom("one", scope="viewer"), _atom("two"), _atom("three")],
+            metadata={"revision": 12},
+        ))
 
-        mock_memory = MagicMock()
-        mock_memory.retrieve_context = AsyncMock(return_value=[
-            MagicMock(
-                user_input="I like Python",
-                agent_response="Python is great!",
-                metadata={"oral_version": "user likes Python"},
-            ),
-        ])
-        mock_memory.build_user_profile = AsyncMock(
-            return_value=MagicMock(
-                is_empty=lambda: True,
-                format_for_prompt=lambda: "",
-            )
+        mm = MemoryMiddleware(memory_system=memory, max_items=2, max_prompt_chars=500)
+        prompt, metadata = await mm.recall_structured(
+            session_id="socket-a",
+            user_input="remember me",
+            context=context,
         )
 
-        mm = MemoryMiddleware(memory_system=mock_memory)
-        enriched, metadata = await mm.before_llm_call(
-            session_id="test",
-            user_input="hello",
-            base_prompt="You are helpful.",
-        )
-        assert enriched is not None
-        assert "You are helpful" in enriched
-        assert metadata is not None
+        assert "one" in prompt and "two" in prompt and "three" not in prompt
+        assert metadata == {
+            "revision": 12,
+            "candidate_count": 3,
+            "atom_count": 2,
+            "prompt_chars": len(prompt),
+            "truncated": True,
+            "degraded": False,
+        }
+        memory.recall.assert_awaited_once()
+        kwargs = memory.recall.await_args.kwargs
+        assert kwargs["context"] is context
+        assert kwargs["limit"] == 2
+        assert kwargs["session_id"] == "socket-a"
 
     @pytest.mark.asyncio
-    async def test_after_call_does_not_crash(self):
-        """after_llm_call should not raise with valid input."""
+    async def test_structured_recall_enforces_prompt_character_budget(self):
+        memory = MagicMock()
+        memory.recall = AsyncMock(return_value=RecallResult(
+            atoms=[_atom("x" * 200)],
+            profile={"preference": "y" * 200},
+            memes=[_atom("z" * 200, scope="community")],
+        ))
 
-        mm = MemoryMiddleware(memory_system=MagicMock())
-        # after_llm_call is just a post-processing marker, doesn't store
-        await mm.after_llm_call(
-            session_id="test",
+        mm = MemoryMiddleware(memory_system=memory, max_prompt_chars=80)
+        prompt, metadata = await mm.recall_structured(
+            session_id="socket-a",
             user_input="hello",
-            agent_response="Hi!",
         )
-        # No exception = pass
+
+        assert len(prompt) <= 80
+        assert metadata["prompt_chars"] == len(prompt)
+        assert metadata["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_recall_timeout_degrades_without_blocking_live_path(self):
+        async def slow_recall(**_: object) -> RecallResult:
+            await asyncio.sleep(0.05)
+            return RecallResult()
+
+        memory = MagicMock()
+        memory.recall = AsyncMock(side_effect=slow_recall)
+        mm = MemoryMiddleware(memory_system=memory, recall_timeout_ms=5)
+
+        prompt, metadata = await mm.recall_structured(
+            session_id="socket-a",
+            user_input="hello",
+        )
+
+        assert prompt == ""
+        assert metadata["degraded"] is True
+        assert metadata["reason"] == "deadline_exceeded"
+        assert metadata["deadline_ms"] == 5
 
     @pytest.mark.asyncio
     async def test_memory_error_does_not_crash(self):
-        """Memory errors should not propagate — middleware degrades gracefully."""
+        memory = MagicMock()
+        memory.recall = AsyncMock(side_effect=RuntimeError("DB down"))
+        mm = MemoryMiddleware(memory_system=memory)
 
-        mock_memory = MagicMock()
-        mock_memory.retrieve_context = AsyncMock(side_effect=Exception("DB down"))
-        mock_memory.fuzzy = None  # No fuzzy store (prevents MagicMock auto-creation)
-
-        mm = MemoryMiddleware(memory_system=mock_memory)
         enriched, metadata = await mm.before_llm_call(
-            session_id="test",
+            session_id="transport-1",
             user_input="hello",
             base_prompt="You are helpful.",
         )
-        # Should return base prompt unchanged on error
+
         assert enriched == "You are helpful."
+        assert metadata is not None
+        assert metadata["degraded"] is True
+        assert metadata["reason"] == "recall_error"
+
+    @pytest.mark.asyncio
+    async def test_after_call_does_not_store(self):
+        memory = MagicMock()
+        mm = MemoryMiddleware(memory_system=memory)
+        await mm.after_llm_call(
+            session_id="transport-1",
+            user_input="hello",
+            agent_response="Hi!",
+        )
+        memory.encode.assert_not_called()

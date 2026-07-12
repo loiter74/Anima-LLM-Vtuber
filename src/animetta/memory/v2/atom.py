@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 
 class Layer(IntEnum):
@@ -17,6 +17,24 @@ class Layer(IntEnum):
     EPISODIC = 1  # Compiled episode summary
     SEMANTIC = 2  # Digested semantic knowledge
     EMERGENT = 3  # Emergent meme or synthesis
+
+
+class MemoryScope(StrEnum):
+    """Livestream memory domains sharing one physical corpus."""
+
+    CHARACTER = "character"
+    COMMUNITY = "community"
+    VIEWER = "viewer"
+    STREAM = "stream"
+    WORLD = "world"
+
+
+class MemoryVisibility(StrEnum):
+    """Who may receive an atom during scoped recall."""
+
+    PUBLIC = "public"
+    PRIVATE = "private"
+    INTERNAL = "internal"
 
 
 class RelationType:
@@ -83,6 +101,15 @@ class MemoryAtom:
     source_ids: list[str] = field(default_factory=list)
     relations: list[Relation] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+
+    # ── Livestream identity and policy ──
+    scope: MemoryScope = MemoryScope.COMMUNITY
+    visibility: MemoryVisibility = MemoryVisibility.INTERNAL
+    subject_ids: list[str] = field(default_factory=list)
+    origin: dict = field(default_factory=dict)
+    trust_level: float = 0.5
+    retention_policy: str = "standard"
+    index_state: str = "pending"
 
     # ── Metabolism parameters ──
     decay_rate: float = 0.1

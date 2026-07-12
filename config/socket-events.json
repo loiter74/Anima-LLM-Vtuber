@@ -1021,8 +1021,40 @@
       }
     }
   },
-  "memory": {
-    "organize": {
+    "memory": {
+      "list": {
+        "name": "memory:list",
+        "payload": {"cursor?": "string", "limit?": "number", "scope?": "string"}
+      },
+      "get": {
+        "name": "memory:get",
+        "payload": {"id": "string"}
+      },
+      "search": {
+        "name": "memory:search",
+        "payload": {"query": "string", "limit?": "number"}
+      },
+      "pin": {
+        "name": "memory:pin",
+        "payload": {"id": "string", "pinned": "boolean"}
+      },
+      "forget": {
+        "name": "memory:forget",
+        "payload": {"id": "string"}
+      },
+      "change": {
+        "name": "memory:change",
+        "payload": {"id": "string", "summary": "string"}
+      },
+      "job": {
+        "name": "memory:job",
+        "payload": {"job_id": "string"}
+      },
+      "changed": {
+        "name": "memory:changed",
+        "payload": {"revision": "number", "reason": "string", "atom_id?": "string"}
+      },
+      "organize": {
       "name": "memory:organize",
       "payload": {}
     },
@@ -1032,19 +1064,23 @@
         "session_id": "string"
       }
     },
-    "organize_progress": {
-      "name": "memory:organize_progress",
-      "payload": {
-        "text": "string",
-        "progress": "number"
-      }
+      "organize_progress": {
+        "name": "memory:organize_progress",
+        "payload": {
+          "job_id": "string",
+          "text": "string",
+          "progress": "number",
+          "status": "string"
+        }
     },
     "organize_result": {
       "name": "memory:organize_result",
-      "payload": {
-        "status": "string",
-        "message": "string"
-      }
+        "payload": {
+          "job_id": "string",
+          "status": "string",
+          "message": "string",
+          "revision?": "number"
+        }
     }
   },
   "sing": {

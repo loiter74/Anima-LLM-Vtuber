@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.memory.v2.context import MemoryContext, normalize_actor_id
 from animetta.tracing.metrics import get_rag_chunks, get_rag_duration, get_rag_top_score
 
 from .interrupt_handler import get_interrupt_handler
@@ -228,6 +229,7 @@ async def _retrieve_memory_context(
     mbti_sn: int = 50,
     mbti_tf: int = 50,
     mbti_jp: int = 50,
+    context: MemoryContext | None = None,
 ) -> tuple[str, dict]:
     """
     Retrieve memory context via LivingMemorySystem V2 recall().
@@ -251,7 +253,12 @@ async def _retrieve_memory_context(
         return "", {}
 
     try:
-        enriched, metadata = await middleware.before_llm_call(
+        recall = (
+            middleware.recall_structured
+            if isinstance(middleware, MemoryMiddleware)
+            else middleware.before_llm_call
+        )
+        enriched, metadata = await recall(
             session_id=session_id,
             user_input=query,
             current_emotion=current_emotion,
@@ -261,6 +268,7 @@ async def _retrieve_memory_context(
             mbti_sn=mbti_sn,
             mbti_tf=mbti_tf,
             mbti_jp=mbti_jp,
+            context=context,
         )
         if metadata:
             logger.info(f"[{session_id}] [LLMNode] Memory injected")
@@ -268,6 +276,39 @@ async def _retrieve_memory_context(
     except Exception as e:
         logger.warning(f"[{session_id}] [LLMNode] MemoryMiddleware retrieval failed: {e}")
         return "", {}
+
+
+def _build_memory_context(state: AgentState) -> MemoryContext:
+    """Build memory identity from stable turn metadata, keeping SID trace-only."""
+    metadata = state.get("metadata", {}) or {}
+    persona = state.get("persona", {}) or {}
+    persona_id = metadata.get("persona_id")
+    if not persona_id and isinstance(persona, dict):
+        persona_id = persona.get("id") or persona.get("name")
+    channel = metadata.get("channel")
+    return MemoryContext(
+        actor_id=normalize_actor_id(
+            state.get("user_id") or metadata.get("actor_id"),
+            channel,
+        ),
+        conversation_id=metadata.get("conversation_id"),
+        stream_id=metadata.get("stream_id"),
+        persona_id=persona_id,
+        channel=channel or "unknown",
+        connection_id=state.get("session_id"),
+    )
+
+
+def _get_recall_emotion(state: AgentState) -> Any | None:
+    """Return audience/conversation emotion, never the model's last expression."""
+    values = state.get("conversation_emotion_vad")
+    if values is None:
+        values = (state.get("metadata", {}) or {}).get("conversation_emotion_vad")
+    if values is None:
+        return None
+    from animetta.memory.v2.emotion_field import VADVector
+
+    return VADVector(*values)
 
 
 def _enrich_system_prompt(
@@ -360,9 +401,7 @@ async def llm_node(
         return {"error": "LLM engine not initialized", "response_text": "", "response_chunks": [], "tool_calls": None}
 
     # RAG: retrieve via LivingMemorySystem V2 recall()
-    vad_tuple = state.get("emotion_vad")
-    from animetta.memory.v2.emotion_field import VADVector
-    current_emotion = VADVector(*vad_tuple) if vad_tuple else None
+    current_emotion = _get_recall_emotion(state)
     t_rag = time_module.perf_counter()
     _meta = state.get("metadata", {})
     retrieval_result = await _retrieve_memory_context(
@@ -377,6 +416,7 @@ async def llm_node(
         mbti_sn=_meta.get("mbti_sn", 50),
         mbti_tf=_meta.get("mbti_tf", 50),
         mbti_jp=_meta.get("mbti_jp", 50),
+        context=_build_memory_context(state),
     )
     memory_context, rag_metadata = retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
     rag_duration = (time_module.perf_counter() - t_rag) * 1000
@@ -389,7 +429,10 @@ async def llm_node(
             rd.record(rag_duration / 1000.0, {"strategy": "hybrid"})
         rc = get_rag_chunks()
         if rc is not None:
-            chunk_count = rag_metadata.get("memory_count", rag_metadata.get("fuzzy_count", 0))
+            chunk_count = rag_metadata.get(
+                "atom_count",
+                rag_metadata.get("memory_count", rag_metadata.get("fuzzy_count", 0)),
+            )
             if chunk_count > 0:
                 rc.record(chunk_count, {"strategy": "hybrid"})
         rts = get_rag_top_score()

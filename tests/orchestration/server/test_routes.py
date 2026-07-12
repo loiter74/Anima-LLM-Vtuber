@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -222,6 +222,9 @@ class TestRouteHandlersDispatch:
         mock_orch.process_text.assert_called_once()
         _, kwargs = mock_orch.process_text.call_args
         assert kwargs["text"] == "hello"
+        assert kwargs["user_id"] == "local:user1"
+        assert kwargs["channel"] == "local"
+        UUID(kwargs["conversation_id"])
 
     @pytest.mark.asyncio
     async def test_on_text_input_handles_explicit_zhouli_without_orchestrator(
@@ -583,6 +586,8 @@ class TestRouteHandlersDispatch:
 
         process_kwargs = orchestrator.process_text.await_args.kwargs
         assert process_kwargs["turn_id"] == process_kwargs["task_id"]
+        assert process_kwargs["user_id"] == "bilibili:1001"
+        assert process_kwargs["channel"] == "bilibili"
         golden_payloads = [
             call.args[1]
             for call in mock_socketio.emit.call_args_list
@@ -789,6 +794,7 @@ class TestRouteHandlersDispatch:
         class PublicMemorySystem:
             def __init__(self) -> None:
                 self.tick_called = False
+                self.store = SimpleNamespace(get_revision=AsyncMock(return_value=4))
 
             async def run_metabolism_tick(self) -> None:
                 self.tick_called = True
@@ -801,12 +807,20 @@ class TestRouteHandlersDispatch:
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
 
-        await handlers.on_memory_organize("sid1", {})
+        accepted = await handlers.on_memory_organize("sid1", {})
+        job_id = accepted["data"]["job_id"]
+        await handlers.memory.wait_for_job(job_id)
 
         assert memory.tick_called
         mock_socketio.emit.assert_any_call(
             "memory:organize_result",
-            {"status": "ok", "message": "Memory organized"},
+            {
+                "job_id": job_id,
+                "status": "completed",
+                "progress": 100,
+                "revision": 4,
+                "message": "Memory organized",
+            },
             to="sid1",
         )
 
@@ -826,6 +840,8 @@ class TestRouteHandlersDispatch:
         }]
 
         class PublicMemorySystem:
+            store = SimpleNamespace(get_revision=AsyncMock(return_value=7))
+
             async def list_wiki_pages(self, limit: int = 50) -> list[dict]:
                 assert limit == 50
                 return pages
@@ -837,7 +853,10 @@ class TestRouteHandlersDispatch:
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
 
-        assert await handlers.on_get_wiki_pages("sid1", {}) == {"pages": pages}
+        assert await handlers.on_get_wiki_pages("sid1", {}) == {
+            "pages": pages,
+            "revision": 7,
+        }
 
     @pytest.mark.asyncio
     async def test_meme_review_roundtrip_uses_registered_runtime_pool(
@@ -1014,7 +1033,7 @@ class TestRegisterRoutes:
 
         mock_orchestrator.process_text.assert_awaited_once_with(
             text="hello",
-            user_id="user1",
+            user_id="local:user1",
             user_name="User",
             channel_id="sid1",
             message_id=ANY,
@@ -1022,6 +1041,7 @@ class TestRegisterRoutes:
             task_id=ANY,
             turn_id=ANY,
             transport_mode="canonical",
+            channel="local",
         )
         undefined_helper_logs = [
             str(call.args[0])

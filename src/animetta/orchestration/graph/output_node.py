@@ -339,16 +339,50 @@ async def _store_conversation_to_memory(
             )
             return
 
-        vad_tuple = state.get("emotion_vad")
+        vad_tuple = state.get("response_emotion_vad") or state.get("emotion_vad")
+        from animetta.core.shared_memory_runtime import ConversationTurn
+        from animetta.memory.v2.context import MemoryContext, normalize_actor_id
         from animetta.memory.v2.emotion_field import VADVector
 
         vad = VADVector(*vad_tuple) if vad_tuple else None
+
+        metadata = state.get("metadata", {}) or {}
+        channel = metadata.get("channel") or "unknown"
+        context = MemoryContext(
+            actor_id=normalize_actor_id(
+                state.get("user_id") or metadata.get("actor_id"),
+                channel,
+            ),
+            conversation_id=state.get("conversation_id") or metadata.get("conversation_id"),
+            stream_id=metadata.get("stream_id"),
+            persona_id=metadata.get("persona_id"),
+            channel=channel,
+            connection_id=session_id,
+        )
+
+        # Production sessions borrow the application-scoped runtime. Database
+        # and embedding work runs on its bounded ingestion worker after output.
+        memory_runtime = vars(service_context).get("memory_runtime")
+        if memory_runtime is not None:
+            accepted = memory_runtime.submit_turn(ConversationTurn(
+                user_input=user_text,
+                agent_response=response_text,
+                emotion_vad=vad,
+                context=context,
+                turn_id=state.get("turn_id") or metadata.get("turn_id"),
+                retention_policy=metadata.get("retention_policy", "standard"),
+            ))
+            logger.debug(
+                f"[{session_id}] [OutputNode] Memory submission accepted={accepted}"
+            )
+            return
 
         await memory_system.encode(
             user_input=user_text,
             agent_response=response_text,
             emotion_vad=vad,
             session_id=session_id,
+            context=context,
         )
 
         logger.debug(f"[{session_id}] [OutputNode] Stored conversation in LivingMemory V2")

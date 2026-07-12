@@ -26,11 +26,12 @@ class SessionManager:
     3. Create and destroy session resources
     """
 
-    def __init__(self, model_manager=None):
+    def __init__(self, model_manager=None, memory_runtime=None):
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
         self.contexts: dict[str, ServiceContext] = {}
         self.model_manager = model_manager
+        self.memory_runtime = memory_runtime
 
         # Store orchestrator per session
         # Key: session_id, Value: LangGraphOrchestrator instance
@@ -74,11 +75,23 @@ class SessionManager:
                 logger.info(f"[{sid}] Using pooled engines (LLM/TTS/ASR)")
                 await ctx.load_cache(config=config, **pool)
                 await ctx.init_vad(config.vad)
-                await ctx.init_memory()
+                if self.memory_runtime is not None:
+                    await self.memory_runtime.initialize()
+                    ctx.attach_memory_system(self.memory_runtime.system, owned=False)
+                    ctx.memory_runtime = self.memory_runtime
+                else:
+                    await ctx.init_memory()
                 await ctx.init_emotion_analyzer(config)
             else:
                 logger.info(f"[{sid}] Pool not available, full init")
-                await ctx.load_from_config(config)
+                await ctx.load_from_config(
+                    config,
+                    initialize_memory=self.memory_runtime is None,
+                )
+                if self.memory_runtime is not None:
+                    await self.memory_runtime.initialize()
+                    ctx.attach_memory_system(self.memory_runtime.system, owned=False)
+                    ctx.memory_runtime = self.memory_runtime
 
             self.contexts[sid] = ctx
             logger.info(f"Created new ServiceContext for session {sid}")

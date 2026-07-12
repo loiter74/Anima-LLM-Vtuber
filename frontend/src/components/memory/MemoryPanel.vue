@@ -13,8 +13,8 @@ const store = useMemoryStore()
 const chatStore = useChatStore()
 
 const collapsed = ref(false)
-const sessionId = ref('default')
 const memeText = ref('')
+const correctionDraft = ref('')
 
 // ── View mode (list / graph) ─────────────────────────────────────────
 const viewMode = ref<'list' | 'graph'>('list')
@@ -63,7 +63,7 @@ function addMeme(): void {
   if (!socket) return
   socket.emit(Events.MEME.ADD, { text, source: 'user' }, () => {
     memeText.value = ''
-    store.fetchWikiPages(sessionId.value)
+    void refreshMemories()
   })
 }
 
@@ -75,6 +75,63 @@ const typeOptions: { key: string | null; label: string }[] = [
   { key: 'source', label: '来源' },
   { key: 'meme', label: '梗' },
 ]
+
+const scopeOptions: { key: string | null; label: string }[] = [
+  { key: null, label: '全部域' },
+  { key: 'character', label: '角色' },
+  { key: 'community', label: '社群' },
+  { key: 'viewer', label: '观众' },
+  { key: 'stream', label: '本场' },
+  { key: 'world', label: '世界' },
+]
+
+async function refreshMemories(): Promise<void> {
+  try {
+    await store.fetchMemories({ scope: store.filterScope })
+  } catch {
+    // The store exposes the structured error state in the panel.
+  }
+}
+
+async function loadMore(): Promise<void> {
+  if (!store.nextCursor) return
+  try {
+    await store.fetchMemories({
+      cursor: store.nextCursor,
+      scope: store.filterScope,
+      append: true,
+    })
+  } catch {
+    // Structured store error is rendered below.
+  }
+}
+
+async function togglePin(page: WikiPageEntry): Promise<void> {
+  try {
+    await store.pinMemory(page.id, page.retention_policy !== 'pinned')
+  } catch {
+    // Structured store error is rendered below.
+  }
+}
+
+async function forget(page: WikiPageEntry): Promise<void> {
+  try {
+    await store.forgetMemory(page.id)
+  } catch {
+    // Structured store error is rendered below.
+  }
+}
+
+async function correct(page: WikiPageEntry): Promise<void> {
+  const summary = correctionDraft.value.trim()
+  if (!summary) return
+  try {
+    await store.changeMemory(page.id, summary)
+    correctionDraft.value = ''
+  } catch {
+    // Structured store error is rendered below.
+  }
+}
 
 function formatTime(iso: string): string {
   if (!iso) return ''
@@ -88,8 +145,7 @@ function formatTime(iso: string): string {
 }
 
 onMounted(() => {
-  console.log('[MemoryPanel] mounted, fetching wiki pages...')
-  store.fetchWikiPages(sessionId.value)
+  void refreshMemories()
 })
 </script>
 
@@ -139,6 +195,31 @@ onMounted(() => {
         </button>
       </div>
 
+      <!-- Runtime state -->
+      <div class="flex items-center gap-2 px-4 py-2 border-b border-c-border/20 text-9px shrink-0">
+        <span
+          class="px-2 py-1 rounded-full border"
+          :class="store.error
+            ? 'text-c-error border-c-error/30 bg-c-error/10'
+            : store.invalidated
+              ? 'text-c-warning border-c-warning/30 bg-c-warning/10'
+              : 'text-c-success border-c-success/30 bg-c-success/10'"
+        >
+          {{ store.error ? store.error.code : store.invalidated ? '有新记忆' : '已同步' }}
+        </span>
+        <span class="font-mono text-c-text-muted">REV {{ store.revision }}</span>
+        <span v-if="store.health.degraded" class="text-c-warning">
+          索引降级 · {{ store.health.indexBacklog }} 待处理
+        </span>
+        <span v-if="store.job" class="text-c-text-dim truncate">
+          {{ store.job.status }} · {{ store.job.progress }}%
+        </span>
+        <div class="flex-1" />
+        <button class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200" @click="refreshMemories">
+          刷新
+        </button>
+      </div>
+
       <!-- Filter bar -->
       <div class="px-4 pt-3 pb-2 border-b border-c-border/20 space-y-2 shrink-0">
         <div class="flex gap-1 flex-wrap">
@@ -150,6 +231,19 @@ onMounted(() => {
               ? 'bg-c-accent/20 text-c-accent'
               : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
             @click="store.setFilter(opt.key)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+        <div class="flex gap-1 flex-wrap">
+          <button
+            v-for="opt in scopeOptions"
+            :key="opt.label"
+            class="px-2 py-1 rounded-lg text-9px font-medium transition-all duration-200"
+            :class="store.filterScope === opt.key
+              ? 'bg-c-blue/20 text-c-blue'
+              : 'bg-c-bg/40 text-c-text-muted hover:text-c-text'"
+            @click="store.setScope(opt.key); refreshMemories()"
           >
             {{ opt.label }}
           </button>
@@ -206,6 +300,8 @@ onMounted(() => {
                     {{ page.page_type }}
                   </span>
                   <span class="text-9px text-c-text-muted">{{ formatTime(page.updated_at) }}</span>
+                  <span class="text-9px text-c-blue">{{ page.scope }}</span>
+                  <span v-if="page.retention_policy === 'pinned'" class="text-9px text-c-warning">PIN</span>
                 </div>
               </div>
             </div>
@@ -216,6 +312,29 @@ onMounted(() => {
                 <p class="text-10px text-c-text-dim leading-relaxed whitespace-pre-wrap line-clamp-6">
                   {{ page.content }}
                 </p>
+                <div class="mt-2 text-9px text-c-text-muted space-y-1">
+                  <p>来源 {{ page.origin.channel || 'unknown' }} · 置信 {{ Math.round(page.confidence * 100) }}% · 显著 {{ Math.round(page.salience * 100) }}%</p>
+                  <p v-if="page.subject_ids.length">主体 {{ page.subject_ids.join(', ') }}</p>
+                </div>
+                <div class="flex gap-1 mt-2" @click.stop>
+                  <button class="px-2 py-1 rounded-lg bg-c-warning/10 text-c-warning hover:bg-c-warning/20 duration-200" @click="togglePin(page)">
+                    {{ page.retention_policy === 'pinned' ? '取消固定' : '固定' }}
+                  </button>
+                  <button class="px-2 py-1 rounded-lg bg-c-error/10 text-c-error hover:bg-c-error/20 duration-200" @click="forget(page)">
+                    忘记
+                  </button>
+                </div>
+                <div class="flex gap-1 mt-2" @click.stop>
+                  <input
+                    v-model="correctionDraft"
+                    class="flex-1 min-w-0 px-2 py-1 rounded-lg bg-c-bg/60 border border-c-border/30 text-9px text-c-text focus:outline-none focus:border-c-accent/50"
+                    placeholder="输入更正后的摘要"
+                    @keyup.enter="correct(page)"
+                  />
+                  <button class="px-2 py-1 rounded-lg bg-c-accent/15 text-c-accent hover:bg-c-accent/25 duration-200" @click="correct(page)">
+                    更正
+                  </button>
+                </div>
               </div>
             </Transition>
           </div>
@@ -244,9 +363,12 @@ onMounted(() => {
 
         <!-- Footer -->
         <div class="px-4 py-2 border-t border-c-border/20 shrink-0">
-          <p class="text-9px text-c-text-muted text-center">
-            {{ store.filteredPages.length }} 个页面
-          </p>
+          <div class="flex items-center justify-center gap-2 text-9px text-c-text-muted">
+            <span>{{ store.filteredPages.length }} / {{ store.total }} 条记忆</span>
+            <button v-if="store.nextCursor" class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200" @click="loadMore">
+              加载更多
+            </button>
+          </div>
         </div>
       </template>
 

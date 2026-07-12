@@ -20,6 +20,8 @@ from animetta.config.runtime_reload import (
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.readiness import frontend_asset_readiness
 from animetta.core.service_pool import ServicePool
+from animetta.core.shared_memory_runtime import SharedMemoryRuntime
+from animetta.orchestration.socket_events import EVENTS
 from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager
@@ -166,7 +168,16 @@ class WebSocketServer:
         set_model_manager(self.model_manager)
         ServicePool.configure_runtime(self.config, self.model_manager)
         set_runtime_readiness_context(self.config, self.frontend_readiness)
-        self.session_manager = SessionManager(model_manager=self.model_manager)
+        self.memory_runtime = SharedMemoryRuntime()
+        self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
+            lambda payload: self.sio.emit(
+                EVENTS["memory"]["changed"]["name"], payload
+            )
+        )
+        self.session_manager = SessionManager(
+            model_manager=self.model_manager,
+            memory_runtime=self.memory_runtime,
+        )
         self.desktop_manager = DesktopClientManager()
         self.live2d_manager = Live2DManager()
         self.lifecycle = LifecycleManager()
@@ -229,6 +240,7 @@ class WebSocketServer:
             logger.info("[Prewarm] No config loaded yet, skipping")
             return
 
+        await self.memory_runtime.initialize()
         await ServicePool.init(self.config, model_manager=self.model_manager)
 
     def _load_bilibili_config(self) -> dict[str, Any] | None:
@@ -333,6 +345,7 @@ class WebSocketServer:
                 type(exc).__name__,
             )
 
+        await self.memory_runtime.shutdown()
         await ServicePool.shutdown()
         logger.info("All resources cleaned up")
 

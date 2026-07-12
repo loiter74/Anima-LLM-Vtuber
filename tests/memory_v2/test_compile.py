@@ -6,7 +6,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from animetta.memory.v2.atom import Layer, MemoryAtom, RelationType
+from animetta.memory.v2.atom import (
+    Layer,
+    MemoryAtom,
+    MemoryScope,
+    MemoryVisibility,
+    RelationType,
+)
 from animetta.memory.v2.compile import COMPILE_TRIGGERS, CompileEngine
 
 
@@ -74,6 +80,25 @@ class TestCompileEngine:
         result = asyncio_run(engine.compile_layer(atoms, Layer.EPISODIC))
         assert len(result.relations) == 2
         assert all(r.relation_type == RelationType.DERIVES for r in result.relations)
+
+    def test_compile_inherits_private_viewer_boundary(self):
+        engine = CompileEngine()
+        atoms = [
+            make_atom(Layer.RAW, "viewer memory one", 2),
+            make_atom(Layer.RAW, "viewer memory two", 3),
+        ]
+        for atom in atoms:
+            atom.scope = MemoryScope.VIEWER
+            atom.visibility = MemoryVisibility.PRIVATE
+            atom.subject_ids = ["bilibili:42"]
+            atom.origin = {"channel": "bilibili", "stream_id": "live:1"}
+
+        result = asyncio_run(engine.compile_layer(atoms, Layer.EPISODIC))
+
+        assert result.scope is MemoryScope.VIEWER
+        assert result.visibility is MemoryVisibility.PRIVATE
+        assert result.subject_ids == ["bilibili:42"]
+        assert result.origin == atoms[0].origin
 
 
 class TestEligibility:

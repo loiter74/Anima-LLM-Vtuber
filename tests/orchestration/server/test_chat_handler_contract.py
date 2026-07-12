@@ -56,7 +56,7 @@ async def test_command_identity_is_propagated_to_orchestrator(handler) -> None:
 
     orchestrator.process_text.assert_awaited_once_with(
         text=command.text,
-        user_id="user",
+        user_id="local:owner",
         user_name="User",
         channel_id="sid",
         message_id=command.message_id,
@@ -64,6 +64,7 @@ async def test_command_identity_is_propagated_to_orchestrator(handler) -> None:
         task_id=command.task_id,
         turn_id=command.task_id,
         transport_mode=command.transport_mode.value,
+        channel="local",
     )
 
 

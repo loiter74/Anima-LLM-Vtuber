@@ -53,7 +53,9 @@ class TestWebSocketServerInit:
             assert server.sio is not None
             assert server.asgi_app is not None
             assert server.model_manager is not None
+            assert server.memory_runtime is not None
             assert server.session_manager is not None
+            assert server.session_manager.memory_runtime is server.memory_runtime
             assert server.desktop_manager is not None
             assert server.live2d_manager is not None
             assert server.lifecycle is not None
@@ -254,6 +256,7 @@ class TestPrewarmServices:
     @pytest.mark.asyncio
     async def test_prewarm_services_with_config(self, websocket_server):
         """prewarm_services initializes ServicePool when config is set."""
+        websocket_server.memory_runtime.initialize = AsyncMock()
         with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
             mock_pool.init = AsyncMock()
 
@@ -263,6 +266,7 @@ class TestPrewarmServices:
                 websocket_server.config,
                 model_manager=websocket_server.model_manager,
             )
+            websocket_server.memory_runtime.initialize.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_prewarm_services_no_config(self):
@@ -295,6 +299,7 @@ class TestCleanup:
         route_handlers.stop_bilibili = MagicMock()
         websocket_server.route_handlers = route_handlers
         websocket_server.session_manager.cleanup_all = AsyncMock()
+        websocket_server.memory_runtime.shutdown = AsyncMock()
 
         with patch(
             "animetta.orchestration.server.websocket.ServicePool.shutdown",
@@ -305,6 +310,7 @@ class TestCleanup:
         route_handlers.stop_bilibili.assert_called_once()
         websocket_server.session_manager.cleanup_all.assert_called_once()
         shutdown.assert_awaited_once_with()
+        websocket_server.memory_runtime.shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_stop_calls_cleanup(self, websocket_server):

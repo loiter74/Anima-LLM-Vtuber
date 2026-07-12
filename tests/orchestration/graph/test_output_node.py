@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langgraph.types import RunnableConfig
@@ -145,6 +145,45 @@ class TestOutputNode:
         call_kwargs = mock_service_context.memory_system.encode.call_args
         assert call_kwargs.kwargs["user_input"] == "Hi there"
         assert call_kwargs.kwargs["agent_response"] == "Hello Alice!"
+
+    @pytest.mark.asyncio
+    async def test_shared_runtime_submission_is_non_blocking_and_scoped(
+        self, mock_socketio, mock_service_context
+    ):
+        runtime = MagicMock()
+        runtime.submit_turn.return_value = True
+        mock_service_context.memory_runtime = runtime
+        mock_service_context.memory_system.encode = AsyncMock()
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
+        state = create_initial_state(
+            session_id="socket-a",
+            user_text="还记得我吗",
+            user_id="bilibili:42",
+            channel_id="bilibili",
+            conversation_id="22222222-2222-4222-8222-222222222222",
+        )
+        state["response_text"] = "当然记得。"
+        state["metadata"] = {
+            "dialogue_status": "composer",
+            "channel": "bilibili",
+            "stream_id": "bilibili:100",
+        }
+        config = RunnableConfig(configurable={
+            "socketio": mock_socketio,
+            "service_context": mock_service_context,
+        })
+
+        await output_node(state, config)
+
+        runtime.submit_turn.assert_called_once()
+        turn = runtime.submit_turn.call_args.args[0]
+        assert turn.user_input == "还记得我吗"
+        assert turn.agent_response == "当然记得。"
+        assert turn.context.actor_id == "bilibili:42"
+        assert turn.context.conversation_id == "22222222-2222-4222-8222-222222222222"
+        assert turn.context.stream_id == "bilibili:100"
+        assert turn.context.connection_id == "socket-a"
+        mock_service_context.memory_system.encode.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_off_policy_never_encodes_living_memory(

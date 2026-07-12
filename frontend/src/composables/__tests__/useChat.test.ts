@@ -5,6 +5,7 @@ import { Events } from '@/constants/socket-events'
 import { useMemoryStore } from '@/stores/memory'
 
 const socket = {
+  connected: true,
   on: vi.fn(),
   off: vi.fn(),
   emit: vi.fn(),
@@ -64,25 +65,28 @@ describe('useChat', () => {
     expect(store.messages[0].id).toBe(payload.message_id)
   })
 
-  it('refreshes wiki pages when memory organize completes', async () => {
+  it('delegates memory organization to the global job store', async () => {
+    socket.emit.mockImplementation((event, _payload, ack) => {
+      if (event === Events.MEMORY.ORGANIZE) {
+        ack({ ok: true, data: { job_id: 'job-a', status: 'accepted', progress: 0 } })
+      }
+    })
     const memoryStore = useMemoryStore()
-    const fetchWikiPages = vi.spyOn(memoryStore, 'fetchWikiPages').mockResolvedValue()
-    const { store, organizeMemory } = useChat()
+    const { organizeMemory } = useChat()
 
     await organizeMemory()
 
-    expect(store.memoryOrganizing).toBe(true)
-    expect(socket.emit).toHaveBeenCalledWith(Events.MEMORY.ORGANIZE, {})
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MEMORY.ORGANIZE,
+      {},
+      expect.any(Function),
+    )
+    expect(memoryStore.job?.job_id).toBe('job-a')
 
     const onResult = socket.on.mock.calls.find(
       ([event]) => event === Events.MEMORY.ORGANIZE_RESULT,
     )?.[1]
-    expect(onResult).toBeTypeOf('function')
-
-    await onResult({ status: 'ok' })
-
-    expect(store.memoryOrganizing).toBe(false)
-    expect(socket.off).toHaveBeenCalledWith(Events.MEMORY.ORGANIZE_RESULT, onResult)
-    expect(fetchWikiPages).toHaveBeenCalledWith('default')
+    onResult?.({ job_id: 'job-a', status: 'completed', progress: 100, revision: 2 })
+    expect(memoryStore.job?.status).toBe('completed')
   })
 })
