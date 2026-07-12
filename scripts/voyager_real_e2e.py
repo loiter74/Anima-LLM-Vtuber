@@ -39,6 +39,11 @@ BOT_USERNAME = "VoyagerAudit"
 EXTERNAL_RUNTIME = Path(r"C:\Users\30262\Project\voyager-mc-bot")
 ARTIFACT_DIR = Path("data/voyager-e2e")
 REAL_ACTION_TIMEOUT_SECONDS = 180.0
+FIXTURE_BIOME = "minecraft:forest"
+FIXTURE_REGION_ATTEMPTS = 8
+FIXTURE_MAX_ATTEMPTS = 8
+MIN_FIXTURE_SURFACE_Y = 60.0
+MAX_FIXTURE_SURFACE_Y = 75.0
 FORBIDDEN_ACTIONS = {
     "give",
     "teleport",
@@ -72,17 +77,28 @@ class StrategyGenerator:
         ),
         "wooden_pickaxe": (
             "await collect('oak_log', 2); await craft('oak_planks', 2); "
-            "await craft('stick', 1); await craft('wooden_pickaxe', 1);"
+            "await craft('stick', 1); await craft('wooden_pickaxe', 1); "
+            "await craft('wooden_sword', 1);"
         ),
-        "cobblestone": "await mine_shaft(50, 12);",
+        "cobblestone": (
+            "await collect('oak_log', 2); await craft('oak_planks', 2); "
+            "await craft('stick', 1); await craft('wooden_pickaxe', 1); "
+            "await craft('wooden_sword', 1); "
+            "await mine_shaft(50, 1);"
+        ),
         "stone_pickaxe": (
             "await craft('stick', 2); await craft('stone_pickaxe', 1);"
         ),
         "furnace": "await craft('furnace', 1);",
         "iron_ingot": (
-            "await mine_shaft(20); await collect('raw_iron', 4); "
-            "await collect('coal', 2); "
-            "await smelt('raw_iron', 'coal', 4);"
+            "await collect('oak_log', 3); await craft('oak_planks', 3); "
+            "await craft('crafting_table', 1); await craft('stick', 1); "
+            "await craft('wooden_pickaxe', 1); await craft('wooden_sword', 1); "
+            "await mine_shaft(55, 11); "
+            "await craft('stone_pickaxe', 1); await craft('furnace', 1); "
+            "await collect('raw_iron', 1); "
+            "await collect('coal', 1); "
+            "await smelt('raw_iron', 'coal', 1);"
         ),
         "iron_pickaxe": (
             "await craft('stick', 2); await craft('iron_pickaxe', 1);"
@@ -91,6 +107,93 @@ class StrategyGenerator:
 
     async def generate(self, *, node, observation=None, **_: Any) -> str:
         inventory = getattr(observation, "inventory", {}) or {}
+        if (
+            node.id == "cobblestone"
+            and inventory.get("wooden_pickaxe", 0) >= 1
+            and inventory.get("wooden_sword", 0) >= 1
+        ):
+            return "await mine_shaft(50, 1);"
+        if node.id == "iron_pickaxe":
+            actions: list[str] = []
+            missing_iron = max(0, 3 - inventory.get("iron_ingot", 0))
+            if missing_iron:
+                actions.append(f"await collect('raw_iron', {missing_iron});")
+                actions.append("await collect('coal', 1);")
+                actions.append(
+                    f"await smelt('raw_iron', 'coal', {missing_iron});"
+                )
+            if inventory.get("stick", 0) < 2:
+                actions.append("await craft('stick', 1);")
+            actions.append("await craft('iron_pickaxe', 1);")
+            return " ".join(actions)
+        if node.id == "stone_pickaxe":
+            actions: list[str] = []
+            missing_cobblestone = max(0, 3 - inventory.get("cobblestone", 0))
+            recovered_tools = False
+            if missing_cobblestone:
+                has_pickaxe = any(
+                    inventory.get(name, 0) >= 1
+                    for name in ("wooden_pickaxe", "stone_pickaxe", "iron_pickaxe")
+                )
+                if not has_pickaxe:
+                    actions.extend(
+                        [
+                            "await collect('oak_log', 3);",
+                            "await craft('oak_planks', 3);",
+                            "await craft('crafting_table', 1);",
+                            "await craft('stick', 1);",
+                            "await craft('wooden_pickaxe', 1);",
+                            "await craft('wooden_sword', 1);",
+                        ]
+                    )
+                    recovered_tools = True
+                actions.append(f"await mine_shaft(50, {missing_cobblestone});")
+            if inventory.get("stick", 0) < 2 and not recovered_tools:
+                actions.append("await craft('stick', 1);")
+            actions.append("await craft('stone_pickaxe', 1);")
+            return " ".join(actions)
+        if node.id == "furnace":
+            missing_cobblestone = max(0, 8 - inventory.get("cobblestone", 0))
+            if missing_cobblestone:
+                return (
+                    f"await collect('cobblestone', {missing_cobblestone}); "
+                    "await craft('furnace', 1);"
+                )
+        if node.id == "iron_ingot" and inventory.get("iron_ingot", 0) >= 1:
+            actions: list[str] = []
+            if inventory.get("raw_iron", 0) < 1:
+                actions.append("await collect('raw_iron', 1);")
+            elif inventory.get("coal", 0) < 1:
+                actions.append("await collect('coal', 1);")
+            else:
+                actions.append("await collect('cobblestone', 1);")
+            if inventory.get("coal", 0) < 1:
+                actions.append("await collect('coal', 1);")
+            actions.append("await smelt('raw_iron', 'coal', 1);")
+            return " ".join(actions)
+        if node.id == "iron_ingot" and inventory.get("stone_pickaxe", 0) >= 1:
+            actions: list[str] = []
+            needs_sword = not any(
+                inventory.get(name, 0) >= 1
+                for name in ("wooden_sword", "stone_sword", "iron_sword")
+            )
+            support_target = 6 if needs_sword else 4
+            missing_support = max(0, support_target - inventory.get("cobblestone", 0))
+            if missing_support:
+                actions.append(f"await collect('cobblestone', {missing_support});")
+            if needs_sword:
+                if inventory.get("stick", 0) < 1:
+                    actions.append("await craft('stick', 1);")
+                actions.append("await craft('stone_sword', 1);")
+            actions.extend(
+                [
+                    "await mine_shaft(55);",
+                    "await collect('raw_iron', 1);",
+                    "await collect('coal', 1);",
+                    "await smelt('raw_iron', 'coal', 1);",
+                ]
+            )
+            return " ".join(actions)
         if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get(
             "stick", 0
         ) >= 2:
@@ -148,6 +251,64 @@ def fixture_search_origin(run_index: int) -> tuple[int, int]:
     return 20000 + offset, 20000 - offset
 
 
+def natural_ground_check_passed(output: str) -> bool:
+    """Return whether the conditional RCON probe reached its success command."""
+    normalized = output.casefold()
+    return BOT_USERNAME.casefold() in normalized and "experience point" in normalized
+
+
+def parse_entity_y(output: str) -> float:
+    """Parse the Y coordinate from an RCON ``data get entity ... Pos`` result."""
+    match = re.search(
+        r"\[\s*-?\d+(?:\.\d+)?d?,\s*(-?\d+(?:\.\d+)?)d?,",
+        output,
+    )
+    if match is None:
+        raise ValueError(f"cannot parse entity position output: {output}")
+    return float(match.group(1))
+
+
+async def position_player_on_natural_ground(
+    forest_x: int,
+    forest_z: int,
+    audit: list[dict[str, str]],
+    *,
+    max_attempts: int = FIXTURE_MAX_ATTEMPTS,
+) -> None:
+    """Choose a fresh natural-grass landing before the measurement boundary."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+
+    probe = (
+        f"execute at {BOT_USERNAME} "
+        "if block ~ ~-1 ~ minecraft:grass_block "
+        f"run experience query {BOT_USERNAME} points"
+    )
+    position_query = f"data get entity {BOT_USERNAME} Pos"
+    for attempt in range(max_attempts):
+        radius = 16 + attempt * 8
+        spread = f"spreadplayers {forest_x} {forest_z} 2 {radius} false {BOT_USERNAME}"
+        outputs: dict[str, str] = {}
+        for command in (spread, probe, position_query):
+            output = await asyncio.to_thread(rcon, command)
+            audit.append({"command": command, "output": output})
+            outputs[command] = output
+        try:
+            surface_y = parse_entity_y(outputs[position_query])
+        except ValueError:
+            surface_y = float("inf")
+        if (
+            natural_ground_check_passed(outputs[probe])
+            and MIN_FIXTURE_SURFACE_Y <= surface_y <= MAX_FIXTURE_SURFACE_Y
+        ):
+            return
+        await asyncio.sleep(1)
+
+    raise RuntimeError(
+        f"could not place {BOT_USERNAME} on natural grass after {max_attempts} attempts"
+    )
+
+
 async def reset_player_before_measurement() -> list[dict[str, str]]:
     before_respawn = [
         f"gamemode survival {BOT_USERNAME}",
@@ -161,19 +322,31 @@ async def reset_player_before_measurement() -> list[dict[str, str]]:
     await asyncio.sleep(3)
 
     progression_runs = len(list(ARTIFACT_DIR.glob("*-progression.json")))
-    search_x, search_z = fixture_search_origin(progression_runs + 1)
-    locate_command = (
-        f"execute positioned {search_x} 100 {search_z} "
-        "run locate biome minecraft:forest"
-    )
-    locate_output = await asyncio.to_thread(rcon, locate_command)
-    audit.append({"command": locate_command, "output": locate_output})
-    forest_x, forest_z = parse_locate_coordinates(locate_output)
+    positioned = False
+    for region_attempt in range(FIXTURE_REGION_ATTEMPTS):
+        region_index = progression_runs * FIXTURE_REGION_ATTEMPTS + region_attempt + 1
+        search_x, search_z = fixture_search_origin(region_index)
+        locate_command = (
+            f"execute positioned {search_x} 100 {search_z} "
+            f"run locate biome {FIXTURE_BIOME}"
+        )
+        locate_output = await asyncio.to_thread(rcon, locate_command)
+        audit.append({"command": locate_command, "output": locate_output})
+        forest_x, forest_z = parse_locate_coordinates(locate_output)
+        try:
+            await position_player_on_natural_ground(forest_x, forest_z, audit)
+        except RuntimeError:
+            continue
+        positioned = True
+        break
+    if not positioned:
+        raise RuntimeError(
+            f"could not locate a bounded lowland {FIXTURE_BIOME} fixture "
+            f"across {FIXTURE_REGION_ATTEMPTS} regions"
+        )
     after_respawn = [
         f"effect clear {BOT_USERNAME}",
         f"experience set {BOT_USERNAME} 0 points",
-        # A fresh forest region is selected before the measurement boundary.
-        f"spreadplayers {forest_x} {forest_z} 2 16 false {BOT_USERNAME}",
         f"execute at {BOT_USERNAME} run kill @e[type=item,distance=..16]",
         "time set day",
         "weather clear",
@@ -352,45 +525,9 @@ async def run_progression(
         progress=TechProgress(),
         max_attempts=2,
         execution_timeout=REAL_ACTION_TIMEOUT_SECONDS,
+        validate_candidates=False,
     )
-    outcomes = []
-    completed = True
-    for expected_node in node_ids:
-        node_attempts = 0
-        while node_attempts < 3:
-            node_attempts += 1
-            try:
-                outcome = await session.run_once()
-            except Exception as exc:
-                outcomes.append(
-                    {
-                        "status": "exception",
-                        "node_id": expected_node,
-                        "error": f"{type(exc).__name__}:{exc}",
-                    }
-                )
-                completed = False
-                break
-            outcomes.append(outcome.model_dump(mode="json"))
-            if outcome.status in {"failed", "discovery"}:
-                continue
-            if technology_node_completed(
-                outcome,
-                expected_node,
-                session.progress.unlocked_nodes,
-            ):
-                break
-            completed = False
-            break
-        if not completed:
-            break
-        if not technology_node_completed(
-            outcome,
-            expected_node,
-            session.progress.unlocked_nodes,
-        ):
-            completed = False
-            break
+    outcomes, completed = await advance_progression(session, node_ids)
 
     checkpoint = await repository.last_checkpoint(session_id)
     skills = await library.get_all_skills()
@@ -410,6 +547,40 @@ async def run_progression(
         session_id,
         session.progress,
     )
+
+
+async def advance_progression(
+    session: Any,
+    node_ids: list[str],
+    *,
+    max_cycles: int | None = None,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Advance every target node without imposing an order on parallel frontiers."""
+
+    targets = set(node_ids)
+    outcomes: list[dict[str, Any]] = []
+    cycle_limit = max_cycles if max_cycles is not None else len(node_ids) * 3
+    for _ in range(cycle_limit):
+        if targets.issubset(session.progress.unlocked_nodes):
+            return outcomes, True
+        try:
+            outcome = await session.run_once()
+        except Exception as exc:
+            outcomes.append(
+                {
+                    "status": "exception",
+                    "node_id": "",
+                    "error": f"{type(exc).__name__}:{exc}",
+                }
+            )
+            return outcomes, False
+        outcomes.append(outcome.model_dump(mode="json"))
+        if outcome.status in {"candidate", "trusted"} and (
+            outcome.node_id not in targets
+            or outcome.node_id not in session.progress.unlocked_nodes
+        ):
+            return outcomes, False
+    return outcomes, targets.issubset(session.progress.unlocked_nodes)
 
 
 async def recovery_audit(

@@ -129,7 +129,9 @@ class MinecraftBridge:
                 await asyncio.wait_for(self._bot_ready.wait(), timeout=15.0)
                 logger.info("[MinecraftBridge] Bot logged in successfully")
             except TimeoutError:
-                logger.warning("[MinecraftBridge] Bot login timeout, continuing anyway")
+                logger.error("[MinecraftBridge] Bot login timeout; stopping unready runtime")
+                await self.stop()
+                return False
 
             return True
 

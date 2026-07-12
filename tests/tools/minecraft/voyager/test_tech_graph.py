@@ -269,6 +269,20 @@ def test_iron_ingot_task_allows_safe_descent_but_still_requires_collect_and_smel
     assert node.required_capabilities == ("collect", "smelt")
 
 
+def test_iron_ingot_task_allows_crafting_replacement_stone_pickaxe() -> None:
+    node = _tech().build_survival_tech_graph().get("iron_ingot")
+
+    assert "craft" in node.allowed_capabilities
+    assert node.required_capabilities == ("collect", "smelt")
+
+
+def test_cobblestone_task_allows_crafting_replacement_wooden_pickaxe() -> None:
+    node = _tech().build_survival_tech_graph().get("cobblestone")
+
+    assert "craft" in node.allowed_capabilities
+    assert node.required_capabilities == ("mine_shaft",)
+
+
 def test_scheduler_skips_cooled_node_when_alternative_frontier_exists() -> None:
     tech = _tech()
     graph = tech.build_survival_tech_graph()
@@ -318,6 +332,28 @@ def test_scheduler_uses_underground_discovery_then_reopens_cobblestone_frontier(
     assert discovery.discovery.params == {"target_y": 50}
     assert retry.kind == "technology"
     assert retry.node.id == "cobblestone"
+
+
+def test_scheduler_uses_bounded_mid_depth_discovery_for_iron() -> None:
+    tech = _tech()
+    graph = tech.build_survival_tech_graph()
+    scheduler = tech.FrontierScheduler(graph, failure_cooldown=1)
+    progress = _progress(
+        "wood_collection",
+        "crafting_table",
+        "wooden_pickaxe",
+        "cobblestone",
+        "stone_pickaxe",
+        "furnace",
+    )
+    observation = _observation("obs-iron", {"stone_pickaxe": 1, "furnace": 1})
+    scheduler.record_failure("iron_ingot")
+
+    discovery = scheduler.select(progress, observation)
+
+    assert discovery.kind == "discovery"
+    assert discovery.discovery.capability == "mine_shaft"
+    assert discovery.discovery.params == {"target_y": 40}
 
 
 def test_scheduler_exposes_gold_frontier_after_committed_iron_pickaxe() -> None:

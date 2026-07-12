@@ -196,7 +196,7 @@ class TestMinecraftBridgeStart:
         )
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_start_login_timeout_still_succeeds(self, mock_is_available, mock_config, mock_process):
+    async def test_start_login_timeout_stops_unready_runtime(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
         with patch("os.path.exists", return_value=True), \
@@ -204,8 +204,8 @@ class TestMinecraftBridgeStart:
              patch("asyncio.wait_for", side_effect=_timeout_ready_wait):
             result = await bridge.start()
 
-        assert result is True
-        assert bridge.is_running is True
+        assert result is False
+        assert bridge.is_running is False
 
     async def test_start_exception_returns_false(self, mock_config):
         bridge = MinecraftBridge(mock_config)

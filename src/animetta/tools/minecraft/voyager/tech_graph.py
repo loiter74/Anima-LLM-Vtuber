@@ -161,7 +161,11 @@ class FrontierScheduler:
         if blocked and blocked.id in {"cobblestone", "iron_ingot", "gold_ore"}:
             capability = "mine_shaft"
             params = {
-                "target_y": 50 if blocked.id == "cobblestone" else 20,
+                "target_y": {
+                    "cobblestone": 50,
+                    "iron_ingot": 40,
+                    "gold_ore": 20,
+                }[blocked.id],
             }
         return FrontierSelection(
             kind="discovery",
@@ -318,7 +322,7 @@ def build_survival_tech_graph() -> TechGraph:
                 name="Collect cobblestone",
                 prerequisites=frozenset({"wooden_pickaxe"}),
                 allowed_capabilities=movement
-                | {"collect", "mine", "equip", "mine_shaft"},
+                | {"collect", "craft", "mine", "equip", "mine_shaft"},
                 required_capabilities=("mine_shaft",),
                 postconditions={"cobblestone": 1},
                 discovery_radius=48,
@@ -328,7 +332,8 @@ def build_survival_tech_graph() -> TechGraph:
                 id="stone_pickaxe",
                 name="Craft a stone pickaxe",
                 prerequisites=frozenset({"cobblestone", "crafting_table"}),
-                allowed_capabilities=movement | {"craft", "place"},
+                allowed_capabilities=movement
+                | {"collect", "craft", "place", "mine_shaft"},
                 required_capabilities=("craft",),
                 postconditions={"stone_pickaxe": 1},
             ),
@@ -336,7 +341,7 @@ def build_survival_tech_graph() -> TechGraph:
                 id="furnace",
                 name="Craft a furnace",
                 prerequisites=frozenset({"cobblestone", "crafting_table"}),
-                allowed_capabilities=movement | {"craft", "place"},
+                allowed_capabilities=movement | {"collect", "craft", "place"},
                 required_capabilities=("craft",),
                 postconditions={"furnace": 1},
             ),
@@ -347,6 +352,7 @@ def build_survival_tech_graph() -> TechGraph:
                 allowed_capabilities=movement
                 | {
                     "collect",
+                    "craft",
                     "mine",
                     "smelt",
                     "equip",
@@ -362,7 +368,8 @@ def build_survival_tech_graph() -> TechGraph:
                 id="iron_pickaxe",
                 name="Craft an iron pickaxe",
                 prerequisites=frozenset({"iron_ingot", "crafting_table"}),
-                allowed_capabilities=movement | {"craft", "place"},
+                allowed_capabilities=movement
+                | {"collect", "craft", "place", "smelt"},
                 required_capabilities=("craft",),
                 postconditions={"iron_pickaxe": 1},
             ),

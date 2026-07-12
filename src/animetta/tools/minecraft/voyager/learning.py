@@ -10,7 +10,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
-from animetta.tools.gamebot.contracts import ActionOutcome, SkillExecutionResult
+from animetta.tools.gamebot.contracts import (
+    ActionOutcome,
+    GameBotObservation,
+    SkillExecutionResult,
+)
 from animetta.tools.minecraft.skill.catalog import SkillLibrary
 from animetta.tools.minecraft.skill.models import (
     Skill,
@@ -145,6 +149,7 @@ class LearningSession:
         progress: TechProgress,
         max_attempts: int = 4,
         execution_timeout: float = 180.0,
+        validate_candidates: bool = True,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
@@ -159,8 +164,9 @@ class LearningSession:
         self._progress = progress
         self._max_attempts = max_attempts
         self._execution_timeout = execution_timeout
+        self._validate_candidates = validate_candidates
         self._verifier = TechEvidenceVerifier(graph)
-        self._last_observation = None
+        self._last_observation: GameBotObservation | None = None
         self._validation_feedback: list[str] = []
 
     @property
@@ -340,6 +346,15 @@ class LearningSession:
                 metadata={"inventory": dict(self._last_observation.inventory)},
             )
         )
+
+        if not self._validate_candidates:
+            return LearningOutcome(
+                status="candidate",
+                node_id=node.id,
+                skill_id=skill.id,
+                attempts=attempt,
+                feedback=tuple(feedback),
+            )
 
         trusted = await self._validate_candidate(node, skill, source_policy)
         return LearningOutcome(

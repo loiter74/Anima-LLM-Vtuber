@@ -145,7 +145,7 @@ def _manifest() -> CapabilityManifest:
     )
 
 
-def _session(runtime, generator, *, scheduler=None):
+def _session(runtime, generator, *, scheduler=None, validate_candidates: bool = True):
     learning = _learning()
     graph = build_survival_tech_graph()
     library = SkillLibrary()
@@ -167,6 +167,7 @@ def _session(runtime, generator, *, scheduler=None):
         code_generator=generator,
         progress=TechProgress(),
         max_attempts=4,
+        validate_candidates=validate_candidates,
     )
     return session, library
 
@@ -306,6 +307,28 @@ async def test_failed_independent_validation_leaves_candidate_out_of_live_trust(
     assert skill.trust_stage is SkillTrustStage.CANDIDATE
     assert skill.is_trusted is False
     assert skill.provenance.validation_session_id == ""
+
+
+async def test_deferred_validation_commits_candidate_without_replaying_world_action() -> None:
+    source_before = _observation("source-before", {})
+    source_after = _observation("source-after", {"oak_log": 1})
+    runtime = FakeLearningRuntime([(source_before, source_after, True)])
+    session, library = _session(
+        runtime,
+        FakeGenerator(),
+        validate_candidates=False,
+    )
+
+    outcome = await session.run_once()
+    skill = (await library.get_all_skills())[0]
+    checkpoint = await session._context.repository.last_checkpoint("learn-session-1")
+
+    assert outcome.status == "candidate"
+    assert len(runtime.eval_calls) == 1
+    assert skill.trust_stage is SkillTrustStage.CANDIDATE
+    assert skill.provenance.validation_session_id == ""
+    assert checkpoint.task_id == skill.provenance.source_task_id
+    assert checkpoint.metadata["inventory"] == {"oak_log": 1}
 
 
 async def test_learning_module_has_no_admin_or_fixed_identity_dependencies() -> None:
