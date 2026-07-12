@@ -4,6 +4,8 @@ ASR Factory - creates ASR instances based on configuration.
 
 from __future__ import annotations
 
+from importlib import import_module
+
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
@@ -19,6 +21,14 @@ from animetta.tracing.proxy import TracingProxy
 
 from .interface import ASRInterface
 from .mock_asr import MockASR
+
+_AVAILABLE_ASR_PROVIDERS = (
+    "mock",
+    "funasr",
+    "glm",
+    "mimo",
+    "faster_whisper",
+)
 
 
 class ASRFactory:
@@ -48,10 +58,31 @@ class ASRFactory:
             return MockASR()
 
         try:
+            normalized_provider = provider.replace("_", "-")
+            module_name = {
+                "mock": ".mock_asr",
+                "openai": ".openai_asr",
+                "funasr": ".funasr_asr",
+                "glm": ".glm_asr",
+                "mimo": ".mimo_asr",
+                "mimo-asr": ".mimo_asr",
+                "faster-whisper": ".faster_whisper_asr",
+            }.get(normalized_provider)
+            if module_name is not None:
+                try:
+                    import_module(module_name, __package__)
+                except ImportError as exc:
+                    logger.warning(
+                        "ASR provider import unavailable: "
+                        f"type={provider}, error={type(exc).__name__}"
+                    )
             svc = ProviderRegistry.create_service("asr", config)
             return TracingProxy(svc, service_name="asr")
         except Exception as e:
-            logger.warning(f"Failed to create ASR ({provider}): {e}, falling back to Mock")
+            logger.warning(
+                "ASR provider failed to initialize; falling back to MockASR: "
+                f"type={provider}, error={type(e).__name__}"
+            )
             return MockASR()
 
     @staticmethod
@@ -116,5 +147,5 @@ class ASRFactory:
 
     @staticmethod
     def get_available_configs() -> list[str]:
-        """Get list of all available providers"""
-        return list(ProviderRegistry.list_services("asr"))
+        """Get the stable catalog of providers with service implementations."""
+        return list(_AVAILABLE_ASR_PROVIDERS)

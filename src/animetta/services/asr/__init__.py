@@ -5,24 +5,36 @@ so that the module can be imported without their dependencies
 in lightweight/core deployments.
 """
 
+from importlib import import_module
+
 from .factory import ASRFactory
-from .glm_asr import GLMASR
 from .interface import ASRInterface
-from .mimo_asr import MimoASR
 
 # Core implementations (lightweight dependencies)
 from .mock_asr import MockASR
 
-# Heavy providers — guarded for core deployments
-try:
-    from .faster_whisper_asr import FasterWhisperASR
-except ImportError:
-    FasterWhisperASR = None  # type: ignore[assignment,misc]
+_LAZY_PROVIDERS = {
+    "GLMASR": (".glm_asr", "GLMASR"),
+    "MimoASR": (".mimo_asr", "MimoASR"),
+    "FasterWhisperASR": (".faster_whisper_asr", "FasterWhisperASR"),
+    "FunASRASR": (".funasr_asr", "FunASRASR"),
+}
 
-try:
-    from .funasr_asr import FunASRASR
-except ImportError:
-    FunASRASR = None  # type: ignore[assignment,misc]
+
+def __getattr__(name: str):
+    """Import optional provider implementations only when requested."""
+    target = _LAZY_PROVIDERS.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module_name, attribute = target
+    try:
+        value = getattr(import_module(module_name, __name__), attribute)
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.startswith("animetta."):
+            raise
+        return None
+    globals()[name] = value
+    return value
 
 __all__ = [
     "ASRInterface",

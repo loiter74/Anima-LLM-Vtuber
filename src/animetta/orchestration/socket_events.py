@@ -50,6 +50,7 @@ EVENT_DEFINITION_KEYS = {
     "golden_path",
     "identity",
     "payload",
+    "ack",
     "completion",
     "degradation",
 }
@@ -58,10 +59,12 @@ LEGACY_SCHEMA_TYPES = {
     "boolean",
     "integer",
     "number",
+    "number|null",
     "number[]",
     "object",
     "object[]",
     "string",
+    "string|null",
     "string[]",
 }
 DESCRIPTOR_KEYS = {

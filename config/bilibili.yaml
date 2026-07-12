@@ -2,3 +2,14 @@
 enabled: false
 room_id: 0
 sessdata: ""
+
+reply_policy:
+  enabled: true
+  max_replies_per_minute: 6
+  max_queue_size: 20
+  max_message_age_seconds: 15
+  per_user_cooldown_seconds: 30
+  duplicate_window_seconds: 60
+  ordinary_sample_rate: 0.1
+  reply_to_gifts: true
+  reply_to_super_chat: true

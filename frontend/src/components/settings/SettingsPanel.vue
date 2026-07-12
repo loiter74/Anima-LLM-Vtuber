@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { useDanmakuStore } from '@/stores/danmaku'
+import { useDanmaku } from '@/composables/useDanmaku'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { useMinecraftStore } from '@/stores/minecraft'
 import type { SubtitleDisplayMode, SubtitleFontSize } from '@/stores/subtitle'
@@ -9,6 +10,11 @@ import BackgroundSettings from './BackgroundSettings.vue'
 import { Events } from '@/constants/socket-events'
 
 const danmakuStore = useDanmakuStore()
+const {
+  connect: connectDanmaku,
+  disconnect: disconnectDanmaku,
+  updateRoom: updateDanmakuRoom,
+} = useDanmaku({ listen: false })
 const subtitleStore = useSubtitleStore()
 const minecraftStore = useMinecraftStore()
 const roomInput = ref<number | null>(null)
@@ -40,22 +46,23 @@ const modelInfo = ref('')
 const backendInfo = ref('')
 const loading = ref(true)
 const error = ref('')
-function handleBilibiliConnect(): void {
-  const socket = getSocket()
-  if (!socket || !roomInput.value) return
+async function handleBilibiliConnect(): Promise<void> {
+  if (!roomInput.value) return
   if (roomInput.value <= 0) {
     roomError.value = '请输入有效的直播间号'
     return
   }
   roomError.value = ''
-  danmakuStore.setConnecting(true)
-  socket.emit(Events.BILIBILI.CONNECT, { room_id: roomInput.value })
+  const command = danmakuStore.desiredRoomId && danmakuStore.desiredRoomId !== roomInput.value
+    ? updateDanmakuRoom
+    : connectDanmaku
+  const ack = await command(roomInput.value)
+  if (!ack.accepted) roomError.value = ack.message
 }
 
-function handleBilibiliDisconnect(): void {
-  const socket = getSocket()
-  if (!socket) return
-  socket.emit(Events.BILIBILI.DISCONNECT)
+async function handleBilibiliDisconnect(): Promise<void> {
+  const ack = await disconnectDanmaku()
+  if (!ack.accepted) roomError.value = ack.message
 }
 
 function handleSubtitleToggle(): void {
@@ -327,8 +334,8 @@ onUnmounted(() => {
             class="w-2 h-2 rounded-full"
             :class="danmakuStore.connected ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-c-error'"
           />
-          <span class="text-xs" :class="danmakuStore.connected ? 'text-c-success' : 'text-c-error'">
-            {{ danmakuStore.connected ? '已连接' : '已断开' }}
+          <span class="text-xs" :class="danmakuStore.connected ? 'text-c-success' : danmakuStore.isConnecting ? 'text-c-warning' : 'text-c-error'">
+            {{ danmakuStore.connected ? `已连接房间 ${danmakuStore.roomId}` : danmakuStore.isConnecting ? '连接处理中' : '已断开' }}
           </span>
           <span v-if="danmakuStore.statusMessage" class="text-10px text-c-text-muted ml-1">
             {{ danmakuStore.statusMessage }}
@@ -341,21 +348,35 @@ onUnmounted(() => {
             class="flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
             :class="danmakuStore.isConnecting
               ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
-              : danmakuStore.connected
-                ? 'bg-c-error/15 text-c-error hover:bg-c-error/25'
-                : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'"
-            :disabled="danmakuStore.isConnecting"
-            @click="danmakuStore.connected ? handleBilibiliDisconnect() : handleBilibiliConnect()"
+              : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'"
+            :disabled="danmakuStore.isConnecting || !roomInput || (danmakuStore.connected && roomInput === danmakuStore.roomId)"
+            @click="handleBilibiliConnect"
           >
             <template v-if="danmakuStore.isConnecting">
               <span class="inline-block w-3 h-3 border-2 border-c-accent border-t-transparent rounded-full animate-spin" />
               连接中...
             </template>
             <template v-else>
-              {{ danmakuStore.connected ? '🔌 断开连接' : '🔗 连接' }}
+              {{ danmakuStore.connected ? '🔁 切换房间' : '🔗 连接' }}
             </template>
           </button>
+          <button
+            v-if="danmakuStore.connected"
+            class="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-c-error/15 text-c-error hover:bg-c-error/25 transition-all"
+            :disabled="danmakuStore.isConnecting"
+            @click="handleBilibiliDisconnect"
+          >
+            🔌 断开连接
+          </button>
         </div>
+        <a
+          href="/live.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-2 flex items-center justify-center px-3 py-2 rounded-xl border border-c-border/40 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/40 transition-all"
+        >
+          打开 OBS 独立页面
+        </a>
       </div>
 
       <div class="pt-3 border-t border-c-border/40 space-y-2">

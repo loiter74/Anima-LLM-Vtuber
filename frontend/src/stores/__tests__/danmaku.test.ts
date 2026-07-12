@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useDanmakuStore } from '@/stores/danmaku'
+import type { DanmakuStatus } from '@/types/chat'
+
+function status(overrides: Partial<DanmakuStatus> = {}): DanmakuStatus {
+  return {
+    state: 'stopped',
+    connected: false,
+    room_id: null,
+    desired_room_id: null,
+    retry_count: 0,
+    error_code: null,
+    generation_id: 0,
+    message: 'Stopped',
+    updated_at: 1,
+    ...overrides,
+  }
+}
 
 describe('useDanmakuStore', () => {
   beforeEach(() => {
@@ -61,15 +77,15 @@ describe('useDanmakuStore', () => {
   describe('setStatus', () => {
     it('sets connected status', () => {
       const store = useDanmakuStore()
-      store.setStatus({ connected: true, message: 'Connected to room' })
+      store.setStatus(status({ state: 'live', connected: true, room_id: 123, desired_room_id: 123, message: 'Connected to room' }))
       expect(store.connected).toBe(true)
       expect(store.statusMessage).toBe('Connected to room')
     })
 
     it('sets disconnected status', () => {
       const store = useDanmakuStore()
-      store.setStatus({ connected: true })
-      store.setStatus({ connected: false, message: 'Disconnected' })
+      store.setStatus(status({ state: 'live', connected: true }))
+      store.setStatus(status({ connected: false, message: 'Disconnected' }))
       expect(store.connected).toBe(false)
       expect(store.isConnecting).toBe(false)
     })
@@ -77,7 +93,7 @@ describe('useDanmakuStore', () => {
     it('clears isConnecting on disconnect', () => {
       const store = useDanmakuStore()
       store.setConnecting(true)
-      store.setStatus({ connected: false })
+      store.setStatus(status({ connected: false }))
       expect(store.isConnecting).toBe(false)
     })
   })

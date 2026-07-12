@@ -45,9 +45,14 @@ validate_env() {
 }
 
 run_static_preflight() {
+    if [ "${ANIMETTA_CONFIG:-}" != "/app/config/config.golden.yaml" ]; then
+        echo "[entrypoint] Golden static preflight: skipped (non-golden profile)"
+        return 0
+    fi
+
     echo "[entrypoint] Running golden static preflight..."
     python scripts/baseline_golden_path.py \
-        --config "${ANIMETTA_CONFIG:-/app/config/config.golden.yaml}" \
+        --config "$ANIMETTA_CONFIG" \
         --project-root /app \
         --output-dir /app/data/baseline \
         --static-only

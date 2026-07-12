@@ -19,6 +19,7 @@ Covers ``create_from_config`` (discriminated union dispatch) and
 and fallback behaviour.
 """
 
+import builtins
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -281,6 +282,41 @@ class TestCreateFromConfig:
         mock_create.assert_called_once_with("llm", config, system_prompt="")
         assert result is mock_svc
 
+    def test_explicit_mock_does_not_import_openai_provider(self):
+        """Selecting mock remains isolated from the optional OpenAI dependency."""
+        imported: list[str] = []
+        original_import = builtins.__import__
+
+        def guarded_import(name, *args, **kwargs):
+            imported.append(name)
+            return original_import(name, *args, **kwargs)
+
+        with patch(
+            "animetta.services.llm.factory.ProviderRegistry.create_service",
+            return_value=MockLLM(),
+        ), patch("builtins.__import__", side_effect=guarded_import):
+            LLMFactory.create_from_config(MockLLMConfig(), strict=True)
+
+        assert "openai_llm" not in imported
+
+    def test_strict_mode_preserves_provider_import_error(self):
+        """Strict creation reports the missing dependency instead of registry drift."""
+        missing = ModuleNotFoundError("missing GLM dependency", name="zhipuai")
+
+        with patch(
+            "animetta.services.llm.factory.import_module",
+            side_effect=missing,
+        ), patch(
+            "animetta.services.llm.factory.ProviderRegistry.create_service",
+        ) as create_service, pytest.raises(ModuleNotFoundError) as exc_info:
+            LLMFactory.create_from_config(
+                GLMLLMConfig(api_key="test"),
+                strict=True,
+            )
+
+        assert exc_info.value is missing
+        create_service.assert_not_called()
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # create (provider-name + kwargs path)
@@ -444,11 +480,6 @@ class TestGetAvailableConfigs:
     """LLMFactory.get_available_configs() — registry listing."""
 
     def test_returns_list(self):
-
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.list_services",
-            return_value=["mock", "openai", "glm", "ollama"],
-        ):
-            providers = LLMFactory.get_available_configs()
-            assert isinstance(providers, list)
-            assert len(providers) >= 1
+        providers = LLMFactory.get_available_configs()
+        assert isinstance(providers, list)
+        assert {"mock", "openai", "glm", "ollama"}.issubset(providers)

@@ -1,3 +1,5 @@
+import type { ChatIdentity } from './socket-events'
+
 export type MessageRole = 'user' | 'assistant' | 'system'
 export type MessageStatus = 'streaming' | 'complete'
 
@@ -31,12 +33,22 @@ export interface DanmakuItem {
   user_name: string
   user_id: number
   timestamp: number
+  is_gift?: boolean
+  is_super_chat?: boolean
+  meta?: Record<string, unknown>
 }
 
 /** Status of Bilibili connection */
 export interface DanmakuStatus {
+  state: 'stopped' | 'connecting' | 'live' | 'reconnecting' | 'stopping' | 'error'
   connected: boolean
-  message?: string
+  room_id: number | null
+  desired_room_id: number | null
+  retry_count: number
+  error_code: string | null
+  generation_id: number
+  message: string
+  updated_at: number
 }
 
 /** AI reply to a danmaku */
@@ -47,4 +59,3 @@ export interface DanmakuReply {
   character_name: string
   timestamp: number
 }
-import type { ChatIdentity } from './socket-events'

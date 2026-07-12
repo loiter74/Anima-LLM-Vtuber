@@ -3,6 +3,7 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -489,19 +490,24 @@ _store_lock = asyncio.Lock()
 
 async def get_stats_store() -> StatsStore:
     global _store
-    if _store is not None:
-        return _store
     async with _store_lock:
         if _store is None:
-            _store = StatsStore()
-            await _store.init()
-    return _store
+            candidate = StatsStore()
+            try:
+                await candidate.init()
+            except BaseException:
+                with suppress(BaseException):
+                    await candidate.close()
+                raise
+            _store = candidate
+        return _store
 
 
 async def close_stats_store() -> None:
     """Close and clear the global stats store singleton."""
     global _store
     async with _store_lock:
-        if _store is not None:
-            await _store.close()
-            _store = None
+        store = _store
+        _store = None
+        if store is not None:
+            await store.close()

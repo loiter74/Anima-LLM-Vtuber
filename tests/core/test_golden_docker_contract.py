@@ -38,6 +38,14 @@ def test_gpu_entrypoint_runs_static_preflight_before_processes() -> None:
     assert preflight < nginx < backend
 
 
+def test_entrypoint_limits_golden_preflight_to_explicit_golden_config() -> None:
+    entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
+
+    assert 'if [ "${ANIMETTA_CONFIG:-}" != "/app/config/config.golden.yaml" ]; then' in entrypoint
+    assert "Golden static preflight: skipped (non-golden profile)" in entrypoint
+    assert '--config "$ANIMETTA_CONFIG"' in entrypoint
+
+
 def test_gpu_image_precreates_read_only_alice_mountpoint() -> None:
     dockerfile = (ROOT / "Dockerfile.cuda").read_text(encoding="utf-8")
 

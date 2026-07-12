@@ -760,12 +760,10 @@ class TestTTSFactory:
                 result = TTSFactory.create("edge")
                 assert isinstance(result, AsyncMock) or True  # fallback happened
 
-    @patch("animetta.services.tts.factory.ProviderRegistry")
-    def test_get_available_configs(self, MockRegistry):
-
-        MockRegistry.list_services.return_value = {"mock", "edge", "glm"}
+    def test_get_available_configs(self):
         providers = TTSFactory.get_available_configs()
         assert isinstance(providers, list)
+        assert "openai" not in providers
 
     def test_create_unknown_provider_returns_mock(self):
         """Factory falls back to MockTTS for unknown provider names."""

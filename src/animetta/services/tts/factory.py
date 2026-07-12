@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from importlib import import_module
+
 """
 TTS Factory - creates TTS instances based on configuration
 
@@ -17,6 +19,7 @@ from animetta.config.core.registry import ProviderRegistry
 from animetta.config.providers.tts import (
     ChatTTSConfig,
     EdgeTTSConfig,
+    GLMTTSConfig,
     GPTSoVITSConfig,
     KokoroTTSConfig,
     MimoTTSConfig,
@@ -30,6 +33,18 @@ from animetta.tracing.proxy import TracingProxy
 from .interface import TTSInterface
 from .mimo_tts import MimoTTS  # noqa: F401 - ensure provider registration
 from .mock_tts import MockTTS
+
+_AVAILABLE_TTS_PROVIDERS = (
+    "mock",
+    "edge",
+    "mimo",
+    "gpt_sovits",
+    "qwen3",
+    "glm",
+    "chattts",
+    "kokoro",
+    "vibe_voice",
+)
 
 
 def _unwrap_tracing_proxy(service: object) -> object:
@@ -70,6 +85,30 @@ class TTSFactory:
             return MockTTS()
 
         try:
+            module_name = {
+                "mock": ".mock_tts",
+                "edge": ".edge_tts",
+                "edge_tts": ".edge_tts",
+                "mimo": ".mimo_tts",
+                "mimo_tts": ".mimo_tts",
+                "mimo-tts": ".mimo_tts",
+                "gpt_sovits": ".gpt_sovits_tts",
+                "qwen3": ".qwen3_tts",
+                "glm": ".contrib.glm_tts",
+                "chattts": ".contrib.chattts_tts",
+                "kokoro": ".contrib.kokoro_tts",
+                "vibe_voice": ".contrib.vibe_voice_tts",
+            }.get(provider)
+            if module_name is not None:
+                try:
+                    import_module(module_name, __package__)
+                except ImportError as exc:
+                    if strict:
+                        raise
+                    logger.warning(
+                        "TTS provider import unavailable: "
+                        f"type={provider}, error={type(exc).__name__}"
+                    )
             svc = ProviderRegistry.create_service("tts", config)
             if (
                 strict
@@ -88,7 +127,10 @@ class TTSFactory:
                     f"type={provider}, error={type(e).__name__}"
                 )
                 raise
-            logger.warning(f"TTS provider '{provider}' failed to initialize: {e}, falling back to MockTTS")
+            logger.warning(
+                "TTS provider failed to initialize; falling back to MockTTS: "
+                f"type={provider}, error={type(e).__name__}"
+            )
             return MockTTS()
 
     @staticmethod
@@ -208,5 +250,5 @@ class TTSFactory:
 
     @staticmethod
     def get_available_configs() -> list[str]:
-        """Get list of all available providers"""
-        return list(ProviderRegistry.list_services("tts"))
+        """Get the stable catalog of providers with service implementations."""
+        return list(_AVAILABLE_TTS_PROVIDERS)

@@ -4,6 +4,8 @@ LLM service factory - automatically creates LLM service instances based on confi
 
 from __future__ import annotations
 
+from importlib import import_module
+
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
@@ -17,6 +19,15 @@ from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import LLMInterface
+
+_AVAILABLE_LLM_PROVIDERS = (
+    "mock",
+    "glm",
+    "ollama",
+    "openai",
+    "deepseek",
+    "local_lora",
+)
 
 
 class LLMFactory:
@@ -56,13 +67,33 @@ class LLMFactory:
         logger.debug(f"create_from_config: config.type={config.type}, config class={type(config).__name__}")
 
         try:
+            module_name = {
+                "mock": ".mock_llm",
+                "glm": ".glm_llm",
+                "ollama": ".ollama_llm",
+                "openai": ".openai_llm",
+                "deepseek": ".openai_llm",
+                "local_lora": ".local_lora_llm",
+            }.get(config.type)
+            if module_name is not None:
+                try:
+                    import_module(module_name, __package__)
+                except ImportError as exc:
+                    if strict:
+                        raise
+                    logger.warning(
+                        "LLM provider import unavailable: "
+                        f"type={config.type}, error={type(exc).__name__}"
+                    )
             # Use Registry to automatically find and instantiate
             llm = ProviderRegistry.create_service("llm", config, system_prompt=system_prompt)
             concrete = unwrap_tracing_proxy(llm)
-            from .openai_llm import OpenAILLM
 
-            if isinstance(concrete, OpenAILLM):
-                concrete._bind_provider_identity(config.type)
+            if config.type in {"openai", "deepseek"}:
+                from .openai_llm import OpenAILLM
+
+                if isinstance(concrete, OpenAILLM):
+                    concrete._bind_provider_identity(config.type)
             if strict and config.type != "mock":
                 from .mock_llm import MockLLM
 
@@ -81,7 +112,10 @@ class LLMFactory:
                 )
                 raise
             # Catch all exceptions (ValueError, TypeError, ImportError, ConnectionError, etc.)
-            logger.error(f"Failed to create LLM service (type={config.type}): {type(e).__name__}: {e}")
+            logger.error(
+                "Failed to create LLM service: "
+                f"type={config.type}, error={type(e).__name__}"
+            )
             # Fall back to Mock implementation
             logger.warning(f"Falling back to MockLLM (original config: {config.type})")
             from .mock_llm import MockLLM
@@ -151,5 +185,5 @@ class LLMFactory:
 
     @staticmethod
     def get_available_configs() -> list:
-        """Get the list of all available providers"""
-        return ProviderRegistry.list_services("llm")
+        """Get the stable catalog of providers with service implementations."""
+        return list(_AVAILABLE_LLM_PROVIDERS)
