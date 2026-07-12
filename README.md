@@ -19,6 +19,23 @@
 
 <img width="2477" height="1856" alt="Animetta screenshot" src="https://github.com/user-attachments/assets/8b3cb1f7-ef61-4cb0-b702-546b3aa8e65e" />
 
+Animetta is an open-source framework for building **AI virtual companions and VTubers** — characters that talk, listen, remember, emote through a Live2D avatar, and act in the world (chat, livestream, Minecraft). It orchestrates ASR → LLM → TTS → emotion as a single LangGraph state machine, so every turn can branch, call tools, and resume.
+
+> **Why Animetta?** Most "AI VTuber" projects hardcode one provider pipeline. Animetta makes every layer — LLM, ASR, TTS, VAD, memory, tools — a swappable plugin via `@ProviderRegistry`, with full observability built in.
+
+## Contents
+
+- [Highlights](#-highlights)
+- [Architecture](#-architecture)
+- [Quick Start](#-quick-start)
+- [Core Modules](#-core-modules)
+- [Project Structure](#-project-structure)
+- [Extending](#-extending)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
+- [Tech Stack](#-tech-stack)
+- [License](#-license)
+
 ---
 
 ## ✨ Highlights
@@ -36,37 +53,37 @@ Animetta is not just another "ChatGPT + TTS" glue. It is an **engineered AI comp
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Frontend (Vue 3 + Vite)                     │
-│              Live2D Renderer · Chat UI · Stats Dashboard        │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ Socket.IO / REST
-┌──────────────────────────▼──────────────────────────────────────┐
-│                WebSocket Server (Starlette + Socket.IO ASGI)     │
-│                Session Management · Desktop App · Live2D Events │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────────┐
-│                  LangGraph Orchestration Engine                  │
-│                                                                  │
-│  ┌─────────┐  ┌─────────┐  ┌──────────┐  ┌────────────────┐   │
-│  │ASR Node │→ │Persona  │→ │ LLM Node │→ │ Emotion Node   │   │
-│  │         │  │  Node   │  │ + RAG    │  │ → Live2D Map   │   │
-│  └─────────┘  └─────────┘  └────┬─────┘  └────────────────┘   │
-│                                  │                               │
-│                          ┌───────▼───────┐  ┌──────────────┐   │
-│                          │  Tool Node    │  │ Output Node  │   │
-│                          │ MC/MCP/Custom │  │ TTS + Memory │   │
-│                          └────────────────┘  └──────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        ▼                  ▼                  ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│   Services   │  │    Memory    │  │   Tracing    │
-│ LLM/ASR/TTS  │  │ Chroma+SQLite│  │  OTel+Stats  │
-│  Live2D/VAD  │  │  +Wiki+Meme  │  │ +Prometheus  │
-└──────────────┘  └──────────────┘  └──────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      Frontend (Vue 3 + Vite)                      │
+│               Live2D Renderer · Chat UI · Stats Dashboard         │
+└─────────────────────────────┬────────────────────────────────────┘
+                              │ Socket.IO / REST
+┌─────────────────────────────▼────────────────────────────────────┐
+│                WebSocket Server (Starlette + Socket.IO ASGI)      │
+│               Session Mgmt · Desktop App · Live2D Events          │
+└─────────────────────────────┬────────────────────────────────────┘
+                              │
+┌─────────────────────────────▼────────────────────────────────────┐
+│                   LangGraph Orchestration Engine                   │
+│                                                                   │
+│  ┌─────────┐   ┌─────────┐   ┌──────────┐   ┌──────────────┐    │
+│  │ ASR Node│ → │ Persona │ → │ LLM Node │ → │ Emotion Node │    │
+│  │         │   │  Node   │   │  + RAG   │   │ → Live2D Map │    │
+│  └─────────┘   └─────────┘   └────┬─────┘   └──────────────┘    │
+│                                  │                                │
+│                          ┌───────▼───────┐   ┌─────────────┐     │
+│                          │  Tool Node   │   │ Output Node │     │
+│                          │ MC/MCP/Custom│   │TTS + Memory │     │
+│                          └──────────────┘   └─────────────┘     │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│   Services    │   │    Memory     │   │   Tracing     │
+│ LLM/ASR/TTS   │   │Chroma+SQLite  │   │ OTel + Stats  │
+│ Live2D / VAD  │   │+ Wiki + Meme  │   │+ Prometheus   │
+└───────────────┘   └───────────────┘   └───────────────┘
 ```
 
 > Deeper architecture detail: [docs/architecture/overview.md](docs/architecture/overview.md).
@@ -94,7 +111,7 @@ cd frontend && pnpm install
 cp config/config.golden.yaml config/config.yaml
 ```
 
-Edit `config/config.yaml` to pick a `profile` (mock / openai / glm / ollama) and `persona`. Then set API keys via environment — **never commit real credentials to `config/*.yaml`**:
+Edit `config/config.yaml` to choose your `persona` and the service providers under `services:` (e.g. `agent: deepseek`, `tts: edge`, `asr: mock`). Then set API keys via environment — **never commit real credentials to `config/*.yaml`**:
 
 ```bash
 cp .env.example .env
@@ -168,7 +185,11 @@ animetta/
 │   ├── memory/            # V2 atom-based memory (Chroma + SQLite FTS5)
 │   ├── tools/             # Tool calling + MCP bridge + Minecraft bot
 │   ├── avatar/            # Live2D emotion/expression analysis
-│   └── ...
+│   ├── config/            # Pydantic configs + provider registry
+│   ├── tracing/           # OpenTelemetry observability
+│   ├── notifier/          # Alert channels (Discord, Feishu, Email)
+│   ├── inspection/        # Health / telemetry background checks
+│   └── acceptance/        # Golden soak state machine
 ├── frontend/              # Vue 3 + TypeScript + Vite (Electron desktop)
 ├── config/                # YAML config files (personas, services, tools)
 ├── design-system/         # Visual design spec (HTML spec sheets)
