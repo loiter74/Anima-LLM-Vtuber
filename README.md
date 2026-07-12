@@ -5,7 +5,7 @@
     插件化架构 · LangGraph 编排 · 混合记忆 · Live2D 驱动 · 多模态交互
   </p>
   <p align="center">
-    <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
+    <img src="https://img.shields.io/badge/python-3.13-blue?logo=python&logoColor=white" alt="Python">
     <img src="https://img.shields.io/badge/Vue_3-vite-green?logo=vue.js" alt="Vue 3">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
     <img src="https://img.shields.io/badge/LangGraph-orchestration-orange" alt="LangGraph">
@@ -107,7 +107,8 @@ class MyLLMAgent(AgentInterface):
 |------|----------|
 | **LLM** | OpenAI · GLM (智谱) · Ollama · Mock |
 | **ASR** | OpenAI Whisper · GLM ASR · Mock |
-| **TTS** | OpenAI TTS · GLM TTS · Edge TTS · Mock |
+| **TTS** (core) | Edge · MiMo · Qwen3 · GPT-SoVITS · Mock |
+| **TTS** (contrib) | GLM · ChatTTS · Kokoro · VibeVoice |
 | **VAD** | Silero VAD |
 
 > **💡 TTS 性能提示**：Qwen3-TTS 推荐安装 flash-attn 加速推理（需 CUDA + Linux）：
@@ -206,7 +207,7 @@ cd frontend && pnpm install
 ### 2. 配置
 
 ```bash
-cp config/config.default.yaml config/config.yaml
+cp config/config.golden.yaml config/config.yaml
 ```
 
 编辑 `config/config.yaml`：
@@ -269,7 +270,7 @@ PYTHONPATH=src:. python scripts/health_check.py
 如果当前 shell 的 `python` 不是完整项目环境，可以显式指定门禁子命令使用的解释器。例如 PowerShell + uv：
 
 ```powershell
-$env:ANIMETTA_PYTHON='uv run --no-project --with-requirements C:\Users\30262\Project\Anima\requirements.txt --with pytest --with pytest-cov --with pytest-asyncio --with pip python'
+$env:ANIMETTA_PYTHON='uv run --no-project --with-requirements requirements.txt --with pytest --with pytest-cov --with pytest-asyncio --with pip python'
 python scripts/health_check.py
 ```
 
@@ -407,7 +408,7 @@ async def my_tool(query: str) -> str:
 | **前端** | Vue 3 · Vite · TypeScript · pixi.js · Live2D Cubism SDK |
 | **记忆** | ChromaDB · SQLite FTS5 · Markdown Wiki |
 | **追踪** | OpenTelemetry · Prometheus · Langfuse |
-| **AI** | OpenAI · 智谱 GLM · Ollama · Whisper · Kokoro TTS |
+| **AI** | OpenAI · 智谱 GLM · Ollama · Whisper · Qwen3-TTS · GPT-SoVITS |
 | **音频** | Demucs · GPT-SoVITS · RVC · yt-dlp |
 | **游戏** | Mineflayer (Node.js) |
 
