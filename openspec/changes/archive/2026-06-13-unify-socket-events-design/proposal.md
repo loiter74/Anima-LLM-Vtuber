@@ -305,7 +305,7 @@ def register_routes(sio, ...):
 
 ## 8. 相关文档
 
-- [proposal.md](../../../../openspec/changes/unify-socket-events/proposal.md)
-- [design.md](../../../../openspec/changes/unify-socket-events/design.md)
-- [tasks.md](../../../../openspec/changes/unify-socket-events/tasks.md)
-- [Backend API documentation](../../../reference/backend-api.md)
+- [proposal.md](../2026-06-20-unify-socket-events/proposal.md)
+- [design.md](../2026-06-20-unify-socket-events/design.md)
+- [tasks.md](../2026-06-20-unify-socket-events/tasks.md)
+- [Backend API documentation](../../../../reference/backend-api.md)
