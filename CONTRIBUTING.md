@@ -68,6 +68,20 @@ See [Testing Guide](docs/development/testing.md) for detailed test conventions.
 4. Update docs if changing public interfaces
 5. Open PR against `main`
 
+## Change Tracking (openspec)
+
+New features and changes are tracked via the [openspec](openspec/) spec-driven system — **not** free-form plan docs. To propose a change:
+
+```
+/opsx-propose <change-name>
+```
+
+This generates `proposal.md` + `design.md` + `tasks.md` under `openspec/changes/<name>/`. Implement with `/opsx-apply`, then archive with `/opsx-archive`. Historical plans migrated from the former `docs/plans/` live in `openspec/changes/archive/`.
+
+## Agent Collaboration
+
+When working with AI agents (ZCode, Claude Code, Cursor, Copilot), read [AGENTS.md](AGENTS.md) first — it is the single source of truth for project conventions, architecture boundaries, and coding rules. Scoped sub-`AGENTS.md` files exist in module directories (`src/animetta/**/AGENTS.md`, `frontend/AGENTS.md`, etc.).
+
 ## Docker Development
 
 ```bash
