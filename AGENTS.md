@@ -1,10 +1,10 @@
 # ANIMETTA PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-06-15
-**Commit:** 10735c3
+**Generated:** 2026-07-12
+**Commit:** 0af42d6e
 **Branch:** main
 
-> Primary knowledge base: [CLAUDE.md](CLAUDE.md). This AGENTS.md is the quick-reference map.
+> Primary knowledge base: this AGENTS.md is the sole agent knowledge base (CLAUDE.md / .cursorrules were removed to avoid drift).
 > Sub-AGENTS.md: [src/animetta/](src/animetta/AGENTS.md) · [src/animetta/core/](src/animetta/core/AGENTS.md) · [orchestration/](src/animetta/orchestration/AGENTS.md) · [orchestration/graph/](src/animetta/orchestration/graph/AGENTS.md) · [services/](src/animetta/services/AGENTS.md) · [memory/](src/animetta/memory/AGENTS.md) · [config/](src/animetta/config/AGENTS.md) · [tools/](src/animetta/tools/AGENTS.md) · [tools/minecraft/](src/animetta/tools/minecraft/AGENTS.md) · [avatar/](src/animetta/avatar/AGENTS.md) · [inspection/](src/animetta/inspection/AGENTS.md) · [frontend/](frontend/AGENTS.md) · [design-system/](design-system/AGENTS.md) · [evaluations/](evaluations/AGENTS.md) · [tests/](tests/AGENTS.md) · [docs/adrs/](docs/adrs/AGENTS.md)
 
 ## OVERVIEW
@@ -26,16 +26,22 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 │   ├── tracing/            # OpenTelemetry observability
 │   ├── notifier/           # Alert channels (Discord, Feishu, Email)
 │   ├── inspection/         # Health/telemetry background checks
+│   ├── acceptance/         # Golden soak state machine + evidence helpers (golden_soak.py)
 │   └── utils/              # Helpers
 ├── frontend/               # Vue 3 + TypeScript + Vite (UnoCSS, Pinia, pixi.js, Electron)
 ├── config/                 # YAML config files (personas, services, tools, singing)
-├── tests/                  # pytest suite (120 files, asyncio_mode=auto)
-├── docs/                   # ADRs (11), plans, benchmarks, external references
+├── tests/                  # pytest suite (~288 files, asyncio_mode=auto)
+├── openspec/               # Spec-driven change tracking (config.yaml + 79 specs + 12 changes). Use openspec-* skills.
+├── docker/                 # Docker build/runtime assets (build-frontend.sh, entrypoint.sh, nginx.conf, minecraft-server, mcp-filesystem)
+├── artifacts/              # Generated test/health evidence JSON (health/ subfolder) — do not hand-edit
+├── evidence/               # Golden-path soak evidence bundles (frontend, golden-soak)
+├── docs/                   # ADRs (13), plans, benchmarks, external references
 ├── scripts/                # anima_cli (RVC training), bench (39KB), validate-events
 ├── design-system/          # Visual design spec (HTML spec sheets from uno.config.ts)
 ├── evaluations/            # Standalone RAG evaluation framework (Python)
 ├── observability/          # Docker-compose for Grafana/Prometheus/Tempo/Loki/OTel stack
-├── data/ + memory_db/      # ⚠️ Dual runtime data dirs (Chroma, SQLite, Wiki, logs)
+├── data/                   # ⚠️ Runtime data (chroma_db, stats.db, mc_skills.db/traces, tech_tree_reports, logs)
+├── memory_db/              # ⚠️ Runtime memory data (chroma_v2, living_memory.sqlite)
 └── .claude/                # Claude skills
 ```
 
@@ -48,7 +54,7 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 | Add graph node | `src/animetta/orchestration/graph/` | Follow node pattern in `__init__.py` |
 | Add tool | `src/animetta/tools/base.py` or `custom_tools.py` | Use `@tool` decorator |
 | Add persona | `config/personas/` + `src/animetta/config/persona/` | YAML + Pydantic |
-| Fix WebSocket route | `src/animetta/orchestration/server/routes.py` | **386 lines - known hotspot** |
+| Fix WebSocket route | `src/animetta/orchestration/server/routes.py` | **446 lines - known hotspot** |
 | Change memory behavior | `src/animetta/memory/v2/` | Atom-based V2 architecture, see ADR-005 |
 | Fix Live2D expression | `src/animetta/avatar/` + `frontend/src/components/live2d/` | |
 | Add singing feature | `src/animetta/services/singing/` | RVC/SVC pipeline + mixer |
@@ -218,10 +224,12 @@ When delegating an implementation task (always use `deep` or `unspecified-high`)
 
 ## NOTES
 
-- `orchestration/server/routes.py` at 386 lines is a known hotspot — thin dispatch preferred
-- Backend coverage at ~70%, targeting 70%. Frontend has 20 vitest test files (happy-dom env, `src/**/*.test.ts`).
-- 11 ADRs in `docs/adrs/`: LangGraph, Hybrid Search, Plugin Architecture, Streaming, Wiki Memory, +6 more (see [docs/adrs/AGENTS.md](docs/adrs/AGENTS.md))
-- Two runtime data directories: `data/` (chroma_db, stats) + `memory_db/` (wiki, chroma, sqlite, raw) — designed split
+- `orchestration/server/routes.py` at 446 lines is a known hotspot — thin dispatch preferred
+- Backend coverage at ~70%, targeting 70%. ~288 pytest test files; frontend has 20 vitest test files (happy-dom env, `src/**/*.test.ts`).
+- 13 ADRs in `docs/adrs/`: LangGraph, Hybrid Search, Plugin Architecture, Streaming, Wiki Memory, +8 more (see [docs/adrs/AGENTS.md](docs/adrs/AGENTS.md))
+- `openspec/` holds spec-driven change tracking (79 specs + 12 changes). Use `openspec-*` / `source-command-opsx-*` skills for propose/apply/archive flows; see `openspec/config.yaml`.
+- `artifacts/health/` and `evidence/` are generated evidence bundles — do not hand-edit; regenerated by the test/soak pipelines.
+- Two runtime data directories: `data/` (chroma_db, stats.db, mc_skills.db/traces, tech_tree_reports, logs) + `memory_db/` (chroma_v2, living_memory.sqlite) — designed split
 - TTS has 9 providers with core/contrib layering (see services/AGENTS.md)
 - `tools/minecraft/bot/` is a Node.js package embedded in the Python tree — cross-language hybrid (see [tools/minecraft/AGENTS.md](src/animetta/tools/minecraft/AGENTS.md))
 - Frontend runs as Vite dev server (port 3000); Electron builder not yet configured

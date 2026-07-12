@@ -9,7 +9,7 @@ Vague asks like "make this prettier" don't work; targeted asks do.
 ## 0 · One-time setup
 
 Drop this whole project into your Animetta repo as `design-system/`, and copy
-`AGENTS.md` / `CLAUDE.md` / `.cursorrules` to the repo root.
+`AGENTS.md` to the repo root.
 The AI will then auto-read the spec map before answering anything UI-related.
 
 ---

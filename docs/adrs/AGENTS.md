@@ -7,7 +7,7 @@
 
 ## OVERVIEW
 
-11 Architecture Decision Records documenting binding technical choices. ADRs are **rationale only** — the enforced rules live in `AGENTS.md` / `CLAUDE.md`. Each ADR follows Michael Nygard's format: Context → Decision → Status → Consequences.
+11 Architecture Decision Records documenting binding technical choices. ADRs are **rationale only** — the enforced rules live in `AGENTS.md`. Each ADR follows Michael Nygard's format: Context → Decision → Status → Consequences.
 
 ## INDEX
 
