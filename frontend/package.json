@@ -9,12 +9,14 @@
     "dev": "vite",
     "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "vue-tsc --noEmit && vite build && node scripts/assert-live-build.mjs",
+    "build:sites": "pnpm build && node scripts/package-sites-worker.mjs",
     "build:electron": "vite build && electron-builder",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:sites": "node --test tests/sites-worker.test.mjs"
   },
   "dependencies": {
     "@pixi/core": "6.5.10",
