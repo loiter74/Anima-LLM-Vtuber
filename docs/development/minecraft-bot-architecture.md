@@ -542,3 +542,29 @@ $env:PYTHONPATH='src'; python -m pytest -o addopts='' tests/tools/minecraft -q
 
 For full application verification after code changes, follow the project Docker
 startup protocol from `AGENTS.md`.
+
+## Extraction Status (2026-07-04)
+
+The Mineflayer runtime is being extracted out of Anima into a standalone external
+project, launched by Anima's `MinecraftBridge` through the generic game-bot stdio
+transport in `src/animetta/tools/gamebot/`.
+
+**Migrated to the external runtime:**
+- Node.js Mineflayer runtime startup and command handlers.
+- Node-side behavior helpers: initial loadout, smelting, mining, spectator, client-viewer.
+- `survival_iron` — deterministic wood-to-iron-gear runner (Anima delegates via `_send("survival_iron", ...)`, no Python survival imports).
+- Voyager mode switching (`set_voyager_mode`).
+
+**Retained in Anima:**
+- Generic contracts, client, and stdio transport: `src/animetta/tools/gamebot/`.
+- Minecraft compatibility adapter and LangChain tool surface: `src/animetta/tools/minecraft/core/`.
+- Socket.IO integration, config loading, viewer event forwarding, state collection.
+- Python-side orchestration not yet replaced: `autonomous/`, `survival/`, `skill/`, `tech_tree/`, `benchmark/`.
+
+**Remaining extraction phases** (each needs contract tests + adapter tests + real-server smoke):
+1. ~~`survival_iron`~~ ✅ Done (2026-07-04)
+2. `run_skill` · 3. `learn_skill` · 4. `benchmark` · 5. `tech_tree_step` · 6. `voyager_live_goal`
+
+> Detailed long-form research and roadmap for the Voyager ecosystem are archived in
+> `docs/development/archive/` (`voyager-landscape-research.zh.md`,
+> `voyager-self-evolution-optimization-roadmap.zh.md`).
