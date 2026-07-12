@@ -40,7 +40,7 @@ from .providers.asr import (
 )
 
 # Providers - Bilibili
-from .providers.bilibili import BilibiliConfig
+from .providers.bilibili import BilibiliConfig, ReplyPolicyConfig
 
 # Providers - LLM
 from .providers.llm import (
@@ -149,6 +149,7 @@ __all__ = [
     "DemucsSeparationConfig",
     # Bilibili
     "BilibiliConfig",
+    "ReplyPolicyConfig",
     # Composite
     "AgentConfig",
     "SystemConfig",

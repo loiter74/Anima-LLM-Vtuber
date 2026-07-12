@@ -836,10 +836,15 @@ class TestLLMFactory:
         config = mock_create_from_config.call_args[0][0]
         assert isinstance(config, MockLLMConfig)
 
-    @patch("animetta.services.llm.factory.ProviderRegistry.list_services")
-    def test_get_available_configs(self, mock_list_services):
-        """get_available_configs should return list from registry."""
+    def test_get_available_configs(self):
+        """get_available_configs should return the stable implementation catalog."""
 
-        mock_list_services.return_value = ["mock", "openai", "glm"]
         providers = LLMFactory.get_available_configs()
-        assert providers == ["mock", "openai", "glm"]
+        assert set(providers) == {
+            "mock",
+            "glm",
+            "ollama",
+            "openai",
+            "deepseek",
+            "local_lora",
+        }

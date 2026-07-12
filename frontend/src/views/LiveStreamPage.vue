@@ -6,7 +6,7 @@ import { useSocket } from '@/composables/useSocket'
 
 // ===== Socket & Composables =====
 const { socket } = useSocket()
-const { store: danmakuStore, connect: connectDanmaku } = useDanmaku()
+const { store: danmakuStore } = useDanmaku({ canControl: false })
 
 // ===== State =====
 const isCollapsed = ref(false)
@@ -26,15 +26,6 @@ function loadBackground(): void {
   }
 }
 
-// ===== Danmaku Room =====
-function connectToRoom(): void {
-  const params = new URLSearchParams(window.location.search)
-  const roomId = params.get('room')
-  if (roomId) {
-    connectDanmaku(parseInt(roomId, 10))
-  }
-}
-
 // ===== Toggle =====
 function togglePanel(): void {
   isCollapsed.value = !isCollapsed.value
@@ -43,7 +34,6 @@ function togglePanel(): void {
 // ===== Lifecycle =====
 onMounted(() => {
   loadBackground()
-  connectToRoom()
 })
 </script>
 

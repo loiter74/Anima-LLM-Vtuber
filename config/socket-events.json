@@ -871,27 +871,60 @@
       "name": "bilibili:connect",
       "payload": {
         "room_id": "number"
+      },
+      "ack": {
+        "accepted": "boolean",
+        "state": "string",
+        "error_code": "string|null",
+        "message": "string"
       }
     },
     "disconnect": {
       "name": "bilibili:disconnect",
-      "payload": {}
+      "payload": {},
+      "ack": {
+        "accepted": "boolean",
+        "state": "string",
+        "error_code": "string|null",
+        "message": "string"
+      }
     },
     "update_room": {
       "name": "bilibili:update_room",
       "payload": {
         "room_id": "number"
+      },
+      "ack": {
+        "accepted": "boolean",
+        "state": "string",
+        "error_code": "string|null",
+        "message": "string"
       }
     },
     "danmaku": {
       "name": "bilibili:danmaku",
-      "payload": {}
+      "payload": {
+        "text": "string",
+        "user_name": "string",
+        "user_id": "number",
+        "timestamp": "number",
+        "is_gift": "boolean",
+        "is_super_chat": "boolean",
+        "meta": "object"
+      }
     },
     "danmaku_status": {
       "name": "bilibili:danmaku_status",
       "payload": {
+        "state": "string",
         "connected": "boolean",
-        "message": "string"
+        "room_id": "number|null",
+        "desired_room_id": "number|null",
+        "retry_count": "number",
+        "error_code": "string|null",
+        "generation_id": "number",
+        "message": "string",
+        "updated_at": "number"
       }
     },
     "danmaku_ai_reply": {

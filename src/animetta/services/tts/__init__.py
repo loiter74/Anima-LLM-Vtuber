@@ -9,6 +9,8 @@ so that the module can be imported without their dependencies (torch, etc.)
 in lightweight/core deployments.
 """
 
+from importlib import import_module
+
 from .edge_tts import EdgeTTS
 from .factory import TTSFactory
 from .gpt_sovits_tts import GPTSoVITSTTS
@@ -18,27 +20,30 @@ from .mimo_tts import MimoTTS
 # Core implementations (lightweight dependencies)
 from .mock_tts import MockTTS
 
-# Qwen3 TTS requires torch — guard the import
-try:
-    from .qwen3_tts import Qwen3TTSTTS
-except ImportError:
-    Qwen3TTSTTS = None  # type: ignore[assignment,misc]
+_LAZY_PROVIDERS = {
+    "Qwen3TTSTTS": (".qwen3_tts", "Qwen3TTSTTS"),
+    "GLMTTS": (".contrib.glm_tts", "GLMTTS"),
+    "ChatTTSTTS": (".contrib.chattts_tts", "ChatTTSTTS"),
+    "GladosEffectProcessor": (".contrib.glados_effect", "GladosEffectProcessor"),
+    "KokoroTTS": (".contrib.kokoro_tts", "KokoroTTS"),
+    "VibeVoiceTTS": (".contrib.vibe_voice_tts", "VibeVoiceTTS"),
+}
 
-# Contrib implementations — each guarded individually
-try:
-    from .contrib import (
-        GLMTTS,
-        ChatTTSTTS,
-        GladosEffectProcessor,
-        KokoroTTS,
-        VibeVoiceTTS,
-    )
-except ImportError:
-    GLMTTS = None  # type: ignore[assignment,misc]
-    ChatTTSTTS = None  # type: ignore[assignment,misc]
-    GladosEffectProcessor = None  # type: ignore[assignment,misc]
-    KokoroTTS = None  # type: ignore[assignment,misc]
-    VibeVoiceTTS = None  # type: ignore[assignment,misc]
+
+def __getattr__(name: str):
+    """Import optional provider implementations only when requested."""
+    target = _LAZY_PROVIDERS.get(name)
+    if target is None:
+        raise AttributeError(name)
+    module_name, attribute = target
+    try:
+        value = getattr(import_module(module_name, __name__), attribute)
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.startswith("animetta."):
+            raise
+        return None
+    globals()[name] = value
+    return value
 
 __all__ = [
     "TTSInterface",

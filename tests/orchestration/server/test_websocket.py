@@ -296,7 +296,7 @@ class TestCleanup:
     async def test_cleanup_all_resources_stops_bilibili_and_sessions(self, websocket_server):
         """_cleanup_all_resources stops bilibili and cleans up sessions."""
         route_handlers = MagicMock()
-        route_handlers.stop_bilibili = MagicMock()
+        route_handlers.stop_runtime = AsyncMock()
         websocket_server.route_handlers = route_handlers
         websocket_server.session_manager.cleanup_all = AsyncMock()
         websocket_server.memory_runtime.shutdown = AsyncMock()
@@ -307,7 +307,7 @@ class TestCleanup:
         ) as shutdown:
             await websocket_server._cleanup_all_resources()
 
-        route_handlers.stop_bilibili.assert_called_once()
+        route_handlers.stop_runtime.assert_awaited_once()
         websocket_server.session_manager.cleanup_all.assert_called_once()
         shutdown.assert_awaited_once_with()
         websocket_server.memory_runtime.shutdown.assert_awaited_once()

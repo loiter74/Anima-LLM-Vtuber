@@ -12,8 +12,6 @@ import pytest
 
 from animetta.services.bilibili import DanmakuMessage, DanmakuReply, DanmakuService
 
-pytestmark = pytest.mark.slow
-
 # ── Mock bilibili_api before importing the service ────────────────────
 mock_bilibili_api = MagicMock()
 mock_live = MagicMock()
@@ -166,6 +164,35 @@ class TestBilibiliDanmakuService:
         mock_monitor.disconnect.assert_awaited_once()
         assert service._monitor is None
 
+    @pytest.mark.asyncio
+    async def test_connected_status_waits_for_verification_event(self, service):
+        """Connection truth is published only after Bilibili verifies the handshake."""
+        handlers = {}
+        monitor = MagicMock()
+
+        def register(event_name):
+            def decorator(callback):
+                handlers[event_name] = callback
+                return callback
+
+            return decorator
+
+        monitor.on.side_effect = register
+        monitor.disconnect = AsyncMock()
+        status_callback = MagicMock()
+        service.set_status_callback(status_callback)
+
+        async def connect_and_verify():
+            status_callback.assert_not_called()
+            await handlers["VERIFICATION_SUCCESSFUL"]({})
+
+        monitor.connect = AsyncMock(side_effect=connect_and_verify)
+        mock_live.LiveDanmaku.return_value = monitor
+
+        await service._connect_and_listen()
+
+        status_callback.assert_any_call(True, "Connected")
+
     # ── _notify_status ───────────────────────────────────────────────
 
     def test_notify_status_with_callback(self, service):
@@ -206,7 +233,14 @@ class TestBilibiliDanmakuService:
         service._running = True
         service._reconnect_delay = 8.0
 
-        with patch.object(service, "_connect_and_listen", AsyncMock()), patch("asyncio.sleep", AsyncMock()):
+        async def connect_once_then_stop():
+            service._running = False
+
+        with patch.object(
+            service,
+            "_connect_and_listen",
+            AsyncMock(side_effect=connect_once_then_stop),
+        ), patch("asyncio.sleep", AsyncMock()):
             await service._run()
 
         assert service._reconnect_delay == 1.0
@@ -221,4 +255,42 @@ class TestBilibiliDanmakuService:
             await service._run()
 
         # Should have notified about max retries
-        mock_notify.assert_any_call(False, "Max retries reached: fail")
+        mock_notify.assert_any_call(False, "Max retries reached")
+
+    @pytest.mark.asyncio
+    async def test_missing_dependency_fails_without_retrying(self, service):
+        service._running = True
+        service.max_retries = 5
+
+        with patch.object(
+            service,
+            "_connect_and_listen",
+            AsyncMock(side_effect=ImportError("credential=secret")),
+        ) as connect, patch.object(service, "_notify_status") as notify:
+            await service._run()
+
+        connect.assert_awaited_once()
+        notify.assert_called_once_with(False, "Dependency unavailable")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("error", "status"),
+        [
+            (type("CredentialNoSessdataException", (Exception,), {})(), "Invalid credentials"),
+            (type("ResponseError", (Exception,), {"code": -101})(), "Invalid credentials"),
+            (type("InvalidRoomException", (Exception,), {})(), "Invalid room"),
+            (type("ResponseError", (Exception,), {"code": -404})(), "Invalid room"),
+        ],
+    )
+    async def test_terminal_connection_errors_do_not_retry(self, service, error, status):
+        service._running = True
+
+        with patch.object(
+            service,
+            "_connect_and_listen",
+            AsyncMock(side_effect=error),
+        ) as connect, patch.object(service, "_notify_status") as notify:
+            await service._run()
+
+        connect.assert_awaited_once()
+        notify.assert_called_once_with(False, status)

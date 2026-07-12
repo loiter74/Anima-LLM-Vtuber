@@ -76,7 +76,7 @@ const desktopTabLabels: Record<string, string> = {
 }
 
 // Initialize danmaku socket listeners (runs globally, not per-tab)
-useDanmaku()
+useDanmaku({ canControl: false })
 </script>
 
 <template>

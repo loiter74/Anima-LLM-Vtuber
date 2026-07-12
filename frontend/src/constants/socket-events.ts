@@ -11,6 +11,7 @@ import events from '../../../config/socket-events.json'
 type EventConfig = {
   name: string
   payload: Record<string, unknown>
+  ack?: Record<string, unknown>
 }
 
 type ModuleEvents = Record<string, EventConfig>
@@ -207,6 +208,33 @@ export interface MemoryOrganizeResultPayload {
 
 export interface BilibiliConnectPayload {
   room_id: number
+}
+
+export type LivestreamState =
+  | 'stopped'
+  | 'connecting'
+  | 'live'
+  | 'reconnecting'
+  | 'stopping'
+  | 'error'
+
+export interface BilibiliCommandAck {
+  accepted: boolean
+  state: LivestreamState
+  error_code: string | null
+  message: string
+}
+
+export interface BilibiliStatusPayload {
+  state: LivestreamState
+  connected: boolean
+  room_id: number | null
+  desired_room_id: number | null
+  retry_count: number
+  error_code: string | null
+  generation_id: number
+  message: string
+  updated_at: number
 }
 
 export interface MinecraftStatusPayload {

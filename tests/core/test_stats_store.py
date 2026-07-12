@@ -228,10 +228,11 @@ class TestStatsStore:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_concurrent_get_stats_store(self, tmp_path):
+    async def test_concurrent_get_stats_store(self, monkeypatch, tmp_path):
         """并发调用 get_stats_store 不应竞态"""
 
         # 重置单例
+        monkeypatch.setattr(stats_store, "_store_lock", asyncio.Lock())
         await close_stats_store()
 
         db_path = str(tmp_path / "concurrent_test.db")
@@ -239,27 +240,136 @@ class TestStatsStore:
         original_cls = stats_store.StatsStore
 
         class TestStore(original_cls):
-            pass
+            def __init__(self):
+                super().__init__(db_path=db_path)
 
-        # 用临时路径创建
-        async def get_test_store():
-            if stats_store._store is not None:
-                return stats_store._store
-            async with stats_store._store_lock:
-                if stats_store._store is None:
-                    s = original_cls(db_path=db_path)
-                    await s.init()
-                    stats_store._store = s
-            return stats_store._store
+        monkeypatch.setattr(stats_store, "StatsStore", TestStore)
 
         # 并发 10 个协程
-        stores = await asyncio.gather(*[get_test_store() for _ in range(10)])
+        stores = await asyncio.gather(*[get_stats_store() for _ in range(10)])
 
         # 所有应返回同一个实例
         assert all(s is stores[0] for s in stores)
 
         # 清理
         await close_stats_store()
+
+    @pytest.mark.asyncio
+    async def test_get_stats_store_never_publishes_partial_initialization(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        """Concurrent readers must wait until the singleton database is ready."""
+        monkeypatch.setattr(stats_store, "_store_lock", asyncio.Lock())
+        await close_stats_store()
+        init_started = asyncio.Event()
+        allow_init = asyncio.Event()
+
+        class SlowStore(StatsStore):
+            def __init__(self):
+                super().__init__(db_path=str(tmp_path / "slow-init.db"))
+
+            async def init(self):
+                init_started.set()
+                await allow_init.wait()
+                await super().init()
+
+        monkeypatch.setattr(stats_store, "StatsStore", SlowStore)
+        first = asyncio.create_task(get_stats_store())
+        await init_started.wait()
+        second = asyncio.create_task(get_stats_store())
+
+        try:
+            await asyncio.sleep(0)
+            assert not second.done()
+        finally:
+            allow_init.set()
+            stores = await asyncio.gather(first, second)
+            stores_were_ready = all(store._db is not None for store in stores)
+            await close_stats_store()
+
+        assert stores[0] is stores[1]
+        assert stores_were_ready
+
+    @pytest.mark.asyncio
+    async def test_init_failure_preserves_root_cause_when_cleanup_fails(
+        self,
+        monkeypatch,
+    ):
+        """A cleanup failure must not replace the original initialization error."""
+        monkeypatch.setattr(stats_store, "_store", None)
+        monkeypatch.setattr(stats_store, "_store_lock", asyncio.Lock())
+        init_error = RuntimeError("init failed")
+        cleanup_error = RuntimeError("cleanup failed")
+
+        class BrokenStore:
+            async def init(self):
+                raise init_error
+
+            async def close(self):
+                raise cleanup_error
+
+        monkeypatch.setattr(stats_store, "StatsStore", BrokenStore)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await get_stats_store()
+
+        assert exc_info.value is init_error
+        assert stats_store._store is None
+
+    @pytest.mark.asyncio
+    async def test_close_failure_still_detaches_singleton(self, monkeypatch):
+        """A partially closed store must never remain globally discoverable."""
+        monkeypatch.setattr(stats_store, "_store_lock", asyncio.Lock())
+        close_error = RuntimeError("close failed")
+
+        class BrokenStore:
+            async def close(self):
+                raise close_error
+
+        monkeypatch.setattr(stats_store, "_store", BrokenStore())
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await close_stats_store()
+
+        assert exc_info.value is close_error
+        assert stats_store._store is None
+
+    @pytest.mark.asyncio
+    async def test_close_waits_for_inflight_initialization(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        """Close serializes behind initialization and then removes the ready store."""
+        monkeypatch.setattr(stats_store, "_store", None)
+        monkeypatch.setattr(stats_store, "_store_lock", asyncio.Lock())
+        init_started = asyncio.Event()
+        allow_init = asyncio.Event()
+
+        class SlowStore(StatsStore):
+            def __init__(self):
+                super().__init__(db_path=str(tmp_path / "close-during-init.db"))
+
+            async def init(self):
+                init_started.set()
+                await allow_init.wait()
+                await super().init()
+
+        monkeypatch.setattr(stats_store, "StatsStore", SlowStore)
+        get_task = asyncio.create_task(get_stats_store())
+        await init_started.wait()
+        close_task = asyncio.create_task(close_stats_store())
+
+        await asyncio.sleep(0)
+        assert not close_task.done()
+        allow_init.set()
+        initialized_store = await get_task
+        await close_task
+
+        assert stats_store._store is None
+        assert initialized_store._db is None
 
     @pytest.mark.asyncio
     async def test_close_stats_store_closes_and_resets_singleton(self, tmp_path):

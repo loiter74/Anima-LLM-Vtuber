@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:3000 && electron .\"",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build && node scripts/assert-live-build.mjs",
     "build:electron": "vite build && electron-builder",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Animetta Live</title>
+    <script src="/live2d/live2dcubismcore.min.js"></script>
+  </head>
+  <body>
+    <main class="live-shell">
+      <div class="ambient"></div>
+      <div class="background" id="liveBackground"></div>
+      <div class="vignette"></div>
+      <section class="live2d-stage" aria-label="Live2D 舞台">
+        <canvas id="live2dCanvas"></canvas>
+      </section>
+      <aside class="status-rail" aria-label="直播状态">
+        <span class="status-pill" id="socketStatus" data-state="connecting">服务连接中</span>
+        <span class="status-pill" id="livestreamStatus" data-state="stopped">直播未启动</span>
+        <span class="status-pill" id="modelStatus" data-state="connecting">Live2D 加载中</span>
+      </aside>
+      <section class="danmaku-panel" id="danmakuPanel" aria-label="实时弹幕">
+        <header class="panel-header">
+          <div>
+            <div class="panel-kicker">LIVE CHAT</div>
+            <h1 class="panel-title">实时弹幕</h1>
+          </div>
+          <span class="message-count" id="messageCount">0</span>
+          <button class="toggle-panel" id="togglePanel" type="button" aria-label="折叠弹幕" aria-expanded="true">⌄</button>
+        </header>
+        <div class="empty-state" id="emptyState">等待直播弹幕…</div>
+        <div class="danmaku-list" id="danmakuList" aria-live="polite"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/live/main.ts"></script>
+  </body>
+</html>

@@ -24,6 +24,23 @@ from loguru import logger
 
 from .models import DanmakuMessage
 
+_AUTH_ERROR_CODES = {-101, -102, -111, -352}
+_ROOM_ERROR_CODES = {-400, -404}
+
+
+def _classify_terminal_error(error: Exception) -> str | None:
+    """Map known Bilibili terminal failures without exposing exception text."""
+    error_name = type(error).__name__.casefold()
+    code = getattr(error, "code", None)
+    if code in _AUTH_ERROR_CODES or any(
+        marker in error_name
+        for marker in ("credential", "sessdata", "unauthorized", "forbidden", "auth")
+    ):
+        return "Invalid credentials"
+    if code in _ROOM_ERROR_CODES or "room" in error_name:
+        return "Invalid room"
+    return None
+
 
 class DanmakuService:
     """
@@ -146,8 +163,11 @@ class DanmakuService:
 
         try:
             self._loop.run_until_complete(self._run())
-        except Exception as e:
-            logger.error(f"[DanmakuService] Event loop error: {e}")
+        except Exception as exc:
+            logger.error(
+                "[DanmakuService] Event loop error: error_type={}",
+                type(exc).__name__,
+            )
         finally:
             self._loop.close()
             self._loop = None
@@ -162,16 +182,33 @@ class DanmakuService:
                 # If we get here, connection was cleanly closed
                 retries = 0
                 self._reconnect_delay = 1.0
-            except Exception as e:
+            except ImportError:
+                logger.error("[DanmakuService] Required dependency unavailable")
+                self._notify_status(False, "Dependency unavailable")
+                break
+            except Exception as exc:
+                terminal_status = _classify_terminal_error(exc)
+                if terminal_status is not None:
+                    logger.error(
+                        "[DanmakuService] Terminal connection failure: error_type={}",
+                        type(exc).__name__,
+                    )
+                    self._notify_status(False, terminal_status)
+                    break
                 retries += 1
-                logger.error(f"[DanmakuService] Connection error (attempt {retries}/{self.max_retries}): {e}")
+                logger.error(
+                    "[DanmakuService] Connection error (attempt {}/{}): error_type={}",
+                    retries,
+                    self.max_retries,
+                    type(exc).__name__,
+                )
 
                 if not self._running:
                     break
 
                 if retries > self.max_retries:
                     logger.error("[DanmakuService] Max retries reached, giving up")
-                    self._notify_status(False, f"Max retries reached: {e}")
+                    self._notify_status(False, "Max retries reached")
                     break
 
                 # Exponential backoff
@@ -287,13 +324,14 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing INTERACT_WORD: {e}")
 
+        @self._monitor.on("VERIFICATION_SUCCESSFUL")
+        async def on_verified(_event):
+            self._connected = True
+            self._notify_status(True, "Connected")
+            logger.info("[DanmakuService] Connected to room {}", self.room_id)
+
         # Start consumer task (drains queue → calls callback)
         consumer_task = asyncio.create_task(self._consume_queue())
-
-        # Notify connected
-        self._connected = True
-        self._notify_status(True, "Connected")
-        logger.info(f"[DanmakuService] Connected to room {self.room_id}")
 
         try:
             # This blocks until disconnected

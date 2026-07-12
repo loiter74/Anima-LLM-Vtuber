@@ -26,7 +26,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'index.html')
+        input: {
+          app: resolve(__dirname, 'index.html'),
+          live: resolve(__dirname, 'live.html'),
+        }
       }
     },
     resolve: {

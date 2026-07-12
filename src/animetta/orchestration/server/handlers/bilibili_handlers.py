@@ -1,24 +1,26 @@
-"""
-Bilibili danmaku integration handlers.
-
-Manages the DanmakuService lifecycle and processes
-incoming danmaku messages through the AI orchestrator.
-"""
+"""Thin Socket.IO adapter for the process-owned Bilibili session."""
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from loguru import logger
 
+from animetta.config import ReplyPolicyConfig
 from animetta.memory.v2.context import normalize_actor_id
-from animetta.services.bilibili import DanmakuService
+from animetta.services.bilibili import (
+    DanmakuBuffer,
+    DanmakuMessage,
+    DanmakuReplyRuntime,
+    LivestreamSession,
+    ReplyCandidate,
+    ReplyMetrics,
+)
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ...chat_contracts import ChatIdentity, ChatTransportMode
 from ...chat_delivery import ChatDelivery
-from ...graph.translation_state import translation_state
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -40,74 +42,131 @@ class BilibiliHandlers:
         sio: "AsyncServer",
         session_manager: "SessionManager",
         admin: "BaseSocketHandler",
-    ):
+        *,
+        session: LivestreamSession | None = None,
+        sessdata: str = "",
+        reply_policy: ReplyPolicyConfig | None = None,
+        buffer: DanmakuBuffer | None = None,
+        gateway_factory: Any | None = None,
+    ) -> None:
         self.sio = sio
         self.session_manager = session_manager
         self.admin = admin
 
+        self._sessdata = sessdata
+        self._configured_enabled = False
+        self._configured_room_id = 0
+        self._reply_policy = reply_policy or ReplyPolicyConfig()
+        self._buffer = buffer or DanmakuBuffer()
+        if session is None:
+            reply_runtime = DanmakuReplyRuntime(
+                self._reply_policy,
+                self._process_reply_candidate,
+            )
+            session_kwargs: dict[str, Any] = {}
+            if gateway_factory is not None:
+                session_kwargs["gateway_factory"] = gateway_factory
+            session = LivestreamSession(
+                status_sink=self.emit_status_snapshot,
+                raw_message_sink=self._broadcast_raw_danmaku,
+                reply_runtime=reply_runtime,
+                buffer=self._buffer,
+                **session_kwargs,
+            )
+        self.session = session
+
+        # Deprecated compatibility attributes. Lifecycle ownership lives in session.
         self._bilibili_service = None
-        self._main_loop: asyncio.AbstractEventLoop | None = None
+        self._main_loop = None
 
-    # ── Service lifecycle ─────────────────────────────────────────────
+    @property
+    def metrics(self) -> ReplyMetrics:
+        """Expose counters owned by the process-wide livestream session."""
+        return self.session.metrics
 
-    def start_bilibili(self, room_id: int, sessdata: str = "") -> None:
-        """Start Bilibili danmaku service. Stops existing service if running."""
+    # ── Session lifecycle ─────────────────────────────────────────────
 
-        if self._bilibili_service is not None:
-            self.stop_bilibili()
+    def configure(self, config: dict[str, Any] | None) -> None:
+        """Apply server-owned Bilibili settings without exposing credentials."""
+        values = config or {}
+        self._configured_enabled = bool(values.get("enabled", False))
+        self._configured_room_id = int(values.get("room_id", 0) or 0)
+        self._sessdata = str(values.get("sessdata", "") or "")
+        policy_values = values.get("reply_policy", {})
+        if isinstance(policy_values, ReplyPolicyConfig):
+            self._reply_policy = policy_values
+        elif isinstance(policy_values, dict):
+            self._reply_policy = ReplyPolicyConfig.model_validate(policy_values)
+        self.session.configure_reply_policy(self._reply_policy)
 
-        self._main_loop = asyncio.get_running_loop()
-        self._bilibili_service = DanmakuService(
-            room_id=room_id,
-            sessdata=sessdata,
+    async def start_configured(self) -> dict[str, Any]:
+        """Start the configured room during the ASGI lifespan."""
+        if not self._configured_enabled or self._configured_room_id <= 0:
+            return self.session.snapshot()
+        return await self.start_bilibili(self._configured_room_id)
+
+    async def start_bilibili(
+        self,
+        room_id: int,
+        sessdata: str | None = None,
+    ) -> dict[str, Any]:
+        """Delegate an atomic room command to the single session owner."""
+        return await self.session.set_room(
+            room_id,
+            sessdata=self._sessdata if sessdata is None else sessdata,
         )
-        self._bilibili_service.set_callback(self._on_danmaku_from_thread)
-        self._bilibili_service.set_status_callback(
-            self._on_bilibili_status_from_thread
-        )
-        self._bilibili_service.start()
 
-    def stop_bilibili(self) -> None:
-        """Stop Bilibili danmaku service."""
-        if self._bilibili_service:
-            self._bilibili_service.stop()
-            self._bilibili_service = None
-
-    # ── Thread → main-loop dispatch ───────────────────────────────────
-
-    def _on_danmaku_from_thread(self, msg) -> None:
-        """Called from Bilibili background thread; schedule on main event loop."""
-        if self._main_loop and self._main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._process_danmaku(msg), self._main_loop
-            )
-
-    def _on_bilibili_status_from_thread(
-        self, connected: bool, message: str
-    ) -> None:
-        """Called from Bilibili background thread; schedule status emit on main loop."""
-        if self._main_loop and self._main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._emit_bilibili_status(connected, message), self._main_loop
-            )
+    async def stop_bilibili(self) -> dict[str, Any]:
+        """Stop the shared session and cancel pending AI reply work."""
+        return await self.session.stop()
 
     # ── Status broadcast ──────────────────────────────────────────────
 
-    async def _emit_bilibili_status(self, connected: bool, message: str) -> None:
-        """Emit Bilibili connection status to all clients."""
+    async def emit_status_snapshot(self, payload: dict[str, object]) -> None:
+        """Broadcast one authoritative session snapshot to all clients."""
         await self.sio.emit(
             EVENTS["bilibili"]["danmaku_status"]["name"],
-            {"connected": connected, "message": message},
+            payload,
+        )
+
+    async def emit_current_snapshot(self, sid: str) -> None:
+        """Send the current session truth to a newly connected client."""
+        await self.sio.emit(
+            EVENTS["bilibili"]["danmaku_status"]["name"],
+            self.session.snapshot(),
+            to=sid,
         )
 
     # ── Danmaku processing ────────────────────────────────────────────
 
-    async def _process_danmaku(self, msg) -> None:
-        """Process a danmaku message in the main event loop."""
-        # 1. Broadcast raw danmaku to all clients
+    async def _broadcast_raw_danmaku(
+        self,
+        msg: DanmakuMessage,
+        _room_id: int,
+    ) -> None:
+        """Broadcast every raw message independently of AI admission."""
         await self.sio.emit(EVENTS["bilibili"]["danmaku"]["name"], msg.to_dict())
 
-        # 2. Process with AI (use a dedicated "bilibili" session)
+    async def _process_reply_candidate(self, candidate: ReplyCandidate) -> None:
+        await self._process_ai_reply(candidate.message, candidate.room_id)
+
+    async def _process_danmaku(self, msg: DanmakuMessage) -> None:
+        """Backward-compatible direct processing helper used by focused tests."""
+        snapshot = self.session.snapshot()
+        room_id = int(
+            snapshot.get("room_id") or snapshot.get("desired_room_id") or 0
+        )
+        await self._broadcast_raw_danmaku(msg, room_id)
+        await self._process_ai_reply(msg, room_id)
+
+    async def _process_ai_reply(
+        self,
+        msg: DanmakuMessage,
+        room_id: int,
+    ) -> None:
+        """Generate and deliver one already-admitted AI reply."""
+        from ...graph.translation_state import translation_state
+
         try:
             task_id = str(uuid4())
             identity = ChatIdentity(
@@ -123,7 +182,6 @@ class BilibiliHandlers:
                 "bilibili"
             )
             actor_id = normalize_actor_id(msg.user_id, "bilibili")
-            room_id = getattr(self._bilibili_service, "room_id", None)
             stream_id = f"bilibili:{room_id}" if room_id else None
             result = await orchestrator.process_text(
                 text=f"{msg.user_name}说: {msg.text}",
@@ -205,12 +263,15 @@ class BilibiliHandlers:
                                         f"[Bilibili] Translated danmaku reply to "
                                         f"{translation_state.target_language}"
                                     )
-                        except Exception as e:
+                        except Exception as exc:
                             logger.warning(
-                                f"[Bilibili] Translation failed: {e}"
+                                "Bilibili translation failed: error_type={}",
+                                type(exc).__name__,
                             )
 
-                    asyncio.create_task(_translate_danmaku())
+                    # Translation is part of the generation-owned reply task so a
+                    # room switch or stop cancels it with the reply worker.
+                    await _translate_danmaku()
 
             # Broadcast emotion
             emotion = result.get("emotion")
@@ -249,8 +310,12 @@ class BilibiliHandlers:
                         "timestamp": time.time(),
                     },
                 )
-        except Exception as e:
-            logger.error(f"[Bilibili] Error processing danmaku: {e}")
+        except Exception as exc:
+            logger.error(
+                "Bilibili reply processing failed: error_type={}",
+                type(exc).__name__,
+            )
+            raise
 
     # ── Audio broadcasting ────────────────────────────────────────────
 
@@ -300,70 +365,104 @@ class BilibiliHandlers:
                     payload["volumes"] = volumes
                 await delivery.emit("chat", "audio_with_expression", payload)
 
-        except Exception as e:
-            logger.error(f"[Bilibili] Audio broadcasting failed: {e}")
+        except Exception as exc:
+            logger.error(
+                "Bilibili audio broadcasting failed: error_type={}",
+                type(exc).__name__,
+            )
+            raise
 
     # ── Frontend-initiated Bilibili control ───────────────────────────
 
-    async def on_bilibili_connect(self, sid: str, data: dict) -> None:
-        """Handle frontend request to connect to a Bilibili live room."""
-        room_id = data.get("room_id")
-        if not room_id or not isinstance(room_id, int) or room_id <= 0:
-            await self.sio.emit(
-                EVENTS["bilibili"]["danmaku_status"]["name"],
-                {"connected": False, "message": "Invalid room ID"},
-                to=sid,
-            )
-            return
+    async def on_bilibili_connect(
+        self,
+        sid: str,
+        data: dict[str, object] | None,
+    ) -> dict[str, object]:
+        """Validate and acknowledge a room command without claiming connection."""
+        return await self._handle_room_command(data, action="connect")
 
-        try:
-            logger.info(
-                f"[Bilibili] Frontend requested connect to room {room_id}"
-            )
-            self.start_bilibili(room_id=room_id)
-        except Exception as e:
-            logger.error(f"[Bilibili] Error connecting to room {room_id}: {e}")
-            await self.sio.emit(
-                EVENTS["bilibili"]["danmaku_status"]["name"],
-                {"connected": False, "message": str(e)},
-                to=sid,
-            )
-
-    async def on_bilibili_disconnect(self, sid: str, data: dict) -> None:
-        """Handle frontend request to disconnect from Bilibili live room."""
+    async def on_bilibili_disconnect(
+        self,
+        sid: str,
+        data: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Disconnect safely even when Socket.IO supplies no payload."""
+        del sid, data
         logger.info("[Bilibili] Frontend requested disconnect")
-        self.stop_bilibili()
-        await self.sio.emit(
-            EVENTS["bilibili"]["danmaku_status"]["name"],
-            {"connected": False, "message": "Disconnected by user"},
+        try:
+            snapshot = await self.stop_bilibili()
+        except Exception as exc:
+            logger.warning(
+                "Bilibili disconnect command failed: error_type={}",
+                type(exc).__name__,
+            )
+            return self._command_ack(
+                accepted=False,
+                error_code="disconnect_failed",
+                message="Disconnect command failed",
+            )
+        return self._command_ack(
+            accepted=True,
+            snapshot=snapshot,
+            message="Command accepted",
         )
 
-    async def on_bilibili_update_room(self, sid: str, data: dict) -> None:
-        """Handle frontend request to change room ID."""
-        room_id = data.get("room_id")
-        if not room_id or not isinstance(room_id, int) or room_id <= 0:
-            await self.sio.emit(
-                EVENTS["bilibili"]["danmaku_status"]["name"],
-                {"connected": False, "message": "Invalid room ID"},
-                to=sid,
-            )
-            return
+    async def on_bilibili_update_room(
+        self,
+        sid: str,
+        data: dict[str, object] | None,
+    ) -> dict[str, object]:
+        """Atomically replace the active room through the shared session."""
+        del sid
+        return await self._handle_room_command(data, action="update_room")
 
+    async def _handle_room_command(
+        self,
+        data: dict[str, object] | None,
+        *,
+        action: str,
+    ) -> dict[str, object]:
+        room_id = data.get("room_id") if isinstance(data, dict) else None
+        if not isinstance(room_id, int) or isinstance(room_id, bool) or room_id <= 0:
+            return self._command_ack(
+                accepted=False,
+                error_code="invalid_room_id",
+                message="Invalid room ID",
+            )
+
+        logger.info("[Bilibili] {} requested for room {}", action, room_id)
         try:
-            logger.info(
-                f"[Bilibili] Frontend requested update room to {room_id}"
+            snapshot = await self.start_bilibili(room_id)
+        except Exception as exc:
+            logger.warning(
+                "Bilibili room command failed: action={} error_type={}",
+                action,
+                type(exc).__name__,
             )
-            self.start_bilibili(room_id=room_id)
-            await self.sio.emit(
-                EVENTS["bilibili"]["danmaku_status"]["name"],
-                {"connected": True, "message": f"Connected to room {room_id}"},
+            return self._command_ack(
+                accepted=False,
+                error_code="command_failed",
+                message="Room command failed",
             )
-        except Exception as e:
-            logger.error(
-                f"[Bilibili] Error updating room to {room_id}: {e}"
-            )
-            await self.sio.emit(
-                EVENTS["bilibili"]["danmaku_status"]["name"],
-                {"connected": False, "message": str(e)},
-                to=sid,
-            )
+        return self._command_ack(
+            accepted=True,
+            snapshot=snapshot,
+            message="Command accepted",
+        )
+
+    def _command_ack(
+        self,
+        *,
+        accepted: bool,
+        error_code: str | None = None,
+        message: str,
+        snapshot: dict[str, Any] | None = None,
+    ) -> dict[str, object]:
+        current = snapshot or self.session.snapshot()
+        return {
+            "accepted": accepted,
+            "state": str(current["state"]),
+            "error_code": error_code,
+            "message": message,
+        }

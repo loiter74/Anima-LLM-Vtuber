@@ -55,6 +55,30 @@ def test_frontend_event_validation_rejects_stale_emit_names(tmp_path, monkeypatc
     ]
 
 
+def test_frontend_event_validation_scans_standalone_html(tmp_path, monkeypatch):
+    module = _load_validate_events_module()
+    frontend_dir = tmp_path / "frontend" / "src"
+    frontend_dir.mkdir(parents=True)
+    standalone = tmp_path / "frontend" / "live.html"
+    invalid_event = "dan" + "maku"
+    standalone.write_text(
+        f'<script>socket.on("{invalid_event}", () => {{}})</script>\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "FRONTEND_SRC_DIR", frontend_dir)
+    monkeypatch.setattr(module, "FRONTEND_ENTRY_FILES", [standalone])
+
+    errors = module.validate_frontend_event_literals(
+        {"bilibili.danmaku": "bilibili:danmaku"}
+    )
+
+    assert errors == [
+        f"frontend/live.html: on('{invalid_event}') not in socket-events.json"
+    ]
+
+
 def test_legacy_alias_is_rejected_outside_adapter_boundary(tmp_path, monkeypatch):
     module = _load_validate_events_module()
     source_dir = tmp_path / "src" / "animetta"

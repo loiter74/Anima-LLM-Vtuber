@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 from collections.abc import Callable, Coroutine
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -161,8 +162,18 @@ class WebSocketServer:
             frontend_routes = [Mount("/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")]
             logger.info(f"[Socket.IO] Frontend static files mounted at /app from {frontend_dist}")
 
+        @asynccontextmanager
+        async def lifespan(_app):
+            if self.route_handlers:
+                await self.route_handlers.start_runtime()
+            try:
+                yield
+            finally:
+                await self._cleanup_all_resources()
+
         self.asgi_app = Starlette(
             routes=stats_routes + metrics_route + singing_routes + config_routes + frontend_routes + [Mount("/", app=sio_app)],
+            lifespan=lifespan,
         )
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
@@ -330,7 +341,7 @@ class WebSocketServer:
 
         if self.route_handlers:
             try:
-                self.route_handlers.stop_bilibili()
+                await self.route_handlers.stop_runtime()
             except Exception as exc:
                 logger.warning(
                     "Bilibili cleanup failed: error_type={}",

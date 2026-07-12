@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent.parent
 EVENTS_JSON = ROOT / "config" / "socket-events.json"
 TS_FILE = ROOT / "frontend" / "src" / "constants" / "socket-events.ts"
 FRONTEND_SRC_DIR = ROOT / "frontend" / "src"
+FRONTEND_ENTRY_FILES = [
+    ROOT / "frontend" / "live.html",
+    ROOT / "frontend" / "public" / "live.html",
+]
 SRC_DIR = ROOT / "src" / "animetta"
 PYTHON_EVENT_DIRS = [
     SRC_DIR,
@@ -115,7 +119,9 @@ def validate_ts_file(events: dict[str, str]) -> list[str]:
 
 def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
     """Check frontend socket event literals use event names from the JSON."""
-    if not FRONTEND_SRC_DIR.exists():
+    if not FRONTEND_SRC_DIR.exists() and not any(
+        path.exists() for path in FRONTEND_ENTRY_FILES
+    ):
         return []
 
     event_names = set(events.values())
@@ -124,8 +130,15 @@ def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
         r'\b(?:socket|sock)(?:\.value)?\.(emit|on|off|once)\(\s*["\']([^"\']+)["\']'
     )
 
-    for source_file in FRONTEND_SRC_DIR.rglob("*"):
-        if source_file.suffix not in {".ts", ".vue"}:
+    source_files = list(FRONTEND_SRC_DIR.rglob("*")) if FRONTEND_SRC_DIR.exists() else []
+    source_files.extend(
+        path
+        for path in FRONTEND_ENTRY_FILES
+        if path.exists() and path.is_relative_to(ROOT)
+    )
+
+    for source_file in source_files:
+        if source_file.suffix not in {".ts", ".vue", ".html"}:
             continue
         if source_file.resolve() == TS_FILE.resolve():
             continue

@@ -158,18 +158,31 @@ class RouteHandlers:
 
     # ── Bilibili service (backward compat — called by WebSocketServer) ─
 
-    def start_bilibili(self, room_id: int, sessdata: str = "") -> None:
+    async def start_bilibili(
+        self,
+        room_id: int,
+        sessdata: str | None = None,
+    ) -> dict[str, Any]:
         """Start Bilibili danmaku service — delegates to BilibiliHandlers."""
-        return self.bilibili.start_bilibili(room_id, sessdata)
+        return await self.bilibili.start_bilibili(room_id, sessdata)
 
-    def stop_bilibili(self) -> None:
+    async def stop_bilibili(self) -> dict[str, Any]:
         """Stop Bilibili danmaku service — delegates to BilibiliHandlers."""
-        return self.bilibili.stop_bilibili()
+        return await self.bilibili.stop_bilibili()
+
+    async def start_runtime(self) -> None:
+        """Start async domain runtimes during the ASGI lifespan."""
+        await self.bilibili.start_configured()
+
+    async def stop_runtime(self) -> None:
+        """Stop async domain runtimes during server shutdown."""
+        await self.bilibili.stop_bilibili()
 
     # ── Connection events ─────────────────────────────────────────────
 
     async def on_connect(self, sid: str, environ: dict) -> None:
-        return await self.lifecycle.on_connect(sid, environ)
+        await self.lifecycle.on_connect(sid, environ)
+        await self.bilibili.emit_current_snapshot(sid)
 
     async def on_disconnect(self, sid: str) -> None:
         return await self.lifecycle.on_disconnect(sid)
@@ -237,13 +250,25 @@ class RouteHandlers:
 
     # ── Bilibili frontend control events ──────────────────────────────
 
-    async def on_bilibili_connect(self, sid: str, data: dict) -> None:
+    async def on_bilibili_connect(
+        self,
+        sid: str,
+        data: dict | None,
+    ) -> dict[str, object]:
         return await self.bilibili.on_bilibili_connect(sid, data)
 
-    async def on_bilibili_disconnect(self, sid: str, data: dict) -> None:
+    async def on_bilibili_disconnect(
+        self,
+        sid: str,
+        data: dict | None = None,
+    ) -> dict[str, object]:
         return await self.bilibili.on_bilibili_disconnect(sid, data)
 
-    async def on_bilibili_update_room(self, sid: str, data: dict) -> None:
+    async def on_bilibili_update_room(
+        self,
+        sid: str,
+        data: dict | None,
+    ) -> dict[str, object]:
         return await self.bilibili.on_bilibili_update_room(sid, data)
 
     # ── Minecraft bot control events ───────────────────────────────────
@@ -347,14 +372,7 @@ def register_routes(
         sio, session_manager, desktop_manager, live2d_manager
     )
 
-    # Start Bilibili danmaku service if configured
-    if bilibili_config and bilibili_config.get("enabled", False):
-        room_id = bilibili_config.get("room_id")
-        if room_id:
-            handlers.bilibili.start_bilibili(
-                room_id=int(room_id),
-                sessdata=bilibili_config.get("sessdata", ""),
-            )
+    handlers.bilibili.configure(bilibili_config)
 
     # Connection events
     sio.on("connect", handlers.on_connect)
