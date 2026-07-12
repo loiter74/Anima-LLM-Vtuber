@@ -1024,7 +1024,10 @@ class TestServiceContextInitVAD:
                    return_value=engine) as mock_create:
             await ctx.init_vad(vad_config)
 
-        mock_create.assert_called_once_with(vad_config)
+        mock_create.assert_called_once_with(
+            vad_config,
+            observation_recorder=ctx.observation_recorder,
+        )
         assert ctx.vad_engine is engine
 
     @pytest.mark.asyncio
@@ -1553,4 +1556,7 @@ class TestServiceContextFactoryParameters:
                    return_value=engine) as mock_create:
             await ctx.init_vad(cfg)
 
-        mock_create.assert_called_once_with(cfg)
+        mock_create.assert_called_once_with(
+            cfg,
+            observation_recorder=ctx.observation_recorder,
+        )

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 import scripts.health_check as health_check
 from scripts.health_check import _python_command, build_gates, redact_output
@@ -169,19 +172,20 @@ def test_pnpm_command_falls_back_to_corepack(monkeypatch) -> None:
     assert health_check._pnpm_command() == ("C:/node/corepack.cmd", "pnpm")
 
 
-def test_python_runtime_preflight_marks_supported_noncanonical_as_degraded(monkeypatch) -> None:
+@pytest.mark.parametrize("minor", [11, 12, 14])
+def test_python_runtime_preflight_rejects_noncanonical_python(minor, monkeypatch) -> None:
     monkeypatch.setattr(health_check, "_python_command", lambda: ("python",))
 
     def fake_probe(command, code):
-        return {"major": 3, "minor": 11, "micro": 9, "executable": "python"}
+        return {"major": 3, "minor": minor, "micro": 11, "executable": "python"}
 
     monkeypatch.setattr(health_check, "_run_json_python_probe", fake_probe)
 
     check = health_check.check_python_runtime()
 
-    assert check.status == health_check.HEALTH_DEGRADED
-    assert check.warning is not None
-    assert check.warning["id"] == "python:runtime-degraded"
+    assert check.status == health_check.HEALTH_FAIL
+    assert check.warning is None
+    assert "Python 3.13" in check.remediation
 
 
 def test_pytest_plugin_preflight_reports_missing_plugins(monkeypatch) -> None:
@@ -293,7 +297,11 @@ def test_summary_contains_contract_fields(tmp_path: Path) -> None:
     output = tmp_path / "health.json"
     health_check.write_summary(output, summary)
 
-    saved = output.read_text(encoding="utf-8")
-    assert '"health_statuses"' in saved
-    assert '"accepted_warning_ledger"' in saved
-    assert '"gates"' in saved
+    saved = json.loads(output.read_text(encoding="utf-8"))
+    assert saved["python_policy"] == {"canonical": "3.13"}
+    assert all(
+        warning["id"] != "python:runtime-degraded"
+        for warning in saved["accepted_warning_ledger"]
+    )
+    assert "health_statuses" in saved
+    assert "gates" in saved

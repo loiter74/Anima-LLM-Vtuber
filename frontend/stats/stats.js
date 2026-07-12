@@ -10,14 +10,14 @@ async function fetchOverview() {
     document.getElementById("success-rate").textContent =
         data.success_rate + "%";
     document.getElementById("p95-latency").textContent =
-        data.p95_duration_ms ? data.p95_duration_ms.toFixed(0) + "ms" : "-";
+        data.avg_duration_ms ? data.avg_duration_ms.toFixed(0) + "ms avg" : "-";
 }
 
 async function fetchErrorRate() {
     const res = await fetch(`${API_BASE}/api/stats/nodes`);
     const data = await res.json();
-    const totalErrors = data.reduce((sum, n) => sum + (n.error_count || 0), 0);
-    const totalCalls = data.reduce((sum, n) => sum + (n.call_count || 0), 0);
+    const totalErrors = data.reduce((sum, n) => sum + (n.failure_count || 0), 0);
+    const totalCalls = data.reduce((sum, n) => sum + (n.operation_count || 0), 0);
     const rate = totalCalls > 0 ? (totalErrors / totalCalls * 100).toFixed(1) + "%" : "0%";
     document.getElementById("error-rate").textContent = rate;
 }
@@ -31,9 +31,9 @@ async function fetchNodeStats() {
 
     if (!data.length) return;
 
-    const labels = data.map(d => d.node_name);
+    const labels = data.map(d => `${d.layer} · ${d.name}`);
     const durations = data.map(d => d.avg_duration_ms);
-    const errors = data.map(d => d.error_count);
+    const errors = data.map(d => d.failure_count);
 
     if (nodeChart) {
         nodeChart.data.labels = labels;
@@ -90,17 +90,17 @@ async function fetchTraces() {
         tr.className = "trace-row";
         tr.onclick = () => showTraceDetail(trace.trace_id);
 
-        const time = trace.created_at
-            ? new Date(trace.created_at + "Z").toLocaleTimeString()
+        const time = trace.started_at
+            ? new Date(trace.started_at * 1000).toLocaleTimeString()
             : "-";
-        const statusClass = trace.status === "success" ? "status-success" : "status-error";
+        const statusClass = trace.outcome === "success" ? "status-success" : "status-error";
 
         tr.innerHTML = `
             <td>${time}</td>
             <td>${trace.input_type}</td>
-            <td>${escapeHtml(trace.user_text || "-")}</td>
-            <td>${trace.total_duration_ms ? trace.total_duration_ms.toFixed(0) + "ms" : "-"}</td>
-            <td class="${statusClass}">${trace.status}</td>
+            <td>${escapeHtml(`${trace.runtime_profile} · ${trace.trace_id}`)}</td>
+            <td>${trace.duration_ms ? trace.duration_ms.toFixed(0) + "ms" : "-"}</td>
+            <td class="${statusClass}">${trace.outcome || "running"}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -114,12 +114,12 @@ async function showTraceDetail(traceId) {
     if (data.error) { alert(data.error); return; }
 
     const detail = document.getElementById("trace-detail");
-    const time = data.created_at
-        ? new Date(data.created_at + "Z").toLocaleString()
+    const time = data.started_at
+        ? new Date(data.started_at * 1000).toLocaleString()
         : "-";
 
-    const totalDuration = data.total_duration_ms || 1;
-    const treeHtml = renderTree(data.tree || [], totalDuration, 0);
+    const totalDuration = data.duration_ms || 1;
+    const treeHtml = renderTree(data.operation_tree || [], totalDuration, 0);
 
     detail.innerHTML = `
         <div class="trace-meta">
@@ -133,22 +133,22 @@ async function showTraceDetail(traceId) {
             </div>
             <div class="trace-meta-item">
                 <label>Status</label>
-                <span class="${data.status === 'success' ? 'status-success' : 'status-error'}">${data.status}</span>
+                <span class="${data.outcome === 'success' ? 'status-success' : 'status-error'}">${data.outcome || 'running'}</span>
             </div>
             <div class="trace-meta-item">
                 <label>Time</label>
                 <span>${time}</span>
             </div>
         </div>
-        <h3>Flame Chart (${data.spans.length} spans)</h3>
+        <h3>Operation Tree (${data.operations.length} operations)</h3>
         <div class="flame-chart">${treeHtml}</div>
-        <h3>Span List</h3>
+        <h3>Operation List</h3>
         <ul class="span-list">
-            ${data.spans.map(s => `
+            ${data.operations.map(s => `
                 <li class="span-item">
-                    <span class="span-name">${s.node_name}</span>
+                    <span class="span-name">${escapeHtml(s.name)}</span>
                     <span class="span-duration">${s.duration_ms ? s.duration_ms.toFixed(1) + "ms" : "-"}</span>
-                    <span class="span-summary">${escapeHtml(s.output_summary || s.input_summary || "-")}</span>
+                    <span class="span-summary">${escapeHtml([s.provider, s.model, s.status].filter(Boolean).join(" · ") || "-")}</span>
                 </li>
             `).join("")}
         </ul>
@@ -173,7 +173,7 @@ function renderTree(nodes, totalDuration, depth) {
         const dur = node.duration_ms || 0;
         const pct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
         const color = SPAN_COLORS[depth % SPAN_COLORS.length];
-        const label = `${node.node_name} — ${dur.toFixed(1)}ms`;
+        const label = `${node.name} — ${dur.toFixed(1)}ms`;
         html += `
             <div class="flame-bar-wrap" style="margin-left: ${depthEm}em;">
                 <div class="flame-bar" style="width: ${Math.max(pct, 2)}%; background: ${color};"

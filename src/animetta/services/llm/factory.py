@@ -16,7 +16,8 @@ from animetta.config.providers.llm import (
     OpenAILLMConfig,
 )
 from animetta.core.readiness import unwrap_tracing_proxy
-from animetta.tracing.proxy import TracingProxy
+from animetta.observability.ports import ObservationRecorder
+from animetta.observability.service_proxy import instrument_service
 
 from .interface import LLMInterface
 
@@ -49,6 +50,7 @@ class LLMFactory:
         system_prompt: str = "",
         *,
         strict: bool = False,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> LLMInterface:
         """
         Automatically create an LLM service instance from a config object
@@ -103,7 +105,13 @@ class LLMFactory:
                         "for a non-mock config"
                     )
             logger.info(f"LLM service created successfully: type={config.type}, instance={type(llm).__name__}")
-            return TracingProxy(llm, service_name="llm")
+            return instrument_service(
+                llm,
+                observation_recorder,
+                "llm",
+                provider=config.type,
+                model=getattr(config, "model", None),
+            )
         except Exception as e:
             if strict:
                 logger.error(
@@ -119,7 +127,13 @@ class LLMFactory:
             # Fall back to Mock implementation
             logger.warning(f"Falling back to MockLLM (original config: {config.type})")
             from .mock_llm import MockLLM
-            return MockLLM(system_prompt=system_prompt)
+            return instrument_service(
+                MockLLM(system_prompt=system_prompt),
+                observation_recorder,
+                "llm",
+                provider="mock",
+                model="mock",
+            )
 
     @staticmethod
     def create(
@@ -127,6 +141,7 @@ class LLMFactory:
         system_prompt: str = "",
         *,
         strict: bool = False,
+        observation_recorder: ObservationRecorder | None = None,
         **kwargs,
     ) -> LLMInterface:
         """
@@ -181,6 +196,7 @@ class LLMFactory:
             config,
             system_prompt,
             strict=strict,
+            observation_recorder=observation_recorder,
         )
 
     @staticmethod

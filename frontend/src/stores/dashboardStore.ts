@@ -1,63 +1,103 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+
+export type TraceOutcome = 'success' | 'degraded' | 'failed' | 'cancelled' | 'aborted' | null
+export type OperationStatus = 'success' | 'skipped' | 'degraded' | 'error' | 'cancelled' | null
 
 export interface StatsOverview {
+  api_version: '2'
   total_requests: number
+  success_count: number
+  degraded_count: number
+  failed_count: number
   success_rate: number
   avg_duration_ms: number
-  p95_duration_ms: number
 }
 
 export interface NodeStats {
-  node_name: string
-  call_count: number
-  avg_duration_ms: number
-  error_count: number
-  error_rate: number
+  api_version: '2'
+  layer: string
+  name: string
+  provider: string | null
+  model: string | null
+  operation_count: number
+  success_count: number
+  degraded_count: number
+  failure_count: number
+  avg_duration_ms: number | null
 }
 
 export interface Trace {
+  api_version: '2'
   trace_id: string
+  message_id: string
+  conversation_id: string
   session_id: string
+  runtime_profile: string
   input_type: string
-  user_text: string
-  total_duration_ms: number
-  status: string
-  error_msg?: string | null
-  created_at: string
-}
-
-export interface TraceSpan {
-  span_id: string
-  parent_span_id: string | null
-  node_name: string
+  privacy_mode: 'full' | 'redacted'
+  started_at: number
+  finished_at: number | null
   duration_ms: number | null
-  status: string
-  input_summary: string | null
-  output_summary: string | null
-  attributes: string | null
-  events: string | null
-  kind?: number | null
-  created_at: string
+  outcome: TraceOutcome
+  error_type: string | null
 }
 
-export interface ConversationTurn {
+export interface TraceContent {
+  text: string | null
+  character_count: number | null
+  byte_count: number | null
+  digest: string | null
+}
+
+export interface TraceOperation {
+  operation_id: string
   trace_id: string
-  session_id: string
-  input_type: string
-  user_text: string
-  assistant_text: string
-  status: string
-  error_msg: string | null
-  metadata: Record<string, unknown>
-  created_at: string
+  parent_operation_id: string | null
+  layer: 'transport' | 'workflow' | 'service' | 'memory' | 'delivery'
+  name: string
+  critical_path: boolean
+  started_at: number
+  finished_at: number | null
+  duration_ms: number | null
+  status: OperationStatus
+  provider: string | null
+  model: string | null
+  error_type: string | null
+  error_summary: string | null
+  attributes: Record<string, unknown>
+  children: TraceOperation[]
+}
+
+export interface TraceEvent {
+  event_id: string
+  trace_id: string
+  operation_id: string | null
+  direction: 'ingress' | 'egress' | 'internal'
+  name: string
+  phase: string
+  occurred_at: number
+  payload_size: number
+  identity_valid: boolean
+  attributes: Record<string, unknown>
+}
+
+export interface PostTurnWork {
+  pending: number
+  completed: number
+  failed: number
+  operations: TraceOperation[]
 }
 
 export interface TraceDetail extends Trace {
-  error_msg: string | null
-  spans: TraceSpan[]
-  conversation_turn?: ConversationTurn | null
-  tree?: unknown[]
+  error_summary: string | null
+  content: { user: TraceContent; assistant: TraceContent }
+  attributes: Record<string, unknown>
+  operations: TraceOperation[]
+  operation_tree: TraceOperation[]
+  events: TraceEvent[]
+  post_turn: PostTurnWork
+  schema_version: number
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
@@ -72,7 +112,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const avgLatency = computed(() => overview.value?.avg_duration_ms ?? 0)
   const totalSessions = computed(() => overview.value?.total_requests ?? 0)
   const errorRate = computed(() => {
-    if (!overview.value || !overview.value.success_rate) return 0
+    if (!overview.value) return 0
     return Math.round((100 - overview.value.success_rate) * 10) / 10
   })
 
@@ -104,9 +144,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   async function fetchTraceDetail(traceId: string): Promise<TraceDetail | null> {
-    if (traceDetails.value[traceId]) {
-      return traceDetails.value[traceId]
-    }
+    if (traceDetails.value[traceId]) return traceDetails.value[traceId]
 
     detailLoading.value = true
     try {
@@ -116,14 +154,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         error.value = detail.error
         return null
       }
-
-      traceDetails.value = {
-        ...traceDetails.value,
-        [traceId]: {
-          ...detail,
-          spans: detail.spans ?? [],
-        },
-      }
+      traceDetails.value = { ...traceDetails.value, [traceId]: detail }
       return traceDetails.value[traceId]
     } catch (e) {
       error.value = String(e)

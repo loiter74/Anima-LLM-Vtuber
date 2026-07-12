@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.cuda
       args:
-        RUNTIME_IMAGE: python:3.12-slim-bookworm
+        RUNTIME_IMAGE: python:3.13-slim-bookworm
     ports:
       - "80:80"
       - "${ANIMETTA_PORT:-12394}:12394"

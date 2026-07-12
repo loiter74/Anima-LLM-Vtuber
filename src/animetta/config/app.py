@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 from loguru import logger
 from pydantic import Field, PrivateAttr, TypeAdapter
 
-from animetta.services.humor.config import HumorConfig
-
 from .agent import AgentConfig
 from .core.base import BaseConfig
+from .humor import HumorConfig
+from .observability import ObservabilityConfig
 from .persona import PersonaConfig
 from .providers.asr import ASRConfig
 from .providers.bilibili import BilibiliConfig
@@ -213,6 +213,9 @@ class AppConfig(BaseConfig):
     # Humor Agent configuration
     humor: HumorConfig = Field(default_factory=HumorConfig)
 
+    # Local-first observation ledger and optional one-way mirrors
+    observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
+
     # AI service configuration (loaded from service config files)
     asr: ASRConfig | None = Field(default=None)
     tts: TTSConfig | None = Field(default=None)
@@ -317,6 +320,7 @@ class AppConfig(BaseConfig):
             "services",
             "system",
             "humor",
+            "observability",
             "asr",
             "tts",
             "agent",

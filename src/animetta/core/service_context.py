@@ -24,6 +24,7 @@ from animetta.core.readiness import (
     canonical_deepseek_endpoint,
     unwrap_tracing_proxy,
 )
+from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 from animetta.services.asr import ASRFactory, ASRInterface
 from animetta.services.audio.processor import AudioProcessorInterface
 from animetta.services.llm import LLMFactory, LLMInterface
@@ -38,9 +39,16 @@ if TYPE_CHECKING:
 class ServiceContext:
     """Service context class"""
 
-    def __init__(self, model_manager: ModelLoadingManager | None = None):
+    def __init__(
+        self,
+        model_manager: ModelLoadingManager | None = None,
+        observation_recorder: ObservationRecorder | None = None,
+    ):
         self.config: AppConfig | None = None
         self.model_manager = model_manager
+        self.observation_recorder = (
+            observation_recorder or NoOpObservationRecorder()
+        )
 
         # Service instances
         self.asr_engine: ASRInterface | None = None
@@ -243,6 +251,7 @@ class ServiceContext:
             hotword=getattr(asr_config, 'hotword', None),
             model_hub=getattr(asr_config, 'model_hub', 'ms'),
             disable_update=getattr(asr_config, 'disable_update', True),
+            observation_recorder=self.observation_recorder,
         )
 
         if hasattr(self.asr_engine, 'preload') and self.model_manager is not None:
@@ -293,7 +302,11 @@ class ServiceContext:
 
         # --- Fallback chain ---
         # 1. Try requested config (e.g. kokoro + cuda)
-        tts_engine = TTSFactory.create(**tts_kwargs, strict=golden)
+        tts_engine = TTSFactory.create(
+            **tts_kwargs,
+            strict=golden,
+            observation_recorder=self.observation_recorder,
+        )
         if golden and self._is_mock_tts(tts_engine):
             raise RuntimeError("MockTTS is forbidden in the golden profile")
         self.tts_engine = tts_engine
@@ -313,7 +326,11 @@ class ServiceContext:
                 f"retrying with device='cpu'"
             )
             fallback_kwargs = {**tts_kwargs, "device": "cpu"}
-            self.tts_engine = TTSFactory.create(**fallback_kwargs, strict=False)
+            self.tts_engine = TTSFactory.create(
+                **fallback_kwargs,
+                strict=False,
+                observation_recorder=self.observation_recorder,
+            )
 
         # 3. Log final fallback state
         if self._is_mock_tts(self.tts_engine) and provider != "mock":
@@ -350,6 +367,7 @@ class ServiceContext:
             config=llm_config,
             system_prompt=system_prompt,
             strict=golden,
+            observation_recorder=self.observation_recorder,
         )
         if golden and self._is_mock_llm(llm_engine):
             raise RuntimeError("MockLLM is forbidden in the golden profile")
@@ -381,6 +399,7 @@ class ServiceContext:
             config=llm_config,
             system_prompt="",
             strict=golden,
+            observation_recorder=self.observation_recorder,
         )
         self.local_llm_engine = local_llm_engine
         logger.info(f"[{self.session_id}] Local LLM created: {type(self.local_llm_engine).__name__}")
@@ -412,7 +431,10 @@ class ServiceContext:
         logger.info(f"[{self.session_id}] Initializing VAD engine: {provider}")
 
         try:
-            self.vad_engine = VADFactory.create_from_config(vad_config)
+            self.vad_engine = VADFactory.create_from_config(
+                vad_config,
+                observation_recorder=self.observation_recorder,
+            )
             logger.info(f"[{self.session_id}] VAD engine created: {type(self.vad_engine).__name__}")
 
             if hasattr(self.vad_engine, 'preload') and self.model_manager is not None:

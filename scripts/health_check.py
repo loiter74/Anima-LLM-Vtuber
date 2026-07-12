@@ -34,8 +34,6 @@ HEALTH_STATUSES = (HEALTH_PASS, HEALTH_DEGRADED, HEALTH_FAIL)
 PROFILES = ("quick", "full", "docker")
 
 CANONICAL_PYTHON = (3, 13)
-ACCEPTED_LOCAL_PYTHON_MIN = (3, 11)
-DOCKER_PYTHON_EXCEPTION = (3, 12)
 
 REQUIRED_PYTHON_MODULES = ("pytest", "yaml", "starlette", "prometheus_client")
 REQUIRED_PYTEST_PLUGIN_MODULES = {
@@ -47,13 +45,6 @@ REQUIRED_PYTEST_PLUGIN_MODULES = {
 }
 
 ACCEPTED_WARNING_LEDGER: dict[str, dict[str, str]] = {
-    "python:runtime-degraded": {
-        "owner": "project-health",
-        "scope": "runtime/tooling",
-        "reason": "Local tooling may temporarily run on Python 3.11 or 3.12 while source compatibility targets Python 3.13.",
-        "remediation": "Use Python 3.13 for local and CI health runs; keep Docker 3.12 documented until base images move.",
-        "removal_condition": "All local, CI, and Docker health profiles run on Python 3.13.",
-    },
     "dependencies:frontend-audit-registry": {
         "owner": "project-health",
         "scope": "frontend/security",
@@ -616,26 +607,17 @@ def check_python_runtime() -> PreflightCheck:
 
     version = (int(info["major"]), int(info["minor"]))
     version_label = f"{info['major']}.{info['minor']}.{info['micro']}"
-    if version >= CANONICAL_PYTHON:
+    if version == CANONICAL_PYTHON:
         return PreflightCheck(
             "python:runtime",
             HEALTH_PASS,
             f"Python {version_label} matches canonical {_version_text(CANONICAL_PYTHON)} baseline.",
         )
-    if version >= ACCEPTED_LOCAL_PYTHON_MIN:
-        warning = accepted_warning("python:runtime-degraded")
-        return PreflightCheck(
-            "python:runtime",
-            HEALTH_DEGRADED,
-            f"Python {version_label} is below canonical {_version_text(CANONICAL_PYTHON)} but above accepted local minimum {_version_text(ACCEPTED_LOCAL_PYTHON_MIN)}.",
-            warning["remediation"],
-            warning,
-        )
     return PreflightCheck(
         "python:runtime",
         HEALTH_FAIL,
-        f"Python {version_label} is below supported minimum {_version_text(ACCEPTED_LOCAL_PYTHON_MIN)}.",
-        "Install Python 3.13 or set ANIMETTA_PYTHON to a compatible interpreter.",
+        f"Python {version_label} does not match canonical {_version_text(CANONICAL_PYTHON)}.",
+        "Install Python 3.13 or set ANIMETTA_PYTHON to a Python 3.13 interpreter.",
     )
 
 
@@ -885,8 +867,6 @@ def build_summary(profile: str, preflight: Sequence[PreflightCheck], gates: Sequ
         "health_statuses": list(HEALTH_STATUSES),
         "python_policy": {
             "canonical": _version_text(CANONICAL_PYTHON),
-            "accepted_local_minimum": _version_text(ACCEPTED_LOCAL_PYTHON_MIN),
-            "docker_temporary_exception": _version_text(DOCKER_PYTHON_EXCEPTION),
         },
         "accepted_warning_ledger": [
             {"id": warning_id, **warning}

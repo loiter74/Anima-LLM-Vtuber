@@ -10,8 +10,15 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from animetta.core.service_pool import ServicePool
-
-from ..graph.stats_store import get_stats_store
+from animetta.observability.dto import (
+    HealthDTO,
+    OperationAggregateDTO,
+    OverviewDTO,
+    TraceDetailDTO,
+    TraceSummaryDTO,
+    versioned_events,
+)
+from animetta.observability.ports import ObservationQuery
 
 # ── Module-level references for health check enrichment ──────
 _model_manager: Any | None = None
@@ -47,9 +54,8 @@ STATS_FRONTEND_DIR = str(
 async def stats_overview(request: Request) -> JSONResponse:
     """GET /api/stats/overview"""
     try:
-        store = await get_stats_store()
-        data = await store.get_overview()
-        return JSONResponse(data)
+        data = await _get_observation_query(request).overview()
+        return JSONResponse(OverviewDTO.model_validate(data).public_dict())
     except Exception as e:
         logger.error(f"[StatsAPI] overview failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -58,9 +64,10 @@ async def stats_overview(request: Request) -> JSONResponse:
 async def stats_nodes(request: Request) -> JSONResponse:
     """GET /api/stats/nodes"""
     try:
-        store = await get_stats_store()
-        data = await store.get_node_stats()
-        return JSONResponse(data)
+        data = await _get_observation_query(request).operation_aggregates()
+        return JSONResponse([
+            OperationAggregateDTO.model_validate(item).public_dict() for item in data
+        ])
     except Exception as e:
         logger.error(f"[StatsAPI] nodes failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -71,9 +78,10 @@ async def stats_traces(request: Request) -> JSONResponse:
     try:
         limit = int(request.query_params.get("limit", "50"))
         offset = int(request.query_params.get("offset", "0"))
-        store = await get_stats_store()
-        data = await store.get_recent_traces(limit, offset)
-        return JSONResponse(data)
+        data = await _get_observation_query(request).recent_traces(limit, offset)
+        return JSONResponse([
+            TraceSummaryDTO.model_validate(item).public_dict() for item in data
+        ])
     except Exception as e:
         logger.error(f"[StatsAPI] traces failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -83,58 +91,48 @@ async def stats_trace_detail(request: Request) -> JSONResponse:
     """GET /api/stats/traces/{trace_id}"""
     try:
         trace_id = request.path_params["trace_id"]
-        store = await get_stats_store()
-        data = await store.get_trace_detail(trace_id)
+        data = await _get_observation_query(request).trace_detail(trace_id)
         if not data:
             return JSONResponse({"error": "Trace not found"}, status_code=404)
-        return JSONResponse(data)
+        return JSONResponse(TraceDetailDTO.from_ledger(dict(data)).public_dict())
     except Exception as e:
         logger.error(f"[StatsAPI] trace_detail failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 async def stats_trace_tree(request: Request) -> JSONResponse:
-    """GET /api/stats/traces/{trace_id}/tree — returns spans as a nested tree."""
+    """GET /api/stats/traces/{trace_id}/tree — canonical operation hierarchy."""
     try:
         trace_id = request.path_params["trace_id"]
-        store = await get_stats_store()
-        detail = await store.get_trace_detail(trace_id)
+        detail = await _get_observation_query(request).trace_detail(trace_id)
         if not detail:
             return JSONResponse({"error": "Trace not found"}, status_code=404)
 
-        spans: list[dict[str, Any]] = detail.get("spans", [])
-        tree = _build_span_tree(spans)
-        return JSONResponse({
-            **detail,
-            "spans": spans,
-            "tree": tree,
-        })
+        return JSONResponse(TraceDetailDTO.from_ledger(dict(detail)).public_dict())
     except Exception as e:
         logger.error(f"[StatsAPI] trace_tree failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-def _build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Group flat span list into a parent-child nested tree.
+async def stats_trace_events(request: Request) -> JSONResponse:
+    """GET /api/stats/traces/{trace_id}/events."""
+    try:
+        trace_id = request.path_params["trace_id"]
+        events = await _get_observation_query(request).trace_events(trace_id)
+        return JSONResponse(versioned_events([dict(event) for event in events]))
+    except Exception as e:
+        logger.error(f"[StatsAPI] trace_events failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
-    Returns a list of root spans (parent_span_id is None), each with a ``children`` list.
-    """
-    by_id: dict[str, dict] = {}
-    roots: list[dict] = []
 
-    for s in spans:
-        node = dict(s)
-        node["children"] = []
-        by_id[s["span_id"]] = node
-
-    for node in by_id.values():
-        pid = node.get("parent_span_id")
-        if pid and pid in by_id:
-            by_id[pid]["children"].append(node)
-        else:
-            roots.append(node)
-
-    return roots
+async def stats_observation_health(request: Request) -> JSONResponse:
+    """GET /api/stats/observation-health."""
+    try:
+        health = await _get_observation_query(request).observation_health()
+        return JSONResponse(HealthDTO.from_health(health).public_dict())
+    except Exception as e:
+        logger.error(f"[StatsAPI] observation_health failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 async def health_check(request):
@@ -232,13 +230,13 @@ def _get_model_status() -> dict[str, str]:
 async def stats_inspection_latest(request: Request) -> JSONResponse:
     """GET /api/stats/inspection/latest — most recent inspection report."""
     try:
-        store = await get_stats_store()
-        data = await store.get_latest_inspection_report()
+        reports = await _get_observation_query(request).inspection_reports(1, 0)
+        data = reports[0] if reports else None
         if data is None:
             return JSONResponse(
                 {"error": "No inspection reports yet"}, status_code=404
             )
-        return JSONResponse(data)
+        return JSONResponse({"api_version": "2", **dict(data)})
     except Exception as e:
         logger.error(f"[StatsAPI] inspection_latest failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -254,6 +252,15 @@ def get_stats_routes():
         Route("/api/stats/traces", stats_traces),
         Route("/api/stats/traces/{trace_id}", stats_trace_detail),
         Route("/api/stats/traces/{trace_id}/tree", stats_trace_tree),
+        Route("/api/stats/traces/{trace_id}/events", stats_trace_events),
+        Route("/api/stats/observation-health", stats_observation_health),
         Route("/api/stats/inspection/latest", stats_inspection_latest),
         Mount("/stats", app=StaticFiles(directory=STATS_FRONTEND_DIR, html=True), name="stats_dashboard"),
     ]
+
+
+def _get_observation_query(request: Request) -> ObservationQuery:
+    query = getattr(request.app.state, "observation_query", None)
+    if query is None:
+        raise RuntimeError("ObservationQuery is not configured")
+    return query

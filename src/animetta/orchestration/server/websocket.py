@@ -9,10 +9,12 @@ from typing import Any
 
 import socketio
 from loguru import logger
+from prometheus_client import CollectorRegistry, generate_latest
 from starlette.applications import Starlette
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
+from animetta.config.observability import ObservabilityConfig
 from animetta.config.runtime_reload import (
     RuntimeConfigReloader,
     apply_runtime_config_to_contexts,
@@ -22,8 +24,19 @@ from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.readiness import frontend_asset_readiness
 from animetta.core.service_pool import ServicePool
 from animetta.core.shared_memory_runtime import SharedMemoryRuntime
+from animetta.inspection.runtime import InspectionRuntime
+from animetta.observability.domain import ObservationHealth
+from animetta.observability.ledger import SQLiteObservationLedger
+from animetta.observability.mirrors import OTelMirror, PrometheusMirror
+from animetta.observability.ports import (
+    NoOpObservationQuery,
+    NoOpObservationRecorder,
+    NoOpObservationReportStore,
+    ObservationQuery,
+    ObservationRecorder,
+    ObservationReportStore,
+)
 from animetta.orchestration.socket_events import EVENTS
-from animetta.tracing.bootstrap import init_tracing
 
 from .desktop import DesktopClientManager
 from .lifecycle import LifecycleManager
@@ -44,6 +57,16 @@ class WebSocketServer:
         """Initialize WebSocket server"""
         self.config = config
         self.runtime_reloader = RuntimeConfigReloader(config) if config is not None else None
+        self._cleanup_lock = asyncio.Lock()
+        self._observation_start_lock = asyncio.Lock()
+        self._cleaned = False
+        self.metrics_registry = CollectorRegistry()
+        self.observation_mirrors: list[PrometheusMirror | OTelMirror] = []
+        self.observation_ledger: SQLiteObservationLedger | None = None
+        self.observation_recorder: ObservationRecorder
+        self.observation_query: ObservationQuery
+        self.observation_report_store: ObservationReportStore
+        self._configure_observation_dependencies(config)
 
         self.sio = socketio.AsyncServer(
             async_mode='asgi',
@@ -62,15 +85,14 @@ class WebSocketServer:
 
         # Prometheus /metrics endpoint (optional — graceful fallback if package not installed)
         metrics_route: list = []
-        try:
-            from prometheus_client import REGISTRY, generate_latest
+        async def metrics_endpoint(request):
+            del request
+            return Response(
+                generate_latest(self.metrics_registry),
+                media_type="text/plain; charset=utf-8",
+            )
 
-            async def metrics_endpoint(request):
-                return Response(generate_latest(REGISTRY), media_type="text/plain; charset=utf-8")
-
-            metrics_route = [Route("/metrics", metrics_endpoint)]
-        except ImportError:
-            logger.warning("[Metrics] prometheus-client not installed — /metrics disabled")
+        metrics_route = [Route("/metrics", metrics_endpoint)]
 
         # Singing media file serving (audio + subtitles)
         import mimetypes
@@ -164,6 +186,7 @@ class WebSocketServer:
 
         @asynccontextmanager
         async def lifespan(_app):
+            await self._start_observability()
             if self.route_handlers:
                 await self.route_handlers.start_runtime()
             try:
@@ -175,11 +198,14 @@ class WebSocketServer:
             routes=stats_routes + metrics_route + singing_routes + config_routes + frontend_routes + [Mount("/", app=sio_app)],
             lifespan=lifespan,
         )
+        self.asgi_app.state.observation_query = self.observation_query
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
         ServicePool.configure_runtime(self.config, self.model_manager)
         set_runtime_readiness_context(self.config, self.frontend_readiness)
-        self.memory_runtime = SharedMemoryRuntime()
+        self.memory_runtime = SharedMemoryRuntime(
+            observation_recorder=self.observation_recorder
+        )
         self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
             lambda payload: self.sio.emit(
                 EVENTS["memory"]["changed"]["name"], payload
@@ -188,6 +214,7 @@ class WebSocketServer:
         self.session_manager = SessionManager(
             model_manager=self.model_manager,
             memory_runtime=self.memory_runtime,
+            observation_recorder=self.observation_recorder,
         )
         self.desktop_manager = DesktopClientManager()
         self.live2d_manager = Live2DManager()
@@ -197,6 +224,83 @@ class WebSocketServer:
 
         logger.info("[Socket.IO] Server created with async_mode='asgi'")
         logger.info("[Socket.IO] CORS enabled: origins=*")
+
+    def _configure_observation_dependencies(self, config) -> None:
+        observation = getattr(config, "observability", None)
+        if not isinstance(observation, ObservabilityConfig) or not observation.enabled:
+            self.observation_recorder = NoOpObservationRecorder()
+            self.observation_query = NoOpObservationQuery()
+            self.observation_report_store = NoOpObservationReportStore()
+            self.cached_observation_health = ObservationHealth(
+                enabled=False,
+                ready=False,
+                degraded=True,
+            )
+            return
+
+        if observation.prometheus.enabled:
+            self.observation_mirrors.append(
+                PrometheusMirror(registry=self.metrics_registry)
+            )
+        if observation.otlp.enabled:
+            endpoint = observation.otlp.endpoint or "http://localhost:4317"
+            try:
+                self.observation_mirrors.append(
+                    OTelMirror.from_endpoint(
+                        endpoint,
+                        max_export_batch_size=observation.otlp.max_export_batch_size,
+                        schedule_delay_millis=observation.otlp.schedule_delay_millis,
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Observability] OTLP mirror unavailable: error_type={}",
+                    type(exc).__name__,
+                )
+                self.observation_mirrors.append(OTelMirror.unavailable(exc))
+
+        ledger = SQLiteObservationLedger(
+            observation.database_path,
+            queue_capacity=observation.queue_capacity,
+            busy_timeout_ms=observation.busy_timeout_ms,
+            drain_timeout=observation.drain_timeout_seconds,
+            mirrors=self.observation_mirrors,
+        )
+        self.observation_ledger = ledger
+        self.observation_recorder = ledger
+        self.observation_query = ledger
+        self.observation_report_store = ledger
+        self.cached_observation_health = ObservationHealth(
+            enabled=True,
+            ready=False,
+            degraded=False,
+        )
+
+    async def _start_observability(self) -> None:
+        async with self._observation_start_lock:
+            if self.observation_ledger is None:
+                self.cached_observation_health = await self.observation_recorder.health()
+                return
+            await self.observation_ledger.start()
+            self.cached_observation_health = await self.observation_ledger.health()
+
+    async def observation_health(self) -> ObservationHealth:
+        self.cached_observation_health = await self.observation_recorder.health()
+        return self.cached_observation_health
+
+    def inspection_runtime(self) -> InspectionRuntime:
+        """Return explicit, content-free dependencies for background inspection."""
+        return InspectionRuntime(
+            observation_query=self.observation_query,
+            report_store=self.observation_report_store,
+            memory_runtime=self.memory_runtime,
+            readiness_snapshot=lambda: ServicePool.get_readiness_snapshot(
+                config=self.config,
+                model_manager=self.model_manager,
+                frontend=self.frontend_readiness,
+            ),
+            metrics_snapshot=lambda: generate_latest(self.metrics_registry).decode(),
+        )
 
     def set_config(self, config) -> None:
         """Set application config"""
@@ -236,10 +340,6 @@ class WebSocketServer:
         if self.route_handlers:
             self.route_handlers.set_user_settings(user_settings)
 
-    def setup_tracing(self) -> None:
-        """Initialize OpenTelemetry tracing pipeline."""
-        init_tracing()
-
     async def prewarm_services(self) -> None:
         """Pre-warm service imports and model loading at server startup.
 
@@ -247,12 +347,17 @@ class WebSocketServer:
         reuses the already-loaded LLM/TTS/ASR engines instead of creating
         them from scratch.
         """
+        await self._start_observability()
         if self.config is None:
             logger.info("[Prewarm] No config loaded yet, skipping")
             return
 
         await self.memory_runtime.initialize()
-        await ServicePool.init(self.config, model_manager=self.model_manager)
+        await ServicePool.init(
+            self.config,
+            model_manager=self.model_manager,
+            observation_recorder=self.observation_recorder,
+        )
 
     def _load_bilibili_config(self) -> dict[str, Any] | None:
         """Return Bilibili configuration from the active app config."""
@@ -279,6 +384,9 @@ class WebSocketServer:
             self.desktop_manager,
             self.live2d_manager,
             bilibili_config=bilibili_config,
+            observation_recorder=self.observation_recorder,
+            observation_query=self.observation_query,
+            observation_report_store=self.observation_report_store,
         )
 
         # Wire up model manager with Socket.IO for status events
@@ -335,6 +443,13 @@ class WebSocketServer:
 
     async def _cleanup_all_resources(self) -> None:
         """Clean up all resources"""
+        async with self._cleanup_lock:
+            if self._cleaned:
+                return
+            self._cleaned = True
+            await self._cleanup_resources_once()
+
+    async def _cleanup_resources_once(self) -> None:
         logger.info("Starting to clean up all resources...")
 
         await self._stop_background_tasks()
@@ -358,6 +473,9 @@ class WebSocketServer:
 
         await self.memory_runtime.shutdown()
         await ServicePool.shutdown()
+        if self.observation_ledger is not None:
+            await self.observation_ledger.close()
+            self.cached_observation_health = await self.observation_ledger.health()
         logger.info("All resources cleaned up")
 
     def get_app(self):
@@ -366,6 +484,7 @@ class WebSocketServer:
 
     async def start(self) -> None:
         """Start the server"""
+        await self._start_observability()
         self.setup_routes()
         self.setup_lifecycle()
         logger.info("WebSocket server started")
@@ -379,7 +498,6 @@ class WebSocketServer:
 def create_server(config=None) -> WebSocketServer:
     """Create a WebSocket server instance"""
     server = WebSocketServer(config)
-    server.setup_tracing()
     server.setup_routes()
     server.setup_lifecycle()
     # Pass config to route handlers

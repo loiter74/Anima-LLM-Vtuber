@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from animetta.orchestration.graph import stats_store
+from animetta.observability.ports import NoOpObservationRecorder
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
-from animetta.orchestration.graph.stats_store import StatsStore, close_stats_store
 
 """Tests for LangGraph orchestrator — initialization and input processing."""
 
@@ -10,6 +9,22 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+
+
+class CaptureRecorder(NoOpObservationRecorder):
+    def __init__(self):
+        self.started = []
+        self.finished = []
+        self.flushes = 0
+
+    async def start_trace(self, record):
+        self.started.append(record)
+
+    async def finish_trace(self, trace_id, outcome, **kwargs):
+        self.finished.append((trace_id, outcome, kwargs))
+
+    async def flush(self):
+        self.flushes += 1
 
 
 @pytest.fixture
@@ -40,15 +55,15 @@ async def orchestrator(mock_service_context, mock_socketio, mock_graph, monkeypa
         lambda: MagicMock(),
     )
 
+    recorder = CaptureRecorder()
     orch = LangGraphOrchestrator(
         service_context=mock_service_context,
         socketio=mock_socketio,
         enable_tools=False,
+        observation_recorder=recorder,
     )
-    try:
-        yield orch
-    finally:
-        await close_stats_store()
+    orch.test_recorder = recorder
+    yield orch
 
 
 class TestOrchestratorInit:
@@ -97,82 +112,54 @@ class TestOrchestratorProcessText:
         assert result["response_text"] == "mock reply"
 
     @pytest.mark.asyncio
-    async def test_process_text_persists_dialogue_and_node_snapshots(
-        self, orchestrator, mock_graph, tmp_path
+    async def test_process_text_records_canonical_root_without_synthetic_snapshots(
+        self, orchestrator, mock_graph
     ):
-        """process_text stores conversation text and per-node debug spans."""
-        await close_stats_store()
-        store = StatsStore(db_path=str(tmp_path / "stats.db"))
-        await store.init()
-        stats_store._store = store
         mock_graph.ainvoke.return_value = {
             "user_text": "为什么一直未采集？",
-            "response_text": "因为之前没有把节点快照写进 stats.db。",
-            "response_chunks": ["因为之前没有把节点快照写进 stats.db。"],
+            "response_text": "现在记录真实节点。",
+            "response_chunks": ["现在记录真实节点。"],
             "tts_audio": b"RIFF....",
             "emotion": "thinking",
-            "_timings": [
-                {"step": "llm.api_call", "duration_ms": 1234.5, "detail": "chat_stream"},
-                {"step": "tts.synthesize", "duration_ms": 456.7, "detail": "edge_tts"},
-            ],
         }
 
-        try:
-            await orchestrator.start()
-            result = await orchestrator.process_text(text="为什么一直未采集？")
-            trace_id = orchestrator._stats_handler._trace_id
+        await orchestrator.start()
+        result = await orchestrator.process_text(
+            text="为什么一直未采集？",
+            message_id="message-1",
+            conversation_id="conversation-1",
+            task_id="task-1",
+        )
 
-            turn = await store.get_conversation_turn(trace_id)
-            detail = await store.get_trace_detail(trace_id)
-
-            assert result["response_text"] == "因为之前没有把节点快照写进 stats.db。"
-            assert turn is not None
-            assert turn["user_text"] == "为什么一直未采集？"
-            assert turn["assistant_text"] == "因为之前没有把节点快照写进 stats.db。"
-            assert detail is not None
-            spans = {span["node_name"]: span for span in detail["spans"]}
-            assert spans["llm"]["input_summary"] == "为什么一直未采集？"
-            assert spans["llm"]["output_summary"] == "因为之前没有把节点快照写进 stats.db。"
-            assert spans["tts"]["input_summary"] == "因为之前没有把节点快照写进 stats.db。"
-            assert spans["emotion"]["output_summary"] == "thinking"
-            assert spans["output"]["output_summary"] == "因为之前没有把节点快照写进 stats.db。"
-        finally:
-            await close_stats_store()
+        assert result["response_text"] == "现在记录真实节点。"
+        assert orchestrator.test_recorder.started[0].trace_id == "task-1"
+        assert orchestrator.test_recorder.finished[0][0] == "task-1"
+        assert orchestrator.test_recorder.flushes == 1
+        assert not hasattr(orchestrator, "_stats_handler")
 
     @pytest.mark.asyncio
-    async def test_golden_stats_persist_identity_and_status_without_content(
-        self, orchestrator, mock_graph, tmp_path
+    async def test_golden_observation_persists_identity_without_content(
+        self, orchestrator, mock_graph
     ):
-        await close_stats_store()
-        store = StatsStore(db_path=str(tmp_path / "golden-stats.db"))
-        await store.init()
-        stats_store._store = store
         orchestrator.service_context.config.system.runtime_profile = "golden"
         mock_graph.ainvoke.return_value = {
             "user_text": "private user text",
             "response_text": "private assistant text",
             "metadata": {"dialogue_status": "composer"},
         }
-        try:
-            await orchestrator.start()
-            await orchestrator.process_text(
-                text="private user text",
-                message_id="11111111-1111-4111-8111-111111111111",
-                conversation_id="22222222-2222-4222-8222-222222222222",
-                task_id="33333333-3333-4333-8333-333333333333",
-                turn_id="33333333-3333-4333-8333-333333333333",
-            )
-            trace_id = orchestrator._stats_handler._trace_id
-            turn = await store.get_conversation_turn(trace_id)
-            detail = await store.get_trace_detail(trace_id)
-            assert turn["user_text"] == ""
-            assert turn["assistant_text"] == ""
-            serialized = repr(detail)
-            assert "private user text" not in serialized
-            assert "private assistant text" not in serialized
-            assert turn["metadata"]["task_id"] == trace_id
-        finally:
-            await close_stats_store()
+        await orchestrator.start()
+        await orchestrator.process_text(
+            text="private user text",
+            message_id="11111111-1111-4111-8111-111111111111",
+            conversation_id="22222222-2222-4222-8222-222222222222",
+            task_id="33333333-3333-4333-8333-333333333333",
+            turn_id="33333333-3333-4333-8333-333333333333",
+        )
+        trace = orchestrator.test_recorder.started[0]
+        finish = orchestrator.test_recorder.finished[0]
+        assert trace.user_content.text is None
+        assert finish[2]["assistant_content"].text is None
+        assert trace.trace_id == finish[0]
 
 
 class TestOrchestratorProcessAudio:

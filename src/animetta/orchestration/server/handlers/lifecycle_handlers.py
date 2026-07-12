@@ -45,13 +45,9 @@ class LifecycleHandlers(BaseSocketHandler):
         print(f"[OK] Client connected: {sid}")
         print(f"     Type: {'Electron' if is_electron else 'Web'}")
         print(f"{'=' * 60}\n")
-        logger.info(
-            f"Client connected: {sid} (Type: {'Electron' if is_electron else 'Web'})"
-        )
+        logger.info(f"Client connected: {sid} (Type: {'Electron' if is_electron else 'Web'})")
 
-        await self.sio.save_session(
-            sid, {"connected_at": time.time(), "is_electron": is_electron}
-        )
+        await self.sio.save_session(sid, {"connected_at": time.time(), "is_electron": is_electron})
 
         await self.sio.emit(
             EVENTS["system"]["connection_established"]["name"],
@@ -62,15 +58,6 @@ class LifecycleHandlers(BaseSocketHandler):
             },
             to=sid,
         )
-
-        # OTel metrics: active sessions gauge
-        try:
-
-            g = get_active_sessions()
-            if g is not None:
-                g.add(1)
-        except Exception as e:
-            logger.debug(f"[LifecycleHandlers] OTel active_sessions (add) failed: {e}")
 
         if not is_electron:
             await self.sio.emit(
@@ -83,12 +70,3 @@ class LifecycleHandlers(BaseSocketHandler):
         logger.info(f"Client disconnected: {sid}")
         self.desktop_manager.unregister(sid)
         await self.session_manager.cleanup_session(sid)
-
-        # OTel metrics: active sessions gauge
-        try:
-
-            g = get_active_sessions()
-            if g is not None:
-                g.add(-1)
-        except Exception as e:
-            logger.debug(f"[LifecycleHandlers] OTel active_sessions (sub) failed: {e}")

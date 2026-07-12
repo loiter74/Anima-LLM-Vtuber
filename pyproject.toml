@@ -6,7 +6,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 name = "animetta"
 version = "0.1.0"
 description = "AI virtual companion / VTuber framework with Live2D avatar support"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

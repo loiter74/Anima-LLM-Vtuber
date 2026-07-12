@@ -56,7 +56,8 @@ class TestVADFactoryFallback:
         fake_config.sample_rate = 16000
 
         result = VADFactory.create_from_config(fake_config)
-        assert isinstance(result, MockVAD), f"降级失败，返回了 {type(result)}"
+        target = getattr(result, "_target", result)
+        assert isinstance(target, MockVAD), f"降级失败，返回了 {type(target)}"
 
 
 # ============================================================
@@ -74,7 +75,8 @@ class TestLLMFactoryFallback:
         fake_config.type = "nonexistent_provider"
 
         result = LLMFactory.create_from_config(fake_config, system_prompt="test")
-        assert isinstance(result, MockLLM), f"降级失败，返回了 {type(result)}"
+        target = getattr(result, "_target", result)
+        assert isinstance(target, MockLLM), f"降级失败，返回了 {type(target)}"
 
 
 # ============================================================

@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer, trim_leading_silence
+from animetta.observability.context import noncritical_observation_context
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.utils.tempfiles import write_temp_bytes
@@ -63,7 +64,12 @@ async def output_node(
     transport_mode = ChatTransportMode(
         metadata.get("transport_mode", ChatTransportMode.CANONICAL.value)
     )
-    delivery = ChatDelivery(sio, identity, transport_mode)
+    recorder = _get_from_config(config, "observation_recorder")
+    delivery = (
+        ChatDelivery(sio, identity, transport_mode, recorder=recorder)
+        if recorder is not None
+        else ChatDelivery(sio, identity, transport_mode)
+    )
 
     # Send conversation-start signal
     await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
@@ -100,36 +106,37 @@ async def output_node(
         if translation_state.enabled and response_text and not _is_golden_profile(config):
 
             async def _translate_and_emit():
-                try:
-                    service_context = _get_from_config(config, "service_context")
-                    if (
-                        service_context
-                        and hasattr(service_context, "llm_engine")
-                        and service_context.llm_engine
-                    ):
-                        llm = service_context.llm_engine
-                        translated = await translate_subtitle_text(
-                            llm,
-                            response_text,
-                            source_lang=translation_state.source_language,
-                            target_lang=translation_state.target_language,
-                        )
-                        if translated:
-                            target_lang = translation_state.target_language.lower()[:2]
-                            await delivery.emit(
-                                "chat",
-                                "subtitle_translation",
-                                {
-                                    "translation": translated,
-                                    "target_lang": target_lang,
-                                },
-                                to=to,
+                with noncritical_observation_context():
+                    try:
+                        service_context = _get_from_config(config, "service_context")
+                        if (
+                            service_context
+                            and hasattr(service_context, "llm_engine")
+                            and service_context.llm_engine
+                        ):
+                            llm = service_context.llm_engine
+                            translated = await translate_subtitle_text(
+                                llm,
+                                response_text,
+                                source_lang=translation_state.source_language,
+                                target_lang=translation_state.target_language,
                             )
-                            logger.info(
-                                f"[{session_id}] [OutputNode] ✅ Translated response to {translation_state.target_language}"
-                            )
-                except Exception as e:
-                    logger.warning(f"[{session_id}] [OutputNode] Translation failed: {e}")
+                            if translated:
+                                target_lang = translation_state.target_language.lower()[:2]
+                                await delivery.emit(
+                                    "chat",
+                                    "subtitle_translation",
+                                    {
+                                        "translation": translated,
+                                        "target_lang": target_lang,
+                                    },
+                                    to=to,
+                                )
+                                logger.info(
+                                    f"[{session_id}] [OutputNode] ✅ Translated response to {translation_state.target_language}"
+                                )
+                    except Exception as e:
+                        logger.warning(f"[{session_id}] [OutputNode] Translation failed: {e}")
 
             asyncio.create_task(_translate_and_emit())
 
@@ -364,6 +371,17 @@ async def _store_conversation_to_memory(
         # and embedding work runs on its bounded ingestion worker after output.
         memory_runtime = vars(service_context).get("memory_runtime")
         if memory_runtime is not None:
+            from animetta.observability.context import (
+                ObservationCarrier,
+                get_observation_context,
+            )
+
+            active_observation = get_observation_context()
+            carrier = (
+                ObservationCarrier.from_context(active_observation)
+                if active_observation is not None
+                else None
+            )
             accepted = memory_runtime.submit_turn(ConversationTurn(
                 user_input=user_text,
                 agent_response=response_text,
@@ -371,6 +389,7 @@ async def _store_conversation_to_memory(
                 context=context,
                 turn_id=state.get("turn_id") or metadata.get("turn_id"),
                 retention_policy=metadata.get("retention_policy", "standard"),
+                observation_carrier=carrier,
             ))
             logger.debug(
                 f"[{session_id}] [OutputNode] Memory submission accepted={accepted}"

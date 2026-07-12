@@ -1,42 +1,31 @@
 """Inspection reporter — persistence and alerting.
 
-store_report(): serialize InspectionReport to StatsStore SQLite.
+store_report(): serialize InspectionReport through ObservationReportStore.
 send_alert(): format Alertmanager webhook payload and fan out via NotifierManager.
 """
 
 from __future__ import annotations
 
-import json
-
 from loguru import logger
 
 from animetta.notifier.manager import NotifierManager
-from animetta.orchestration.graph.stats_store import get_stats_store
+from animetta.observability.ports import ObservationReportStore
 
 from .models import InspectionReport
 
 
-async def store_report(report: InspectionReport) -> None:
-    """Persist an inspection report to the StatsStore SQLite database.
-
-    Serializes the checks dict to JSON and delegates to
-    StatsStore.store_inspection_report().
-
-    Args:
-        report: Completed InspectionReport to persist.
-    """
-    checks_json = json.dumps(
-        {name: c.model_dump() for name, c in report.checks.items()},
-        ensure_ascii=False,
-    )
-    store = await get_stats_store()
-    await store.store_inspection_report(
-        run_id=report.run_id,
-        started_at=report.started_at,
-        finished_at=report.finished_at,
-        overall_ok=report.overall_ok,
-        checks_json=checks_json,
-    )
+async def store_report(
+    report: InspectionReport,
+    report_store: ObservationReportStore,
+) -> None:
+    """Persist a report through the injected canonical report port."""
+    await report_store.store_inspection_report({
+        "run_id": report.run_id,
+        "started_at": report.started_at,
+        "finished_at": report.finished_at,
+        "overall_ok": report.overall_ok,
+        "checks": {name: check.model_dump() for name, check in report.checks.items()},
+    })
     logger.info(f"[inspection:reporter] Report stored: {report.summary}")
 
 

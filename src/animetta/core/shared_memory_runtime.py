@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 import hashlib
 import inspect
+import time
+import uuid
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -18,6 +20,14 @@ from animetta.memory.v2.atom import MemoryScope, MemoryVisibility
 from animetta.memory.v2.context import MemoryContext
 from animetta.memory.v2.emotion_field import VADVector
 from animetta.memory.v2.system import LivingMemorySystem
+from animetta.observability.context import ObservationCarrier, observation_context
+from animetta.observability.domain import (
+    EventDirection,
+    ObservationEvent,
+    ObservationLayer,
+)
+from animetta.observability.operations import observe_operation
+from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +43,7 @@ class ConversationTurn:
     is_fallback: bool = False
     requested_scope: MemoryScope | None = None
     retention_policy: str = "standard"
+    observation_carrier: ObservationCarrier | None = None
 
 
 class SharedMemoryRuntime:
@@ -50,6 +61,7 @@ class SharedMemoryRuntime:
         worker_interval: float = 0.5,
         ingestion_queue_size: int = 256,
         dedup_window: int = 2048,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         self.db_path = str(db_path)
         self._system_factory = system_factory or (
@@ -64,12 +76,18 @@ class SharedMemoryRuntime:
         self._ingestion_queue: asyncio.Queue[ConversationTurn] = asyncio.Queue(
             maxsize=max(1, ingestion_queue_size)
         )
+        self._index_carriers: asyncio.Queue[ObservationCarrier] = asyncio.Queue()
+        self.observation_recorder = (
+            observation_recorder or NoOpObservationRecorder()
+        )
         self._dedup: OrderedDict[str, None] = OrderedDict()
         self._dedup_window = max(1, dedup_window)
         self._revision_subscribers: list[Callable[[dict[str, object]], Any]] = []
         self._ingestion_rejected = 0
         self._ingestion_dropped = 0
         self._ingestion_failed = 0
+        self._last_ingestion_error: str | None = None
+        self._last_index_error: str | None = None
         self._stopping = asyncio.Event()
         self._initialized = False
         self._closed = False
@@ -106,12 +124,29 @@ class SharedMemoryRuntime:
         while not self._stopping.is_set():
             system = self.system
             if system is not None:
+                carrier: ObservationCarrier | None = None
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    carrier = self._index_carriers.get_nowait()
                 try:
-                    await system.store.process_index_outbox()
+                    if carrier is None:
+                        await system.store.process_index_outbox()
+                    else:
+                        with observation_context(carrier.to_context()):
+                            async with observe_operation(
+                                self.observation_recorder,
+                                "memory.chroma_index",
+                                layer=ObservationLayer.MEMORY,
+                                critical_path=False,
+                            ):
+                                await system.store.process_index_outbox()
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
+                    self._last_index_error = type(exc).__name__
                     logger.warning("[SharedMemoryRuntime] Index worker degraded: {}", exc)
+                finally:
+                    if carrier is not None:
+                        self._index_carriers.task_done()
             try:
                 await asyncio.wait_for(
                     self._stopping.wait(), timeout=self.worker_interval
@@ -136,24 +171,52 @@ class SharedMemoryRuntime:
         """Submit without awaiting storage; reject invalid/duplicate/overflow turns."""
         if not self.is_ready or turn.is_probe or turn.is_fallback:
             self._ingestion_rejected += 1
+            self._schedule_queue_event(turn, "rejected")
             return False
         if not turn.user_input.strip() or not turn.agent_response.strip():
             self._ingestion_rejected += 1
+            self._schedule_queue_event(turn, "rejected")
             return False
 
         fingerprint = self._fingerprint(turn)
         if fingerprint in self._dedup:
             self._ingestion_rejected += 1
+            self._schedule_queue_event(turn, "rejected")
             return False
         try:
             self._ingestion_queue.put_nowait(turn)
         except asyncio.QueueFull:
             self._ingestion_dropped += 1
+            self._schedule_queue_event(turn, "dropped")
             return False
         self._dedup[fingerprint] = None
         while len(self._dedup) > self._dedup_window:
             self._dedup.popitem(last=False)
+        self._schedule_queue_event(turn, "accepted")
         return True
+
+    def _schedule_queue_event(self, turn: ConversationTurn, phase: str) -> None:
+        carrier = turn.observation_carrier
+        if carrier is None:
+            return
+        event = ObservationEvent(
+            event_id=uuid.uuid4().hex,
+            trace_id=carrier.trace_id,
+            operation_id=carrier.parent_operation_id,
+            direction=EventDirection.INTERNAL,
+            name="memory.turn_queue",
+            phase=phase,
+            occurred_at=time.time(),
+            payload_size=0,
+            identity_valid=True,
+            attributes={"event_name": "memory.turn_queue", "phase": phase},
+        )
+        try:
+            asyncio.get_running_loop().create_task(
+                self.observation_recorder.record_event(event)
+            )
+        except RuntimeError:
+            return
 
     @staticmethod
     def _fingerprint(turn: ConversationTurn) -> str:
@@ -177,6 +240,7 @@ class SharedMemoryRuntime:
                 raise
             except Exception as exc:
                 self._ingestion_failed += 1
+                self._last_ingestion_error = type(exc).__name__
                 logger.warning("[SharedMemoryRuntime] Ingestion failed: {}", exc)
             finally:
                 self._ingestion_queue.task_done()
@@ -185,8 +249,45 @@ class SharedMemoryRuntime:
         system = self.system
         if system is None:
             return
+        carrier = turn.observation_carrier
+        if carrier is not None:
+            with observation_context(carrier.to_context()):
+                async with observe_operation(
+                    self.observation_recorder,
+                    "memory.ingest",
+                    layer=ObservationLayer.MEMORY,
+                    critical_path=False,
+                ):
+                    await self._ingest_observed(system, turn, carrier)
+            return
+        atom = await self._encode_turn(system, turn)
+        await self._publish_revision(system, atom)
+
+    async def _ingest_observed(
+        self,
+        system: Any,
+        turn: ConversationTurn,
+        carrier: ObservationCarrier,
+    ) -> None:
+        async with observe_operation(
+            self.observation_recorder,
+            "memory.sqlite_commit",
+            layer=ObservationLayer.MEMORY,
+            critical_path=False,
+        ):
+            atom = await self._encode_turn(system, turn)
+        async with observe_operation(
+            self.observation_recorder,
+            "memory.outbox_enqueue",
+            layer=ObservationLayer.MEMORY,
+            critical_path=False,
+        ):
+            await self._index_carriers.put(carrier)
+        await self._publish_revision(system, atom)
+
+    async def _encode_turn(self, system: Any, turn: ConversationTurn) -> Any:
         scope, visibility = self._safe_scope(turn)
-        atom = await system.encode(
+        return await system.encode(
             user_input=turn.user_input,
             agent_response=turn.agent_response,
             emotion_vad=turn.emotion_vad,
@@ -195,6 +296,8 @@ class SharedMemoryRuntime:
             visibility=visibility,
             retention_policy=turn.retention_policy,
         )
+
+    async def _publish_revision(self, system: Any, atom: Any) -> None:
         revision = await system.store.get_revision()
         payload: dict[str, object] = {
             "revision": revision,
@@ -283,10 +386,18 @@ class SharedMemoryRuntime:
         index_health = store.get_index_health()
         return {
             "ready": True,
-            "degraded": bool(index_health["degraded"]),
+            "degraded": bool(
+                index_health["degraded"]
+                or self._last_ingestion_error
+                or self._last_index_error
+            ),
             "revision": await store.get_revision(),
             "index_backlog": await store.get_index_backlog(),
-            "last_error": index_health["last_error"],
+            "last_error": (
+                self._last_ingestion_error
+                or self._last_index_error
+                or index_health["last_error"]
+            ),
             "ingestion_queue": self._ingestion_queue.qsize(),
             "ingestion_rejected": self._ingestion_rejected,
             "ingestion_dropped": self._ingestion_dropped,

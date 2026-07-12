@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+from animetta.config.app import AppConfig
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
 
 # ── Fixtures ───────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ class TestSingingMediaRoutes:
     """Lightweight HTTP route probes for singing media endpoints."""
 
     @staticmethod
-    def _server_with_real_routes():
+    def _server_with_real_routes(config=None):
         with (
             patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm,
             patch("animetta.orchestration.server.websocket.SessionManager") as mock_sessions,
@@ -116,7 +117,23 @@ class TestSingingMediaRoutes:
             mock_desktop.return_value = MagicMock()
             mock_live2d.return_value = MagicMock()
             mock_lifecycle.return_value = MagicMock()
-            return WebSocketServer(config=None)
+            return WebSocketServer(config=config)
+
+    def test_metrics_endpoint_exposes_committed_record_projection(self, tmp_path):
+        server = self._server_with_real_routes(
+            AppConfig(
+                observability={
+                    "database_path": str(tmp_path / "observations.db"),
+                    "otlp": {"enabled": False},
+                }
+            )
+        )
+
+        with TestClient(server.get_app()) as client:
+            response = client.get("/metrics")
+
+        assert response.status_code == 200
+        assert "anima_active_sessions" in response.text
 
     def test_singing_recent_returns_empty_list_when_no_outputs(self):
         """GET /api/singing/recent returns [] instead of raising when output dir is absent."""
@@ -191,6 +208,9 @@ class TestSetupRoutes:
                 websocket_server.desktop_manager,
                 websocket_server.live2d_manager,
                 bilibili_config=mock_reg.call_args[1]["bilibili_config"],
+                observation_recorder=websocket_server.observation_recorder,
+                observation_query=websocket_server.observation_query,
+                observation_report_store=websocket_server.observation_report_store,
             )
 
     def test_setup_routes_wires_socketio_to_model_manager(self, websocket_server):
@@ -265,6 +285,7 @@ class TestPrewarmServices:
             mock_pool.init.assert_called_once_with(
                 websocket_server.config,
                 model_manager=websocket_server.model_manager,
+                observation_recorder=websocket_server.observation_recorder,
             )
             websocket_server.memory_runtime.initialize.assert_awaited_once()
 
@@ -434,12 +455,11 @@ class TestCreateServer:
     """create_server factory function."""
 
     def test_create_server_creates_and_configures(self):
-        """create_server builds server, sets up tracing, routes, and lifecycle."""
+        """create_server builds server, routes, and lifecycle."""
         with patch("socketio.AsyncServer") as mock_sio_cls, \
              patch("socketio.ASGIApp") as mock_asgi, \
              patch("starlette.applications.Starlette") as mock_starlette, \
-             patch("animetta.orchestration.server.websocket.ModelLoadingManager"), \
-             patch("animetta.orchestration.server.websocket.init_tracing") as mock_tracing:
+             patch("animetta.orchestration.server.websocket.ModelLoadingManager"):
             mock_sio_cls.return_value = MagicMock()
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
@@ -451,6 +471,5 @@ class TestCreateServer:
                 server = create_server(config=cfg)
 
                 assert isinstance(server, WebSocketServer)
-                mock_tracing.assert_called_once()
                 mock_routes.assert_called_once()
                 mock_lifecycle.assert_called_once()

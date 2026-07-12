@@ -432,7 +432,7 @@ class TestVADFactory:
 
         config = MockVADConfig()
         result = VADFactory.create_from_config(config)
-        assert isinstance(result, MockVAD)
+        assert isinstance(getattr(result, "_target", result), MockVAD)
 
     def test_create_mock(self):
         """create('mock') should return a MockVAD with default sample_rate."""

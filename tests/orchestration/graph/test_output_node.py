@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for output distribution node — Socket.IO + memory storage."""
 
+import asyncio
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -13,10 +14,42 @@ from langgraph.types import RunnableConfig
 # graph/__init__.py), shadowing the module of the same name. To reach
 # module-level helpers like ``_is_unpersistable_response`` we go through
 # sys.modules to grab the actual module object.
+from animetta.observability.context import ObservationContext, observation_context
+from animetta.observability.domain import PrivacyMode
+from animetta.observability.service_proxy import InstrumentedServiceProxy
 from animetta.orchestration.graph import output_node
 from animetta.orchestration.graph.state import create_initial_state
 
 _output_node_module = sys.modules["animetta.orchestration.graph.output_node"]
+
+
+class _OperationRecorder:
+    def __init__(self) -> None:
+        self.started = []
+        self.finished = []
+        self.operation_started = asyncio.Event()
+        self.operation_finished = asyncio.Event()
+
+    async def start_operation(self, record) -> None:
+        self.started.append(record)
+        self.operation_started.set()
+
+    async def finish_operation(self, record) -> None:
+        self.finished.append(record)
+        self.operation_finished.set()
+
+    async def record_event(self, record) -> None:
+        del record
+
+
+class _BlockingTranslationLLM:
+    def __init__(self, release: asyncio.Event) -> None:
+        self.release = release
+
+    async def chat_messages(self, messages, **kwargs) -> str:
+        del messages, kwargs
+        await self.release.wait()
+        return "translated"
 
 
 class TestOutputNode:
@@ -91,6 +124,58 @@ class TestOutputNode:
             "service_context": context,
         }))
         translate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_background_translation_service_operation_is_noncritical(
+        self, mock_socketio, monkeypatch
+    ):
+        monkeypatch.setattr(_output_node_module.translation_state, "enabled", True)
+        release = asyncio.Event()
+        recorder = _OperationRecorder()
+        llm = InstrumentedServiceProxy(
+            _BlockingTranslationLLM(release),
+            recorder,
+            "llm",
+            provider="test",
+            model="test",
+        )
+        context = SimpleNamespace(
+            config=SimpleNamespace(system=SimpleNamespace(runtime_profile="standard")),
+            llm_engine=llm,
+            memory_system=None,
+        )
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Hello world"
+        root = ObservationContext(
+            trace_id=state["task_id"],
+            operation_id="output-operation",
+            parent_operation_id=None,
+            message_id=state["message_id"],
+            conversation_id=state["conversation_id"],
+            session_id="test",
+            privacy_mode=PrivacyMode.FULL,
+        )
+
+        with observation_context(root):
+            await output_node(
+                state,
+                RunnableConfig(
+                    configurable={
+                        "socketio": mock_socketio,
+                        "service_context": context,
+                        "observation_recorder": recorder,
+                    }
+                ),
+            )
+
+        await asyncio.wait_for(recorder.operation_started.wait(), timeout=1)
+        try:
+            operation = recorder.started[0]
+            assert operation.name == "llm.chat_messages"
+            assert operation.critical_path is False
+        finally:
+            release.set()
+            await asyncio.wait_for(recorder.operation_finished.wait(), timeout=1)
 
     @pytest.mark.asyncio
     async def test_emits_expression_for_emotion(self, mock_socketio, mock_service_context):

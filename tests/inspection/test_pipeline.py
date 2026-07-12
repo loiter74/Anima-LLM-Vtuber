@@ -133,6 +133,61 @@ class TestSuccessfulPipeline:
         assert client.emit.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_runtime_check_uses_active_development_topology(self):
+        handlers: list = [None]
+        client = _create_mock_client(wildcard_handler_container=handlers)
+        client.connected = True
+
+        async def emit(event: str, payload: dict) -> None:
+            if payload.get("is_inspection"):
+                return
+            handler = handlers[0]
+            for event_name, extra in (
+                ("chat:sentence", {"text": "你好", "seq": 0}),
+                ("chat:expression", {"emotion": "neutral"}),
+                ("chat:live2d_action", {"type": "motion"}),
+                ("chat:control", {"signal": "conversation-end"}),
+            ):
+                await handler(event_name, {**payload, **extra})
+
+        client.emit = AsyncMock(side_effect=emit)
+        runtime = MagicMock()
+        runtime.metrics_snapshot.return_value = ""
+        runtime.readiness_snapshot.return_value = {
+            "profile": "development",
+            "components": {"pool": {"ready": True}},
+        }
+        runtime.observation_query.trace_detail = AsyncMock(return_value=None)
+        validation = AsyncMock(return_value=CheckResult.passed(
+            "pipeline/observed_turn",
+            workflow=[
+                "personality", "llm", "humor_rewrite", "humor_validation",
+                "tts", "emotion", "output",
+            ],
+            tts_evidence=True,
+            metrics_delta={"anima_trace_outcomes_total": 1.0},
+        ))
+        with (
+            patch("animetta.inspection.checks.pipeline.socketio.AsyncClient", return_value=client),
+            patch("animetta.inspection.checks.pipeline.asyncio.sleep", AsyncMock()),
+            patch("animetta.inspection.checks.pipeline.validate_observed_turn", validation),
+        ):
+            result = await check_golden_conversation_pipeline(runtime)
+
+        assert result.ok is True
+        assert result.name == "pipeline/observed_turn"
+        assert result.detail["tts_evidence"] is True
+        assert result.detail["metrics_delta"] == {
+            "anima_trace_outcomes_total": 1.0,
+        }
+        assert result.detail["probe_contained"] is True
+        assert validation.await_args.kwargs["expected_workflow"] == (
+            "personality", "llm", "humor_rewrite", "humor_validation",
+            "tts", "emotion", "output",
+        )
+        assert validation.await_args.kwargs["expected_llm_calls"] is None
+
+    @pytest.mark.asyncio
     async def test_extra_events_do_not_break_success(self):
         """Receiving additional events beyond EXPECTED_EVENTS still passes."""
         wildcard_handler: list = [None]

@@ -107,7 +107,7 @@
 **What to show:**
 - 81 tests, all external services mocked in conftest.py
 - `mock_llm`, `mock_tts`, `mock_asr`, `mock_vad` fixtures
-- GitHub Actions: Python 3.12/3.13 matrix, mypy strict, ruff
+- GitHub Actions: canonical Python 3.13 from `.python-version`, mypy strict, ruff
 
 ### 6c. ADRs (1 min)
 

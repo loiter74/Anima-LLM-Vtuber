@@ -31,9 +31,9 @@ def _make_metrics_app(body: str | None = None, status_code: int = 200) -> tuple:
     """
     if body is None:
         body = (
-            "# HELP anima_llm_errors_total Total LLM errors\n"
-            "# TYPE anima_llm_errors_total counter\n"
-            "anima_llm_errors_total 0\n"
+            "# HELP anima_trace_outcomes_total Completed traces\n"
+            "# TYPE anima_trace_outcomes_total counter\n"
+            "anima_trace_outcomes_total 0\n"
             "# HELP anima_node_duration_seconds Node duration histogram\n"
             "# TYPE anima_node_duration_seconds histogram\n"
         )
@@ -47,9 +47,9 @@ def _make_metrics_app(body: str | None = None, status_code: int = 200) -> tuple:
 
 def _full_body() -> str:
     return (
-        "# HELP anima_llm_errors_total Total LLM call errors\n"
-        "# TYPE anima_llm_errors_total counter\n"
-        "anima_llm_errors_total{provider=\"deepseek\"} 3\n"
+        "# HELP anima_trace_outcomes_total Completed traces\n"
+        "# TYPE anima_trace_outcomes_total counter\n"
+        "anima_trace_outcomes_total{outcome=\"success\"} 3\n"
         "# HELP anima_node_duration_seconds LangGraph node duration\n"
         "# TYPE anima_node_duration_seconds histogram\n"
         "anima_node_duration_seconds_bucket{node=\"llm\",le=\"0.5\"} 10\n"
@@ -86,7 +86,7 @@ class TestCheckMetricsPipeline:
         assert result.name == "metrics_pipeline"
         assert result.error is None
         assert result.detail["status_code"] == 200
-        assert result.detail["has_anima_llm_errors_total"] is True
+        assert result.detail["has_anima_trace_outcomes_total"] is True
         assert result.detail["has_anima_node_duration_seconds"] is True
 
     @pytest.mark.asyncio
@@ -94,9 +94,9 @@ class TestCheckMetricsPipeline:
 
         # Body only has one of two required metrics
         body = (
-            "# HELP anima_llm_errors_total Total LLM errors\n"
-            "# TYPE anima_llm_errors_total counter\n"
-            "anima_llm_errors_total 0\n"
+            "# HELP anima_trace_outcomes_total Completed traces\n"
+            "# TYPE anima_trace_outcomes_total counter\n"
+            "anima_trace_outcomes_total 0\n"
         )
         mock_response = httpx.Response(200, text=body, request=MagicMock())
         mock_get = AsyncMock(return_value=mock_response)
@@ -109,7 +109,7 @@ class TestCheckMetricsPipeline:
             result = await check_metrics_pipeline()
         assert result.ok is False
         assert "metrics_missing_anima_node_duration_seconds" in result.error
-        assert result.detail["has_anima_llm_errors_total"] is True
+        assert result.detail["has_anima_trace_outcomes_total"] is True
         assert result.detail["has_anima_node_duration_seconds"] is False
 
     @pytest.mark.asyncio

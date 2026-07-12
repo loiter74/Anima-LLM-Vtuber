@@ -14,9 +14,10 @@ from .checks import (
     check_metrics_pipeline,
 )
 from .models import CheckResult, InspectionReport
+from .runtime import InspectionRuntime
 
 
-async def run_full_inspection() -> InspectionReport:
+async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
     """Run all registered inspection checks and return an aggregated report.
 
     Executes four check categories sequentially:
@@ -43,7 +44,7 @@ async def run_full_inspection() -> InspectionReport:
     # ── 1. Component health checks ──────────────────────────────
     try:
 
-        results = await check_all_components()
+        results = await check_all_components(runtime)
         checks.update(results)
     except Exception as exc:
         logger.error(f"[inspection] check_all_components crashed: {exc}")
@@ -55,7 +56,7 @@ async def run_full_inspection() -> InspectionReport:
     # ── 2. Pipeline smoke test ──────────────────────────────────
     try:
 
-        result = await check_golden_conversation_pipeline()
+        result = await check_golden_conversation_pipeline(runtime=runtime)
         checks[result.name] = result
     except Exception as exc:
         logger.error(f"[inspection] check_conversation_pipeline crashed: {exc}")
@@ -67,7 +68,7 @@ async def run_full_inspection() -> InspectionReport:
     # ── 3. Data consistency checks ──────────────────────────────
     try:
 
-        result = await check_data_consistency()
+        result = await check_data_consistency(runtime)
         checks[result.name] = result
     except Exception as exc:
         logger.error(f"[inspection] check_data_consistency crashed: {exc}")
@@ -79,7 +80,7 @@ async def run_full_inspection() -> InspectionReport:
     # ── 4. Metrics pipeline checks ──────────────────────────────
     try:
 
-        result = await check_metrics_pipeline()
+        result = await check_metrics_pipeline(runtime=runtime)
         checks[result.name] = result
     except Exception as exc:
         logger.error(f"[inspection] check_metrics_pipeline crashed: {exc}")

@@ -5,7 +5,6 @@ OpenAI LLM implementation
 Uses the openai SDK to call OpenAI GPT models
 """
 
-import time as time_module
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -196,7 +195,6 @@ class OpenAILLM(LLMInterface):
         system_prompt = kwargs.get("system_prompt")
         messages = self._build_messages(user_input, system_prompt=system_prompt)
 
-        t_start = time_module.perf_counter()
         try:
             response = await self.client.chat.completions.create(
                 model=kwargs.get("model", self.model),
@@ -209,9 +207,7 @@ class OpenAILLM(LLMInterface):
 
             assistant_message = response.choices[0].message.content
 
-            # OTel metrics: record token usage + cost + duration
-            duration_s = time_module.perf_counter() - t_start
-            self._record_usage(response, duration_s)
+            self._record_usage(response, 0.0)
 
             # Update history
             self.history.append({"role": "user", "content": user_input})
@@ -221,8 +217,7 @@ class OpenAILLM(LLMInterface):
             return assistant_message
 
         except Exception as e:
-            duration_s = time_module.perf_counter() - t_start
-            self._record_error(duration_s)
+            self._record_error(0.0)
             logger.error(f"OpenAI chat error: {e}")
             raise
 
@@ -253,21 +248,17 @@ class OpenAILLM(LLMInterface):
         if "response_format" in kwargs:
             create_kwargs["response_format"] = kwargs["response_format"]
 
-        t_start = time_module.perf_counter()
         try:
             response = await self.client.chat.completions.create(**create_kwargs)
             assistant_message = response.choices[0].message.content
 
-            # OTel metrics
-            duration_s = time_module.perf_counter() - t_start
-            self._record_usage(response, duration_s)
+            self._record_usage(response, 0.0)
 
             logger.debug(f"OpenAI chat_messages response: {assistant_message[:100]}...")
             return assistant_message
 
         except Exception as e:
-            duration_s = time_module.perf_counter() - t_start
-            self._record_error(duration_s)
+            self._record_error(0.0)
             logger.error(f"OpenAI chat_messages error: {e}")
             raise
 
@@ -311,56 +302,12 @@ class OpenAILLM(LLMInterface):
         return "openai"
 
     def _record_usage(self, response: Any, duration_s: float) -> None:
-        """Record OTel metrics for token usage, cost, and duration."""
-        try:
-            input_tokens = 0
-            output_tokens = 0
-
-            if hasattr(response, "usage") and response.usage:
-                input_tokens = getattr(response.usage, "prompt_tokens", 0)
-                output_tokens = getattr(response.usage, "completion_tokens", 0)
-
-            provider = self._get_provider_name()
-            model = self.model
-
-
-            # Duration
-            dur = get_llm_request_duration()
-            if dur is not None:
-                dur.observe(duration_s, {"provider": provider, "model": model})
-
-            # Tokens
-            tok = get_llm_tokens()
-            if tok is not None:
-                if input_tokens > 0:
-                    tok.add(input_tokens, {"provider": provider, "model": model, "type": "input"})
-                if output_tokens > 0:
-                    tok.add(output_tokens, {"provider": provider, "model": model, "type": "output"})
-
-            # Cost
-            cost = calculate_cost(provider, model, input_tokens, output_tokens)
-            if cost > 0:
-                cst = get_llm_cost()
-                if cst is not None:
-                    cst.add(cost, {"provider": provider, "model": model})
-
-        except Exception:
-            pass
+        """Compatibility callback; canonical usage is emitted by observation adapters."""
+        del response, duration_s
 
     def _record_error(self, duration_s: float) -> None:
-        """Record LLM error metrics."""
-        try:
-            provider = self._get_provider_name()
-            err = get_llm_errors()
-            if err is not None:
-                err.add(1, {"provider": provider, "model": self.model})
-            if _PROM_LLM_ERRORS is not None:
-                _PROM_LLM_ERRORS.labels(provider=provider, model=self.model).inc()
-            dur = get_llm_request_duration()
-            if dur is not None and duration_s > 0:
-                dur.observe(duration_s, {"provider": provider, "model": self.model})
-        except Exception:
-            pass
+        """Compatibility callback; canonical errors are emitted by observation adapters."""
+        del duration_s
 
     def handle_interrupt(self, heard_response: str = "") -> None:
         """

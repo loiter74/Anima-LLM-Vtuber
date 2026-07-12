@@ -45,8 +45,9 @@ class SimpleVADProcessor:
 
         # Get raw probability from Silero VAD model
         self._silero_model = None
-        if hasattr(vad_engine, 'model'):
-            self._silero_model = vad_engine.model
+        model = getattr(vad_engine, "model", None)
+        if callable(model):
+            self._silero_model = model
 
     def _get_speech_prob(self, audio_data: list[float]) -> float:
         """Get raw speech probability"""

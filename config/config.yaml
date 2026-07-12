@@ -38,3 +38,23 @@ system:
     path: "${GPT_SOVITS_PATH:}"           # GPT-SoVITS 仓库路径（环境变量）
     python: "${GPT_SOVITS_PYTHON:python}"  # Python 解释器路径（默认系统 python）
     port: 9880      # api_v2.py 监听端口
+
+# 本地观测账本是事实源；Prometheus/OTLP 仅做单向镜像。
+observability:
+  enabled: true
+  database_path: "data/observations.db"
+  queue_capacity: 4096
+  busy_timeout_ms: 5000
+  drain_timeout_seconds: 5.0
+  privacy:
+    development: full
+    golden: redacted
+    production: redacted
+    digest_salt: "animetta-local-observation"
+  prometheus:
+    enabled: true
+  otlp:
+    enabled: false
+    endpoint: null
+    max_export_batch_size: 512
+    schedule_delay_millis: 5000

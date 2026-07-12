@@ -5,21 +5,24 @@ LangGraph Orchestrator
 
 from __future__ import annotations
 
-import json
+import asyncio
 import time as time_module
 from typing import Any
 
 from loguru import logger
 
-from animetta.tracing.context import attach_trace_context, detach_trace_context
+from animetta.observability.conversation import ConversationObserver
+from animetta.observability.domain import PrivacyMode
+from animetta.observability.ports import (
+    NoOpObservationRecorder,
+    ObservationRecorder,
+)
 
 from .builder import create_default_graph
 from .conversation_session import ConversationSessionState
 from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
 from .state import AgentState, create_initial_state
-from .stats_handler import StatsCallbackHandler
-from .stats_store import get_stats_store
 from .tool_manager import ToolManager
 
 
@@ -36,6 +39,7 @@ class LangGraphOrchestrator:
         enable_tools: bool = False,
         enable_memory: bool = True,
         tools_config: dict[str, Any] | None = None,
+        observation_recorder: ObservationRecorder | None = None,
     ):
         self.service_context = service_context
         self.socketio = socketio
@@ -43,6 +47,7 @@ class LangGraphOrchestrator:
         self.enable_tools = enable_tools
         self.enable_memory = enable_memory
         self.tools_config = tools_config or {}
+        self.observation_recorder = observation_recorder or NoOpObservationRecorder()
 
         raw_session_id = getattr(service_context, "session_id", None)
         self.session_id = raw_session_id if isinstance(raw_session_id, str) and raw_session_id else "unknown"
@@ -63,6 +68,7 @@ class LangGraphOrchestrator:
                 "emotion_analyzer": emotion_analyzer,
                 "thread_id": self.session_id,
                 "conversation_session": self.conversation_session,
+                "observation_recorder": self.observation_recorder,
             }
         }
 
@@ -74,14 +80,6 @@ class LangGraphOrchestrator:
         self._callbacks = obs.callbacks
         if self._callbacks:
             logger.info(f"[{self.session_id}] [LangGraph] Observability callbacks: {len(self._callbacks)}")
-
-        # Stats handler
-        self._stats_handler = StatsCallbackHandler()
-        if self._callbacks:
-            self._callbacks.append(self._stats_handler)
-        else:
-            self._callbacks = [self._stats_handler]
-        logger.info(f"[{self.session_id}] [LangGraph] Stats handler injected")
 
         logger.info(f"[{self.session_id}] [LangGraph] Orchestrator initialized")
 
@@ -109,6 +107,7 @@ class LangGraphOrchestrator:
                 tools=self.tool_manager.tools if self.tool_manager else None,
                 tools_map=self.tool_manager.tools_map if self.tool_manager else None,
                 golden_profile=self._is_golden_profile(),
+                observation_recorder=self.observation_recorder,
             )
 
             self._is_running = True
@@ -193,6 +192,10 @@ class LangGraphOrchestrator:
         user_id: str | None = None,
         user_name: str | None = None,
         channel_id: str | None = None,
+        message_id: str | None = None,
+        conversation_id: str | None = None,
+        task_id: str | None = None,
+        turn_id: str | None = None,
         **metadata,
     ) -> dict[str, Any]:
         """Process audio input"""
@@ -215,6 +218,10 @@ class LangGraphOrchestrator:
                 channel_id=channel_id,
                 user_id=user_id,
                 user_name=user_name,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                turn_id=turn_id,
                 metadata=metadata,
             )
 
@@ -277,19 +284,9 @@ class LangGraphOrchestrator:
 
     async def _run_graph(self, initial_state: AgentState) -> dict[str, Any]:
         """Run the state graph, passing service context through LangGraph config"""
-        # Start trace
         input_type = initial_state.get("input_type", "text")
         user_text = initial_state.get("user_text", "")
-        trace_id = self._stats_handler.start_trace(
-            self.session_id,
-            input_type,
-            user_text,
-            trace_id=initial_state.get("task_id"),
-        )
-
-        # Attach OTel context so TracingProxy spans inherit this trace_id
-        _token = attach_trace_context(trace_id)
-
+        turn = await self._conversation_observer().start(initial_state)
         run_config = dict(self._langgraph_config)
         callbacks = self._callbacks or get_observability().callbacks
         if callbacks:
@@ -302,201 +299,45 @@ class LangGraphOrchestrator:
             result = await self.graph.ainvoke(initial_state, config=run_config)
             duration_ms = (time_module.perf_counter() - t_start) * 1000
             logger.info(f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms")
-            await self._persist_conversation_observation(
-                trace_id=trace_id,
-                initial_state=initial_state,
-                final_state=result,
-                status="success",
-                error_msg=None,
-            )
-            self._stats_handler.finish_trace(status="success")
+            await turn.finish(result)
             return result
+        except asyncio.CancelledError as exc:
+            await turn.fail(exc)
+            raise
         except Exception as e:
             duration_ms = (time_module.perf_counter() - t_start) * 1000
             logger.error(f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}")
-            self._stats_handler.finish_trace(status="error", error_msg=str(e)[:500])
+            await turn.fail(e)
             raise
-        finally:
-            detach_trace_context(_token)
-
-    async def _persist_conversation_observation(
-        self,
-        trace_id: str,
-        initial_state: AgentState,
-        final_state: dict[str, Any],
-        status: str,
-        error_msg: str | None,
-    ) -> None:
-        """Persist full turn text and deterministic node snapshots for debugging."""
-
-        try:
-            store = await get_stats_store()
-            input_type = initial_state.get("input_type", "text")
-            user_text = (
-                final_state.get("user_text")
-                or initial_state.get("user_text")
-                or ""
+    def _conversation_observer(self) -> ConversationObserver:
+        config = getattr(self.service_context, "config", None)
+        system = getattr(config, "system", None)
+        profile = str(getattr(system, "runtime_profile", "development") or "development")
+        observation = getattr(config, "observability", None)
+        privacy = getattr(observation, "privacy", None)
+        salt = str(
+            getattr(privacy, "digest_salt", "animetta-local-observation")
+            or "animetta-local-observation"
+        )
+        privacy_name = str(
+            getattr(privacy, profile, "")
+            or getattr(
+                privacy,
+                "production" if profile in {"prod", "production"} else profile,
+                "",
             )
-            assistant_text = final_state.get("response_text") or ""
-            content_allowed = not self._is_golden_profile()
-            persisted_user_text = user_text if content_allowed else ""
-            persisted_assistant_text = assistant_text if content_allowed else ""
-            metadata_candidates = {
-                **initial_state.get("metadata", {}),
-                **final_state.get("metadata", {}),
-                "message_id": initial_state.get("message_id"),
-                "conversation_id": initial_state.get("conversation_id"),
-                "task_id": initial_state.get("task_id"),
-                "turn_id": initial_state.get("turn_id"),
-                "config_version": initial_state.get("config_version"),
-            }
-            allowed_metadata = (
-                "message_id",
-                "conversation_id",
-                "task_id",
-                "turn_id",
-                "config_version",
-                "source",
-                "is_acceptance",
-                "transport_mode",
-                "dialogue_status",
-                "reasoner_provider",
-                "composer_provider",
-                "tts_provider",
-                "media_status",
-                "composer_rejection",
-                "degradation_reason",
-            )
-            metadata = {
-                field: metadata_candidates[field]
-                for field in allowed_metadata
-                if metadata_candidates.get(field) is not None
-            }
-
-            await store.create_trace(
-                trace_id, self.session_id, input_type, persisted_user_text
-            )
-            await store.store_conversation_turn(
-                trace_id=trace_id,
-                session_id=self.session_id,
-                input_type=input_type,
-                user_text=persisted_user_text,
-                assistant_text=persisted_assistant_text,
-                status=status,
-                error_msg=error_msg,
-                metadata=metadata,
-            )
-            await self._persist_node_snapshot_spans(
-                trace_id=trace_id,
-                initial_state=initial_state,
-                final_state=final_state,
-                status=status,
-            )
-        except Exception as e:
-            logger.warning(f"[{self.session_id}] [LangGraph] Failed to persist conversation observation: {e}")
-
-    async def _persist_node_snapshot_spans(
-        self,
-        trace_id: str,
-        initial_state: AgentState,
-        final_state: dict[str, Any],
-        status: str,
-    ) -> None:
-        store = await get_stats_store()
-        existing = await store.get_trace_detail(trace_id)
-        if existing and existing.get("spans"):
-            return
-
-        user_text = final_state.get("user_text") or initial_state.get("user_text") or ""
-        response_text = final_state.get("response_text") or ""
-        emotion = final_state.get("emotion") or ""
-        tts_audio = final_state.get("tts_audio")
-        timings = final_state.get("_timings") or []
-        if self._is_golden_profile():
-            user_text = "input_present" if user_text else "input_absent"
-            response_text = "response_present" if response_text else "response_absent"
-
-        snapshots = [
-            {
-                "node": "input",
-                "input": user_text,
-                "output": user_text,
-                "duration_ms": 0.0,
-                "status": "success" if user_text else "skipped",
-            },
-            {
-                "node": "llm",
-                "input": user_text,
-                "output": response_text,
-                "duration_ms": self._timing_total(timings, "llm"),
-                "status": "success" if response_text else status,
-            },
-            {
-                "node": "tts",
-                "input": response_text,
-                "output": self._summarize_tts_audio(tts_audio),
-                "duration_ms": self._timing_total(timings, "tts"),
-                "status": "success" if tts_audio else "skipped",
-            },
-            {
-                "node": "emotion",
-                "input": response_text,
-                "output": emotion,
-                "duration_ms": self._timing_total(timings, "emotion"),
-                "status": "success" if emotion else "skipped",
-            },
-            {
-                "node": "output",
-                "input": response_text,
-                "output": response_text,
-                "duration_ms": self._timing_total(timings, "output"),
-                "status": "success" if response_text else "skipped",
-            },
-        ]
-
-        for snapshot in snapshots:
-            span_id = f"{trace_id}:snapshot:{snapshot['node']}"
-            await store.create_span(
-                span_id=span_id,
-                trace_id=trace_id,
-                node_name=snapshot["node"],
-                input_summary=self._clip_payload(snapshot["input"]),
-            )
-            await store.finish_span(
-                span_id=span_id,
-                duration_ms=snapshot["duration_ms"],
-                status=snapshot["status"],
-                output_summary=self._clip_payload(snapshot["output"]),
-            )
-
-    @staticmethod
-    def _timing_total(timings: list[dict[str, Any]], prefix: str) -> float:
-        total = 0.0
-        for timing in timings:
-            step = str(timing.get("step", ""))
-            if step == prefix or step.startswith(f"{prefix}."):
-                total += float(timing.get("duration_ms") or 0.0)
-        return round(total, 2)
-
-    @staticmethod
-    def _summarize_tts_audio(tts_audio: Any) -> str:
-        if tts_audio is None:
-            return ""
-        if isinstance(tts_audio, bytes):
-            return f"audio bytes: {len(tts_audio)}"
-        if isinstance(tts_audio, str):
-            return tts_audio
-        try:
-            return json.dumps(tts_audio, ensure_ascii=False, default=str)[:500]
-        except TypeError:
-            return str(tts_audio)[:500]
-
-    @staticmethod
-    def _clip_payload(value: Any, limit: int = 2000) -> str:
-        if value is None:
-            return ""
-        text = value if isinstance(value, str) else str(value)
-        return text[:limit]
+        )
+        privacy_mode = (
+            PrivacyMode(privacy_name)
+            if privacy_name in {mode.value for mode in PrivacyMode}
+            else None
+        )
+        return ConversationObserver(
+            self.observation_recorder,
+            runtime_profile=profile,
+            digest_salt=salt,
+            privacy_mode=privacy_mode,
+        )
 
     def _clean_result(self, final_state: dict[str, Any]) -> dict[str, Any]:
         """Clean up return value"""
@@ -547,6 +388,7 @@ class LangGraphOrchestrator:
         enable_tools: bool = False,
         enable_memory: bool = True,
         tools_config: dict[str, Any] | None = None,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> LangGraphOrchestrator:
         """Create orchestrator instance"""
         orchestrator = LangGraphOrchestrator(
@@ -556,6 +398,7 @@ class LangGraphOrchestrator:
             enable_tools=enable_tools,
             enable_memory=enable_memory,
             tools_config=tools_config,
+            observation_recorder=observation_recorder,
         )
 
         await orchestrator.start()

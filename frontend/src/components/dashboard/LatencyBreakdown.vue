@@ -13,7 +13,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const store = useDashboardStore()
 
 const chartData = computed(() => ({
-  labels: store.nodeStats.map(n => n.node_name),
+  labels: store.nodeStats.map(n => `${n.layer} · ${n.name}`),
   datasets: [{
     label: 'Avg Duration (ms)',
     data: store.nodeStats.map(n => n.avg_duration_ms),

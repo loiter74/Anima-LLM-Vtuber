@@ -112,12 +112,22 @@ def build_runtime_readiness_snapshot(
             "ready": bool(development_ready),
             "reason": None if development_ready else "initializing",
         }
+        llm_component = _runtime_service_component(
+            llm_engine,
+            configured_provider=getattr(getattr(config, "services", None), "agent", None),
+        )
+        tts_component = _runtime_service_component(
+            tts_engine,
+            configured_provider=getattr(getattr(config, "services", None), "tts", None),
+        )
         return RuntimeReadinessSnapshot(
             ready=bool(development_ready),
             profile=profile,
             acceptance_eligible=False,
             components={
                 "pool": pool_component,
+                "llm": llm_component,
+                "tts": tts_component,
                 "frontend": frontend_component,
             },
         )
@@ -165,11 +175,12 @@ def build_runtime_readiness_snapshot(
 
 def unwrap_tracing_proxy(engine: Any) -> Any:
     """Unwrap any number of tracing proxies, failing safely on cycles."""
+    from animetta.observability.service_proxy import InstrumentedServiceProxy
     from animetta.tracing.proxy import TracingProxy
 
     current = engine
     seen: set[int] = set()
-    while isinstance(current, TracingProxy):
+    while isinstance(current, (TracingProxy, InstrumentedServiceProxy)):
         identity = id(current)
         if identity in seen:
             return None
@@ -179,6 +190,34 @@ def unwrap_tracing_proxy(engine: Any) -> Any:
         except Exception:
             return None
     return current
+
+
+def _runtime_service_component(
+    engine: Any,
+    *,
+    configured_provider: Any,
+) -> dict[str, Any]:
+    """Expose bounded provider identity for non-golden runtime health."""
+    target = unwrap_tracing_proxy(engine)
+    if target is None:
+        return {
+            "state": "failed",
+            "ready": False,
+            "provider": str(configured_provider) if configured_provider else None,
+            "model": None,
+            "reason": "engine_missing",
+        }
+    try:
+        model = object.__getattribute__(engine, "_model")
+    except (AttributeError, TypeError):
+        model = getattr(target, "model", None)
+    return {
+        "state": "ready",
+        "ready": True,
+        "provider": str(configured_provider) if configured_provider else None,
+        "model": str(model) if model is not None else None,
+        "reason": None,
+    }
 
 
 def canonical_deepseek_endpoint(value: Any) -> str | None:

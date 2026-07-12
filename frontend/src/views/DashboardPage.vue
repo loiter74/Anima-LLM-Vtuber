@@ -4,7 +4,7 @@ import {
   useDashboardStore,
   type Trace,
   type TraceDetail,
-  type TraceSpan,
+  type TraceOperation,
 } from '../stores/dashboardStore'
 
 type TraceNodeStatus = 'success' | 'warning' | 'error' | 'skipped'
@@ -24,19 +24,10 @@ interface TraceNodeDetail {
 const store = useDashboardStore()
 
 const selectedTraceIndex = ref(0)
-const selectedNodeId = ref('llm')
+const selectedNodeId = ref('')
 const userSelectedNode = ref(false)
 const historyOpen = ref(false)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-const topology = [
-  { id: 'input', label: 'Input', role: '用户输入' },
-  { id: 'memory', label: 'Memory', role: '记忆检索' },
-  { id: 'tools', label: 'Tools', role: '工具调用' },
-  { id: 'llm', label: 'LLM', role: '推理生成' },
-  { id: 'tts', label: 'TTS', role: '语音合成' },
-  { id: 'output', label: 'Output', role: '响应出口' },
-] as const
 
 const selectedTrace = computed(() => store.traces[selectedTraceIndex.value] ?? null)
 const selectedTraceDetail = computed(() => {
@@ -51,15 +42,15 @@ const canGoNewer = computed(() => selectedTraceIndex.value > 0)
 const canGoOlder = computed(() => selectedTraceIndex.value < store.traces.length - 1)
 const healthTone = computed(() => {
   if (!selectedTrace.value) return 'idle'
-  if (selectedTrace.value.status === 'error') return 'error'
-  if (selectedTrace.value.status === 'success') return 'success'
+  if (['failed', 'cancelled', 'aborted'].includes(selectedTrace.value.outcome ?? '')) return 'error'
+  if (selectedTrace.value.outcome === 'success') return 'success'
   return 'warning'
 })
 const executedNodeCount = computed(() =>
   traceNodes.value.filter(node => node.status !== 'skipped').length
 )
-const failedNode = computed(() => traceNodes.value.find(node => node.status === 'error') ?? null)
-const selectedTraceTime = computed(() => formatTime(selectedTrace.value?.created_at))
+const selectedTraceTime = computed(() => formatTime(selectedTrace.value?.started_at))
+const selectedTraceTitle = computed(() => traceTitle(selectedTrace.value))
 
 onMounted(async () => {
   await store.fetchAll()
@@ -95,9 +86,11 @@ function clampSelectedTrace() {
 function selectPreferredNode() {
   if (userSelectedNode.value) return
   const errorNode = traceNodes.value.find(node => node.status === 'error')
-  const activeLlmNode = traceNodes.value.find(node => node.id === 'llm' && node.status !== 'skipped')
+  const activeLlmNode = traceNodes.value.find(
+    node => node.label.toLowerCase().includes('llm') && node.status !== 'skipped'
+  )
   const firstCapturedNode = traceNodes.value.find(node => node.status !== 'skipped')
-  selectedNodeId.value = errorNode?.id ?? activeLlmNode?.id ?? firstCapturedNode?.id ?? 'input'
+  selectedNodeId.value = errorNode?.id ?? activeLlmNode?.id ?? firstCapturedNode?.id ?? ''
 }
 
 function goNewer() {
@@ -133,179 +126,92 @@ async function loadSelectedTraceDetail() {
 }
 
 function buildNodeDetails(trace: Trace | null, detail: TraceDetail | null): TraceNodeDetail[] {
-  const totalDuration = trace?.total_duration_ms ?? store.overview?.avg_duration_ms ?? 0
-  const llmStats = store.nodeStats.find(node => node.node_name.toLowerCase().includes('llm'))
-  const ttsStats = store.nodeStats.find(node => node.node_name.toLowerCase().includes('tts'))
-  const hasError = trace?.status === 'error'
-  const turn = detail?.conversation_turn
-  const userText = turn?.user_text || trace?.user_text || ''
-  const assistantText = turn?.assistant_text || ''
-  const assistantOrError = assistantText || detail?.error_msg || ''
-  const prompt = userText || '等待下一次对话进入 trace。'
-  const status = trace?.status ?? 'pending'
-  const allowEstimate = !detail
-  const missingNodeStatus: TraceNodeStatus = detail ? 'skipped' : trace ? 'success' : 'skipped'
-  const memorySpan = findSpan(detail, ['memory'])
-  const toolSpan = findSpan(detail, ['tool'])
-  const llmSpan = findSpan(detail, ['llm', 'chat', 'model'])
-  const ttsSpan = findSpan(detail, ['tts', 'speech'])
-  const outputSpan = findSpan(detail, ['output', 'response']) ?? findLastSpan(detail)
+  if (!detail) return []
+  const operations = flattenOperations(detail.operation_tree)
+  return operations.map((operation) => {
+    const events = detail.events.filter(event => event.operation_id === operation.operation_id)
+    const isRoot = operation.parent_operation_id === null
+    const input = isRoot
+      ? contentLabel(detail.content.user, '还没有采集到用户输入。')
+      : `上游操作 · ${operation.parent_operation_id}`
+    const output = operation.error_summary
+      || events.map(event => `${event.direction} · ${event.name} · ${event.phase}`).join('\n')
+      || (operation.name.includes('output')
+        ? contentLabel(detail.content.assistant, '未采集响应正文。')
+        : '操作已提交，未保存业务载荷。')
 
-  return [
-    {
-      id: 'input',
-      label: 'Input',
-      role: '用户输入',
-      status: trace ? 'success' : 'skipped',
-      durationMs: 0,
-      input: formatPayload(userText, '还没有采集到原始输入。'),
-      output: prompt,
+    return {
+      id: operation.operation_id,
+      label: operation.name,
+      role: layerRole(operation.layer),
+      status: normalizeOperationStatus(operation.status),
+      durationMs: Math.round(operation.duration_ms ?? 0),
+      input,
+      output,
       attributes: [
-        { label: 'type', value: turn?.input_type ?? trace?.input_type ?? 'unknown' },
-        { label: 'session', value: turn?.session_id ?? trace?.session_id ?? '-' },
+        { label: 'layer', value: operation.layer },
+        { label: 'provider', value: operation.provider ?? '-' },
+        { label: 'model', value: operation.model ?? '-' },
+        { label: 'critical', value: operation.critical_path ? 'yes' : 'no' },
       ],
-      events: ['message.received', 'state.initialized'],
-    },
-    {
-      id: 'memory',
-      label: 'Memory',
-      role: '记忆检索',
-      status: normalizeNodeStatus(memorySpan?.status, missingNodeStatus),
-      durationMs: normalizeDuration(
-        memorySpan?.duration_ms,
-        allowEstimate ? Math.max(42, Math.round(totalDuration * 0.08)) : 0
-      ),
-      input: formatPayload(memorySpan?.input_summary ?? prompt, '没有采集到记忆节点输入。'),
-      output: formatPayload(memorySpan?.output_summary, trace ? '未采集 memory output_summary。' : 'No trace selected'),
-      attributes: [
-        { label: 'span', value: memorySpan?.span_id ?? '-' },
-        { label: 'strategy', value: 'hybrid search' },
-      ],
-      events: parseEvents(memorySpan) ?? ['memory.query', 'memory.merge_context'],
-    },
-    {
-      id: 'tools',
-      label: 'Tools',
-      role: '工具调用',
-      status: toolSpan ? normalizeNodeStatus(toolSpan.status, 'success') : 'skipped',
-      durationMs: normalizeDuration(toolSpan?.duration_ms, 0),
-      input: formatPayload(toolSpan?.input_summary, trace ? '本轮没有工具节点输入。' : 'No trace selected'),
-      output: formatPayload(toolSpan?.output_summary, trace ? '本轮无外部工具调用。' : 'No trace selected'),
-      attributes: [
-        { label: 'calls', value: toolSpan ? '1' : '0' },
-        { label: 'policy', value: 'auto' },
-      ],
-      events: parseEvents(toolSpan) ?? ['tool.router.skip'],
-    },
-    {
-      id: 'llm',
-      label: 'LLM',
-      role: '推理生成',
-      status: normalizeNodeStatus(llmSpan?.status, missingNodeStatus),
-      durationMs: normalizeDuration(
-        llmSpan?.duration_ms,
-        allowEstimate ? Math.round(llmStats?.avg_duration_ms ?? totalDuration * 0.42) : 0
-      ),
-      input: formatPayload(llmSpan?.input_summary, trace ? prompt : 'No trace selected'),
-      output: formatPayload(llmSpan?.output_summary ?? ttsSpan?.input_summary ?? assistantText, trace ? '未采集 llm output_summary。' : 'No trace selected'),
-      attributes: [
-        { label: 'span', value: llmSpan?.span_id ?? '-' },
-        { label: 'provider', value: 'active llm service' },
-      ],
-      events: parseEvents(llmSpan) ?? ['llm.request.start', 'llm.stream.delta', 'llm.request.end'],
-    },
-    {
-      id: 'tts',
-      label: 'TTS',
-      role: '语音合成',
-      status: normalizeNodeStatus(ttsSpan?.status, !trace ? 'skipped' : hasError && !detail ? 'error' : missingNodeStatus),
-      durationMs: normalizeDuration(
-        ttsSpan?.duration_ms,
-        allowEstimate ? Math.round(ttsStats?.avg_duration_ms ?? totalDuration * 0.36) : 0
-      ),
-      input: formatPayload(ttsSpan?.input_summary ?? llmSpan?.output_summary ?? assistantText, trace ? 'TTS 未保存输入摘要。' : 'No trace selected'),
-      output: formatPayload(ttsSpan?.output_summary ?? detail?.error_msg, hasError ? '未采集 tts output_summary。' : '未采集 tts output_summary。'),
-      attributes: [
-        { label: 'voice', value: 'persona default' },
-        { label: 'retryable', value: hasError ? 'yes' : 'no' },
-      ],
-      events: parseEvents(ttsSpan) ?? (hasError
-        ? ['tts.request.start', 'tts.provider.error', 'trace.mark_error']
-        : ['tts.request.start', 'tts.audio.ready']),
-    },
-    {
-      id: 'output',
-      label: 'Output',
-      role: '响应出口',
-      status: outputSpan ? normalizeNodeStatus(outputSpan.status, hasError ? 'warning' : 'success') : missingNodeStatus,
-      durationMs: normalizeDuration(
-        outputSpan?.duration_ms,
-        allowEstimate ? Math.max(16, Math.round(totalDuration * 0.04)) : 0
-      ),
-      input: formatPayload(outputSpan?.input_summary ?? ttsSpan?.output_summary ?? llmSpan?.output_summary, hasError ? 'partial response' : 'text + audio + expression'),
-      output: formatPayload(outputSpan?.output_summary ?? assistantOrError, status === 'success' ? '未采集 output_summary。' : '未采集 output_summary。'),
-      attributes: [
-        { label: 'trace', value: trace?.trace_id ?? '-' },
-        { label: 'status', value: status },
-      ],
-      events: parseEvents(outputSpan) ?? (hasError ? ['response.partial', 'debug.snapshot.saved'] : ['response.sent', 'trace.closed']),
-    },
-  ]
+      events: events.length
+        ? events.map(event => `${event.direction} · ${event.name} · ${event.phase}`)
+        : ['no committed event'],
+    }
+  })
 }
 
-function findSpan(detail: TraceDetail | null, keywords: string[]) {
-  if (!detail) return null
-  return detail.spans.find(span => {
-    const nodeName = span.node_name.toLowerCase()
-    return keywords.some(keyword => nodeName.includes(keyword))
-  }) ?? null
+function flattenOperations(roots: TraceOperation[]): TraceOperation[] {
+  return roots.flatMap(operation => [operation, ...flattenOperations(operation.children ?? [])])
 }
 
-function findLastSpan(detail: TraceDetail | null) {
-  if (!detail?.spans.length) return null
-  return detail.spans[detail.spans.length - 1]
+function layerRole(layer: TraceOperation['layer']) {
+  const roles: Record<TraceOperation['layer'], string> = {
+    transport: '传输入口',
+    workflow: '工作流节点',
+    service: '服务调用',
+    memory: '记忆处理',
+    delivery: '响应投递',
+  }
+  return roles[layer]
 }
 
-function normalizeNodeStatus(status: string | null | undefined, fallback: TraceNodeStatus): TraceNodeStatus {
-  if (status === 'success' || status === 'error') return status
-  if (status === 'warning') return 'warning'
+function normalizeOperationStatus(status: TraceOperation['status']): TraceNodeStatus {
+  if (status === 'success') return 'success'
   if (status === 'skipped') return 'skipped'
+  if (status === 'degraded') return 'warning'
+  if (status === 'error' || status === 'cancelled') return 'error'
+  return 'warning'
+}
+
+function contentLabel(
+  content: TraceDetail['content']['user'] | TraceDetail['content']['assistant'],
+  fallback: string,
+) {
+  if (content.text) return content.text
+  if (content.digest) {
+    return `已脱敏 · ${content.character_count ?? 0} chars · ${content.digest.slice(0, 12)}…`
+  }
   return fallback
 }
 
-function normalizeDuration(duration: number | null | undefined, fallback: number) {
-  return Math.round(duration ?? fallback ?? 0)
+function traceTitle(trace: Trace | null) {
+  if (!trace) return '等待 trace'
+  const detail = store.traceDetails[trace.trace_id]
+  return detail ? contentLabel(detail.content.user, trace.trace_id) : trace.trace_id
 }
 
-function formatPayload(value: string | null | undefined, fallback: string) {
-  const text = value?.trim()
-  return text || fallback
-}
-
-function parseEvents(span: TraceSpan | null) {
-  if (!span?.events) return null
-  try {
-    const events = JSON.parse(span.events)
-    if (!Array.isArray(events)) return null
-    return events.map((event) => {
-      if (typeof event === 'string') return event
-      if (event && typeof event === 'object' && 'name' in event) {
-        return String(event.name)
-      }
-      return JSON.stringify(event)
-    })
-  } catch {
-    return [span.events]
-  }
-}
-
-function statusLabel(status: TraceNodeStatus | Trace['status']) {
+function statusLabel(status: TraceNodeStatus | NonNullable<Trace['outcome']>) {
   const labels: Record<string, string> = {
     success: 'OK',
     warning: 'WARN',
     error: 'FAIL',
     skipped: 'SKIP',
     pending: 'RUN',
+    degraded: 'DEGRADED',
+    failed: 'FAIL',
+    cancelled: 'CANCEL',
+    aborted: 'ABORT',
   }
   return labels[status] ?? status.toUpperCase()
 }
@@ -316,9 +222,9 @@ function formatDuration(duration?: number) {
   return `${Math.round(duration)} ms`
 }
 
-function formatTime(value?: string) {
+function formatTime(value?: number | string) {
   if (!value) return '--:--'
-  const date = new Date(value)
+  const date = new Date(typeof value === 'number' ? value * 1000 : value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
@@ -361,20 +267,24 @@ function formatTime(value?: string) {
       <div class="metric">
         <span>当前状态</span>
         <strong :class="`tone-${healthTone}`">
-          {{ selectedTrace ? statusLabel(selectedTrace.status) : 'EMPTY' }}
+          {{ selectedTrace?.outcome ? statusLabel(selectedTrace.outcome) : 'RUN' }}
         </strong>
       </div>
       <div class="metric">
         <span>耗时</span>
-        <strong>{{ formatDuration(selectedTrace?.total_duration_ms) }}</strong>
+        <strong>{{ formatDuration(selectedTrace?.duration_ms ?? undefined) }}</strong>
       </div>
       <div class="metric">
         <span>节点</span>
-        <strong>{{ executedNodeCount }}/{{ topology.length }}</strong>
+        <strong>{{ executedNodeCount }}/{{ traceNodes.length }}</strong>
       </div>
       <div class="metric">
-        <span>失败点</span>
-        <strong>{{ failedNode?.label ?? 'none' }}</strong>
+        <span>后台任务</span>
+        <strong>
+          {{ selectedTraceDetail?.post_turn.completed ?? 0 }} done ·
+          {{ selectedTraceDetail?.post_turn.pending ?? 0 }} pending ·
+          {{ selectedTraceDetail?.post_turn.failed ?? 0 }} failed
+        </strong>
       </div>
       <div class="metric">
         <span>更新时间</span>
@@ -392,7 +302,7 @@ function formatTime(value?: string) {
         >
           <span class="history-toggle-main">
             <span class="eyebrow">历史 Trace</span>
-            <strong>{{ selectedTrace?.user_text || '等待 trace' }}</strong>
+            <strong>{{ selectedTraceTitle }}</strong>
             <small>{{ store.traces.length }} runs · {{ selectedTraceTime }}</small>
           </span>
           <span class="history-toggle-action">{{ historyOpen ? '收起' : '展开' }}</span>
@@ -406,10 +316,12 @@ function formatTime(value?: string) {
             :class="{ active: index === selectedTraceIndex }"
             @click="selectTrace(index)"
           >
-            <span class="row-status" :class="`status-${trace.status}`">{{ statusLabel(trace.status) }}</span>
+            <span class="row-status" :class="`status-${trace.outcome ?? 'pending'}`">
+              {{ trace.outcome ? statusLabel(trace.outcome) : 'RUN' }}
+            </span>
             <span class="row-main">
-              <strong>{{ trace.user_text || trace.trace_id }}</strong>
-              <small>{{ formatTime(trace.created_at) }} · {{ formatDuration(trace.total_duration_ms) }}</small>
+              <strong>{{ traceTitle(trace) }}</strong>
+              <small>{{ formatTime(trace.started_at) }} · {{ formatDuration(trace.duration_ms ?? undefined) }}</small>
             </span>
           </button>
           <div v-if="!store.traces.length" class="empty-state">
@@ -422,7 +334,7 @@ function formatTime(value?: string) {
         <div class="graph-toolbar">
           <div>
             <p class="eyebrow">Flow Graph</p>
-            <h2>{{ selectedTrace?.user_text || '等待对话 trace' }}</h2>
+            <h2>{{ selectedTraceTitle }}</h2>
           </div>
           <span class="trace-id">{{ selectedTrace?.trace_id ?? 'no-trace' }}</span>
         </div>

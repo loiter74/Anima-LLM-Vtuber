@@ -5,8 +5,21 @@ from uuid import uuid4
 
 import pytest
 
+from animetta.observability.ports import NoOpObservationRecorder
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 from animetta.orchestration.graph.state import create_initial_state
+
+
+class CaptureRecorder(NoOpObservationRecorder):
+    def __init__(self) -> None:
+        self.started = []
+        self.finished = []
+
+    async def start_trace(self, record) -> None:
+        self.started.append(record)
+
+    async def finish_trace(self, trace_id, outcome, **kwargs) -> None:
+        self.finished.append((trace_id, outcome, kwargs))
 
 
 def _identity() -> dict[str, str]:
@@ -63,36 +76,38 @@ async def test_process_text_propagates_identity_to_state_and_result() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_graph_reuses_task_id_for_stats_and_otel(monkeypatch) -> None:
+async def test_run_graph_reuses_task_id_for_canonical_observation() -> None:
     identity = _identity()
     context = MagicMock()
     context.session_id = "sid"
-    orchestrator = LangGraphOrchestrator(service_context=context, socketio=None)
-    orchestrator._stats_handler = MagicMock()
-    orchestrator._stats_handler.start_trace.return_value = identity["task_id"]
+    recorder = CaptureRecorder()
+    orchestrator = LangGraphOrchestrator(
+        service_context=context,
+        socketio=None,
+        observation_recorder=recorder,
+    )
     orchestrator.graph = MagicMock()
     state = create_initial_state(session_id="sid", user_text="hello", **identity)
-    orchestrator.graph.ainvoke = AsyncMock(return_value=state)
-    orchestrator._persist_conversation_observation = AsyncMock()
-    attach = MagicMock(return_value=None)
-    monkeypatch.setattr(
-        "animetta.orchestration.graph.orchestrator.attach_trace_context", attach
+    orchestrator.graph.ainvoke = AsyncMock(
+        return_value={**state, "response_text": "reply"}
     )
-
     await orchestrator._run_graph(state)
 
-    orchestrator._stats_handler.start_trace.assert_called_once_with(
-        "sid", "text", "hello", trace_id=identity["task_id"]
-    )
-    attach.assert_called_once_with(identity["task_id"])
+    assert recorder.started[0].trace_id == identity["task_id"]
+    assert recorder.finished[0][0] == identity["task_id"]
 
 
 @pytest.mark.asyncio
-async def test_persisted_metadata_is_allowlisted_and_keeps_identity(monkeypatch) -> None:
+async def test_observation_metadata_is_allowlisted_and_keeps_identity() -> None:
     identity = _identity()
     context = MagicMock()
     context.session_id = "sid"
-    orchestrator = LangGraphOrchestrator(service_context=context, socketio=None)
+    recorder = CaptureRecorder()
+    orchestrator = LangGraphOrchestrator(
+        service_context=context,
+        socketio=None,
+        observation_recorder=recorder,
+    )
     state = create_initial_state(session_id="sid", user_text="hello", **identity)
     state["config_version"] = 3
     state["metadata"] = {
@@ -102,22 +117,16 @@ async def test_persisted_metadata_is_allowlisted_and_keeps_identity(monkeypatch)
         "api_key": "must-not-persist",
         "prompt": "must-not-persist",
     }
-    store = MagicMock()
-    store.create_trace = AsyncMock()
-    store.store_conversation_turn = AsyncMock()
-    monkeypatch.setattr(
-        "animetta.orchestration.graph.orchestrator.get_stats_store",
-        AsyncMock(return_value=store),
+    orchestrator.graph = MagicMock()
+    orchestrator.graph.ainvoke = AsyncMock(
+        return_value={
+            **state,
+            "response_text": "reply",
+            "metadata": {"secret": "must-not-persist"},
+        }
     )
-    orchestrator._persist_node_snapshot_spans = AsyncMock()
+    await orchestrator._run_graph(state)
 
-    await orchestrator._persist_conversation_observation(
-        trace_id=identity["task_id"],
-        initial_state=state,
-        final_state={**state, "metadata": {"secret": "must-not-persist"}},
-        status="success",
-        error_msg=None,
-    )
-
-    metadata = store.store_conversation_turn.await_args.kwargs["metadata"]
-    assert metadata == {**identity, "config_version": 3, "source": "text"}
+    serialized = repr((recorder.started, recorder.finished))
+    assert identity["task_id"] in serialized
+    assert "must-not-persist" not in serialized

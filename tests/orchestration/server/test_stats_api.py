@@ -16,9 +16,11 @@ from animetta.orchestration.server.stats_api import _get_gpu_info, get_stats_rou
 
 
 def _build_test_app(store_mock=None):
-    """Build a Starlette app with the stats routes and optional mocked store."""
+    """Build a Starlette app with an injected ObservationQuery."""
     routes = get_stats_routes()
     app = Starlette(routes=routes)
+    if store_mock is not None:
+        app.state.observation_query = store_mock
     return app
 
 
@@ -27,62 +29,63 @@ def _build_test_app(store_mock=None):
 
 @pytest.fixture
 def mock_store():
-    """Mock StatsStore with async methods returning canned data."""
+    """Mock ObservationQuery with ledger-shaped responses."""
     store = MagicMock()
-    store.get_overview = AsyncMock(return_value={
-        "total_sessions": 10,
-        "total_messages": 100,
-        "avg_latency_ms": 250.0,
+    store.overview = AsyncMock(return_value={
+        "schema_version": 2,
+        "total_requests": 10,
+        "success_count": 8,
+        "degraded_count": 1,
+        "failed_count": 1,
+        "success_rate": 80.0,
+        "avg_duration_ms": 250.0,
     })
-    store.get_node_stats = AsyncMock(return_value={
-        "llm_node": {"calls": 50, "avg_duration_ms": 300},
-        "tts_node": {"calls": 30, "avg_duration_ms": 150},
-    })
-    store.get_recent_traces = AsyncMock(return_value=[
-        {"trace_id": "abc", "status": "ok", "total_duration_ms": 500},
-        {"trace_id": "def", "status": "ok", "total_duration_ms": 300},
+    store.operation_aggregates = AsyncMock(return_value=[{
+        "layer": "workflow", "name": "llm_node", "operation_count": 50,
+        "success_count": 49, "degraded_count": 0, "failure_count": 1,
+        "avg_duration_ms": 300.0,
+    }])
+    trace_summary = {
+        "message_id": "message-1", "conversation_id": "conversation-1",
+        "session_id": "desktop", "runtime_profile": "development",
+        "input_type": "text", "privacy_mode": "full", "started_at": 10.0,
+        "finished_at": 10.5, "duration_ms": 500.0, "outcome": "success",
+        "error_type": None,
+    }
+    store.recent_traces = AsyncMock(return_value=[
+        {"trace_id": "abc", **trace_summary},
+        {"trace_id": "def", **trace_summary},
     ])
-    store.get_trace_detail = AsyncMock(return_value={
+    store.trace_detail = AsyncMock(return_value={
         "trace_id": "abc",
-        "status": "ok",
-        "total_duration_ms": 500,
-        "conversation_turn": {
-            "trace_id": "abc",
-            "session_id": "desktop",
-            "input_type": "text",
-            "user_text": "full user text",
-            "assistant_text": "full assistant text",
-            "status": "ok",
-            "error_msg": None,
-            "metadata": {"source": "test"},
-            "created_at": "2026-07-09T10:00:00",
-        },
-        "spans": [
-            {"span_id": "s1", "parent_span_id": None, "name": "llm_call"},
-            {"span_id": "s2", "parent_span_id": "s1", "name": "tts_call"},
-        ],
+        **trace_summary,
+        "error_summary": None, "user_text": "full user text",
+        "user_character_count": 14, "user_byte_count": 14, "user_digest": "u",
+        "assistant_text": "full assistant text", "assistant_character_count": 19,
+        "assistant_byte_count": 19, "assistant_digest": "a", "attributes": {},
+        "operations": [], "operation_tree": [], "events": [],
+        "post_turn": {"pending": 0, "completed": 0, "failed": 0, "operations": []},
+        "schema_version": 2,
     })
-    store.get_latest_inspection_report = AsyncMock(return_value={
+    store.inspection_reports = AsyncMock(return_value=[{
         "run_id": "inspection-1",
         "started_at": 1000.0,
         "finished_at": 1001.0,
         "overall_ok": True,
         "checks": {
-            "stats_store": {"name": "stats_store", "ok": True},
+            "observation_ledger": {"name": "observation_ledger", "ok": True},
         },
         "created_at": 1001.5,
-    })
+    }])
     return store
 
 
 @pytest.fixture
 def client(mock_store):
     """TestClient with mocked stats store."""
-    with patch("animetta.orchestration.server.stats_api.get_stats_store",
-               AsyncMock(return_value=mock_store)):
-        app = _build_test_app()
-        with TestClient(app) as c:
-            yield c
+    app = _build_test_app(mock_store)
+    with TestClient(app) as c:
+        yield c
 
 
 # ── Health Check ───────────────────────────────────────────────────
@@ -223,27 +226,24 @@ class TestStatsOverview:
         resp = client.get("/api/stats/overview")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_sessions"] == 10
-        assert data["total_messages"] == 100
-        assert data["avg_latency_ms"] == 250.0
+        assert data["total_requests"] == 10
+        assert data["degraded_count"] == 1
+        assert data["avg_duration_ms"] == 250.0
 
     def test_overview_calls_get_overview(self, client, mock_store):
         """The underlying store method is called."""
         client.get("/api/stats/overview")
-        mock_store.get_overview.assert_called_once()
+        mock_store.overview.assert_awaited_once()
 
     def test_overview_returns_500_on_error(self):
         """Overview returns 500 when store raises."""
         failing_store = MagicMock()
-        failing_store.get_overview = AsyncMock(side_effect=RuntimeError("db fail"))
-
-        with patch("animetta.orchestration.server.stats_api.get_stats_store",
-                   AsyncMock(return_value=failing_store)):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/overview")
-            assert resp.status_code == 500
-            assert "error" in resp.json()
+        failing_store.overview = AsyncMock(side_effect=RuntimeError("db fail"))
+        app = _build_test_app(failing_store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/overview")
+        assert resp.status_code == 500
+        assert "error" in resp.json()
 
 
 # ── Node Stats ─────────────────────────────────────────────────────
@@ -257,13 +257,13 @@ class TestStatsNodes:
         resp = client.get("/api/stats/nodes")
         assert resp.status_code == 200
         data = resp.json()
-        assert "llm_node" in data
-        assert data["llm_node"]["calls"] == 50
+        assert data[0]["name"] == "llm_node"
+        assert data[0]["operation_count"] == 50
 
     def test_nodes_calls_get_node_stats(self, client, mock_store):
         """The underlying store method is called."""
         client.get("/api/stats/nodes")
-        mock_store.get_node_stats.assert_called_once()
+        mock_store.operation_aggregates.assert_awaited_once()
 
 
 # ── Traces ─────────────────────────────────────────────────────────
@@ -284,25 +284,22 @@ class TestStatsTraces:
     def test_traces_passes_limit_and_offset(self, client, mock_store):
         """Limit and offset query params are passed to store."""
         client.get("/api/stats/traces?limit=10&offset=5")
-        mock_store.get_recent_traces.assert_called_once_with(10, 5)
+        mock_store.recent_traces.assert_awaited_once_with(10, 5)
 
     def test_traces_uses_default_pagination(self, client, mock_store):
         """Default limit=50, offset=0 when not specified."""
         client.get("/api/stats/traces")
-        mock_store.get_recent_traces.assert_called_once_with(50, 0)
+        mock_store.recent_traces.assert_awaited_once_with(50, 0)
 
     def test_traces_returns_500_on_error(self):
         """Traces returns 500 when store raises."""
         failing_store = MagicMock()
-        failing_store.get_recent_traces = AsyncMock(side_effect=RuntimeError("db fail"))
-
-        with patch("animetta.orchestration.server.stats_api.get_stats_store",
-                   AsyncMock(return_value=failing_store)):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/traces")
-            assert resp.status_code == 500
-            assert "error" in resp.json()
+        failing_store.recent_traces = AsyncMock(side_effect=RuntimeError("db fail"))
+        app = _build_test_app(failing_store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/traces")
+        assert resp.status_code == 500
+        assert "error" in resp.json()
 
 
 # ── Trace Detail ───────────────────────────────────────────────────
@@ -317,20 +314,17 @@ class TestStatsTraceDetail:
         assert resp.status_code == 200
         data = resp.json()
         assert data["trace_id"] == "abc"
-        assert data["status"] == "ok"
+        assert data["outcome"] == "success"
 
     def test_trace_detail_404_when_not_found(self):
         """Missing trace returns 404."""
         store = MagicMock()
-        store.get_trace_detail = AsyncMock(return_value=None)
-
-        with patch("animetta.orchestration.server.stats_api.get_stats_store",
-                   AsyncMock(return_value=store)):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/traces/missing")
-            assert resp.status_code == 404
-            assert "error" in resp.json()
+        store.trace_detail = AsyncMock(return_value=None)
+        app = _build_test_app(store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/traces/missing")
+        assert resp.status_code == 404
+        assert "error" in resp.json()
 
 
 # ── Trace Tree ─────────────────────────────────────────────────────
@@ -340,30 +334,23 @@ class TestStatsTraceTree:
     """GET /api/stats/traces/{trace_id}/tree"""
 
     def test_trace_tree_returns_nested_tree(self, client, mock_store):
-        """Trace tree returns spans with nested children."""
+        """Trace tree returns the canonical operation hierarchy."""
         resp = client.get("/api/stats/traces/abc/tree")
         assert resp.status_code == 200
         data = resp.json()
         assert data["trace_id"] == "abc"
-        assert "tree" in data
-        assert len(data["tree"]) == 1
-        assert data["tree"][0]["span_id"] == "s1"
-        assert len(data["tree"][0]["children"]) == 1
-        assert data["tree"][0]["children"][0]["span_id"] == "s2"
-        assert data["conversation_turn"]["user_text"] == "full user text"
-        assert data["conversation_turn"]["assistant_text"] == "full assistant text"
+        assert data["operation_tree"] == []
+        assert data["content"]["user"]["text"] == "full user text"
+        assert data["content"]["assistant"]["text"] == "full assistant text"
 
     def test_trace_tree_returns_404_when_not_found(self):
         """Missing trace tree returns 404."""
         store = MagicMock()
-        store.get_trace_detail = AsyncMock(return_value=None)
-
-        with patch("animetta.orchestration.server.stats_api.get_stats_store",
-                   AsyncMock(return_value=store)):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/traces/missing/tree")
-            assert resp.status_code == 404
+        store.trace_detail = AsyncMock(return_value=None)
+        app = _build_test_app(store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/traces/missing/tree")
+        assert resp.status_code == 404
 
 
 # ── Inspection Latest ──────────────────────────────────────────────
@@ -380,21 +367,16 @@ class TestStatsInspectionLatest:
         data = resp.json()
         assert data["run_id"] == "inspection-1"
         assert data["overall_ok"] is True
-        assert data["checks"]["stats_store"]["ok"] is True
-        mock_store.get_latest_inspection_report.assert_called_once()
+        assert data["checks"]["observation_ledger"]["ok"] is True
+        mock_store.inspection_reports.assert_awaited_once_with(1, 0)
 
     def test_inspection_latest_returns_404_when_no_report(self):
         """Missing inspection reports return a stable 404 payload."""
         store = MagicMock()
-        store.get_latest_inspection_report = AsyncMock(return_value=None)
-
-        with patch(
-            "animetta.orchestration.server.stats_api.get_stats_store",
-            AsyncMock(return_value=store),
-        ):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/inspection/latest")
+        store.inspection_reports = AsyncMock(return_value=[])
+        app = _build_test_app(store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/inspection/latest")
 
         assert resp.status_code == 404
         assert resp.json() == {"error": "No inspection reports yet"}
@@ -402,17 +384,12 @@ class TestStatsInspectionLatest:
     def test_inspection_latest_returns_500_on_store_error(self):
         """Store failures are surfaced as HTTP 500."""
         store = MagicMock()
-        store.get_latest_inspection_report = AsyncMock(
+        store.inspection_reports = AsyncMock(
             side_effect=RuntimeError("db fail")
         )
-
-        with patch(
-            "animetta.orchestration.server.stats_api.get_stats_store",
-            AsyncMock(return_value=store),
-        ):
-            app = _build_test_app()
-            with TestClient(app) as c:
-                resp = c.get("/api/stats/inspection/latest")
+        app = _build_test_app(store)
+        with TestClient(app) as c:
+            resp = c.get("/api/stats/inspection/latest")
 
         assert resp.status_code == 500
         assert "db fail" in resp.json()["error"]

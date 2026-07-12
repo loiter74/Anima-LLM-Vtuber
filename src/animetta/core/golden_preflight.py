@@ -637,7 +637,9 @@ def _is_mock_engine(engine: object) -> bool:
     )
 
 
-def _unwrap_tracing_proxy(engine: object, proxy_type: type) -> tuple[object, bool]:
+def _unwrap_tracing_proxy(
+    engine: object, proxy_type: type | tuple[type, ...]
+) -> tuple[object, bool]:
     current = engine
     proxied = False
     seen: set[int] = set()
@@ -671,14 +673,16 @@ def _runtime_engine_evidence(
         return False, code, {"missing": missing}
 
     try:
+        from animetta.observability.service_proxy import InstrumentedServiceProxy
         from animetta.services.llm.openai_llm import OpenAILLM
         from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
         from animetta.tracing.proxy import TracingProxy
     except ImportError as exc:
         return False, "runtime_engine_types_unavailable", {"reason": str(exc)}
 
-    llm, llm_proxied = _unwrap_tracing_proxy(engines["llm"], TracingProxy)
-    tts, tts_proxied = _unwrap_tracing_proxy(engines["tts"], TracingProxy)
+    proxy_types = (TracingProxy, InstrumentedServiceProxy)
+    llm, llm_proxied = _unwrap_tracing_proxy(engines["llm"], proxy_types)
+    tts, tts_proxied = _unwrap_tracing_proxy(engines["tts"], proxy_types)
     unwrapped = {"llm": llm, "tts": tts}
     unexpected = [
         f"{name}:{type(engine).__name__}"

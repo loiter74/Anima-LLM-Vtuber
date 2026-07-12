@@ -17,7 +17,8 @@ from animetta.config.providers.asr import (
     MockASRConfig,
     OpenAIASRConfig,
 )
-from animetta.tracing.proxy import TracingProxy
+from animetta.observability.ports import ObservationRecorder
+from animetta.observability.service_proxy import instrument_service
 
 from .interface import ASRInterface
 from .mock_asr import MockASR
@@ -38,7 +39,12 @@ class ASRFactory:
     _CONFIG_MAP = {}
 
     @staticmethod
-    def create(provider: str, **kwargs) -> ASRInterface:
+    def create(
+        provider: str,
+        *,
+        observation_recorder: ObservationRecorder | None = None,
+        **kwargs,
+    ) -> ASRInterface:
         """
         Creates ASR instance by provider via ProviderRegistry.
 
@@ -55,7 +61,9 @@ class ASRFactory:
         config = ASRFactory._build_config(provider, kwargs)
         if config is None:
             logger.warning(f"Unknown ASR provider: {provider}, using Mock implementation")
-            return MockASR()
+            return instrument_service(
+                MockASR(), observation_recorder, "asr", provider="mock", model="mock"
+            )
 
         try:
             normalized_provider = provider.replace("_", "-")
@@ -77,13 +85,21 @@ class ASRFactory:
                         f"type={provider}, error={type(exc).__name__}"
                     )
             svc = ProviderRegistry.create_service("asr", config)
-            return TracingProxy(svc, service_name="asr")
+            return instrument_service(
+                svc,
+                observation_recorder,
+                "asr",
+                provider=provider,
+                model=getattr(config, "model", None),
+            )
         except Exception as e:
             logger.warning(
                 "ASR provider failed to initialize; falling back to MockASR: "
                 f"type={provider}, error={type(e).__name__}"
             )
-            return MockASR()
+            return instrument_service(
+                MockASR(), observation_recorder, "asr", provider="mock", model="mock"
+            )
 
     @staticmethod
     def _build_config(provider: str, kwargs: dict):

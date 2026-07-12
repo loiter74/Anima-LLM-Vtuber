@@ -1,223 +1,174 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/views/DashboardPage.vue'
 
+const baseTrace = {
+  api_version: '2',
+  message_id: 'message-1',
+  conversation_id: 'conversation-1',
+  session_id: 'desktop',
+  input_type: 'text',
+  privacy_mode: 'redacted',
+  started_at: 1_784_000_000,
+  finished_at: 1_784_000_002,
+  duration_ms: 2000,
+  error_type: null,
+} as const
+
+function operation(
+  operationId: string,
+  name: string,
+  status: 'success' | 'degraded' | 'error' = 'success',
+  children: object[] = [],
+) {
+  return {
+    operation_id: operationId,
+    trace_id: 'golden-task',
+    parent_operation_id: null,
+    layer: 'workflow',
+    name,
+    critical_path: true,
+    started_at: 1_784_000_000,
+    finished_at: 1_784_000_001,
+    duration_ms: 100,
+    status,
+    provider: null,
+    model: null,
+    error_type: null,
+    error_summary: null,
+    attributes: {},
+    children,
+  }
+}
+
+function detail(traceId: string, golden: boolean) {
+  const names = golden
+    ? ['conversation_start', 'personality', 'reasoner', 'anima_composer', 'response_guard', 'reply_output', 'tts', 'emotion', 'performance_output', 'conversation_finalizer']
+    : ['personality', 'llm', 'humor_rewrite', 'humor_validation', 'tts', 'emotion', 'output']
+  const operations = names.map((name, index) => operation(
+    `${traceId}-${name}`,
+    name,
+    golden && index === 4 ? 'degraded' : 'success',
+    name === (golden ? 'reasoner' : 'llm')
+      ? [{
+          ...operation(`${traceId}-service`, 'llm.chat'),
+          trace_id: traceId,
+          parent_operation_id: `${traceId}-${name}`,
+          layer: 'service',
+          provider: 'openai',
+          model: 'gpt-test',
+        }]
+      : [],
+  ))
+  return {
+    ...baseTrace,
+    trace_id: traceId,
+    runtime_profile: golden ? 'golden' : 'development',
+    outcome: golden ? 'degraded' : 'success',
+    error_summary: null,
+    content: {
+      user: { text: null, character_count: 18, byte_count: 36, digest: 'abcdef1234567890' },
+      assistant: { text: null, character_count: 12, byte_count: 24, digest: '123456abcdef7890' },
+    },
+    attributes: {},
+    operations,
+    operation_tree: operations,
+    events: [{
+      event_id: `${traceId}-delivery`,
+      trace_id: traceId,
+      operation_id: `${traceId}-performance_output`,
+      direction: 'egress',
+      name: 'chat:text',
+      phase: 'delivered',
+      occurred_at: 1_784_000_002,
+      payload_size: 12,
+      identity_valid: true,
+      attributes: {},
+    }],
+    post_turn: {
+      pending: golden ? 1 : 0,
+      completed: golden ? 2 : 0,
+      failed: 0,
+      operations: [],
+    },
+    schema_version: 2,
+  }
+}
+
 function mockStatsFetch() {
-  vi.stubGlobal('fetch', vi.fn((url: string) => {
-    if (url.includes('/api/stats/traces/trace-latest/tree')) {
-      return Promise.resolve({
-        json: () => Promise.resolve({
-          trace_id: 'trace-latest',
-          session_id: 'desktop',
-          input_type: 'text',
-          user_text: '把刚才那段话用更元气的语气说一遍',
-          total_duration_ms: 2860,
-          status: 'error',
-          error_msg: 'tts provider returned empty audio buffer',
-          created_at: '2026-07-08T22:41:16',
-          spans: [
-            {
-              span_id: 'span-memory',
-              parent_span_id: null,
-              node_name: 'memory',
-              duration_ms: 210,
-              status: 'success',
-              input_summary: '用户原始输入：把刚才那段话用更元气的语气说一遍',
-              output_summary: '召回记忆：用户喜欢元气风格，最近聊过晚饭。',
-              attributes: null,
-              events: null,
-              created_at: '2026-07-08T22:41:16',
-            },
-            {
-              span_id: 'span-llm',
-              parent_span_id: null,
-              node_name: 'llm',
-              duration_ms: 1061,
-              status: 'success',
-              input_summary: '用户：把刚才那段话用更元气的语气说一遍\n记忆：用户喜欢元气风格，最近聊过晚饭。',
-              output_summary: '好的，我会用更元气的语气说：今天也要好好吃饭哦！',
-              attributes: null,
-              events: null,
-              created_at: '2026-07-08T22:41:17',
-            },
-            {
-              span_id: 'span-tts',
-              parent_span_id: null,
-              node_name: 'tts',
-              duration_ms: 1468,
-              status: 'error',
-              input_summary: '好的，我会用更元气的语气说：今天也要好好吃饭哦！',
-              output_summary: 'provider returned empty audio buffer',
-              attributes: null,
-              events: null,
-              created_at: '2026-07-08T22:41:18',
-            },
-          ],
-        }),
-      })
+  vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+    const url = String(input)
+    if (url.includes('/api/stats/traces/golden-task/tree')) {
+      return Promise.resolve({ json: () => Promise.resolve(detail('golden-task', true)) })
     }
-    if (url.includes('/api/stats/traces/trace-previous/tree')) {
-      return Promise.resolve({
-        json: () => Promise.resolve({
-          trace_id: 'trace-previous',
-          session_id: 'desktop',
-          input_type: 'text',
-          user_text: '今天的记忆系统状态怎么样？',
-          total_duration_ms: 1794,
-          status: 'success',
-          error_msg: null,
-          created_at: '2026-07-08T22:38:02',
-          conversation_turn: {
-            trace_id: 'trace-previous',
-            session_id: 'desktop',
-            input_type: 'text',
-            user_text: '今天的记忆系统状态怎么样？这是完整的长文本输入。',
-            assistant_text: '系统正常，最近没有失败节点。',
-            status: 'success',
-            error_msg: null,
-            metadata: { source: 'test' },
-            created_at: '2026-07-08T22:38:02',
-          },
-          spans: [],
-        }),
-      })
+    if (url.includes('/api/stats/traces/standard-task/tree')) {
+      return Promise.resolve({ json: () => Promise.resolve(detail('standard-task', false)) })
     }
     if (url.includes('/api/stats/overview')) {
-      return Promise.resolve({
-        json: () => Promise.resolve({
-          total_requests: 2,
-          success_rate: 50,
-          avg_duration_ms: 2300,
-          p95_duration_ms: 2860,
-        }),
-      })
+      return Promise.resolve({ json: () => Promise.resolve({
+        api_version: '2', total_requests: 2, success_count: 1, degraded_count: 1,
+        failed_count: 0, success_rate: 50, avg_duration_ms: 1800,
+      }) })
     }
-    if (url.includes('/api/stats/nodes')) {
-      return Promise.resolve({
-        json: () => Promise.resolve([
-          { node_name: 'llm', call_count: 2, avg_duration_ms: 1061, error_count: 0, error_rate: 0 },
-          { node_name: 'tts', call_count: 1, avg_duration_ms: 1468, error_count: 1, error_rate: 100 },
-        ]),
-      })
-    }
-    return Promise.resolve({
-      json: () => Promise.resolve([
-        {
-          trace_id: 'trace-latest',
-          session_id: 'desktop',
-          input_type: 'text',
-          user_text: '把刚才那段话用更元气的语气说一遍',
-          total_duration_ms: 2860,
-          status: 'error',
-          created_at: '2026-07-08T22:41:16',
-        },
-        {
-          trace_id: 'trace-previous',
-          session_id: 'desktop',
-          input_type: 'text',
-          user_text: '今天的记忆系统状态怎么样？',
-          total_duration_ms: 1794,
-          status: 'success',
-          created_at: '2026-07-08T22:38:02',
-        },
-      ]),
-    })
+    if (url.includes('/api/stats/nodes')) return Promise.resolve({ json: () => Promise.resolve([]) })
+    return Promise.resolve({ json: () => Promise.resolve([
+      { ...baseTrace, trace_id: 'golden-task', runtime_profile: 'golden', outcome: 'degraded' },
+      { ...baseTrace, trace_id: 'standard-task', runtime_profile: 'development', outcome: 'success' },
+    ]) })
   }))
 }
 
 async function flushPromises() {
-  for (let i = 0; i < 8; i += 1) {
-    await Promise.resolve()
-  }
+  for (let index = 0; index < 10; index += 1) await Promise.resolve()
 }
 
-describe('DashboardPage trace debugger', () => {
+describe('DashboardPage canonical observation tree', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockStatsFetch()
   })
 
-  it('renders the latest trace as a graph-based debugging dashboard', async () => {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-      },
-    })
+  async function mountDashboard() {
+    const wrapper = mount(DashboardPage, { global: { plugins: [createPinia()] } })
     await flushPromises()
+    return wrapper
+  }
 
-    expect(wrapper.text()).toContain('历史 Trace')
-    expect(wrapper.text()).toContain('Trace Debug Dashboard')
-    expect(wrapper.text()).toContain('把刚才那段话用更元气的语气说一遍')
-    expect(wrapper.text()).toContain('LLM')
-    expect(wrapper.text()).toContain('TTS')
-    expect(wrapper.text()).toContain('节点详情')
+  it('renders the actual golden topology and typed degraded outcome', async () => {
+    const wrapper = await mountDashboard()
+    expect(wrapper.text()).toContain('DEGRADED')
+    expect(wrapper.text()).toContain('conversation_start')
+    expect(wrapper.text()).toContain('reasoner')
+    expect(wrapper.text()).toContain('conversation_finalizer')
   })
 
-  it('navigates to older and newer traces with arrow buttons', async () => {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-      },
-    })
-    await flushPromises()
-
-    await wrapper.get('[data-testid="older-trace"]').trigger('click')
-    expect(wrapper.text()).toContain('今天的记忆系统状态怎么样？')
-
-    await wrapper.get('[data-testid="newer-trace"]').trigger('click')
-    expect(wrapper.text()).toContain('把刚才那段话用更元气的语气说一遍')
-  })
-
-  it('keeps trace history collapsed until the user opens it', async () => {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-      },
-    })
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="history-traces"]').exists()).toBe(false)
-
-    await wrapper.get('[data-testid="history-toggle"]').trigger('click')
-
-    expect(wrapper.find('[data-testid="history-traces"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('今天的记忆系统状态怎么样？')
-  })
-
-  it('shows real span payloads for the selected node data flow', async () => {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-      },
-    })
-    await flushPromises()
-
-    await wrapper.get('[data-testid="trace-node-llm"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('用户喜欢元气风格')
-    expect(wrapper.text()).toContain('今天也要好好吃饭哦')
-    expect(wrapper.text()).not.toContain('prompt + memory context')
-  })
-
-  it('falls back to stored conversation text when node spans are absent', async () => {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-      },
-    })
-    await flushPromises()
-
+  it('renders the actual standard topology after trace navigation', async () => {
+    const wrapper = await mountDashboard()
     await wrapper.get('[data-testid="older-trace"]').trigger('click')
     await flushPromises()
+    expect(wrapper.text()).toContain('humor_rewrite')
+    expect(wrapper.text()).toContain('output')
+    expect(wrapper.text()).not.toContain('conversation_finalizer')
+  })
 
-    expect(wrapper.text()).toContain('节点详情OKInput')
+  it('shows redaction facts without exposing content', async () => {
+    const wrapper = await mountDashboard()
+    expect(wrapper.text()).toContain('已脱敏 · 18 chars · abcdef123456…')
+    expect(wrapper.text()).not.toContain('secret prompt')
+  })
 
-    await wrapper.get('[data-testid="trace-node-llm"]').trigger('click')
-    await flushPromises()
+  it('shows provider identity and committed delivery events', async () => {
+    const wrapper = await mountDashboard()
+    await wrapper.get('[data-testid="trace-node-golden-task-service"]').trigger('click')
+    expect(wrapper.text()).toContain('openai')
+    expect(wrapper.text()).toContain('gpt-test')
+    await wrapper.get('[data-testid="trace-node-golden-task-performance_output"]').trigger('click')
+    expect(wrapper.text()).toContain('egress · chat:text · delivered')
+  })
 
-    expect(wrapper.text()).toContain('今天的记忆系统状态怎么样？这是完整的长文本输入。')
-    expect(wrapper.text()).toContain('系统正常，最近没有失败节点。')
+  it('shows post-turn memory work separately from the critical path', async () => {
+    const wrapper = await mountDashboard()
+    expect(wrapper.text()).toContain('2 done · 1 pending · 0 failed')
   })
 })

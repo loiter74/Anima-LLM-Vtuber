@@ -107,6 +107,28 @@ class TestSimpleVADProcessor:
         assert len(mock_callbacks.await_args.args[0]) > 0
 
     @pytest.mark.asyncio
+    async def test_provider_model_name_uses_vad_interface(self, mock_callbacks):
+        """A provider model identifier must not be treated as a callable Silero model."""
+        vad = MagicMock(spec=VADInterface)
+        vad.model = "mimo-v2.5-asr"
+        vad.detect_speech.return_value = VADResult(
+            is_speech_start=True,
+            state=VADState.ACTIVE,
+            speech_detected=True,
+        )
+        p = SimpleVADProcessor(
+            session_id="test",
+            vad_engine=vad,
+            on_speech_end=mock_callbacks,
+            sample_rate=16000,
+        )
+
+        await p.process_chunk([0.2] * 512)
+
+        vad.detect_speech.assert_called_once_with([0.2] * 512)
+        assert p._is_speech is True
+
+    @pytest.mark.asyncio
     async def test_vad_interface_discards_unconfirmed_speech_end(self, mock_callbacks):
         """speech_detected=False should reset state without calling downstream ASR."""
         vad = MagicMock(spec=VADInterface)

@@ -28,6 +28,11 @@ from animetta.config.providers.tts import (
     Qwen3TTSConfig,
     VibeVoiceTTSConfig,
 )
+from animetta.observability.ports import ObservationRecorder
+from animetta.observability.service_proxy import (
+    InstrumentedServiceProxy,
+    instrument_service,
+)
 from animetta.tracing.proxy import TracingProxy
 
 from .interface import TTSInterface
@@ -49,7 +54,7 @@ _AVAILABLE_TTS_PROVIDERS = (
 
 def _unwrap_tracing_proxy(service: object) -> object:
     """Return the concrete service behind any nested tracing proxies."""
-    while isinstance(service, TracingProxy):
+    while isinstance(service, (InstrumentedServiceProxy, TracingProxy)):
         service = object.__getattribute__(service, "_target")
     return service
 
@@ -62,6 +67,7 @@ class TTSFactory:
         provider: str,
         *,
         strict: bool = False,
+        observation_recorder: ObservationRecorder | None = None,
         **kwargs,
     ) -> TTSInterface:
         """
@@ -82,7 +88,9 @@ class TTSFactory:
             if strict:
                 raise ValueError(f"Unknown TTS provider: {provider}")
             logger.warning(f"Unknown TTS provider: {provider}, using Mock implementation")
-            return MockTTS()
+            return instrument_service(
+                MockTTS(), observation_recorder, "tts", provider="mock", model="mock"
+            )
 
         try:
             module_name = {
@@ -119,7 +127,13 @@ class TTSFactory:
                     "Strict TTS provider creation returned MockTTS "
                     "for a non-mock config"
                 )
-            return TracingProxy(svc, service_name="tts")
+            return instrument_service(
+                svc,
+                observation_recorder,
+                "tts",
+                provider=provider,
+                model=getattr(config, "model", None),
+            )
         except Exception as e:
             if strict:
                 logger.error(
@@ -131,7 +145,9 @@ class TTSFactory:
                 "TTS provider failed to initialize; falling back to MockTTS: "
                 f"type={provider}, error={type(e).__name__}"
             )
-            return MockTTS()
+            return instrument_service(
+                MockTTS(), observation_recorder, "tts", provider="mock", model="mock"
+            )
 
     @staticmethod
     def _build_config(provider: str, kwargs: dict, *, strict: bool = False):

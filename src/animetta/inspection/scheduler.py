@@ -9,6 +9,7 @@ from loguru import logger
 from .checks.health import refresh_llm_connectivity_cache
 from .inspector import run_full_inspection
 from .reporter import send_alert, store_report
+from .runtime import InspectionRuntime
 
 
 class InspectionScheduler:
@@ -27,9 +28,11 @@ class InspectionScheduler:
 
     def __init__(
         self,
+        runtime: InspectionRuntime,
         interval_hours: float = 24.0,
         connectivity_refresh_minutes: float = 10.0,
     ) -> None:
+        self.runtime = runtime
         self.interval_hours = interval_hours
         self.connectivity_refresh_minutes = connectivity_refresh_minutes
         self._task: asyncio.Task | None = None
@@ -102,8 +105,8 @@ class InspectionScheduler:
 
             try:
 
-                report = await run_full_inspection()
-                await store_report(report)
+                report = await run_full_inspection(self.runtime)
+                await store_report(report, self.runtime.report_store)
 
                 if not report.overall_ok:
                     await send_alert(report)

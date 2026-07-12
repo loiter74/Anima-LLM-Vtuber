@@ -26,12 +26,18 @@ class SessionManager:
     3. Create and destroy session resources
     """
 
-    def __init__(self, model_manager=None, memory_runtime=None):
+    def __init__(
+        self,
+        model_manager=None,
+        memory_runtime=None,
+        observation_recorder=None,
+    ):
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
         self.contexts: dict[str, ServiceContext] = {}
         self.model_manager = model_manager
         self.memory_runtime = memory_runtime
+        self.observation_recorder = observation_recorder
 
         # Store orchestrator per session
         # Key: session_id, Value: LangGraphOrchestrator instance
@@ -65,7 +71,10 @@ class SessionManager:
         """
         if sid not in self.contexts:
             logger.info(f"[{sid}] Creating new ServiceContext")
-            ctx = ServiceContext(model_manager=self.model_manager)
+            ctx = ServiceContext(
+                model_manager=self.model_manager,
+                observation_recorder=self.observation_recorder,
+            )
             ctx.session_id = sid
             ctx.send_text = websocket_send
 
@@ -159,6 +168,7 @@ class SessionManager:
                 enable_tools=enable_tools,
                 enable_memory=True,
                 tools_config=tools_config.get("config", tools_config),
+                observation_recorder=self.observation_recorder,
             )
 
             logger.info(f"[{sid}] LangGraphOrchestrator created")

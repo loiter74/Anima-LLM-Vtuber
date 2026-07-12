@@ -172,22 +172,6 @@ class GLMLLM(LLMInterface):
                     f"cumulative input={self._total_input_tokens}, output={self._total_output_tokens}"
                 )
 
-                # OTel metrics: record token usage + cost
-                try:
-
-                    tok = get_llm_tokens()
-                    if tok is not None:
-                        tok.add(input_tokens, {"provider": "glm", "model": self.model, "type": "input"})
-                        tok.add(output_tokens, {"provider": "glm", "model": self.model, "type": "output"})
-
-                    cost = calculate_cost("glm", self.model, input_tokens, output_tokens)
-                    if cost > 0:
-                        cst = get_llm_cost()
-                        if cst is not None:
-                            cst.add(cost, {"provider": "glm", "model": self.model})
-                except Exception as e:
-                    logger.debug(f"[GLM] Token tracking cost metric failed: {e}")
-
         except Exception as e:
             logger.debug(f"[GLM] Token tracking failed: {e}")
 

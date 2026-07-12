@@ -346,7 +346,7 @@ class Benchmark:
         print(f"Latest updated: {latest_path}")
 
     def generate_report(self):
-        """Generate markdown report from latest results, augmented with StatsStore data."""
+        """Generate a report augmented with canonical observation-ledger data."""
         output_dir = Path(__file__).parent.parent / "docs" / "benchmarks"
 
         lines = [
@@ -407,21 +407,22 @@ class Benchmark:
             )
         lines.append("\n")
 
-        # ── StatsStore data ──
+        # ── Canonical observation ledger data ──
         try:
             import sqlite3
-            db_path = str(Path(__file__).parent.parent / "data" / "stats.db")
+            db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
             if Path(db_path).exists():
-                lines.append("## Per-Node Timing (StatsStore)\n\n")
+                lines.append("## Per-Operation Timing (Observation Ledger)\n\n")
                 conn = sqlite3.connect(db_path)
                 conn.row_factory = sqlite3.Row
 
                 # Per-node timing
                 cursor = conn.execute("""
-                    SELECT node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms,
+                    SELECT name AS node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms,
                            MIN(duration_ms) as min_ms, MAX(duration_ms) as max_ms
-                    FROM spans WHERE duration_ms IS NOT NULL AND node_name NOT LIKE '%.%'
-                    GROUP BY node_name ORDER BY avg_ms DESC
+                    FROM observation_operations
+                    WHERE duration_ms IS NOT NULL AND layer='workflow'
+                    GROUP BY name ORDER BY avg_ms DESC
                 """)
                 rows = cursor.fetchall()
                 if rows:
@@ -436,9 +437,10 @@ class Benchmark:
 
                 # Sub-node timing
                 cursor2 = conn.execute("""
-                    SELECT node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms
-                    FROM spans WHERE duration_ms IS NOT NULL AND node_name LIKE '%.%'
-                    GROUP BY node_name ORDER BY avg_ms DESC
+                    SELECT name AS node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms
+                    FROM observation_operations
+                    WHERE duration_ms IS NOT NULL AND layer!='workflow'
+                    GROUP BY name ORDER BY avg_ms DESC
                 """)
                 rows2 = cursor2.fetchall()
                 if rows2:
@@ -600,11 +602,11 @@ async def run_auto():
     bench = Benchmark()
     await bench.run_live(url=url, prompts=text_prompts)
 
-    # 4. Read StatsStore
+    # 4. Read canonical observation ledger
     print(f"\n  [3/4] Collecting timing data...")
     await asyncio.sleep(1)  # let async writes flush
 
-    db_path = str(Path(__file__).parent.parent / "data" / "stats.db")
+    db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
     traces_data = []
     spans_data = []
     otel_spans = []
@@ -616,36 +618,39 @@ async def run_auto():
 
         # Traces
         cur = conn.execute("""
-            SELECT total_duration_ms, status, input_type, user_text, created_at
-            FROM traces WHERE total_duration_ms IS NOT NULL
-            ORDER BY created_at DESC
+            SELECT duration_ms AS total_duration_ms, outcome AS status,
+                   input_type, user_text, started_at AS created_at
+            FROM observation_traces WHERE duration_ms IS NOT NULL
+            ORDER BY started_at DESC
         """)
         for r in cur.fetchall():
             traces_data.append(dict(r))
 
         # Spans
         cur2 = conn.execute("""
-            SELECT node_name, duration_ms, status
-            FROM spans WHERE duration_ms IS NOT NULL AND node_name NOT LIKE '%.%'
+            SELECT name AS node_name, duration_ms, status
+            FROM observation_operations
+            WHERE duration_ms IS NOT NULL AND layer='workflow'
         """)
         for r in cur2.fetchall():
             spans_data.append(dict(r))
 
         # OTel sub-spans
         cur3 = conn.execute("""
-            SELECT node_name, duration_ms, status
-            FROM spans WHERE duration_ms IS NOT NULL AND node_name LIKE '%.%'
+            SELECT name AS node_name, duration_ms, status
+            FROM observation_operations
+            WHERE duration_ms IS NOT NULL AND layer!='workflow'
         """)
         for r in cur3.fetchall():
             otel_spans.append(dict(r))
 
         conn.close()
     except Exception as e:
-        print(f"  ⚠️  StatsStore read failed: {e}")
+        print(f"  ⚠️  Observation ledger read failed: {e}")
 
-    # 5. Wait for OTel BatchSpanProcessor to flush
-    print(f"  [4/4] Waiting for OTel span flush...")
-    await asyncio.sleep(6)  # > schedule_delay_millis (5000ms)
+    # 5. Allow committed-record mirrors to consume their final records.
+    print(f"  [4/4] Waiting for observation mirrors...")
+    await asyncio.sleep(0.1)
 
     # 6. Stop server
     print(f"  Cleaning up...")
@@ -825,11 +830,11 @@ async def main():
         return
 
     if mode == "stats":
-        """Read StatsStore and print a performance report."""
+        """Read the canonical observation ledger and print a performance report."""
         import sqlite3
-        db_path = str(Path(__file__).parent.parent / "data" / "stats.db")
+        db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
         if not Path(db_path).exists():
-            print(f"StatsDB not found: {db_path}")
+            print(f"Observation ledger not found: {db_path}")
             print("Start Animetta and run some conversations first.")
             return
 
@@ -839,24 +844,24 @@ async def main():
             # Overview
             cur = conn.execute("""
                 SELECT COUNT(*) as total,
-                       SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) as succ,
-                       AVG(total_duration_ms) as avg_dur,
-                       MAX(total_duration_ms) as max_dur
-                FROM traces WHERE total_duration_ms IS NOT NULL
+                       SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) as succ,
+                       AVG(duration_ms) as avg_dur,
+                       MAX(duration_ms) as max_dur
+                FROM observation_traces WHERE duration_ms IS NOT NULL
             """)
             r = cur.fetchone()
             total = r["total"] or 0
 
             # P95
             cur2 = conn.execute("""
-                SELECT total_duration_ms FROM traces
-                WHERE status='success' AND total_duration_ms IS NOT NULL
-                ORDER BY total_duration_ms
+                SELECT duration_ms FROM observation_traces
+                WHERE outcome='success' AND duration_ms IS NOT NULL
+                ORDER BY duration_ms
             """)
             durs = [x[0] for x in cur2.fetchall()]
 
             print(f"\n{'='*60}")
-            print("  StatsStore Report")
+            print("  Observation Ledger Report")
             print(f"{'='*60}")
             print(f"  Total requests:  {total}")
             print(f"  Success rate:    {r['succ']/total*100:.1f}%" if total > 0 else "  No data")
@@ -869,10 +874,11 @@ async def main():
 
             # Per-node
             cur3 = conn.execute("""
-                SELECT node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms,
+                SELECT name AS node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms,
                        MIN(duration_ms) as min_ms, MAX(duration_ms) as max_ms
-                FROM spans WHERE duration_ms IS NOT NULL AND node_name NOT LIKE '%.%'
-                GROUP BY node_name ORDER BY avg_ms DESC
+                FROM observation_operations
+                WHERE duration_ms IS NOT NULL AND layer='workflow'
+                GROUP BY name ORDER BY avg_ms DESC
             """)
             rows = cur3.fetchall()
             if rows:
@@ -882,9 +888,10 @@ async def main():
 
             # Sub-node
             cur4 = conn.execute("""
-                SELECT node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms
-                FROM spans WHERE duration_ms IS NOT NULL AND node_name LIKE '%.%'
-                GROUP BY node_name ORDER BY avg_ms DESC
+                SELECT name AS node_name, COUNT(*) as cnt, AVG(duration_ms) as avg_ms
+                FROM observation_operations
+                WHERE duration_ms IS NOT NULL AND layer!='workflow'
+                GROUP BY name ORDER BY avg_ms DESC
             """)
             rows2 = cur4.fetchall()
             if rows2:

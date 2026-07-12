@@ -987,7 +987,7 @@ class TestRouteHandlersConnection:
 class TestRegisterRoutes:
     """register_routes function binds events to handler methods."""
 
-    async def test_registered_chat_text_reaches_orchestrator_and_records_metric(
+    async def test_registered_chat_text_reaches_orchestrator(
         self, mock_socketio, mock_session_manager, monkeypatch
     ):
         """A normal chat:text payload should traverse the registered route cleanly."""
@@ -996,7 +996,6 @@ class TestRegisterRoutes:
         mock_session_manager.get_or_create_orchestrator = AsyncMock(
             return_value=mock_orchestrator
         )
-        session_messages = MagicMock()
         chat_logger = MagicMock()
 
         monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
@@ -1007,10 +1006,6 @@ class TestRegisterRoutes:
             "animetta.orchestration.server.handlers.chat_handlers.logger",
             chat_logger,
         )
-        monkeypatch.setattr(
-            "animetta.tracing.metrics._SESSION_MESSAGES", session_messages
-        )
-
         handlers = register_routes(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
         chat_text_handler = next(
@@ -1049,7 +1044,6 @@ class TestRegisterRoutes:
             if "not defined" in str(call.args[0])
         ]
         assert undefined_helper_logs == []
-        session_messages.add.assert_called_once_with(1)
 
     def test_register_routes_binds_events(self, mock_socketio, mock_session_manager):
         """register_routes calls sio.on() for every event."""

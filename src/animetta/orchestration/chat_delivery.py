@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import time
+import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
+from animetta.observability.context import (
+    get_observation_context,
+    mark_delivery_evidence,
+)
+from animetta.observability.domain import EventDirection, ObservationEvent
+from animetta.observability.errors import classify_error
+from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 from animetta.orchestration.chat_contracts import (
     ChatIdentity,
     ChatTransportMode,
@@ -27,6 +38,9 @@ class ChatDelivery:
     sio: Any
     identity: ChatIdentity
     transport_mode: ChatTransportMode
+    recorder: ObservationRecorder = dataclass_field(
+        default_factory=NoOpObservationRecorder
+    )
 
     def _wire_event(self, module: str, action: str) -> str:
         canonical = event_name(module, action)
@@ -94,7 +108,84 @@ class ChatDelivery:
         """Emit one validated event and never mirror it to the other generation."""
         event = self._wire_event(module, action)
         correlated = self.build_payload(module, action, payload)
-        if to is None:
-            await self.sio.emit(event, correlated)
-        else:
-            await self.sio.emit(event, correlated, to=to)
+        try:
+            if to is None:
+                await self.sio.emit(event, correlated)
+            else:
+                await self.sio.emit(event, correlated, to=to)
+        except Exception as exc:
+            self._mark_evidence(action, payload, delivered=False)
+            await self._record_event(
+                event,
+                "failed",
+                correlated,
+                error_type=classify_error(exc).value,
+            )
+            raise
+        self._mark_evidence(action, payload, delivered=True)
+        await self._record_event(event, "delivered", correlated)
+
+    @staticmethod
+    def _mark_evidence(
+        action: str,
+        payload: Mapping[str, Any],
+        *,
+        delivered: bool,
+    ) -> None:
+        if action == "sentence" and bool(payload.get("text")):
+            mark_delivery_evidence(text_delivered=delivered)
+        elif action == "control" and payload.get("signal") == "conversation-end":
+            mark_delivery_evidence(terminal_control_delivered=delivered)
+        elif action == "audio_with_expression":
+            mark_delivery_evidence(audio_delivered=delivered)
+
+    async def _record_event(
+        self,
+        event_name: str,
+        phase: str,
+        payload: Mapping[str, Any],
+        *,
+        error_type: str | None = None,
+    ) -> None:
+        context = get_observation_context()
+        if context is None:
+            return
+        identity_valid = (
+            context.trace_id == self.identity.task_id
+            and context.message_id == self.identity.message_id
+            and context.conversation_id == self.identity.conversation_id
+        )
+        await self.recorder.record_event(
+            ObservationEvent(
+                event_id=uuid.uuid4().hex,
+                trace_id=context.trace_id,
+                operation_id=context.operation_id,
+                direction=EventDirection.EGRESS,
+                name=event_name,
+                phase=phase,
+                occurred_at=time.time(),
+                payload_size=_payload_size(payload),
+                identity_valid=identity_valid,
+                attributes={
+                    "event_name": event_name,
+                    "phase": phase,
+                    "error_type": error_type,
+                },
+            )
+        )
+
+
+def _payload_size(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bytes):
+        return len(value)
+    if isinstance(value, str):
+        return len(value.encode("utf-8"))
+    if isinstance(value, (bool, int, float)):
+        return len(str(value))
+    if isinstance(value, Mapping):
+        return sum(_payload_size(key) + _payload_size(item) for key, item in value.items())
+    if isinstance(value, Sequence):
+        return sum(_payload_size(item) for item in value)
+    return 0

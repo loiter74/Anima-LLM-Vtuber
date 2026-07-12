@@ -1,7 +1,6 @@
 """Tool execution node"""
 
 import json
-import time as time_module
 from typing import Any
 
 from langchain_core.messages import ToolMessage
@@ -53,7 +52,6 @@ async def tool_node(
 
         logger.info(f"[{session_id}] [ToolNode] Calling tool: {tool_name}({tool_args})")
 
-        t_start = 0.0
         try:
             tool_fn = tools_map.get(tool_name)
 
@@ -64,8 +62,6 @@ async def tool_node(
                 tool_results.append({"error": error_msg})
                 continue
 
-            # Execute tool with timing
-            t_start = time_module.perf_counter()
             if hasattr(tool_fn, 'ainvoke'):
                 result = await tool_fn.ainvoke(tool_args)
             elif hasattr(tool_fn, '_run'):
@@ -76,11 +72,6 @@ async def tool_node(
                     result = await tool_fn(**tool_args)
                 else:
                     result = tool_fn(**tool_args)
-            duration_s = time_module.perf_counter() - t_start
-
-            # OTel metrics: tool duration + success count
-            _record_tool_metrics(tool_name, "success", duration_s)
-
             result_str = _format_tool_result(result)
             logger.info(f"[{session_id}] [ToolNode] {tool_name} result: {result_str[:100]}...")
 
@@ -88,14 +79,10 @@ async def tool_node(
             tool_results.append({"tool": tool_name, "args": tool_args, "result": result})
 
         except Exception as e:
-            duration_s = time_module.perf_counter() - t_start if t_start > 0 else 0
             error_msg = f"Tool execution error: {str(e)}"
             logger.error(f"[{session_id}] [ToolNode] {tool_name} execution failed: {e}")
             tool_messages.append(ToolMessage(content=f"Error: {error_msg}", tool_call_id=tool_id))
             tool_results.append({"tool": tool_name, "args": tool_args, "error": str(e)})
-
-            # OTel metrics: tool error count + duration
-            _record_tool_metrics(tool_name, "error", duration_s)
 
     logger.info(f"[{session_id}] [ToolNode] Completed {len(tool_calls)} tool calls")
 
@@ -119,16 +106,3 @@ def _format_tool_result(result: Any) -> str:
             logger.debug(f"[ToolNode] Failed to serialize tool result as JSON: {e}")
             return str(result)
     return str(result)
-
-
-def _record_tool_metrics(tool_name: str, status: str, duration_s: float) -> None:
-    """Record OTel metrics for a tool execution."""
-    try:
-        tc = get_tool_calls()
-        if tc is not None:
-            tc.add(1, {"tool_name": tool_name, "status": status})
-        td = get_tool_duration()
-        if td is not None and duration_s > 0:
-            td.observe(duration_s, {"tool_name": tool_name})
-    except Exception as e:
-        logger.debug(f"[ToolNode] OTel metrics recording failed: {e}")

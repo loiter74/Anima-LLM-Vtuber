@@ -201,7 +201,9 @@ def get_asgi_app():
         # ── Start daily inspection scheduler ────────────────────────
         try:
 
-            _inspection_scheduler = InspectionScheduler(interval_hours=24)
+            _inspection_scheduler = InspectionScheduler(
+                runtime=_server.inspection_runtime(), interval_hours=24
+            )
             _INIT_TASKS.append(
                 _server.supervise_background(
                     _inspection_scheduler.start,

@@ -11,6 +11,7 @@ import pytest
 from langgraph.graph import StateGraph as RealStateGraph
 
 import animetta.orchestration.graph.builder as builder_mod
+from animetta.observability.ports import NoOpObservationRecorder
 from animetta.orchestration.graph.builder import (
     build_graph,
     create_default_graph,
@@ -174,6 +175,57 @@ class TestBuildGraph:
             "emotion",
             "output",
         ]
+
+    @pytest.mark.parametrize(
+        ("golden_profile", "expected"),
+        [
+            (
+                False,
+                {
+                    "asr",
+                    "personality",
+                    "llm",
+                    "humor_rewrite",
+                    "humor_validation",
+                    "tts",
+                    "emotion",
+                    "output",
+                },
+            ),
+            (
+                True,
+                {
+                    "asr",
+                    "conversation_start",
+                    "personality",
+                    "reasoner",
+                    "anima_composer",
+                    "response_guard",
+                    "reply_output",
+                    "tts",
+                    "emotion",
+                    "performance_output",
+                    "conversation_finalizer",
+                },
+            ),
+        ],
+    )
+    def test_every_registered_node_uses_exact_runtime_instrumentation_name(
+        self, mock_state_graph, golden_profile, expected
+    ):
+        graph, _ = mock_state_graph
+        with patch("animetta.orchestration.graph.builder.StateGraph", return_value=graph):
+            build_graph(
+                golden_profile=golden_profile,
+                observation_recorder=NoOpObservationRecorder(),
+            )
+
+        registrations = {
+            item.args[0]: getattr(item.args[1], "observation_node_name", None)
+            for item in graph.add_node.call_args_list
+        }
+        assert set(registrations) == expected
+        assert registrations == {name: name for name in expected}
 
     def test_build_graph_registers_tool_node(self, mock_state_graph, mock_tools):
         """When enable_tools=True, the 'tools' node is also registered."""

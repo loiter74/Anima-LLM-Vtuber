@@ -787,7 +787,7 @@ class TestLLMFactory:
         config = MockLLMConfig()
 
         result = LLMFactory.create_from_config(config, system_prompt="fallback")
-        assert isinstance(result, MockLLM)
+        assert isinstance(getattr(result, "_target", result), MockLLM)
 
     @patch("animetta.services.llm.factory.LLMFactory.create_from_config")
     def test_create_uses_mock_for_unknown_provider(self, mock_create_from_config):

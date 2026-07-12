@@ -10,6 +10,7 @@ import pytest
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.service_context import ServiceContext
 from animetta.core.service_pool import ServicePool
+from animetta.observability.service_proxy import InstrumentedServiceProxy
 from animetta.services.llm.mock_llm import MockLLM
 from animetta.services.llm.openai_llm import OpenAILLM
 from animetta.services.tts.mock_tts import MockTTS
@@ -468,6 +469,40 @@ def test_development_snapshot_allows_explicit_mocks_but_is_not_acceptance_eviden
     assert payload["profile"] == "development"
     assert payload["acceptance_eligible"] is False
     assert payload["components"]["frontend"]["required"] is False
+
+
+def test_development_snapshot_exposes_instrumented_provider_identity() -> None:
+    config = _config(profile="development")
+    config.services.agent = "deepseek"
+    config.services.tts = "mimo"
+    llm = InstrumentedServiceProxy(
+        _DeepSeek(), MagicMock(), "llm",
+        provider="deepseek", model="deepseek-v4-flash",
+    )
+    tts = InstrumentedServiceProxy(
+        MockTTS(), MagicMock(), "tts",
+        provider="mimo", model="mimo-v2.5-tts",
+    )
+    manager = _manager("unloaded")
+    _seed_pool(config=config, llm=llm, tts=tts, manager=manager)
+    ServicePool._ready = True
+
+    payload = _snapshot(config=config, manager=manager, frontend_ready=False)
+
+    assert payload["components"]["llm"] == {
+        "state": "ready",
+        "ready": True,
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "reason": None,
+    }
+    assert payload["components"]["tts"] == {
+        "state": "ready",
+        "ready": True,
+        "provider": "mimo",
+        "model": "mimo-v2.5-tts",
+        "reason": None,
+    }
 
 
 async def test_service_context_connectivity_probe_uses_client_and_caches_only_metadata() -> None:

@@ -47,7 +47,7 @@ class ServicePool:
     # ── Lifecycle ──────────────────────────────────────────
 
     @classmethod
-    async def init(cls, config, model_manager=None) -> None:
+    async def init(cls, config, model_manager=None, observation_recorder=None) -> None:
         """Initialize once; concurrent callers await the same lifecycle task."""
         if cls._init_state == "closed" and (
             cls._shutdown_task is None or cls._shutdown_task.done()
@@ -87,13 +87,22 @@ class ServicePool:
 
         cls._initializing_task = current_task
         try:
-            await cls._init_once(config, model_manager=model_manager)
+            await cls._init_once(
+                config,
+                model_manager=model_manager,
+                observation_recorder=observation_recorder,
+            )
         finally:
             if cls._initializing_task is current_task:
                 cls._initializing_task = None
 
     @classmethod
-    async def _init_once(cls, config, model_manager=None) -> None:
+    async def _init_once(
+        cls,
+        config,
+        model_manager=None,
+        observation_recorder=None,
+    ) -> None:
         """Create all shareable engines from *config* and keep them alive.
 
         Spawns a temporary ServiceContext, loads all services, then
@@ -116,7 +125,13 @@ class ServicePool:
 
         from .service_context import ServiceContext
 
-        ctx = ServiceContext(model_manager=model_manager)
+        if observation_recorder is None:
+            ctx = ServiceContext(model_manager=model_manager)
+        else:
+            ctx = ServiceContext(
+                model_manager=model_manager,
+                observation_recorder=observation_recorder,
+            )
         ctx.session_id = "__pool__"
         try:
             await ctx.load_from_config(config, initialize_memory=False)

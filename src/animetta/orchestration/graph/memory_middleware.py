@@ -8,6 +8,9 @@ import time
 from typing import Any
 
 from animetta.memory.v2.context import MemoryContext
+from animetta.observability.domain import ObservationLayer
+from animetta.observability.operations import observe_operation
+from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +26,16 @@ class MemoryMiddleware:
         recall_timeout_ms: int = 150,
         max_items: int = 8,
         max_prompt_chars: int = 1500,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         self._memory_system = memory_system
         self._mode = mode
         self._recall_timeout_ms = max(1, recall_timeout_ms)
         self._max_items = max(1, max_items)
         self._max_prompt_chars = max(1, max_prompt_chars)
+        self._observation_recorder = (
+            observation_recorder or NoOpObservationRecorder()
+        )
 
     async def recall_structured(
         self,
@@ -52,16 +59,23 @@ class MemoryMiddleware:
 
         started = time.perf_counter()
         try:
-            async with asyncio.timeout(self._recall_timeout_ms / 1000):
-                result = await self._memory_system.recall(
-                    query=user_input,
-                    session_id=session_id,
-                    current_emotion=current_emotion,
-                    character_known=character_known,
-                    character_unknown=character_unknown,
-                    context=context,
-                    limit=self._max_items,
-                )
+            async with observe_operation(
+                self._observation_recorder,
+                "memory.recall",
+                layer=ObservationLayer.MEMORY,
+                critical_path=True,
+                attributes={"strategy": "hybrid"},
+            ):
+                async with asyncio.timeout(self._recall_timeout_ms / 1000):
+                    result = await self._memory_system.recall(
+                        query=user_input,
+                        session_id=session_id,
+                        current_emotion=current_emotion,
+                        character_known=character_known,
+                        character_unknown=character_unknown,
+                        context=context,
+                        limit=self._max_items,
+                    )
         except TimeoutError:
             logger.warning(
                 "[MemoryMiddleware] recall deadline exceeded (%dms)",

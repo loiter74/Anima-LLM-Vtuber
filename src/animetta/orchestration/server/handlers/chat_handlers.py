@@ -30,7 +30,6 @@ from animetta.services.effects import (
     create_default_effect_runtime,
 )
 from animetta.services.meme.styles import get_meme_style, parse_meme_invocation
-from animetta.tracing.metrics import get_session_messages, get_websocket_errors
 
 from ...socket_events import EVENTS, resolve_socket_event
 
@@ -165,13 +164,6 @@ class ChatHandlers:
             return
 
         try:
-            sm = get_session_messages()
-            if sm is not None:
-                sm.add(1)
-        except Exception as exc:
-            logger.debug("[ChatHandlers] session_messages metric failed: {}", exc)
-
-        try:
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
             actor_id = normalize_actor_id(command.user_id or "user", "local")
             result = await orchestrator.process_text(
@@ -197,12 +189,6 @@ class ChatHandlers:
                     transport_mode=command.transport_mode,
                 )
         except Exception as exc:
-            try:
-                metric = get_websocket_errors()
-                if metric is not None:
-                    metric.add(1)
-            except Exception as metric_exc:
-                logger.debug("[ChatHandlers] websocket_errors metric failed: {}", metric_exc)
             await self._emit_command_error(
                 sid,
                 command,
@@ -342,16 +328,13 @@ class ChatHandlers:
             f"heard response: {heard_response[:50] if heard_response else '(empty)'}..."
         )
 
-
         interrupt_handler = get_interrupt_handler()
         interrupt_handler.set_interrupt(sid)
 
         identity = self._correlation_identity(data)
         delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
         await delivery.emit("chat", "stop_audio", {}, to=sid)
-        await delivery.emit(
-            "chat", "control", {"type": "control", "text": "interrupted"}, to=sid
-        )
+        await delivery.emit("chat", "control", {"type": "control", "text": "interrupted"}, to=sid)
 
     # ── History ────────────────────────────────────────────────────────
 
@@ -381,7 +364,9 @@ class ChatHandlers:
             logger.info(f"[{sid}] Conversation history cleared")
 
             await self.sio.emit(
-                EVENTS["history"]["clear"]["name"], {"type": EVENTS["history"]["clear"]["name"]}, to=sid
+                EVENTS["history"]["clear"]["name"],
+                {"type": EVENTS["history"]["clear"]["name"]},
+                to=sid,
             )
 
     async def on_create_new_history(self, sid: str, data: dict) -> None:

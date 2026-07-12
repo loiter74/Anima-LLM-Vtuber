@@ -20,7 +20,7 @@ class TestASRFactory:
 
     def test_create_unknown_returns_mock(self):
         engine = ASRFactory.create("nonexistent_provider")
-        assert isinstance(engine, MockASR)
+        assert isinstance(unwrap_tracing_proxy(engine), MockASR)
 
     def test_create_mock_is_mock_asr(self):
         engine = ASRFactory.create("mock")

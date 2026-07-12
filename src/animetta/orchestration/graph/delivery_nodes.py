@@ -30,7 +30,13 @@ def _delivery(
     mode = ChatTransportMode(
         state.get("metadata", {}).get("transport_mode", ChatTransportMode.CANONICAL.value)
     )
-    return ChatDelivery(sio, identity, mode), state.get("channel_id") or state["session_id"]
+    recorder = configurable.get("observation_recorder")
+    delivery = (
+        ChatDelivery(sio, identity, mode, recorder=recorder)
+        if recorder is not None
+        else ChatDelivery(sio, identity, mode)
+    )
+    return delivery, state.get("channel_id") or state["session_id"]
 
 
 async def conversation_start_node(

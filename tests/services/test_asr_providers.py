@@ -429,15 +429,20 @@ class TestFunASRASR:
 class TestASRFactory:
     """Tests for the ASRFactory."""
 
+    @staticmethod
+    def _target(service):
+        """Return the concrete provider behind the observability proxy."""
+        return getattr(service, "_target", service)
+
     def test_create_unknown_provider_falls_back(self):
         """create() with unknown provider should fall back to MockASR."""
         result = ASRFactory.create("unknown_provider")
-        assert isinstance(result, MockASR)
+        assert isinstance(self._target(result), MockASR)
 
     def test_create_with_kwargs_unknown(self):
         """create() with kwargs for unknown provider falls back to MockASR."""
         result = ASRFactory.create("nonexistent", model="test", language="en")
-        assert isinstance(result, MockASR)
+        assert isinstance(self._target(result), MockASR)
 
     @patch("animetta.services.asr.factory.ASRFactory._build_config")
     @patch("animetta.services.asr.factory.ProviderRegistry.create_service")
@@ -462,7 +467,7 @@ class TestASRFactory:
         """create() should fall back to MockASR when ProviderRegistry raises."""
         mock_create_service.side_effect = ValueError("Service creation failed")
         result = ASRFactory.create("faster_whisper")
-        assert isinstance(result, MockASR)
+        assert isinstance(self._target(result), MockASR)
 
     @patch("animetta.services.asr.factory.logger")
     def test_create_unknown_logs_warning(self, mock_logger):

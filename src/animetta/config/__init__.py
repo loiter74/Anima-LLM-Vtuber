@@ -18,6 +18,7 @@ from .app import AppConfig
 from .core.base import BaseConfig
 from .core.mixins import ApiKeyMixin, DeviceMixin, ModelMixin, TemperatureMixin
 from .core.registry import ProviderRegistry
+from .humor import HumorConfig
 from .persona import (
     BehaviorRules,
     MBTIDimensionDelta,
@@ -102,6 +103,7 @@ __all__ = [
     "ModelMixin",
     "DeviceMixin",
     "TemperatureMixin",
+    "HumorConfig",
     # LLM Providers
     "LLMConfig",
     "LLMBaseConfig",

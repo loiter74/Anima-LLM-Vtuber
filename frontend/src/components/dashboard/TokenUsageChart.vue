@@ -16,12 +16,12 @@ const hasData = computed(() => store.traces.length > 0)
 
 const chartData = computed(() => ({
   labels: store.traces.slice(0, 20).reverse().map(t =>
-    t.created_at ? new Date(t.created_at).toLocaleTimeString() : ''
+    new Date(t.started_at * 1000).toLocaleTimeString()
   ),
   datasets: [
     {
       label: 'Latency (ms)',
-      data: store.traces.slice(0, 20).reverse().map(t => t.total_duration_ms),
+      data: store.traces.slice(0, 20).reverse().map(t => t.duration_ms ?? 0),
       borderColor: 'rgb(52, 211, 153)',
       backgroundColor: 'rgba(52, 211, 153, 0.1)',
       fill: true,

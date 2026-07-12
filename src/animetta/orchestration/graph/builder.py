@@ -6,6 +6,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from loguru import logger
 
+from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
+
 from . import (
     anima_composer_node,
     asr_node,
@@ -23,6 +25,7 @@ from . import (
     tool_node,
     tts_node,
 )
+from .instrumentation import instrument_node
 from .personality_node import personality_node
 from .state import AgentState
 
@@ -70,6 +73,7 @@ def build_graph(
     tools: list[Any] | None = None,
     tools_map: dict[str, Any] | None = None,
     golden_profile: bool = False,
+    observation_recorder: ObservationRecorder | None = None,
 ) -> StateGraph:
     """
     Build the LangGraph state graph
@@ -107,21 +111,25 @@ def build_graph(
         logger.info(f"[LangGraph] Tool calls enabled, loading {len(tools or [])} tools")
 
     graph = StateGraph(AgentState)
+    recorder = observation_recorder or NoOpObservationRecorder()
+
+    def add_observed_node(name: str, node: Any) -> None:
+        graph.add_node(name, instrument_node(name, node, recorder))
 
     # Register nodes
-    graph.add_node("asr", asr_node)
-    graph.add_node("personality", personality_node)
+    add_observed_node("asr", asr_node)
+    add_observed_node("personality", personality_node)
 
     if golden_profile:
-        graph.add_node("reasoner", reasoner_node)
-        graph.add_node("anima_composer", anima_composer_node)
-        graph.add_node("response_guard", response_guard_node)
-        graph.add_node("conversation_finalizer", conversation_finalizer_node)
-        graph.add_node("conversation_start", conversation_start_node)
-        graph.add_node("reply_output", reply_output_node)
-        graph.add_node("performance_output", performance_output_node)
-        graph.add_node("tts", tts_node)
-        graph.add_node("emotion", emotion_node)
+        add_observed_node("reasoner", reasoner_node)
+        add_observed_node("anima_composer", anima_composer_node)
+        add_observed_node("response_guard", response_guard_node)
+        add_observed_node("conversation_finalizer", conversation_finalizer_node)
+        add_observed_node("conversation_start", conversation_start_node)
+        add_observed_node("reply_output", reply_output_node)
+        add_observed_node("performance_output", performance_output_node)
+        add_observed_node("tts", tts_node)
+        add_observed_node("emotion", emotion_node)
         graph.set_conditional_entry_point(route_input, {"asr": "asr", "llm": "conversation_start"})
         graph.add_edge("asr", "conversation_start")
         graph.add_edge("conversation_start", "personality")
@@ -137,12 +145,12 @@ def build_graph(
         logger.info("[LangGraph] Golden two-pass graph built")
         return graph.compile(checkpointer=None)
 
-    graph.add_node("llm", llm_node)
-    graph.add_node("humor_rewrite", humor_rewrite_node)
-    graph.add_node("humor_validation", humor_validation_node)
-    graph.add_node("tts", tts_node)
-    graph.add_node("emotion", emotion_node)
-    graph.add_node("output", output_node)
+    add_observed_node("llm", llm_node)
+    add_observed_node("humor_rewrite", humor_rewrite_node)
+    add_observed_node("humor_validation", humor_validation_node)
+    add_observed_node("tts", tts_node)
+    add_observed_node("emotion", emotion_node)
+    add_observed_node("output", output_node)
 
     registered_nodes = [
         "asr",
@@ -155,7 +163,7 @@ def build_graph(
         "output",
     ]
     if enable_tools:
-        graph.add_node("tools", tool_node)
+        add_observed_node("tools", tool_node)
         registered_nodes.append("tools")
         logger.info("[LangGraph] Tool node registered")
 
@@ -198,6 +206,7 @@ def create_default_graph(
     tools: list[Any] | None = None,
     tools_map: dict[str, Any] | None = None,
     golden_profile: bool = False,
+    observation_recorder: ObservationRecorder | None = None,
 ) -> StateGraph:
     """
     Create a state graph with default configuration
@@ -233,6 +242,7 @@ def create_default_graph(
         tools=tools,
         tools_map=tools_map,
         golden_profile=golden_profile,
+        observation_recorder=observation_recorder,
     )
 
 

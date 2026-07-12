@@ -10,7 +10,6 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
-from animetta.tracing.metrics import get_rag_chunks, get_rag_duration, get_rag_top_score
 
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
@@ -212,7 +211,10 @@ def _get_memory_middleware(config: RunnableConfig | None) -> MemoryMiddleware | 
             return configurable["memory_middleware"]
         memory_system = _get_memory_system(config)
         if memory_system:
-            middleware = MemoryMiddleware(memory_system=memory_system)
+            middleware = MemoryMiddleware(
+                memory_system=memory_system,
+                observation_recorder=configurable.get("observation_recorder"),
+            )
             return middleware
     return None
 
@@ -421,27 +423,6 @@ async def llm_node(
     memory_context, rag_metadata = retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
     rag_duration = (time_module.perf_counter() - t_rag) * 1000
     log_timing(state, "llm.rag_retrieval", rag_duration, f"query='{user_text[:50]}'")
-
-    # OTel metrics: RAG retrieval duration + chunk count + top score
-    try:
-        rd = get_rag_duration()
-        if rd is not None:
-            rd.record(rag_duration / 1000.0, {"strategy": "hybrid"})
-        rc = get_rag_chunks()
-        if rc is not None:
-            chunk_count = rag_metadata.get(
-                "atom_count",
-                rag_metadata.get("memory_count", rag_metadata.get("fuzzy_count", 0)),
-            )
-            if chunk_count > 0:
-                rc.record(chunk_count, {"strategy": "hybrid"})
-        rts = get_rag_top_score()
-        if rts is not None:
-            top_score = rag_metadata.get("top_score", 0.0)
-            if top_score > 0:
-                rts.record(top_score, {"strategy": "hybrid"})
-    except Exception as e:
-        logger.warning(f"[{session_id}] [LLMNode] OTel RAG metrics recording failed: {e}")
 
     # Check if tools are enabled
     enable_tools = _get_config_value(config, "enable_tools", False)

@@ -9,7 +9,7 @@ VAD Factory - Create VAD instances based on configuration
 
 from loguru import logger
 
-from animetta.tracing.proxy import TracingProxy
+from animetta.observability.service_proxy import instrument_service
 
 from .interface import VADInterface
 from .mock_vad import MockVAD
@@ -36,16 +36,28 @@ class VADFactory:
         try:
             vad = ProviderRegistry.create_service("vad", config)
             logger.info(f"VAD service created successfully: type={config.type}")
-            return TracingProxy(vad, service_name="vad")
+            return instrument_service(
+                vad,
+                kwargs.get("observation_recorder"),
+                "vad",
+                provider=config.type,
+                model=getattr(config, "model", None),
+            )
         except Exception as e:
             logger.error(f"Failed to create VAD service (type={config.type}): {type(e).__name__}: {e}")
             # Degrade to Mock implementation
             logger.warning(f"Degraded to using MockVAD (original config: {config.type})")
-            return MockVAD(
-                sample_rate=getattr(config, 'sample_rate', 16000),
-                db_threshold=-30.0,
-                min_speech_duration=5,
-                min_silence_duration=15,
+            return instrument_service(
+                MockVAD(
+                    sample_rate=getattr(config, 'sample_rate', 16000),
+                    db_threshold=-30.0,
+                    min_speech_duration=5,
+                    min_silence_duration=15,
+                ),
+                kwargs.get("observation_recorder"),
+                "vad",
+                provider="mock",
+                model="mock",
             )
 
     @staticmethod

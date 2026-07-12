@@ -7,6 +7,7 @@ from animetta.config.providers.llm import (
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
+from animetta.observability.service_proxy import InstrumentedServiceProxy
 from animetta.services.llm import LLMFactory
 from animetta.services.llm.mock_llm import MockLLM
 from animetta.services.llm.openai_llm import OpenAILLM
@@ -60,8 +61,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ) as mock_create, patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda x, **kw: x,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda x, *args, **kw: x,
         ):
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config, system_prompt="Hello")
@@ -79,8 +80,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ) as mock_create, patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda x, **kw: x,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda x, *args, **kw: x,
         ):
             config = OpenAILLMConfig(api_key="sk-test", model="gpt-4")
             result = LLMFactory.create_from_config(config)
@@ -97,8 +98,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=service,
         ), patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda target, **_: target,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda target, *args, **_: target,
         ):
             result = LLMFactory.create_from_config(
                 DeepSeekLLMConfig(api_key="test"),
@@ -116,8 +117,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ) as mock_create, patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda x, **kw: x,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda x, *args, **kw: x,
         ):
             config = GLMLLMConfig(api_key="glm-key", model="glm-4")
             result = LLMFactory.create_from_config(config, system_prompt="Be helpful")
@@ -134,8 +135,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ) as mock_create, patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda x, **kw: x,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda x, *args, **kw: x,
         ):
             config = OllamaLLMConfig(model="llama3.2")
             result = LLMFactory.create_from_config(config)
@@ -145,8 +146,8 @@ class TestCreateFromConfig:
 
     # ── TracingProxy wrapping ───────────────────────────────────
 
-    def test_wraps_in_tracing_proxy(self):
-        """The returned service is wrapped in a TracingProxy."""
+    def test_wraps_in_instrumented_service_proxy(self):
+        """The returned service is wrapped through the recorder adapter."""
 
         mock_svc = _mock_service()
 
@@ -154,13 +155,13 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ), patch(
-            "animetta.services.llm.factory.TracingProxy",
+            "animetta.services.llm.factory.instrument_service",
             return_value="proxy-wrapped",
         ) as mock_proxy:
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config)
 
-            mock_proxy.assert_called_once_with(mock_svc, service_name="llm")
+            assert mock_proxy.call_args.args[:3] == (mock_svc, None, "llm")
             assert result == "proxy-wrapped"
 
     # ── Fallback ─────────────────────────────────────────────────
@@ -181,7 +182,8 @@ class TestCreateFromConfig:
             result = LLMFactory.create_from_config(config, system_prompt="Hello")
 
             MockMockLLM.assert_called_once_with(system_prompt="Hello")
-            assert result is mock_instance
+            assert isinstance(result, InstrumentedServiceProxy)
+            assert result._target is mock_instance
 
     def test_fallback_to_mock_on_import_error(self):
         """ImportError during service creation also triggers fallback."""
@@ -199,7 +201,8 @@ class TestCreateFromConfig:
             result = LLMFactory.create_from_config(config)
 
             MockMockLLM.assert_called_once()
-            assert result is mock_instance
+            assert isinstance(result, InstrumentedServiceProxy)
+            assert result._target is mock_instance
 
     def test_fallback_uses_original_system_prompt(self):
         """Fallback MockLLM receives the same system_prompt."""
@@ -273,8 +276,8 @@ class TestCreateFromConfig:
             "animetta.services.llm.factory.ProviderRegistry.create_service",
             return_value=mock_svc,
         ) as mock_create, patch(
-            "animetta.services.llm.factory.TracingProxy",
-            side_effect=lambda target, **_: target,
+            "animetta.services.llm.factory.instrument_service",
+            side_effect=lambda target, *args, **_: target,
         ):
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config, strict=True)

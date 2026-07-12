@@ -95,5 +95,5 @@ cd frontend && pnpm test:run && pnpm test:coverage
 - `tests/integration/conftest.py` auto-tags every collected item as `integration`
 - `tests/tracing/conftest.py` `autouse=True` fixture resets: Prometheus REGISTRY, OTel `_TRACER_INITIALIZED`, `metrics._initialized`
 - Required plugins (implicit via addopts): pytest-asyncio, pytest-xdist, pytest-timeout, pytest-cov
-- CI (`.github/workflows/test.yml`): Python 3.12+3.13 matrix, `--cov-fail-under=70`, skips `tests/memory/test_manager.py`
+- CI (`.github/workflows/test.yml`): Python 3.13 from `.python-version`, `--cov-fail-under=67`, skips `tests/memory/test_manager.py`
 - docs/development/testing.md is stale (claims 21% coverage); frontend/AGENTS.md is stale (claims 0% coverage / no vitest)

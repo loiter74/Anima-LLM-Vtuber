@@ -23,7 +23,7 @@ class TestTTSFactory:
 
     def test_create_unknown_returns_mock(self):
         engine = TTSFactory.create("nonexistent_provider")
-        assert isinstance(engine, MockTTS)
+        assert isinstance(unwrap_tracing_proxy(engine), MockTTS)
 
     def test_create_mock_is_mock_tts(self):
         engine = TTSFactory.create("mock")
@@ -92,7 +92,7 @@ class TestTTSFactory:
         ):
             engine = TTSFactory.create("edge_tts")
 
-        assert isinstance(engine, MockTTS)
+        assert isinstance(unwrap_tracing_proxy(engine), MockTTS)
 
 
 class TestMockTTS:

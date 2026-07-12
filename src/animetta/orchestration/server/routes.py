@@ -26,6 +26,12 @@ from .live2d import Live2DManager
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
+    from animetta.observability.ports import (
+        ObservationQuery,
+        ObservationRecorder,
+        ObservationReportStore,
+    )
+
     from .session import SessionManager
 
 
@@ -42,12 +48,18 @@ class RouteHandlers:
         session_manager: "SessionManager",
         desktop_manager: DesktopClientManager | None = None,
         live2d_manager: Live2DManager | None = None,
+        observation_recorder: "ObservationRecorder | None" = None,
+        observation_query: "ObservationQuery | None" = None,
+        observation_report_store: "ObservationReportStore | None" = None,
     ):
         # Infrastructure
         self.sio = sio
         self.session_manager = session_manager
         self.desktop_manager = desktop_manager or DesktopClientManager()
         self.live2d_manager = live2d_manager or Live2DManager()
+        self.observation_recorder = observation_recorder
+        self.observation_query = observation_query
+        self.observation_report_store = observation_report_store
 
         # Shared base — used by dependent handlers that need orchestrator access
         self.base = BaseSocketHandler(
@@ -366,10 +378,19 @@ def register_routes(
     desktop_manager: DesktopClientManager | None = None,
     live2d_manager: Live2DManager | None = None,
     bilibili_config: dict[str, Any] | None = None,
+    observation_recorder: "ObservationRecorder | None" = None,
+    observation_query: "ObservationQuery | None" = None,
+    observation_report_store: "ObservationReportStore | None" = None,
 ) -> RouteHandlers:
     """Register all routes to the Socket.IO server."""
     handlers = RouteHandlers(
-        sio, session_manager, desktop_manager, live2d_manager
+        sio,
+        session_manager,
+        desktop_manager,
+        live2d_manager,
+        observation_recorder,
+        observation_query,
+        observation_report_store,
     )
 
     handlers.bilibili.configure(bilibili_config)
