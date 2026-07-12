@@ -101,6 +101,7 @@ C:tmp_pip/
 # AI agent artifacts
 .opencode/
 .sisyphus/
+.worktrees/
 
 # Testing artifacts
 .pytest_cache/
