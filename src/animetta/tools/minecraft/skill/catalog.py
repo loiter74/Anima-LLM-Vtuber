@@ -9,7 +9,7 @@ from loguru import logger
 
 from .conditions import check_preconditions
 from .executor import execute_skill
-from .models import Skill, SkillResult
+from .models import Skill, SkillResult, SkillTrustStage
 from .store import SkillLibraryDB
 
 if TYPE_CHECKING:
@@ -68,6 +68,7 @@ class SkillLibrary:
         """Add a learned skill with validation and deduplication."""
         skill.is_learned = True
         skill.validated = False
+        skill.trust_stage = SkillTrustStage.CANDIDATE
 
         if skill.id in self._skills:
             existing = self._skills[skill.id]
@@ -95,6 +96,52 @@ class SkillLibrary:
             f"[SkillLibrary] Added learned skill: {skill.id} "
             f"(tags={skill.tags}, validated={skill.validated})"
         )
+        return True
+
+    async def demote_skill(self, skill_id: str, *, reason: str, session_id: str) -> bool:
+        """Move a trusted skill back to candidate while preserving audit history."""
+        skill = self._skills.get(skill_id)
+        if skill is None:
+            return False
+        skill.trust_stage = SkillTrustStage.CANDIDATE
+        skill.validated = False
+        skill.provenance.history.append(
+            {
+                "event": "demoted",
+                "reason": reason,
+                "session_id": session_id,
+            }
+        )
+        await self.save_skill(skill)
+        return True
+
+    async def promote_skill(
+        self,
+        skill_id: str,
+        *,
+        validation_session_id: str,
+        evidence_refs: list[str],
+        environment_fingerprint: str,
+    ) -> bool:
+        """Promote a candidate after a separate evidence-backed validation task."""
+        skill = self._skills.get(skill_id)
+        if skill is None or not validation_session_id or not evidence_refs:
+            return False
+        skill.trust_stage = SkillTrustStage.TRUSTED
+        skill.validated = True
+        skill.provenance.validation_session_id = validation_session_id
+        skill.provenance.evidence_refs.extend(
+            ref for ref in evidence_refs if ref not in skill.provenance.evidence_refs
+        )
+        skill.provenance.environment_fingerprint = environment_fingerprint
+        skill.provenance.history.append(
+            {
+                "event": "promoted",
+                "reason": "independent validation passed",
+                "session_id": validation_session_id,
+            }
+        )
+        await self.save_skill(skill)
         return True
 
     async def get_skill(self, skill_id: str) -> Skill | None:
@@ -131,12 +178,14 @@ class SkillLibrary:
         skill = self._skills.get(skill_id)
         if skill:
             skill.success_count += 1
+            skill.consecutive_failures = 0
             skill.last_used = datetime.now().isoformat()
             if self._db:
                 await self._db.update_stats(
                     skill_id,
                     skill.success_count,
                     skill.fail_count,
+                    skill.consecutive_failures,
                     skill.avg_duration,
                     skill.last_used,
                 )
@@ -147,12 +196,14 @@ class SkillLibrary:
         skill = self._skills.get(skill_id)
         if skill:
             skill.fail_count += 1
+            skill.consecutive_failures += 1
             skill.last_used = datetime.now().isoformat()
             if self._db:
                 await self._db.update_stats(
                     skill_id,
                     skill.success_count,
                     skill.fail_count,
+                    skill.consecutive_failures,
                     skill.avg_duration,
                     skill.last_used,
                 )
@@ -206,6 +257,18 @@ class SkillLibrary:
                 candidates.append(skill)
 
         candidates.sort(key=lambda s: (-s.success_rate, s.avg_duration))
+        return candidates[:limit]
+
+    async def match_trusted_skills(
+        self, context: dict[str, Any], limit: int = 5
+    ) -> list[Skill]:
+        """Return only independently validated skills eligible for live execution."""
+        candidates = [
+            skill
+            for skill in self._skills.values()
+            if skill.is_trusted and check_preconditions(skill.preconditions, context)
+        ]
+        candidates.sort(key=lambda skill: (-skill.success_rate, skill.avg_duration))
         return candidates[:limit]
 
     async def search_by_keyword(self, keyword: str, limit: int = 5) -> list[Skill]:

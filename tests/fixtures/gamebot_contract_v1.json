@@ -1,0 +1,79 @@
+{
+  "manifest": {
+    "protocol_version": "1.0",
+    "runtime_id": "runtime-fixture",
+    "capabilities": [
+      {
+        "name": "collect",
+        "risk": "survival_safe",
+        "parameters": {
+          "block_type": {"type": "string"},
+          "count": {"type": "integer"}
+        }
+      },
+      {
+        "name": "craft",
+        "risk": "survival_safe",
+        "parameters": {
+          "recipe": {"type": "string"},
+          "count": {"type": "integer"}
+        }
+      }
+    ]
+  },
+  "observation": {
+    "observation_id": "observation-1",
+    "correlation_id": "observe-1",
+    "runtime_id": "runtime-fixture",
+    "captured_at": "2026-07-12T00:00:00Z",
+    "position": {"x": 0.0, "y": 64.0, "z": 0.0},
+    "health": 20.0,
+    "food": 20,
+    "inventory": {},
+    "equipment": {},
+    "environment": {"dimension": "overworld"}
+  },
+  "observation_hash": "e441f6423dce9d21a2b214b760ca15cf14107bbba177e5b429eab062dec5f82b",
+  "skill_execution": {
+    "receipts": [
+      {
+        "receipt_id": "receipt-1",
+        "session_id": "session-1",
+        "task_id": "task-1",
+        "correlation_id": "action-1",
+        "runtime_id": "runtime-fixture",
+        "capability": "collect",
+        "params": {"block_type": "oak_log", "count": 1},
+        "started_at": "2026-07-12T00:00:01Z",
+        "finished_at": "2026-07-12T00:00:02Z",
+        "before_observation_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "after_observation_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "previous_receipt_hash": "",
+        "outcome": "success",
+        "error": null
+      },
+      {
+        "receipt_id": "receipt-2",
+        "session_id": "session-1",
+        "task_id": "task-1",
+        "correlation_id": "action-2",
+        "runtime_id": "runtime-fixture",
+        "capability": "craft",
+        "params": {"recipe": "oak_planks", "count": 4},
+        "started_at": "2026-07-12T00:00:03Z",
+        "finished_at": "2026-07-12T00:00:04Z",
+        "before_observation_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "after_observation_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "previous_receipt_hash": "aa09caad0b68da6f3d27a78cbc72b645fb300c0eb6373991f1d5e3611f3a2eb1",
+        "outcome": "success",
+        "error": null
+      }
+    ],
+    "output": {"crafted": 4}
+  },
+  "incompatible_manifest": {
+    "protocol_version": "0.9",
+    "runtime_id": "runtime-old",
+    "capabilities": []
+  }
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 # Includes both Python-side step types and Node.js-side actions from AVAILABLE_TOOLS.
@@ -44,6 +45,39 @@ _STEP_PARAM_DEFS: dict[str, dict[str, tuple[type, Any]]] = {
     "smelt": {"item": (str, None), "fuel": (str, None), "count": (int, 1)},
     "water_bucket_clutch": {},
 }
+
+
+class SkillTrustStage(StrEnum):
+    CANDIDATE = "candidate"
+    TRUSTED = "trusted"
+
+
+@dataclass
+class SkillProvenance:
+    """Durable evidence for skill creation, validation, and trust changes."""
+
+    source_session_id: str = ""
+    source_task_id: str = ""
+    policy_report: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    validation_session_id: str = ""
+    environment_fingerprint: str = ""
+    history: list[dict[str, str]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_session_id": self.source_session_id,
+            "source_task_id": self.source_task_id,
+            "policy_report": self.policy_report,
+            "evidence_refs": list(self.evidence_refs),
+            "validation_session_id": self.validation_session_id,
+            "environment_fingerprint": self.environment_fingerprint,
+            "history": list(self.history),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> SkillProvenance:
+        return cls(**(data or {}))
 
 
 @dataclass
@@ -118,16 +152,27 @@ class Skill:
     postconditions: list[str] = field(default_factory=list)
     success_count: int = 0
     fail_count: int = 0
+    consecutive_failures: int = 0
     avg_duration: float = 0.0
     last_used: str = ""
     tags: list[str] = field(default_factory=list)
     is_learned: bool = False
     validated: bool = True
+    trust_stage: SkillTrustStage = SkillTrustStage.CANDIDATE
+    provenance: SkillProvenance = field(default_factory=SkillProvenance)
 
     @property
     def success_rate(self) -> float:
         total = self.success_count + self.fail_count
         return self.success_count / total if total > 0 else 0.0
+
+    @property
+    def is_trusted(self) -> bool:
+        return (
+            self.trust_stage is SkillTrustStage.TRUSTED
+            and bool(self.provenance.validation_session_id)
+            and bool(self.provenance.evidence_refs)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -142,19 +187,24 @@ class Skill:
             "postconditions": self.postconditions,
             "success_count": self.success_count,
             "fail_count": self.fail_count,
+            "consecutive_failures": self.consecutive_failures,
             "avg_duration": self.avg_duration,
             "last_used": self.last_used,
             "tags": self.tags,
             "is_learned": self.is_learned,
             "validated": self.validated,
+            "trust_stage": self.trust_stage.value,
+            "provenance": self.provenance.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Skill:
         data = dict(data)
         steps_data = data.pop("steps", [])
+        trust_stage = SkillTrustStage(data.pop("trust_stage", SkillTrustStage.CANDIDATE))
+        provenance = SkillProvenance.from_dict(data.pop("provenance", None))
         steps = [SkillStep.from_dict(s) for s in steps_data]
-        return cls(steps=steps, **data)
+        return cls(steps=steps, trust_stage=trust_stage, provenance=provenance, **data)
 
 
 @dataclass

@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock
 
 from animetta.tools.minecraft.autonomous.live_agent import LiveAgent
 from animetta.tools.minecraft.skill.catalog import SkillLibrary
-from animetta.tools.minecraft.skill.models import Skill, SkillResult
+from animetta.tools.minecraft.skill.models import (
+    Skill,
+    SkillProvenance,
+    SkillResult,
+    SkillTrustStage,
+)
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,15 +23,27 @@ def _skill(
     success_count: int = 0,
     fail_count: int = 0,
     validated: bool = True,
+    consecutive_failures: int | None = None,
 ) -> Skill:
+    trust_stage = SkillTrustStage.TRUSTED if validated else SkillTrustStage.CANDIDATE
+    provenance = SkillProvenance(
+        source_session_id="learn-session",
+        source_task_id=id_,
+        evidence_refs=[f"receipt-{id_}"],
+        validation_session_id="validation-session" if validated else "",
+        environment_fingerprint="test",
+    )
     return Skill(
         id=id_,
         name=name,
         description=f"skill {name}",
         tags=["live"],
         validated=validated,
+        trust_stage=trust_stage,
+        provenance=provenance,
         success_count=success_count,
         fail_count=fail_count,
+        consecutive_failures=(fail_count if consecutive_failures is None else consecutive_failures),
     )
 
 
@@ -70,6 +87,23 @@ async def test_select_skill_excludes_unvalidated():
 
     assert picked is not None
     assert picked.id == "ok"
+
+
+async def test_select_skill_excludes_legacy_validated_candidate_without_provenance():
+    lib = SkillLibrary()
+    await lib.save_skill(
+        Skill(
+            id="legacy",
+            name="collect wood",
+            description="legacy validated but no provenance",
+            validated=True,
+            trust_stage=SkillTrustStage.CANDIDATE,
+        )
+    )
+
+    picked = await LiveAgent(lib, AsyncMock()).select_skill("collect wood")
+
+    assert picked is None
 
 
 async def test_select_skill_returns_none_when_empty():
@@ -117,6 +151,8 @@ async def test_run_goal_skill_fail_degrades_and_falls_back():
     assert out["skill_id"] == "flaky"
     assert fb.await_count == 1  # 兜底被调用
     assert (await lib.get_skill("flaky")).validated is False  # 已降权
+    assert (await lib.get_skill("flaky")).trust_stage is SkillTrustStage.CANDIDATE
+    assert (await lib.get_skill("flaky")).provenance.history[-1]["event"] == "demoted"
 
 
 async def test_run_goal_skill_fail_below_threshold_no_degrade():
@@ -134,6 +170,35 @@ async def test_run_goal_skill_fail_below_threshold_no_degrade():
     assert (await lib.get_skill("ok")).fail_count == 1
 
 
+async def test_historical_failures_do_not_count_as_consecutive_live_failures():
+    lib = SkillLibrary()
+    await lib.save_skill(
+        _skill(
+            "recovered",
+            "collect wood",
+            success_count=10,
+            fail_count=10,
+            consecutive_failures=0,
+        )
+    )
+    agent = LiveAgent(
+        lib,
+        AsyncMock(),
+        degrade_threshold=3,
+        fallback_fn=AsyncMock(return_value={"completed": False}),
+    )
+    lib.execute_skill_by_id = AsyncMock(
+        return_value=SkillResult(success=False, skill_id="recovered")
+    )
+
+    out = await agent.run_goal("collect wood")
+
+    loaded = await lib.get_skill("recovered")
+    assert out["degraded"] is False
+    assert loaded.trust_stage is SkillTrustStage.TRUSTED
+    assert loaded.consecutive_failures == 1
+
+
 async def test_run_goal_no_skill_falls_back():
     """无适配 verified 技能 → 直接兜底 Survival Runner。"""
     lib = SkillLibrary()
@@ -143,7 +208,7 @@ async def test_run_goal_no_skill_falls_back():
     out = await agent.run_goal("whatever")
 
     assert out["outcome"] == "fallback"
-    assert out["reason"] == "no_validated_skill"
+    assert out["reason"] == "no_trusted_skill"
     assert fb.await_count == 1
 
 

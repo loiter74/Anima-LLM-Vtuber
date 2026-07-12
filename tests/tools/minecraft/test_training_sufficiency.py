@@ -78,41 +78,11 @@ def test_summary_shape():
     assert "tech_tree_coverage" in s and "is_sufficient" in s
 
 
-# ── AutonomousLoop 集成（learn→live 自动提升）────────────────────────────────
-
-
-def test_loop_promotes_learn_to_live_when_sufficient():
-    bridge = AsyncMock()
-    tracker = TrainingTracker(min_coverage=2.0, min_recent_samples=999, min_items_discovered=3)
-    loop = AutonomousLoop(bridge, training_tracker=tracker)
-    loop.set_voyager_mode("learn")
-    tracker.update_discovered({"a": 1, "b": 1, "c": 1})
-
-    loop._check_training_sufficient()
-
-    assert loop.voyager_mode == "live"
-
-
-def test_loop_does_not_switch_when_not_learn():
-    """非 learn 模式（fallback/live）不触发自动提升。"""
-    bridge = AsyncMock()
+# AutonomousLoop may still collect legacy training metrics for diagnostics, but
+# mode transitions are exclusively owned by VoyagerController.
+def test_loop_keeps_training_tracker_as_metrics_only():
     tracker = TrainingTracker(min_items_discovered=1)
-    loop = AutonomousLoop(bridge, training_tracker=tracker)
-    loop.set_voyager_mode("fallback")
-    tracker.update_discovered({"a": 1})
+    loop = AutonomousLoop(AsyncMock(), training_tracker=tracker)
 
-    loop._check_training_sufficient()
-
-    assert loop.voyager_mode == "fallback"
-
-
-def test_loop_does_not_switch_when_not_sufficient():
-    bridge = AsyncMock()
-    tracker = TrainingTracker(min_coverage=2.0, min_recent_samples=999, min_items_discovered=999)
-    loop = AutonomousLoop(bridge, training_tracker=tracker)
-    loop.set_voyager_mode("learn")
-    tracker.update_discovered({"only_one": 1})
-
-    loop._check_training_sufficient()
-
-    assert loop.voyager_mode == "learn"  # 未达标，保持 learn
+    assert not hasattr(loop, "set_voyager_mode")
+    assert not hasattr(loop, "voyager_mode")

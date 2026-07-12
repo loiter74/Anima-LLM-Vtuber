@@ -116,8 +116,7 @@ class AutonomousLoop:
         # Safety: base position (set on first night return or manual trigger)
         self._base_pos: dict | None = None
 
-        # T10: Voyager 阶段（learn/live/fallback）+ 训练充分判据
-        self._voyager_mode = "fallback"
+        # Legacy training metrics are diagnostic only. VoyagerController owns modes.
         self._training_tracker = training_tracker
 
         logger.info(
@@ -157,32 +156,6 @@ class AutonomousLoop:
     @property
     def is_running(self) -> bool:
         return self._running
-
-    # ── Voyager 阶段切换（mc-bot-voyager-learning T10）──
-
-    def set_voyager_mode(self, mode: str) -> None:
-        """设置 Voyager 阶段：learn / live / fallback。"""
-        self._voyager_mode = mode
-        logger.info(f"[AutonomousLoop] voyager mode = {mode}")
-
-    @property
-    def voyager_mode(self) -> str:
-        return self._voyager_mode
-
-    def _check_training_sufficient(self) -> None:
-        """训练充分判据达标 → learn 自动提升为 live（T10）。
-
-        三选一（技术树覆盖 / 近期成功率 / 物品发现数）。仅 learn 模式触发；
-        live 期不生成代码，须回落 Survival Runner（见 live_agent）。
-        """
-        if self._voyager_mode != "learn" or self._training_tracker is None:
-            return
-        ok, reason = self._training_tracker.sufficiency()
-        if ok:
-            logger.success(
-                f"[AutonomousLoop] 训练充分 ({reason}) → learn→live 自动提升"
-            )
-            self._voyager_mode = "live"
 
     async def _threat_check(self) -> bool:
         """Quick threat check — if hostile nearby, attack and return True"""
@@ -244,7 +217,6 @@ class AutonomousLoop:
         # 6. T10: 训练充分判据 → learn→live 自动提升（best-effort，不影响主循环）
         if self._training_tracker is not None:
             self._training_tracker.update_discovered(getattr(state, "inventory", {}) or {})
-            self._check_training_sufficient()
 
     # ── Evaluation & Decision ──
 

@@ -6,6 +6,7 @@ The bridge (MinecraftBridge) manages the Node.js subprocess lifecycle.
 """
 
 import asyncio  # noqa: F401  (patch anchor: tests/tools/minecraft/core/test_bridge.py)
+import json
 from typing import Any
 
 from langchain_core.tools import tool
@@ -13,6 +14,8 @@ from loguru import logger
 
 # Global bridge instance (initialized by init_bridge)
 _bridge = None
+_voyager_controller = None
+_voyager_library = None
 # Global state collector (set by MinecraftHandlers after start)
 _state_collector = None
 
@@ -29,7 +32,7 @@ def init_bridge(config: dict | None = None):
 
     from . import bridge as bridge_module
     from .bridge import MinecraftBridge
-    from .config import MinecraftConfig, MinecraftMode
+    from .config import MinecraftConfig
 
     mc_config = MinecraftConfig(**(config or {}))
 
@@ -49,7 +52,7 @@ def init_bridge(config: dict | None = None):
 
     _bridge = MinecraftBridge(
         mc_config,
-        autonomous=mc_config.mode != MinecraftMode.FALLBACK,
+        autonomous=False,
         service_pool=service_pool_ref,
     )
     bridge_module._bridge = _bridge
@@ -61,7 +64,13 @@ def init_bridge(config: dict | None = None):
 
 async def cleanup_bridge():
     """Cleanup bridge resources (called from ToolManager.cleanup)"""
-    global _bridge
+    global _bridge, _voyager_controller, _voyager_library
+    if _voyager_controller is not None:
+        await _voyager_controller.stop()
+        _voyager_controller = None
+    if _voyager_library is not None:
+        await _voyager_library.close_db()
+        _voyager_library = None
     if _bridge:
         await _bridge.stop()
         _bridge = None
@@ -69,6 +78,109 @@ async def cleanup_bridge():
 
         bridge_module._bridge = None
         logger.info("[MinecraftTools] Bridge cleaned up")
+
+
+async def configure_voyager_controller(
+    bridge: Any,
+    *,
+    llm_service: Any,
+    library: Any = None,
+    repository: Any = None,
+):
+    """Compose the sole Voyager controller around a running game-bot runtime."""
+    global _voyager_controller, _voyager_library
+
+    from animetta.tools.minecraft.skill.catalog import SkillLibrary
+    from animetta.tools.minecraft.survival.runner import SurvivalIronRunner
+    from animetta.tools.minecraft.voyager.adapter import MinecraftGameBotAdapter
+    from animetta.tools.minecraft.voyager.contracts import VoyagerMode
+    from animetta.tools.minecraft.voyager.controller import VoyagerController
+    from animetta.tools.minecraft.voyager.learning import (
+        FrontierLLMCodeGenerator,
+        LearningSession,
+    )
+    from animetta.tools.minecraft.voyager.live import FallbackSession, LiveSession
+    from animetta.tools.minecraft.voyager.policy import VoyagerPolicy
+    from animetta.tools.minecraft.voyager.recovery import RecoveryCoordinator
+    from animetta.tools.minecraft.voyager.repository import InMemoryVoyagerRepository
+    from animetta.tools.minecraft.voyager.tech_graph import (
+        FrontierScheduler,
+        TechProgress,
+        build_survival_tech_graph,
+    )
+
+    if _voyager_controller is not None:
+        await _voyager_controller.stop()
+    if _voyager_library is not None and _voyager_library is not library:
+        await _voyager_library.close_db()
+
+    runtime = MinecraftGameBotAdapter(bridge)
+    skill_library = library or SkillLibrary(db_path="data/minecraft_skills.db")
+    await skill_library.init_db()
+    voyager_repository = repository or InMemoryVoyagerRepository()
+    graph = build_survival_tech_graph()
+    allowed_capabilities = {
+        "observe",
+        "status",
+        "goto",
+        "collect",
+        "mine",
+        "craft",
+        "place",
+        "smelt",
+        "equip",
+        "attack",
+        "chat",
+        "recipes",
+        "mine_shaft",
+    }
+    policy = VoyagerPolicy(
+        supported_protocol="1.0",
+        allowed_capabilities=allowed_capabilities,
+    )
+    generator = FrontierLLMCodeGenerator(llm_service)
+
+    async def run_fallback(goal: str, *, task_id: str) -> dict[str, Any]:
+        del goal, task_id
+        report = await SurvivalIronRunner(bridge, skill_library=skill_library).run()
+        return report.summary()
+
+    def fallback_factory(context):
+        return FallbackSession(context=context, runner=run_fallback)
+
+    def learning_factory(context):
+        return LearningSession(
+            context=context,
+            graph=graph,
+            scheduler=FrontierScheduler(graph),
+            policy=policy,
+            library=skill_library,
+            code_generator=generator,
+            progress=TechProgress(),
+        )
+
+    def live_factory(context):
+        return LiveSession(
+            context=context,
+            library=skill_library,
+            policy=policy,
+            fallback=fallback_factory(context),
+        )
+
+    controller = VoyagerController(
+        runtime=runtime,
+        policy=policy,
+        session_factories={
+            VoyagerMode.LEARN: learning_factory,
+            VoyagerMode.LIVE: live_factory,
+            VoyagerMode.FALLBACK: fallback_factory,
+        },
+        repository=voyager_repository,
+        recovery=RecoveryCoordinator(runtime=runtime, repository=voyager_repository),
+    )
+    _voyager_controller = controller
+    _voyager_library = skill_library
+    return controller
 
 
 def get_minecraft_tools() -> list[Any]:
@@ -314,14 +426,17 @@ async def mc_voyager_learn() -> str:
     This is offline exploration — it does NOT generate code during live streaming.
     Use mc_voyager_live to switch to the reliable live mode after training.
     """
-    global _bridge
+    global _bridge, _voyager_controller
     if _bridge is None or not _bridge.is_running:
         return (
             "Minecraft bot is not connected. "
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
 
-    return await _send("set_voyager_mode", {"mode": "learn"}, timeout=10.0)
+    if _voyager_controller is None:
+        return "Voyager controller is not configured. Restart the Minecraft integration."
+    status = await _voyager_controller.start_learning()
+    return json.dumps(status.model_dump(mode="json"), ensure_ascii=False)
 
 
 @tool
@@ -337,18 +452,18 @@ async def mc_voyager_live(goal: str = "") -> str:
         goal: Optional goal to pursue immediately (e.g. 'collect wood', 'smelt iron').
               If omitted, the bot just enters live standby.
     """
-    global _bridge
+    global _bridge, _voyager_controller
     if _bridge is None or not _bridge.is_running:
         return (
             "Minecraft bot is not connected. "
             "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
         )
 
-    mode_result = await _send("set_voyager_mode", {"mode": "live"}, timeout=10.0)
+    if _voyager_controller is None:
+        return "Voyager controller is not configured. Restart the Minecraft integration."
+    status = await _voyager_controller.start_live()
     if not goal:
-        return mode_result
+        return json.dumps(status.model_dump(mode="json"), ensure_ascii=False)
 
-    goal_result = await _send("voyager_live_goal", {"goal": goal}, timeout=60.0)
-    if goal_result.startswith("Action failed:"):
-        return f"{mode_result}\n{goal_result}"
-    return goal_result
+    result = await _voyager_controller.run_live_goal(goal)
+    return json.dumps(result, ensure_ascii=False, default=str)

@@ -1,8 +1,8 @@
 """直播期 agent（mc-bot-voyager-learning T11/T12）。
 
-直播期**只复用**学习期产出的 ``validated`` 技能，不生成新代码——这是直播可靠性的根。
+直播期**只复用**独立复验后的 ``trusted`` 技能，不生成新代码——这是直播可靠性的根。
 选技能：precondition 匹配 + goal 相关度 + success_rate 排序；失败计 fail_count，连续
-K 次降权（``validated=False``，不再被直播期信任）。全部可用技能失败 / 无适配技能 /
+K 次连续失败后降为 candidate，不再被直播期信任。全部可用技能失败 / 无适配技能 /
 agent 卡死时，自动回落 Survival Runner 跑确定性流程（T12 兜底）。
 """
 
@@ -28,6 +28,7 @@ class LiveAgent:
         *,
         degrade_threshold: int = 3,
         fallback_fn: Any = None,
+        session_id: str = "live-agent",
     ):
         self._library = library
         self._bridge = bridge
@@ -35,6 +36,7 @@ class LiveAgent:
         self._degrade_threshold = degrade_threshold
         # 可注入的兜底回调（默认走 Survival Runner）；测试可注入 mock
         self._fallback_fn = fallback_fn
+        self._session_id = session_id
 
     # ── T11: 选技能 ────────────────────────────────────────────────────────
 
@@ -45,10 +47,8 @@ class LiveAgent:
             最佳适配 Skill，或 None（无 validated 技能 / 无 precondition 满足者）。
         """
         context = context or {}
-        # match_skills 已按 success_rate 排序 + precondition 过滤
-        matched = await self._library.match_skills(context, limit=10)
-        validated = [s for s in matched if s.validated]
-        if not validated:
+        trusted = await self._library.match_trusted_skills(context, limit=10)
+        if not trusted:
             return None
 
         # goal 相关度细化：关键词重叠优先，其次 success_rate，最后 fail_count 升序
@@ -58,8 +58,8 @@ class LiveAgent:
             text = f"{s.name} {s.description}".lower()
             return sum(1 for w in goal_words if w in text)
 
-        validated.sort(key=lambda s: (-relevance(s), -s.success_rate, s.fail_count))
-        return validated[0]
+        trusted.sort(key=lambda s: (-relevance(s), -s.success_rate, s.consecutive_failures))
+        return trusted[0]
 
     # ── T11/T12: 执行 + 失败计数 + 兜底 ────────────────────────────────────
 
@@ -71,8 +71,8 @@ class LiveAgent:
         """
         skill = await self.select_skill(goal, context)
         if skill is None:
-            logger.info(f"[LiveAgent] 无适配 verified 技能 → 兜底 Survival Runner: '{goal}'")
-            return await self._fallback(goal, reason="no_validated_skill")
+            logger.info(f"[LiveAgent] 无适配 trusted 技能 → 兜底 Survival Runner: '{goal}'")
+            return await self._fallback(goal, reason="no_trusted_skill")
 
         result = await self._library.execute_skill_by_id(skill.id, self._bridge)
         if result.success:
@@ -83,12 +83,15 @@ class LiveAgent:
         # 失败 → 计 fail_count；K 次降权
         await self._library.update_failure(skill.id)
         degraded = False
-        if skill.fail_count >= self._degrade_threshold:
-            skill.validated = False
-            await self._library.save_skill(skill)
+        if skill.consecutive_failures >= self._degrade_threshold:
+            await self._library.demote_skill(
+                skill.id,
+                reason=f"{skill.consecutive_failures} consecutive live failures",
+                session_id=self._session_id,
+            )
             degraded = True
             logger.warning(
-                f"[LiveAgent] skill '{skill.name}' 连续失败 {skill.fail_count} 次 → 降权 (validated=False)"
+                f"[LiveAgent] skill '{skill.name}' 连续失败 {skill.consecutive_failures} 次 → candidate"
             )
         else:
             logger.warning(

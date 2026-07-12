@@ -1,102 +1,123 @@
-"""T13: mc_voyager_learn / mc_voyager_live entry tools (mc-bot-voyager-learning)."""
+"""Public Voyager tools route to the single Python control plane."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
 from animetta.tools.minecraft.core import tools
+from animetta.tools.minecraft.voyager.contracts import (
+    VoyagerMode,
+    VoyagerSessionState,
+    VoyagerStatus,
+)
 
 
-def _running_bridge(*, autonomous_loop=None) -> AsyncMock:
+def _running_bridge() -> AsyncMock:
     bridge = AsyncMock()
     bridge.is_running = True
-    bridge.send_command = AsyncMock(
-        return_value={
-            "status": "success",
-            "result": "Voyager LEARN mode enabled in external runtime.",
-        }
-    )
-    bridge._autonomous_loop = autonomous_loop
+    bridge.send_command = AsyncMock()
     return bridge
 
 
-async def test_learn_switches_mode():
+def _controller() -> AsyncMock:
+    controller = AsyncMock()
+    controller.start_learning.return_value = VoyagerStatus(
+        mode=VoyagerMode.LEARN,
+        state=VoyagerSessionState.RUNNING,
+        session_id="learn-session",
+        runtime_id="runtime-1",
+    )
+    controller.start_live.return_value = VoyagerStatus(
+        mode=VoyagerMode.LIVE,
+        state=VoyagerSessionState.RUNNING,
+        session_id="live-session",
+        runtime_id="runtime-1",
+    )
+    controller.run_live_goal.return_value = {
+        "outcome": "success",
+        "skill_id": "trusted-wood",
+        "evidence_eligible": True,
+    }
+    return controller
+
+
+async def test_learn_starts_python_learning_session_without_node_mode_command() -> None:
     bridge = _running_bridge()
+    controller = _controller()
     tools._bridge = bridge
+    tools._voyager_controller = controller
+    try:
+        out = await tools.mc_voyager_learn.ainvoke({})
+    finally:
+        tools._bridge = None
+        tools._voyager_controller = None
+
+    controller.start_learning.assert_awaited_once_with()
+    bridge.send_command.assert_not_awaited()
+    assert "learn-session" in out
+
+
+async def test_live_without_goal_starts_python_live_session() -> None:
+    bridge = _running_bridge()
+    controller = _controller()
+    tools._bridge = bridge
+    tools._voyager_controller = controller
+    try:
+        out = await tools.mc_voyager_live.ainvoke({})
+    finally:
+        tools._bridge = None
+        tools._voyager_controller = None
+
+    controller.start_live.assert_awaited_once_with()
+    controller.run_live_goal.assert_not_awaited()
+    bridge.send_command.assert_not_awaited()
+    assert "live-session" in out
+
+
+async def test_live_goal_executes_through_python_live_session() -> None:
+    bridge = _running_bridge()
+    controller = _controller()
+    tools._bridge = bridge
+    tools._voyager_controller = controller
+    try:
+        out = await tools.mc_voyager_live.ainvoke({"goal": "collect wood"})
+    finally:
+        tools._bridge = None
+        tools._voyager_controller = None
+
+    controller.start_live.assert_awaited_once_with()
+    controller.run_live_goal.assert_awaited_once_with("collect wood")
+    bridge.send_command.assert_not_awaited()
+    assert "trusted-wood" in out
+
+
+async def test_connected_without_controller_returns_configuration_error() -> None:
+    tools._bridge = _running_bridge()
+    tools._voyager_controller = None
     try:
         out = await tools.mc_voyager_learn.ainvoke({})
     finally:
         tools._bridge = None
 
-    assert "LEARN" in out
-    bridge.send_command.assert_awaited_with(
-        "set_voyager_mode", {"mode": "learn"}, timeout=10.0
-    )
+    assert "controller" in out.lower()
+    assert "not configured" in out.lower()
+
+
+async def test_not_connected_returns_warning() -> None:
     tools._bridge = None
-
-
-async def test_live_no_goal_switches_mode():
-    bridge = _running_bridge()
-    bridge.send_command = AsyncMock(
-        return_value={
-            "status": "success",
-            "result": "Voyager LIVE mode enabled in external runtime.",
-        }
-    )
-    tools._bridge = bridge
+    tools._voyager_controller = _controller()
     try:
-        out = await tools.mc_voyager_live.ainvoke({})
+        out = await tools.mc_voyager_learn.ainvoke({})
+        assert "not connected" in out.lower()
+
+        out = await tools.mc_voyager_live.ainvoke({"goal": "x"})
+        assert "not connected" in out.lower()
     finally:
-        tools._bridge = None
-
-    assert "LIVE" in out
-    bridge.send_command.assert_awaited_with(
-        "set_voyager_mode", {"mode": "live"}, timeout=10.0
-    )
+        tools._voyager_controller = None
 
 
-async def test_live_with_goal_but_no_library_defers():
-    bridge = _running_bridge(autonomous_loop=None)  # 无 loop → 无 library
-    bridge.send_command = AsyncMock(
-        side_effect=[
-            {"status": "success", "result": "Voyager LIVE mode enabled in external runtime."},
-            {
-                "status": "error",
-                "result": {
-                    "code": "EXTERNAL_VOYAGER_GOAL_NOT_IMPLEMENTED",
-                    "message": "External runtime has accepted Voyager LIVE mode, but goal execution is not implemented yet.",
-                    "goal": "collect wood",
-                },
-            },
-        ]
-    )
-    tools._bridge = bridge
-    try:
-        out = await tools.mc_voyager_live.ainvoke({"goal": "collect wood"})
-    finally:
-        tools._bridge = None
-
-    assert bridge.send_command.await_args_list[0].args == ("set_voyager_mode", {"mode": "live"})
-    assert bridge.send_command.await_args_list[1].args == (
-        "voyager_live_goal",
-        {"goal": "collect wood"},
-    )
-    assert "not implemented" in out.lower()
-
-
-async def test_not_connected_returns_warning():
-    tools._bridge = None
-    out = await tools.mc_voyager_learn.ainvoke({})
-    assert "not connected" in out.lower()
-
-    out = await tools.mc_voyager_live.ainvoke({"goal": "x"})
-    assert "not connected" in out.lower()
-
-
-def test_tools_registered():
-    """两个 Voyager 入口 tool 已注册到 get_minecraft_tools()。"""
+def test_tools_registered() -> None:
     registered = tools.get_minecraft_tools()
     assert tools.mc_voyager_learn in registered
     assert tools.mc_voyager_live in registered
-    # mc_survival_iron 保留为 fallback 入口
     assert tools.mc_survival_iron in registered

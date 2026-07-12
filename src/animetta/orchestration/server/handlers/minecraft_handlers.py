@@ -32,6 +32,22 @@ class MinecraftHandlers:
         self.sio = sio
         self._state_collector: StateCollector | None = None
 
+    async def _configure_voyager(self, bridge) -> bool:
+        """Attach the Python control plane when the shared LLM is available."""
+        from animetta.core.service_pool import ServicePool
+
+        if not ServicePool._ready or ServicePool._llm is None:
+            logger.warning(
+                "[Minecraft] Shared LLM is unavailable; Voyager controller not configured"
+            )
+            return False
+        await mc_tools.configure_voyager_controller(
+            bridge,
+            llm_service=ServicePool._llm,
+        )
+        logger.info("[Minecraft] Python Voyager controller configured")
+        return True
+
     def _setup_viewer_callback(self, bridge) -> None:
         """Register callback to forward viewer join/leave events to frontend."""
 
@@ -110,6 +126,7 @@ class MinecraftHandlers:
             # Start the bot (init_bridge only creates, doesn't start)
             await bridge.start()
             logger.info("[Minecraft] Bot started successfully")
+            await self._configure_voyager(bridge)
 
             # Start state collector for HUD + web dashboard
             self._state_collector = StateCollector(bridge, self.sio, interval=2.0)

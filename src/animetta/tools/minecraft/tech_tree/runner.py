@@ -9,6 +9,13 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from ..benchmark.models import BenchmarkMetrics
+from ..voyager.tech_graph import (
+    EvidenceFailure,
+    TechEvidenceReport,
+    TechEvidenceVerifier,
+    TechMilestoneEvidence,
+    TechProgress,
+)
 from .adapter import report_to_benchmark_metrics
 from .defaults import _phase_tasks, create_default_tech_tree
 from .models import TechTreeConfig, TechTreeMetrics, TechTreePhase, TechTreeReport
@@ -27,6 +34,10 @@ class TechTreeRunner:
         bridge: MinecraftBridge,
         skill_library: SkillLibrary,
         config: TechTreeConfig | None = None,
+        *,
+        evidence_verifier: TechEvidenceVerifier | None = None,
+        tech_progress: TechProgress | None = None,
+        phase_node_map: dict[str, str] | None = None,
     ) -> None:
         self._bridge = bridge
         self._skill_library = skill_library
@@ -35,6 +46,10 @@ class TechTreeRunner:
         self._phase_details: list[dict[str, Any]] = []
         self._run_start: float = 0.0
         self._deaths_at_start: int = 0
+        self._evidence_verifier = evidence_verifier
+        self._tech_progress = tech_progress or TechProgress()
+        self._phase_node_map = dict(phase_node_map or {})
+        self._last_evidence_report: TechEvidenceReport | None = None
         logger.info(
             f"[TechTreeRunner] Initialized: {len(self._config.phases)} phases, "
             f"{self._config.total_time_budget_minutes}min total budget"
@@ -115,7 +130,52 @@ class TechTreeRunner:
             }
         )
 
-    async def _check_milestone(self, phase: TechTreePhase, inventory: dict[str, int]) -> bool:
+    @property
+    def tech_progress(self) -> TechProgress:
+        return self._tech_progress
+
+    @property
+    def last_evidence_report(self) -> TechEvidenceReport | None:
+        return self._last_evidence_report
+
+    async def _check_milestone(
+        self,
+        phase: TechTreePhase,
+        inventory: dict[str, int],
+        *,
+        evidence: TechMilestoneEvidence | None = None,
+    ) -> bool:
+        if self._evidence_verifier is not None:
+            if evidence is None:
+                self._last_evidence_report = TechEvidenceReport(
+                    valid=False,
+                    failures=[EvidenceFailure(code="MISSING_MILESTONE_EVIDENCE")],
+                )
+                return False
+            node_id = self._phase_node_map.get(phase.name)
+            if node_id is None:
+                self._last_evidence_report = TechEvidenceReport(
+                    valid=False,
+                    failures=[
+                        EvidenceFailure(code="MISSING_PHASE_NODE_MAPPING", detail=phase.name)
+                    ],
+                )
+                return False
+            report = self._evidence_verifier.verify(
+                node_id=node_id,
+                progress=self._tech_progress,
+                receipts=list(evidence.receipts),
+                before=evidence.before,
+                after=evidence.after,
+                session_id=evidence.session_id,
+                task_id=evidence.task_id,
+                runtime_id=evidence.runtime_id,
+            )
+            self._last_evidence_report = report
+            if report.valid and report.unlock_record is not None:
+                self._tech_progress = self._tech_progress.commit(report.unlock_record)
+                return True
+            return False
         return phase.is_complete(inventory)
 
     async def _execute_task(

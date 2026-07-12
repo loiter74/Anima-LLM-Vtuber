@@ -97,13 +97,13 @@ class TestMinecraftBridgeInit:
         assert bridge._pending == {}
         assert bridge._next_id == 1
 
-    def test_autonomous_flag_is_stored(self, mock_config):
+    def test_autonomous_flag_is_ignored_for_compatibility(self, mock_config):
         bridge = MinecraftBridge(mock_config, autonomous=True)
-        assert bridge._autonomous_enabled is True
+        assert not hasattr(bridge, "_autonomous_enabled")
 
-    def test_autonomous_flag_defaults_false(self, mock_config):
+    def test_bridge_has_no_autonomous_owner_by_default(self, mock_config):
         bridge = MinecraftBridge(mock_config)
-        assert bridge._autonomous_enabled is False
+        assert not hasattr(bridge, "_autonomous_loop")
 
     def test_resolve_bot_dir_keeps_invalid_configured_external_path(self, mock_config):
         mock_config.runtime.runtime_path = "C:/missing/voyager-mc-bot"
@@ -217,21 +217,16 @@ class TestMinecraftBridgeStart:
         assert result is False
         assert bridge.is_running is False
 
-    async def test_start_with_autonomous_loop(self, mock_config, mock_process):
+    async def test_legacy_autonomous_flag_does_not_start_competing_loop(self, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config, autonomous=True)
-
-        mock_loop = MagicMock()
-        mock_loop.start = AsyncMock()
 
         with patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True), \
              patch("os.path.exists", return_value=True), \
              patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait), \
-             patch("animetta.tools.minecraft.autonomous.loop.AutonomousLoop", return_value=mock_loop):
+             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
             result = await bridge.start()
 
         assert result is True
-        mock_loop.start.assert_awaited_once()
 
 
 class TestMinecraftBridgeSendCommand:
@@ -560,31 +555,3 @@ class TestMinecraftBridgeModeCommands:
             result = await bridge.get_plan_status()
 
         assert result["result"] == {"current_step": 2, "total": 5}
-
-
-class TestMinecraftBridgePauseResumeAutonomous:
-    """Bridge pause_autonomous / resume_autonomous tests."""
-
-    def test_pause_autonomous_no_loop_does_not_crash(self, mock_config):
-        bridge = MinecraftBridge(mock_config)
-        bridge._autonomous_loop = None
-        bridge.pause_autonomous()  # Should not raise
-
-    def test_resume_autonomous_no_loop_does_not_crash(self, mock_config):
-        bridge = MinecraftBridge(mock_config)
-        bridge._autonomous_loop = None
-        bridge.resume_autonomous()  # Should not raise
-
-    def test_pause_delegates_to_loop(self, mock_config):
-        bridge = MinecraftBridge(mock_config)
-        mock_loop = MagicMock()
-        bridge._autonomous_loop = mock_loop
-        bridge.pause_autonomous()
-        mock_loop.pause.assert_called_once()
-
-    def test_resume_delegates_to_loop(self, mock_config):
-        bridge = MinecraftBridge(mock_config)
-        mock_loop = MagicMock()
-        bridge._autonomous_loop = mock_loop
-        bridge.resume_autonomous()
-        mock_loop.resume.assert_called_once()

@@ -24,14 +24,14 @@ from loguru import logger
 from animetta.utils.service_availability import is_service_available
 
 from ...gamebot.stdio_transport import StdioGameBotTransport
-from .config import MinecraftConfig, MinecraftMode
+from .config import MinecraftConfig
 
 if TYPE_CHECKING:
     pass  # ServicePool is accessed as a class, not imported for type checking
 
 
 class MinecraftBridge:
-    """Manages the Mineflayer bot subprocess with optional autonomous behavior"""
+    """Transport-only owner of the Mineflayer subprocess lifecycle."""
 
     def __init__(
         self,
@@ -39,6 +39,9 @@ class MinecraftBridge:
         autonomous: bool = False,
         service_pool: Any | None = None,
     ):
+        # Kept in the signature for callers that still pass the legacy arguments.
+        # Autonomous mode ownership now belongs exclusively to VoyagerController.
+        del autonomous, service_pool
         self.config = config
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future] = {}
@@ -51,18 +54,8 @@ class MinecraftBridge:
         # Generic transport layer (Phase 13: delegates subprocess lifecycle)
         self._transport: StdioGameBotTransport | None = None
 
-        # Autonomous behavior loop (lazy init)
-        self._autonomous_loop = None
-        self._autonomous_enabled = autonomous
-        self._service_pool = service_pool
-
         # Viewer callback for forwarding viewer_joined/viewer_left events
         self._viewer_callback: Any | None = None
-
-        # Voyager 阶段（mc-bot-voyager-learning T9/T10）：learn/live/fallback
-        self._voyager_mode: str | None = None
-        self._learning_task: asyncio.Task | None = None
-        self._skill_library: Any = None
 
     async def start(self) -> bool:
         """Start the Mineflayer bot subprocess"""
@@ -137,10 +130,6 @@ class MinecraftBridge:
                 logger.info("[MinecraftBridge] Bot logged in successfully")
             except TimeoutError:
                 logger.warning("[MinecraftBridge] Bot login timeout, continuing anyway")
-
-            # Start autonomous loop if enabled
-            if self._autonomous_enabled:
-                await self._start_autonomous()
 
             return True
 
@@ -380,144 +369,6 @@ class MinecraftBridge:
         except Exception as e:
             logger.debug(f"[MinecraftBridge] stderr reader stopped: {e}")
 
-    async def _start_autonomous(self):
-        """Start autonomous behavior — Voyager learn loop (LEARN) or rules loop (LIVE/fallback)."""
-        from ..autonomous.loop import AutonomousLoop
-        from ..other.trace_recorder import TraceRecorder
-        from ..skill.library import SkillLibrary
-        from ..skill.validator import SkillValidator
-
-        llm_service = None
-        if self._service_pool is not None:
-            try:
-                llm_service = getattr(self._service_pool, "_llm", None)
-            except Exception:
-                logger.warning("[MinecraftBridge] Could not get LLM service from ServicePool")
-
-        # 解析 Voyager 模式：set_voyager_mode 优先，回落 config.mode（T9）
-        cfg_mode = getattr(self.config, "mode", None)
-        if self._voyager_mode is not None:
-            mode = self._voyager_mode
-        elif cfg_mode == MinecraftMode.LEARN:
-            mode = "learn"
-        elif cfg_mode == MinecraftMode.LIVE:
-            mode = "live"
-        else:
-            mode = "fallback"
-        self._voyager_mode = mode
-
-        # 共享 skill library（学习期/直播期都用）；无 LLM 则不建库
-        if llm_service is not None:
-            library = SkillLibrary(db_path="data/mc_skills.db")
-            await library.init_db()
-            await library.load_predefined_skills()
-            self._skill_library = library
-        else:
-            library = None
-
-        # LEARN + LLM → Voyager 学习闭环后台跑（替代规则循环，T9）
-        if mode == "learn" and llm_service is not None and library is not None:
-            await self._launch_learning_loop(library, llm_service)
-            return
-
-        # LIVE / fallback / 无 LLM → 规则 AutonomousLoop（LIVE 期具体 goal 由 LiveAgent 驱动）
-        if llm_service is not None and library is not None:
-            from ..skill.extractor import SkillExtractor
-
-            extractor = SkillExtractor(llm_service=llm_service, skill_library=library)
-            validator = SkillValidator()
-            recorder = TraceRecorder(output_dir="data/mc_traces")
-            self._autonomous_loop = AutonomousLoop(
-                self,
-                skill_library=library,
-                skill_extractor=extractor,
-                skill_validator=validator,
-                trace_recorder=recorder,
-            )
-            logger.info("[MinecraftBridge] Autonomous loop started WITH learning components")
-        else:
-            # Graceful degradation: pure rule-based loop
-            if self._service_pool is not None:
-                logger.warning(
-                    "[MinecraftBridge] ServicePool available but no LLM service — "
-                    "running without learning"
-                )
-            self._autonomous_loop = AutonomousLoop(self)
-            logger.info("[MinecraftBridge] Autonomous loop started (no learning — rule-based only)")
-
-        await self._autonomous_loop.start()
-
-    async def _launch_learning_loop(self, library, llm_service) -> None:
-        """T9: 后台启动 Voyager 学习闭环（run_learning_loop），不阻塞 bridge.start。
-
-        复用 ``other.self_evolution.run_learning_loop``（经 mc-evo-purity 测试覆盖的核心）。
-        bridge 生命周期由调用方管理；本方法只创建后台 task。
-        """
-        from ..other.self_evolution import run_learning_loop
-
-        # 加载 code seeds 作 reference（学习期检索复用 verified 技能）
-        try:
-            from ..skill.code_seeds import get_code_seeds
-
-            for seed in get_code_seeds():
-                await library.save_skill(seed)
-        except Exception as e:
-            logger.warning(f"[MinecraftBridge] load code seeds failed: {e}")
-
-        self._learning_task = asyncio.create_task(run_learning_loop(self, library, llm_service))
-        logger.info("[MinecraftBridge] Voyager LEARN loop started in background")
-
-    async def _stop_autonomous(self):
-        """Stop the autonomous behavior loop / learning loop"""
-        if self._learning_task is not None:
-            self._learning_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._learning_task
-            self._learning_task = None
-        if self._autonomous_loop:
-            await self._autonomous_loop.stop()
-            self._autonomous_loop = None
-
-    def pause_autonomous(self):
-        """Pause autonomous decisions (e.g., LLM instruction active)"""
-        if self._autonomous_loop:
-            self._autonomous_loop.pause()
-
-    def resume_autonomous(self):
-        """Resume autonomous decisions after LLM instruction"""
-        if self._autonomous_loop:
-            self._autonomous_loop.resume()
-
-    # ── Voyager 阶段切换（mc-bot-voyager-learning T10/T13）──
-
-    async def set_voyager_mode(self, mode: str) -> dict:
-        """切换 Voyager 阶段：learn / live / fallback。
-
-        记录期望模式；若 bridge 已运行，按需启停学习闭环（切到 LEARN 且未在学 → 后台
-        拉起 ``run_learning_loop``；切离 LEARN → 取消学习 task）。规则 AutonomousLoop
-        （若有）同步模式。实际 learn 闭环的运行验证见 T9/T15（需实机）。
-        """
-        self._voyager_mode = mode
-        if self._autonomous_loop is not None:
-            self._autonomous_loop.set_voyager_mode(mode)
-
-        if mode == "learn" and self._running and self._learning_task is None:
-            # bridge 已启动后切到 learn → 后台拉起学习闭环
-            llm = getattr(self._service_pool, "_llm", None) if self._service_pool else None
-            if llm is not None and self._skill_library is not None:
-                await self._launch_learning_loop(self._skill_library, llm)
-            else:
-                logger.warning("[MinecraftBridge] 无法启动 learn loop：缺 LLM 或 skill library")
-        elif mode != "learn" and self._learning_task is not None:
-            self._learning_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._learning_task
-            self._learning_task = None
-            logger.info("[MinecraftBridge] Voyager LEARN loop stopped (mode switched)")
-
-        logger.info(f"[MinecraftBridge] voyager mode = {mode}")
-        return {"status": "ok", "voyager_mode": mode}
-
     # ── Mode Commands (for planner integration) ──
 
     async def set_planner_mode(self, plan_steps: list) -> dict:
@@ -568,11 +419,8 @@ class MinecraftBridge:
         self._viewer_callback = callback
 
     async def stop(self):
-        """Stop the bot subprocess and autonomous loop"""
+        """Stop the bot subprocess and resolve pending commands."""
         self._running = False
-
-        # Stop autonomous loop first
-        await self._stop_autonomous()
 
         if self._reader_task:
             self._reader_task.cancel()
