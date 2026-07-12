@@ -15,7 +15,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Context:** This should be run in a dedicated worktree (created by brainstorming skill).
 
-**Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
+**Save plans to:** Use the OpenSpec spec-driven system. Plans live at `openspec/changes/<change-name>/tasks.md` (created by `/opsx-propose`). **Never write to `docs/plans/`** — that directory has been removed; all change tracking goes through `openspec/`.
 
 ## Bite-Sized Task Granularity
 
@@ -33,7 +33,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For agents:** This plan is the `tasks.md` of the OpenSpec change at `openspec/changes/<change-name>/`.
+> Execute via `/opsx-apply <change-name>`. Mark each task `- [x]` as you complete it.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -96,13 +97,13 @@ git commit -m "feat: add specific feature"
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan to `openspec/changes/<change-name>/tasks.md` (via `/opsx-propose`), offer execution choice:
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `openspec/changes/<change-name>/tasks.md`. Two execution options:**
 
-**1. Subagent-Driven (this session)** - I dispatch fresh subagent per task, review between tasks, fast iteration
+**1. Apply via OpenSpec (recommended)** - Run `/opsx-apply <change-name>` to execute tasks with progress tracking
 
-**2. Parallel Session (separate)** - Open new session with executing-plans, batch execution with checkpoints
+**2. Subagent-Driven (this session)** - I dispatch fresh subagent per task, review between tasks, fast iteration
 
 **Which approach?"**
 
