@@ -1,0 +1,370 @@
+schema_version: 1
+
+quick_groups: [backend-route-smoke]
+
+groups:
+  backend-static:
+    domain: backend
+    kind: lint
+    runner: ruff
+    targets: [src, tooling, tests]
+    timeout_seconds: 180
+    include_in_full: true
+
+  backend-typecheck:
+    domain: backend
+    kind: typecheck
+    runner: mypy
+    targets: [src/animetta]
+    args: [--ignore-missing-imports]
+    timeout_seconds: 300
+    include_in_full: true
+
+  backend-tooling-typecheck:
+    domain: repository
+    kind: typecheck
+    runner: mypy
+    targets: [tooling/quality]
+    args: [--ignore-missing-imports]
+    timeout_seconds: 180
+    include_in_full: true
+
+  backend-tooling-quality:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets: [tests/tooling/quality]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 180
+
+  backend-core-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/core]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+
+  backend-config-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/config]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+
+  backend-server-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/orchestration/server]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+
+  backend-graph-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests/orchestration/graph]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 420
+
+  backend-services-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/services]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 420
+
+  backend-memory-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/memory_v2]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+
+  backend-tools-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/tools]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 600
+
+  backend-observability-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests/observability, tests/tracing, tests/inspection]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+
+  backend-route-smoke:
+    domain: backend
+    kind: smoke
+    runner: python
+    entrypoint: scripts/route_smoke.py
+    timeout_seconds: 120
+    include_in_full: true
+
+  backend-events-contract:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/validate-events.py
+    timeout_seconds: 120
+    include_in_full: true
+
+  security-secrets:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/check_secrets.py
+    timeout_seconds: 120
+    include_in_full: true
+
+  docs-contract:
+    domain: repository
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/smoke/test_readme_alignment.py
+      - tests/smoke/test_frontend_agents_docs.py
+      - tests/smoke/test_opsx_archive_docs.py
+    args: [-q, -o, addopts=]
+    timeout_seconds: 120
+    include_in_full: true
+
+  backend-full:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests]
+    args:
+      - -q
+      - -o
+      - addopts=
+      - -m
+      - not slow and not integration
+      - --tb=short
+      - -n
+      - auto
+      - --timeout=30
+      - --timeout-method=thread
+      - --cov=src/animetta
+      - --cov-report=term-missing
+      - --cov-report=xml
+      - --cov-fail-under=67
+    timeout_seconds: 1800
+    artifacts: [coverage.xml]
+    include_in_full: true
+
+  frontend-tests:
+    domain: frontend
+    kind: unit
+    runner: pnpm
+    cwd: frontend
+    args: [test:run]
+    timeout_seconds: 300
+    include_in_full: true
+
+  frontend-typecheck:
+    domain: frontend
+    kind: typecheck
+    runner: pnpm
+    cwd: frontend
+    args: [typecheck]
+    timeout_seconds: 300
+    include_in_full: true
+
+  frontend-build:
+    domain: frontend
+    kind: build
+    runner: pnpm
+    cwd: frontend
+    args: [build]
+    timeout_seconds: 420
+    include_in_full: true
+
+  frontend-playwright-smoke:
+    domain: frontend
+    kind: e2e
+    runner: playwright
+    isolation: service
+    cwd: frontend
+    entrypoint: smoke-test.mjs
+    capabilities: [browser]
+    timeout_seconds: 600
+    artifacts: [smoke-test-homepage.png]
+    required: false
+    include_in_nightly: true
+
+  docker-compose-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args: [compose, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+
+components:
+  quality-control-plane:
+    domain: repository
+    paths:
+      - tooling/**
+      - tests/tooling/**
+      - scripts/health_check.py
+      - tests/smoke/test_health_check.py
+    direct_groups: [backend-tooling-quality, backend-tooling-typecheck, backend-static]
+    impacts: []
+    risk: high
+
+  backend-core:
+    domain: backend
+    paths: [src/animetta/core/**]
+    direct_groups: [backend-core-unit, backend-route-smoke]
+    impacts: [orchestration-server, orchestration-graph]
+    risk: high
+
+  backend-config:
+    domain: backend
+    paths:
+      - src/animetta/config/**
+      - config/**
+    direct_groups: [backend-config-unit, backend-core-unit]
+    impacts: [backend-core]
+    risk: high
+
+  orchestration-server:
+    domain: backend
+    paths: [src/animetta/orchestration/server/**]
+    direct_groups: [backend-server-unit, backend-route-smoke]
+    impacts: [orchestration-graph]
+    risk: normal
+
+  orchestration-graph:
+    domain: backend
+    paths: [src/animetta/orchestration/graph/**]
+    direct_groups: [backend-graph-unit]
+    impacts: []
+    risk: normal
+
+  backend-services:
+    domain: backend
+    paths: [src/animetta/services/**]
+    direct_groups: [backend-services-unit]
+    impacts: [orchestration-graph]
+    risk: normal
+
+  backend-memory:
+    domain: backend
+    paths: [src/animetta/memory/**]
+    direct_groups: [backend-memory-unit]
+    impacts: [orchestration-graph]
+    risk: normal
+
+  backend-tools:
+    domain: backend
+    paths: [src/animetta/tools/**]
+    direct_groups: [backend-tools-unit]
+    impacts: [orchestration-server]
+    risk: normal
+
+  backend-observability:
+    domain: backend
+    paths:
+      - src/animetta/observability/**
+      - src/animetta/tracing/**
+      - src/animetta/inspection/**
+    direct_groups: [backend-observability-unit]
+    impacts: [backend-core]
+    risk: normal
+
+  frontend-source:
+    domain: frontend
+    paths: [frontend/src/**]
+    direct_groups: [frontend-tests, frontend-typecheck]
+    impacts: [frontend-build-control]
+    risk: normal
+
+  frontend-build-control:
+    domain: frontend
+    paths:
+      - frontend/package.json
+      - frontend/pnpm-lock.yaml
+      - frontend/vite.config.ts
+      - frontend/vitest.config.ts
+      - frontend/uno.config.ts
+    direct_groups: [frontend-typecheck, frontend-build]
+    impacts: []
+    risk: high
+
+  docker-infrastructure:
+    domain: repository
+    paths:
+      - Dockerfile
+      - docker-compose*.yml
+      - docker/**
+    direct_groups: [docker-compose-contract]
+    impacts: []
+    risk: high
+
+  repository-governance:
+    domain: repository
+    paths:
+      - .github/workflows/**
+      - AGENTS.md
+      - tests/AGENTS.md
+      - Makefile
+      - docs/development/project-health.md
+      - openspec/changes/add-impact-aware-quality-pipeline/**
+    direct_groups: [backend-tooling-quality, docs-contract]
+    impacts: []
+    risk: normal
+
+  documentation:
+    domain: repository
+    paths:
+      - README.md
+      - CONTRIBUTING.md
+      - docs/**
+    direct_groups: [docs-contract]
+    impacts: []
+    risk: normal
+
+  global-python-contract:
+    domain: repository
+    paths:
+      - pyproject.toml
+      - requirements*.txt
+      - tests/conftest.py
+    direct_groups: [backend-full]
+    impacts: []
+    risk: global
+
+fallbacks:
+  backend:
+    - backend-static
+    - backend-typecheck
+    - backend-route-smoke
+    - backend-events-contract
+    - backend-full
+  frontend: [frontend-tests, frontend-typecheck, frontend-build]
+  repository:
+    - backend-static
+    - backend-typecheck
+    - backend-tooling-typecheck
+    - backend-route-smoke
+    - backend-events-contract
+    - docs-contract
+    - security-secrets
+    - backend-full
+    - frontend-tests
+    - frontend-typecheck
+    - frontend-build
+    - docker-compose-contract

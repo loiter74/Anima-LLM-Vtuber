@@ -31,7 +31,7 @@ HEALTH_PASS = "pass"
 HEALTH_DEGRADED = "degraded"
 HEALTH_FAIL = "fail"
 HEALTH_STATUSES = (HEALTH_PASS, HEALTH_DEGRADED, HEALTH_FAIL)
-PROFILES = ("quick", "full", "docker")
+PROFILES = ("quick", "affected", "full", "docker")
 
 CANONICAL_PYTHON = (3, 13)
 
@@ -396,81 +396,55 @@ def _docker_logs_probe() -> None:
 
 
 def build_gates(profile: str | None = "full") -> list[Gate]:
-    pytest_base = (
-        "-m",
-        "pytest",
-        "tests",
-        "-q",
-        "-o",
-        "addopts=",
-        "-m",
-        "not slow and not integration",
-        "--tb=short",
-    )
     gates = [
+        Gate(
+            "quality:affected",
+            "Impact-aware verification for the current worktree",
+            _python(
+                "-m",
+                "tooling.quality",
+                "verify",
+                "--tier",
+                "affected",
+                "--worktree",
+            ),
+            profiles=("affected",),
+            remediation="Inspect the plan-hash evidence directory under artifacts/test-impact/.",
+        ),
+        Gate(
+            "quality:full",
+            "Full repository verification with a single backend coverage run",
+            _python(
+                "-m",
+                "tooling.quality",
+                "verify",
+                "--tier",
+                "full",
+                "--worktree",
+            ),
+            profiles=("full",),
+            remediation="Inspect the plan-hash evidence directory under artifacts/test-impact/.",
+        ),
         Gate(
             "backend:ruff",
             "Backend lint",
-            ("ruff", "check", "src", "tests"),
-            profiles=("quick", "full"),
+            _python("-m", "ruff", "check", "src", "tests"),
+            profiles=("quick",),
             remediation="Run ruff locally and fix reported lint violations.",
         ),
         Gate(
             "backend:mypy",
             "Backend type check",
-            ("mypy", "src/animetta", "--ignore-missing-imports"),
-            profiles=("quick", "full"),
+            _python("-m", "mypy", "src/animetta", "--ignore-missing-imports"),
+            profiles=("quick",),
             remediation="Fix type errors or document a targeted suppression.",
         ),
         Gate(
             "backend:pytest-collect",
             "Backend pytest collection",
             _python("-m", "pytest", "tests", "--collect-only", "-qq", "-o", "addopts="),
-            profiles=("quick", "full"),
+            profiles=("quick",),
             remediation="Fix import-time or collection failures before running the suite.",
-        ),
-        Gate(
-            "backend:tests",
-            "Backend tests",
-            _python(*pytest_base),
-            profiles=("full",),
-            remediation="Fix failing tests or quarantine external-service tests with markers.",
-        ),
-        Gate(
-            "backend:coverage",
-            "Backend coverage report",
-            _python(
-                *pytest_base,
-                "--cov-report=term-missing",
-                "--cov-fail-under=67",
-                "--cov=src/animetta",
-            ),
-            profiles=("full",),
-            remediation="Add coverage for changed behavior or update the threshold only with evidence.",
-        ),
-        Gate(
-            "frontend:typecheck",
-            "Frontend type check",
-            _pnpm("run", "typecheck"),
-            FRONTEND,
-            profiles=("full",),
-            remediation="Fix vue-tsc TypeScript errors.",
-        ),
-        Gate(
-            "frontend:tests",
-            "Frontend tests",
-            _pnpm("run", "test:run"),
-            FRONTEND,
-            profiles=("full",),
-            remediation="Fix failing Vitest tests.",
-        ),
-        Gate(
-            "frontend:build",
-            "Frontend production build",
-            _pnpm("run", "build"),
-            FRONTEND,
-            profiles=("full",),
-            remediation="Fix Vite build errors.",
         ),
         Gate(
             "frontend:coverage-script",
@@ -498,22 +472,8 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
             "events:validate",
             "Socket.IO event validation",
             _python("scripts/validate-events.py"),
-            profiles=("quick", "full"),
+            profiles=("quick",),
             remediation="Fix event schema drift reported by scripts/validate-events.py.",
-        ),
-        Gate(
-            "routes:smoke",
-            "Lightweight ASGI route probes",
-            _python("scripts/route_smoke.py"),
-            profiles=("full",),
-            remediation="Fix route import or ASGI response regressions.",
-        ),
-        Gate(
-            "security:secrets",
-            "Tracked config secret scan",
-            _python("scripts/check_secrets.py"),
-            profiles=("full",),
-            remediation="Remove plaintext secrets or move them to local ignored config.",
         ),
         Gate(
             "dependencies:pip-check",
@@ -535,14 +495,21 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
         Gate(
             "docker:compose-gpu-config",
             "Docker compose GPU config validation",
-            ("docker", "compose", "config"),
+            ("docker", "compose", "config", "--quiet"),
             profiles=("docker",),
             remediation="Fix docker-compose.yml syntax or unavailable compose configuration.",
         ),
         Gate(
             "docker:compose-cpu-config",
             "Docker compose CPU config validation",
-            ("docker", "compose", "-f", "docker-compose.cpu.yml", "config"),
+            (
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose.cpu.yml",
+                "config",
+                "--quiet",
+            ),
             profiles=("docker",),
             remediation="Fix docker-compose.cpu.yml syntax or unavailable compose configuration.",
         ),

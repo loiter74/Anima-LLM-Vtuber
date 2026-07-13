@@ -97,6 +97,15 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 - **每次测试前必须重新获取数据** — 禁止使用上一次 playwright 的缓存结果，必须重新捕获页面
 - **QA 测试流程**：`qa` skill → Playwright 页面捕获（全新获取）→ 发现/修复问题
 
+### Impact-aware verification
+
+- Stable local entrypoints are `make test-quick`, `make test-affected`, and `make test-full`; validate the catalog with `make quality-validate`.
+- `tooling/quality.yml` is the only component-to-test mapping. Do not duplicate path-selection logic in scripts or CI YAML.
+- Verification is machine-selected from the changed paths, impact closure, risk level, tier, and declared capabilities. An AI agent may not manually omit a required selected group.
+- Catalog labels such as `[backend, hermetic]` mean “backend ownership” and “runs without a live browser/service”; capability requirements such as an installed Docker CLI are declared separately.
+- `docker-compose-contract` is a hermetic static configuration check and does not start containers. Selected Playwright or live Docker service groups require fresh runtime evidence; Playwright must use a fresh page capture and live Docker verification must follow the sub-agent startup protocol below.
+- Every run persists the frozen plan and per-group result evidence under `artifacts/test-impact/`; CI matrices contain group IDs only and execute the same frozen plan.
+
 ### 服务启动（Docker 启动协议）
 
 > **核心原则**：成功判定 = 容器健康检查通过 + API 返回 200，**不依赖进程退出**。
@@ -170,6 +179,9 @@ docker compose logs -f animetta           # Logs
 PYTHONPATH=src python -m animetta.core.socketio_server
 
 # Tests
+make test-quick
+make test-affected
+make test-full
 PYTHONPATH=src python -m pytest tests/ -v
 PYTHONPATH=src python -m pytest tests/ --cov=src/animetta --cov-report=term-missing
 

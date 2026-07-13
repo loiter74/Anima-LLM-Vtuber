@@ -1,6 +1,18 @@
 # Project Health Contract
 
-This document is the repository-level health contract for Animetta. Runtime health remains `/health`; repository health is produced by `scripts/health_check.py`.
+This document is the repository-level health contract for Animetta. Runtime health remains `/health`; repository verification is planned from `tooling/quality.yml`, while `scripts/health_check.py` adds environment, security, dependency, and runtime-health policy checks.
+
+## Impact-aware Quality Contract
+
+The quality catalog owns components, path patterns, impact edges, risk, verification groups, isolation, capabilities, and fallback policy. Planning produces an immutable JSON plan. Its `plan_hash` binds the tier, normalized change set, catalog hash, selected group IDs, and reasons. Local execution and CI both consume that plan; CI matrices contain group IDs only and cannot inject commands.
+
+- `backend` is the owning code domain.
+- `hermetic` means the group does not depend on a live application service or interactive browser session. It may still require an installed local tool such as Docker for static configuration validation.
+- Isolation and capabilities are orthogonal: `isolation` describes runtime state, while `capabilities` declares the tools or environment the runner needs.
+- `service` groups start or connect to live runtime state and are isolated from ordinary unit checks.
+- A missing required capability blocks the result. A missing optional capability is recorded as skipped/degraded evidence.
+
+Playwright and Docker capabilities are machine-selected, not unconditional. `docker-compose-contract` is a hermetic, static `docker compose config --quiet` check and does not start containers. A selected Playwright or live Docker service group requires fresh runtime evidence; QA must obtain a fresh Playwright capture, and the main agent delegates the complete Docker startup protocol to a sub-agent and verifies health, frontend HTTP, and clean logs.
 
 ## Status Model
 
@@ -21,7 +33,13 @@ Any non-3.13 interpreter fails preflight. Use the repository `.venv` or set `ANI
 ## Commands
 
 ```powershell
+make quality-validate
+make test-quick
+make test-affected
+make test-full
+
 .\.venv\Scripts\python.exe scripts/health_check.py --profile quick
+.\.venv\Scripts\python.exe scripts/health_check.py --profile affected
 .\.venv\Scripts\python.exe scripts/health_check.py --profile full
 .\.venv\Scripts\python.exe scripts/health_check.py --profile docker
 .\.venv\Scripts\python.exe scripts/health_check.py --profile full --summary-file artifacts/health/latest.json
@@ -30,7 +48,8 @@ Any non-3.13 interpreter fails preflight. Use the repository `.venv` or set `ANI
 Profiles:
 
 - `quick`: fast local iteration checks: ruff, mypy, pytest collection, event validation, active-doc framework wording, and frontend font policy.
-- `full`: backend, frontend, docs, dependency, security, route smoke, and coverage checks that do not require service startup.
+- `affected`: run the frozen impact closure selected from the current worktree.
+- `full`: run the catalog's repository-wide groups, including a single backend test invocation that also produces coverage, then apply dependency and security policy gates.
 - `docker`: compose config, `/health`, frontend HTTP, and recent log verification after the Docker startup protocol has started the service.
 
 ## Docker Verification
@@ -45,24 +64,17 @@ The Docker profile verifies readiness evidence; it does not replace the startup 
 
 ## Required Gates
 
-Backend:
+Quality orchestration:
 
-- `backend:ruff`
-- `backend:mypy`
-- `backend:pytest-collect`
-- `backend:tests`
-- `backend:coverage`
-- `events:validate`
-- `routes:smoke`
-- `security:secrets`
+- `quality:affected`
+- `quality:full`
 
-Frontend:
+Repository policy:
 
-- `frontend:typecheck`
-- `frontend:tests`
-- `frontend:build`
 - `frontend:coverage-script`
 - `frontend:font-policy`
+- `docs:backend-framework`
+- `security-secrets` (delegated through `quality:full`)
 - `dependencies:frontend-audit`
 
 Docker:

@@ -61,6 +61,12 @@ All use `MagicMock` + `AsyncMock`; each exposes `.close = AsyncMock()`. Prefer t
 ## COMMANDS
 
 ```bash
+# Stable impact-aware entrypoints (preferred for agent and CI parity)
+make quality-validate
+make test-quick
+make test-affected
+make test-full
+
 # Default run (parallel, skip slow/integration)
 PYTHONPATH=src python -m pytest tests/
 
@@ -82,6 +88,8 @@ cd frontend && pnpm test:run && pnpm test:coverage
 
 > `conftest.py` auto-injects `src/` to `sys.path`, but keep `PYTHONPATH=src` prefix in docs/CI for safety.
 
+`quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. `full` runs the repository contract and executes `backend-full` once with coverage. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups run only when selected and when their declared capabilities are present.
+
 ## ANTI-PATTERNS
 
 - ❌ Never put tracing tests outside `tests/tracing/` — Prometheus REGISTRY is global; only that conftest resets it
@@ -95,5 +103,5 @@ cd frontend && pnpm test:run && pnpm test:coverage
 - `tests/integration/conftest.py` auto-tags every collected item as `integration`
 - `tests/tracing/conftest.py` `autouse=True` fixture resets: Prometheus REGISTRY, OTel `_TRACER_INITIALIZED`, `metrics._initialized`
 - Required plugins (implicit via addopts): pytest-asyncio, pytest-xdist, pytest-timeout, pytest-cov
-- CI (`.github/workflows/test.yml`): Python 3.13 from `.python-version`, `--cov-fail-under=67`, skips `tests/memory/test_manager.py`
+- CI (`.github/workflows/quality.yml`): Python 3.13 from `.python-version`, frozen group-ID matrices, and `backend-full` with `--cov-fail-under=67`
 - docs/development/testing.md is stale (claims 21% coverage); frontend/AGENTS.md is stale (claims 0% coverage / no vitest)

@@ -44,33 +44,33 @@ def test_build_gates_includes_required_health_domains() -> None:
     gate_ids = {gate.id for gate in build_gates("full")}
 
     assert {
-        "backend:ruff",
-        "backend:mypy",
-        "backend:pytest-collect",
+        "quality:full",
+        "frontend:coverage-script",
+        "frontend:font-policy",
+        "docs:backend-framework",
+        "dependencies:pip-check",
+        "dependencies:frontend-audit",
+    }.issubset(gate_ids)
+    assert "security:secrets" not in gate_ids
+
+
+def test_build_gates_exposes_quick_affected_full_and_docker_profiles() -> None:
+    quick_ids = {gate.id for gate in build_gates("quick")}
+    affected_ids = {gate.id for gate in build_gates("affected")}
+    full_ids = {gate.id for gate in build_gates("full")}
+    docker_ids = {gate.id for gate in build_gates("docker")}
+
+    assert "backend:ruff" in quick_ids
+    assert "quality:affected" not in quick_ids
+    assert affected_ids == {"quality:affected"}
+    assert "quality:full" in full_ids
+    assert {
         "backend:tests",
         "backend:coverage",
         "frontend:typecheck",
         "frontend:tests",
         "frontend:build",
-        "frontend:coverage-script",
-        "frontend:font-policy",
-        "docs:backend-framework",
-        "events:validate",
-        "security:secrets",
-        "dependencies:pip-check",
-        "dependencies:frontend-audit",
-        "routes:smoke",
-    }.issubset(gate_ids)
-
-
-def test_build_gates_exposes_quick_full_and_docker_profiles() -> None:
-    quick_ids = {gate.id for gate in build_gates("quick")}
-    full_ids = {gate.id for gate in build_gates("full")}
-    docker_ids = {gate.id for gate in build_gates("docker")}
-
-    assert "backend:ruff" in quick_ids
-    assert "frontend:build" not in quick_ids
-    assert "frontend:build" in full_ids
+    }.isdisjoint(full_ids)
     assert {
         "docker:compose-gpu-config",
         "docker:compose-cpu-config",
@@ -78,6 +78,18 @@ def test_build_gates_exposes_quick_full_and_docker_profiles() -> None:
         "docker:frontend-endpoint",
         "docker:logs-clean",
     }.issubset(docker_ids)
+
+
+def test_quality_health_gates_use_single_plan_and_run_command() -> None:
+    affected = next(gate for gate in build_gates("affected") if gate.id == "quality:affected")
+    full = next(gate for gate in build_gates("full") if gate.id == "quality:full")
+
+    assert "verify" in affected.command
+    assert affected.command.count("affected") == 1
+    assert "--results-dir" not in affected.command
+    assert "verify" in full.command
+    assert full.command.count("full") == 1
+    assert "--results-dir" not in full.command
 
 
 def test_redact_output_masks_secret_like_values() -> None:

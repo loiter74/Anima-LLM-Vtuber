@@ -1,0 +1,349 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Verification tier
+        required: true
+        default: full
+        type: choice
+        options: [quick, affected, full, nightly]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      python_groups: ${{ steps.plan.outputs.python_groups }}
+      node_groups: ${{ steps.plan.outputs.node_groups }}
+      service_groups: ${{ steps.plan.outputs.service_groups }}
+      has_python: ${{ steps.plan.outputs.has_python }}
+      has_node: ${{ steps.plan.outputs.has_node }}
+      has_service: ${{ steps.plan.outputs.has_service }}
+      plan_hash: ${{ steps.plan.outputs.plan_hash }}
+      tier: ${{ steps.plan.outputs.tier }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - name: Install planner dependencies
+        run: python -m pip install pydantic pyyaml
+
+      - name: Validate catalog
+        run: python -m tooling.quality validate
+
+      - name: Freeze verification plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          EVENT="${{ github.event_name }}"
+          HEAD="${{ github.sha }}"
+          BASE="$(git rev-parse HEAD^ 2>/dev/null || echo __missing_base__)"
+
+          if [[ "$EVENT" == "pull_request" ]]; then
+            TIER="affected"
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          elif [[ "$EVENT" == "push" ]]; then
+            TIER="full"
+            BASE="${{ github.event.before }}"
+          elif [[ "$EVENT" == "schedule" ]]; then
+            TIER="nightly"
+          else
+            TIER="${{ github.event.inputs.tier }}"
+          fi
+
+          mkdir -p artifacts/test-impact/ci
+          python -m tooling.quality plan \
+            --tier "$TIER" \
+            --base-sha "$BASE" \
+            --head-sha "$HEAD" \
+            --output artifacts/test-impact/ci/plan.json \
+            --github-output "$GITHUB_OUTPUT"
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+          echo "### Quality plan: $TIER" >> "$GITHUB_STEP_SUMMARY"
+          python -m tooling.quality plan \
+            --tier "$TIER" \
+            --base-sha "$BASE" \
+            --head-sha "$HEAD" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload frozen plan
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/plan.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  python:
+    name: python / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_python == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.python_groups) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - name: Install Python verification environment
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run selected Python group
+        run: >-
+          python -m tooling.quality run-group "${{ matrix.group }}"
+          --plan artifacts/test-impact/ci/plan.json
+          --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
+
+      - name: Upload structured Python result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-result-python-${{ matrix.group }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/results/${{ matrix.group }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Python diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-diagnostics-python-${{ matrix.group }}-${{ github.run_attempt }}
+          path: |
+            coverage.xml
+            junit.xml
+            artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  node:
+    name: node / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_node == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.node_groups) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install pydantic pyyaml
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Run selected Node group
+        run: >-
+          python -m tooling.quality run-group "${{ matrix.group }}"
+          --plan artifacts/test-impact/ci/plan.json
+          --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
+
+      - name: Upload structured Node result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-result-node-${{ matrix.group }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/results/${{ matrix.group }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Node diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-diagnostics-node-${{ matrix.group }}-${{ github.run_attempt }}
+          path: |
+            frontend/coverage/
+            frontend/test-results/
+            artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  service:
+    name: service / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_service == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.service_groups) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install pydantic pyyaml
+
+      - uses: pnpm/action-setup@v4
+        if: matrix.group == 'frontend-playwright-smoke'
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        if: matrix.group == 'frontend-playwright-smoke'
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install browser environment
+        if: matrix.group == 'frontend-playwright-smoke'
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Start CPU service stack for fresh browser capture
+        if: matrix.group == 'frontend-playwright-smoke'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.cpu.yml up -d --build
+          ready=false
+          for attempt in $(seq 1 24); do
+            if curl -fsS http://localhost/health | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+              ready=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "$ready" == "true" ]]
+          curl -fsS http://localhost/ >/dev/null
+
+      - name: Run selected service group
+        run: >-
+          python -m tooling.quality run-group "${{ matrix.group }}"
+          --plan artifacts/test-impact/ci/plan.json
+          --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
+
+      - name: Capture service logs
+        if: ${{ always() && matrix.group == 'frontend-playwright-smoke' }}
+        shell: bash
+        run: |
+          mkdir -p artifacts/test-impact/ci
+          docker compose -f docker-compose.cpu.yml logs --no-color > artifacts/test-impact/ci/service.log
+          if grep -E 'Traceback|ERROR|CRITICAL|FATAL' artifacts/test-impact/ci/service.log; then
+            rm -f "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
+            exit 1
+          fi
+
+      - name: Stop service stack
+        if: ${{ always() && matrix.group == 'frontend-playwright-smoke' }}
+        run: docker compose -f docker-compose.cpu.yml down
+
+      - name: Upload structured service result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-result-service-${{ matrix.group }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/results/${{ matrix.group }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload service diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-diagnostics-service-${{ matrix.group }}-${{ github.run_attempt }}
+          path: |
+            smoke-test-homepage.png
+            artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  quality-gate:
+    name: quality-gate
+    needs: [plan, python, node, service]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: quality-result-*-${{ github.run_attempt }}
+          merge-multiple: true
+          path: artifacts/test-impact/ci/results
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install pydantic pyyaml
+
+      - name: Aggregate required results
+        run: >-
+          python -m tooling.quality aggregate
+          --plan artifacts/test-impact/ci/plan.json
+          --results-dir artifacts/test-impact/ci/results
+          --output artifacts/test-impact/ci/summary.json
+
+      - name: Upload aggregate evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/test-impact/ci/plan.json
+            artifacts/test-impact/ci/summary.json
+            artifacts/test-impact/ci/results/
+          if-no-files-found: warn
+          retention-days: 30

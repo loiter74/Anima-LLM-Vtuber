@@ -1,4 +1,6 @@
-.PHONY: lint typecheck deadcode test health docker-health docker-test docker-lint
+.PHONY: lint typecheck deadcode test quality-validate test-quick test-affected test-full health docker-health docker-test docker-lint
+
+PYTHON ?= python
 
 # ── Local targets ────────────────────────────────────────────────────────
 
@@ -16,6 +18,18 @@ deadcode:
 
 test:
 	PYTHONPATH=src python -m pytest tests/ -x -q
+
+quality-validate:
+	$(PYTHON) -m tooling.quality validate
+
+test-quick:
+	$(PYTHON) -m tooling.quality verify --tier quick --worktree
+
+test-affected:
+	$(PYTHON) -m tooling.quality verify --tier affected --worktree
+
+test-full:
+	$(PYTHON) -m tooling.quality verify --tier full --worktree
 
 health:
 	@echo "=== Lint ==="
