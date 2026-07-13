@@ -1,8 +1,6 @@
 ## Purpose
 Defines the accepted behavior and requirements for the grafana-dashboards capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: Grafana auto-provisioned with Prometheus and Tempo datasources
 Grafana SHALL be configured via provisioning to automatically connect to Prometheus (port 9090) and Tempo (port 3200) on startup, requiring zero manual configuration.
 
@@ -12,27 +10,22 @@ Grafana SHALL be configured via provisioning to automatically connect to Prometh
 - **THEN** both datasources SHALL show "Success" when tested
 
 ### Requirement: Overview Dashboard
-The system SHALL provide a pre-built Grafana dashboard (`01-overview.json`) showing high-level metrics.
+The overview dashboard SHALL derive request rate, outcome rate, critical-path latency, degradation rate, cost, and active sessions from ledger-backed Prometheus metrics. Failed, degraded, cancelled, and aborted traces SHALL remain distinguishable.
 
-#### Scenario: Overview panel data
-- **WHEN** the Anima backend has been processing conversations for at least 1 minute
-- **THEN** the Overview dashboard SHALL display:
-  - QPS: `rate(anima_session_messages_total[5m])`
-  - End-to-end latency p50/p95/p99 from `anima_node_duration_seconds{node_name="output"}`
-  - Error rate: `rate(anima_node_errors_total[5m]) / rate(anima_node_duration_seconds_count[5m]) * 100`
-  - Cost rate per hour
-  - Active sessions gauge
+#### Scenario: Mixed outcomes are present
+- **WHEN** successful, degraded, and failed turns have committed
+- **THEN** the overview SHALL display separate counts/rates rather than treating all non-exception returns as success
 
 ### Requirement: LangGraph Pipeline Dashboard
-The system SHALL provide a pre-built Grafana dashboard (`02-langgraph-pipeline.json`) showing per-node pipeline metrics.
+The pipeline dashboard SHALL display actual profile-specific workflow operation names and durations. It SHALL not assume the legacy route/ASR/LLM/Tool/TTS/Emotion/Output topology.
 
-#### Scenario: Pipeline panel data
-- **WHEN** conversations have been processed
-- **THEN** the Pipeline dashboard SHALL display:
-  - Per-node latency stacked bar chart (route/ASR/LLM/Tool/TTS/Emotion/Output)
-  - Node error rate heatmap
-  - Tool call distribution pie chart
-  - LLM call count vs tool call count dual line chart
+#### Scenario: Golden traffic is selected
+- **WHEN** the dashboard filters to golden profile
+- **THEN** panels SHALL include reasoner, anima_composer, reply_output, and performance_output operations
+
+#### Scenario: Standard traffic is selected
+- **WHEN** the dashboard filters to standard profile
+- **THEN** panels SHALL show the standard nodes and any repeated tool-loop executions that actually committed
 
 ### Requirement: RAG Performance Dashboard
 The system SHALL provide a pre-built Grafana dashboard (`03-rag-performance.json`) showing retrieval quality metrics.
@@ -63,8 +56,9 @@ All dashboard JSON files SHALL be stored in `observability/grafana/dashboards/` 
 - **THEN** all 4 dashboards SHALL be available in Grafana without manual import
 
 ### Requirement: Session ID drill-down variable
-All dashboards SHALL include a `session_id` template variable for filtering data by session.
+Dashboards SHALL support bounded operational filtering by runtime profile and provider. Trace-level drill-down SHALL use local dashboard links keyed by task ID rather than exporting task/session IDs as unbounded Prometheus labels.
 
-#### Scenario: Filter by session
-- **WHEN** user selects a specific session_id from the dropdown
-- **THEN** all panels SHALL update to show only data for that session
+#### Scenario: Operator opens a trace
+- **WHEN** an operator selects a trace from the local dashboard
+- **THEN** the local trace detail SHALL show its operation tree and events
+- **AND** Prometheus time-series labels SHALL not contain task ID, message ID, conversation ID, or session ID

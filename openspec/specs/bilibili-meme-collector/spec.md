@@ -98,3 +98,27 @@
 - **WHEN** jieba 库未安装
 - **THEN** 系统 SHALL 回退到原有的字符 2-gram 方法
 - **AND** 记录 warning 日志提示安装 jieba
+
+### Requirement: 风格感知候选识别
+系统 SHALL 在 B 站梗候选识别中支持注册梗风格工具的可选抽取，同时保留现有通用梗识别能力。
+
+#### Scenario: LLM 识别使用梗风格提示
+- **WHEN** BilibiliMemeCollector 使用 LLM 识别梗候选
+- **THEN** 系统 SHALL 将已注册 meme style 的 explanation、slots、style_rules 和 few-shot examples 加入识别提示
+- **AND** 系统 SHALL 要求 LLM 在匹配格式时返回 `format_id`、`format_slots`、`format_confidence` 和 `rendered_text`
+- **AND** 系统 SHALL 继续允许返回不带格式字段的通用梗候选
+
+#### Scenario: 周礼体候选被结构化
+- **WHEN** LLM 返回一个 `format_id` 为 `zhouli` 的候选
+- **THEN** 系统 SHALL 将 `format_slots`、`format_confidence` 和 `rendered_text` 保留到 MemeCandidate
+- **AND** 候选 SHALL 保留原有 `text`、`context_hint`、`frequency` 和 `tags` 字段
+
+#### Scenario: 风格未匹配时保持兼容
+- **WHEN** LLM 返回的候选不包含格式字段
+- **THEN** 系统 SHALL 按现有逻辑创建普通 MemeCandidate
+- **AND** 不得因为缺少格式字段丢弃候选
+
+#### Scenario: LLM 不可用时降级不变
+- **WHEN** LLM 客户端不可用或 LLM 调用失败
+- **THEN** 系统 SHALL 继续使用现有 heuristic 候选识别
+- **AND** heuristic 返回的候选 SHALL 不要求格式元数据

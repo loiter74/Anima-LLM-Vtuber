@@ -2,9 +2,7 @@
 
 ## Purpose
 使用 LLM 对采集到的梗进行认知科学分析，输出幽默机制、使用场景、情感色彩等结构化描述，存入 Meme 模型供 AI 对话时使用。
-
 ## Requirements
-
 ### Requirement: 梗认知分析
 系统 SHALL 对每个梗候选执行 LLM 驱动的认知分析，输出结构化分析结果。
 
@@ -51,3 +49,27 @@
 - **WHEN** 认知分析完成但 persona_fit_score < 0.5
 - **THEN** 系统 SHALL 跳过该候选，不入库
 - **AND** 记录 debug 日志
+
+### Requirement: 梗风格元数据保留
+系统 SHALL 在认知分析和入库流程中保留已匹配的梗风格元数据。
+
+#### Scenario: 认知分析接收风格元数据
+- **WHEN** MemeCognitiveAnalyzer 分析带有 `format_id` 和 `format_slots` 的候选
+- **THEN** 认知分析结果 SHALL 保留 `format_id` 作为 meme style id
+- **AND** 认知分析结果 SHALL 保留 `format_slots`
+- **AND** 如存在 `rendered_text`，认知分析结果 SHALL 将其作为格式化使用示例的候选来源
+
+#### Scenario: 周礼体示例进入 usage_example
+- **WHEN** 候选的 `format_id` 为 `zhouli` 且 `rendered_text` 有效
+- **THEN** CognitiveAnalysis 的 `usage_example` SHALL 优先使用或包含该周礼体格式化示例
+- **AND** `humor_mechanism` SHALL 能表达其 mock-classical ritual elevation mechanism
+
+#### Scenario: 入库保留风格标签
+- **WHEN** 带格式元数据的候选通过 persona_fit_score 门槛并入库
+- **THEN** Meme SHALL 保留 `format_id` 和 `format_slots`
+- **AND** Meme tags SHALL include `format:<format_id>`
+
+#### Scenario: Review payload exports format metadata
+- **WHEN** meme review API or Socket.IO handler serializes a meme with format metadata
+- **THEN** the payload SHALL include `format_id`, `format_slots`, optional `format_confidence`, and optional `rendered_text`
+- **AND** memes without format metadata SHALL serialize successfully without those fields

@@ -4,9 +4,7 @@
 Defines the accepted behavior and requirements for the inspection-scheduler capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
 
 Orchestrates daily inspection runs: triggers all checks, aggregates results into structured reports, persists reports, and alerts on failures.
-
 ## Requirements
-
 ### Requirement: Data models for inspection results
 
 The system SHALL define `CheckResult` and `InspectionReport` as Pydantic V2 `BaseModel` classes with `model_config = ConfigDict(frozen=True)`.
@@ -26,34 +24,27 @@ The system SHALL define `CheckResult` and `InspectionReport` as Pydantic V2 `Bas
 - **THEN** the `InspectionReport.overall_ok` SHALL be `False`
 
 ### Requirement: Scheduled daily execution
+The system SHALL register one application-owned inspection task after startup readiness. The first run delay and interval SHALL be explicit configuration, and inspection SHALL use current runtime/query ports rather than constructing duplicate service or storage clients.
 
-The system SHALL register an `asyncio.Task` during server startup (`socketio_server.py`) that runs a full inspection once every 24 hours. The first inspection SHALL be delayed by 10 seconds after task creation to allow service warmup.
+#### Scenario: First inspection runs
+- **WHEN** the configured warmup completes
+- **THEN** one full inspection SHALL run against the active server, ledger, ServicePool, and SharedMemoryRuntime instances
 
-The scheduler loop SHALL be wrapped in `try/except Exception` — a single inspection failure SHALL NOT terminate the scheduler task.
-
-#### Scenario: Server starts and runs first inspection after warmup
-
-- **WHEN** the server process starts and the scheduler task is created
-- **THEN** the scheduler SHALL wait 10 seconds, then execute `run_full_inspection()`, then wait 24 hours before the next execution
-
-#### Scenario: Inspection crashes due to transient error
-
-- **WHEN** `run_full_inspection()` raises an unhandled `Exception`
-- **THEN** the scheduler SHALL log the error via `logger.error()` and SHALL NOT terminate (next inspection runs in 24 hours as scheduled)
+#### Scenario: One check crashes
+- **WHEN** an inspection check raises unexpectedly
+- **THEN** other checks SHALL continue and the scheduler SHALL remain alive for the next interval
 
 ### Requirement: Report persistence to StatsStore
-
-The system SHALL persist each `InspectionReport` to the existing StatsStore SQLite database using a new `inspection_reports` table. The report SHALL be queryable via StatsStore API for trend analysis and dashboard display.
+The system SHALL persist each InspectionReport through the application-owned observation report store/query port. Inspection code SHALL NOT import StatsStore or access a private SQLite connection.
 
 #### Scenario: Successful report persistence
+- **WHEN** a scheduled inspection completes
+- **THEN** its run identity, timestamps, overall result, and serialized checks SHALL commit to the local observation database
 
-- **WHEN** an inspection completes and produces a report
-- **THEN** the report SHALL be stored with `run_id`, `started_at`, `finished_at`, `overall_ok`, and serialized `checks` JSON
-
-#### Scenario: StatsStore unavailable during persistence
-
-- **WHEN** `store_report()` fails because StatsStore SQLite is unreachable
-- **THEN** the error SHALL be logged but SHALL NOT prevent the alert from being sent (alert uses in-memory report data)
+#### Scenario: Report persistence fails
+- **WHEN** the observation ledger is unavailable
+- **THEN** the in-memory report SHALL still be available for alerting
+- **AND** the scheduler SHALL record a sanitized persistence failure without terminating
 
 ### Requirement: Failure alerting via Notifier
 

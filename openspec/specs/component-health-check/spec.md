@@ -4,22 +4,14 @@
 Defines the accepted behavior and requirements for the component-health-check capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
 
 Provides granular per-component health status for the Anima backend, replacing the binary `/health` endpoint (`{"status":"ok"}`) with component-level diagnostics.
-
 ## Requirements
-
 ### Requirement: Health endpoint returns per-component status
+The system SHALL preserve cheap `/health` liveness and SHALL expose component observation/readiness diagnostics through a non-blocking cached snapshot or inspection endpoint. Provider network calls and model generation SHALL NOT run inside the cheap liveness request.
 
-The system SHALL return a `"status"` field of either `"ok"` (all components healthy) or `"degraded"` (at least one component unhealthy) in the `GET /health` response, plus a `"checks"` object containing per-component `CheckResult` entries.
-
-#### Scenario: All components healthy
-
-- **WHEN** the server is running and all registered components respond within their timeouts
-- **THEN** `GET /health` returns `{"status": "ok", "checks": {"llm_available": {"ok": true, ...}, "tts_available": {"ok": true, ...}, ...}}`
-
-#### Scenario: One component fails
-
-- **WHEN** the LLM component times out but all other components respond normally
-- **THEN** `GET /health` returns `{"status": "degraded", "checks": {"llm_available": {"ok": false, "error": "timeout"}, "tts_available": {"ok": true, ...}, ...}}`
+#### Scenario: Process is alive but observation is degraded
+- **WHEN** the ASGI process is serving but the ledger writer has failed
+- **THEN** `/health` SHALL continue to prove process liveness
+- **AND** the component diagnostic snapshot SHALL report observation degraded
 
 ### Requirement: Component checks execute concurrently with independent timeouts
 
@@ -36,28 +28,23 @@ The system SHALL execute all component health probes concurrently using `asyncio
 - **THEN** the Chroma check SHALL report `"ok": false` with `"error": "ConnectionError: <message>"`, and other component checks SHALL be unaffected
 
 ### Requirement: Health check covers core service dependencies
+The system SHALL check the application-owned dependencies that serve real traffic: local observation ledger, ServicePool readiness/provider identity, SharedMemoryRuntime health, its canonical SQLite store, derived-index backlog, and the Prometheus endpoint. Health SHALL NOT open unrelated Chroma paths or treat an uninitialized required component as healthy.
 
-The system SHALL check the following components by default:
+#### Scenario: Observation ledger is writable
+- **WHEN** the ledger writer is running, its queue is below threshold, and a probe transaction commits
+- **THEN** `observation_ledger` SHALL report healthy with queue depth and last-commit age
 
-| Component ID | What It Checks |
-|--------------|----------------|
-| `stats_store` | StatsStore SQLite connectivity (single-row query) |
-| `chroma` | ChromaDB collection accessibility |
-| `llm_available` | LLM service model loaded and responsive |
-| `tts_available` | TTS engine initialized and responsive |
-| `asr_available` | ASR model loaded and responsive |
-| `memory_read` | Memory system readable (hybrid search probe) |
-| `metrics_endpoint` | Prometheus `/metrics` endpoint returns 200 and contains expected gauge/counter names |
+#### Scenario: Memory index is degraded
+- **WHEN** SharedMemoryRuntime reports a non-zero stuck outbox backlog or last indexing error
+- **THEN** `memory_runtime` SHALL report degraded with the real backlog and sanitized reason
 
-#### Scenario: StatsStore SQLite is locked
+#### Scenario: Required ServicePool is not initialized
+- **WHEN** the active runtime profile requires a real LLM or TTS and ServicePool is not ready
+- **THEN** the corresponding health check SHALL fail rather than return true as not configured
 
-- **WHEN** the StatsStore SQLite database is locked by another process
-- **THEN** the `stats_store` check SHALL report `"ok": false` with `"error"` indicating the lock failure
-
-#### Scenario: Metrics endpoint missing expected metrics
-
-- **WHEN** `GET /metrics` returns HTTP 200 but does not contain `anima_llm_errors_total`
-- **THEN** the `metrics_endpoint` check SHALL report `"ok": false` with `"error": "missing_core_metric: anima_llm_errors_total"`
+#### Scenario: Prometheus endpoint is reachable but inactive
+- **WHEN** `/metrics` returns 200 but controlled ledger activity does not change the expected metric
+- **THEN** `metrics_endpoint` SHALL report instrumentation degraded
 
 ### Requirement: Backward compatibility of health endpoint
 

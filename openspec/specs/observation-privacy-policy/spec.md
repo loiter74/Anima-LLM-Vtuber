@@ -1,5 +1,8 @@
-## ADDED Requirements
+# observation-privacy-policy Specification
 
+## Purpose
+TBD - created by archiving change unify-local-observability-ledger. Update Purpose after archive.
+## Requirements
 ### Requirement: Privacy mode is selected before persistence
 The system SHALL apply one ObservationContentPolicy before creating persistence commands. Development SHALL default to `full`; golden and production SHALL default to `redacted` unless an explicit approved override is configured.
 

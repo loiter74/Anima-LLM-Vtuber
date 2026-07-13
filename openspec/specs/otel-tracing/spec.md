@@ -1,56 +1,49 @@
 ## Purpose
 Defines the accepted behavior and requirements for the otel-tracing capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: Service calls produce OTel spans
-Every service method call (LLM.chat_stream, TTS.synthesize, ASR.transcribe, VAD.detect_speech) SHALL automatically produce an OpenTelemetry span.
+Every observed LLM, TTS, ASR, and VAD service call SHALL first produce a local service operation. When the OTel mirror is enabled, each committed service operation SHALL also produce an OpenTelemetry span with equivalent name, status, timing, and allowlisted attributes.
 
-#### Scenario: LLM chat_stream traced
-- **WHEN** llm_node calls service.chat_stream("你好")
-- **THEN** a span named "llm.chat_stream" SHALL be created with start_time, end_time, and duration
+#### Scenario: LLM call is observed locally
+- **WHEN** reasoner calls `llm.chat_messages`
+- **THEN** the ledger SHALL contain a completed `llm.chat_messages` service operation
 
-#### Scenario: TTS synthesize traced
-- **WHEN** tts_node calls service.synthesize("你好")
-- **THEN** a span named "tts.synthesize" SHALL be created
+#### Scenario: OTel mirror is enabled
+- **WHEN** a committed `tts.synthesize` operation is published to the enabled OTel mirror
+- **THEN** a span named `tts.synthesize` SHALL be exported with matching status and duration
 
-#### Scenario: Service error captured
-- **WHEN** a service method raises an exception
-- **THEN** the span SHALL have status=ERROR and record the exception
+#### Scenario: Service error is captured
+- **WHEN** an observed service method raises
+- **THEN** the local operation SHALL have status `error` and a structured error code
+- **AND** any mirrored OTel span SHALL have status ERROR without unrestricted exception content
 
 ### Requirement: Span hierarchy matches call tree
-Spans SHALL form a parent-child tree matching the actual call hierarchy: LangGraph node → service method → sub-operations.
+Local operations SHALL form the authoritative parent-child tree matching workflow node, service method, and sub-operation execution. Any OTel mirror SHALL reproduce this hierarchy from committed operation IDs rather than deriving a second local trace tree.
 
-#### Scenario: Nested span creation
-- **WHEN** llm_node calls chat_stream which internally calls an HTTP API
-- **THEN** the "llm.chat_stream" span SHALL have as parent the "llm_node" span
-- **THEN** each sub-operation SHALL be a child span of "llm.chat_stream"
+#### Scenario: Nested service operation
+- **WHEN** `reasoner` invokes `llm.chat_messages`
+- **THEN** the local service operation SHALL have the reasoner operation as parent
+- **AND** the mirrored OTel span SHALL preserve the same logical parent relationship
 
 #### Scenario: Context propagation across async boundaries
-- **WHEN** a service method is called from an async context
-- **THEN** the span SHALL correctly inherit the parent trace context via ContextVar
+- **WHEN** a service or memory operation resumes after an await or from an ObservationCarrier
+- **THEN** it SHALL retain the originating trace and parent identities
 
 ### Requirement: Spans written to StatsStore AND exported via OTLP
-All completed spans SHALL be written to the StatsStore SQLite database via `StatsSpanExporter` AND exported to an OTel Collector via `OTLPSpanExporter` when the OTLP endpoint is configured.
+All completed operations SHALL be written once to the local observation ledger. When OTLP is configured, an OTel mirror SHALL export committed records asynchronously. OTLP failure SHALL NOT alter, retry, or duplicate the local record.
 
-#### Scenario: Dual export active
-- **WHEN** `config/observability.yaml` has `otlp.enabled: true` and a valid `endpoint`
-- **THEN** `BatchSpanProcessor(OTLPSpanExporter)` SHALL be added to the TracerProvider alongside the existing `SimpleSpanProcessor(StatsSpanExporter)`
-- **THEN** each completed span SHALL be written to BOTH SQLite and the OTLP endpoint
+**Reason**: Replaced by a single-writer local ledger and one-way optional mirrors; dual SQLite writers caused orphan spans and inconsistent topology.
+
+**Migration**: Remove SQLite writes from StatsSpanExporter. Commit all operations to SQLiteObservationLedger, then mirror committed operations to OTLP when enabled.
 
 #### Scenario: OTLP disabled
-- **WHEN** `config/observability.yaml` has `otlp.enabled: false`
-- **THEN** only `StatsSpanExporter` SHALL be active (single export to SQLite)
-- **THEN** no gRPC connection to the Collector SHALL be attempted
+- **WHEN** `otlp.enabled` is false
+- **THEN** local operations SHALL remain complete and no OTLP connection SHALL be attempted
 
 #### Scenario: OTLP endpoint unreachable
-- **WHEN** OTLP export is enabled but the Collector is not running
-- **THEN** the system SHALL log a warning and continue (graceful degradation)
-- **THEN** spans SHALL still be written to StatsStore SQLite
-
-#### Scenario: Batch writing
-- **WHEN** many spans end in quick succession
-- **THEN** they SHALL be batched and written at once (max 512 spans or 5s interval)
+- **WHEN** OTLP is enabled but unavailable
+- **THEN** mirror health SHALL become degraded
+- **AND** local observation and request processing SHALL continue
 
 ### Requirement: Dashboard shows span tree
 The existing stats dashboard SHALL display individual trace detail as a span tree / flame chart.
@@ -61,12 +54,12 @@ The existing stats dashboard SHALL display individual trace detail as a span tre
 - **THEN** each span SHALL display name, duration_ms, and status
 
 ### Requirement: Tracing can be disabled
-The tracing infrastructure SHALL support being disabled via configuration without code changes.
+External OTel tracing SHALL be independently disableable without disabling the local observation ledger. Local observation MAY be disabled only through its own explicit configuration.
 
-#### Scenario: Disable tracing
-- **WHEN** tracing is disabled in config
-- **THEN** NoOpTracerProvider SHALL be used (zero overhead)
-- **THEN** no spans SHALL be created or written
+#### Scenario: OTel tracing is disabled
+- **WHEN** OTLP and OTel mirroring are disabled
+- **THEN** no OTel spans SHALL be exported
+- **AND** local traces and operations SHALL still be recorded
 
 ### Requirement: OTLP configuration in observability.yaml
 The `config/observability.yaml` SHALL include an `otlp` section with `enabled`, `endpoint`, and `protocol` fields. The default value for `enabled` SHALL be `false` (opt-in).

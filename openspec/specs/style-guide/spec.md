@@ -1,8 +1,6 @@
 ## Purpose
 Defines the accepted behavior and requirements for the style-guide capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: CSS variable to UnoCSS mapping table
 The system SHALL provide a complete mapping table from all 21 color CSS variables (`var(--c-*)`) to their UnoCSS class equivalents in STYLE_GUIDE.md.
 
@@ -20,11 +18,27 @@ The system SHALL provide a Vue SFC template in STYLE_GUIDE.md demonstrating corr
 - **AND** the template includes: glass panel, heading, body text, accent button, ghost button
 
 ### Requirement: Code review checklist
-The system SHALL provide a PR review checklist in STYLE_GUIDE.md covering design system compliance.
+The system SHALL provide a PR review checklist in STYLE_GUIDE.md covering design system compliance, and the agent-facing documentation (`AGENTS.md` at the repository root) SHALL be the sole agent knowledge base — no duplicate `CLAUDE.md` or `.cursorrules` files SHALL exist at the root or in `design-system/`.
 
 #### Scenario: Reviewer checks a PR
 - **WHEN** a reviewer runs through the checklist
 - **THEN** they verify: new code uses UnoCSS (no raw `var(--c-*)` in style blocks), no hardcoded hex colors, rounded-xl default (no sharp corners), animation durations use `--d-*` tokens, glass panels use `glass`/`glass-strong` shortcuts
+
+#### Scenario: Agent looks for project guidance
+- **WHEN** an agent (ZCode, Claude Code, Cursor, or Copilot) needs project conventions and design-system rules
+- **THEN** it reads the single `AGENTS.md` at the repository root (and the scoped sub-`AGENTS.md` files in module directories)
+- **AND** no `CLAUDE.md` or `.cursorrules` duplicate exists at the root or in `design-system/` to introduce conflicting or stale guidance (e.g. the former "FastAPI" mislabel)
+
+#### Scenario: Contributor looks for the Minecraft bot architecture
+- **WHEN** a contributor or agent needs the Minecraft bot architecture
+- **THEN** they find exactly one authoritative document at `docs/development/minecraft-bot-architecture.md`
+- **AND** no verbatim `.zh.md` duplicate, stale status report, or scattered research docs remain in `docs/development/` (long-form research/roadmap docs have been moved to `docs/development/archive/`)
+
+#### Scenario: Contributor looks for historical plans
+- **WHEN** a contributor looks for past design plans
+- **THEN** they find them under `openspec/changes/archive/` (migrated from the former `docs/plans/`)
+- **AND** the `docs/plans/` directory no longer exists
+- **AND** new plans are created exclusively via the `openspec/` spec-driven system
 
 ### Requirement: Naming convention documentation
 The system SHALL document the UnoCSS class naming convention used across the project.

@@ -1,47 +1,35 @@
 ## Purpose
 Defines the accepted behavior and requirements for the otel-metrics capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: OTel MeterProvider initialized
-The system SHALL initialize an OpenTelemetry MeterProvider alongside the existing TracerProvider during `init_tracing()`. Metrics SHALL be exported to the OTel Collector via OTLP only when `otlp.enabled` is explicitly set to `true` in `config/observability.yaml`.
+The system SHALL keep local Prometheus metric production independent from OTel. An OTel MeterProvider and OTLP metric reader SHALL be initialized only when OTel metric mirroring is explicitly enabled; committed local observation records SHALL remain the source of metric updates.
 
-#### Scenario: MeterProvider created at startup (OTLP disabled — default)
-- **WHEN** the backend starts and `init_tracing()` is called with `otlp.enabled: false` (the default)
-- **THEN** a MeterProvider SHALL be created with the same `service.name` resource attribute as the TracerProvider
-- **THEN** NO PeriodicExportingMetricReader SHALL be configured (no OTLP gRPC connection attempted)
-- **THEN** metric instruments SHALL still be defined and usable for local consumption (e.g., via `http://localhost:8889` when Collector is running)
+#### Scenario: OTLP disabled
+- **WHEN** the backend starts with `otlp.enabled: false`
+- **THEN** local prometheus_client metrics SHALL update from committed observation records
+- **AND** no OTLP metric reader SHALL connect to a collector
 
-#### Scenario: MeterProvider created at startup (OTLP enabled — opt-in)
-- **WHEN** the backend starts and `init_tracing()` is called with `otlp.enabled: true`
-- **THEN** a PeriodicExportingMetricReader SHALL be configured with an OTLP gRPC metric exporter pointing to the configured endpoint (default: `http://localhost:4317`)
-
-#### Scenario: Metrics disabled when tracing disabled
-- **WHEN** `config/observability.yaml` has `tracing.enabled: false`
-- **THEN** no MeterProvider SHALL be created (no metrics overhead)
+#### Scenario: OTLP enabled
+- **WHEN** the backend starts with `otlp.enabled: true`
+- **THEN** committed observation metrics SHALL also be mirrored to the configured OTel endpoint
 
 ### Requirement: LangGraph node duration histogram
-The system SHALL record an `anima_node_duration_seconds` Histogram for every LangGraph node execution, labeled with `node_name`.
+The system SHALL record `anima_node_duration_seconds` for every committed workflow operation, labeled by the exact compiled `node_name` and runtime profile. Labels SHALL use a bounded set and SHALL NOT contain trace, session, or content values.
 
-#### Scenario: Node duration recorded on completion
-- **WHEN** a LangGraph node (e.g., "llm", "asr", "tts") completes execution
-- **THEN** `anima_node_duration_seconds{node_name="llm"}` SHALL observe the node's wall-clock duration in seconds
-- **THEN** the histogram SHALL have buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+#### Scenario: Golden pipeline completes
+- **WHEN** a golden turn commits its workflow operations
+- **THEN** duration observations SHALL exist for the actual golden node names including `reasoner`, `anima_composer`, `reply_output`, and `performance_output`
 
-#### Scenario: All 7 nodes tracked
-- **WHEN** a full pipeline runs (asr → personality → llm → tts → emotion → output, optionally tool)
-- **THEN** each of the 7+ nodes SHALL produce a histogram observation
+#### Scenario: Tool loop repeats
+- **WHEN** the standard graph executes a node more than once
+- **THEN** each committed execution SHALL contribute one duration observation
 
 ### Requirement: LangGraph node error counter
-The system SHALL record an `anima_node_errors_total` Counter for every node execution failure, labeled with `node_name` and `error_type`.
+The system SHALL increment `anima_node_errors_total` from committed workflow operations whose status is `error`, labeled by actual node name and structured error type.
 
-#### Scenario: Node error counted
-- **WHEN** a LangGraph node raises an exception
-- **THEN** `anima_node_errors_total{node_name="llm", error_type="timeout"}` SHALL increment by 1
-
-#### Scenario: Error types include structured categories
-- **WHEN** an error occurs with a known error_type (timeout, rate_limit, network_error, invalid_response)
-- **THEN** the `error_type` label SHALL reflect the structured error category
+#### Scenario: Soft workflow failure is recorded
+- **WHEN** a node returns a typed error state without raising and the operation is committed as error
+- **THEN** the corresponding node error counter SHALL increment
 
 ### Requirement: LLM request duration histogram
 The system SHALL record an `anima_llm_request_duration_seconds` Histogram for every LLM API call, labeled with `provider` and `model`.
@@ -63,32 +51,25 @@ The system SHALL record `anima_llm_tokens_total` Counter for input and output to
 - **THEN** the system SHALL extract token counts from the final chunk and record them after the stream completes
 
 ### Requirement: RAG retrieval metrics
-The system SHALL record RAG retrieval performance metrics: `anima_rag_retrieval_duration_seconds` Histogram and `anima_rag_chunks_retrieved` Histogram, labeled with `strategy`.
+The system SHALL derive RAG duration and retrieved-item metrics from committed memory recall operations rather than direct metrics calls inside graph nodes.
 
-#### Scenario: Hybrid search retrieval measured
-- **WHEN** MemoryMiddleware.before_llm_call() performs RAG retrieval
-- **THEN** `anima_rag_retrieval_duration_seconds{strategy="hybrid"}` SHALL observe the retrieval duration
-- **THEN** `anima_rag_chunks_retrieved{strategy="hybrid"}` SHALL observe the number of retrieved chunks
+#### Scenario: Hybrid recall completes
+- **WHEN** a memory recall operation commits with strategy and result-count attributes
+- **THEN** the Prometheus mirror SHALL observe its duration and retrieved count exactly once
 
 ### Requirement: ASR/TTS duration metrics
-The system SHALL record `anima_asr_duration_seconds` and `anima_tts_duration_seconds` Histograms, labeled with `provider`.
+The system SHALL derive `anima_asr_duration_seconds` and `anima_tts_duration_seconds` from committed service operations, labeled with allowlisted provider identity.
 
-#### Scenario: TTS synthesis duration measured
-- **WHEN** tts_node calls tts_engine.synthesize()
-- **THEN** `anima_tts_duration_seconds{provider="edge_tts"}` SHALL observe the synthesis duration
+#### Scenario: TTS degrades
+- **WHEN** a TTS service operation commits with status `degraded`
+- **THEN** its duration SHALL be observed and its degradation counter SHALL increment without being classified as a successful synthesis
 
 ### Requirement: WebSocket session and message metrics
-The system SHALL record `anima_active_sessions` Gauge and `anima_session_messages_total` Counter.
+The system SHALL derive active-session and accepted-message metrics from committed transport events. Filtered probes SHALL NOT increment accepted user-message totals.
 
-#### Scenario: Active session tracking
-- **WHEN** a client connects via Socket.IO
-- **THEN** `anima_active_sessions` SHALL increment by 1
-- **WHEN** a client disconnects
-- **THEN** `anima_active_sessions` SHALL decrement by 1
-
-#### Scenario: Message counting
-- **WHEN** a user sends a text or audio message
-- **THEN** `anima_session_messages_total` SHALL increment by 1
+#### Scenario: Inspection probe is filtered
+- **WHEN** a marked inspection probe is dropped before orchestration
+- **THEN** it SHALL NOT increment the accepted conversation message counter
 
 ### Requirement: Tool call metrics
 The system SHALL record `anima_tool_calls_total` Counter and `anima_tool_duration_seconds` Histogram, labeled with `tool_name` and `status`.

@@ -1,8 +1,6 @@
 ## Purpose
 Define how Anima launches and communicates with an external game-bot runtime after the Minecraft Mineflayer implementation has been extracted from the Anima tree.
-
 ## Requirements
-
 ### Requirement: Anima can launch an external game bot runtime
 The system SHALL allow bot runtime path, entrypoint, package manager, and version to be configured outside the Anima tree.
 
@@ -35,3 +33,17 @@ The system SHALL allow operators to switch the external runtime path and entrypo
 - **WHEN** the configured external runtime fails parity verification
 - **THEN** an operator SHALL be able to point `runtime_path` and `entrypoint` at another compatible runtime
 - **THEN** existing Minecraft bridge tests SHALL continue to pass
+
+### Requirement: Capability-only runtime responsibility
+The external Node runtime SHALL execute versioned game capabilities and SHALL NOT own curriculum, skill trust, technology unlock, or Voyager learn/live/fallback mode state.
+
+#### Scenario: Runtime receives mode command
+- **WHEN** a caller sends the legacy `set_voyager_mode` or `voyager_live_goal` command after migration
+- **THEN** the runtime SHALL return a structured deprecated-command error and SHALL NOT change business state
+
+### Requirement: Restricted skill execution surface
+The runtime SHALL execute generated skills only with frozen wrappers for controller-authorized survival-safe capabilities and SHALL NOT expose the raw bot, process, module loader, filesystem, or network.
+
+#### Scenario: Skill executes through safe wrappers
+- **WHEN** the controller submits policy-approved skill code and an allowed capability set
+- **THEN** the runtime SHALL expose only the intersection of its manifest and the authorized set

@@ -1,5 +1,8 @@
-## ADDED Requirements
+# local-observability-ledger Specification
 
+## Purpose
+TBD - created by archiving change unify-local-observability-ledger. Update Purpose after archive.
+## Requirements
 ### Requirement: Local ledger is the authoritative observation store
 The system SHALL persist conversation traces, operations, and events to a local SQLite observation ledger that remains fully functional without an OTel Collector, Grafana, Langfuse, or network access. No other exporter or callback SHALL write trace facts back into the ledger.
 

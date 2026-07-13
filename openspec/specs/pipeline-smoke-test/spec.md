@@ -6,47 +6,52 @@ Defines the accepted behavior and requirements for the pipeline-smoke-test capab
 Verifies the end-to-end conversation pipeline by initiating a real Socket.IO connection, sending a test message, and collecting expected events across all 7 LangGraph nodes.
 ## Requirements
 ### Requirement: Smoke test uses real Socket.IO client
+The smoke test SHALL use a real Socket.IO client against the running server. It SHALL execute a filtered negative probe followed by one normal identity-correlated conversation using the active runtime profile.
 
-The system SHALL use a `socketio.AsyncClient` to connect to the running server at `http://localhost:12394` using `websocket` transport. It SHALL NOT use HTTP requests, pytest fixtures, or mock clients.
+#### Scenario: Negative probe is contained
+- **WHEN** the client sends a marked `[inspection]` probe
+- **THEN** no conversation trace, provider operation, delivery event, session-window mutation, or memory write SHALL be created for that probe
 
-#### Scenario: Successful full-pipeline smoke test
-
-- **WHEN** the smoke test connects via Socket.IO, emits a `user_message` event with `{"text": "[inspection] ping", "mode": "text"}`, and waits 30 seconds
-- **THEN** the test SHALL report `"ok": true` with received event names and duration in its `CheckResult`
+#### Scenario: Real turn executes
+- **WHEN** the same client sends a normal acceptance turn with a fresh identity triple
+- **THEN** it SHALL receive the profile-required delivery events and resolve `task_id` to one local ledger trace
 
 ### Requirement: Event collection via wildcard listener
+The smoke test SHALL collect all Socket.IO events with timestamps and identities, then compare them with committed delivery-event evidence for the same task. Extra diagnostic events MAY be retained but SHALL NOT substitute for required events.
 
-The system SHALL register a wildcard event listener (`@sio.on("*")`) that records all event names received during the test window. It SHALL compare the set of received events against an expected set of critical pipeline events.
+#### Scenario: Events and ledger agree
+- **WHEN** the real turn reaches terminal control
+- **THEN** every required observed client event SHALL have a matching successful ledger delivery event
+- **AND** every required ledger delivery event SHALL carry the input identity
 
-#### Scenario: All expected events received
-
-- **WHEN** within 30 seconds, events `emotion_update`, `tts_audio_data`, and `transcript_complete` are received
-- **THEN** the test SHALL report `"ok": true` with `detail.received` containing all received event names
-
-#### Scenario: Missing expected events
-
-- **WHEN** within 30 seconds, only `tts_audio_data` is received (missing `emotion_update` and `transcript_complete`)
-- **THEN** the test SHALL report `"ok": false` with `detail.missing` listing the missing events and `detail.received` listing what was received
-
-#### Scenario: Unexpected extra events
-
-- **WHEN** within 30 seconds, all expected events plus an unexpected `rag_cache_hit` event are received
-- **THEN** the test SHALL report `"ok": true` (all expected events received) and SHALL include `rag_cache_hit` in `detail.received` — the presence of unexpected events SHALL NOT cause failure
+#### Scenario: Required event is missing
+- **WHEN** terminal control arrives without required text or performance evidence
+- **THEN** the smoke test SHALL fail with client-received, ledger-recorded, and missing event sets
 
 ### Requirement: Test message isolation
+The negative probe and real acceptance turn SHALL be distinguishable. The negative probe SHALL create no trace. The real turn SHALL create operational evidence but SHALL not create forbidden long-term character memory.
 
-The system SHALL prefix all smoke test messages with `[inspection]` to allow the Memory middleware to identify and filter them from conversation context. The test SHALL NOT leave persistent side effects visible to users.
-
-#### Scenario: Inspection message filtered from memory
-
-- **WHEN** a smoke test sends `{"text": "[inspection] ping"}`
-- **THEN** the Memory middleware SHALL recognize the `[inspection]` prefix and exclude the message from context injection into future LLM calls
+#### Scenario: Acceptance trace is inspected
+- **WHEN** the real acceptance turn completes
+- **THEN** inspection SHALL find its trace by task ID
+- **AND** it SHALL verify no prohibited memory ingestion or character-memory operation occurred
 
 ### Requirement: Smoke test timeout and resource cleanup
+Connection, negative-observation, real-turn, ledger-flush, and post-turn-memory checks SHALL each have bounded timeouts. The client SHALL disconnect and collected evidence SHALL be preserved on success, failure, timeout, or cancellation.
 
-The system SHALL enforce a total test timeout of 35 seconds (5s connect + 30s event collection). On completion or timeout, the system SHALL call `sio.disconnect()` to release the WebSocket connection.
+#### Scenario: Ledger evidence does not flush
+- **WHEN** terminal control is received but the trace is not queryable before the ledger timeout
+- **THEN** the smoke test SHALL fail as observation-incomplete and disconnect cleanly
 
-#### Scenario: Test exceeds total timeout
+### Requirement: Smoke test validates actual profile topology and providers
+The smoke test SHALL compare committed workflow and service operations against the active profile. Golden mode SHALL prove exactly two real LLM service calls and real TTS audio or an explicit typed degradation; standard and voice modes SHALL validate their own executed topology without a fixed legacy seven-node assumption.
 
-- **WHEN** the event collection phase exceeds 30 seconds without receiving all expected events
-- **THEN** the test SHALL disconnect, report whatever events were received up to that point, and report `"ok": false` with missing events listed
+#### Scenario: Golden topology is valid
+- **WHEN** a golden acceptance turn succeeds
+- **THEN** the trace SHALL include the golden workflow node sequence
+- **AND** exactly two non-mock LLM service operations SHALL be recorded
+- **AND** TTS SHALL be ready or explicitly degraded
+
+#### Scenario: Mock provider appears in golden mode
+- **WHEN** a golden trace records MockLLM or MockTTS as active provider
+- **THEN** the smoke test SHALL fail

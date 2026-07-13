@@ -53,3 +53,17 @@ The system SHALL detect when all phases are complete.
 #### Scenario: Time budget exceeded
 - **WHEN** total time exceeds 60 minutes
 - **THEN** runner stops and reports partial progress
+
+### Requirement: Technology progress requires evidence
+The tech-tree runner SHALL use the shared technology graph and evidence verifier, and MUST NOT mark a milestone unlocked from an LLM claim, command success alone, or an unexplained final inventory.
+
+#### Scenario: Command reports success without evidence
+- **WHEN** a milestone action returns success but its receipt chain is missing or invalid
+- **THEN** the runner SHALL leave the milestone locked and record an evidence failure
+
+### Requirement: Initial survival technology path
+The technology graph SHALL define prerequisite and evidence rules for wood collection, crafting table, wooden pickaxe, cobblestone, stone pickaxe, furnace, iron ingot, and iron pickaxe.
+
+#### Scenario: Clean-world path reaches iron pickaxe
+- **WHEN** the bot completes the path from an empty inventory using only survival-safe capabilities and valid receipts
+- **THEN** each node SHALL unlock in prerequisite order and the final frontier SHALL include technologies downstream of iron pickaxe

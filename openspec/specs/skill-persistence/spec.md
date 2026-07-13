@@ -1,8 +1,6 @@
 ## Purpose
 Defines the accepted behavior and requirements for the skill-persistence capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: SkillLibrary persists to SQLite
 The system SHALL persist all learned and predefined skills to a SQLite database so that skills survive bot restarts.
 
@@ -43,3 +41,21 @@ The system SHALL serialize all skill fields to SQLite including nested structure
 - **WHEN** a skill has a last_used timestamp
 - **THEN** it SHALL be stored as ISO format string in SQLite
 - **AND** restored as the same timestamp on load
+
+### Requirement: Persist skill trust stage and provenance
+Skill persistence SHALL distinguish candidate and trusted stages and SHALL store source session, source task, policy result, evidence references, validation session, and environment fingerprint.
+
+#### Scenario: Candidate survives restart
+- **WHEN** a candidate skill is saved and the process restarts
+- **THEN** it SHALL remain candidate with its provenance intact and SHALL NOT become selectable by live mode
+
+#### Scenario: Trusted skill reloads
+- **WHEN** an independently validated trusted skill is reloaded
+- **THEN** live mode SHALL be able to select it with its validation provenance intact
+
+### Requirement: Demotion preserves audit history
+Repeated live failures SHALL demote a trusted skill to candidate without deleting its execution and validation history.
+
+#### Scenario: Trusted skill crosses failure threshold
+- **WHEN** a trusted skill reaches the configured consecutive failure threshold
+- **THEN** persistence SHALL record its demotion and live mode SHALL stop selecting it
