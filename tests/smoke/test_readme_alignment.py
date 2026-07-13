@@ -9,7 +9,7 @@ def test_readme_describes_current_backend_stack() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "WebSocket Server (Starlette + Socket.IO ASGI)" in readme
-    assert "| **后端** | Starlette · Socket.IO ASGI |" in readme
+    assert "| **Backend** | Starlette · Socket.IO ASGI |" in readme
     assert "FastAPI + Socket.IO" not in readme
     assert "FastAPI · Socket.IO" not in readme
 
