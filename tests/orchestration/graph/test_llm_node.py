@@ -322,6 +322,44 @@ class TestLLMNodeWithoutTools:
         assert result["response_chunks"] == ["赛博酒馆不提供实体餐，只有数据流配给。[neutral]"]
 
     @pytest.mark.asyncio
+    async def test_streaming_strips_reasoning_before_quoted_latin_reply(
+        self,
+        mock_service_context,
+    ):
+        """A quoted Latin echo must not prevent meta-reasoning removal."""
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield (
+                'The user just said "oooo" which is a pretty simple/empty chat message. '
+                "According to my instructions, when the message is empty like this, "
+                "I should use a嘴硬+世界观 approach to handle it, keeping it short "
+                "(1-3 sentences for casual chat). Let me give a quick response that fits "
+                "the深夜赛博酒馆 vibe - tired, slightly sarcastic, but still welcoming. "
+                "I need to include 1-2表情 tags. Current affinity is 50 - polite but "
+                "distant. This message doesn't really change anything."
+            )
+            yield (
+                '"oooo" —— 赛博酒馆里最精辟的哲学发言，建议收录进家里蹲大学教材。 '
+                "要点什么？还是说今晚就打算用元音字母交流了？[neutral]"
+            )
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="oooo",
+        )
+        config = _make_config(service_context=mock_service_context)
+        result = await llm_node(state, config)
+
+        expected = (
+            '"oooo" —— 赛博酒馆里最精辟的哲学发言，建议收录进家里蹲大学教材。 '
+            "要点什么？还是说今晚就打算用元音字母交流了？"
+        )
+        assert result["response_text"] == expected
+        assert result["response_chunks"] == [f"{expected}[neutral]"]
+
+    @pytest.mark.asyncio
     async def test_streaming_strips_chinese_untagged_reasoning_prefix(self, mock_service_context):
         """Visible reply should hide Chinese untagged model meta-reasoning prefixes."""
 

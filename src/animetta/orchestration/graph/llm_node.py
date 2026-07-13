@@ -35,13 +35,14 @@ _ORPHAN_THINKING_PREFIX_RE = re.compile(
 )
 _UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?is)^\s*"
-    r"(?=(?:the user\s+(?:says|said|asks|asked|wants|is)\b|"
+    r"(?=(?:the user\s+(?:just\s+)?(?:says|said|asks|asked|wants|is)\b|"
     r"user\s+(?:says|said|asks|asked|wants|is)\b|"
     r"as an?\b|i should\b|let me\b))"
     r"(?=.*\b(?:i should|let me|actually|respond in character|"
     r"not a minecraft command|usual style)\b)"
-    r".*[.!?]\s+"
-    r"(?P<answer>[\u4e00-\u9fff][\s\S]*)$"
+    r".*[.!?](?:\s+|(?=[\"“]))"
+    r"(?P<answer>(?:[\u4e00-\u9fff]|[\"“][^\"”\r\n]{1,64}[\"”]\s*"
+    r"(?:[-—–:：]+\s*)?[\u4e00-\u9fff])[\s\S]*)$"
 )
 _CHINESE_UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?s)^\s*"
