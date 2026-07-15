@@ -43,12 +43,12 @@
 
 ## 5. Operational source and configuration standards
 
-- [ ] 5.1 Inventory tracked Dockerfiles, Shell, PowerShell, batch, YAML, JSON, and TOML sources and map each to one parser, analyzer, formatter, schema, or contract gate
-- [ ] 5.2 Add failing catalog and workflow tests for required operational-source tools, capability reporting, and fail-closed behavior
-- [ ] 5.3 Add or configure semantic checks for Dockerfiles and Shell scripts, fixing diagnostics without changing container behavior
-- [ ] 5.4 Add or configure syntax and standards checks for PowerShell and batch scripts, fixing diagnostics without changing command behavior
-- [ ] 5.5 Add canonical parser, formatter, schema, or contract checks for maintained YAML, JSON, and TOML configuration
-- [ ] 5.6 Run every operational-source group and existing Docker Compose, runtime-topology, configuration, and documentation contracts
+- [x] 5.1 Inventory tracked Dockerfiles, Shell, PowerShell, batch, YAML, JSON, and TOML sources and map each to one parser, analyzer, formatter, schema, or contract gate
+- [x] 5.2 Add failing catalog and workflow tests for required operational-source tools, capability reporting, and fail-closed behavior
+- [x] 5.3 Add or configure semantic checks for Dockerfiles and Shell scripts, fixing diagnostics without changing container behavior
+- [x] 5.4 Add or configure syntax and standards checks for PowerShell and batch scripts, fixing diagnostics without changing command behavior
+- [x] 5.5 Add canonical parser, formatter, schema, or contract checks for maintained YAML, JSON, and TOML configuration
+- [x] 5.6 Run every operational-source group and existing Docker Compose, runtime-topology, configuration, and documentation contracts
 
 ## 6. Dead-code and duplication audit
 

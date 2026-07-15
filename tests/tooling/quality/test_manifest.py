@@ -316,11 +316,16 @@ def test_repository_catalog_has_operational_source_contract() -> None:
         for path in component.paths
     }
     assert {
+        "scripts/check_source_standards.py",
         "Dockerfile*",
-        "docker/**/*.sh",
-        "scripts/**/*.ps1",
-        "scripts/**/*.bat",
-        "config/**/*.yaml",
+        "**/Dockerfile*",
+        "**/*.sh",
+        "**/*.ps1",
+        "**/*.bat",
+        "**/*.cmd",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.json",
         "**/*.toml",
     }.issubset(operational_paths)
 
