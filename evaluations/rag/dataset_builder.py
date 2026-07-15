@@ -9,11 +9,8 @@ Output: evaluations/rag/dataset.jsonl — 55+ annotated queries across 6 categor
 """
 
 import json
-import os
 import random
-import re
 from pathlib import Path
-from typing import Optional
 
 random.seed(42)
 
@@ -28,7 +25,7 @@ OUTPUT_FILE = SCRIPT_DIR / "dataset.jsonl"
 # ============================================================================
 
 
-def read_wiki_file(rel_path: str) -> Optional[list[str]]:
+def read_wiki_file(rel_path: str) -> list[str] | None:
     """Read a wiki file. Returns list of lines, or None if not found."""
     full_path = WIKI_DIR / rel_path
     if not full_path.exists():
@@ -1282,7 +1279,7 @@ def validate_dataset(entries: list[dict]) -> bool:
     """Validate the dataset meets all requirements."""
     n = len(entries)
     print(f"\n{'=' * 60}")
-    print(f"Dataset Validation Report")
+    print("Dataset Validation Report")
     print(f"{'=' * 60}")
     print(f"Total entries: {n}")
 
@@ -1290,7 +1287,7 @@ def validate_dataset(entries: list[dict]) -> bool:
     from collections import Counter
 
     cats = Counter(e["category"] for e in entries)
-    print(f"\nCategory distribution:")
+    print("\nCategory distribution:")
     for cat in ["factual", "contextual", "temporal", "persona", "multi_hop", "robustness"]:
         cnt = cats.get(cat, 0)
         status = "OK" if cnt >= 5 else "FAIL"
@@ -1298,7 +1295,7 @@ def validate_dataset(entries: list[dict]) -> bool:
 
     # Difficulty
     diffs = Counter(e["difficulty"] for e in entries)
-    print(f"\nDifficulty distribution:")
+    print("\nDifficulty distribution:")
     for d in ["easy", "medium", "hard"]:
         print(f"  {d}: {diffs.get(d, 0)}")
 
@@ -1319,10 +1316,10 @@ def validate_dataset(entries: list[dict]) -> bool:
                 print(f"  MISSING: {e.get('id', '?')}: missing field '{field}'")
                 missing += 1
     if missing == 0:
-        print(f"\n[OK] All entries have required fields")
+        print("\n[OK] All entries have required fields")
 
     # Check JSON validity
-    print(f"\n[OK] All entries are valid JSON objects")
+    print("\n[OK] All entries are valid JSON objects")
 
     # Overall
     if n >= 50:
@@ -1357,7 +1354,7 @@ def main() -> None:
     if not ok:
         print("\n[WARN] Dataset does not meet minimum requirements")
     else:
-        print(f"\n[OK] Dataset ready for RAG evaluation!")
+        print("\n[OK] Dataset ready for RAG evaluation!")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ Mock Separation implementation - for testing and development
 from pathlib import Path
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.separation.mock import MockSeparationConfig
 
 from .interface import SeparationInterface
 
@@ -40,12 +41,12 @@ class MockSeparation(SeparationInterface):
 
         await asyncio.sleep(0.1)
 
-        stems = {"vocals": audio, "other": audio}
+        stems: dict[str, bytes] = {"vocals": audio, "other": audio}
 
         if output_dir:
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
-            result = {}
+            result: dict[str, bytes | str] = {}
             for stem_name, stem_audio in stems.items():
                 out_path = output_dir / f"{stem_name}.wav"
                 with open(out_path, "wb") as f:
@@ -53,7 +54,7 @@ class MockSeparation(SeparationInterface):
                 result[stem_name] = str(out_path)
             return result
 
-        return stems
+        return dict[str, bytes | str](stems)
 
     async def close(self) -> None:
         """No resources to clean up."""

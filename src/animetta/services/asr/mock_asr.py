@@ -7,6 +7,7 @@ Mock ASR implementation - for testing and development
 from pathlib import Path
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.mock import MockASRConfig
 
 from .interface import ASRInterface
 
@@ -41,7 +42,7 @@ class MockASR(ASRInterface):
         self.mock_response = mock_response
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: MockASRConfig, **kwargs):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls()
 

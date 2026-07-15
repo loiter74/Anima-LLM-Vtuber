@@ -10,11 +10,13 @@ Uses locally fine-tuned models for inference
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 import torch
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm.local_lora_llm import LocalLoraLLMConfig
 
 from .interface import LLMInterface
 
@@ -50,8 +52,9 @@ class LocalLoraLLM(LLMInterface):
         self.device = self._resolve_device(device)  # Auto-degradation
         self.system_prompt = system_prompt
 
-        self.model = None
-        self.tokenizer = None
+        # Transformers and PEFT expose version-dependent runtime protocols.
+        self.model: Any = None
+        self.tokenizer: Any = None
         self._loaded = False
 
         # Conversation history
@@ -101,7 +104,12 @@ class LocalLoraLLM(LLMInterface):
         return "cpu"
 
     @classmethod
-    def from_config(cls, config, system_prompt: str = "", **kwargs):
+    def from_config(
+        cls,
+        config: LocalLoraLLMConfig,
+        system_prompt: str = "",
+        **kwargs,
+    ):
         """
         Create an instance from configuration
 
@@ -120,7 +128,7 @@ class LocalLoraLLM(LLMInterface):
             system_prompt=system_prompt,
         )
 
-    def load_model(self):
+    def load_model(self) -> None:
         """Load the model"""
         if self._loaded:
             return
@@ -194,7 +202,7 @@ class LocalLoraLLM(LLMInterface):
             logger.error("[LocalLoraLLM]    3. Are transformers and peft installed")
             raise
 
-    async def chat_stream(self, text: str) -> AsyncIterator[str]:
+    async def chat_stream(self, user_input: str, **kwargs: Any) -> AsyncIterator[str]:
         """
         Streaming conversation
 
@@ -209,7 +217,8 @@ class LocalLoraLLM(LLMInterface):
             self.load_model()
 
         # Build prompt
-        prompt = self._format_prompt(text)
+        del kwargs
+        prompt = self._format_prompt(user_input)
 
         # Tokenize
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=256).to(
@@ -279,7 +288,7 @@ class LocalLoraLLM(LLMInterface):
 
         return prompt
 
-    async def chat(self, text: str) -> str:
+    async def chat(self, user_input: str, **kwargs: Any) -> str:
         """
         Non-streaming conversation (async)
 
@@ -294,7 +303,8 @@ class LocalLoraLLM(LLMInterface):
             self.load_model()
 
         # Build prompt
-        prompt = self._format_prompt(text)
+        del kwargs
+        prompt = self._format_prompt(user_input)
 
         logger.info("[LocalLoraLLM] Starting response generation...")
         logger.debug(f"[LocalLoraLLM] Input prompt length: {len(prompt)} chars")
@@ -361,7 +371,7 @@ class LocalLoraLLM(LLMInterface):
             f"[LocalLoraLLM] Restoring memory from history: conf_uid={conf_uid}, history_uid={history_uid}"
         )
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the model and release resources"""
         if self.model is not None:
             del self.model

@@ -149,7 +149,7 @@ def run_baseline(
     evidence_path = output_dir / filename
     try:
         preflight = preflight_runner(config_path, project_root)
-        preflight_check = {
+        preflight_check: dict[str, Any] = {
             "ok": preflight.get("ok") is True,
             "code": "ok" if preflight.get("ok") is True else "preflight_failed",
             "payload": preflight,

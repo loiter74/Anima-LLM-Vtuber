@@ -7,6 +7,7 @@ and sends via webhook.
 
 import logging
 import os
+from typing import Any
 
 import httpx
 
@@ -58,7 +59,7 @@ class DiscordNotifier(NotifierBase):
                 }
             )
 
-        payload = {"embeds": embeds}
+        payload: dict[str, Any] = {"embeds": embeds}
         if len(alerts) == 1:
             payload["content"] = f"**{alerts[0]['name']}** — {alerts[0].get('summary', '')}"
 

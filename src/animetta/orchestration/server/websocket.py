@@ -2,7 +2,7 @@
 
 import asyncio
 import datetime
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -11,15 +11,19 @@ import socketio
 from loguru import logger
 from prometheus_client import CollectorRegistry, generate_latest
 from starlette.applications import Starlette
+from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
+from animetta.config.manifest import EffectiveConfig
 from animetta.config.observability import ObservabilityConfig
 from animetta.config.runtime_reload import (
+    RuntimeConfigApplyResult,
     RuntimeConfigReloader,
     apply_runtime_config_to_contexts,
     build_runtime_system_prompt,
 )
+from animetta.config.user import UserSettings
 from animetta.core.component_readiness import ComponentReadinessCache
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.readiness import frontend_asset_readiness, unwrap_tracing_proxy
@@ -55,7 +59,7 @@ from .stats_api import (
 class WebSocketServer:
     """WebSocket server"""
 
-    def __init__(self, config=None):
+    def __init__(self, config: EffectiveConfig | None = None) -> None:
         """Initialize WebSocket server"""
         self.config = config
         self.runtime_reloader = RuntimeConfigReloader(config) if config is not None else None
@@ -88,7 +92,7 @@ class WebSocketServer:
         # Prometheus /metrics endpoint (optional — graceful fallback if package not installed)
         metrics_route: list = []
 
-        async def metrics_endpoint(request):
+        async def metrics_endpoint(request: Request) -> Response:
             del request
             return Response(
                 generate_latest(self.metrics_registry),
@@ -102,7 +106,7 @@ class WebSocketServer:
 
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 
-        async def serve_singing_audio(request):
+        async def serve_singing_audio(request: Request) -> Response:
             filename = request.path_params.get("filename", "")
             filepath = project_root / "data" / "singing" / "outputs" / filename
             if not filepath.is_file():
@@ -110,7 +114,7 @@ class WebSocketServer:
             mime, _ = mimetypes.guess_type(filename)
             return FileResponse(str(filepath), media_type=mime or "audio/wav")
 
-        async def serve_singing_subtitle(request):
+        async def serve_singing_subtitle(request: Request) -> Response:
             filename = request.path_params.get("filename", "")
             filepath = project_root / "data" / "singing" / "outputs" / filename
             if not filepath.is_file():
@@ -121,7 +125,7 @@ class WebSocketServer:
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
-        async def serve_singing_recent(request):
+        async def serve_singing_recent(request: Request) -> JSONResponse:
             output_dir = project_root / "data" / "singing" / "outputs"
             if not output_dir.is_dir():
                 return JSONResponse([])
@@ -163,7 +167,7 @@ class WebSocketServer:
             Route("/api/singing/recent", serve_singing_recent),
         ]
 
-        async def reload_config_endpoint(request):
+        async def reload_config_endpoint(request: Request) -> JSONResponse:
             if self.runtime_reloader is None:
                 if self.config is None:
                     return JSONResponse(
@@ -204,7 +208,7 @@ class WebSocketServer:
             logger.info(f"[Socket.IO] Frontend static files mounted at /app from {frontend_dist}")
 
         @asynccontextmanager
-        async def lifespan(_app):
+        async def lifespan(_app: Starlette) -> AsyncIterator[None]:
             await self._start_observability()
             await self.component_readiness_cache.start()
             if self.route_handlers:
@@ -248,7 +252,10 @@ class WebSocketServer:
         logger.info("[Socket.IO] Server created with async_mode='asgi'")
         logger.info("[Socket.IO] CORS enabled: origins=*")
 
-    def _configure_observation_dependencies(self, config) -> None:
+    def _configure_observation_dependencies(
+        self,
+        config: EffectiveConfig | None,
+    ) -> None:
         observation = getattr(config, "observability", None)
         if not isinstance(observation, ObservabilityConfig) or not observation.enabled:
             self.observation_recorder = NoOpObservationRecorder()
@@ -355,7 +362,7 @@ class WebSocketServer:
             raise RuntimeError("prometheus mirror is unavailable")
         await asyncio.gather(*(mirror.probe() for mirror in mirrors))
 
-    def set_config(self, config) -> None:
+    def set_config(self, config: EffectiveConfig) -> None:
         """Set application config"""
         self.config = config
         self.runtime_reloader = RuntimeConfigReloader(config)
@@ -364,7 +371,11 @@ class WebSocketServer:
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
 
-    async def _apply_reloaded_config(self, config, version: int):
+    async def _apply_reloaded_config(
+        self,
+        config: EffectiveConfig,
+        version: int,
+    ) -> RuntimeConfigApplyResult:
         """Apply a successfully reloaded config to active runtime holders."""
         self.config = config
         if self.runtime_reloader is not None:
@@ -390,7 +401,7 @@ class WebSocketServer:
 
         return apply_result
 
-    def set_user_settings(self, user_settings) -> None:
+    def set_user_settings(self, user_settings: UserSettings) -> None:
         """Set user settings"""
         if self.route_handlers:
             self.route_handlers.set_user_settings(user_settings)
@@ -536,7 +547,7 @@ class WebSocketServer:
         set_component_readiness_cache(None)
         logger.info("All resources cleaned up")
 
-    def get_app(self):
+    def get_app(self) -> Starlette:
         """Get the ASGI app"""
         return self.asgi_app
 
@@ -553,7 +564,7 @@ class WebSocketServer:
         logger.info("WebSocket server stopped")
 
 
-def create_server(config=None) -> WebSocketServer:
+def create_server(config: EffectiveConfig | None = None) -> WebSocketServer:
     """Create a WebSocket server instance"""
     server = WebSocketServer(config)
     server.setup_routes()

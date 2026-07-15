@@ -11,6 +11,7 @@ from loguru import logger
 from animetta.config.core.registry import ProviderRegistry
 from animetta.config.providers.llm import (
     GLMLLMConfig,
+    LLMConfig,
     MockLLMConfig,
     OllamaLLMConfig,
     OpenAILLMConfig,

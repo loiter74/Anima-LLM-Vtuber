@@ -12,6 +12,9 @@ from pathlib import Path
 
 from loguru import logger
 
+from animetta.avatar.analyzers.audio import AudioAnalyzer
+from animetta.config.singing import SingingConfig
+
 from .bilibili import BilibiliDownloader
 from .interface import (
     LyricLine,

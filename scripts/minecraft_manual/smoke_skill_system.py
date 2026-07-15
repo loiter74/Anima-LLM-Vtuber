@@ -11,14 +11,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    if reconfigure_stdout := getattr(sys.stdout, "reconfigure", None):
+        reconfigure_stdout(encoding="utf-8", errors="replace")
+    if reconfigure_stderr := getattr(sys.stderr, "reconfigure", None):
+        reconfigure_stderr(encoding="utf-8", errors="replace")
 
-from animetta.tools.minecraft.predefined_skills import get_predefined_skills
 from animetta.tools.minecraft.skill_library import Skill, SkillLibrary, SkillStep
 
 
-async def main():
+async def main() -> None:
     print("=== MC Bot Skill System Smoke Test ===\n")
 
     # Use a temp DB so we don't pollute the real data dir

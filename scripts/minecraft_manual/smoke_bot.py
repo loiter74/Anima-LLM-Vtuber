@@ -13,7 +13,7 @@ from animetta.tools.minecraft.bridge import MinecraftBridge
 from animetta.tools.minecraft.config import MinecraftBotConfig, MinecraftConfig
 
 
-async def main():
+async def main() -> None:
     print("=== Simple Bot Test ===\n")
 
     config = MinecraftConfig(

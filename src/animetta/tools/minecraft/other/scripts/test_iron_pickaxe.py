@@ -10,11 +10,12 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 BOT_DIR = Path(__file__).resolve().parents[2] / "bot"
 
 
-async def iron_pickaxe():
+async def iron_pickaxe() -> None:
     proc = await asyncio.create_subprocess_exec(
         "node",
         "index.js",
@@ -29,10 +30,19 @@ async def iron_pickaxe():
 
     cmd_id = [0]
 
-    async def send(action, params=None, timeout=60):
+    async def send(
+        action: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 60,
+    ) -> dict[str, Any]:
         cmd_id[0] += 1
-        cmd = {"id": cmd_id[0], "action": action, "params": params or {}}
-        cmd["params"]["timeout"] = timeout * 1000
+        command_params = dict(params or {})
+        command_params["timeout"] = timeout * 1000
+        cmd: dict[str, Any] = {
+            "id": cmd_id[0],
+            "action": action,
+            "params": command_params,
+        }
         proc.stdin.write((json.dumps(cmd) + "\n").encode())
         await proc.stdin.drain()
         deadline = asyncio.get_event_loop().time() + timeout
@@ -51,14 +61,22 @@ async def iron_pickaxe():
                 break
         return {"status": "error", "result": "timeout"}
 
-    async def inv():
+    async def inv() -> dict[str, int]:
         r = await send("status")
         result = r.get("result", {})
         if isinstance(result, dict):
             return result.get("inventory", {})
         return {}
 
-    async def retry(action, params, need_item, need_count, tries=10, timeout=90, label=""):
+    async def retry(
+        action: str,
+        params: dict[str, Any],
+        need_item: str,
+        need_count: int,
+        tries: int = 10,
+        timeout: float = 90,
+        label: str = "",
+    ) -> bool:
         for i in range(tries):
             r = await send(action, params, timeout=timeout)
             h = (await inv()).get(need_item, 0)

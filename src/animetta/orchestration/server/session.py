@@ -4,16 +4,32 @@ Manages client session lifecycle and resources
 Uses LangGraph orchestrator
 """
 
+from __future__ import annotations
+
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from animetta.config.manifest import EffectiveConfig
 from animetta.core.service_pool import ServicePool
 
 from ...core.service_context import ServiceContext
+
+if TYPE_CHECKING:
+    from socketio import AsyncServer
+
+    from animetta.config.live2d import Live2DConfig
+    from animetta.core.model_loading_manager import ModelLoadingManager
+    from animetta.core.shared_memory_runtime import SharedMemoryRuntime
+    from animetta.observability.ports import ObservationRecorder
+    from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
+
+    from ..graph.orchestrator import LangGraphOrchestrator
+
+SendCallback = Callable[[dict[str, Any] | str], Awaitable[None]]
 
 
 class SessionManager:
@@ -28,10 +44,10 @@ class SessionManager:
 
     def __init__(
         self,
-        model_manager=None,
-        memory_runtime=None,
-        observation_recorder=None,
-    ):
+        model_manager: ModelLoadingManager | None = None,
+        memory_runtime: SharedMemoryRuntime | None = None,
+        observation_recorder: ObservationRecorder | None = None,
+    ) -> None:
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
         self.contexts: dict[str, ServiceContext] = {}
@@ -53,7 +69,10 @@ class SessionManager:
     # ========================================
 
     async def get_or_create_context(
-        self, sid: str, config, websocket_send: Callable
+        self,
+        sid: str,
+        config: EffectiveConfig,
+        websocket_send: SendCallback,
     ) -> ServiceContext:
         """
         Get or create the ServiceContext for a given session
@@ -116,10 +135,10 @@ class SessionManager:
         self,
         sid: str,
         ctx: ServiceContext,
-        websocket_send: Callable,
-        live2d_config,
-        socketio=None,
-    ):
+        websocket_send: SendCallback,
+        live2d_config: Live2DConfig,
+        socketio: AsyncServer | None = None,
+    ) -> LangGraphOrchestrator:
         """
         Get or create the LangGraph orchestrator for a given session
 
@@ -321,7 +340,7 @@ class SessionManager:
         self,
         sid: str,
         ctx: ServiceContext,
-    ):
+    ) -> SimpleVADProcessor:
         """
         Get or create an audio processor
 
@@ -335,7 +354,7 @@ class SessionManager:
         if sid not in self.audio_processors:
             from ...services.audio.simple_vad_processor import SimpleVADProcessor
 
-            async def on_speech_end(audio_data):
+            async def on_speech_end(audio_data: list[float]) -> None:
                 # When speech ends, call orchestrator to process audio
                 orchestrator = self.get_orchestrator(sid)
                 if orchestrator:

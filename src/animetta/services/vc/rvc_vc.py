@@ -18,10 +18,13 @@ import io
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import soundfile as sf
 from loguru import logger
+
+from animetta.config.providers.vc.rvc import RVCConfig
 
 from .interface import VCInterface
 
@@ -76,7 +79,7 @@ class RVCVC(VCInterface):
         self.f0_max = f0_max
         self.sample_rate = sample_rate
 
-        self._rvc: object | None = None
+        self._rvc: Any | None = None
         self._model_loaded: bool = False
 
     # ------------------------------------------------------------------
@@ -217,8 +220,11 @@ class RVCVC(VCInterface):
 
         # ── Blocking RVC inference → asyncio.to_thread() ────────────
         try:
+            rvc = self._rvc
+            if rvc is None:
+                raise RuntimeError("RVC model is not loaded")
             result_np = await asyncio.to_thread(
-                self._rvc.infer,
+                rvc.infer,
                 input_wav=audio_tensor,
                 block_frame_16k=400,
                 skip_head=0,
@@ -266,9 +272,12 @@ class RVCVC(VCInterface):
             # 1 second of silence at 16 kHz
             silence = np.zeros(16000, dtype=np.float32)
             silence_tensor = torch.from_numpy(silence).float()
+            rvc = self._rvc
+            if rvc is None:
+                raise RuntimeError("RVC model is not loaded")
 
             await asyncio.to_thread(
-                self._rvc.infer,
+                rvc.infer,
                 input_wav=silence_tensor,
                 block_frame_16k=400,
                 skip_head=0,

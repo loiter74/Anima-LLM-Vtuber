@@ -14,6 +14,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.chattts import ChatTTSConfig
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
@@ -224,6 +225,9 @@ class ChatTTSTTS(TTSInterface):
         """
         # Ensure model is loaded
         self._ensure_loaded()
+        chat = self._chat
+        if chat is None:
+            raise RuntimeError("ChatTTS model is not loaded")
 
         # Clean text: full-width punctuation, emoji, etc. that ChatTTS does not support
         cleaned_text = self._clean_text(text)
@@ -244,7 +248,7 @@ class ChatTTSTTS(TTSInterface):
             loop = asyncio.get_event_loop()
             wavs = await loop.run_in_executor(
                 None,
-                lambda: self._chat.infer(
+                lambda: chat.infer(
                     [cleaned_text],
                     params_infer_code=params,
                 ),

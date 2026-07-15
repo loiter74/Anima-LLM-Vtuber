@@ -100,7 +100,7 @@ class PreflightCheck:
         return self.status != HEALTH_FAIL
 
     def to_dict(self) -> dict[str, Any]:
-        payload = {
+        payload: dict[str, Any] = {
             "id": self.id,
             "status": self.status,
             "message": self.message,
@@ -172,19 +172,19 @@ def _python_command() -> tuple[str, ...]:
 
     candidates: list[tuple[str, ...]] = []
     if os.name == "nt":
-        for candidate in (
+        for path_candidate in (
             ROOT / ".venv" / "Scripts" / "python.exe",
             ROOT / "venv" / "Scripts" / "python.exe",
         ):
-            if candidate.exists():
-                candidates.append((str(candidate),))
+            if path_candidate.exists():
+                candidates.append((str(path_candidate),))
         if shutil.which("py"):
             candidates.append(("py", "-3.13"))
 
     candidates.append((sys.executable,))
-    for candidate in candidates:
-        if _python_has_health_dependencies(candidate):
-            return candidate
+    for command_candidate in candidates:
+        if _python_has_health_dependencies(command_candidate):
+            return command_candidate
 
     return (sys.executable,)
 

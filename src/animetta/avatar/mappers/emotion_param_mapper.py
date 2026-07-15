@@ -289,7 +289,7 @@ class EmotionParamMapper(IEmotionParamMapper):
         """Get supported emotions list"""
         return list(self.mappings.keys())
 
-    def add_emotion_mapping(self, emotion: str, param_mappings: dict[str, float]):
+    def add_emotion_mapping(self, emotion: str, param_mappings: dict[str, float]) -> None:
         """
         Add or update emotion mapping
 
@@ -299,7 +299,7 @@ class EmotionParamMapper(IEmotionParamMapper):
         """
         self.mappings[emotion.lower()] = param_mappings
 
-    def load_from_yaml(self, yaml_path: str):
+    def load_from_yaml(self, yaml_path: str) -> None:
         """
         Load mapping configuration from YAML file
 

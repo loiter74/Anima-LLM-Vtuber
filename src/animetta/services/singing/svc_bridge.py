@@ -13,6 +13,8 @@ from pathlib import Path
 import httpx
 from loguru import logger
 
+from animetta.config.singing import GPTSoVITSConfig
+
 
 class SVCBridge:
     """Bridge to GPT-SoVITS api_v2.py for voice conversion."""

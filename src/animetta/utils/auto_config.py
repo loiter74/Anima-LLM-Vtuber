@@ -279,7 +279,7 @@ class AutoConfig:
         return success
 
 
-def main():
+def main() -> None:
     """Command line entry point"""
     import argparse
 

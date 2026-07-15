@@ -9,7 +9,7 @@ core LLM implementation.
 
 import json
 import time as time_module
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from loguru import logger
@@ -87,7 +87,7 @@ class OpenAIToolHandler:
         Returns:
             Message list in OpenAI API format
         """
-        messages = []
+        messages: list[dict[str, Any]] = []
 
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -161,7 +161,8 @@ class OpenAIToolHandler:
 
         t_start = time_module.perf_counter()
         try:
-            response = await self.llm.client.chat.completions.create(
+            create_completion = cast(Any, self.llm.client.chat.completions.create)
+            response = await create_completion(
                 model=self.llm.model,
                 messages=messages,
                 tools=openai_tools if openai_tools else None,

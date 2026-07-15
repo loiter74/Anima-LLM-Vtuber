@@ -19,6 +19,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.kokoro import KokoroTTSConfig
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
@@ -83,7 +84,7 @@ class KokoroTTS(TTSInterface):
         )
 
     @classmethod
-    def from_config(cls, config, **kwargs) -> KokoroTTS:
+    def from_config(cls, config: KokoroTTSConfig, **kwargs) -> KokoroTTS:
         """Create instance from KokoroTTSConfig."""
         return cls(
             voice=getattr(config, "voice", "zf_xiaobei"),
@@ -153,6 +154,9 @@ class KokoroTTS(TTSInterface):
             Audio bytes (WAV format), or file path string if output_path set
         """
         self._ensure_pipeline()
+        pipeline = self._pipeline
+        if pipeline is None:
+            raise RuntimeError("Kokoro pipeline is not loaded")
 
         actual_voice = voice or self.voice
         actual_speed = speed if speed is not None else self.speed
@@ -168,7 +172,7 @@ class KokoroTTS(TTSInterface):
             # Generate audio via Kokoro pipeline
             # pipeline() is a generator yielding (graphemes, phonemes, audio_tensor)
             audio_chunks: list[torch.Tensor] = []
-            for result in self._pipeline(
+            for result in pipeline(
                 text,
                 voice=actual_voice,
                 speed=actual_speed,
@@ -215,7 +219,7 @@ class KokoroTTS(TTSInterface):
             logger.error(f"[KokoroTTS] Synthesis failed: {e}")
             raise
 
-    def _tensor_to_wav_bytes(self, audio_tensor) -> bytes:
+    def _tensor_to_wav_bytes(self, audio_tensor: Any) -> bytes:
         """
         Convert a 1D audio tensor to WAV bytes using Python's built-in wave module.
 

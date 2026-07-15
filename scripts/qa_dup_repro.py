@@ -1,14 +1,13 @@
 """复现重复消息 bug — playwright 真实浏览器，数实际渲染的 AI 气泡数。"""
 
 import asyncio
-from pathlib import Path
 
 from playwright.async_api import async_playwright
 
 URL = "http://localhost"
 
 
-async def main():
+async def main() -> None:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={"width": 1280, "height": 900})
@@ -72,14 +71,14 @@ async def main():
             last = ai_replies[-1]
             second_last = ai_replies[-2]
             if last == second_last:
-                print(f"\n[❌ 确认重复] 最后两条 AI 回复完全相同:")
+                print("\n[❌ 确认重复] 最后两条 AI 回复完全相同:")
                 print(f"  倒数第2: {second_last[:100]}")
                 print(f"  倒数第1: {last[:100]}")
             else:
-                print(f"\n[ℹ️  最后两条不同] 可能是历史消息")
+                print("\n[ℹ️  最后两条不同] 可能是历史消息")
 
         # 打印 socket 监听器相关日志
-        print(f"\n[3] 控制台日志（最后 20 条）:")
+        print("\n[3] 控制台日志（最后 20 条）:")
         for log in logs[-20:]:
             print(f"  {log}")
 

@@ -21,7 +21,7 @@ from typing import Any
 
 # AsyncCallable was added provisionally in Python 3.12 typing but may be absent
 # in some builds. Define an equivalent type alias.
-AsyncCallable = Callable[..., Coroutine[Any, Any, Any]]
+AsyncCallable = Callable[[], Coroutine[Any, Any, Any]]
 
 import contextlib
 
@@ -51,7 +51,7 @@ class ScheduledTask:
     """A registered scheduled task."""
 
     name: str
-    func: AsyncCallable[[], Any]
+    func: AsyncCallable
     interval: float  # seconds
     timeout: float  # max execution time
     metrics: TaskMetrics = field(default_factory=lambda: TaskMetrics(name=""))
@@ -83,7 +83,7 @@ class AsyncScheduler:
     def add_task(
         self,
         name: str,
-        func: AsyncCallable[[], Any],
+        func: AsyncCallable,
         *,
         interval: float,
         timeout: float = 300,

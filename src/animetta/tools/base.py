@@ -2,6 +2,7 @@
 Anima tool base classes and tool registry
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from langchain_core.tools import tool
@@ -121,7 +122,7 @@ async def calculator(expression: str) -> str:
         import ast
         import operator as op
 
-        operators = {
+        operators: dict[type[ast.AST], Callable[..., Any]] = {
             ast.Add: op.add,
             ast.Sub: op.sub,
             ast.Mult: op.mul,
@@ -130,13 +131,19 @@ async def calculator(expression: str) -> str:
             ast.USub: op.neg,
         }
 
-        def eval_node(n):
+        def eval_node(n: ast.AST) -> Any:
             if isinstance(n, ast.Constant):
                 return n.value
             elif isinstance(n, ast.BinOp):
-                return operators[type(n.op)](eval_node(n.left), eval_node(n.right))
+                operation = operators.get(type(n.op))
+                if operation is None:
+                    raise TypeError(f"Unsupported operator: {type(n.op)}")
+                return operation(eval_node(n.left), eval_node(n.right))
             elif isinstance(n, ast.UnaryOp):
-                return operators[type(n.op)](eval_node(n.operand))
+                operation = operators.get(type(n.op))
+                if operation is None:
+                    raise TypeError(f"Unsupported operator: {type(n.op)}")
+                return operation(eval_node(n.operand))
             elif isinstance(n, ast.Expression):
                 return eval_node(n.body)
             else:

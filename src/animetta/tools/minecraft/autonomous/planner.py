@@ -7,6 +7,7 @@ Outputs structured JSON plans that the Node.js state machine can execute.
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 from loguru import logger
 
@@ -119,12 +120,16 @@ class PlannerError(Exception):
 class MinecraftPlanner:
     """LLM-powered Minecraft task planner"""
 
-    def __init__(self, llm_service=None, skill_library: SkillLibrary | None = None):
+    def __init__(
+        self,
+        llm_service: Any | None = None,
+        skill_library: SkillLibrary | None = None,
+    ) -> None:
         self._llm = llm_service
         self._skill_library = skill_library
         self._last_plan: Plan | None = None
 
-    def set_llm(self, llm_service):
+    def set_llm(self, llm_service: Any) -> None:
         """Set or update the LLM service"""
         self._llm = llm_service
 
@@ -291,7 +296,7 @@ class ModeSelector:
         self._has_goal = False
         self._goal: str | None = None
 
-    def set_goal(self, goal: str | None):
+    def set_goal(self, goal: str | None) -> None:
         """Set a natural language goal, or None to clear"""
         self._goal = goal
         self._has_goal = bool(goal and goal.strip())

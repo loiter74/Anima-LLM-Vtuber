@@ -12,7 +12,7 @@ from typing import Any
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.llm import MockLLMConfig
+from animetta.config.providers.llm import LLMBaseConfig, MockLLMConfig
 
 from .interface import LLMInterface
 

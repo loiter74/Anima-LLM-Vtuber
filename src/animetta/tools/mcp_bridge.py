@@ -81,7 +81,7 @@ class MCPClient:
             await self.disconnect()
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect"""
         if self._exit_stack:
             with contextlib.suppress(RuntimeError):
@@ -298,7 +298,7 @@ class MCPManager:
         logger.info(f"[MCP] Loaded {len(self.tools)} tools from {len(self.clients)} servers")
         return self.tools
 
-    async def close_all(self):
+    async def close_all(self) -> None:
         """Close all connections"""
         for client in self.clients:
             await client.disconnect()

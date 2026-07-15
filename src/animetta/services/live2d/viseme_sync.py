@@ -97,11 +97,11 @@ class VisemeLipSync:
 
         # Calculate energy
         if max_idx > min_idx:
-            band_energy = np.mean(np.abs(frequency_buffer[min_idx:max_idx]))
+            band_energy = float(np.mean(np.abs(frequency_buffer[min_idx:max_idx])))
         else:
             band_energy = 0.0
 
-        return float(band_energy)
+        return band_energy
 
     def extract_viseme_features(self, audio_data: np.ndarray, voice_energy: float) -> list[float]:
         """
@@ -226,7 +226,7 @@ class VisemeLipSync:
 
         return {"ParamMouthOpen": mouth_open, "ParamMouthForm": mouth_form}
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset state"""
         self._current_weights = np.zeros(5)
         self._target_weights = np.zeros(5)
@@ -267,7 +267,7 @@ class SimpleLipSync:
 
         return self._current_value
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset state"""
         self._current_value = 0.0
 

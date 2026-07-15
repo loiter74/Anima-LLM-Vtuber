@@ -142,7 +142,7 @@ async def main() -> int:
         # 非 debug 轮无 marker = 正常，不打 log
 
     if not leak_found:
-        print(f"  ✅ 所有非 debug 轮次都没有泄漏 marker")
+        print("  ✅ 所有非 debug 轮次都没有泄漏 marker")
 
     if len(debug_values) >= 2:
         v1 = debug_values[0][1]
@@ -150,9 +150,9 @@ async def main() -> int:
         delta = v2 - v1 if v1 is not None and v2 is not None else None
         print(f"\n  好感度变化: 第2轮 {v1} → 第4轮 {v2}（Δ = {delta:+d}）")
         if delta is not None and delta > 0:
-            print(f"  ✅ 真诚互动后好感度上升（符合预期）")
+            print("  ✅ 真诚互动后好感度上升（符合预期）")
         elif delta == 0:
-            print(f"  ℹ️  好感度未变（LLM 可能判定互动不够积极）")
+            print("  ℹ️  好感度未变（LLM 可能判定互动不够积极）")
 
     print("\n" + "═" * 70)
     return 0

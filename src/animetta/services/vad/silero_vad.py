@@ -6,11 +6,13 @@ Based on Open-LLM-VTuber's VADEngine and StateMachine implementation
 """
 
 from collections import deque
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.vad.silero import SileroVADConfig
 
 from .detector import SileroDetector
 from .interface import VADInterface, VADResult, VADState
@@ -62,7 +64,7 @@ class SileroVAD(VADInterface):
         logger.info(f"   - Required misses: {required_misses}")
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: SileroVADConfig, **kwargs):
         """Create instance from configuration"""
         return cls(
             sample_rate=config.sample_rate,
@@ -113,12 +115,12 @@ class SileroVAD(VADInterface):
         return self.detector.get_current_state(self)
 
     @property
-    def model(self):
+    def model(self) -> Any:
         """Backward-compatible access to the VAD model (delegates to detector)."""
         return self.detector.model
 
     @model.setter
-    def model(self, value):
+    def model(self, value: Any) -> None:
         self.detector.model = value
 
     async def close(self) -> None:
@@ -138,7 +140,7 @@ class SileroStateMachine:
     INACTIVE -> IDLE: Consecutive misses reaching required_misses (output audio)
     """
 
-    def __init__(self, vad_instance):
+    def __init__(self, vad_instance: SileroVAD) -> None:
         self.state = VADState.IDLE
         self.vad = vad_instance  # Reference to SileroVAD instance
 
@@ -147,23 +149,24 @@ class SileroStateMachine:
         self.miss_count = 0
 
         # Accumulated audio data
-        self.probs = []
-        self.dbs = []
+        self.probs: list[float] = []
+        self.dbs: list[float] = []
         self.bytes = bytearray()
 
         # Smoothing window
-        self.prob_window = deque(maxlen=vad_instance.smoothing_window)
-        self.db_window = deque(maxlen=vad_instance.smoothing_window)
+        self.prob_window: deque[float] = deque(maxlen=vad_instance.smoothing_window)
+        self.db_window: deque[float] = deque(maxlen=vad_instance.smoothing_window)
 
         # Pre-buffer (saves some audio before speech starts)
-        self.pre_buffer = deque(maxlen=20)
+        self.pre_buffer: deque[bytes] = deque(maxlen=20)
 
         # Diagnostic counter
         self._chunk_count = 0
 
         # INACTIVE state timeout mechanism (seconds)
-        self._inactive_start_time = None
+        self._inactive_start_time: float | None = None
         self._inactive_timeout = 1.0  # Force end if INACTIVE exceeds 1 second
+        self._last_logged_duration = 0.0
 
     @staticmethod
     def calculate_db(audio_data: np.ndarray) -> float:
@@ -177,11 +180,11 @@ class SileroStateMachine:
         rms = np.sqrt(mean_square)
         return 20 * np.log10(rms + 1e-7)
 
-    def get_smoothed_values(self, prob: float, db: float) -> tuple:
+    def get_smoothed_values(self, prob: float, db: float) -> tuple[float, float]:
         """Get smoothed probability and decibel values"""
         self.prob_window.append(prob)
         self.db_window.append(db)
-        return np.mean(self.prob_window), np.mean(self.db_window)
+        return float(np.mean(self.prob_window)), float(np.mean(self.db_window))
 
     def update(self, chunk_bytes: bytes, prob: float, db: float) -> None:
         """Update accumulated data"""
@@ -288,10 +291,7 @@ class SileroStateMachine:
             inactive_duration = time.time() - self._inactive_start_time
 
             # Print status every 0.5 seconds
-            if (
-                not hasattr(self, "_last_logged_duration")
-                or inactive_duration - self._last_logged_duration >= 0.5
-            ):
+            if inactive_duration - self._last_logged_duration >= 0.5:
                 logger.info(
                     f"[VAD] INACTIVE state has lasted {inactive_duration:.1f}s (timeout threshold: {self._inactive_timeout}s)"
                 )

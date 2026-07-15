@@ -414,7 +414,11 @@ class ServiceContext:
         if hasattr(self.llm_engine, "preload") and self.model_manager is not None:
             self.model_manager.register("llm", self.llm_engine.preload, "llm")
 
-    async def init_local_llm(self, llm_config, app_config: EffectiveConfig | Any = None) -> None:
+    async def init_local_llm(
+        self,
+        llm_config: Any,
+        app_config: EffectiveConfig | Any = None,
+    ) -> None:
         """Initialize local LLM service (no persona)"""
         if self.local_llm_engine is not None:
             logger.debug(f"[{self.session_id}] Local LLM already initialized, skipping")

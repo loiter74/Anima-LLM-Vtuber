@@ -10,21 +10,19 @@ Note: Actual tool calls are handled directly by llm_node.py; this adapter is for
 """
 
 import inspect
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
-from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.callbacks.manager import (
+    AsyncCallbackManagerForLLMRun,
+    CallbackManagerForLLMRun,
+)
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from loguru import logger
-
-# Pydantic v1/v2 compatibility handling
-try:
-    from pydantic import Field
-except ImportError:
-    from pydantic.v1 import Field
+from pydantic import Field
 
 # Import existing LLM interface
 from ..llm.interface import LLMInterface
@@ -40,7 +38,7 @@ class LLMChatModelAdapter(BaseChatModel):
     """
 
     llm_service: LLMInterface = Field(description="Existing LLM service instance")
-    bound_tools: Sequence[BaseTool] = Field(default_factory=list, description="Bound tool list")
+    bound_tools: Sequence[Any] = Field(default_factory=list, description="Bound tool list")
     model_name: str = Field(
         default="unknown", description="Model name (used for LangSmith/LangFuse tracing)"
     )
@@ -86,7 +84,7 @@ class LLMChatModelAdapter(BaseChatModel):
         self,
         messages: list[BaseMessage],
         stop: list[str] | None = None,
-        run_manager: CallbackManagerForLLMRun | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """
@@ -107,9 +105,9 @@ class LLMChatModelAdapter(BaseChatModel):
 
         for msg in messages:
             if isinstance(msg, SystemMessage):
-                system_prompt = msg.content
+                system_prompt = str(msg.content)
             elif isinstance(msg, HumanMessage):
-                user_input = msg.content
+                user_input = str(msg.content)
 
         if not user_input:
             logger.warning("[LLM Adapter] No user input found")
@@ -126,7 +124,6 @@ class LLMChatModelAdapter(BaseChatModel):
             self.llm_service.set_system_prompt(system_prompt)
 
         # Call existing LLM service's streaming interface
-        chunks = []
         full_response = ""
 
         try:
@@ -137,12 +134,13 @@ class LLMChatModelAdapter(BaseChatModel):
                     full_response = str(response)
             else:
                 async for chunk in stream:
-                    chunks.append(chunk)
                     full_response += chunk
 
                     # Notify callback (supports streaming output)
                     if run_manager:
-                        await run_manager.on_llm_new_token(chunk)
+                        callback_result = run_manager.on_llm_new_token(chunk)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
 
         except Exception as e:
             logger.error(f"[LLM Adapter] Generation failed: {e}")
@@ -155,12 +153,15 @@ class LLMChatModelAdapter(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type | BaseTool],
+        tools: Sequence[dict[str, Any] | type | Callable[..., Any] | BaseTool],
+        *,
+        tool_choice: str | None = None,
         **kwargs: Any,
     ) -> LLMChatModelAdapter:
         """
         Bind tools (placeholder method; actual tool calls are handled by llm_node.py)
         """
+        del tool_choice, kwargs
         logger.info(f"[LLM Adapter bind_tools] called, tools count: {len(tools)}")
 
         # Directly set bound_tools
@@ -168,7 +169,7 @@ class LLMChatModelAdapter(BaseChatModel):
 
         logger.info(f"[LLM Adapter bind_tools] set {len(self.bound_tools)} tools")
         for i, tool in enumerate(self.bound_tools):
-            logger.debug(f"[LLM Adapter bind_tools] tool[{i}]: {tool.name}")
+            logger.debug(f"[LLM Adapter bind_tools] tool[{i}]: {getattr(tool, 'name', tool)}")
 
         return self
 

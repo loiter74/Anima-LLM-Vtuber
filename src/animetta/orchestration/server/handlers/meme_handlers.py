@@ -193,7 +193,7 @@ class MemeHandlers(BaseSocketHandler):
                 if meme:
                     meme.source_platform = "bilibili"
                     self._store.update(meme)
-            payload = {"ok": True, "count": len(candidates)}
+            payload: dict[str, Any] = {"ok": True, "count": len(candidates)}
         except Exception as e:
             logger.exception("[MemeHandlers] collection failed")
             payload = {"ok": False, "error": str(e)}

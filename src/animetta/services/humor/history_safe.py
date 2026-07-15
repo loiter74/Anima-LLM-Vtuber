@@ -25,10 +25,8 @@ def unwrap_service_proxy(service: object) -> object:
 def has_native_chat_messages(llm: object) -> bool:
     """Return True when the concrete LLM overrides LLMInterface.chat_messages."""
     target = unwrap_service_proxy(llm)
-    return (
-        hasattr(type(target), "chat_messages")
-        and type(target).chat_messages is not LLMInterface.chat_messages
-    )
+    implementation = getattr(type(target), "chat_messages", None)
+    return implementation is not None and implementation is not LLMInterface.chat_messages
 
 
 def _copy_history(history: Sequence[Any]) -> list[Any]:

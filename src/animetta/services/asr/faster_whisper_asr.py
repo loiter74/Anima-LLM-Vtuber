@@ -17,12 +17,14 @@ Supports Chinese models:
 - distil-medium.en: English only
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.faster_whisper import FasterWhisperASRConfig
 
 from .interface import ASRInterface
 
@@ -250,7 +252,9 @@ class FasterWhisperASR(ASRInterface):
 
             # Convert to mono
             if audio_segment.channels > 1:
-                samples = samples.reshape((-1, audio_segment.channels)).mean(axis=1)
+                samples = (
+                    samples.reshape((-1, audio_segment.channels)).mean(axis=1).astype(np.float32)
+                )
 
             # Resample to 16kHz (if needed)
             if audio_segment.frame_rate != 16000:
@@ -259,7 +263,7 @@ class FasterWhisperASR(ASRInterface):
                 target_length = int(len(samples) * ratio)
                 samples = np.interp(
                     np.linspace(0, len(samples), target_length), np.arange(len(samples)), samples
-                )
+                ).astype(np.float32)
 
             logger.debug(f"Loaded audio file: {file_path}, samples: {len(samples)}")
             return samples
@@ -285,7 +289,7 @@ class FasterWhisperASR(ASRInterface):
                         np.linspace(0, len(samples), target_length),
                         np.arange(len(samples)),
                         samples,
-                    )
+                    ).astype(np.float32)
 
                 return samples
 
@@ -295,7 +299,11 @@ class FasterWhisperASR(ASRInterface):
         audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         return audio_np
 
-    async def transcribe_stream(self, audio_data: bytes | str | Path | list | np.ndarray, **kwargs):
+    async def transcribe_stream(
+        self,
+        audio_data: bytes | str | Path | list | np.ndarray,
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -324,7 +332,7 @@ class FasterWhisperASR(ASRInterface):
         logger.debug("Faster-Whisper ASR resources released")
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: FasterWhisperASRConfig, **kwargs):
         """Create instance from configuration"""
         return cls(
             model=getattr(config, "model", "distil-large-v3"),

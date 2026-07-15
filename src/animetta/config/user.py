@@ -32,7 +32,7 @@ class UserSettings:
         """Create default configuration"""
         return {"log_level": "INFO"}
 
-    def save(self):
+    def save(self) -> None:
         """Save user configuration"""
         try:
             with open(self.config_file, "w", encoding="utf-8") as f:
@@ -43,6 +43,6 @@ class UserSettings:
     def get_log_level(self) -> str:
         return self.settings.get("log_level", "INFO")
 
-    def set_log_level(self, level: str):
+    def set_log_level(self, level: str) -> None:
         self.settings["log_level"] = level
         self.save()

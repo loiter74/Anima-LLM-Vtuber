@@ -9,6 +9,7 @@ VAD Factory - Create VAD instances based on configuration
 
 from loguru import logger
 
+from animetta.config.providers.vad import VADBaseConfig
 from animetta.observability.service_proxy import instrument_service
 
 from .interface import VADInterface
@@ -19,7 +20,12 @@ class VADFactory:
     """VAD Service Factory"""
 
     @staticmethod
-    def create_from_config(config, *, strict: bool = False, **kwargs) -> VADInterface:
+    def create_from_config(
+        config: VADBaseConfig,
+        *,
+        strict: bool = False,
+        **kwargs,
+    ) -> VADInterface:
         """
         Create VAD instance from config object (using ProviderRegistry)
 

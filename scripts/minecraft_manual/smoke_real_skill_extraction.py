@@ -6,7 +6,6 @@ Connects to actual Minecraft server, executes task, extracts skill.
 """
 
 import asyncio
-import json
 import os
 import sys
 import time
@@ -21,7 +20,7 @@ from animetta.tools.minecraft.skill_validator import SkillValidator
 from animetta.tools.minecraft.trace_recorder import TraceRecorder
 
 
-async def main():
+async def main() -> None:
     print("=== Real Minecraft Skill Extraction Test ===\n")
 
     # 1. Initialize
@@ -115,7 +114,7 @@ async def main():
     # End trace
     trace = trace_recorder.end_trace("success" if result2.get("status") == "success" else "failed")
 
-    print(f"\n   Trace summary:")
+    print("\n   Trace summary:")
     print(f"     Steps: {len(trace.steps)}")
     print(f"     Result: {trace.final_result}")
     print(f"     Items gained: {trace.items_gained}")
@@ -165,7 +164,7 @@ async def main():
     if validation.passed:
         extracted_skill.validated = True
         await skill_library.add_learned(extracted_skill)
-        print(f"\n6. Skill saved to library!")
+        print("\n6. Skill saved to library!")
 
         all_skills = await skill_library.get_all_skills()
         learned = await skill_library.get_learned_skills()
@@ -174,7 +173,7 @@ async def main():
 
     # 7. Save trace
     await trace_recorder.save_trace(trace)
-    print(f"\n7. Trace saved to data/mc_traces.jsonl")
+    print("\n7. Trace saved to data/mc_traces.jsonl")
 
     # 8. Stop bridge
     print("\n8. Stopping bot...")
@@ -186,8 +185,8 @@ async def main():
     print(f"Result: {trace.final_result}")
     print(f"Skill: {extracted_skill.name}")
     print(f"Validated: {validation.passed}")
-    print(f"\nThe bot learned a new skill from this execution!")
-    print(f"Next time it needs to collect wood, it will use this skill directly.")
+    print("\nThe bot learned a new skill from this execution!")
+    print("Next time it needs to collect wood, it will use this skill directly.")
 
     print("\n=== Test Complete ===")
 

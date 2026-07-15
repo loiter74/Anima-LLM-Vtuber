@@ -12,8 +12,6 @@ import argparse
 import csv
 import json
 import logging
-import sys
-from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -26,7 +24,7 @@ logger = logging.getLogger(__name__)
 def read_csv(file_path: str) -> list[dict]:
     """Read CSV file and return list of dicts."""
     data = []
-    with open(file_path, "r", encoding="utf-8-sig") as f:
+    with open(file_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             data.append(row)
@@ -137,23 +135,17 @@ def merge_results(mimo_results: list[dict], glm_results: list[dict]) -> list[dic
             humor_type = mimo["humor_type"]
         else:
             # Choose the more specific one
-            if mimo["humor_type"] != "其他":
-                humor_type = mimo["humor_type"]
-            else:
-                humor_type = glm["humor_type"]
+            humor_type = mimo["humor_type"] if mimo["humor_type"] != "其他" else glm["humor_type"]
 
         # Choose the longer context (more detailed)
-        if len(mimo["context"]) > len(glm["context"]):
-            context = mimo["context"]
-        else:
-            context = glm["context"]
+        context = mimo["context"] if len(mimo["context"]) > len(glm["context"]) else glm["context"]
 
         merged.append({"context": context, "humor_type": humor_type})
 
     return merged
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Analyze danmaku using OpenCode task system",
     )
@@ -203,9 +195,6 @@ def main():
         logger.info("Test mode: processing only first batch")
 
     # Process each batch
-    all_mimo_results = []
-    all_glm_results = []
-
     for batch_index, batch in enumerate(batches):
         logger.info("Processing batch %d/%d", batch_index + 1, len(batches))
 
@@ -250,17 +239,17 @@ def main():
     logger.info("Saved batch info to data/training/batch_info.json")
 
     # Print summary
-    print(f"\n[SUMMARY]")
+    print("\n[SUMMARY]")
     print(f"  Total rows: {len(data)}")
     print(f"  Batch size: {args.batch_size}")
     print(f"  Num batches: {len(batches)}")
     print(f"  Test mode: {args.test}")
-    print(f"\n[NEXT] Use OpenCode task system to analyze batches:")
-    print(f"  1. Read batch_info.json")
-    print(f"  2. For each batch, create two tasks:")
-    print(f"     - mimo task: analyze batch with mimo model")
-    print(f"     - glm task: analyze batch with glm model")
-    print(f"  3. Merge results")
+    print("\n[NEXT] Use OpenCode task system to analyze batches:")
+    print("  1. Read batch_info.json")
+    print("  2. For each batch, create two tasks:")
+    print("     - mimo task: analyze batch with mimo model")
+    print("     - glm task: analyze batch with glm model")
+    print("  3. Merge results")
     print(f"  4. Save to {args.output}")
 
 

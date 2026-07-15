@@ -40,7 +40,7 @@ def __getattr__(name: str):
     return value
 
 
-def get_llm_class(provider: str):
+def get_llm_class(provider: str) -> type[LLMInterface] | None:
     """
     Get the LLM implementation class (for lazy loading)
 

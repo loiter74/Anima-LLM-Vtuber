@@ -174,7 +174,7 @@ ITEM_TO_BLOCK = {
 }
 
 
-def resolve_block_type(item_name):
+def resolve_block_type(item_name: str) -> str | None:
     """Translate an inventory item name to the block type to mine.
 
     Returns the Minecraft block name (suitable for mcData.blocksByName),

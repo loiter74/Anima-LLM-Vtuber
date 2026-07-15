@@ -14,11 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ except ImportError:
 
 # ── Jinja2 ─────────────────────────────────────────────────────────────
 try:
-    import jinja2
+    from jinja2 import Template as Jinja2Template
 
     _HAS_JINJA2 = True
 except ImportError:
@@ -219,12 +217,12 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
             {"level": d, "count": difficulty_count[d], "avg_recall": sum(vals) / len(vals)}
             for d, vals in difficulty_recall.items()
         ],
-        key=lambda x: x["level"],
+        key=lambda x: str(x["level"]),
     )
 
     ctx = {
         "config_name": config.get("name", "unknown"),
-        "timestamp": data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+        "timestamp": data.get("timestamp", datetime.now(UTC).isoformat()),
         "git_commit": data.get("git_commit", ""),
         "config": config,
         "summary": summary,
@@ -232,8 +230,6 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
         "latency": latency,
         "difficulty_breakdown": difficulty_breakdown,
     }
-
-    from jinja2 import Template as Jinja2Template
 
     template = Jinja2Template(_MD_TEMPLATE)
     report = template.render(**ctx)
@@ -411,7 +407,7 @@ def _cli() -> None:
         logger.error("Results file not found: %s", results_path)
         return
 
-    with open(results_path, "r", encoding="utf-8") as f:
+    with open(results_path, encoding="utf-8") as f:
         data = json.load(f)
 
     out_dir = Path(args.output) if args.output else results_path.parent

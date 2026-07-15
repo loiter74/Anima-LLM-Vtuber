@@ -22,7 +22,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -340,7 +340,7 @@ async def main() -> None:
     provider_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, result in enumerate(provider_results):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             logger.error(f"Provider {providers[i]} failed: {result}")
         else:
             all_results.extend(result)

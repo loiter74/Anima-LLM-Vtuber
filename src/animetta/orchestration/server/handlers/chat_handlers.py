@@ -346,7 +346,7 @@ class ChatHandlers:
         """Fetch specific history record."""
         history_uid = data.get("history_uid")
         logger.info(f"[{sid}] Requested history: {history_uid}")
-        messages = []
+        messages: list[dict[str, Any]] = []
 
         await self.sio.emit(
             EVENTS["history"]["list"]["name"],

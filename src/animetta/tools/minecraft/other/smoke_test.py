@@ -104,7 +104,7 @@ async def run_smoke_test(host: str, port: int, username: str) -> dict:
     return result
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Iron survival smoke test")
     parser.add_argument("--host", required=True, help="Minecraft server host")
     parser.add_argument("--port", type=int, default=25565, help="Minecraft server port")

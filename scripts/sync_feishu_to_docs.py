@@ -53,14 +53,14 @@ def read_sheet(sheet_name: str, range_str: str) -> list[list[str]]:
     return rows
 
 
-def sync_roadmap():
+def sync_roadmap() -> None:
     """Sync Roadmap sheet to docs/roadmap.md."""
     rows = read_sheet("Roadmap", "Roadmap!A1:D10")
 
     content = """# Animetta Roadmap
 
 > 未来几个月的大方向安排。防止每天被新想法带跑。
-> 
+>
 > **Source of Truth**: [飞书表格](https://k1xawe1z6a6.feishu.cn/sheets/Io94sSOnShYdkXtuLl4c6FLDnnd)
 
 ## 路线图
@@ -94,7 +94,7 @@ def sync_roadmap():
     print(f"✓ Synced Roadmap → {roadmap_path}")
 
 
-def sync_scope():
+def sync_scope() -> None:
     """Sync Scope-2026-07 sheet to docs/scope-2026-07.md."""
     rows = read_sheet("Scope-2026-07", "Scope-2026-07!A1:C20")
 
@@ -107,7 +107,7 @@ def sync_scope():
             elif row[0] == "不做":
                 out_scope.append((row[1], row[2]))
 
-    content = f"""# Animetta Scope - 2026年7月
+    content = """# Animetta Scope - 2026年7月
 
 > 这次到底做什么，不做什么。项目失败很多时候不是因为做得少，而是因为 Scope 一直膨胀。
 >
@@ -161,7 +161,7 @@ def sync_scope():
     print(f"✓ Synced Scope → {scope_path}")
 
 
-def sync_risk_log():
+def sync_risk_log() -> None:
     """Sync Risk Log sheet to docs/risk-log.md."""
     rows = read_sheet("Risk Log", "Risk Log!A1:D10")
 
@@ -212,7 +212,7 @@ def sync_risk_log():
     print(f"✓ Synced Risk Log → {risk_path}")
 
 
-def sync_backlog():
+def sync_backlog() -> None:
     """Sync Backlog sheet to docs/backlog.md."""
     rows = read_sheet("Backlog", "Backlog!A1:D20")
 
@@ -255,7 +255,7 @@ def sync_backlog():
     print(f"✓ Synced Backlog → {backlog_path}")
 
 
-def sync_not_now():
+def sync_not_now() -> None:
     """Sync Not Now sheet to docs/not-now.md."""
     rows = read_sheet("Not Now", "Not Now!A1:C10")
 
@@ -299,7 +299,7 @@ def sync_not_now():
     print(f"✓ Synced Not Now → {not_now_path}")
 
 
-def main():
+def main() -> None:
     """Main sync function."""
     import datetime
 

@@ -151,7 +151,7 @@ def get_live2d_config() -> Live2DConfig:
     return _live2d_config
 
 
-def reset_live2d_config():
+def reset_live2d_config() -> None:
     """Reset global Live2D configuration (for testing)"""
     global _live2d_config
     _live2d_config = None

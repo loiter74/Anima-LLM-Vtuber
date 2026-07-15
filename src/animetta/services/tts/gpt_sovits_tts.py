@@ -14,6 +14,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.gpt_sovits import GPTSoVITSConfig
 
 from .interface import TTSInterface
 
@@ -129,6 +130,9 @@ class GPTSoVITSTTS(TTSInterface):
             RuntimeError: If the API returns an error
         """
         self._ensure_client()
+        client = self._client
+        if client is None:
+            raise RuntimeError("GPT-SoVITS client is not initialized")
 
         payload = {
             "text": text,
@@ -156,7 +160,7 @@ class GPTSoVITSTTS(TTSInterface):
         )
 
         try:
-            response = await self._client.post("/tts", json=payload)
+            response = await client.post("/tts", json=payload)
         except Exception as e:
             logger.error(f"GPT-SoVITS server not reachable at {self.base_url}: {e}")
             raise ConnectionError(

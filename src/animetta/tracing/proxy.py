@@ -14,6 +14,7 @@ Usage:
 import asyncio
 import functools
 import inspect
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from opentelemetry import trace
@@ -105,7 +106,7 @@ class TracingProxy:
         tracer: trace.Tracer,
         service: str,
         method: str,
-        coro_fn,
+        coro_fn: Callable[..., Awaitable[Any]],
         args: tuple,
         kwargs: dict,
     ) -> Any:

@@ -11,21 +11,19 @@ Tests the full flow:
 """
 
 import asyncio
-import json
 import os
 import sys
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from animetta.tools.minecraft.bridge import MinecraftBridge
 from animetta.tools.minecraft.predefined_skills import get_predefined_skills
 from animetta.tools.minecraft.skill_library import Skill, SkillLibrary, SkillStep
 from animetta.tools.minecraft.skill_validator import SkillValidator
-from animetta.tools.minecraft.trace_recorder import ActionTrace, TraceRecorder
+from animetta.tools.minecraft.trace_recorder import TraceRecorder
 
 
-async def main():
+async def main() -> None:
     print("=== Skill Extraction Integration Test ===\n")
 
     # 1. Initialize components
@@ -110,7 +108,7 @@ async def main():
 
     # End trace
     trace = trace_recorder.end_trace("success")
-    print(f"\n   Trace completed:")
+    print("\n   Trace completed:")
     print(f"     - Goal: {trace.goal}")
     print(f"     - Steps: {len(trace.steps)}")
     print(f"     - Result: {trace.final_result}")
@@ -195,11 +193,11 @@ async def main():
     print(f"Skill extracted: {extracted_skill.name}")
     print(f"Skill validated: {validation_result.passed}")
     print(f"Skill saved: {validation_result.passed}")
-    print(f"\nNext time a similar task is requested, the bot will:")
-    print(f"  1. Search skill library for matching skills")
+    print("\nNext time a similar task is requested, the bot will:")
+    print("  1. Search skill library for matching skills")
     print(f"  2. Find '{extracted_skill.name}'")
-    print(f"  3. Execute the skill directly (no LLM planning needed)")
-    print(f"  4. Track success/failure for continuous improvement")
+    print("  3. Execute the skill directly (no LLM planning needed)")
+    print("  4. Track success/failure for continuous improvement")
 
     print("\n=== Test Complete ===")
 

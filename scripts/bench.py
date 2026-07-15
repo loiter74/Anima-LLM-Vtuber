@@ -15,13 +15,20 @@ Usage:
 import argparse
 import asyncio
 import json
+import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from statistics import median, stdev
-from typing import Any, Dict, List
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from animetta.config.providers.llm import DeepSeekLLMConfig, GLMLLMConfig, OpenAILLMConfig
+from animetta.core.service_context import ServiceContext
+from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
+from animetta.services.llm.factory import LLMFactory
 
 
 class Benchmark:
@@ -29,13 +36,15 @@ class Benchmark:
 
     def __init__(self, mode: str = "quick"):
         self.mode = mode
-        self.results: Dict[str, Any] = {
+        self.results: dict[str, Any] = {
             "timestamp": time.time(),
             "mode": mode,
             "scenarios": [],
         }
 
-    async def run_quick(self, turns: int = 10, concurrency: int = 1, provider: str | None = None):
+    async def run_quick(
+        self, turns: int = 10, concurrency: int = 1, provider: str | None = None
+    ) -> None:
         """Quick benchmark: text E2E with configurable turns, concurrency, and providers."""
         use_real = provider is not None
         mode_label = f"real ({provider})" if use_real else "mock"
@@ -51,6 +60,7 @@ class Benchmark:
             "讲个笑话吧。",
         ]
 
+        latencies: list[float]
         if concurrency > 1:
             latencies = await self._run_concurrent(
                 test_inputs, turns, concurrency, provider=provider
@@ -61,14 +71,14 @@ class Benchmark:
                 ctx = await self._create_real_context(provider)
             else:
                 ctx = await self._create_mock_context()
-            orch = await LangGraphOrchestratorFactory.create(
+            orch = await LangGraphOrchestrator.create(
                 session_id="bench-quick",
                 service_context=ctx,
                 socketio=None,
                 emotion_analyzer=None,
             )
 
-            latencies: List[float] = []
+            latencies = []
             for i in range(turns):
                 text = test_inputs[i % len(test_inputs)]
                 start = time.perf_counter()
@@ -188,7 +198,7 @@ class Benchmark:
         )
 
     @staticmethod
-    def _calculate_qps(latencies: List[float]) -> float:
+    def _calculate_qps(latencies: list[float]) -> float:
         """Queries per second from latency list."""
         if not latencies:
             return 0.0
@@ -197,10 +207,10 @@ class Benchmark:
 
     async def _run_concurrent(
         self, test_inputs: list, turns: int, concurrency: int, provider: str | None = None
-    ) -> List[float]:
+    ) -> list[float]:
         """Run turns with bounded concurrency and return latencies."""
         sem = asyncio.Semaphore(concurrency)
-        latencies: List[float] = []
+        latencies: list[float] = []
         lock = asyncio.Lock()
         completed = 0
 
@@ -211,7 +221,7 @@ class Benchmark:
                     ctx = await self._create_real_context(provider)
                 else:
                     ctx = await self._create_mock_context()
-                orch = await LangGraphOrchestratorFactory.create(
+                orch = await LangGraphOrchestrator.create(
                     session_id=f"bench-concurrent-{idx}",
                     service_context=ctx,
                     socketio=None,
@@ -239,7 +249,7 @@ class Benchmark:
         await asyncio.gather(*tasks)
         return latencies
 
-    def _print_summary(self, name: str, latencies: List[float]):
+    def _print_summary(self, name: str, latencies: list[float]):
         if not latencies:
             print(f"  No valid measurements for {name}")
             return
@@ -256,7 +266,9 @@ class Benchmark:
         if len(latencies) > 1:
             print(f"    Std:  {stdev(latencies):.0f}ms")
 
-    async def run_live(self, url: str = "http://localhost:12394", prompts: List[str] = None):
+    async def run_live(
+        self, url: str = "http://localhost:12394", prompts: list[str] = None
+    ) -> None:
         """Live benchmark: connect to a running server via Socket.IO."""
         if prompts is None:
             prompts = ["你好", "你叫什么名字", "今天过得怎么样？", "1+1等于几？", "讲个笑话吧"]
@@ -271,14 +283,14 @@ class Benchmark:
         sio = socketio.AsyncClient()
         responses = []
         done = asyncio.Event()
-        current_chunks = []
+        current_chunks: list[str] = []
 
         @sio.on("connect")
         async def on_connect():
-            print(f"  ✅ Connected")
+            print("  ✅ Connected")
 
         @sio.on("chat:sentence")
-        async def on_sentence(data):
+        async def on_sentence(data: dict[str, Any]) -> None:
             if data.get("is_complete"):
                 responses.append("".join(current_chunks))
                 current_chunks.clear()
@@ -287,12 +299,12 @@ class Benchmark:
                 current_chunks.append(data.get("text", ""))
 
         @sio.on("chat:audio_with_expression")
-        async def on_audio(data):
+        async def on_audio(data: dict[str, Any]) -> None:
             if not done.is_set() and not current_chunks:
                 done.set()  # audio-only response
 
         @sio.on("system:error")
-        async def on_error(data):
+        async def on_error(data: dict[str, Any]) -> None:
             print(f"  ❌ Server error: {data}")
             done.set()
 
@@ -317,7 +329,7 @@ class Benchmark:
                 print(
                     f"  [{i}/{len(prompts)}] {elapsed:.0f}ms | response: {(responses[-1] if responses else '?')[:50]}"
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print(f"  [{i}/{len(prompts)}] TIMEOUT")
 
         await sio.disconnect()
@@ -333,7 +345,7 @@ class Benchmark:
             )
             self._print_summary("text_e2e_live", latencies)
 
-    def save_results(self, output_path: str | None = None):
+    def save_results(self, output_path: str | None = None) -> None:
         """Save results to JSON for report generation.
 
         Saves to:
@@ -361,15 +373,15 @@ class Benchmark:
             json.dump(self.results, f, indent=2, ensure_ascii=False)
         print(f"Latest updated: {latest_path}")
 
-    def generate_report(self):
+    def generate_report(self) -> None:
         """Generate a report augmented with canonical observation-ledger data."""
         output_dir = Path(__file__).parent.parent / "docs" / "benchmarks"
 
         lines = [
-            f"# Benchmark Results\n",
+            "# Benchmark Results\n",
             f"**Date:** {time.strftime('%Y-%m-%d %H:%M', time.localtime(self.results['timestamp']))}\n",
             f"**Mode:** {self.results['mode']}\n",
-            f"\n",
+            "\n",
         ]
 
         # ── Run Configuration ──
@@ -492,7 +504,8 @@ class RealServer:
 
     def __init__(self, port: int = None):
         self.port = port or self.DEFAULT_PORT
-        self._process = None
+        self._process: subprocess.Popen[bytes] | None = None
+        self._exit_stack = ExitStack()
 
     def start(self) -> int:
         """Start uvicorn on a free port. Returns the actual port."""
@@ -506,10 +519,8 @@ class RealServer:
                 f"Cannot find free port after {self.MAX_PORT_TRIES} tries (tried {self.port}+)"
             )
 
-        import subprocess
-
         log_path = Path(__file__).parent.parent / "data" / f"benchmark-server-{self.port}.log"
-        self._log_file = open(log_path, "w", encoding="utf-8")
+        self._log_file = self._exit_stack.enter_context(log_path.open("w", encoding="utf-8"))
         self._process = subprocess.Popen(
             [
                 sys.executable,
@@ -543,7 +554,7 @@ class RealServer:
             await asyncio.sleep(0.5)
         return False
 
-    def stop(self):
+    def stop(self) -> None:
         """Terminate the server process."""
         if self._process:
             self._process.terminate()
@@ -552,8 +563,7 @@ class RealServer:
             except Exception:
                 self._process.kill()
             self._process = None
-        if hasattr(self, "_log_file"):
-            self._log_file.close()
+        self._exit_stack.close()
 
     @staticmethod
     def _port_free(port: int) -> bool:
@@ -591,7 +601,7 @@ def _validate_env() -> bool:
     return True
 
 
-async def run_auto():
+async def run_auto() -> None:
     """Auto benchmark: start real server → test → collect → report."""
     import atexit
 
@@ -603,7 +613,7 @@ async def run_auto():
     _validate_env()
 
     # 2. Start server
-    print(f"\n  [1/4] Starting server...")
+    print("\n  [1/4] Starting server...")
     server = RealServer()
     port = server.start()
     atexit.register(server.stop)
@@ -618,7 +628,7 @@ async def run_auto():
     print(f"  ✅ Server ready at http://127.0.0.1:{port}")
 
     # 3. Run benchmarks
-    print(f"\n  [2/4] Running test prompts...")
+    print("\n  [2/4] Running test prompts...")
     url = f"http://127.0.0.1:{port}"
 
     # Text prompts
@@ -633,7 +643,7 @@ async def run_auto():
     await bench.run_live(url=url, prompts=text_prompts)
 
     # 4. Read canonical observation ledger
-    print(f"\n  [3/4] Collecting timing data...")
+    print("\n  [3/4] Collecting timing data...")
     await asyncio.sleep(1)  # let async writes flush
 
     db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
@@ -680,11 +690,11 @@ async def run_auto():
         print(f"  ⚠️  Observation ledger read failed: {e}")
 
     # 5. Allow committed-record mirrors to consume their final records.
-    print(f"  [4/4] Waiting for observation mirrors...")
+    print("  [4/4] Waiting for observation mirrors...")
     await asyncio.sleep(0.1)
 
     # 6. Stop server
-    print(f"  Cleaning up...")
+    print("  Cleaning up...")
     server.stop()
 
     # 6. Generate report
@@ -723,10 +733,15 @@ async def run_auto():
     print(f"\n{'=' * 60}\n")
 
 
-def _print_auto_report(bench, traces, spans, otel_spans):
+def _print_auto_report(
+    bench: Benchmark,
+    traces: list[dict[str, Any]],
+    spans: list[dict[str, Any]],
+    otel_spans: list[dict[str, Any]],
+) -> None:
     """Print a structured auto benchmark report."""
     print(f"\n{'=' * 60}")
-    print(f"  🔍 Auto Benchmark Report")
+    print("  🔍 Auto Benchmark Report")
     print(f"  {time.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'=' * 60}")
 
@@ -736,7 +751,7 @@ def _print_auto_report(bench, traces, spans, otel_spans):
         latencies.extend(sc.get("latencies_ms", []))
     if latencies:
         latencies.sort()
-        print(f"\n  ── End-to-End Latency ──")
+        print("\n  ── End-to-End Latency ──")
         print(f"  Prompts:  {len(latencies)}")
         print(f"  P50:      {latencies[len(latencies) // 2]:.0f}ms")
         print(f"  P95:      {latencies[int(len(latencies) * 0.95)]:.0f}ms")
@@ -746,10 +761,10 @@ def _print_auto_report(bench, traces, spans, otel_spans):
 
     # Node breakdown
     if spans:
-        print(f"\n  ── Node Timing ──")
+        print("\n  ── Node Timing ──")
         print(f"  {'Node':25s} {'Calls':>6s} {'Avg(ms)':>8s} {'Min':>8s} {'Max':>8s}")
         print(f"  {'-' * 55}")
-        by_node = {}
+        by_node: dict[str, dict[str, list[float]]] = {}
         for s in spans:
             n = s["node_name"]
             if n not in by_node:
@@ -767,10 +782,10 @@ def _print_auto_report(bench, traces, spans, otel_spans):
 
     # OTel sub-steps
     if otel_spans:
-        print(f"\n  ── Service-Level Spans (OTel) ──")
+        print("\n  ── Service-Level Spans (OTel) ──")
         print(f"  {'Step':30s} {'Calls':>6s} {'Avg(ms)':>8s}")
         print(f"  {'-' * 44}")
-        by_step = {}
+        by_step: dict[str, dict[str, list[float]]] = {}
         for s in otel_spans:
             n = s["node_name"]
             if n not in by_step:
@@ -814,7 +829,7 @@ def _print_baseline_diff(runs_dir: Path, run_data: dict):
     old_lats.sort()
     new_lats.sort()
 
-    def _pct(a, b):
+    def _pct(a: float, b: float) -> float:
         if b <= 0:
             return 0
         return (a - b) / b * 100
@@ -824,7 +839,7 @@ def _print_baseline_diff(runs_dir: Path, run_data: dict):
     delta = _pct(new_p95, old_p95)
     icon = "⚠️" if abs(delta) > 20 else "✅"
 
-    print(f"\n  ── Baseline Comparison ──")
+    print("\n  ── Baseline Comparison ──")
     print(f"  {'Metric':20s} {'Before':>10s} {'After':>10s} {'Δ%':>8s}")
     print(f"  {'-' * 48}")
     print(f"  {'P95':20s} {old_p95:>8.0f}ms {new_p95:>8.0f}ms {delta:+7.1f}% {icon}")
@@ -872,7 +887,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def main():
+async def main() -> None:
     args = parse_args()
     mode = args.mode
 
@@ -937,7 +952,7 @@ async def main():
             """)
             rows = cur3.fetchall()
             if rows:
-                print(f"\n  -- Node Timing --")
+                print("\n  -- Node Timing --")
                 for n in rows:
                     print(
                         f"  {n['node_name']:20s}  calls={n['cnt']:4d}  avg={n['avg_ms']:8.0f}ms  min={n['min_ms']:7.0f}ms  max={n['max_ms']:7.0f}ms"
@@ -952,7 +967,7 @@ async def main():
             """)
             rows2 = cur4.fetchall()
             if rows2:
-                print(f"\n  -- Sub-Node Timing --")
+                print("\n  -- Sub-Node Timing --")
                 for n in rows2:
                     print(f"  {n['node_name']:25s}  calls={n['cnt']:4d}  avg={n['avg_ms']:8.0f}ms")
 
@@ -1037,11 +1052,11 @@ def _run_diff(args: list):
     with open(p2) as f:
         r2 = json.load(f)
 
-    def _get_lats(data):
-        l = []
+    def _get_lats(data: dict[str, Any]) -> list[float]:
+        latencies = []
         for sc in data.get("latencies", data.get("scenarios", [])):
-            l.extend(sc.get("latencies_ms", []))
-        return sorted(l)
+            latencies.extend(sc.get("latencies_ms", []))
+        return sorted(latencies)
 
     l1 = _get_lats(r1)
     l2 = _get_lats(r2)
@@ -1050,7 +1065,7 @@ def _run_diff(args: list):
         print("One or both runs have no latency data.")
         return
 
-    def _p(a, b):
+    def _p(a: float, b: float) -> float:
         return (a - b) / b * 100 if b else 0
 
     print(f"\n{'=' * 60}")

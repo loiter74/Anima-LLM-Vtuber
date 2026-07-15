@@ -7,6 +7,7 @@ Mock VC implementation - for testing and development
 from pathlib import Path
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.vc.mock import MockVCConfig
 
 from .interface import VCInterface
 

@@ -81,7 +81,7 @@ class DeepSeekLLM:
         )
         self._model = model
 
-    async def chat(self, messages: list[dict]):
+    async def chat(self, messages: list[dict[str, Any]]) -> Any:
         r = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,  # type: ignore[arg-type]

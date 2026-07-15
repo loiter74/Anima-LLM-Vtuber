@@ -13,6 +13,8 @@ import ollama
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm import LLMBaseConfig
+from animetta.config.providers.llm.ollama import OllamaLLMConfig
 
 from .interface import LLMInterface
 

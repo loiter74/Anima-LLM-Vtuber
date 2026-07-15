@@ -14,6 +14,7 @@ from loguru import logger
 from zhipuai import ZhipuAI
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm.glm import GLMLLMConfig
 
 from .glm_message_converter import GLMMessageConverter, GLMToolConverter
 from .interface import LLMInterface
@@ -49,13 +50,15 @@ class GLMLLM(LLMInterface):
 
     async def chat_stream(
         self,
-        prompt: str,
+        user_input: str,
         system_prompt: str | None = None,
         tools: list[Any] | None = None,
+        **kwargs: Any,
     ) -> AsyncIterator[str]:
+        del kwargs
         await self._ensure_client()
 
-        messages = self._build_messages(prompt, system_prompt, include_history=True)
+        messages = self._build_messages(user_input, system_prompt, include_history=True)
         glm_tools = self._convert_tools_if_needed(tools)
 
         logger.debug(
@@ -82,7 +85,7 @@ class GLMLLM(LLMInterface):
                     full_response += content
                     yield content
 
-            self._update_history(prompt, full_response)
+            self._update_history(user_input, full_response)
 
         except Exception as e:
             logger.error(f"[GLM] Chat failed: {e}")
@@ -93,7 +96,9 @@ class GLMLLM(LLMInterface):
         user_input: str,
         system_prompt: str | None = None,
         tools: list[Any] | None = None,
+        **kwargs: Any,
     ) -> str:
+        del kwargs
         await self._ensure_client()
 
         messages = self._build_messages(user_input, system_prompt, include_history=True)
@@ -262,7 +267,7 @@ class GLMLLM(LLMInterface):
         if self._call_count % 100 == 0 and len(self._conversation_history) > 100:
             self._conversation_history = self._conversation_history[-50:]
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         self._conversation_history = []
         logger.debug("[GLM] Conversation history cleared")
 
@@ -293,7 +298,7 @@ class GLMLLM(LLMInterface):
     def max_tokens(self) -> int | None:
         return self.config.max_tokens
 
-    def set_max_tokens(self, max_tokens: int):
+    def set_max_tokens(self, max_tokens: int) -> None:
         self.config.max_tokens = max_tokens
 
     def supports_tool_calls(self) -> bool:
@@ -304,6 +309,6 @@ class GLMLLM(LLMInterface):
             f"[GLM] Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}"
         )
 
-    async def close(self):
+    async def close(self) -> None:
         self.client = None
         logger.info("[GLM] Connection closed")

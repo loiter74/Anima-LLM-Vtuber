@@ -5,10 +5,11 @@ import asyncio
 import sys
 
 sys.path.insert(0, "src")
-sys.stdout.reconfigure(line_buffering=True)
+if reconfigure_stdout := getattr(sys.stdout, "reconfigure", None):
+    reconfigure_stdout(line_buffering=True)
 
 
-async def main():
+async def main() -> None:
     from animetta.tools.minecraft.core.bridge import MinecraftBridge, get_bridge
     from animetta.tools.minecraft.core.config import MinecraftConfig
 
@@ -26,7 +27,7 @@ async def main():
     if not started:
         print("[restart] FAILED", flush=True)
         return
-    print(f"[restart] Bot online", flush=True)
+    print("[restart] Bot online", flush=True)
 
     # Bootstrap: craft basic tools
     steps = [
@@ -43,7 +44,7 @@ async def main():
         status = r.get("status", "unknown")
         print(f"    → {status}: {r.get('result', '')}", flush=True)
         if status != "success":
-            print(f"    [WARN] Step failed, continuing...", flush=True)
+            print("    [WARN] Step failed, continuing...", flush=True)
 
     # Mine stone for stone pickaxe
     print("  [mine stone x3]...", flush=True)

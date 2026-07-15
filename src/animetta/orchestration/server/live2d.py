@@ -3,8 +3,7 @@ Live2D action queue management
 Manages Live2D action queuing and execution
 """
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
@@ -22,10 +21,10 @@ class Live2DManager:
 
     def __init__(self):
         self._action_queue = None
-        self._execute_callback: Callable | None = None
+        self._execute_callback: Callable[[ActionMessage], Awaitable[None]] | None = None
 
     @property
-    def action_queue(self):
+    def action_queue(self) -> Live2DActionQueue:
         """Get the Live2D action queue (lazy initialization)"""
         if self._action_queue is None:
             self._action_queue = Live2DActionQueue()
@@ -33,7 +32,10 @@ class Live2DManager:
 
         return self._action_queue
 
-    def set_execute_callback(self, callback: Callable[[Any], None]) -> None:
+    def set_execute_callback(
+        self,
+        callback: Callable[[ActionMessage], Awaitable[None]],
+    ) -> None:
         """
         Set action execution callback
 

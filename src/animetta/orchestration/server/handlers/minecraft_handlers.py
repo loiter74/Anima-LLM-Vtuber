@@ -6,12 +6,12 @@ Follows the same pattern as BilibiliHandlers: frontend emits events,
 backend starts/stops the service and reports status back.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from ....tools.minecraft.core import tools as mc_tools
-from ....tools.minecraft.core.bridge import get_bridge
+from ....tools.minecraft.core.bridge import MinecraftBridge, get_bridge
 from ....tools.minecraft.core.config import MinecraftConfig
 from ....tools.minecraft.core.state_collector import StateCollector
 from ....tools.minecraft.core.tools import cleanup_bridge, init_bridge
@@ -32,7 +32,7 @@ class MinecraftHandlers:
         self.sio = sio
         self._state_collector: StateCollector | None = None
 
-    async def _configure_voyager(self, bridge) -> bool:
+    async def _configure_voyager(self, bridge: MinecraftBridge) -> bool:
         """Attach the Python control plane when the shared LLM is available."""
         from animetta.core.service_pool import ServicePool
 
@@ -48,10 +48,10 @@ class MinecraftHandlers:
         logger.info("[Minecraft] Python Voyager controller configured")
         return True
 
-    def _setup_viewer_callback(self, bridge) -> None:
+    def _setup_viewer_callback(self, bridge: MinecraftBridge) -> None:
         """Register callback to forward viewer join/leave events to frontend."""
 
-        def on_viewer_event(event_type: str, payload) -> None:
+        def on_viewer_event(event_type: str, payload: dict[str, Any] | object) -> None:
             import asyncio
 
             if event_type == "client_viewer_status" and isinstance(payload, dict):
@@ -133,9 +133,10 @@ class MinecraftHandlers:
             await self._configure_voyager(bridge)
 
             # Start state collector for HUD + web dashboard
-            self._state_collector = StateCollector(bridge, self.sio, interval=2.0)
-            mc_tools._state_collector = self._state_collector
-            await self._state_collector.start()
+            collector = StateCollector(bridge, self.sio, interval=2.0)
+            self._state_collector = collector
+            mc_tools._state_collector = collector
+            await collector.start()
 
             await self.sio.emit(
                 EVENTS["minecraft"]["status"]["name"],

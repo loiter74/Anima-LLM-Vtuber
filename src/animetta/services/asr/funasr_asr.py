@@ -16,12 +16,15 @@ Common models:
 - paraformer-en: English speech recognition
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.funasr import FunASRConfig
 
 from .interface import ASRInterface
 
@@ -235,7 +238,11 @@ class FunASRASR(ASRInterface):
             tmp_file.flush()
             return tmp_file.name
 
-    async def transcribe_stream(self, audio_data: bytes | str | Path | list | np.ndarray, **kwargs):
+    async def transcribe_stream(
+        self,
+        audio_data: bytes | str | Path | list | np.ndarray,
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -264,14 +271,19 @@ class FunASRASR(ASRInterface):
         logger.debug("FunASR ASR resources released")
 
     @classmethod
-    def _get(cls, config, key, default):
+    def _get(
+        cls,
+        config: FunASRConfig | dict[str, Any],
+        key: str,
+        default: Any,
+    ) -> Any:
         """Get value from config object or dict."""
         if isinstance(config, dict):
             return config.get(key, default)
         return getattr(config, key, default)
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: FunASRConfig | dict[str, Any], **kwargs):
         """Create instance from configuration"""
         return cls(
             model=cls._get(config, "model", "paraformer-zh"),

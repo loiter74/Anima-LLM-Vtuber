@@ -21,7 +21,7 @@ class SkillLibrary:
 
     COLLECTION_NAME = "mc_skills"
 
-    def __init__(self, atom_store=None, db_path: str | None = None):
+    def __init__(self, atom_store: object | None = None, db_path: str | None = None) -> None:
         self._store = atom_store
         self._skills: dict[str, Skill] = {}
         self._db: SkillLibraryDB | None = None

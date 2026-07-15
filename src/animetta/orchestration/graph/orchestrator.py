@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import time as time_module
-from typing import Any
+from typing import Any, cast
 
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.observability.conversation import ConversationObserver
@@ -18,7 +19,7 @@ from animetta.observability.ports import (
     ObservationRecorder,
 )
 
-from .builder import create_default_graph
+from .builder import CompiledAgentGraph, create_default_graph
 from .conversation_session import ConversationSessionState
 from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
@@ -54,7 +55,7 @@ class LangGraphOrchestrator:
             raw_session_id if isinstance(raw_session_id, str) and raw_session_id else "unknown"
         )
 
-        self.graph = None
+        self.graph: CompiledAgentGraph | None = None
         self._is_running = False
         self._processing_audio = False  # guard against concurrent audio processing
         self.conversation_session = ConversationSessionState()
@@ -63,7 +64,7 @@ class LangGraphOrchestrator:
         self.tool_manager: ToolManager | None = None
 
         # Build LangGraph config (passed to nodes via config parameter)
-        self._langgraph_config = {
+        self._langgraph_config: dict[str, Any] = {
             "configurable": {
                 "service_context": service_context,
                 "socketio": socketio,
@@ -299,7 +300,7 @@ class LangGraphOrchestrator:
         input_type = initial_state.get("input_type", "text")
         user_text = initial_state.get("user_text", "")
         turn = await self._conversation_observer().start(initial_state)
-        run_config = dict(self._langgraph_config)
+        run_config = cast(RunnableConfig, dict(self._langgraph_config))
         callbacks = self._callbacks or get_observability().callbacks
         if callbacks:
             run_config["callbacks"] = callbacks
@@ -310,7 +311,10 @@ class LangGraphOrchestrator:
         t_start = time_module.perf_counter()
 
         try:
-            result = await self.graph.ainvoke(initial_state, config=run_config)
+            graph = self.graph
+            if graph is None:
+                raise RuntimeError("State graph is not initialized")
+            result = await graph.ainvoke(initial_state, config=run_config)
             duration_ms = (time_module.perf_counter() - t_start) * 1000
             logger.info(
                 f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms"

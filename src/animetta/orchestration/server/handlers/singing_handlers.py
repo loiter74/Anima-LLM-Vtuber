@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 import yaml
 from loguru import logger
 
+from animetta.config.singing import SingingConfig
+from animetta.services.singing.interface import PipelineProgress
+from animetta.services.singing.svc_pipeline import SVCPipeline
+
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
 
@@ -31,7 +35,7 @@ class SingingHandlers(BaseSocketHandler):
         live2d_manager: "Live2DManager",
     ):
         super().__init__(sio, session_manager, desktop_manager, live2d_manager)
-        self._pipeline = None
+        self._pipeline: SVCPipeline | None = None
 
     async def on_sing_process(self, sid: str, data: dict) -> None:
         """Start singing pipeline.
@@ -70,12 +74,13 @@ class SingingHandlers(BaseSocketHandler):
                 raw = yaml.safe_load(f)
             config = SingingConfig(**raw.get("singing", {}))
 
-            self._pipeline = SVCPipeline(config)
+            pipeline = SVCPipeline(config)
+            self._pipeline = pipeline
 
-            def _on_progress(progress):
+            def _on_progress(progress: PipelineProgress) -> None:
                 asyncio.ensure_future(self._emit_progress(sid, progress))
 
-            self._pipeline.set_progress_callback(_on_progress)
+            pipeline.set_progress_callback(_on_progress)
 
             if file_data:
                 # Save uploaded file then run pipeline from local path
@@ -115,7 +120,7 @@ class SingingHandlers(BaseSocketHandler):
         logger.info(f"Uploaded file saved: {output_path} ({len(raw_bytes)} bytes)")
         return str(output_path)
 
-    async def _emit_progress(self, sid: str, progress) -> None:
+    async def _emit_progress(self, sid: str, progress: PipelineProgress) -> None:
         """Emit progress event to client."""
         await self.sio.emit(
             EVENTS["sing"]["progress"]["name"],

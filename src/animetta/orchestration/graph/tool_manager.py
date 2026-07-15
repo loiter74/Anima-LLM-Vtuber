@@ -81,7 +81,7 @@ class ToolManager:
     def is_loaded(self) -> bool:
         return len(self.tools) > 0 and self.chat_model is not None
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources"""
         if self._mcp_manager:
             await self._mcp_manager.close_all()

@@ -16,19 +16,19 @@
 - [x] 2.4 Apply Ruff format and import normalization to service packages, preserving provider discovery and optional dependency boundaries
 - [x] 2.5 Apply Ruff format and import normalization to memory and tool packages, including Minecraft Python sources
 - [x] 2.6 Apply Ruff format and import normalization to all Python tests without changing test semantics or fixture discovery
-- [ ] 2.7 Prove every maintained Python root passes `ruff format --check`, `ruff check`, `git diff --check`, and the impact-selected tests
+- [x] 2.7 Prove every maintained Python root passes `ruff format --check`, `ruff check`, `git diff --check`, and the impact-selected tests
 
 ## 3. Python lint and typing convergence
 
-- [ ] 3.1 Add configuration-contract tests that reject package-wide `F821`, mypy `ignore_errors`, and maintained-root format exclusions
-- [ ] 3.2 Enable the agreed Ruff correctness and maintainability rules and public-interface annotation checks with test-only naming exceptions kept narrow
-- [ ] 3.3 Type and lint core, config, acceptance, avatar, notifier, inspection, tracing, and utility packages, adding characterization tests before non-mechanical fixes
-- [ ] 3.4 Type and lint orchestration server and graph packages, preserving Socket.IO events, LangGraph state, cancellation, and cleanup behavior
-- [ ] 3.5 Type and lint all service packages, replacing broad ignores with typed provider adapters or localized documented boundaries
-- [ ] 3.6 Type and lint memory and tool packages, preserving storage schemas, dynamic tool dispatch, and Minecraft bridge behavior
-- [ ] 3.7 Type and lint quality tooling, scripts, and evaluations under explicit mypy module scopes
-- [ ] 3.8 Remove obsolete package-wide Ruff and mypy suppressions and verify the new configuration-contract tests pass
-- [ ] 3.9 Run zero-diagnostic Ruff and mypy checks for every maintained non-test Python root plus all affected behavior tests
+- [x] 3.1 Add configuration-contract tests that reject package-wide `F821`, mypy `ignore_errors`, and maintained-root format exclusions
+- [x] 3.2 Enable the agreed Ruff correctness and maintainability rules and public-interface annotation checks with test-only naming exceptions kept narrow
+- [x] 3.3 Type and lint core, config, acceptance, avatar, notifier, inspection, tracing, and utility packages, adding characterization tests before non-mechanical fixes
+- [x] 3.4 Type and lint orchestration server and graph packages, preserving Socket.IO events, LangGraph state, cancellation, and cleanup behavior
+- [x] 3.5 Type and lint all service packages, replacing broad ignores with typed provider adapters or localized documented boundaries
+- [x] 3.6 Type and lint memory and tool packages, preserving storage schemas, dynamic tool dispatch, and Minecraft bridge behavior
+- [x] 3.7 Type and lint quality tooling, scripts, and evaluations under explicit mypy module scopes
+- [x] 3.8 Remove obsolete package-wide Ruff and mypy suppressions and verify the new configuration-contract tests pass
+- [x] 3.9 Run zero-diagnostic Ruff and mypy checks for every maintained non-test Python root plus all affected behavior tests
 
 ## 4. Frontend lint, format, and type convergence
 

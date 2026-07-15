@@ -1,7 +1,7 @@
 """Thin LangGraph nodes for the isolated two-pass golden dialogue."""
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -38,7 +38,7 @@ def _memory_mode(config: RunnableConfig | None) -> PersistenceMode:
     context = _configurable(config).get("service_context")
     system = getattr(getattr(context, "config", None), "system", None)
     mode = getattr(system, "long_term_memory_mode", "off")
-    return mode if mode in {"off", "read_only", "read_write"} else "off"
+    return cast(PersistenceMode, mode) if mode in {"off", "read_only", "read_write"} else "off"
 
 
 async def reasoner_node(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.config.manifest import EffectiveConfig
 from animetta.config.persona import PersonaConfig, list_available_personas
 
 from ...socket_events import EVENTS
@@ -37,7 +38,7 @@ class PersonaHandlers(BaseSocketHandler):
         self._base = base
 
     @property
-    def global_config(self):
+    def global_config(self) -> EffectiveConfig | None:
         """Get global_config from base handler if available."""
         logger.debug(
             "[PersonaHandlers] global_config requested: has_base={}, "
@@ -51,7 +52,7 @@ class PersonaHandlers(BaseSocketHandler):
         return self._global_config
 
     @global_config.setter
-    def global_config(self, value):
+    def global_config(self, value: EffectiveConfig | None) -> None:
         logger.debug(
             "[PersonaHandlers] global_config updated: has_config={}",
             value is not None,

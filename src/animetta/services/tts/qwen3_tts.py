@@ -33,6 +33,7 @@ from typing import Any
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.qwen3 import Qwen3TTSConfig
 
 from .interface import TTSInterface
 
@@ -454,8 +455,12 @@ class Qwen3TTSTTS(TTSInterface):
         if not os.path.exists(self.ref_audio_path):
             raise FileNotFoundError(f"Reference audio not found: {self.ref_audio_path}")
 
+        model = self._model
+        if model is None:
+            raise RuntimeError("Qwen3-TTS model is not loaded")
+
         logger.info("Qwen3-TTS voice clone prompt build started")
-        self._voice_clone_prompt = self._model.create_voice_clone_prompt(
+        self._voice_clone_prompt = model.create_voice_clone_prompt(
             ref_audio=self.ref_audio_path,
             ref_text=self.ref_text,
             x_vector_only_mode=self.x_vector_only,
@@ -521,8 +526,11 @@ class Qwen3TTSTTS(TTSInterface):
 
             def generate_and_encode() -> bytes | str:
                 self._ensure_preloaded_worker()
+                model = self._model
+                if model is None:
+                    raise RuntimeError("Qwen3-TTS model is not loaded")
                 if self.ref_audio_path:
-                    wavs, sr = self._model.generate_voice_clone(
+                    wavs, sr = model.generate_voice_clone(
                         text=text,
                         language=effective_language,
                         voice_clone_prompt=self._voice_clone_prompt,
@@ -534,7 +542,7 @@ class Qwen3TTSTTS(TTSInterface):
                         ),
                     )
                 else:
-                    wavs, sr = self._model.generate_custom_voice(
+                    wavs, sr = model.generate_custom_voice(
                         text=text,
                         language=effective_language,
                         speaker=effective_speaker,

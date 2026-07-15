@@ -419,7 +419,7 @@ class MinecraftBridge:
         """
         self._viewer_callback = callback
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the bot subprocess and resolve pending commands."""
         self._running = False
 

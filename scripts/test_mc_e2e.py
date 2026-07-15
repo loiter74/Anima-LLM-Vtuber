@@ -1,21 +1,22 @@
 """End-to-end test: text input → LLM → mc tool call → bot execution."""
 
 import asyncio
+from typing import Any
 
 import socketio
 
 SERVER = "http://localhost:12394"
 
-events_log = []
+events_log: list[tuple[str, Any]] = []
 
 
-def log(evt, data):
+def log(evt: str, data: Any) -> None:
     msg = f"[EVENT] {evt}: {str(data)[:200]}"
     print(msg)
     events_log.append((evt, data))
 
 
-async def main():
+async def main() -> None:
     sio = socketio.AsyncClient()
 
     @sio.event
@@ -23,35 +24,35 @@ async def main():
         print("[CONNECTED]")
 
     @sio.on("minecraft:status")
-    async def on_mc_status(data):
+    async def on_mc_status(data: Any) -> None:
         log("minecraft:status", data)
 
     @sio.on("minecraft:bot_state")
-    async def on_bot_state(data):
+    async def on_bot_state(data: Any) -> None:
         log("minecraft:bot_state", data)
 
     @sio.on("minecraft:command_result")
-    async def on_cmd(data):
+    async def on_cmd(data: Any) -> None:
         log("minecraft:command_result", data)
 
     @sio.on("minecraft:viewer_status")
-    async def on_viewer(data):
+    async def on_viewer(data: Any) -> None:
         log("minecraft:viewer_status", data)
 
     @sio.on("chat:sentence")
-    async def on_sentence(data):
+    async def on_sentence(data: Any) -> None:
         log("chat:sentence", data)
 
     @sio.on("chat:control")
-    async def on_control(data):
+    async def on_control(data: Any) -> None:
         log("chat:control", data)
 
     @sio.on("chat:expression")
-    async def on_expression(data):
+    async def on_expression(data: Any) -> None:
         log("chat:expression", data)
 
     @sio.on("chat:transcript")
-    async def on_transcript(data):
+    async def on_transcript(data: Any) -> None:
         log("chat:transcript", data)
 
     print(f"[1] Connecting to {SERVER} ...")

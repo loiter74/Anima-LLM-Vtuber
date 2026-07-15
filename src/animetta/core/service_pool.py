@@ -16,10 +16,17 @@ Usage:
         await ctx.init_memory()
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from animetta.config.manifest import EffectiveConfig
+    from animetta.core.model_loading_manager import ModelLoadingManager
+    from animetta.observability.ports import ObservationRecorder
 
 
 class ServicePool:
@@ -48,7 +55,12 @@ class ServicePool:
     # ── Lifecycle ──────────────────────────────────────────
 
     @classmethod
-    async def init(cls, config, model_manager=None, observation_recorder=None) -> None:
+    async def init(
+        cls,
+        config: EffectiveConfig,
+        model_manager: ModelLoadingManager | None = None,
+        observation_recorder: ObservationRecorder | None = None,
+    ) -> None:
         """Initialize once; concurrent callers await the same lifecycle task."""
         if cls._init_state == "closed" and (
             cls._shutdown_task is None or cls._shutdown_task.done()
@@ -100,9 +112,9 @@ class ServicePool:
     @classmethod
     async def _init_once(
         cls,
-        config,
-        model_manager=None,
-        observation_recorder=None,
+        config: EffectiveConfig,
+        model_manager: ModelLoadingManager | None = None,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         """Create all shareable engines from *config* and keep them alive.
 

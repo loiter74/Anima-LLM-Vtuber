@@ -22,7 +22,7 @@ class EmotionTag:
     def __repr__(self) -> str:
         return f"EmotionTag({self.emotion}, pos={self.position})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, EmotionTag):
             return False
         return self.emotion == other.emotion and self.position == other.position

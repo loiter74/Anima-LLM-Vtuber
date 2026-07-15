@@ -9,7 +9,7 @@ from collections.abc import Callable
 import numpy as np
 from loguru import logger
 
-from ..vad import VADInterface, VADState
+from ..vad import VADInterface, VADResult, VADState
 
 
 class SimpleVADProcessor:
@@ -38,8 +38,8 @@ class SimpleVADProcessor:
 
         # State
         self._is_speech = False
-        self._speech_start_time = None
-        self._silence_start_time = None
+        self._speech_start_time: float | None = None
+        self._silence_start_time: float | None = None
         self._silence_transition_count = 0
         self._total_chunks = 0
 
@@ -60,14 +60,14 @@ class SimpleVADProcessor:
                 import torch
 
                 # Silero VAD model expects (batch, samples) format.
-                chunk = torch.from_numpy(audio_np)
-                if chunk.ndim == 1:
-                    chunk = chunk.unsqueeze(0)
+                torch_chunk = torch.from_numpy(audio_np)
+                if torch_chunk.ndim == 1:
+                    torch_chunk = torch_chunk.unsqueeze(0)
                 with torch.no_grad():
-                    result = self._silero_model(chunk, self.sample_rate)
+                    result = self._silero_model(torch_chunk, self.sample_rate)
             except ImportError:
-                chunk = audio_np.reshape(1, -1) if audio_np.ndim == 1 else audio_np
-                result = self._silero_model(chunk, self.sample_rate)
+                numpy_chunk = audio_np.reshape(1, -1) if audio_np.ndim == 1 else audio_np
+                result = self._silero_model(numpy_chunk, self.sample_rate)
 
             return float(result.item() if hasattr(result, "item") else result)
         except Exception as e:
@@ -108,7 +108,7 @@ class SimpleVADProcessor:
                 speech_buffer = list(self._audio_buffer)
             await self._finish_speech(speech_buffer)
 
-    def _samples_from_vad_result(self, result) -> list[float]:
+    def _samples_from_vad_result(self, result: VADResult) -> list[float]:
         """Convert byte audio carried by VADResult into float samples."""
         audio_bytes = getattr(result, "audio_data", b"")
         if not audio_bytes:

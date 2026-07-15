@@ -13,18 +13,19 @@ class RVCBridge:
 
     def __init__(
         self,
-        rvc_path="",
-        python_exe="",
-        model_name="kikiV1.pth",
-        index_path="logs/kikiV1.index",
-        f0_method="rmvpe",
-        f0_up_key=0,
-        index_rate=0.75,
-        filter_radius=3,
-        rms_mix_rate=0.25,
-        protect=0.33,
-        _manage_server=False,
-    ):
+        rvc_path: str | Path = "",
+        python_exe: str | Path = "",
+        model_name: str = "kikiV1.pth",
+        index_path: str | Path = "logs/kikiV1.index",
+        f0_method: str = "rmvpe",
+        f0_up_key: int = 0,
+        index_rate: float = 0.75,
+        filter_radius: int = 3,
+        rms_mix_rate: float = 0.25,
+        protect: float = 0.33,
+        manage_server: bool = False,
+    ) -> None:
+        del manage_server  # Retained for compatibility; this bridge never owns the server.
         self.rvc_path = Path(rvc_path or self.DEFAULT_RVC_PATH)
         self.python_exe = python_exe or str(self.rvc_path / "runtime" / "python.exe")
         self.model_name = model_name
@@ -36,7 +37,12 @@ class RVCBridge:
         self.rms_mix_rate = rms_mix_rate
         self.protect = protect
 
-    async def convert(self, source_audio_path, output_path, pitch_adjust=0):
+    async def convert(
+        self,
+        source_audio_path: str | Path,
+        output_path: str | Path,
+        pitch_adjust: int = 0,
+    ) -> str:
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         wrapper = self.rvc_path / "tools" / "rvc_convert_wrapper.py"
@@ -83,5 +89,5 @@ class RVCBridge:
             return str(actual)
         raise RuntimeError(f"RVC output not found: {actual}")
 
-    async def close(self):
+    async def close(self) -> None:
         pass

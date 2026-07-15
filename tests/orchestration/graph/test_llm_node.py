@@ -680,6 +680,32 @@ class TestLLMNodeWithTools:
         assert result["response_text"] == "Fallback response"
         assert "messages" not in result
 
+    @pytest.mark.asyncio
+    async def test_invalid_tool_response_falls_back_to_streaming(self, mock_service_context):
+        """A provider protocol violation must not leak a ``None`` node result."""
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = [MagicMock(name="web_search")]
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(return_value="invalid")
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield "Fallback response"
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="What is the weather?",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "Fallback response"
+        assert result["tool_calls"] is None
+
 
 class TestLLMNodeHumorAgent:
     """LLM node defers Humor Agent work to graph-visible humor nodes."""

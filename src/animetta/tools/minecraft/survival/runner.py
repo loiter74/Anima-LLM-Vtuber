@@ -25,6 +25,7 @@ from .models import (
 )
 from .recovery import (
     RecoveryAction,
+    RecoveryPlan,
     check_safety,
     get_phase_retry_budget,
     map_collect_failure,
@@ -346,7 +347,12 @@ class SurvivalIronRunner:
         inv = report.final_inventory or {}
         return all(inv.get(item, 0) >= count for item, count in check.items())
 
-    def _build_recovery(self, phase, action, error):
+    def _build_recovery(
+        self,
+        phase: SurvivalPhase,
+        action: RecoveryAction,
+        error: str | dict[str, Any],
+    ) -> RecoveryPlan:
         if action.action in ("collect", "mine"):
             plan = map_collect_failure(
                 action.params.get("block_type", ""),
@@ -369,13 +375,13 @@ class SurvivalIronRunner:
         return RecoveryPlan()
 
     @staticmethod
-    def _resolve_collect_block_type(action):
+    def _resolve_collect_block_type(action: RecoveryAction) -> None:
         item = action.params.get("block_type", "")
         block = resolve_block_type(item)
         if block is not None:
             action.params["block_type"] = block
 
-    async def _refresh_inventory(self, report):
+    async def _refresh_inventory(self, report: RunReport) -> dict[str, int]:
         status = await self._send_command("status")
         if status and isinstance(status, dict):
             result = status.get("result", status)
@@ -384,7 +390,12 @@ class SurvivalIronRunner:
                 report.final_inventory = normalize_inventory(raw_inv)
         return report.final_inventory
 
-    async def _send_command(self, action, params=None, timeout=60.0):
+    async def _send_command(
+        self,
+        action: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 60.0,
+    ) -> dict[str, Any] | None:
         try:
             if not self._bridge or not self._bridge.is_running:
                 return None
@@ -393,9 +404,9 @@ class SurvivalIronRunner:
             logger.error(f"[SurvivalRunner] Bridge command '{action}' exception: {e}")
             return None
 
-    def _global_timeout_exceeded(self):
+    def _global_timeout_exceeded(self) -> bool:
         return (time.time() - self._start_time) > self._max_global_timeout
 
     @staticmethod
-    def _count_deaths(status_data):
+    def _count_deaths(status_data: dict[str, Any]) -> int:
         return status_data.get("deaths", 0)

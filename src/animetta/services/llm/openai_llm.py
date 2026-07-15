@@ -6,12 +6,13 @@ Uses the openai SDK to call OpenAI GPT models
 """
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 from openai import AsyncOpenAI
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm import LLMBaseConfig
 
 from .interface import LLMInterface
 from .stream_handler import OpenAIStreamHandler
@@ -78,11 +79,14 @@ class OpenAILLM(LLMInterface):
                 keepalive_expiry=30.0,
             ),
         )
-        client_kwargs = {"api_key": api_key, "http_client": http_client}
         if base_url:
-            client_kwargs["base_url"] = base_url
-
-        self.client = AsyncOpenAI(**client_kwargs)
+            self.client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                http_client=http_client,
+            )
+        else:
+            self.client = AsyncOpenAI(api_key=api_key, http_client=http_client)
 
         # Initialize handler instances
         self.stream_handler = OpenAIStreamHandler(self)
@@ -193,7 +197,8 @@ class OpenAILLM(LLMInterface):
         messages = self._build_messages(user_input, system_prompt=system_prompt)
 
         try:
-            response = await self.client.chat.completions.create(
+            create_completion = cast(Any, self.client.chat.completions.create)
+            response = await create_completion(
                 model=kwargs.get("model", self.model),
                 messages=messages,
                 temperature=kwargs.get("temperature", self.temperature),
@@ -202,7 +207,7 @@ class OpenAILLM(LLMInterface):
                 **({"extra_body": self.extra_body} if self.extra_body else {}),
             )
 
-            assistant_message = response.choices[0].message.content
+            assistant_message = response.choices[0].message.content or ""
 
             self._record_usage(response, 0.0)
 
@@ -246,8 +251,9 @@ class OpenAILLM(LLMInterface):
             create_kwargs["response_format"] = kwargs["response_format"]
 
         try:
-            response = await self.client.chat.completions.create(**create_kwargs)
-            assistant_message = response.choices[0].message.content
+            create_completion = cast(Any, self.client.chat.completions.create)
+            response = await create_completion(**create_kwargs)
+            assistant_message = response.choices[0].message.content or ""
 
             self._record_usage(response, 0.0)
 

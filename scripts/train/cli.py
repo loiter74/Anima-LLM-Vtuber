@@ -18,7 +18,6 @@ Usage:
 """
 
 import argparse
-import os
 import subprocess
 import sys
 import time
@@ -65,12 +64,12 @@ def run_step(step_name: str, cmd: list[str], cwd: str = NOW_DIR) -> None:
 # ── Steps ────────────────────────────────────────────────────────
 
 
-def step_preprocess_data():
+def step_preprocess_data() -> None:
     """Run data prep: slice → normalize → pitch augment → split."""
     run_step("Prepare Data", [PYTHON, str(SCRIPT_DIR / "prepare_data.py")], cwd=str(SCRIPT_DIR))
 
 
-def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str):
+def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str) -> None:
     """Step 1: RVC audio preprocessing (resample + slice)."""
     cmd = [
         PYTHON,
@@ -84,7 +83,7 @@ def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str):
     run_step("RVC: Audio Preprocessing", cmd)
 
 
-def step_rvc_extract_f0(exp_dir: str, f0_method: str):
+def step_rvc_extract_f0(exp_dir: str, f0_method: str) -> None:
     """Step 2: Extract F0 using rmvpe."""
     cmd = [
         PYTHON,
@@ -98,9 +97,8 @@ def step_rvc_extract_f0(exp_dir: str, f0_method: str):
     run_step("RVC: F0 Extraction (rmvpe)", cmd)
 
 
-def step_rvc_extract_features(exp_dir: str, version: str):
+def step_rvc_extract_features(exp_dir: str, version: str) -> None:
     """Step 3: Extract HuBERT/ContentVec features."""
-    ckpt = "assets/hubert/hubert_base.pt"
     if version == "v2":
         cmd = [
             PYTHON,
@@ -133,7 +131,7 @@ def step_rvc_train(
     pretrained_g: str = "",
     pretrained_d: str = "",
     gpu: str = "0",
-):
+) -> None:
     """Step 4: Train the RVC model."""
     cmd = [
         PYTHON,
@@ -168,7 +166,7 @@ def step_rvc_train(
     run_step("RVC: Model Training", cmd)
 
 
-def step_rvc_build_index(exp_dir: str, version: str):
+def step_rvc_build_index(exp_dir: str, version: str) -> None:
     """Step 5: Build FAISS feature index."""
     cmd = [
         PYTHON,
@@ -181,7 +179,7 @@ def step_rvc_build_index(exp_dir: str, version: str):
     run_step("RVC: Build FAISS Index", cmd)
 
 
-def step_deploy(character_name: str):
+def step_deploy(character_name: str) -> None:
     """Step 6: Deploy model to Anima."""
     run_step(
         "Deploy to Anima",
@@ -193,7 +191,7 @@ def step_deploy(character_name: str):
 # ── CLI ──────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Anima Train — 一键训练 RVC v2 歌声模型",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -283,7 +281,7 @@ Examples:
         pd_path = RVC_ROOT / pd
         if not pg_path.exists():
             print(f"[WARN] Pretrained G not found: {pg_path}")
-            print(f"       Download from: https://huggingface.co/lj1995/VoiceConversionWebUI")
+            print("       Download from: https://huggingface.co/lj1995/VoiceConversionWebUI")
             pg = ""
         if not pd_path.exists():
             print(f"[WARN] Pretrained D not found: {pd_path}")
@@ -349,7 +347,7 @@ Examples:
     print(f"  [DONE] Training complete for {char_name}!")
     print(f"  Model: {RVC_ROOT}/weights/{char_name}.pth")
     print(f"  Index: {RVC_ROOT}/logs/{char_name}.index")
-    print(f"  Anima config: config/singing.yaml")
+    print("  Anima config: config/singing.yaml")
     print(f"{'=' * 60}\n")
 
 

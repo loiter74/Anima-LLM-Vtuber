@@ -21,6 +21,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.vibe_voice import VibeVoiceTTSConfig
 from animetta.utils.tempfiles import reserve_temp_path
 
 from ..interface import TTSInterface
@@ -324,6 +325,8 @@ class VibeVoiceTTS(TTSInterface):
                 output_path=None,
                 voice=voice or self.voice,
             )
+            if isinstance(audio, str):
+                audio = Path(audio).read_bytes()
             yield audio
             return
 

@@ -70,7 +70,11 @@ async def purify_validated_skills(
         logger.warning(f"[purify] 无法强制 self_evolution.MC_EVO_ALLOW_GIVE=False: {e}")
 
     if get_state_fn is None:
-        from animetta.tools.minecraft.other.self_evolution import get_state as get_state_fn
+        from animetta.tools.minecraft.other.self_evolution import (
+            get_state as default_get_state,
+        )
+
+        get_state_fn = default_get_state
 
     report: dict[str, Any] = {
         "total": 0,

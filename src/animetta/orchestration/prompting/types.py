@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import Any, Protocol
 
 
 class SectionRole:
@@ -65,6 +65,14 @@ class PromptContext:
     affinity: int = 50
     config_version: int = 1
     base_system_prompt_warnings: list[str] = field(default_factory=list)
+
+
+class PromptSource(Protocol):
+    """Structural contract implemented by every prompt source."""
+
+    name: str
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]: ...
 
 
 @dataclass

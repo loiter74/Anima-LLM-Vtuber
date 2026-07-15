@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.services.live2d.action_queue import ActionMessage
+
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -46,7 +48,7 @@ class Live2DHandlers:
         broadcast to desktop clients.
         """
 
-        async def execute_action(action):
+        async def execute_action(action: ActionMessage) -> None:
             await self.admin.broadcast_to_desktop_clients(
                 "live2d",
                 "live2d:action",

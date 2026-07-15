@@ -337,18 +337,18 @@ def _validate_schema_vocabulary(
     if golden:
         return [f"{location} golden payload field must use an explicit descriptor"]
 
-    errors: list[str] = []
+    nested_errors: list[str] = []
     for nested_field, nested_schema in schema.items():
         if not isinstance(nested_field, str) or not FIELD_PATTERN.fullmatch(nested_field):
-            errors.append(f"{location} has invalid nested field {nested_field!r}")
+            nested_errors.append(f"{location} has invalid nested field {nested_field!r}")
             continue
-        errors.extend(
+        nested_errors.extend(
             _validate_schema_vocabulary(
                 nested_schema,
                 location=f"{location}.{nested_field.removesuffix('?')}",
             )
         )
-    return errors
+    return nested_errors
 
 
 def _validate_payload_schema(

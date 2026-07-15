@@ -25,7 +25,7 @@ from animetta.tools.minecraft.trace_recorder import TraceRecorder
 from animetta.tools.minecraft.tech_tree import TechTreeRunner, create_default_tech_tree
 
 
-async def main():
+async def main() -> None:
     print("=" * 60)
     print("  TechTreeRunner - Autonomous Tech Tree Unlock")
     print("=" * 60)

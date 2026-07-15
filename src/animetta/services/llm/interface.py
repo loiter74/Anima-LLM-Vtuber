@@ -47,7 +47,7 @@ class LLMInterface(ABC):
         return await self.chat(prompt, **kwargs)
 
     @abstractmethod
-    async def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
+    def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         """
         Streaming chat
 
@@ -58,7 +58,7 @@ class LLMInterface(ABC):
         Yields:
             str: Text chunk of the LLM response
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def set_system_prompt(self, prompt: str) -> None:

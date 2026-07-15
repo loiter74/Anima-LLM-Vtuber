@@ -20,7 +20,6 @@ import csv
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -40,8 +39,8 @@ async def collect_danmaku(
     count: int = 100,
     min_length: int = 5,
     max_length: int = 20,
-    meme_keywords: Optional[list[str]] = None,
-    output_file: Optional[str] = None,
+    meme_keywords: list[str] | None = None,
+    output_file: str | None = None,
 ) -> list[CollectedDanmaku]:
     """Collect danmaku from Bilibili trending videos.
 
@@ -155,7 +154,7 @@ def print_sample(danmaku_list: list[CollectedDanmaku], sample_size: int = 10) ->
         return
 
     print(f"\n[OK] Collected {len(danmaku_list)} danmaku")
-    print(f"[STATS] Quality distribution:")
+    print("[STATS] Quality distribution:")
 
     # Calculate quality distribution
     high_quality = sum(1 for d in danmaku_list if d.quality_score >= 0.7)
@@ -179,7 +178,7 @@ def print_sample(danmaku_list: list[CollectedDanmaku], sample_size: int = 10) ->
         )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Collect Bilibili danmaku for training data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -187,13 +186,13 @@ def main():
 Examples:
   # Collect 100 danmaku
   python scripts/collect_danmaku.py --count 100
-  
+
   # Collect with meme keywords
   python scripts/collect_danmaku.py --count 100 --keywords 草,awsl,哈哈哈
-  
+
   # Custom length filter
   python scripts/collect_danmaku.py --count 100 --min-length 5 --max-length 20
-  
+
   # Export to specific file
   python scripts/collect_danmaku.py --count 100 --output data/training/danmaku.csv
         """,

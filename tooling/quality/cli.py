@@ -11,6 +11,8 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from .aggregate import aggregate_results
 from .benchmark import BenchmarkEvidence, BenchmarkRun, percentile
 from .cache import ResultCache, artifact_digest
@@ -158,7 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _json_text(model) -> str:
+def _json_text(model: BaseModel) -> str:
     return json.dumps(model.model_dump(mode="json"), indent=2, ensure_ascii=True)
 
 

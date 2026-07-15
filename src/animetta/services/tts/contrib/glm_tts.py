@@ -7,11 +7,14 @@ GLM TTS implementation - uses Zhipu AI GLM TTS API
 # Status: maintained
 # Last verified: 2026-05-23
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.glm import GLMTTSConfig
 
 from ..interface import TTSInterface
 
@@ -52,7 +55,7 @@ class GLMTTS(TTSInterface):
         self._client = None
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: GLMTTSConfig, **kwargs):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls(
             api_key=config.api_key,
@@ -145,7 +148,7 @@ class GLMTTS(TTSInterface):
 
     async def _synthesize_sync(
         self,
-        client,
+        client: Any,
         text: str,
         output_path: str | Path | None,
         voice: str,
@@ -192,7 +195,7 @@ class GLMTTS(TTSInterface):
 
     async def _synthesize_stream(
         self,
-        client,
+        client: Any,
         text: str,
         output_path: str | Path | None,
         voice: str,
@@ -257,7 +260,7 @@ class GLMTTS(TTSInterface):
         speed: float | None = None,
         volume: float | None = None,
         **kwargs,
-    ):
+    ) -> AsyncGenerator[bytes]:
         """
         Streaming speech synthesis, generator yields audio chunks
 

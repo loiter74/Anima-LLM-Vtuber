@@ -7,10 +7,15 @@ Extracted from silero_vad.py to separate model/detection concerns from
 audio processing + state machine logic.
 """
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from loguru import logger
 
 from .interface import VADResult, VADState
+
+if TYPE_CHECKING:
+    from .silero_vad import SileroVAD
 
 
 class SileroDetector:
@@ -79,7 +84,11 @@ class SileroDetector:
             result = result.item()
         return float(result)
 
-    def detect(self, audio_data: list | np.ndarray, vad_instance) -> VADResult:
+    def detect(
+        self,
+        audio_data: list | np.ndarray,
+        vad_instance: SileroVAD,
+    ) -> VADResult:
         """
         Detect voice activity in audio data.
 
@@ -180,6 +189,6 @@ class SileroDetector:
             state=vad_instance.state_machine.state,
         )
 
-    def get_current_state(self, vad_instance) -> VADState:
+    def get_current_state(self, vad_instance: SileroVAD) -> VADState:
         """Get current VAD state from the state machine."""
         return vad_instance.state_machine.state

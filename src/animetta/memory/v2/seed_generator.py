@@ -15,8 +15,13 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from animetta.memory.v2.atom import Layer, MemoryAtom
+
+if TYPE_CHECKING:
+    from animetta.config.persona.base import PersonaConfig
+    from animetta.memory.v2.store import AtomStore
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +54,11 @@ class PersonaSeedGenerator:
         # result.atoms can be written to AtomStore
     """
 
-    def __init__(self, persona, store=None):
+    def __init__(
+        self,
+        persona: PersonaConfig,
+        store: AtomStore | None = None,
+    ) -> None:
         """Initialize seed generator.
 
         Args:

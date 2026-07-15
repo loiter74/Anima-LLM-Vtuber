@@ -10,6 +10,7 @@ import wave
 from pathlib import Path
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.mock import MockTTSConfig
 
 from .interface import TTSInterface
 
@@ -25,7 +26,7 @@ class MockTTS(TTSInterface):
         self._sample_rate = sample_rate
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: MockTTSConfig, **kwargs):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls()
 

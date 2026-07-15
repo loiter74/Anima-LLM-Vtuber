@@ -8,6 +8,7 @@ import contextlib
 import signal
 import sys
 from collections.abc import Callable
+from types import FrameType
 
 from loguru import logger
 
@@ -53,7 +54,7 @@ class LifecycleManager:
         self._signal_handlers_set = True
         logger.debug("Signal handlers set up")
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
         """Signal handler"""
         # Prevent duplicate processing
         if self._shutting_down:

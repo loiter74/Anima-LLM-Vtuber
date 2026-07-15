@@ -8,6 +8,7 @@ Manages the action queue for Live2D models, based on open-yachiyo implementation
 import asyncio
 import contextlib
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -38,7 +39,7 @@ class ActionMessage:
     action_id: str
     action: dict
     duration_sec: float = 0.5
-    queue_policy: str = "append"
+    queue_policy: QueuePolicy | str = QueuePolicy.APPEND
 
     def __post_init__(self):
         if isinstance(self.queue_policy, str):
@@ -74,7 +75,7 @@ class Live2DActionMutex:
             self._is_executing = True
             return True
 
-    async def release(self):
+    async def release(self) -> None:
         """Release the mutex lock"""
         async with self._lock:
             self._is_executing = False
@@ -108,12 +109,15 @@ class Live2DActionQueue:
         self._current_action: ActionMessage | None = None
 
         # Action execution callback
-        self._execute_callback: callable | None = None
+        self._execute_callback: Callable[[ActionMessage], Awaitable[None]] | None = None
 
         # Task tracking (for cleanup)
-        self._process_task: asyncio.Task | None = None
+        self._process_task: asyncio.Task[None] | None = None
 
-    def set_execute_callback(self, callback: callable):
+    def set_execute_callback(
+        self,
+        callback: Callable[[ActionMessage], Awaitable[None]],
+    ) -> None:
         """Set action execution callback"""
         self._execute_callback = callback
 
@@ -237,7 +241,7 @@ class Live2DActionQueue:
         except Exception as e:
             logger.error(f"[ActionQueue] Error handling task exception: {e}", exc_info=e)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop queue processing and clean up resources"""
         # Cancel the running task
         if self._process_task and not self._process_task.done():
@@ -251,7 +255,7 @@ class Live2DActionQueue:
         self._current_action = None
         logger.debug("[ActionQueue] Queue stopped")
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the queue"""
         self.queue.clear()
         logger.debug("[ActionQueue] Queue cleared")

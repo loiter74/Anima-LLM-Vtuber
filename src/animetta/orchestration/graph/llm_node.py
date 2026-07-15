@@ -142,7 +142,10 @@ def _enforce_persona_verbal_tics(response_text: str, system_prompt: str | None) 
     return rewritten
 
 
-def _extract_and_update_affinity(state: dict[str, Any], response_text: str) -> str:
+def _extract_and_update_affinity(
+    state: AgentState | dict[str, Any],
+    response_text: str,
+) -> str:
     """Parse the LLM's ``[affinity:N]`` marker, write the value back to state.
 
     The marker is Galgame-style self-report: the LLM emits its updated
@@ -547,6 +550,17 @@ async def _llm_with_tools(
                     "tool_calls": None,
                     "metadata": {**state.get("metadata", {})},
                 }
+
+        logger.warning(
+            f"[{session_id}] [LLMNode] Tool response was not a mapping; using streaming fallback"
+        )
+        return await _llm_without_tools(
+            session_id,
+            state,
+            service_context,
+            config,
+            memory_context,
+        )
 
     except Exception as e:
         logger.error(f"[{session_id}] [LLMNode] Tool call failed: {e}")

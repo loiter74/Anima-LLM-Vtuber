@@ -271,6 +271,7 @@ async def fetch_comments(
         return []
     except Exception as e:
         logger.debug("[bilibili.api] Comment fetch failed for %s: %s", bvid, e)
+        return []
 
 
 async def fetch_video_danmaku(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -76,7 +77,7 @@ Style: Default,Microsoft YaHei,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    def _segments_to_ass(self, segments) -> list[str]:
+    def _segments_to_ass(self, segments: list[Any]) -> list[str]:
         lines = []
         for seg in segments:
             start = self._sec_to_ass_time(seg.start)

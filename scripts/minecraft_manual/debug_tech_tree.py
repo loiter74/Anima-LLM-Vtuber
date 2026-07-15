@@ -7,7 +7,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
@@ -16,12 +15,9 @@ logging.basicConfig(level=logging.DEBUG)
 
 from animetta.tools.minecraft.bridge import MinecraftBridge
 from animetta.tools.minecraft.config import MinecraftBotConfig, MinecraftConfig
-from animetta.tools.minecraft.skill_library import SkillLibrary
-
-from animetta.tools.minecraft.tech_tree import TechTreeRunner, create_default_tech_tree
 
 
-async def main():
+async def main() -> None:
     print("=== TechTreeRunner Debug ===\n")
 
     # Initialize
@@ -29,7 +25,6 @@ async def main():
         enabled=True, bot=MinecraftBotConfig(host="localhost", port=25565, username="AnimettaBot")
     )
     bridge = MinecraftBridge(config)
-    skill_library = SkillLibrary()
 
     # Start bridge
     print("Starting bridge...")

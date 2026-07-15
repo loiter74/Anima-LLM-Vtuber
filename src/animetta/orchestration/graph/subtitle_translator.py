@@ -12,7 +12,7 @@ Design decisions (from design.md):
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
@@ -100,10 +100,10 @@ async def translate_subtitle_text(
     # The base LLMInterface.chat_messages() default serializes to string
     # and calls chat(), which mutates history. We detect this by checking
     # if the method is overridden in the concrete class's MRO.
-    llm_target = _unwrap_service_proxy(llm)
+    llm_target = cast(LLMInterface, _unwrap_service_proxy(llm))
+    chat_messages_impl = getattr(type(llm_target), "chat_messages", None)
     has_native_chat_messages = (
-        hasattr(type(llm_target), "chat_messages")
-        and type(llm_target).chat_messages is not LLMInterface.chat_messages
+        chat_messages_impl is not None and chat_messages_impl is not LLMInterface.chat_messages
     )
 
     if has_native_chat_messages:

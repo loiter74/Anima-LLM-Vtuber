@@ -5,11 +5,14 @@ GLM ASR implementation - uses Zhipu AI GLM ASR API
 """
 
 import io
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.glm import GLMASRConfig
 
 from .interface import ASRInterface
 
@@ -23,7 +26,8 @@ class GLMASR(ASRInterface):
 
     @staticmethod
     def _convert_to_supported_audio_bytes(
-        audio_data, sample_rate: int = 16000
+        audio_data: bytes | list[float] | Any,
+        sample_rate: int = 16000,
     ) -> tuple[bytes, str]:
         """
         Convert audio data to a format supported by GLM ASR
@@ -127,7 +131,7 @@ class GLMASR(ASRInterface):
         self._client = None
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: GLMASRConfig, **kwargs):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls(
             api_key=config.api_key,
@@ -198,7 +202,12 @@ class GLMASR(ASRInterface):
         finally:
             pass  # bytes dont need cleanup
 
-    async def _transcribe_sync(self, client, audio_bytes: bytes, ext: str = "mp3") -> str:
+    async def _transcribe_sync(
+        self,
+        client: Any,
+        audio_bytes: bytes,
+        ext: str = "mp3",
+    ) -> str:
         """Non-streaming recognition"""
         import asyncio
 
@@ -207,7 +216,7 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 
@@ -226,7 +235,12 @@ class GLMASR(ASRInterface):
         else:
             return str(response)
 
-    async def _transcribe_stream(self, client, audio_bytes: bytes, ext: str = "mp3") -> str:
+    async def _transcribe_stream(
+        self,
+        client: Any,
+        audio_bytes: bytes,
+        ext: str = "mp3",
+    ) -> str:
         """Streaming recognition"""
         import asyncio
 
@@ -235,7 +249,7 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 
@@ -275,7 +289,11 @@ class GLMASR(ASRInterface):
 
         return "".join(full_text)
 
-    async def transcribe_stream(self, audio_data: bytes | str | Path | list, **kwargs):
+    async def transcribe_stream(
+        self,
+        audio_data: bytes | str | Path | list,
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -304,7 +322,7 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 

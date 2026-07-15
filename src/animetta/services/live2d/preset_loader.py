@@ -51,7 +51,7 @@ class PresetLoader:
     Loads expression, gesture, and reaction presets from YAML files
     """
 
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str | Path | None = None):
         """
         Initialize the preset loader
 
@@ -219,7 +219,7 @@ class PresetLoader:
             return None
 
         # Calculate total duration
-        total_duration = 0
+        total_duration = 0.0
         for action in preset:
             if action.get("type") == "wait":
                 total_duration += action.get("ms", 0) / 1000

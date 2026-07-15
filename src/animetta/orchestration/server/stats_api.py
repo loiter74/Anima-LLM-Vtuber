@@ -6,7 +6,7 @@ from typing import Any
 from loguru import logger
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from animetta.core.service_pool import ServicePool
@@ -139,9 +139,11 @@ async def stats_observation_health(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-async def health_check(request):
+async def health_check(request: Request) -> JSONResponse:
     """Cheap process liveness check; never waits for providers or models."""
     import time
+
+    del request
 
     return JSONResponse(
         {
@@ -293,7 +295,7 @@ async def stats_inspection_latest(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-def get_stats_routes():
+def get_stats_routes() -> list[BaseRoute]:
     """Return the route list for the stats API"""
     return [
         Route("/health", health_check),

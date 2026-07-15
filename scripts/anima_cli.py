@@ -15,7 +15,9 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).parent
 RVC_PATHS = [
@@ -25,9 +27,9 @@ RVC_PATHS = [
 
 
 class RVCEnv:
-    def __init__(self):
-        self.root = None
-        self.python = None
+    def __init__(self) -> None:
+        self.root: Path | None = None
+        self.python: str | None = None
         self.ok = False
         self._detect()
 
@@ -52,14 +54,18 @@ class RVCEnv:
                 self.ok = False
 
     @property
-    def weights_dir(self):
+    def weights_dir(self) -> Path:
         return (self.root / "weights") if self.root else Path(".")
 
     @property
-    def logs_dir(self):
+    def logs_dir(self) -> Path:
         return (self.root / "logs") if self.root else Path(".")
 
-    def run(self, cmd, **kwargs):
+    def run(
+        self,
+        cmd: Sequence[str],
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[Any]:
         """Run with RVC Python + ffmpeg in PATH, force CPU."""
         env = os.environ.copy()
         env["PATH"] = f"{self.root}\\runtime;{self.root};{env.get('PATH', '')}"
@@ -70,28 +76,28 @@ class RVCEnv:
 # ── UI helpers ────────────────────────────────────────────────────
 
 
-def title(text):
+def title(text: str) -> None:
     print(f"\n  {text}")
 
 
-def ok(msg=""):
+def ok(msg: str = "") -> None:
     print(f"  [OK] {msg}")
 
 
-def err(msg=""):
+def err(msg: str = "") -> None:
     print(f"  [ERR] {msg}")
 
 
-def info(msg):
+def info(msg: str) -> None:
     print(f"    {msg}")
 
 
-def ask(prompt, default=""):
+def ask(prompt: str, default: str = "") -> str:
     d = f" [{default}]" if default else ""
     return input(f"  {prompt}{d}: ").strip() or default
 
 
-def confirm(text="Continue?"):
+def confirm(text: str = "Continue?") -> bool:
     return ask(f"{text} [y/N]")[:1].lower() == "y"
 
 
@@ -99,8 +105,15 @@ def confirm(text="Continue?"):
 
 
 def run_pipeline(
-    rvc, exp_name, data_dir, sr="48000", version="v2", epochs=100, batch=16, pretrained_g=""
-):
+    rvc: RVCEnv,
+    exp_name: str,
+    data_dir: str,
+    sr: str = "48000",
+    version: str = "v2",
+    epochs: int = 100,
+    batch: int = 16,
+    pretrained_g: str = "",
+) -> bool:
     os.makedirs(str(rvc.logs_dir / exp_name), exist_ok=True)
 
     # sr for argparse-based scripts uses "48k" format
@@ -232,7 +245,7 @@ def run_pipeline(
                     conv_path = pg_path.with_name(pg_path.stem + "_ft.pth")
                     torch.save({"model": ckpt["weight"]}, str(conv_path))
                     pretrained_g = str(conv_path.relative_to(rvc.root))
-                    info(f"Converted model format")
+                    info("Converted model format")
             except Exception:
                 info("Model conversion failed, training without pretrained")
                 pretrained_g = ""
@@ -251,7 +264,7 @@ def run_pipeline(
     return True
 
 
-def build_index(rvc, exp_name):
+def build_index(rvc: RVCEnv, exp_name: str) -> bool | None:
     import numpy as np
 
     try:
@@ -266,7 +279,7 @@ def build_index(rvc, exp_name):
         info("No features, skip index")
         return False
 
-    print(f"\n  [5/5] Build index...", end=" ", flush=True)
+    print("\n  [5/5] Build index...", end=" ", flush=True)
     try:
         npys = []
         for name in sorted(os.listdir(feat_dir)):
@@ -292,7 +305,7 @@ def build_index(rvc, exp_name):
         return False
 
 
-def deploy_model(rvc, exp_name):
+def deploy_model(rvc: RVCEnv, exp_name: str) -> None:
     candidates = list((rvc.logs_dir / exp_name).glob("*.pth")) + list(
         (rvc.logs_dir / exp_name).glob("G_*.pth")
     )
@@ -318,7 +331,7 @@ def deploy_model(rvc, exp_name):
 # ── Commands ──────────────────────────────────────────────────────
 
 
-def cmd_list(rvc):
+def cmd_list(rvc: RVCEnv) -> None:
     title("Available Models")
     for m in sorted(rvc.weights_dir.glob("*.pth")):
         sz = m.stat().st_size / 1024 / 1024
@@ -327,7 +340,7 @@ def cmd_list(rvc):
         print(f"  {m.stem:30s} {sz:6.1f} MB{tag}")
 
 
-def cmd_train(rvc):
+def cmd_train(rvc: RVCEnv) -> None:
     """Train a model from scratch using RVC base pretrained."""
     name = ask("Experiment name", "")
     if not name:
@@ -344,7 +357,6 @@ def cmd_train(rvc):
 
     sr_k = f"{int(sr) // 1000}k"
     pg = f"assets/pretrained_v2/f0G{sr_k}.pth"
-    pd = f"assets/pretrained_v2/f0D{sr_k}.pth"
 
     total_size = sum(f.stat().st_size for f in wavs)
     info(f"Data: {len(wavs)} files, {total_size / 1024 / 1024:.0f} MB")
@@ -369,7 +381,7 @@ def cmd_train(rvc):
     print(f"\n  Done! Model: weights/{name}.pth")
 
 
-def cmd_finetune(rvc):
+def cmd_finetune(rvc: RVCEnv) -> None:
     models = sorted(rvc.weights_dir.glob("*.pth"))
     if not models:
         return info("No models yet.")
@@ -423,7 +435,7 @@ def cmd_finetune(rvc):
     print(f"\n  Done! Model: weights/{name}.pth")
 
 
-def cmd_cover(rvc, url=""):
+def cmd_cover(rvc: RVCEnv, url: str = "") -> None:
     if not url:
         url = ask("Bilibili URL", "")
     if not url:
@@ -550,7 +562,7 @@ def cmd_cover(rvc, url=""):
     print(f"\n  Done: {final}")
 
 
-def cmd_env(rvc):
+def cmd_env(rvc: RVCEnv) -> None:
     title("Environment")
     for name, ok_val in [
         ("RVC installation", rvc.root is not None),
@@ -578,7 +590,7 @@ MENU = """
 """
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Anima CLI")
     parser.add_argument("command", nargs="?", default="menu")
     parser.add_argument("url", nargs="?")

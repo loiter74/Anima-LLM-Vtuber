@@ -20,10 +20,11 @@ import sys
 import tempfile
 import time
 import traceback
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
@@ -71,23 +72,24 @@ class EvalConfig:
     candidate_multiplier: int = 4
     description: str = ""
 
-    def to_memory_config(self, workspace_dir: str) -> MemoryConfig:
-        """Convert to a MemoryConfig for MemoryManager initialization."""
-        return MemoryConfig(
-            workspace_dir=workspace_dir,
-            search=SearchConfig(
-                vector_weight=self.vector_weight,
-                keyword_weight=self.keyword_weight,
-                default_max_results=self.max_results,
-                candidate_multiplier=self.candidate_multiplier,
-            ),
-            chunk=ChunkConfig(
-                target_tokens=self.target_tokens,
-                overlap_tokens=self.overlap_tokens,
-                chars_per_token=self.chars_per_token,
-            ),
-            embedding=EmbeddingConfig(model_name=self.embedding_model),
-        )
+
+class SearchResult(Protocol):
+    path: str
+    start_line: int
+    end_line: int
+    score: float
+    text: str
+
+
+class SearchBackend(Protocol):
+    def sync(self) -> None: ...
+
+    def search(self, query: str, max_results: int) -> list[SearchResult]: ...
+
+    def close(self) -> None: ...
+
+
+SearchBackendFactory = Callable[[Path, EvalConfig], SearchBackend]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -95,7 +97,7 @@ class EvalConfig:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _search_result_to_chunk_id(sr) -> ChunkId:
+def _search_result_to_chunk_id(sr: SearchResult) -> ChunkId:
     """Convert a SearchResult to a ChunkId tuple for metrics.
 
     Normalizes path separators to forward slash for cross-platform matching.
@@ -139,7 +141,7 @@ def load_jsonl(path: str | Path) -> list[dict]:
     """Load a JSONL dataset file."""
     path = Path(path)
     entries = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -191,21 +193,31 @@ def _copy_corpus(project_root: Path, workspace: Path) -> int:
 class EvalRunner:
     """Runs a single experiment configuration against a dataset."""
 
-    def __init__(self, workspace_dir: Path, config: EvalConfig):
+    def __init__(
+        self,
+        workspace_dir: Path,
+        config: EvalConfig,
+        manager_factory: SearchBackendFactory | None = None,
+    ):
         self.workspace_dir = workspace_dir
         self.config = config
-        self.memory_config = config.to_memory_config(str(workspace_dir))
-        self._manager: MemoryManager | None = None
+        self._manager_factory = manager_factory
+        self._manager: SearchBackend | None = None
 
     @property
-    def manager(self) -> MemoryManager:
+    def manager(self) -> SearchBackend:
         if self._manager is None:
             raise RuntimeError("MemoryManager not initialized. Call setup() first.")
         return self._manager
 
     def setup(self) -> None:
-        """Initialize MemoryManager and index the workspace."""
-        self._manager = MemoryManager(config=self.memory_config)
+        """Initialize the configured search backend."""
+        if self._manager_factory is None:
+            raise RuntimeError(
+                "RAG evaluation requires a search backend factory; "
+                "the legacy MemoryManager was removed by the Memory V2 migration"
+            )
+        self._manager = self._manager_factory(self.workspace_dir, self.config)
 
     def sync(self) -> None:
         """Index all files in the workspace."""
@@ -338,7 +350,7 @@ class EvalRunner:
 
         return {
             "config": asdict(self.config),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "git_commit": get_git_commit(),
             "summary": summary,
             "per_category": per_category,
@@ -413,7 +425,7 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("Config file not found: %s", config_path)
         sys.exit(1)
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         all_configs = yaml.safe_load(f)
 
     experiments = all_configs.get("experiments", {})

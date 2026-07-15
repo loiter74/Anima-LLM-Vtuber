@@ -8,9 +8,11 @@ Responsibilities:
 4. Provide merged callbacks list to inject into LangGraph config
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from loguru import logger
@@ -19,9 +21,10 @@ from loguru import logger
 class ObservabilityManager:
     """Observability manager - singleton"""
 
-    _instance: Optional["ObservabilityManager"] = None
+    _instance: ObservabilityManager | None = None
+    _initialized: bool = False
 
-    def __new__(cls) -> "ObservabilityManager":
+    def __new__(cls) -> ObservabilityManager:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
@@ -62,19 +65,20 @@ class ObservabilityManager:
     def _load_config(self, config_path: str | None = None) -> dict[str, Any]:
         """Load configuration file"""
         if config_path is None:
-            config_path = (
+            path = (
                 Path(__file__).parent.parent.parent.parent.parent / "config" / "observability.yaml"
             )
+        else:
+            path = Path(config_path)
 
-        config_path = Path(config_path)
-        if not config_path.exists():
+        if not path.exists():
             logger.info("[Observability] Config file not found, using defaults (all disabled)")
             return {"langsmith": {"enabled": False}, "langfuse": {"enabled": False}}
 
         try:
-            with open(config_path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
-            logger.info(f"[Observability] Config loaded: {config_path}")
+            logger.info(f"[Observability] Config loaded: {path}")
             return config
         except Exception as e:
             logger.warning(f"[Observability] Config load failed: {e}")

@@ -16,6 +16,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.edge import EdgeTTSConfig
 from animetta.utils.tempfiles import write_temp_bytes
 
 from .interface import TTSInterface
@@ -101,7 +102,7 @@ class EdgeTTS(TTSInterface):
         self._communicate = None
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: EdgeTTSConfig, **kwargs):
         """Create instance from config, supporting presets like 'neurosama'."""
         voice = getattr(config, "voice", "zh-CN-XiaoxiaoNeural")
         rate = getattr(config, "rate", None)

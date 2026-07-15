@@ -9,6 +9,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.vad.mock import MockVADConfig
 
 from .interface import VADInterface, VADResult, VADState
 
@@ -43,13 +44,13 @@ class MockVAD(VADInterface):
         self.audio_buffer = bytearray()
 
         # Pre-buffer
-        self.pre_buffer = []
+        self.pre_buffer: list[bytes] = []
         self.pre_buffer_max = 10
 
         logger.info(f"Mock VAD initialized: db_threshold={db_threshold}")
 
     @classmethod
-    def from_config(cls, config, **kwargs) -> MockVAD:
+    def from_config(cls, config: MockVADConfig, **kwargs) -> MockVAD:
         """Create MockVAD from provider config."""
         return cls(
             sample_rate=getattr(config, "sample_rate", 16000),
@@ -123,13 +124,13 @@ class MockVAD(VADInterface):
 
                     # Merge pre-buffer and main buffer
                     pre_bytes = b"".join(self.pre_buffer)
-                    audio_data = pre_bytes + bytes(self.audio_buffer)
+                    completed_audio = pre_bytes + bytes(self.audio_buffer)
 
                     self.audio_buffer.clear()
                     self.pre_buffer.clear()
 
                     return VADResult(
-                        audio_data=audio_data,
+                        audio_data=completed_audio,
                         is_speech_start=False,
                         is_speech_end=True,
                         state=VADState.IDLE,

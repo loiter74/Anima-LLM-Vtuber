@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.config import ReplyPolicyConfig
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.services.bilibili import (
@@ -28,6 +29,22 @@ if TYPE_CHECKING:
 
     from ..session import SessionManager
     from .base_handler import BaseSocketHandler
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Read an audio file for transport from a worker thread."""
+    with open(path, "rb") as audio_file:
+        return audio_file.read()
+
+
+def _compute_volumes(audio_path: str) -> list[float]:
+    """Build the non-normalized peak envelope used by Live2D lip sync."""
+    return AudioAnalyzer().compute_volume_envelope(
+        audio_path,
+        normalize=False,
+        gain=3.5,
+        use_peak=True,
+    )
 
 
 class BilibiliHandlers:
@@ -77,7 +94,7 @@ class BilibiliHandlers:
 
         # Deprecated compatibility attributes. Lifecycle ownership lives in session.
         self._bilibili_service = None
-        self._main_loop = None
+        self._main_loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def metrics(self) -> ReplyMetrics:
@@ -307,7 +324,7 @@ class BilibiliHandlers:
 
     async def _broadcast_danmaku_audio(
         self,
-        tts_audio,
+        tts_audio: str | bytes,
         delivery: ChatDelivery,
     ) -> None:
         """Process TTS audio and broadcast to all clients."""
@@ -320,7 +337,7 @@ class BilibiliHandlers:
         try:
             audio_data = None
             format = "wav"
-            volumes = []
+            volumes: list[float] = []
 
             if isinstance(tts_audio, str) and os.path.exists(tts_audio):
                 raw_bytes = await loop.run_in_executor(None, partial(_read_file_bytes, tts_audio))
@@ -343,7 +360,7 @@ class BilibiliHandlers:
                 volumes = _compute_volumes(tmp_audio) or []
 
             if audio_data:
-                payload = {"audio_data": audio_data, "format": format}
+                payload: dict[str, Any] = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
                 await delivery.emit("chat", "audio_with_expression", payload)

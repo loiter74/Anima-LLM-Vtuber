@@ -9,10 +9,10 @@ Uses a mock bridge to simulate bot behavior.
 import asyncio
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from unittest.mock import AsyncMock, MagicMock
 
 from animetta.tools.minecraft.skill_library import SkillLibrary
 
@@ -40,7 +40,12 @@ class MockBridge:
         self.health = 20
         self.food = 20
 
-    async def send_command(self, action, params=None, timeout=60.0):
+    async def send_command(
+        self,
+        action: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 60.0,
+    ) -> dict[str, Any]:
         """Simulate bot commands"""
         self.commands.append((action, params))
         params = params or {}
@@ -75,7 +80,7 @@ class MockBridge:
             count = params.get("count", 1)
 
             # Simulate crafting
-            craftable = {
+            craftable: dict[str, dict[str, Any]] = {
                 "oak_planks": {"requires": {"oak_log": 1}, "produces": 4},
                 "stick": {"requires": {"oak_planks": 2}, "produces": 4},
                 "crafting_table": {"requires": {"oak_planks": 4}, "produces": 1},
@@ -109,7 +114,7 @@ class MockBridge:
         return {"status": "error", "result": f"Unknown action: {action}"}
 
 
-async def main():
+async def main() -> None:
     print("=" * 60)
     print("  TechTreeRunner Simulation Test")
     print("=" * 60)
@@ -144,7 +149,7 @@ async def main():
         print(f"\nCompleted phases: {', '.join(metrics.phases_completed)}")
 
     # Show inventory
-    print(f"\nFinal inventory:")
+    print("\nFinal inventory:")
     for item, count in bridge.inventory.items():
         if count > 0:
             print(f"  {item}: {count}")

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from openai import AsyncOpenAI
@@ -44,14 +45,14 @@ class DeepSeekLLM:
             base_url="https://api.deepseek.com/v1", api_key=os.environ["DEEPSEEK_API_KEY"]
         )
 
-    async def chat(self, messages):
+    async def chat(self, messages: list[dict[str, Any]]) -> Any:
         r = await self._c.chat.completions.create(
             model="deepseek-chat", messages=messages, temperature=0, max_tokens=512
         )
         return type("R", (), {"content": r.choices[0].message.content})()
 
 
-async def main():
+async def main() -> None:
     config = MinecraftConfig(
         enabled=True,
         mode=MinecraftMode.FALLBACK,

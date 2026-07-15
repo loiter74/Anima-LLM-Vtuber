@@ -16,11 +16,13 @@ Lifecycle:
     4. stop() → cancel loop, cleanup
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import random
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -33,7 +35,9 @@ from .rules_engine import RulesEngine
 if TYPE_CHECKING:
     from ..core.bridge import MinecraftBridge
     from ..skill.library import SkillLibrary
+    from .planner import MinecraftPlanner
     from .trace_recorder import TaskTrace
+    from .training import TrainingTracker
 
 
 # ── Cooldown tracker ──
@@ -51,10 +55,10 @@ class CooldownTracker:
         last = self._cooldowns.get(action, 0)
         return (time.time() - last) >= self._default
 
-    def mark_executed(self, action: str):
+    def mark_executed(self, action: str) -> None:
         self._cooldowns[action] = time.time()
 
-    def reset(self, action: str):
+    def reset(self, action: str) -> None:
         self._cooldowns.pop(action, None)
 
 
@@ -78,14 +82,14 @@ class AutonomousLoop:
         bridge: "MinecraftBridge",
         rules: RulesEngine | None = None,
         skill_library: "SkillLibrary | None" = None,
-        planner=None,
-        config=None,
+        planner: MinecraftPlanner | None = None,
+        config: dict[str, Any] | None = None,
         trace_recorder: TraceRecorder | None = None,
         skill_extractor: SkillExtractor | None = None,
         skill_validator: SkillValidator | None = None,
         cleanup_chance: float = 0.05,
-        training_tracker=None,
-    ):
+        training_tracker: TrainingTracker | None = None,
+    ) -> None:
         self._bridge = bridge
         self._rules = rules or RulesEngine()
         self._running = False
@@ -125,7 +129,7 @@ class AutonomousLoop:
 
     # ── Lifecycle ──
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the autonomous decision loop"""
         if self._running:
             return
@@ -133,7 +137,7 @@ class AutonomousLoop:
         self._loop_task = asyncio.create_task(self._loop())
         logger.info("[AutonomousLoop] Started (interval=5-10s)")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the autonomous loop"""
         self._running = False
         if self._loop_task:
@@ -143,12 +147,12 @@ class AutonomousLoop:
             self._loop_task = None
         logger.info("[AutonomousLoop] Stopped")
 
-    def pause(self):
+    def pause(self) -> None:
         """Pause autonomous decisions (e.g., during LLM instruction)"""
         self._paused = True
         logger.debug("[AutonomousLoop] Paused for LLM instruction")
 
-    def resume(self):
+    def resume(self) -> None:
         """Resume autonomous decisions after LLM instruction"""
         self._paused = False
         logger.debug("[AutonomousLoop] Resumed")
