@@ -10,16 +10,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # All event types emitted by the current JSON-line protocol.
-KNOWN_EVENT_TYPES: frozenset[str] = frozenset({
-    "login",
-    "spawn",
-    "heartbeat",
-    "disconnect",
-    "initial_loadout",
-    "viewer_joined",
-    "viewer_left",
-    "client_viewer_status",
-})
+KNOWN_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "login",
+        "spawn",
+        "heartbeat",
+        "disconnect",
+        "initial_loadout",
+        "viewer_joined",
+        "viewer_left",
+        "client_viewer_status",
+    }
+)
 
 
 @dataclass

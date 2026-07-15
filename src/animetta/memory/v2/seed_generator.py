@@ -219,9 +219,7 @@ class PersonaSeedGenerator:
         role = self.persona.role
 
         episode_content = (
-            f"私（{name}）の記憶:\n"
-            f"役割: {role}\n"
-            f"自分が誰で、どこから来たのか:\n{identity}"
+            f"私（{name}）の記憶:\n役割: {role}\n自分が誰で、どこから来たのか:\n{identity}"
         )
 
         atom = self._make_atom(

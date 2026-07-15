@@ -157,19 +157,21 @@ class StateCollector:
         await self._push_hud(state)
 
         # 5. Push Socket.IO
-        await self._emit_state({
-            "health": state.health,
-            "food": state.food,
-            "position": {"x": state.x, "y": state.y, "z": state.z},
-            "dimension": state.dimension,
-            "biome": state.biome,
-            "time": state.time_of_day,
-            "weather": state.weather,
-            "action": state.current_action,
-            "action_target": state.action_target,
-            "held_item": state.held_item,
-            "inventory": inventory,
-        })
+        await self._emit_state(
+            {
+                "health": state.health,
+                "food": state.food,
+                "position": {"x": state.x, "y": state.y, "z": state.z},
+                "dimension": state.dimension,
+                "biome": state.biome,
+                "time": state.time_of_day,
+                "weather": state.weather,
+                "action": state.current_action,
+                "action_target": state.action_target,
+                "held_item": state.held_item,
+                "inventory": inventory,
+            }
+        )
 
     async def _push_hud(self, state: BotHudState) -> None:
         """Send HUD commands to MC server via bot.chat() (commands start with /)."""

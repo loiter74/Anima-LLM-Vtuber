@@ -67,7 +67,9 @@ class BotHudState:
         )
 
 
-def _bar(current: float, maximum: float, length: int = 10, filled: str = "▮", empty: str = "▯") -> str:
+def _bar(
+    current: float, maximum: float, length: int = 10, filled: str = "▮", empty: str = "▯"
+) -> str:
     """Render a text progress bar."""
     ratio = max(0.0, min(1.0, current / maximum))
     filled_count = round(ratio * length)
@@ -166,8 +168,8 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     # Build sidebar using a single dummy objective with line ordering
     lines = [
         (15, '{"text":"━━━ Bot HUD ━━━","color":"gold","bold":true}'),
-        (14, f'{{"text":"❤ {state.health:.0f}/20 { _bar(state.health, 20)}","color":"{hp_color}"}}'),
-        (13, f'{{"text":"🍖 {state.food:.0f}/20 { _bar(state.food, 20)}","color":"{food_color}"}}'),
+        (14, f'{{"text":"❤ {state.health:.0f}/20 {_bar(state.health, 20)}","color":"{hp_color}"}}'),
+        (13, f'{{"text":"🍖 {state.food:.0f}/20 {_bar(state.food, 20)}","color":"{food_color}"}}'),
         (12, f'{{"text":"📍 {state.x:.0f} {state.y:.0f} {state.z:.0f}","color":"aqua"}}'),
         (11, f'{{"text":"🌍 {state.dimension}","color":"white"}}'),
         (10, f'{{"text":"🌿 {state.biome}","color":"green"}}'),
@@ -178,12 +180,8 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     ]
 
     if state.current_goal:
-        lines.append(
-            (5, '{"text":"━━━ Goal ━━━","color":"gold","bold":true}')
-        )
-        lines.append(
-            (4, f'{{"text":"🎯 {state.current_goal[:30]}","color":"light_purple"}}')
-        )
+        lines.append((5, '{"text":"━━━ Goal ━━━","color":"gold","bold":true}'))
+        lines.append((4, f'{{"text":"🎯 {state.current_goal[:30]}","color":"light_purple"}}'))
 
     cmds = [
         # Create/reset the sidebar objective
@@ -194,9 +192,7 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     # Use fake player names for line ordering (higher score = higher on sidebar)
     for score, text_json in lines:
         # Escape quotes for command
-        cmds.append(
-            f"scoreboard players set line_{score} hud_sidebar {score}"
-        )
+        cmds.append(f"scoreboard players set line_{score} hud_sidebar {score}")
 
     # We use a workaround: set display name of the objective itself + use entity scores
     # Actually, for proper sidebar with custom text, we need /tellraw or a different approach.
@@ -218,9 +214,7 @@ def render_sidebar_update(state: BotHudState) -> list[str]:
     ]
 
     if state.current_goal:
-        cmds.append(
-            "scoreboard players set 🎯_Goal hud_sidebar 0"
-        )
+        cmds.append("scoreboard players set 🎯_Goal hud_sidebar 0")
 
     return cmds
 
@@ -245,7 +239,7 @@ def render_chat_reasoning(state: BotHudState) -> str | None:
         f'{{"text":"","extra":['
         f'{{"text":"[AI] ","color":"light_purple","bold":true}},'
         f'{{"text":"{text}","color":"white"}}'
-        f']}}'
+        f"]}}"
     )
     return f"tellraw @a {payload}"
 
@@ -272,7 +266,7 @@ def render_chat_action(state: BotHudState) -> str | None:
         f'{{"text":"","extra":['
         f'{{"text":"{icon} ","color":"yellow"}},'
         f'{{"text":"{state.current_action}{target}","color":"gold"}}'
-        f']}}'
+        f"]}}"
     )
     return f"tellraw @a {payload}"
 

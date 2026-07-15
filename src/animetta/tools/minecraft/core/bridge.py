@@ -151,15 +151,14 @@ class MinecraftBridge:
             external = os.path.abspath(rt.runtime_path)
             if os.path.isdir(external):
                 return external
-            logger.warning(
-                f"[MinecraftBridge] External runtime path not found: {external}"
-            )
+            logger.warning(f"[MinecraftBridge] External runtime path not found: {external}")
             return external
 
         # Default: external voyager-mc-bot project
         default = os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..",
-                         "..", "voyager-mc-bot")
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "..", "..", "..", "voyager-mc-bot"
+            )
         )
         if os.path.isdir(default):
             return default

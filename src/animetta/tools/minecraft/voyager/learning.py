@@ -197,9 +197,7 @@ class LearningSession:
     async def run_once(self) -> LearningOutcome:
         observation = self._last_observation
         if observation is None:
-            observation = await self._context.runtime.observe(
-                f"frontier-{uuid4().hex}"
-            )
+            observation = await self._context.runtime.observe(f"frontier-{uuid4().hex}")
             self._last_observation = observation
 
         selection = self._scheduler.select(self._progress, observation)
@@ -314,8 +312,7 @@ class LearningSession:
                 self._progress = self._progress.commit(source_report.unlock_record)
                 break
             feedback.append(
-                "EVIDENCE_REJECTED: "
-                + ",".join(failure.code for failure in source_report.failures)
+                "EVIDENCE_REJECTED: " + ",".join(failure.code for failure in source_report.failures)
             )
         else:
             self._scheduler.record_failure(node.id)
@@ -380,8 +377,7 @@ class LearningSession:
             description=f"Evidence-backed candidate for {node.id}",
             body={"type": "code", "code": code, "api_version": "v1"},
             postconditions=[
-                f"has_{item} >= {minimum}"
-                for item, minimum in node.postconditions.items()
+                f"has_{item} >= {minimum}" for item, minimum in node.postconditions.items()
             ],
             tags=["voyager", node.id, "candidate"],
             is_learned=True,
@@ -421,9 +417,7 @@ class LearningSession:
             )
             after = await self._context.runtime.observe(f"validation-after-{uuid4().hex}")
         except Exception as exc:
-            self._validation_feedback.append(
-                f"RUNTIME_ERROR:{type(exc).__name__}:{exc}"
-            )
+            self._validation_feedback.append(f"RUNTIME_ERROR:{type(exc).__name__}:{exc}")
             cleanup_failure = await self._cancel_and_wait_until_idle(correlation_id)
             if cleanup_failure is not None:
                 self._validation_feedback.append(cleanup_failure)
@@ -446,8 +440,7 @@ class LearningSession:
         )
         if not report.valid:
             self._validation_feedback.append(
-                "EVIDENCE_REJECTED: "
-                + ",".join(failure.code for failure in report.failures)
+                "EVIDENCE_REJECTED: " + ",".join(failure.code for failure in report.failures)
             )
             return False
         await self._context.repository.commit_checkpoint(

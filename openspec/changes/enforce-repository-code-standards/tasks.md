@@ -14,7 +14,7 @@
 - [x] 2.2 Apply Ruff format and import normalization to core, config, acceptance, avatar, notifier, inspection, tracing, and utility packages
 - [x] 2.3 Apply Ruff format and import normalization to orchestration server and graph packages, preserving registration and lazy-import order
 - [x] 2.4 Apply Ruff format and import normalization to service packages, preserving provider discovery and optional dependency boundaries
-- [ ] 2.5 Apply Ruff format and import normalization to memory and tool packages, including Minecraft Python sources
+- [x] 2.5 Apply Ruff format and import normalization to memory and tool packages, including Minecraft Python sources
 - [ ] 2.6 Apply Ruff format and import normalization to all Python tests without changing test semantics or fixture discovery
 - [ ] 2.7 Prove every maintained Python root passes `ruff format --check`, `ruff check`, `git diff --check`, and the impact-selected tests
 

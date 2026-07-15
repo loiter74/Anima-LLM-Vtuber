@@ -224,7 +224,7 @@ async def _send(action: str, params: dict | None = None, timeout: float = 60.0) 
             if action == "mine_block":
                 target = params.get("block_type", "")
             elif action == "goto":
-                target = f"({params.get('x',0)},{params.get('y',0)},{params.get('z',0)})"
+                target = f"({params.get('x', 0)},{params.get('y', 0)},{params.get('z', 0)})"
             elif action == "craft_item":
                 target = params.get("item_name", "")
             elif action == "chop_tree":

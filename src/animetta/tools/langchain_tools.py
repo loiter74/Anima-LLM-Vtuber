@@ -31,12 +31,9 @@ def get_python_repl_tool() -> Any:
             """Safely execute Python code and return the result"""
             try:
                 import asyncio
+
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None,
-                    python_repl.run,
-                    code
-                )
+                result = await loop.run_in_executor(None, python_repl.run, code)
                 return f"Python execution result:\n\n{result}"
             except Exception as e:
                 return f"Python execution error: {str(e)}"
@@ -49,7 +46,9 @@ def get_python_repl_tool() -> Any:
         )
 
     except ImportError:
-        logger.warning("[LangChainTools] PythonREPL not installed, run: pip install langchain-experimental")
+        logger.warning(
+            "[LangChainTools] PythonREPL not installed, run: pip install langchain-experimental"
+        )
         return None
     except Exception as e:
         logger.error(f"[LangChainTools] PythonREPL load failed: {e}")

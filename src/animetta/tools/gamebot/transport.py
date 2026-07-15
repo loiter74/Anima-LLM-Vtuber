@@ -21,7 +21,9 @@ class GameBotTransport(Protocol):
         """Gracefully stop the bot runtime."""
         ...
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         """Send a command and wait for a response. Returns bridge-style dict."""
         ...
 

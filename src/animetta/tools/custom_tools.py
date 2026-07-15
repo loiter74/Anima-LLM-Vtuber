@@ -43,8 +43,9 @@ async def url_preview(url: str) -> str:
 
                 # Get first 500 characters as preview
                 import re
-                text_only = re.sub(r'<[^>]+>', ' ', html)
-                text_only = ' '.join(text_only.split())
+
+                text_only = re.sub(r"<[^>]+>", " ", html)
+                text_only = " ".join(text_only.split())
                 preview = text_only[:500] + "..." if len(text_only) > 500 else text_only
 
                 result = f"URL Preview: {url}\n"

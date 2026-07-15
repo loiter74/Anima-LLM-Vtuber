@@ -25,26 +25,27 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompileTrigger:
     """When to trigger a compilation pass."""
-    min_atoms: int           # Minimum RAW atoms needed
-    min_age_hours: float     # Minimum age of oldest atom
-    target_layer: Layer      # What layer to produce
+
+    min_atoms: int  # Minimum RAW atoms needed
+    min_age_hours: float  # Minimum age of oldest atom
+    target_layer: Layer  # What layer to produce
 
 
 # ── Layer progression triggers ──
 COMPILE_TRIGGERS: dict[Layer, CompileTrigger] = {
     Layer.RAW: CompileTrigger(
-        min_atoms=5,          # 5 conversations → compile to episode
-        min_age_hours=1.0,    # At least 1 hour old
+        min_atoms=5,  # 5 conversations → compile to episode
+        min_age_hours=1.0,  # At least 1 hour old
         target_layer=Layer.EPISODIC,
     ),
     Layer.EPISODIC: CompileTrigger(
-        min_atoms=3,          # 3 episodes → digest to knowledge
-        min_age_hours=24.0,   # At least 1 day old
+        min_atoms=3,  # 3 episodes → digest to knowledge
+        min_age_hours=24.0,  # At least 1 day old
         target_layer=Layer.SEMANTIC,
     ),
     Layer.SEMANTIC: CompileTrigger(
-        min_atoms=5,          # 5 knowledge items → emerge meme/synthesis
-        min_age_hours=72.0,   # At least 3 days old
+        min_atoms=5,  # 5 knowledge items → emerge meme/synthesis
+        min_age_hours=72.0,  # At least 3 days old
         target_layer=Layer.EMERGENT,
     ),
 }
@@ -126,11 +127,10 @@ class CompileEngine:
                     raw_memories=combined,
                     target_layer_name=target_layer.name,
                 )
-                result = await self._llm_call(
-                    "你是一个记忆消化系统。只输出 JSON。", prompt
-                )
+                result = await self._llm_call("你是一个记忆消化系统。只输出 JSON。", prompt)
                 if result:
                     import json
+
                     data = json.loads(result)
                     summary = data.get("summary")
                     tags = data.get("tags", [])
@@ -162,6 +162,7 @@ class CompileEngine:
 
         # Create compiled atom
         import uuid
+
         compiled_id = f"{target_layer.name.lower()}-{uuid.uuid4().hex[:12]}"
         compiled = MemoryAtom(
             id=compiled_id,
@@ -239,10 +240,7 @@ class CompileEngine:
             if age_hours < trigger.min_age_hours:
                 continue
             # Check if already compiled (has DERIVES relation outgoing)
-            already_compiled = any(
-                r.relation_type == RelationType.DERIVES
-                for r in a.relations
-            )
+            already_compiled = any(r.relation_type == RelationType.DERIVES for r in a.relations)
             if already_compiled:
                 continue
             eligible.append(a)

@@ -47,8 +47,10 @@ async def web_search(query: str, num_results: int = 5) -> str:
     # DuckDuckGo fallback
     try:
         from langchain_community.tools import DuckDuckGoSearchRun
+
         search = DuckDuckGoSearchRun()
         import asyncio
+
         loop = asyncio.get_event_loop()
         results_text = await loop.run_in_executor(None, search.run, query)
         return f"Search results (DuckDuckGo) for '{query}':\n\n{results_text}"
@@ -70,17 +72,24 @@ async def get_weather(city: str) -> str:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 geo_url = "https://restapi.amap.com/v3/geocode/geo"
-                geo_response = await client.get(geo_url, params={"key": amap_api_key, "address": city})
+                geo_response = await client.get(
+                    geo_url, params={"key": amap_api_key, "address": city}
+                )
                 geo_data = geo_response.json()
                 if geo_data.get("status") == "1" and geo_data.get("geocodes"):
                     adcode = geo_data["geocodes"][0].get("adcode")
                     if adcode:
                         weather_url = "https://restapi.amap.com/v3/weather/weatherInfo"
-                        weather_response = await client.get(weather_url, params={"key": amap_api_key, "city": adcode, "extensions": "base"})
+                        weather_response = await client.get(
+                            weather_url,
+                            params={"key": amap_api_key, "city": adcode, "extensions": "base"},
+                        )
                         weather_data = weather_response.json()
                         if weather_data.get("status") == "1" and weather_data.get("lives"):
                             live = weather_data["lives"][0]
-                            result = f"Weather for {live.get('province', '')}{live.get('city', '')}: "
+                            result = (
+                                f"Weather for {live.get('province', '')}{live.get('city', '')}: "
+                            )
                             result += f"{live.get('weather', '')}, {live.get('temperature', '')}C"
                             return result
         except Exception as e:
@@ -96,6 +105,7 @@ async def get_current_time(timezone: str = "Asia/Shanghai") -> str:
     """Get the current time"""
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     try:
         tz = ZoneInfo(timezone)
         now = datetime.now(tz)
@@ -110,7 +120,16 @@ async def calculator(expression: str) -> str:
     try:
         import ast
         import operator as op
-        operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.Pow: op.pow, ast.USub: op.neg}
+
+        operators = {
+            ast.Add: op.add,
+            ast.Sub: op.sub,
+            ast.Mult: op.mul,
+            ast.Div: op.truediv,
+            ast.Pow: op.pow,
+            ast.USub: op.neg,
+        }
+
         def eval_node(n):
             if isinstance(n, ast.Constant):
                 return n.value
@@ -122,7 +141,8 @@ async def calculator(expression: str) -> str:
                 return eval_node(n.body)
             else:
                 raise TypeError(f"Unsupported: {type(n)}")
-        tree = ast.parse(expression, mode='eval')
+
+        tree = ast.parse(expression, mode="eval")
         result = eval_node(tree)
         return f"Result: {expression} = {result}"
     except Exception as e:
@@ -143,7 +163,9 @@ def get_tools_map(tools: list[Any] | None = None) -> dict[str, Any]:
     return {tool.name: tool for tool in tools}
 
 
-def create_tool_registry(builtin_enabled: list[str] | None = None, extra_tools: list[Any] | None = None) -> tuple:
+def create_tool_registry(
+    builtin_enabled: list[str] | None = None, extra_tools: list[Any] | None = None
+) -> tuple:
     tools = []
     if builtin_enabled is None:
         tools.extend(_BUILTIN_TOOLS)
@@ -168,6 +190,7 @@ def load_tools_from_config(config: dict[str, Any]) -> tuple:
     if lc_config:
         try:
             from .langchain_tools import load_langchain_tools
+
             lc_tools = load_langchain_tools(lc_config.get("enabled", []))
             extra_tools.extend(lc_tools)
         except Exception as e:
@@ -178,6 +201,7 @@ def load_tools_from_config(config: dict[str, Any]) -> tuple:
     if custom_config:
         try:
             from .custom_tools import get_custom_tools
+
             enabled_custom = custom_config.get("enabled", [])
             if enabled_custom:
                 all_custom = get_custom_tools()
@@ -196,10 +220,13 @@ def load_tools_from_config(config: dict[str, Any]) -> tuple:
     if minecraft_config.get("enabled", False):
         try:
             from .minecraft.core.tools import get_minecraft_tools, init_bridge
+
             init_bridge(minecraft_config)
             mc_tools = get_minecraft_tools()
             extra_tools.extend(mc_tools)
-            logger.info(f"[Minecraft Tools] Loaded {len(mc_tools)} tools: {[t.name for t in mc_tools]}")
+            logger.info(
+                f"[Minecraft Tools] Loaded {len(mc_tools)} tools: {[t.name for t in mc_tools]}"
+            )
         except Exception as e:
             logger.error(f"[Minecraft Tools] Failed to load: {e}")
 

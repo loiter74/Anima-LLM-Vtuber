@@ -76,7 +76,9 @@ class StdioGameBotTransport:
         self._pending.clear()
         self._process = None
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         if not self._process or not self._process.stdin:
             return {"status": "error", "result": f"Action '{action}' failed: transport not started"}
 
@@ -84,7 +86,10 @@ class StdioGameBotTransport:
         self._next_id += 1
         timeout_ms = int(timeout * 1000)
 
-        line = json.dumps({"id": cmd_id, "action": action, "params": params, "timeout_ms": timeout_ms}) + "\n"
+        line = (
+            json.dumps({"id": cmd_id, "action": action, "params": params, "timeout_ms": timeout_ms})
+            + "\n"
+        )
 
         future: asyncio.Future[dict[str, Any]] = asyncio.get_event_loop().create_future()
         self._pending[cmd_id] = future
@@ -149,10 +154,12 @@ class StdioGameBotTransport:
                     # Command response — resolve future
                     future = self._pending.pop(cmd_id)
                     if not future.done():
-                        future.set_result({
-                            "status": status,
-                            "result": data.get("result"),
-                        })
+                        future.set_result(
+                            {
+                                "status": status,
+                                "result": data.get("result"),
+                            }
+                        )
         except asyncio.CancelledError:
             pass
         except Exception:

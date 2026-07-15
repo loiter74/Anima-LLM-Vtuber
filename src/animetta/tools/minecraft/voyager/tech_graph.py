@@ -111,7 +111,9 @@ class TechGraph:
         for node in nodes:
             missing = node.prerequisites - self._nodes.keys()
             if missing:
-                raise ValueError(f"technology node '{node.id}' has missing prerequisites: {missing}")
+                raise ValueError(
+                    f"technology node '{node.id}' has missing prerequisites: {missing}"
+                )
 
     def get(self, node_id: str) -> TechNode:
         return self._nodes[node_id]
@@ -321,8 +323,7 @@ def build_survival_tech_graph() -> TechGraph:
                 id="cobblestone",
                 name="Collect cobblestone",
                 prerequisites=frozenset({"wooden_pickaxe"}),
-                allowed_capabilities=movement
-                | {"collect", "craft", "mine", "equip", "mine_shaft"},
+                allowed_capabilities=movement | {"collect", "craft", "mine", "equip", "mine_shaft"},
                 required_capabilities=("mine_shaft",),
                 postconditions={"cobblestone": 1},
                 discovery_radius=48,
@@ -332,8 +333,7 @@ def build_survival_tech_graph() -> TechGraph:
                 id="stone_pickaxe",
                 name="Craft a stone pickaxe",
                 prerequisites=frozenset({"cobblestone", "crafting_table"}),
-                allowed_capabilities=movement
-                | {"collect", "craft", "place", "mine_shaft"},
+                allowed_capabilities=movement | {"collect", "craft", "place", "mine_shaft"},
                 required_capabilities=("craft",),
                 postconditions={"stone_pickaxe": 1},
             ),
@@ -368,8 +368,7 @@ def build_survival_tech_graph() -> TechGraph:
                 id="iron_pickaxe",
                 name="Craft an iron pickaxe",
                 prerequisites=frozenset({"iron_ingot", "crafting_table"}),
-                allowed_capabilities=movement
-                | {"collect", "craft", "place", "smelt"},
+                allowed_capabilities=movement | {"collect", "craft", "place", "smelt"},
                 required_capabilities=("craft",),
                 postconditions={"iron_pickaxe": 1},
             ),

@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 try:
     import chromadb
     from chromadb.core.config import Settings
+
     _HAS_CHROMA = True
 except ImportError:
     _HAS_CHROMA = False
@@ -73,8 +74,7 @@ class AtomStore:
         if not exists:
             return False
         columns = {
-            row["name"]
-            for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
+            row["name"] for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
         }
         return "scope" not in columns
 
@@ -83,11 +83,13 @@ class AtomStore:
         if not self.enable_chroma or not _HAS_CHROMA:
             return
         try:
-            self._chroma_client = chromadb.Client(Settings(
-                is_persistent=True,
-                persist_directory="memory_db/chroma_v2",
-                anonymized_telemetry=False,
-            ))
+            self._chroma_client = chromadb.Client(
+                Settings(
+                    is_persistent=True,
+                    persist_directory="memory_db/chroma_v2",
+                    anonymized_telemetry=False,
+                )
+            )
             self._chroma_collection = self._chroma_client.get_or_create_collection(
                 name="memory_atoms_v2",
                 metadata={"hnsw:space": "cosine"},
@@ -96,9 +98,7 @@ class AtomStore:
             logger.warning(f"Chroma init failed, vector search disabled: {e}")
             self._chroma_client = None
 
-    async def _vector_search(
-        self, query_text: str, limit: int = 50
-    ) -> list[tuple[str, float]]:
+    async def _vector_search(self, query_text: str, limit: int = 50) -> list[tuple[str, float]]:
         """Vector similarity search via Chroma. Returns [(atom_id, score), ...]."""
         if not self._chroma_collection:
             return []
@@ -111,10 +111,7 @@ class AtomStore:
             ids = results.get("ids", [[]])[0]
             distances = results.get("distances", [[]])[0]
             # Convert cosine distance to similarity score (1 - distance)
-            return [
-                (id_, 1.0 - float(dist))
-                for id_, dist in zip(ids, distances)
-            ]
+            return [(id_, 1.0 - float(dist)) for id_, dist in zip(ids, distances)]
         except Exception as e:
             logger.warning(f"Vector search failed: {e}")
             return []
@@ -127,12 +124,14 @@ class AtomStore:
         self._chroma_collection.upsert(
             ids=[atom.id],
             documents=[text],
-            metadatas=[{
-                "layer": atom.layer.value,
-                "scope": atom.scope.value,
-                "confidence": atom.confidence,
-                "salience": atom.salience,
-            }],
+            metadatas=[
+                {
+                    "layer": atom.layer.value,
+                    "scope": atom.scope.value,
+                    "confidence": atom.confidence,
+                    "salience": atom.salience,
+                }
+            ],
         )
 
     async def close(self) -> None:
@@ -222,8 +221,7 @@ class AtomStore:
 
         assert self._conn is not None
         columns = {
-            row["name"]
-            for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
+            row["name"] for row in self._conn.execute("PRAGMA table_info(memory_atoms)").fetchall()
         }
         additions = {
             "scope": "TEXT NOT NULL DEFAULT 'community'",
@@ -236,9 +234,7 @@ class AtomStore:
         }
         for name, declaration in additions.items():
             if name not in columns:
-                self._conn.execute(
-                    f"ALTER TABLE memory_atoms ADD COLUMN {name} {declaration}"
-                )
+                self._conn.execute(f"ALTER TABLE memory_atoms ADD COLUMN {name} {declaration}")
 
         if legacy_schema:
             self._conn.execute(
@@ -417,7 +413,8 @@ class AtomStore:
 
     async def create(self, atom: MemoryAtom) -> str:
         assert self._conn is not None
-        self._conn.execute("""
+        self._conn.execute(
+            """
             INSERT INTO memory_atoms (id, layer, content, summary, occurred_at,
                 rewritten_at, version, version_chain, confidence, salience,
                 retrieval_count, last_accessed_at, emotion_valence, emotion_arousal,
@@ -426,29 +423,47 @@ class AtomStore:
                 decay_rate, forget_at, is_archived)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            atom.id, atom.layer.value, atom.content, atom.summary,
-            atom.occurred_at.isoformat(),
-            atom.rewritten_at.isoformat() if atom.rewritten_at else atom.occurred_at.isoformat(),
-            atom.version, json.dumps(atom.version_chain),
-            atom.confidence, atom.salience, atom.retrieval_count,
-            atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
-            atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance,
-            json.dumps(atom.source_ids),
-            json.dumps([self._relation_to_dict(r) for r in atom.relations]),
-            json.dumps(atom.tags), atom.scope.value, atom.visibility.value,
-            json.dumps(atom.subject_ids), json.dumps(atom.origin), atom.trust_level,
-            atom.retention_policy, atom.index_state, atom.decay_rate,
-            atom.forget_at.isoformat() if atom.forget_at else None,
-            1 if atom.is_archived else 0,
-        ))
+        """,
+            (
+                atom.id,
+                atom.layer.value,
+                atom.content,
+                atom.summary,
+                atom.occurred_at.isoformat(),
+                atom.rewritten_at.isoformat()
+                if atom.rewritten_at
+                else atom.occurred_at.isoformat(),
+                atom.version,
+                json.dumps(atom.version_chain),
+                atom.confidence,
+                atom.salience,
+                atom.retrieval_count,
+                atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
+                atom.emotion_valence,
+                atom.emotion_arousal,
+                atom.emotion_dominance,
+                json.dumps(atom.source_ids),
+                json.dumps([self._relation_to_dict(r) for r in atom.relations]),
+                json.dumps(atom.tags),
+                atom.scope.value,
+                atom.visibility.value,
+                json.dumps(atom.subject_ids),
+                json.dumps(atom.origin),
+                atom.trust_level,
+                atom.retention_policy,
+                atom.index_state,
+                atom.decay_rate,
+                atom.forget_at.isoformat() if atom.forget_at else None,
+                1 if atom.is_archived else 0,
+            ),
+        )
         # Sync FTS5 index
         rowid = self._conn.execute(
             "SELECT rowid FROM memory_atoms WHERE id=?", (atom.id,)
         ).fetchone()[0]
         self._conn.execute(
             "INSERT INTO memory_fts(rowid, content, summary) VALUES (?, ?, ?)",
-            (rowid, atom.content, atom.summary or ''),
+            (rowid, atom.content, atom.summary or ""),
         )
         revision = self._next_revision()
         self._enqueue_index(atom.id, "upsert", revision)
@@ -457,16 +472,15 @@ class AtomStore:
 
     async def get(self, atom_id: str) -> MemoryAtom | None:
         assert self._conn is not None
-        row = self._conn.execute(
-            "SELECT * FROM memory_atoms WHERE id = ?", (atom_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM memory_atoms WHERE id = ?", (atom_id,)).fetchone()
         if row is None:
             return None
         return self._row_to_atom(row)
 
     async def update(self, atom: MemoryAtom) -> None:
         assert self._conn is not None
-        self._conn.execute("""
+        self._conn.execute(
+            """
             UPDATE memory_atoms SET content=?, summary=?, rewritten_at=?,
                 version=?, version_chain=?, confidence=?, salience=?,
                 retrieval_count=?, last_accessed_at=?, emotion_valence=?,
@@ -475,36 +489,54 @@ class AtomStore:
                 scope=?, visibility=?, subject_ids=?, origin=?, trust_level=?,
                 retention_policy=?, index_state=?
             WHERE id=?
-        """, (
-            atom.content, atom.summary,
-            atom.rewritten_at.isoformat() if atom.rewritten_at else atom.occurred_at.isoformat(),
-            atom.version, json.dumps(atom.version_chain),
-            atom.confidence, atom.salience, atom.retrieval_count,
-            atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
-            atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance,
-            atom.decay_rate,
-            atom.forget_at.isoformat() if atom.forget_at else None,
-            1 if atom.is_archived else 0,
-            json.dumps([self._relation_to_dict(r) for r in atom.relations]),
-            json.dumps(atom.tags), json.dumps(atom.source_ids),
-            atom.scope.value, atom.visibility.value, json.dumps(atom.subject_ids),
-            json.dumps(atom.origin), atom.trust_level, atom.retention_policy,
-            atom.index_state,
-            atom.id,
-        ))
+        """,
+            (
+                atom.content,
+                atom.summary,
+                atom.rewritten_at.isoformat()
+                if atom.rewritten_at
+                else atom.occurred_at.isoformat(),
+                atom.version,
+                json.dumps(atom.version_chain),
+                atom.confidence,
+                atom.salience,
+                atom.retrieval_count,
+                atom.last_accessed_at.isoformat() if atom.last_accessed_at else None,
+                atom.emotion_valence,
+                atom.emotion_arousal,
+                atom.emotion_dominance,
+                atom.decay_rate,
+                atom.forget_at.isoformat() if atom.forget_at else None,
+                1 if atom.is_archived else 0,
+                json.dumps([self._relation_to_dict(r) for r in atom.relations]),
+                json.dumps(atom.tags),
+                json.dumps(atom.source_ids),
+                atom.scope.value,
+                atom.visibility.value,
+                json.dumps(atom.subject_ids),
+                json.dumps(atom.origin),
+                atom.trust_level,
+                atom.retention_policy,
+                atom.index_state,
+                atom.id,
+            ),
+        )
         # Update FTS5 index
         self._conn.execute(
             "UPDATE memory_fts SET content=?, summary=? WHERE rowid=("
             "SELECT rowid FROM memory_atoms WHERE id=?)",
-            (atom.content, atom.summary or '', atom.id),
+            (atom.content, atom.summary or "", atom.id),
         )
         revision = self._next_revision()
         self._enqueue_index(atom.id, "upsert", revision)
         self._conn.commit()
 
     async def create_version(
-        self, atom_id: str, new_summary: str,
-        new_confidence: float, new_emotion: tuple[float, float, float],
+        self,
+        atom_id: str,
+        new_summary: str,
+        new_confidence: float,
+        new_emotion: tuple[float, float, float],
     ) -> MemoryAtom:
         """Create a new version after reconsolidation. Saves old version to history."""
         old = await self.get(atom_id)
@@ -514,13 +546,23 @@ class AtomStore:
         assert self._conn is not None
 
         # Save old version to history
-        self._conn.execute("""
+        self._conn.execute(
+            """
             INSERT OR REPLACE INTO memory_versions (atom_id, version, content, summary,
                 rewritten_at, emotion_valence, emotion_arousal, emotion_dominance)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (atom_id, old.version, old.content, old.summary,
-              old.rewritten_at.isoformat() if old.rewritten_at else old.occurred_at.isoformat(),
-              old.emotion_valence, old.emotion_arousal, old.emotion_dominance))
+        """,
+            (
+                atom_id,
+                old.version,
+                old.content,
+                old.summary,
+                old.rewritten_at.isoformat() if old.rewritten_at else old.occurred_at.isoformat(),
+                old.emotion_valence,
+                old.emotion_arousal,
+                old.emotion_dominance,
+            ),
+        )
 
         # Update with new version
         now = datetime.now(UTC)
@@ -541,8 +583,7 @@ class AtomStore:
         """Get all non-archived atoms, ordered by salience descending."""
         assert self._conn is not None
         rows = self._conn.execute(
-            "SELECT * FROM memory_atoms WHERE is_archived = 0 "
-            "ORDER BY salience DESC LIMIT ?",
+            "SELECT * FROM memory_atoms WHERE is_archived = 0 ORDER BY salience DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [self._row_to_atom(r) for r in rows]
@@ -559,8 +600,7 @@ class AtomStore:
         """Archive all atoms with salience below threshold. Returns count."""
         assert self._conn is not None
         cursor = self._conn.execute(
-            "UPDATE memory_atoms SET is_archived = 1 "
-            "WHERE is_archived = 0 AND salience < ?",
+            "UPDATE memory_atoms SET is_archived = 1 WHERE is_archived = 0 AND salience < ?",
             (threshold,),
         )
         self._conn.commit()
@@ -577,11 +617,11 @@ class AtomStore:
         """Full-text search via FTS5. Falls back to LIKE for CJK."""
         assert self._conn is not None
         # For CJK text — FTS5 can't tokenize, use LIKE instead
-        if any('\u4e00' <= c <= '\u9fff' for c in query):
+        if any("\u4e00" <= c <= "\u9fff" for c in query):
             rows = self._conn.execute(
                 "SELECT * FROM memory_atoms WHERE (content LIKE ? OR summary LIKE ?) "
                 "AND is_archived = 0 ORDER BY salience DESC LIMIT ?",
-                (f'%{query}%', f'%{query}%', limit),
+                (f"%{query}%", f"%{query}%", limit),
             ).fetchall()
             return [self._row_to_atom(r) for r in rows]
 
@@ -597,9 +637,7 @@ class AtomStore:
             return []
         return [self._row_to_atom(r) for r in rows]
 
-    async def hybrid_search(
-        self, query: str, limit: int = 50
-    ) -> list[MemoryAtom]:
+    async def hybrid_search(self, query: str, limit: int = 50) -> list[MemoryAtom]:
         """Hybrid search: vector (Chroma) + keyword (FTS5)."""
         results: dict[str, MemoryAtom] = {}
         scores: dict[str, float] = {}
@@ -644,17 +682,13 @@ class AtomStore:
             salience=row["salience"],
             retrieval_count=row["retrieval_count"],
             last_accessed_at=(
-                datetime.fromisoformat(row["last_accessed_at"])
-                if row["last_accessed_at"] else None
+                datetime.fromisoformat(row["last_accessed_at"]) if row["last_accessed_at"] else None
             ),
             emotion_valence=row["emotion_valence"],
             emotion_arousal=row["emotion_arousal"],
             emotion_dominance=row["emotion_dominance"],
             source_ids=json.loads(row["source_ids"]),
-            relations=[
-                self._dict_to_relation(d)
-                for d in json.loads(row["relations"])
-            ],
+            relations=[self._dict_to_relation(d) for d in json.loads(row["relations"])],
             tags=json.loads(row["tags"]),
             scope=MemoryScope(row["scope"]),
             visibility=MemoryVisibility(row["visibility"]),
@@ -664,10 +698,7 @@ class AtomStore:
             retention_policy=row["retention_policy"],
             index_state=row["index_state"],
             decay_rate=row["decay_rate"],
-            forget_at=(
-                datetime.fromisoformat(row["forget_at"])
-                if row["forget_at"] else None
-            ),
+            forget_at=(datetime.fromisoformat(row["forget_at"]) if row["forget_at"] else None),
             is_archived=bool(row["is_archived"]),
         )
 

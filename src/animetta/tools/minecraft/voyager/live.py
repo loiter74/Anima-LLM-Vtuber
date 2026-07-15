@@ -16,9 +16,7 @@ from .policy import VoyagerPolicy
 
 
 class FallbackRunner(Protocol):
-    async def run_goal(
-        self, goal: str, *, reason: str, parent_task_id: str
-    ) -> dict[str, Any]: ...
+    async def run_goal(self, goal: str, *, reason: str, parent_task_id: str) -> dict[str, Any]: ...
 
 
 class FallbackSession:
@@ -36,9 +34,7 @@ class FallbackSession:
     async def run(self) -> None:
         await asyncio.Event().wait()
 
-    async def run_goal(
-        self, goal: str, *, reason: str, parent_task_id: str
-    ) -> dict[str, Any]:
+    async def run_goal(self, goal: str, *, reason: str, parent_task_id: str) -> dict[str, Any]:
         fallback_task_id = f"fallback-{uuid4().hex}"
         raw = await self._runner(goal, task_id=fallback_task_id)
         result = dict(raw) if isinstance(raw, dict) else {"result": raw}
@@ -164,9 +160,7 @@ class LiveSession:
         fallback["failed_receipt_hashes"] = receipt_hashes
         return fallback
 
-    async def _run_fallback(
-        self, goal: str, *, reason: str, parent_task_id: str
-    ) -> dict[str, Any]:
+    async def _run_fallback(self, goal: str, *, reason: str, parent_task_id: str) -> dict[str, Any]:
         result = await self._fallback.run_goal(
             goal,
             reason=reason,

@@ -15,9 +15,18 @@ from animetta.memory.v2.store import AtomStore
 from animetta.memory.v2.system import LivingMemorySystem, RecallResult
 
 __all__ = [
-    "LivingMemorySystem", "RecallResult",
-    "MemoryAtom", "Layer", "Relation", "RelationType",
-    "VADVector", "VAD_MAP", "EmotionalField",
-    "MetabolismScheduler", "MemorySearch", "AtomStore",
-    "CompileEngine", "ReconsolidationClient",
+    "LivingMemorySystem",
+    "RecallResult",
+    "MemoryAtom",
+    "Layer",
+    "Relation",
+    "RelationType",
+    "VADVector",
+    "VAD_MAP",
+    "EmotionalField",
+    "MetabolismScheduler",
+    "MemorySearch",
+    "AtomStore",
+    "CompileEngine",
+    "ReconsolidationClient",
 ]

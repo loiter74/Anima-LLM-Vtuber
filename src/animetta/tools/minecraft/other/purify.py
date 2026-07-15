@@ -89,14 +89,18 @@ async def purify_validated_skills(
         if s.validated and s.body.get("type") == "code" and s.body.get("code")
     ]
     report["total"] = len(candidates)
-    logger.info(f"[purify] 待复验 validated code-body skill: {len(candidates)} 个（give 已强制关闭）")
+    logger.info(
+        f"[purify] 待复验 validated code-body skill: {len(candidates)} 个（give 已强制关闭）"
+    )
 
     for skill in candidates:
         # ⑤ 断连：bridge 未运行 → 跳过（不中断）
         if not getattr(bridge, "is_running", True):
             logger.warning(f"[purify] bridge 未运行，跳过 skill {skill.id}")
             report["skipped"] += 1
-            report["details"].append({"id": skill.id, "outcome": "skipped", "reason": "bridge not running"})
+            report["details"].append(
+                {"id": skill.id, "outcome": "skipped", "reason": "bridge not running"}
+            )
             continue
 
         try:
@@ -114,10 +118,18 @@ async def purify_validated_skills(
                 if skill.fail_count >= fail_threshold:
                     await lib.remove_skill(skill.id)
                     report["evicted"] += 1
-                    report["details"].append({"id": skill.id, "outcome": "evicted", "reason": f"replay fail x{skill.fail_count}"})
+                    report["details"].append(
+                        {
+                            "id": skill.id,
+                            "outcome": "evicted",
+                            "reason": f"replay fail x{skill.fail_count}",
+                        }
+                    )
                 else:
                     report["demoted"] += 1
-                    report["details"].append({"id": skill.id, "outcome": "demoted", "reason": f"replay fail: {err}"})
+                    report["details"].append(
+                        {"id": skill.id, "outcome": "demoted", "reason": f"replay fail: {err}"}
+                    )
                 continue
 
             # ②③ 正常采集快照 + 真实 verify
@@ -138,7 +150,9 @@ async def purify_validated_skills(
                 report["details"].append({"id": skill.id, "outcome": "kept", "gate": vr.gate})
             else:
                 # ④ failed → 降级；连续失败达阈值 → 淘汰
-                logger.warning(f"[purify] skill {skill.id} 复验失败 (gate={vr.gate}) → 降级: {vr.reason}")
+                logger.warning(
+                    f"[purify] skill {skill.id} 复验失败 (gate={vr.gate}) → 降级: {vr.reason}"
+                )
                 skill.validated = False
                 await lib.save_skill(skill)
                 await lib.update_failure(skill.id)
@@ -146,18 +160,28 @@ async def purify_validated_skills(
                     await lib.remove_skill(skill.id)
                     report["evicted"] += 1
                     report["details"].append(
-                        {"id": skill.id, "outcome": "evicted", "reason": f"verify fail x{skill.fail_count}"}
+                        {
+                            "id": skill.id,
+                            "outcome": "evicted",
+                            "reason": f"verify fail x{skill.fail_count}",
+                        }
                     )
                 else:
                     report["demoted"] += 1
                     report["details"].append(
-                        {"id": skill.id, "outcome": "demoted", "reason": f"verify fail: {vr.reason[:120]}"}
+                        {
+                            "id": skill.id,
+                            "outcome": "demoted",
+                            "reason": f"verify fail: {vr.reason[:120]}",
+                        }
                     )
         except Exception as e:
             # ⑤ 异常 → 跳过、记日志，不中断整体复验
             logger.warning(f"[purify] skill {skill.id} 复验异常，跳过: {e}")
             report["skipped"] += 1
-            report["details"].append({"id": skill.id, "outcome": "skipped", "reason": f"exception: {e}"})
+            report["details"].append(
+                {"id": skill.id, "outcome": "skipped", "reason": f"exception: {e}"}
+            )
 
     # 通用清扫：cleanup() 清低质 is_learned 技能（与 code-body 阈值淘汰互补）。
     try:

@@ -160,9 +160,7 @@ class SurvivalIronRunner:
                 f"[SurvivalRunner] bootstrap skill extracted: {skill.name} (phase={phase.value})"
             )
         except Exception as e:  # bootstrap 抽取失败绝不能拖垮确定性生存流程
-            logger.warning(
-                f"[SurvivalRunner] phase skill extraction failed ({phase.value}): {e}"
-            )
+            logger.warning(f"[SurvivalRunner] phase skill extraction failed ({phase.value}): {e}")
 
     async def _run_phase(self, phase: SurvivalPhase, report: RunReport) -> PhaseResult:
         result = PhaseResult(phase=phase, success=True)

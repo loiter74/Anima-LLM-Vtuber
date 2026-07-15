@@ -154,7 +154,9 @@ def validate_receipt_chain(
 
     for receipt in receipts:
         if receipt.receipt_id in seen_receipts:
-            errors.append(ReceiptChainError(code="DUPLICATE_RECEIPT_ID", receipt_id=receipt.receipt_id))
+            errors.append(
+                ReceiptChainError(code="DUPLICATE_RECEIPT_ID", receipt_id=receipt.receipt_id)
+            )
         seen_receipts.add(receipt.receipt_id)
 
         if receipt.correlation_id in seen_correlations:

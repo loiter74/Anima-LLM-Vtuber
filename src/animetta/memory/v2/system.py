@@ -44,6 +44,7 @@ class RecallResult:
     profile:  User profile extracted from SEMANTIC layer atoms.
     memes:    Active memes from EMERGENT layer.
     """
+
     atoms: list[MemoryAtom] = field(default_factory=list)
     profile: dict = field(default_factory=dict)
     memes: list[MemoryAtom] = field(default_factory=list)
@@ -152,7 +153,7 @@ class LivingMemorySystem:
             except ValueError as exc:
                 raise ValueError(f"unknown memory scope: {scope}") from exc
             atoms = [atom for atom in atoms if atom.scope is expected_scope]
-        page = atoms[offset: offset + page_size]
+        page = atoms[offset : offset + page_size]
         next_offset = offset + len(page)
         index_health = self.store.get_index_health()
         return {
@@ -342,17 +343,18 @@ class LivingMemorySystem:
             for partition in partitions.values():
                 if len(partition) < trigger.min_atoms:
                     continue
-                compiled = await self.compile_engine.compile_layer(
-                    partition, trigger.target_layer
-                )
+                compiled = await self.compile_engine.compile_layer(partition, trigger.target_layer)
                 if compiled:
                     await self.store.create(compiled)
                     # Mark source atoms as compiled
                     for a in partition:
-                        a.relations.append(Relation(
-                            source_id=compiled.id, target_id=a.id,
-                            relation_type=RelationType.DERIVES,
-                        ))
+                        a.relations.append(
+                            Relation(
+                                source_id=compiled.id,
+                                target_id=a.id,
+                                relation_type=RelationType.DERIVES,
+                            )
+                        )
                         await self.store.update(a)
                     logger.info(
                         f"Compiled {len(partition)} {source_layer.name} → "
@@ -469,10 +471,7 @@ class LivingMemorySystem:
         all_active = await self.store.hybrid_search(query, limit * 3)
 
         # Scope policy is based on stable identities, never transport session IDs.
-        all_active = [
-            atom for atom in all_active
-            if self._is_visible_in_context(atom, context)
-        ]
+        all_active = [atom for atom in all_active if self._is_visible_in_context(atom, context)]
 
         # Character persona filtering (pre-rank)
         if character_unknown:
@@ -495,15 +494,14 @@ class LivingMemorySystem:
 
         # Extract profile from SEMANTIC layer
         profile_atoms = [
-            atom for atom in top_atoms
+            atom
+            for atom in top_atoms
             if atom.layer == Layer.SEMANTIC
             and atom.scope is MemoryScope.VIEWER
             and context is not None
             and context.actor_id in atom.subject_ids
         ]
-        profile = {
-            atom.id: atom.summary or atom.content for atom in profile_atoms
-        }
+        profile = {atom.id: atom.summary or atom.content for atom in profile_atoms}
 
         # Extract memes from EMERGENT layer
         meme_atoms = [a for a in ranked if a.layer == Layer.EMERGENT][:5]
@@ -520,9 +518,7 @@ class LivingMemorySystem:
         )
 
         # Trigger async reconsolidation (fire-and-forget)
-        asyncio.create_task(
-            self._reconsolidate(top_atoms, current_emotion, query)
-        )
+        asyncio.create_task(self._reconsolidate(top_atoms, current_emotion, query))
 
         return result
 
@@ -532,16 +528,10 @@ class LivingMemorySystem:
         context: MemoryContext | None,
     ) -> bool:
         if atom.scope is MemoryScope.VIEWER:
-            return bool(
-                context
-                and context.actor_id
-                and context.actor_id in atom.subject_ids
-            )
+            return bool(context and context.actor_id and context.actor_id in atom.subject_ids)
         if atom.scope is MemoryScope.STREAM:
             return bool(
-                context
-                and context.stream_id
-                and atom.origin.get("stream_id") == context.stream_id
+                context and context.stream_id and atom.origin.get("stream_id") == context.stream_id
             )
         return atom.scope in {
             MemoryScope.CHARACTER,
@@ -560,11 +550,15 @@ class LivingMemorySystem:
             index, atom = item
             relevance = 1.0 - (index / total)
             subject = 1.0 if context and context.actor_id in atom.subject_ids else 0.0
-            stream = 1.0 if (
-                context
-                and context.stream_id
-                and atom.origin.get("stream_id") == context.stream_id
-            ) else 0.0
+            stream = (
+                1.0
+                if (
+                    context
+                    and context.stream_id
+                    and atom.origin.get("stream_id") == context.stream_id
+                )
+                else 0.0
+            )
             return (
                 0.55 * relevance
                 + 0.18 * subject
@@ -573,12 +567,7 @@ class LivingMemorySystem:
                 + 0.07 * atom.salience
             )
 
-        return [
-            atom
-            for _, atom in sorted(
-                enumerate(atoms), key=score, reverse=True
-            )
-        ]
+        return [atom for _, atom in sorted(enumerate(atoms), key=score, reverse=True)]
 
     # ── Reconsolidation (integrated) ──
 
@@ -631,8 +620,10 @@ class LivingMemorySystem:
         """
         new_summary = atom.summary or atom.content
         new_confidence = min(1.0, atom.confidence + 0.02)
-        new_emotion = EmotionalField.emotion_shift(current_emotion,
-            VADVector(atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance))
+        new_emotion = EmotionalField.emotion_shift(
+            current_emotion,
+            VADVector(atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance),
+        )
 
         # Try LLM-driven reconsolidation
         client = get_reconsolidation_client()
@@ -649,11 +640,14 @@ class LivingMemorySystem:
                 )
                 if result:
                     new_summary = result.summary
-                    new_confidence = min(1.0, max(0.0,
-                        atom.confidence + result.confidence_delta))
+                    new_confidence = min(1.0, max(0.0, atom.confidence + result.confidence_delta))
                     # Apply emotion shift from LLM
-                    shifted = EmotionalField.emotion_shift(current_emotion,
-                        VADVector(atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance))
+                    shifted = EmotionalField.emotion_shift(
+                        current_emotion,
+                        VADVector(
+                            atom.emotion_valence, atom.emotion_arousal, atom.emotion_dominance
+                        ),
+                    )
                     new_emotion = shifted
             except Exception as e:
                 logger.warning(f"Reconsolidation LLM call failed, using metadata fallback: {e}")
@@ -676,8 +670,16 @@ class LivingMemorySystem:
 
         # Keep the caller's in-memory object coherent for existing graph/tests.
         for field_name in (
-            "summary", "confidence", "emotion_valence", "emotion_arousal",
-            "emotion_dominance", "decay_rate", "version", "version_chain",
-            "rewritten_at", "retrieval_count", "last_accessed_at",
+            "summary",
+            "confidence",
+            "emotion_valence",
+            "emotion_arousal",
+            "emotion_dominance",
+            "decay_rate",
+            "version",
+            "version_chain",
+            "rewritten_at",
+            "retrieval_count",
+            "last_accessed_at",
         ):
             setattr(atom, field_name, getattr(updated, field_name))

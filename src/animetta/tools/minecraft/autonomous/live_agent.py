@@ -94,9 +94,7 @@ class LiveAgent:
                 f"[LiveAgent] skill '{skill.name}' 连续失败 {skill.consecutive_failures} 次 → candidate"
             )
         else:
-            logger.warning(
-                f"[LiveAgent] skill '{skill.name}' 失败 (fail_count={skill.fail_count})"
-            )
+            logger.warning(f"[LiveAgent] skill '{skill.name}' 失败 (fail_count={skill.fail_count})")
 
         # T12 兜底：技能失败 → 回落 Survival Runner 跑确定性流程
         fb = await self._fallback(goal, reason=f"skill_failed:{skill.name}")

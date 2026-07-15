@@ -259,9 +259,7 @@ class SkillLibrary:
         candidates.sort(key=lambda s: (-s.success_rate, s.avg_duration))
         return candidates[:limit]
 
-    async def match_trusted_skills(
-        self, context: dict[str, Any], limit: int = 5
-    ) -> list[Skill]:
+    async def match_trusted_skills(self, context: dict[str, Any], limit: int = 5) -> list[Skill]:
         """Return only independently validated skills eligible for live execution."""
         candidates = [
             skill
