@@ -123,8 +123,6 @@ async def _run_case(
     url: str,
     name: str,
     payload: dict,
-    *,
-    expect_llm: bool,
 ) -> CaseResult:
     """Run one chat:text emission and collect events for COLLECTION_WINDOW."""
     result = CaseResult(name)
@@ -165,7 +163,6 @@ async def test_a_inspection_flag_skipped(url: str) -> tuple[CaseResult, bool, st
         url,
         "A_inspection_flag",
         {"text": "[inspection] ping", "mode": "text", "is_inspection": True},
-        expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
@@ -187,7 +184,6 @@ async def test_b_inspection_text_skipped(url: str) -> tuple[CaseResult, bool, st
         url,
         "B_inspection_text",
         {"text": "[inspection] ping", "mode": "text"},
-        expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
@@ -215,7 +211,6 @@ async def test_c_real_danmaku_full_pipeline(url: str) -> tuple[CaseResult, bool,
         url,
         "C_real_danmaku",
         {"text": REAL_DANMAKU, "mode": "text"},
-        expect_llm=True,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
@@ -244,7 +239,6 @@ async def test_d_bare_ping_skipped(url: str) -> tuple[CaseResult, bool, str]:
         url,
         "D_bare_ping",
         {"text": "ping", "mode": "text"},
-        expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"

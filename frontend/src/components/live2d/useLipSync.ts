@@ -2,7 +2,7 @@ import { getModel } from './useLive2DModel'
 
 // ===== Mouth Parameter Candidates (Cubism 3/4) =====
 
-export const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
+const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
 
 // ===== LipSync State =====
 
@@ -11,10 +11,6 @@ let targetMouth = 0
 let mouthParam: string | null = null
 let lipSyncCancel: (() => void) | null = null
 let _lipSyncRafActive = false // when true, PIXI ticker lip sync is disabled
-
-export function getIsLipSyncRafActive(): boolean {
-  return _lipSyncRafActive
-}
 
 // ===== Mouth Target =====
 
@@ -140,14 +136,4 @@ export function stopLipSync(): void {
   try {
     model?.motion?.('Idle', 0)
   } catch {}
-}
-
-// ===== State Reset (for destroy) =====
-
-export function resetLipSyncState(): void {
-  mouthValue = 0
-  targetMouth = 0
-  mouthParam = null
-  lipSyncCancel = null
-  _lipSyncRafActive = false
 }

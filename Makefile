@@ -26,7 +26,7 @@ typecheck:
 	PYTHONPATH=src mypy src/animetta --ignore-missing-imports
 
 deadcode:
-	PYTHONPATH=src vulture src/animetta/core src/animetta/config src/animetta/memory src/animetta/avatar src/animetta/utils src/animetta/notifier src/animetta/inspection --min-confidence 80
+	PYTHONPATH=src $(PYTHON) -m vulture
 
 test:
 	PYTHONPATH=src python -m pytest tests/ -x -q

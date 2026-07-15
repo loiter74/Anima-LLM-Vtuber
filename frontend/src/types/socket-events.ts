@@ -1,10 +1,5 @@
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 
-export interface ConnectionStatusPayload {
-  status: ConnectionStatus
-  message?: string
-}
-
 export interface ChatIdentity {
   message_id: string
   conversation_id: string
@@ -84,23 +79,4 @@ export interface ChatErrorEvent extends ChatIdentity {
   phase: string
   retryable: boolean
   terminal: boolean
-}
-
-/** Payload for `translation.configure` client-to-server event */
-export interface TranslationConfigurePayload {
-  target_language: string
-}
-
-/** Payload for `minecraft.status` server-to-client event */
-export interface MinecraftStatusPayload {
-  connected: boolean
-  username?: string
-  error?: string
-}
-
-/** Payload for `minecraft:viewer_status` server-to-client event */
-export interface MinecraftViewerStatusPayload {
-  status: 'waiting' | 'joined' | 'left' | 'error'
-  username?: string
-  error?: string
 }

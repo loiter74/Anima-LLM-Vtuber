@@ -278,4 +278,4 @@ def visualize_graph(graph: CompiledAgentGraph, output_path: str = "graph.png") -
 def print_graph_structure(graph: CompiledAgentGraph) -> None:
     """Print graph structure (for debugging)"""
     logger.info("[LangGraph] Graph structure:")
-    logger.info(str(graph.get_graph().print_ascii()))
+    graph.get_graph().print_ascii()

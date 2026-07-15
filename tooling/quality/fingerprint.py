@@ -405,6 +405,7 @@ class FingerprintContext:
             Runner.RUFF: "ruff",
             Runner.RUFF_FORMAT: "ruff",
             Runner.MYPY: "mypy",
+            Runner.VULTURE: "vulture",
             Runner.PYTEST: "pytest",
             Runner.PLAYWRIGHT: "playwright",
         }

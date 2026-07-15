@@ -79,9 +79,9 @@ class AutonomousLoop:
 
     def __init__(
         self,
-        bridge: "MinecraftBridge",
+        bridge: MinecraftBridge,
         rules: RulesEngine | None = None,
-        skill_library: "SkillLibrary | None" = None,
+        skill_library: SkillLibrary | None = None,
         planner: MinecraftPlanner | None = None,
         config: dict[str, Any] | None = None,
         trace_recorder: TraceRecorder | None = None,
@@ -610,7 +610,7 @@ class AutonomousLoop:
             "fall_risk": state.get_fall_risk_level(),
         }
 
-    async def _trigger_skill_extraction(self, trace: "TaskTrace", state: WorldState) -> None:
+    async def _trigger_skill_extraction(self, trace: TaskTrace, state: WorldState) -> None:
         """Extract and store a new skill from a successful trace.
 
         Validates the extracted skill before adding it to the library.

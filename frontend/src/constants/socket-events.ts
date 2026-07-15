@@ -145,38 +145,6 @@ export const Events = {
   },
 } as const
 
-/**
- * Payload 类型定义
- */
-export interface ChatTextPayload {
-  text: string
-  user_id?: string
-  from_name?: string
-}
-
-export interface ChatAudioPayload {
-  audio: number[]
-}
-
-export interface ChatSentencePayload {
-  text: string
-  seq: number
-  lang: string
-  is_complete?: boolean
-  metadata?: Record<string, unknown>
-}
-
-export interface ChatTranscriptPayload {
-  text: string
-  is_final: boolean
-}
-
-export interface SingProcessPayload {
-  url?: string
-  file?: string
-  auto_confirm?: boolean
-}
-
 export interface SingCompletePayload {
   audio_url: string
   subtitle_url?: string
@@ -187,28 +155,6 @@ export interface SingCompletePayload {
   duration: number
   lyrics?: Array<{ text: string; translation: string; start_ms: number; end_ms: number }>
   volumes?: number[]
-}
-
-export interface PersonaSetPayload {
-  persona_name: string
-}
-
-export interface PersonaSetModePayload {
-  mode: string
-}
-
-export interface MemoryOrganizeProgressPayload {
-  text: string
-  progress: number
-}
-
-export interface MemoryOrganizeResultPayload {
-  status: string
-  message: string
-}
-
-export interface BilibiliConnectPayload {
-  room_id: number
 }
 
 export type LivestreamState =
@@ -231,17 +177,6 @@ export interface BilibiliStatusPayload {
   generation_id: number
   message: string
   updated_at: number
-}
-
-export interface MinecraftStatusPayload {
-  connected: boolean
-  username?: string
-  error?: string
-}
-
-export interface SystemErrorPayload {
-  type: string
-  message: string
 }
 
 /**

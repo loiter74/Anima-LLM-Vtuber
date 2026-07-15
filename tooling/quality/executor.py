@@ -36,6 +36,8 @@ def build_argv(
         return [python_executable, "-m", "ruff", "format", *group.args, *group.targets]
     if group.runner is Runner.MYPY:
         return [python_executable, "-m", "mypy", *group.targets, *group.args]
+    if group.runner is Runner.VULTURE:
+        return [python_executable, "-m", "vulture", *group.targets, *group.args]
     if group.runner is Runner.PYTEST:
         return [python_executable, "-m", "pytest", *group.targets, *group.args]
     if group.runner is Runner.PYTHON:

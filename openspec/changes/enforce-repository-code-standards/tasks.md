@@ -52,11 +52,11 @@
 
 ## 6. Dead-code and duplication audit
 
-- [ ] 6.1 Run CodeGraph call-path inspection and vulture on every configured Python root and classify each candidate as live, dynamic, or removable
-- [ ] 6.2 Add focused tests for dynamically registered or externally invoked symbols that static analysis cannot see
-- [ ] 6.3 Remove only proven unreachable Python code and duplicate implementations, rerunning the owning component tests after each batch
-- [ ] 6.4 Run frontend static analysis for unused exports, unreachable branches, and duplicate helpers, preserving framework and template entrypoints
-- [ ] 6.5 Remove only proven unreachable frontend code and verify typecheck, lint, tests, and build remain green
+- [x] 6.1 Run CodeGraph call-path inspection and vulture on every configured Python root and classify each candidate as live, dynamic, or removable
+- [x] 6.2 Add focused tests for dynamically registered or externally invoked symbols that static analysis cannot see
+- [x] 6.3 Remove only proven unreachable Python code and duplicate implementations, rerunning the owning component tests after each batch
+- [x] 6.4 Run frontend static analysis for unused exports, unreachable branches, and duplicate helpers, preserving framework and template entrypoints
+- [x] 6.5 Remove only proven unreachable frontend code and verify typecheck, lint, tests, and build remain green
 
 ## 7. Concurrent Qwen integration
 

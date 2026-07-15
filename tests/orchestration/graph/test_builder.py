@@ -417,15 +417,15 @@ class TestPrintGraphStructure:
     """print_graph_structure() output."""
 
     def test_print_graph_structure_calls_ascii(self):
-        """print_graph_structure calls print_ascii and logs the result."""
+        """print_graph_structure delegates rendering to print_ascii."""
         mock_graph = MagicMock()
-        mock_graph.get_graph.return_value.print_ascii.return_value = "mock ascii art"
 
         with patch("animetta.orchestration.graph.builder.logger") as mock_logger:
             print_graph_structure(mock_graph)
 
         mock_graph.get_graph.assert_called_once()
-        mock_logger.info.assert_any_call("mock ascii art")
+        mock_graph.get_graph.return_value.print_ascii.assert_called_once_with()
+        mock_logger.info.assert_any_call("[LangGraph] Graph structure:")
 
 
 def test_golden_graph_contains_only_two_pass_dialogue_branch() -> None:

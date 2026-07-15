@@ -179,7 +179,7 @@ def step_rvc_build_index(exp_dir: str, version: str) -> None:
     run_step("RVC: Build FAISS Index", cmd)
 
 
-def step_deploy(character_name: str) -> None:
+def step_deploy() -> None:
     """Step 6: Deploy model to Anima."""
     run_step(
         "Deploy to Anima",
@@ -296,7 +296,7 @@ Examples:
     # ── Execute ──
 
     if args.deploy_only:
-        step_deploy(char_name)
+        step_deploy()
         return
 
     if args.dry_run:
@@ -341,7 +341,7 @@ Examples:
     step_rvc_build_index(char_name, version)
 
     # Step G: Deploy to Anima
-    step_deploy(char_name)
+    step_deploy()
 
     print(f"\n{'=' * 60}")
     print(f"  [DONE] Training complete for {char_name}!")

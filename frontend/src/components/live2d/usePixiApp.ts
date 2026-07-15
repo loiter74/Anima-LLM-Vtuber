@@ -11,15 +11,6 @@ let lastCanvasH = 0
 export function getApp(): Application | null {
   return app
 }
-export function getContainer(): HTMLElement | null {
-  return container
-}
-export function getLastCanvasW(): number {
-  return lastCanvasW
-}
-export function getLastCanvasH(): number {
-  return lastCanvasH
-}
 
 // ===== PIXI Application Initialization =====
 

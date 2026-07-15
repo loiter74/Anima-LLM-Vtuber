@@ -231,7 +231,6 @@ async def _retrieve_memory_context(
     session_id: str,
     query: str,
     config: RunnableConfig | None,
-    max_turns: int = 5,
     current_emotion: Any = None,
     character_known: list[str] | None = None,
     character_unknown: list[str] | None = None,
@@ -248,7 +247,6 @@ async def _retrieve_memory_context(
         session_id: Session ID
         query: Query text (user input)
         config: LangGraph config
-        max_turns: Maximum number of turns to retrieve
         current_emotion: VADVector for mood-congruent recall
         character_known: Character's known knowledge domains (from persona config)
         character_unknown: Character's unknown knowledge domains (excluded from recall)
@@ -390,8 +388,6 @@ async def llm_node(
     """
     session_id = state.get("session_id", "unknown")
     user_text = state.get("user_text", "")
-    list(state.get("messages", []))
-
     logger.info(f"[{session_id}] [LLMNode] Processing...")
 
     # Validate input
@@ -434,7 +430,6 @@ async def llm_node(
         session_id=session_id,
         query=user_text,
         config=config,
-        max_turns=5,
         current_emotion=current_emotion,
         character_known=_meta.get("character_known"),
         character_unknown=_meta.get("character_unknown"),

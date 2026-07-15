@@ -300,6 +300,17 @@ def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:
     }.issubset(gated_paths)
 
 
+def test_repository_catalog_has_dead_code_and_duplication_gates() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+
+    assert catalog.groups["backend-deadcode"].runner.value == "vulture"
+    assert catalog.groups["backend-deadcode"].include_in_full is True
+    assert catalog.groups["frontend-deadcode"].args == ("deadcode",)
+    assert catalog.groups["frontend-deadcode"].include_in_full is True
+    assert catalog.groups["frontend-duplicates"].args == ("duplicates:check",)
+    assert catalog.groups["frontend-duplicates"].include_in_full is True
+
+
 def test_repository_catalog_has_operational_source_contract() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
     group = catalog.groups["operational-source-contract"]

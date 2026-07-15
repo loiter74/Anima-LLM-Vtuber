@@ -62,7 +62,3 @@ export function stopAudio(): void {
   stopLipSync()
   cleanup()
 }
-
-export function cleanupAudio(): void {
-  cleanup()
-}

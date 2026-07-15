@@ -29,6 +29,7 @@ class Runner(StrEnum):
     RUFF = "ruff"
     RUFF_FORMAT = "ruff-format"
     MYPY = "mypy"
+    VULTURE = "vulture"
     PYTEST = "pytest"
     PYTHON = "python"
     PNPM = "pnpm"
@@ -246,7 +247,8 @@ class VerificationGroup(FrozenModel):
         if self.runner is Runner.PYTHON and not self.entrypoint:
             raise ValueError("python runner requires entrypoint")
         if (
-            self.runner in {Runner.RUFF, Runner.RUFF_FORMAT, Runner.MYPY, Runner.PYTEST}
+            self.runner
+            in {Runner.RUFF, Runner.RUFF_FORMAT, Runner.MYPY, Runner.VULTURE, Runner.PYTEST}
             and not self.targets
         ):
             raise ValueError(f"{self.runner.value} runner requires targets")

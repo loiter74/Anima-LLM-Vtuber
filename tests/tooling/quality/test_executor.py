@@ -133,6 +133,10 @@ def test_code_standard_groups_use_canonical_local_commands() -> None:
         loaded.catalog.groups["operational-source-contract"],
         python_executable=sys.executable,
     )
+    deadcode_argv = build_argv(
+        loaded.catalog.groups["backend-deadcode"],
+        python_executable=sys.executable,
+    )
 
     assert format_argv == [
         sys.executable,
@@ -152,6 +156,18 @@ def test_code_standard_groups_use_canonical_local_commands() -> None:
         sys.executable,
         "scripts/check_source_standards.py",
         "--check",
+    ]
+    assert deadcode_argv == [
+        sys.executable,
+        "-m",
+        "vulture",
+        "tooling",
+        "scripts",
+        "evaluations",
+        "src/animetta",
+        "src/animetta_qwen_tts",
+        "--min-confidence",
+        "80",
     ]
 
 

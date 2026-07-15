@@ -64,4 +64,4 @@ disallow_untyped_defs = false
 
 [tool.vulture]
 min_confidence = 80
-paths = ["src/animetta"]
+paths = ["tooling", "scripts", "evaluations", "src/animetta", "src/animetta_qwen_tts"]

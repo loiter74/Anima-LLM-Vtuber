@@ -59,26 +59,3 @@ export function useScrollTrigger(
 
   return { ctx, prefersReducedMotion }
 }
-
-/**
- * Scrub animation - progress tied to scroll position.
- */
-export function useScrollScrub(
-  trigger: Ref<HTMLElement | null>,
-  options: ScrollTriggerOptions = {},
-) {
-  return useScrollTrigger(trigger, {
-    scrub: true,
-    ...options,
-  })
-}
-
-/**
- * Pin section - element stays fixed while scroll continues.
- */
-export function useScrollPin(trigger: Ref<HTMLElement | null>, options: ScrollTriggerOptions = {}) {
-  return useScrollTrigger(trigger, {
-    pin: true,
-    ...options,
-  })
-}

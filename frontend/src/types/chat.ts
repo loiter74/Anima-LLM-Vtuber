@@ -16,12 +16,6 @@ export interface ChatMessage {
   turn_id?: ChatIdentity['turn_id']
 }
 
-export interface LlmChunk {
-  text: string
-  seq: number
-  is_complete: boolean
-}
-
 export interface Transcript {
   text: string
   is_final: boolean

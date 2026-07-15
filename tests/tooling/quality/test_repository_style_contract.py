@@ -73,9 +73,23 @@ def test_ruff_keeps_every_maintained_python_root_in_scope() -> None:
     assert hidden_roots == set()
 
 
+def test_vulture_audits_every_maintained_non_test_python_root() -> None:
+    config = _load_config()
+
+    assert set(config["tool"]["vulture"]["paths"]) == {
+        "tooling",
+        "scripts",
+        "evaluations",
+        "src/animetta",
+        "src/animetta_qwen_tts",
+    }
+
+
 def test_frontend_package_exposes_fail_closed_lint_and_format_commands() -> None:
     package = _load_frontend_package()
 
     assert package["scripts"]["lint"] == "eslint . --max-warnings 0"
     assert package["scripts"]["format"] == "prettier --write ."
     assert package["scripts"]["format:check"] == "prettier --check ."
+    assert package["scripts"]["deadcode"] == "knip --files --exports --dependencies"
+    assert package["scripts"]["duplicates:check"].startswith("jscpd ")

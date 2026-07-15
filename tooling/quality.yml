@@ -26,6 +26,8 @@ input_sets:
     paths:
       - frontend/package.json
       - frontend/pnpm-lock.yaml
+      - frontend/pnpm-workspace.yaml
+      - frontend/knip.json
       - frontend/vite.config.ts
       - frontend/vitest.config.ts
       - frontend/tsconfig*.json
@@ -378,6 +380,19 @@ groups:
       - backend-tools-unit
       - backend-observability-unit
 
+  backend-deadcode:
+    domain: repository
+    kind: lint
+    runner: vulture
+    targets: [tooling, scripts, evaluations, src/animetta, src/animetta_qwen_tts]
+    args: [--min-confidence, "80"]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source]
+
   frontend-tests:
     domain: frontend
     kind: unit
@@ -410,6 +425,32 @@ groups:
     runner: pnpm
     cwd: frontend
     args: [format:check]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-deadcode:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [deadcode]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-duplicates:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [duplicates:check]
     timeout_seconds: 300
     include_in_full: true
     cacheable: true
@@ -499,6 +540,7 @@ components:
       - backend-support-typecheck
       - backend-static
       - python-format
+      - backend-deadcode
     impacts: []
     risk: high
 
@@ -511,6 +553,7 @@ components:
       - python-format
       - backend-static
       - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-server, orchestration-graph]
     risk: high
 
@@ -525,6 +568,7 @@ components:
       - python-format
       - backend-static
       - backend-typecheck
+      - backend-deadcode
     impacts: [backend-core]
     risk: high
 
@@ -537,13 +581,19 @@ components:
       - python-format
       - backend-static
       - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   orchestration-graph:
     domain: backend
     paths: [src/animetta/orchestration/graph/**]
-    direct_groups: [backend-graph-unit, python-format, backend-static, backend-typecheck]
+    direct_groups:
+      - backend-graph-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: []
     risk: normal
 
@@ -557,20 +607,31 @@ components:
       - python-format
       - backend-static
       - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   backend-memory:
     domain: backend
     paths: [src/animetta/memory/**]
-    direct_groups: [backend-memory-unit, python-format, backend-static, backend-typecheck]
+    direct_groups:
+      - backend-memory-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   backend-tools:
     domain: backend
     paths: [src/animetta/tools/**]
-    direct_groups: [backend-tools-unit, python-format, backend-static, backend-typecheck]
+    direct_groups:
+      - backend-tools-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-server]
     risk: normal
 
@@ -585,6 +646,7 @@ components:
       - python-format
       - backend-static
       - backend-typecheck
+      - backend-deadcode
     impacts: [backend-core]
     risk: normal
 
@@ -596,7 +658,13 @@ components:
       - frontend/scripts/**
       - frontend/*.mjs
       - frontend/*.ts
-    direct_groups: [frontend-tests, frontend-typecheck, frontend-lint, frontend-format]
+    direct_groups:
+      - frontend-tests
+      - frontend-typecheck
+      - frontend-lint
+      - frontend-format
+      - frontend-deadcode
+      - frontend-duplicates
     impacts: [frontend-build-control]
     risk: normal
 
@@ -605,10 +673,18 @@ components:
     paths:
       - frontend/package.json
       - frontend/pnpm-lock.yaml
+      - frontend/pnpm-workspace.yaml
+      - frontend/knip.json
       - frontend/vite.config.ts
       - frontend/vitest.config.ts
       - frontend/uno.config.ts
-    direct_groups: [frontend-typecheck, frontend-build, frontend-lint, frontend-format]
+    direct_groups:
+      - frontend-typecheck
+      - frontend-build
+      - frontend-lint
+      - frontend-format
+      - frontend-deadcode
+      - frontend-duplicates
     impacts: []
     risk: high
 
@@ -676,6 +752,7 @@ components:
 
 fallbacks:
   backend:
+    - backend-deadcode
     - python-format
     - backend-static
     - backend-typecheck
@@ -683,12 +760,15 @@ fallbacks:
     - backend-events-contract
     - backend-full
   frontend:
+    - frontend-deadcode
+    - frontend-duplicates
     - frontend-lint
     - frontend-format
     - frontend-tests
     - frontend-typecheck
     - frontend-build
   repository:
+    - backend-deadcode
     - python-format
     - backend-static
     - backend-typecheck
@@ -701,6 +781,8 @@ fallbacks:
     - frontend-tests
     - frontend-lint
     - frontend-format
+    - frontend-deadcode
+    - frontend-duplicates
     - frontend-typecheck
     - frontend-build
     - docker-compose-contract

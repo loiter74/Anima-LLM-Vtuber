@@ -698,7 +698,7 @@ async def run_auto() -> None:
     server.stop()
 
     # 6. Generate report
-    _print_auto_report(bench, traces_data, spans_data, otel_spans)
+    _print_auto_report(bench, spans_data, otel_spans)
 
     # 7. Save results
     runs_dir = Path(__file__).parent.parent / "docs" / "benchmarks" / "runs"
@@ -735,7 +735,6 @@ async def run_auto() -> None:
 
 def _print_auto_report(
     bench: Benchmark,
-    traces: list[dict[str, Any]],
     spans: list[dict[str, Any]],
     otel_spans: list[dict[str, Any]],
 ) -> None:

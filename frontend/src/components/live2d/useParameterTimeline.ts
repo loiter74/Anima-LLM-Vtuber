@@ -21,10 +21,6 @@ const currentParams = new Map<
   }
 >()
 
-export function getIsTimelinePlaying(): boolean {
-  return timelinePlaying
-}
-
 // ===== Parameter Setting =====
 
 export function setParam(name: string, value: number): void {
