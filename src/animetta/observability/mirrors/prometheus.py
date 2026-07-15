@@ -159,9 +159,7 @@ class PrometheusMirror:
                 phase=self._labels.value("event_phase", record.phase),
             ).inc()
 
-    def _observe_operation(
-        self, started: OperationStarted, finished: OperationFinished
-    ) -> None:
+    def _observe_operation(self, started: OperationStarted, finished: OperationFinished) -> None:
         duration = max(0.0, finished.finished_at - started.started_at)
         status = finished.status.value
         if started.layer is ObservationLayer.WORKFLOW:

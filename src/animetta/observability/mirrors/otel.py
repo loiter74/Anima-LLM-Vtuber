@@ -85,9 +85,7 @@ class OTelMirror:
         exporter = _HealthTrackingExporter(
             OTLPSpanExporter(endpoint=endpoint, timeout=10), health_state
         )
-        provider = TracerProvider(
-            resource=Resource.create({"service.name": service_name})
-        )
+        provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
         provider.add_span_processor(
             BatchSpanProcessor(
                 exporter,
@@ -301,9 +299,7 @@ class _MirrorHealthState:
 
 
 class _HealthTrackingExporter(SpanExporter):
-    def __init__(
-        self, delegate: SpanExporter, health_state: _MirrorHealthState
-    ) -> None:
+    def __init__(self, delegate: SpanExporter, health_state: _MirrorHealthState) -> None:
         self._delegate = delegate
         self._health_state = health_state
 

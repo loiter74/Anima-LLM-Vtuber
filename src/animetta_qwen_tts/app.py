@@ -345,9 +345,7 @@ def create_app(
             await active_service.close()
 
     async def health(request: Request) -> JSONResponse:
-        return JSONResponse(
-            {"status": "ok", "service": "qwen-tts", "api_version": "v1"}
-        )
+        return JSONResponse({"status": "ok", "service": "qwen-tts", "api_version": "v1"})
 
     def require_auth(request: Request) -> JSONResponse | None:
         if active_service.authorized(request):

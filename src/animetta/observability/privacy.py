@@ -42,9 +42,7 @@ _ALLOWED_ATTRIBUTES = frozenset(
     }
 )
 _BEARER_RE = re.compile(r"(?i)(authorization\s*:\s*)?bearer\s+[^\s,;]+")
-_SECRET_RE = re.compile(
-    r"(?i)\b(api[_-]?key|secret|password|token)\s*[=:]\s*[^\s,;]+"
-)
+_SECRET_RE = re.compile(r"(?i)\b(api[_-]?key|secret|password|token)\s*[=:]\s*[^\s,;]+")
 
 
 class ObservationContentPolicy:
@@ -74,9 +72,7 @@ class ObservationContentPolicy:
             digest=digest,
         )
 
-    def filter_attributes(
-        self, values: Mapping[str, object]
-    ) -> dict[str, AttributeValue]:
+    def filter_attributes(self, values: Mapping[str, object]) -> dict[str, AttributeValue]:
         filtered: dict[str, AttributeValue] = {}
         for key, value in values.items():
             if key not in _ALLOWED_ATTRIBUTES:

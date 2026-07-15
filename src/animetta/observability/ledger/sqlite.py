@@ -256,15 +256,11 @@ class SQLiteObservationLedger:
             "success_count": int(row["success"] or 0),
             "degraded_count": int(row["degraded"] or 0),
             "failed_count": int(row["failed"] or 0),
-            "success_rate": (
-                round(float(row["success"] or 0) / total * 100, 1) if total else 0.0
-            ),
+            "success_rate": (round(float(row["success"] or 0) / total * 100, 1) if total else 0.0),
             "avg_duration_ms": round(float(row["average_duration"] or 0.0), 2),
         }
 
-    async def recent_traces(
-        self, limit: int = 50, offset: int = 0
-    ) -> Sequence[Mapping[str, Any]]:
+    async def recent_traces(self, limit: int = 50, offset: int = 0) -> Sequence[Mapping[str, Any]]:
         db = self._require_db()
         cursor = await db.execute(
             """
@@ -298,9 +294,7 @@ class SQLiteObservationLedger:
     async def trace_detail(self, trace_id: str) -> Mapping[str, Any] | None:
         db = self._require_db()
         trace = await (
-            await db.execute(
-                "SELECT * FROM observation_traces WHERE trace_id=?", (trace_id,)
-            )
+            await db.execute("SELECT * FROM observation_traces WHERE trace_id=?", (trace_id,))
         ).fetchone()
         if trace is None:
             return None
@@ -320,12 +314,8 @@ class SQLiteObservationLedger:
         )
         detail = dict(trace)
         detail["attributes"] = _json_loads(detail.pop("attributes_json"))
-        operations = [
-            self._operation_row(row) for row in await operation_cursor.fetchall()
-        ]
-        events = [
-            self._event_row(row) for row in await event_cursor.fetchall()
-        ]
+        operations = [self._operation_row(row) for row in await operation_cursor.fetchall()]
+        events = [self._event_row(row) for row in await event_cursor.fetchall()]
         post_turn_operations = [
             operation for operation in operations if not operation["critical_path"]
         ]
@@ -339,8 +329,7 @@ class SQLiteObservationLedger:
                 for item in post_turn_operations
             ),
             "failed": sum(
-                item["status"] in {"error", "cancelled"}
-                for item in post_turn_operations
+                item["status"] in {"error", "cancelled"} for item in post_turn_operations
             ),
             "operations": post_turn_operations,
         }
@@ -364,9 +353,7 @@ class SQLiteObservationLedger:
     async def latest_inspection_report(self) -> Mapping[str, Any] | None:
         db = self._require_db()
         row = await (
-            await db.execute(
-                "SELECT * FROM inspection_reports ORDER BY started_at DESC LIMIT 1"
-            )
+            await db.execute("SELECT * FROM inspection_reports ORDER BY started_at DESC LIMIT 1")
         ).fetchone()
         if row is None:
             return None
@@ -449,9 +436,7 @@ class SQLiteObservationLedger:
                     self._record_writer_error(LedgerWriteError(str(exc)))
             except Exception as exc:
                 await self._require_db().rollback()
-                wrapped = LedgerWriteError(
-                    f"{command.kind} commit failed: {type(exc).__name__}"
-                )
+                wrapped = LedgerWriteError(f"{command.kind} commit failed: {type(exc).__name__}")
                 self._record_writer_error(wrapped)
                 if command.acknowledgement is not None:
                     _reject(command.acknowledgement, wrapped)
@@ -539,9 +524,7 @@ class SQLiteObservationLedger:
             )
         ).fetchone()
         if int(open_critical[0]) > 0:
-            raise LedgerIntegrityError(
-                f"trace {record.trace_id} has running critical operations"
-            )
+            raise LedgerIntegrityError(f"trace {record.trace_id} has running critical operations")
         started = await (
             await db.execute(
                 "SELECT started_at FROM observation_traces WHERE trace_id=?",
@@ -613,9 +596,7 @@ class SQLiteObservationLedger:
             )
         ).fetchone()
         if started is None:
-            raise LedgerIntegrityError(
-                f"operation does not exist: {record.operation_id}"
-            )
+            raise LedgerIntegrityError(f"operation does not exist: {record.operation_id}")
         duration_ms = max(0.0, (record.finished_at - float(started[0])) * 1000)
         cursor = await db.execute(
             """
@@ -635,9 +616,7 @@ class SQLiteObservationLedger:
             ),
         )
         if cursor.rowcount != 1:
-            raise LedgerIntegrityError(
-                f"operation already finalized: {record.operation_id}"
-            )
+            raise LedgerIntegrityError(f"operation already finalized: {record.operation_id}")
 
     async def _insert_event(self, record: ObservationEvent) -> None:
         try:
@@ -866,9 +845,7 @@ def _reject(future: asyncio.Future[None], error: BaseException) -> None:
 
 def _expect(value: object | None, expected_type: type[Any]) -> Any:
     if not isinstance(value, expected_type):
-        raise LedgerIntegrityError(
-            f"expected {expected_type.__name__}, got {type(value).__name__}"
-        )
+        raise LedgerIntegrityError(f"expected {expected_type.__name__}, got {type(value).__name__}")
     return value
 
 
