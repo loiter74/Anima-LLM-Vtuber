@@ -2,7 +2,13 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { getSocket } from './useSocket'
 import { Events } from '@/constants/socket-events'
-import type { AudioWithExpressionEvent, ChatControlEvent, ChatIdentity, SentenceEvent, SubtitleTranslationEvent } from '@/types/socket-events'
+import type {
+  AudioWithExpressionEvent,
+  ChatControlEvent,
+  ChatIdentity,
+  SentenceEvent,
+  SubtitleTranslationEvent,
+} from '@/types/socket-events'
 import { activateChatTask, isCurrentChatTask } from './chatTaskGate'
 
 export function useSubtitle() {
@@ -40,7 +46,12 @@ export function useSubtitle() {
     }
   }
 
-  function showSubtitle(finalText: string, finalTranslation?: string, lang?: string, tLang?: string): void {
+  function showSubtitle(
+    finalText: string,
+    finalTranslation?: string,
+    lang?: string,
+    tLang?: string,
+  ): void {
     cancelHide()
     text.value = stripEmotionTags(finalText)
     translation.value = finalTranslation || ''
@@ -83,7 +94,8 @@ export function useSubtitle() {
   let _onStopAudio: ((data: ChatIdentity) => void) | null = null
   let _onSubtitleTranslation: ((data: SubtitleTranslationEvent) => void) | null = null
   let _onAudioWithExpression: ((data: AudioWithExpressionEvent) => void) | null = null
-  let _onSingSubtitle: ((data: { text: string; translation: string; lang?: string }) => void) | null = null
+  let _onSingSubtitle:
+    ((data: { text: string; translation: string; lang?: string }) => void) | null = null
 
   onMounted(() => {
     const socket = getSocket()
@@ -186,7 +198,8 @@ export function useSubtitle() {
     if (_onControl) socket.off(Events.CHAT.CONTROL, _onControl)
     if (_onStopAudio) socket.off(Events.CHAT.STOP_AUDIO, _onStopAudio)
     if (_onSubtitleTranslation) socket.off(Events.CHAT.SUBTITLE_TRANSLATION, _onSubtitleTranslation)
-    if (_onAudioWithExpression) socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, _onAudioWithExpression)
+    if (_onAudioWithExpression)
+      socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, _onAudioWithExpression)
     if (_onSingSubtitle) socket.off(Events.SING.SUBTITLE_LINE, _onSingSubtitle)
     if (hideTimeout) clearTimeout(hideTimeout)
   })

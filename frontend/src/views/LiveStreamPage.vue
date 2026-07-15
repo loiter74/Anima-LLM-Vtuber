@@ -5,7 +5,7 @@ import { useDanmaku } from '@/composables/useDanmaku'
 import { useSocket } from '@/composables/useSocket'
 
 // ===== Socket & Composables =====
-const { socket } = useSocket()
+useSocket()
 const { store: danmakuStore } = useDanmaku({ canControl: false })
 
 // ===== State =====
@@ -40,11 +40,7 @@ onMounted(() => {
 <template>
   <div class="live-page">
     <!-- Background -->
-    <div
-      v-if="bgImage"
-      class="bg-layer"
-      :style="{ backgroundImage: `url(${bgImage})` }"
-    />
+    <div v-if="bgImage" class="bg-layer" :style="{ backgroundImage: `url(${bgImage})` }" />
     <div v-else class="bg-gradient" />
 
     <!-- Vignette -->
@@ -71,9 +67,7 @@ onMounted(() => {
           <span class="name">{{ msg.user_name }}</span>
           <span class="text">{{ msg.text }}</span>
         </div>
-        <div v-if="danmakuCount === 0" class="empty">
-          等待弹幕...
-        </div>
+        <div v-if="danmakuCount === 0" class="empty">等待弹幕...</div>
       </div>
     </div>
   </div>
@@ -106,7 +100,11 @@ onMounted(() => {
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 30%, color-mix(in srgb, var(--c-bg) 40%, transparent) 100%);
+  background: radial-gradient(
+    ellipse at center,
+    transparent 30%,
+    color-mix(in srgb, var(--c-bg) 40%, transparent) 100%
+  );
   pointer-events: none;
   z-index: 1;
 }
@@ -227,7 +225,13 @@ onMounted(() => {
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

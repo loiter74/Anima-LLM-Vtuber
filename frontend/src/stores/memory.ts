@@ -82,9 +82,11 @@ interface FetchOptions {
 const DEFAULT_ACK_TIMEOUT_MS = 3000
 
 function isAck<T>(value: unknown): value is MemoryAck<T> {
-  return typeof value === 'object'
-    && value !== null
-    && typeof (value as { ok?: unknown }).ok === 'boolean'
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { ok?: unknown }).ok === 'boolean'
+  )
 }
 
 export const useMemoryStore = defineStore('memory', () => {
@@ -106,14 +108,15 @@ export const useMemoryStore = defineStore('memory', () => {
 
   const filteredPages = computed(() => {
     let list = wikiPages.value
-    if (filterType.value) list = list.filter(item => item.page_type === filterType.value)
-    if (filterScope.value) list = list.filter(item => item.scope === filterScope.value)
+    if (filterType.value) list = list.filter((item) => item.page_type === filterType.value)
+    if (filterScope.value) list = list.filter((item) => item.scope === filterScope.value)
     const query = searchQuery.value.trim().toLowerCase()
     if (query) {
-      list = list.filter(item =>
-        item.content.toLowerCase().includes(query)
-        || item.title.toLowerCase().includes(query)
-        || (item.summary ?? '').toLowerCase().includes(query),
+      list = list.filter(
+        (item) =>
+          item.content.toLowerCase().includes(query) ||
+          item.title.toLowerCase().includes(query) ||
+          (item.summary ?? '').toLowerCase().includes(query),
       )
     }
     return list
@@ -158,14 +161,16 @@ export const useMemoryStore = defineStore('memory', () => {
   async function fetchMemories(options: FetchOptions = {}): Promise<void> {
     loading.value = true
     try {
-      const page = await request<MemoryPage>(Events.MEMORY.LIST, {
-        cursor: options.cursor ?? undefined,
-        limit: options.limit ?? 50,
-        scope: options.scope ?? undefined,
-      }, options.timeoutMs)
-      wikiPages.value = options.append
-        ? [...wikiPages.value, ...page.items]
-        : page.items
+      const page = await request<MemoryPage>(
+        Events.MEMORY.LIST,
+        {
+          cursor: options.cursor ?? undefined,
+          limit: options.limit ?? 50,
+          scope: options.scope ?? undefined,
+        },
+        options.timeoutMs,
+      )
+      wikiPages.value = options.append ? [...wikiPages.value, ...page.items] : page.items
       revision.value = page.revision
       latestRevision.value = Math.max(latestRevision.value, page.revision)
       nextCursor.value = page.next_cursor
@@ -184,6 +189,7 @@ export const useMemoryStore = defineStore('memory', () => {
   }
 
   async function fetchWikiPages(_sessionId = 'default'): Promise<void> {
+    void _sessionId
     await fetchMemories()
   }
 
@@ -202,22 +208,17 @@ export const useMemoryStore = defineStore('memory', () => {
     }
   }
 
-  async function mutate(
-    event: string,
-    payload: Record<string, unknown>,
-  ): Promise<MemoryAtomDTO> {
+  async function mutate(event: string, payload: Record<string, unknown>): Promise<MemoryAtomDTO> {
     const result = await request<{ item: MemoryAtomDTO; revision: number }>(event, payload)
-    const index = wikiPages.value.findIndex(item => item.id === result.item.id)
+    const index = wikiPages.value.findIndex((item) => item.id === result.item.id)
     if (index >= 0) wikiPages.value.splice(index, 1, result.item)
     revision.value = result.revision
     latestRevision.value = Math.max(latestRevision.value, result.revision)
     return result.item
   }
 
-  const pinMemory = (id: string, pinned: boolean) =>
-    mutate(Events.MEMORY.PIN, { id, pinned })
-  const forgetMemory = (id: string) =>
-    mutate(Events.MEMORY.FORGET, { id })
+  const pinMemory = (id: string, pinned: boolean) => mutate(Events.MEMORY.PIN, { id, pinned })
+  const forgetMemory = (id: string) => mutate(Events.MEMORY.FORGET, { id })
   const changeMemory = (id: string, summary: string) =>
     mutate(Events.MEMORY.CHANGE, { id, summary })
 
@@ -274,17 +275,46 @@ export const useMemoryStore = defineStore('memory', () => {
   function selectPath(path: string): void {
     selectedPath.value = selectedPath.value === path ? null : path
   }
-  function setFilter(type: string | null): void { filterType.value = type }
-  function setScope(scope: string | null): void { filterScope.value = scope }
-  function setSearch(query: string): void { searchQuery.value = query }
+  function setFilter(type: string | null): void {
+    filterType.value = type
+  }
+  function setScope(scope: string | null): void {
+    filterScope.value = scope
+  }
+  function setSearch(query: string): void {
+    searchQuery.value = query
+  }
 
   startListeners()
 
   return {
-    wikiPages, selectedPath, loading, filterType, filterScope, searchQuery,
-    revision, latestRevision, nextCursor, total, invalidated, error, job, health,
-    filteredPages, fetchMemories, fetchWikiPages, searchRemote,
-    pinMemory, forgetMemory, changeMemory, organizeMemory,
-    startListeners, stopListeners, selectPath, setFilter, setScope, setSearch,
+    wikiPages,
+    selectedPath,
+    loading,
+    filterType,
+    filterScope,
+    searchQuery,
+    revision,
+    latestRevision,
+    nextCursor,
+    total,
+    invalidated,
+    error,
+    job,
+    health,
+    filteredPages,
+    fetchMemories,
+    fetchWikiPages,
+    searchRemote,
+    pinMemory,
+    forgetMemory,
+    changeMemory,
+    organizeMemory,
+    startListeners,
+    stopListeners,
+    selectPath,
+    setFilter,
+    setScope,
+    setSearch,
   }
 })

@@ -8,19 +8,19 @@ vi.mock('gsap', () => ({
   gsap: {
     context: vi.fn((callback) => ({
       callback,
-      revert: vi.fn()
+      revert: vi.fn(),
     })),
     fromTo: vi.fn(),
-    registerPlugin: vi.fn()
-  }
+    registerPlugin: vi.fn(),
+  },
 }))
 
 vi.mock('gsap/ScrollTrigger', () => ({
   ScrollTrigger: {
     create: vi.fn(),
     getAll: vi.fn(() => []),
-    kill: vi.fn()
-  }
+    kill: vi.fn(),
+  },
 }))
 
 describe('useScrollTrigger', () => {
@@ -28,7 +28,7 @@ describe('useScrollTrigger', () => {
     vi.clearAllMocks()
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query) => ({
         matches: false,
         media: query,
         addEventListener: vi.fn(),
@@ -43,10 +43,10 @@ describe('useScrollTrigger', () => {
         const elementRef = ref<HTMLElement | null>(null)
         return {
           ...useScrollTrigger(elementRef),
-          elementRef
+          elementRef,
         }
       },
-      template: '<div ref="elementRef"></div>'
+      template: '<div ref="elementRef"></div>',
     })
 
     const wrapper = mount(TestComponent)
@@ -57,7 +57,7 @@ describe('useScrollTrigger', () => {
   it('respects prefers-reduced-motion', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query) => ({
         matches: query === '(prefers-reduced-motion: reduce)',
         media: query,
         addEventListener: vi.fn(),
@@ -70,10 +70,10 @@ describe('useScrollTrigger', () => {
         const elementRef = ref<HTMLElement | null>(null)
         return {
           ...useScrollTrigger(elementRef),
-          elementRef
+          elementRef,
         }
       },
-      template: '<div ref="elementRef"></div>'
+      template: '<div ref="elementRef"></div>',
     })
 
     const wrapper = mount(TestComponent)

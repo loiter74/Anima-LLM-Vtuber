@@ -45,7 +45,8 @@ export function createDomLiveView(document: Document): LiveView {
       list.scrollTop = list.scrollHeight
     },
     setSocketState(state): void {
-      socketStatus.textContent = state === 'connected' ? '服务已连接' : state === 'connecting' ? '服务连接中' : '服务已断开'
+      socketStatus.textContent =
+        state === 'connected' ? '服务已连接' : state === 'connecting' ? '服务连接中' : '服务已断开'
       socketStatus.dataset.state = state
     },
     setLivestreamStatus(status: BilibiliStatusPayload): void {

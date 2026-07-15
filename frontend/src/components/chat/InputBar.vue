@@ -37,9 +37,11 @@ function sendMessage(): void {
     data-testid="chat-input-bar"
     class="border border-c-border rounded-lg backdrop-blur-md flex items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
     style="background: rgba(36, 21, 56, 0.35); touch-action: manipulation"
-    :class="isMobile
-      ? 'mobile-input-bar gap-3 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'
-      : 'gap-2.5 pl-5 pr-4 py-4'"
+    :class="
+      isMobile
+        ? 'mobile-input-bar gap-3 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'
+        : 'gap-2.5 pl-5 pr-4 py-4'
+    "
   >
     <textarea
       ref="textareaRef"
@@ -51,9 +53,7 @@ function sendMessage(): void {
       @input="handleInput"
       @keydown="handleKeydown"
     />
-    <VoiceButton
-      :class="isMobile ? '!w-12 !h-12' : ''"
-    />
+    <VoiceButton :class="isMobile ? '!w-12 !h-12' : ''" />
     <button
       class="bg-c-accent hover:bg-c-accent-hover text-white rounded-lg flex items-center justify-center transition-all duration-200 disabled:bg-c-card disabled:text-c-text-muted disabled:cursor-not-allowed"
       :class="isMobile ? 'w-12 h-12' : 'w-8 h-8'"

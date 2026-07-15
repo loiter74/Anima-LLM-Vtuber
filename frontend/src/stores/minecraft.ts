@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
 
@@ -89,7 +89,8 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     const botStateHandler = (data: Record<string, unknown>) => {
       if (data.health != null) botState.value.health = data.health as number
       if (data.food != null) botState.value.food = data.food as number
-      if (data.position) botState.value.position = data.position as { x: number; y: number; z: number }
+      if (data.position)
+        botState.value.position = data.position as { x: number; y: number; z: number }
       if (data.dimension) botState.value.dimension = data.dimension as string
       if (data.biome) botState.value.biome = data.biome as string
       if (data.time) botState.value.time = data.time as string
@@ -97,7 +98,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
       if (data.action) botState.value.action = data.action as string
       if (data.action_target) botState.value.actionTarget = data.action_target as string
       if (data.held_item) botState.value.heldItem = data.held_item as string
-      if (data.inventory) botState.value.inventory = data.inventory as Array<{ name: string; count: number; slot: number }>
+      if (data.inventory)
+        botState.value.inventory = data.inventory as Array<{
+          name: string
+          count: number
+          slot: number
+        }>
     }
 
     socket.on(Events.MINECRAFT.STATUS, statusHandler)

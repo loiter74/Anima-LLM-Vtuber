@@ -42,8 +42,10 @@ describe('TitleBar', () => {
 
     await wrapper.get('[data-testid="nav-memory"]').trigger('click')
 
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'animetta:panel-tab',
-    }))
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'animetta:panel-tab',
+      }),
+    )
   })
 })

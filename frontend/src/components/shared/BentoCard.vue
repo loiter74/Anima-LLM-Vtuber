@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<Props>(), {
   rowSpan: 1,
   type: 'default',
   hover: true,
-  scrollReveal: true
+  scrollReveal: true,
 })
 
 const cardRef = ref<HTMLElement | null>(null)
@@ -29,7 +29,7 @@ const cardRef = ref<HTMLElement | null>(null)
 // Scroll reveal animation
 if (props.scrollReveal) {
   useScrollTrigger(cardRef, {
-    start: 'top 85%'
+    start: 'top 85%',
   })
 }
 

@@ -53,9 +53,7 @@ const hotbarItems = computed(() => {
       <h3 class="text-c-text font-bold text-base flex items-center gap-2">
         <span class="text-lg">🎮</span> Bot HUD
       </h3>
-      <span class="text-xs text-c-text-secondary">
-        {{ bs.dimension }} · {{ bs.biome }}
-      </span>
+      <span class="text-xs text-c-text-secondary"> {{ bs.dimension }} · {{ bs.biome }} </span>
     </div>
 
     <!-- Vital Bars -->
@@ -96,7 +94,8 @@ const hotbarItems = computed(() => {
       <div class="flex items-center gap-1.5">
         <span>📍</span>
         <span class="text-c-text-secondary">
-          {{ Math.floor(bs.position.x) }}, {{ Math.floor(bs.position.y) }}, {{ Math.floor(bs.position.z) }}
+          {{ Math.floor(bs.position.x) }}, {{ Math.floor(bs.position.y) }},
+          {{ Math.floor(bs.position.z) }}
         </span>
       </div>
       <div class="flex items-center gap-1.5">
@@ -108,18 +107,19 @@ const hotbarItems = computed(() => {
     <!-- Current Action -->
     <div
       class="flex items-center gap-2 px-3 py-2 rounded-lg"
-      :class="bs.action === 'idle' ? 'bg-c-bg-secondary/50' : 'bg-c-accent/10 border border-c-accent/20'"
+      :class="
+        bs.action === 'idle' ? 'bg-c-bg-secondary/50' : 'bg-c-accent/10 border border-c-accent/20'
+      "
     >
       <span class="text-lg">{{ actionIcon }}</span>
       <div class="flex-1 min-w-0">
         <div class="text-xs text-c-text-secondary">Current Action</div>
         <div class="font-medium truncate">
-          {{ bs.action }}<span v-if="bs.actionTarget" class="text-c-accent"> → {{ bs.actionTarget }}</span>
+          {{ bs.action
+          }}<span v-if="bs.actionTarget" class="text-c-accent"> → {{ bs.actionTarget }}</span>
         </div>
       </div>
-      <div class="text-xs text-c-text-secondary truncate max-w-24">
-        🖐 {{ bs.heldItem }}
-      </div>
+      <div class="text-xs text-c-text-secondary truncate max-w-24">🖐 {{ bs.heldItem }}</div>
     </div>
 
     <!-- Hotbar (inventory preview) -->
@@ -130,7 +130,11 @@ const hotbarItems = computed(() => {
           v-for="(item, i) in hotbarItems"
           :key="i"
           class="aspect-square rounded border flex flex-col items-center justify-center text-center p-0.5"
-          :class="item.name ? 'border-c-border bg-c-bg-secondary/80' : 'border-c-border/30 bg-c-bg-secondary/30'"
+          :class="
+            item.name
+              ? 'border-c-border bg-c-bg-secondary/80'
+              : 'border-c-border/30 bg-c-bg-secondary/30'
+          "
         >
           <span v-if="item.name" class="text-[10px] leading-tight truncate w-full">
             {{ item.name.replace('minecraft:', '').replace('_', ' ') }}

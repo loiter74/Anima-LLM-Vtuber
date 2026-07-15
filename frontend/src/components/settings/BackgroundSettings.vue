@@ -31,12 +31,6 @@ function selectPreset(url: string): void {
   applyBg(url)
 }
 
-function clearBg(): void {
-  currentBg.value = ''
-  localStorage.removeItem(STORAGE_KEY)
-  applyBg('')
-}
-
 function applyBg(url: string): void {
   if (typeof window.__setAppBg === 'function') {
     window.__setAppBg(url)
@@ -52,7 +46,11 @@ function applyBg(url: string): void {
         v-for="preset in presets"
         :key="preset.name"
         class="aspect-video rounded-lg overflow-hidden border-2 transition-all hover:scale-105 focus:outline-none"
-        :class="currentBg === preset.url ? 'border-c-accent shadow-[0_0_8px_rgba(167,139,250,0.4)]' : 'border-c-border/40 hover:border-c-border'"
+        :class="
+          currentBg === preset.url
+            ? 'border-c-accent shadow-[0_0_8px_rgba(167,139,250,0.4)]'
+            : 'border-c-border/40 hover:border-c-border'
+        "
         @click="selectPreset(preset.url)"
         :title="preset.name"
       >
@@ -64,7 +62,8 @@ function applyBg(url: string): void {
         v-for="preset in presets"
         :key="preset.name"
         class="text-10px text-c-text-muted text-center flex-1"
-      >{{ preset.name }}</span>
+        >{{ preset.name }}</span
+      >
     </div>
   </div>
 </template>

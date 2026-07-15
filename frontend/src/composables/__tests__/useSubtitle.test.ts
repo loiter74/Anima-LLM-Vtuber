@@ -7,15 +7,6 @@ vi.mock('@/composables/useSocket', () => ({
 
 describe('useSubtitle', () => {
   describe('stripEmotionTags (pure function)', () => {
-    let stripEmotionTags: (text: string) => string
-
-    beforeEach(async () => {
-      vi.resetModules()
-      const mod = await import('@/composables/useSubtitle')
-      // stripEmotionTags is not exported, so we test via useSubtitle
-      // but we can test the logic by importing and checking behavior
-    })
-
     it('removes [happy] tag', () => {
       const text = '[happy] Hello world'
       const result = text.replace(/\[(happy|sad|angry|surprised|thinking|neutral)\]/g, '').trim()
@@ -66,7 +57,7 @@ describe('useSubtitle', () => {
     it('computes correct default duration for mp3 data', () => {
       // 100 chars base64 ≈ 75 bytes → 75/48000 ≈ 0.00156 sec
       const base64 = 'a'.repeat(100)
-      const rawBytes = Math.floor(100 * 0.75)
+      const rawBytes = Math.floor(base64.length * 0.75)
       const expected = rawBytes / 48000
       expect(expected).toBeCloseTo(0.0015625, 5)
     })
@@ -168,8 +159,12 @@ describe('useSubtitle', () => {
       return {
         onSentence,
         onTranslation,
-        get currentTurnId() { return currentTurnId },
-        get translation() { return translation },
+        get currentTurnId() {
+          return currentTurnId
+        },
+        get translation() {
+          return translation
+        },
         reset,
       }
     }

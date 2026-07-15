@@ -1,11 +1,19 @@
 import { ref } from 'vue'
 import { getApp } from './usePixiApp'
 import {
-  getModel, applyScale, centerModel,
-  getUserScale, setUserScale, getStrategy,
-  STRATEGIES, setStrategy,
-  POS_X_RATIO, POS_Y_RATIO, INITIAL_SCALE,
-  FIXED_X, FIXED_Y, USE_FIXED_POSITION
+  getModel,
+  applyScale,
+  getUserScale,
+  setUserScale,
+  getStrategy,
+  STRATEGIES,
+  setStrategy,
+  POS_X_RATIO,
+  POS_Y_RATIO,
+  INITIAL_SCALE,
+  FIXED_X,
+  FIXED_Y,
+  USE_FIXED_POSITION,
 } from './useLive2DModel'
 
 // ===== Reactive State (exposed to Vue templates) =====
@@ -103,11 +111,14 @@ export function setScaleStrategy(s: string): void {
 export function updateModelInfo(): void {
   const app = getApp()
   const model = getModel()
-  if (!model || !app) { modelInfo.value = null; return }
+  if (!model || !app) {
+    modelInfo.value = null
+    return
+  }
   modelInfo.value = {
     strategy: getStrategy(),
     userScale: getUserScale().toFixed(2),
     position: `(${model.x.toFixed(0)}, ${model.y.toFixed(0)})`,
-    canvas: `${app.screen.width}x${app.screen.height}`
+    canvas: `${app.screen.width}x${app.screen.height}`,
   }
 }

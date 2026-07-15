@@ -32,14 +32,14 @@
 
 ## 4. Frontend lint, format, and type convergence
 
-- [ ] 4.1 Add failing manifest and package-script tests for frontend lint and format-check commands
-- [ ] 4.2 Add pinned ESLint flat-config, Vue/TypeScript plugins, and Prettier development dependencies and scripts to the pnpm lockfile
-- [ ] 4.3 Configure Vue, TypeScript, JavaScript, Electron, and build-script scopes, deterministic ignores, and zero-warning CI behavior
-- [ ] 4.4 Canonically format frontend application, test, Electron, build, JSON, and CSS sources while preserving design-system token semantics
-- [ ] 4.5 Resolve ESLint correctness and type-safety diagnostics in stores, services, composables, and shared types with focused tests where behavior can change
-- [ ] 4.6 Resolve ESLint correctness, resource-lifetime, and Composition API diagnostics in Vue components without changing rendered behavior
-- [ ] 4.7 Resolve Electron and frontend build-script diagnostics without changing packaging, startup, or Sites worker contracts
-- [ ] 4.8 Run frontend format check, zero-warning lint, strict typecheck, all Vitest and Node tests, and the production build
+- [x] 4.1 Add failing manifest and package-script tests for frontend lint and format-check commands
+- [x] 4.2 Add pinned ESLint flat-config, Vue/TypeScript plugins, and Prettier development dependencies and scripts to the pnpm lockfile
+- [x] 4.3 Configure Vue, TypeScript, JavaScript, Electron, and build-script scopes, deterministic ignores, and zero-warning CI behavior
+- [x] 4.4 Canonically format frontend application, test, Electron, build, JSON, and CSS sources while preserving design-system token semantics
+- [x] 4.5 Resolve ESLint correctness and type-safety diagnostics in stores, services, composables, and shared types with focused tests where behavior can change
+- [x] 4.6 Resolve ESLint correctness, resource-lifetime, and Composition API diagnostics in Vue components without changing rendered behavior
+- [x] 4.7 Resolve Electron and frontend build-script diagnostics without changing packaging, startup, or Sites worker contracts
+- [x] 4.8 Run frontend format check, zero-warning lint, strict typecheck, all Vitest and Node tests, and the production build
 
 ## 5. Operational source and configuration standards
 

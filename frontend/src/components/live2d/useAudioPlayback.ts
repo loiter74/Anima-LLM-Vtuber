@@ -1,3 +1,4 @@
+import type { ParameterTimeline } from '@/types/socket-events'
 import { startLipSync, stopLipSync } from './useLipSync'
 import { setExpression } from './useLive2DModel'
 
@@ -14,16 +15,21 @@ function cleanup(): void {
     currentAudio.onended = null
     currentAudio = null
   }
-  if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null }
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+    currentBlobUrl = null
+  }
 }
 
-export function playAudio(data: {
+export interface AudioPlaybackPayload {
   audio_data?: string
   format?: string
   volumes?: number[]
-  expressions?: any
+  expressions?: ParameterTimeline
   return_to_idle?: boolean
-}): void {
+}
+
+export function playAudio(data: AudioPlaybackPayload): void {
   if (!data?.audio_data) return
   cleanup()
 

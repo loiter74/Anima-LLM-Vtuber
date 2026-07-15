@@ -7,7 +7,9 @@
   }
 
   /* Better tap targets on mobile */
-  button, a, [role="button"] {
+  button,
+  a,
+  [role='button'] {
     min-height: 44px;
     min-width: 44px;
   }
@@ -32,13 +34,15 @@
   }
 
   /* Prevent text selection on UI elements */
-  button, .no-select {
+  button,
+  .no-select {
     -webkit-user-select: none;
     user-select: none;
   }
 
   /* Better focus styles for mobile */
-  textarea:focus, input:focus {
+  textarea:focus,
+  input:focus {
     font-size: 16px; /* Prevent zoom on iOS */
   }
 }

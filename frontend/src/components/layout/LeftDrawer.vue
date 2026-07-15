@@ -18,27 +18,34 @@ function toggleDrawer() {
 
 <template>
   <!-- Expand Button (visible when collapsed) -->
-  <button
-    v-if="isCollapsed"
-    class="expand-btn"
-    @click="toggleDrawer"
-  >
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M9 18l6-6-6-6"/>
+  <button v-if="isCollapsed" class="expand-btn" @click="toggleDrawer">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path d="M9 18l6-6-6-6" />
     </svg>
   </button>
 
   <!-- Drawer -->
-  <aside
-    class="drawer"
-    :class="{ collapsed: isCollapsed }"
-  >
+  <aside class="drawer" :class="{ collapsed: isCollapsed }">
     <!-- Header -->
     <div class="drawer-header">
       <div class="drawer-title">Controls & Memory</div>
       <button class="collapse-btn" @click="toggleDrawer">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
     </div>
@@ -99,7 +106,7 @@ function toggleDrawer() {
   left: var(--s-4);
   bottom: var(--s-4);
   width: 300px;
-  background: rgba(36, 21, 56, 0.90);
+  background: rgba(36, 21, 56, 0.9);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid var(--c-border);
@@ -140,7 +147,7 @@ function toggleDrawer() {
   width: 24px;
   height: 24px;
   border-radius: var(--r-md);
-  background: rgba(26, 16, 40, 0.50);
+  background: rgba(26, 16, 40, 0.5);
   border: none;
   color: var(--c-text-dim);
   cursor: pointer;
@@ -152,7 +159,7 @@ function toggleDrawer() {
 
 .collapse-btn:hover {
   color: var(--c-text);
-  background: rgba(26, 16, 40, 0.70);
+  background: rgba(26, 16, 40, 0.7);
 }
 
 /* Body: Split into top and bottom */
@@ -180,7 +187,7 @@ function toggleDrawer() {
   min-height: 0;
   border-top: 1px solid var(--c-border);
   padding: var(--s-4);
-  background: rgba(26, 16, 40, 0.30);
+  background: rgba(26, 16, 40, 0.3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -222,7 +229,7 @@ function toggleDrawer() {
 
 .drawer-top::-webkit-scrollbar-thumb,
 .drawer-bottom::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 

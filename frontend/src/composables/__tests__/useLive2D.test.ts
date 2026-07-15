@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, type Ref } from 'vue'
 
 // Mock pixi.js before any imports
 vi.mock('pixi.js', () => ({
   Application: vi.fn(function ApplicationMock() {
     return {
-    view: document.createElement('canvas'),
-    screen: { width: 800, height: 600 },
-    renderer: { resize: vi.fn() },
-    ticker: { add: vi.fn(), remove: vi.fn() },
-    stage: { addChild: vi.fn(), removeChild: vi.fn() },
-    destroy: vi.fn(),
+      view: document.createElement('canvas'),
+      screen: { width: 800, height: 600 },
+      renderer: { resize: vi.fn() },
+      ticker: { add: vi.fn(), remove: vi.fn() },
+      stage: { addChild: vi.fn(), removeChild: vi.fn() },
+      destroy: vi.fn(),
     }
   }),
 }))
@@ -170,7 +170,9 @@ describe('useLive2D', () => {
 
     it('handles param action without model', () => {
       const live2d = useLive2D(canvasRef)
-      expect(() => live2d.executeAction({ type: 'param', name: 'ParamAngleX', value: 30 })).not.toThrow()
+      expect(() =>
+        live2d.executeAction({ type: 'param', name: 'ParamAngleX', value: 30 }),
+      ).not.toThrow()
     })
 
     it('handles sequence action without model', () => {
@@ -183,7 +185,7 @@ describe('useLive2D', () => {
             { type: 'wait', ms: 100 },
             { type: 'expression', name: 'idle' },
           ],
-        } as any),
+        }),
       ).not.toThrow()
     })
   })

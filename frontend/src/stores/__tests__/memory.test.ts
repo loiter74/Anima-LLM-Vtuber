@@ -53,10 +53,12 @@ describe('useMemoryStore', () => {
   })
 
   it('invalidates cached pages when a newer revision arrives', async () => {
-    socket.emit.mockImplementation((_event, _payload, ack) => ack({
-      ok: true,
-      data: { items: [], revision: 4, next_cursor: null, total: 0 },
-    }))
+    socket.emit.mockImplementation((_event, _payload, ack) =>
+      ack({
+        ok: true,
+        data: { items: [], revision: 4, next_cursor: null, total: 0 },
+      }),
+    )
     const store = useMemoryStore()
     await store.fetchMemories()
     expect(store.invalidated).toBe(false)
@@ -77,12 +79,18 @@ describe('useMemoryStore', () => {
     await store.organizeMemory()
 
     listeners.get(Events.MEMORY.ORGANIZE_PROGRESS)?.({
-      job_id: 'job-b', status: 'running', progress: 90, text: 'stale',
+      job_id: 'job-b',
+      status: 'running',
+      progress: 90,
+      text: 'stale',
     })
     expect(store.job?.progress).toBe(0)
 
     listeners.get(Events.MEMORY.ORGANIZE_RESULT)?.({
-      job_id: 'job-a', status: 'completed', progress: 100, revision: 8,
+      job_id: 'job-a',
+      status: 'completed',
+      progress: 100,
+      revision: 8,
     })
     expect(store.job?.status).toBe('completed')
     expect(store.latestRevision).toBe(8)

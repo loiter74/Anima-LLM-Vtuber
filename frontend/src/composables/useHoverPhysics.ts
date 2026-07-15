@@ -28,10 +28,7 @@ function isTouchDevice(): boolean {
  * On touch devices, falls back to CSS transitions.
  * Use with overflow-hidden containers to prevent layout shift.
  */
-export function useHoverPhysics(
-  element: Ref<HTMLElement | null>,
-  options: HoverOptions = {}
-) {
+export function useHoverPhysics(element: Ref<HTMLElement | null>, options: HoverOptions = {}) {
   const { scale = 1.05, duration = 0.7, ease = 'power2.out' } = options
   const isHovered = ref(false)
   const useCssFallback = isTouchDevice()
@@ -41,7 +38,7 @@ export function useHoverPhysics(
     if (!useCssFallback) return {}
     return {
       transition: `transform ${duration}s ${ease}`,
-      transform: isHovered.value ? `scale(${scale})` : 'scale(1)'
+      transform: isHovered.value ? `scale(${scale})` : 'scale(1)',
     }
   })
 
@@ -59,7 +56,7 @@ export function useHoverPhysics(
       scale,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 
@@ -77,7 +74,7 @@ export function useHoverPhysics(
       scale: 1,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 
@@ -90,7 +87,7 @@ export function useHoverPhysics(
  */
 export function useMagneticHover(
   element: Ref<HTMLElement | null>,
-  options: HoverOptions & { strength?: number } = {}
+  options: HoverOptions & { strength?: number } = {},
 ) {
   const { strength = 0.3, duration = 0.5, ease = 'power2.out' } = options
   const isHovered = ref(false)
@@ -107,7 +104,7 @@ export function useMagneticHover(
       y: y * strength,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 
@@ -123,7 +120,7 @@ export function useMagneticHover(
       y: 0,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 

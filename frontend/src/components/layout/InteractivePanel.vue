@@ -11,7 +11,7 @@ import { useDanmaku } from '@/composables/useDanmaku'
 import { useMobile } from '@/composables/useMobile'
 import { useChatStore } from '@/stores/chat'
 
-const props = defineProps<{
+defineProps<{
   live2dPopout: boolean
 }>()
 
@@ -71,8 +71,12 @@ const mobileTabs = [
 
 // Desktop tab labels
 const desktopTabLabels: Record<string, string> = {
-  chat: '💬 聊天', live: '📺 直播', memory: '🧠 记忆',
-  personality: '🎭 人格', singing: '🎵 音乐', settings: '⚙️ 设置',
+  chat: '💬 聊天',
+  live: '📺 直播',
+  memory: '🧠 记忆',
+  personality: '🎭 人格',
+  singing: '🎵 音乐',
+  settings: '⚙️ 设置',
 }
 
 // Initialize danmaku socket listeners (runs globally, not per-tab)
@@ -124,9 +128,11 @@ useDanmaku({ canControl: false })
         :key="tab.key"
         data-testid="mobile-tab-button"
         class="mobile-tab-button flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-xl transition-all touch-manipulation"
-        :class="activeTab === tab.key
-          ? 'bg-c-accent/20 text-c-accent'
-          : 'text-c-text-dim active:text-c-accent'"
+        :class="
+          activeTab === tab.key
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'text-c-text-dim active:text-c-accent'
+        "
         @click="activeTab = tab.key"
       >
         <span class="text-lg leading-none">{{ tab.icon }}</span>
@@ -141,7 +147,7 @@ useDanmaku({ canControl: false })
     <div class="panel-header">
       <div class="panel-tabs">
         <button
-          v-for="tab in (['chat', 'live', 'memory', 'personality', 'singing', 'settings'] as const)"
+          v-for="tab in ['chat', 'live', 'memory', 'personality', 'singing', 'settings'] as const"
           :key="tab"
           :aria-label="desktopTabLabels[tab]"
           class="panel-tab"
@@ -153,11 +159,7 @@ useDanmaku({ canControl: false })
       </div>
 
       <!-- PopOut button -->
-      <PopOutButton
-        v-if="!live2dPopout"
-        class="mr-1"
-        @popout="emit('popout')"
-      />
+      <PopOutButton v-if="!live2dPopout" class="mr-1" @popout="emit('popout')" />
 
       <div class="config-reload-wrap">
         <button
@@ -181,12 +183,15 @@ useDanmaku({ canControl: false })
       </div>
 
       <!-- Collapse button -->
-      <button
-        class="panel-collapse"
-        aria-label="收起侧边栏"
-        @click="isCollapsed = true"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <button class="panel-collapse" aria-label="收起侧边栏" @click="isCollapsed = true">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
       </button>
@@ -234,7 +239,7 @@ useDanmaku({ canControl: false })
    image shows through (blurred) while keeping dialog text readable. */
 .panel-container {
   width: 340px;
-  background: rgba(26, 16, 40, 0.30);
+  background: rgba(26, 16, 40, 0.3);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border: 1px solid var(--c-border);
@@ -274,7 +279,7 @@ useDanmaku({ canControl: false })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 16, 40, 0.40);
+  background: rgba(26, 16, 40, 0.4);
   border: none;
   border-radius: var(--r-lg);
   color: var(--c-text-dim);
@@ -286,7 +291,7 @@ useDanmaku({ canControl: false })
 
 .config-reload-button:hover:not(:disabled) {
   color: var(--c-text);
-  background: rgba(26, 16, 40, 0.60);
+  background: rgba(26, 16, 40, 0.6);
 }
 
 .config-reload-button:disabled {
@@ -342,7 +347,7 @@ useDanmaku({ canControl: false })
   font-size: 12px;
   font-weight: 500;
   color: var(--c-text-dim);
-  background: rgba(26, 16, 40, 0.40);
+  background: rgba(26, 16, 40, 0.4);
   border: none;
   border-radius: var(--r-lg);
   cursor: pointer;
@@ -353,7 +358,7 @@ useDanmaku({ canControl: false })
 
 .panel-tab:hover {
   color: var(--c-text);
-  background: rgba(45, 27, 69, 0.60);
+  background: rgba(45, 27, 69, 0.6);
 }
 
 .panel-tab.active {
@@ -367,7 +372,7 @@ useDanmaku({ canControl: false })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 16, 40, 0.40);
+  background: rgba(26, 16, 40, 0.4);
   border: none;
   border-radius: var(--r-lg);
   color: var(--c-text-dim);
@@ -378,7 +383,7 @@ useDanmaku({ canControl: false })
 
 .panel-collapse:hover {
   color: var(--c-text);
-  background: rgba(26, 16, 40, 0.60);
+  background: rgba(26, 16, 40, 0.6);
 }
 
 .panel-content {
@@ -408,7 +413,7 @@ useDanmaku({ canControl: false })
 }
 
 .panel-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 

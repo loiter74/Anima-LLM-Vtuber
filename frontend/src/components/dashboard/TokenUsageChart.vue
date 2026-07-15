@@ -3,25 +3,44 @@ import { computed } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
-  CategoryScale, LinearScale, PointElement, LineElement,
-  Title, Tooltip, Legend, Filler,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
 } from 'chart.js'
 import { useDashboardStore } from '../../stores/dashboardStore'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+)
 
 const store = useDashboardStore()
 
 const hasData = computed(() => store.traces.length > 0)
 
 const chartData = computed(() => ({
-  labels: store.traces.slice(0, 20).reverse().map(t =>
-    new Date(t.started_at * 1000).toLocaleTimeString()
-  ),
+  labels: store.traces
+    .slice(0, 20)
+    .reverse()
+    .map((t) => new Date(t.started_at * 1000).toLocaleTimeString()),
   datasets: [
     {
       label: 'Latency (ms)',
-      data: store.traces.slice(0, 20).reverse().map(t => t.duration_ms ?? 0),
+      data: store.traces
+        .slice(0, 20)
+        .reverse()
+        .map((t) => t.duration_ms ?? 0),
       borderColor: 'rgb(52, 211, 153)',
       backgroundColor: 'rgba(52, 211, 153, 0.1)',
       fill: true,

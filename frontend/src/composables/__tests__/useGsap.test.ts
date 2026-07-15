@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, ref } from 'vue'
+import { defineComponent } from 'vue'
 import { useGsap } from '@/composables/useGsap'
 
 // Mock gsap
@@ -8,9 +8,9 @@ vi.mock('gsap', () => ({
   gsap: {
     context: vi.fn((callback) => ({
       callback,
-      revert: vi.fn()
-    }))
-  }
+      revert: vi.fn(),
+    })),
+  },
 }))
 
 describe('useGsap', () => {
@@ -19,7 +19,7 @@ describe('useGsap', () => {
     // Mock matchMedia
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query) => ({
         matches: false,
         media: query,
         onchange: null,
@@ -37,7 +37,7 @@ describe('useGsap', () => {
       setup() {
         return useGsap(() => {})
       },
-      template: '<div></div>'
+      template: '<div></div>',
     })
 
     const wrapper = mount(TestComponent)
@@ -48,7 +48,7 @@ describe('useGsap', () => {
     // Mock matchMedia to return reduced motion
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query) => ({
         matches: query === '(prefers-reduced-motion: reduce)',
         media: query,
         addEventListener: vi.fn(),
@@ -60,7 +60,7 @@ describe('useGsap', () => {
       setup() {
         return useGsap(() => {})
       },
-      template: '<div></div>'
+      template: '<div></div>',
     })
 
     const wrapper = mount(TestComponent)
@@ -77,14 +77,14 @@ describe('useGsap', () => {
       add: vi.fn(),
       ignore: vi.fn(),
       kill: vi.fn(),
-      clear: vi.fn()
+      clear: vi.fn(),
     } as unknown as gsap.Context)
 
     const TestComponent = defineComponent({
       setup() {
         return useGsap(() => {})
       },
-      template: '<div></div>'
+      template: '<div></div>',
     })
 
     const wrapper = mount(TestComponent)

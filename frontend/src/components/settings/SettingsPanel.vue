@@ -5,7 +5,6 @@ import { useDanmakuStore } from '@/stores/danmaku'
 import { useDanmaku } from '@/composables/useDanmaku'
 import { useSubtitleStore } from '@/stores/subtitle'
 import { useMinecraftStore } from '@/stores/minecraft'
-import type { SubtitleDisplayMode, SubtitleFontSize } from '@/stores/subtitle'
 import BackgroundSettings from './BackgroundSettings.vue'
 import { Events } from '@/constants/socket-events'
 import { fetchRuntimeStatus } from '@/services/runtimeStatus'
@@ -57,9 +56,11 @@ const loading = ref(true)
 const error = ref('')
 
 function formatIdentity(identity: ProviderIdentity): string {
-  return [identity.provider || identity.type, identity.model, identity.voice]
-    .filter((value): value is string => Boolean(value))
-    .join(' · ') || '-'
+  return (
+    [identity.provider || identity.type, identity.model, identity.voice]
+      .filter((value): value is string => Boolean(value))
+      .join(' · ') || '-'
+  )
 }
 
 function serviceInfo(
@@ -98,9 +99,10 @@ async function handleBilibiliConnect(): Promise<void> {
     return
   }
   roomError.value = ''
-  const command = danmakuStore.desiredRoomId && danmakuStore.desiredRoomId !== roomInput.value
-    ? updateDanmakuRoom
-    : connectDanmaku
+  const command =
+    danmakuStore.desiredRoomId && danmakuStore.desiredRoomId !== roomInput.value
+      ? updateDanmakuRoom
+      : connectDanmaku
   const ack = await command(roomInput.value)
   if (!ack.accepted) roomError.value = ack.message
 }
@@ -127,11 +129,15 @@ function handleTargetLanguageChange(event: Event): void {
   }
 }
 
-const activeSection = ref<'status' | 'background' | 'controls' | 'live' | 'subtitle' | 'theme'>('status')
+const activeSection = ref<'status' | 'background' | 'controls' | 'live' | 'subtitle' | 'theme'>(
+  'status',
+)
 
 // Theme toggle
 const STORAGE_KEY = 'animetta-theme'
-const currentTheme = ref(document.documentElement.className.includes('theme-light') ? 'light' : 'dark')
+const currentTheme = ref(
+  document.documentElement.className.includes('theme-light') ? 'light' : 'dark',
+)
 
 function setTheme(theme: 'light' | 'dark'): void {
   currentTheme.value = theme
@@ -178,34 +184,70 @@ onUnmounted(() => {
     <div class="flex gap-1.5 px-5 py-4 border-b border-c-border/40 shrink-0">
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'status' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'status'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'status'"
-      >📊 状态</button>
+      >
+        📊 状态
+      </button>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'background' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'background'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'background'"
-      >🖼️ 背景</button>
+      >
+        🖼️ 背景
+      </button>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'controls' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'controls'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'controls'"
-      >🎮 控制</button>
+      >
+        🎮 控制
+      </button>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'live' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'live'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'live'"
-      >📡 直播</button>
+      >
+        📡 直播
+      </button>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'subtitle' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'subtitle'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'subtitle'"
-      >📝 字幕</button>
+      >
+        📝 字幕
+      </button>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-        :class="activeSection === 'theme' ? 'bg-c-accent/20 text-c-accent' : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+        :class="
+          activeSection === 'theme'
+            ? 'bg-c-accent/20 text-c-accent'
+            : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+        "
         @click="activeSection = 'theme'"
-      >🎨 主题</button>
+      >
+        🎨 主题
+      </button>
     </div>
 
     <!-- Status section -->
@@ -225,14 +267,18 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="mb-5">
-          <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">Live2D 模型</h3>
+          <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">
+            Live2D 模型
+          </h3>
           <div class="bg-c-card/50 rounded-xl px-4 py-3 flex items-center gap-2">
             <span class="text-sm">✨</span>
             <span class="text-sm text-c-text truncate" :title="modelInfo">{{ modelInfo }}</span>
           </div>
         </div>
         <div class="mb-4">
-          <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">服务配置</h3>
+          <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">
+            服务配置
+          </h3>
           <div class="space-y-2">
             <div
               v-for="svc in services"
@@ -245,11 +291,22 @@ onUnmounted(() => {
                 <span
                   class="text-10px font-mono"
                   :class="svc.ready ? 'text-c-success' : 'text-c-error'"
-                >{{ svc.ready ? 'READY' : (svc.reason || 'NOT READY') }}</span>
+                  >{{ svc.ready ? 'READY' : svc.reason || 'NOT READY' }}</span
+                >
               </div>
               <div class="grid gap-1 text-10px font-mono">
-                <div class="flex gap-2"><span class="text-c-text-muted shrink-0">配置</span><span class="text-c-text truncate" :title="svc.configured">{{ svc.configured }}</span></div>
-                <div class="flex gap-2"><span class="text-c-text-muted shrink-0">实际</span><span class="text-c-accent truncate" :title="svc.resolved">{{ svc.resolved }}</span></div>
+                <div class="flex gap-2">
+                  <span class="text-c-text-muted shrink-0">配置</span
+                  ><span class="text-c-text truncate" :title="svc.configured">{{
+                    svc.configured
+                  }}</span>
+                </div>
+                <div class="flex gap-2">
+                  <span class="text-c-text-muted shrink-0">实际</span
+                  ><span class="text-c-accent truncate" :title="svc.resolved">{{
+                    svc.resolved
+                  }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -258,12 +315,18 @@ onUnmounted(() => {
           <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">后端</h3>
           <div class="bg-c-card/50 rounded-xl px-3 py-2 flex items-center gap-2">
             <span class="text-xs">🖥️</span>
-            <span class="text-xs text-c-text-dim">{{ backendInfo }} · {{ profileInfo }} · v{{ versionInfo }}</span>
+            <span class="text-xs text-c-text-dim"
+              >{{ backendInfo }} · {{ profileInfo }} · v{{ versionInfo }}</span
+            >
           </div>
-          <p class="mt-2 text-10px font-mono text-c-text-muted truncate" :title="semanticHash">semantic · {{ semanticHash }}</p>
+          <p class="mt-2 text-10px font-mono text-c-text-muted truncate" :title="semanticHash">
+            semantic · {{ semanticHash }}
+          </p>
         </div>
         <div class="pt-4 border-t border-c-border/40">
-          <p class="text-10px text-c-text-muted text-center">配置通过 config/animetta.yaml 管理 · 生命周期字段需重启</p>
+          <p class="text-10px text-c-text-muted text-center">
+            配置通过 config/animetta.yaml 管理 · 生命周期字段需重启
+          </p>
         </div>
       </template>
     </div>
@@ -286,16 +349,27 @@ onUnmounted(() => {
       <p class="text-10px text-c-text-muted">将 Live2D 模型缩放重置为 1x 并居中</p>
 
       <div class="pt-3 border-t border-c-border/40">
-        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">Minecraft 机器人</h3>
-        <p class="text-10px text-c-text-muted mb-3">启动 AI 控制的 Minecraft 角色，可执行挖掘、建造、战斗等操作</p>
+        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">
+          Minecraft 机器人
+        </h3>
+        <p class="text-10px text-c-text-muted mb-3">
+          启动 AI 控制的 Minecraft 角色，可执行挖掘、建造、战斗等操作
+        </p>
 
         <!-- Connection status -->
         <div class="flex items-center gap-2 mb-3">
           <span
             class="w-2 h-2 rounded-full"
-            :class="minecraftStore.connected ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-c-error'"
+            :class="
+              minecraftStore.connected
+                ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]'
+                : 'bg-c-error'
+            "
           />
-          <span class="text-xs" :class="minecraftStore.connected ? 'text-c-success' : 'text-c-error'">
+          <span
+            class="text-xs"
+            :class="minecraftStore.connected ? 'text-c-success' : 'text-c-error'"
+          >
             {{ minecraftStore.connected ? `已连接 (${minecraftStore.username})` : '已断开' }}
           </span>
           <span v-if="minecraftStore.error" class="text-10px text-c-error ml-1">
@@ -306,16 +380,20 @@ onUnmounted(() => {
         <!-- Action button -->
         <button
           class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-          :class="minecraftStore.isConnecting
-            ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
-            : minecraftStore.connected
-              ? 'bg-c-error/15 text-c-error hover:bg-c-error/25'
-              : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'"
+          :class="
+            minecraftStore.isConnecting
+              ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
+              : minecraftStore.connected
+                ? 'bg-c-error/15 text-c-error hover:bg-c-error/25'
+                : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
+          "
           :disabled="minecraftStore.isConnecting"
           @click="minecraftStore.connected ? minecraftStore.stop() : minecraftStore.start()"
         >
           <template v-if="minecraftStore.isConnecting">
-            <span class="inline-block w-3 h-3 border-2 border-c-accent border-t-transparent rounded-full animate-spin" />
+            <span
+              class="inline-block w-3 h-3 border-2 border-c-accent border-t-transparent rounded-full animate-spin"
+            />
             启动中...
           </template>
           <template v-else>
@@ -330,32 +408,55 @@ onUnmounted(() => {
               class="w-2 h-2 rounded-full"
               :class="{
                 'bg-c-text-muted': minecraftStore.viewerStatus === 'idle',
-                'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.6)] animate-pulse': minecraftStore.viewerStatus === 'waiting',
-                'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]': minecraftStore.viewerStatus === 'joined',
+                'bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.6)] animate-pulse':
+                  minecraftStore.viewerStatus === 'waiting',
+                'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]':
+                  minecraftStore.viewerStatus === 'joined',
                 'bg-c-error': minecraftStore.viewerStatus === 'left',
-                'bg-c-error shadow-[0_0_6px_rgba(248,113,113,0.6)]': minecraftStore.viewerStatus === 'error',
+                'bg-c-error shadow-[0_0_6px_rgba(248,113,113,0.6)]':
+                  minecraftStore.viewerStatus === 'error',
               }"
             />
-            <span class="text-xs" :class="{
-              'text-c-text-muted': minecraftStore.viewerStatus === 'idle',
-              'text-yellow-400': minecraftStore.viewerStatus === 'waiting',
-              'text-c-success': minecraftStore.viewerStatus === 'joined',
-              'text-c-error': minecraftStore.viewerStatus === 'left' || minecraftStore.viewerStatus === 'error',
-            }">
+            <span
+              class="text-xs"
+              :class="{
+                'text-c-text-muted': minecraftStore.viewerStatus === 'idle',
+                'text-yellow-400': minecraftStore.viewerStatus === 'waiting',
+                'text-c-success': minecraftStore.viewerStatus === 'joined',
+                'text-c-error':
+                  minecraftStore.viewerStatus === 'left' || minecraftStore.viewerStatus === 'error',
+              }"
+            >
               <template v-if="minecraftStore.viewerStatus === 'idle'">旁观者: 未配置</template>
-              <template v-else-if="minecraftStore.viewerStatus === 'waiting'">等待 {{ minecraftStore.viewerUsername }} 连接...</template>
-              <template v-else-if="minecraftStore.viewerStatus === 'joined'">👁 旁观中: {{ minecraftStore.viewerUsername }}</template>
-              <template v-else-if="minecraftStore.viewerStatus === 'left'">{{ minecraftStore.viewerUsername }} 已断开</template>
-              <template v-else-if="minecraftStore.viewerStatus === 'error'">旁观失败: {{ minecraftStore.error }}</template>
+              <template v-else-if="minecraftStore.viewerStatus === 'waiting'"
+                >等待 {{ minecraftStore.viewerUsername }} 连接...</template
+              >
+              <template v-else-if="minecraftStore.viewerStatus === 'joined'"
+                >👁 旁观中: {{ minecraftStore.viewerUsername }}</template
+              >
+              <template v-else-if="minecraftStore.viewerStatus === 'left'"
+                >{{ minecraftStore.viewerUsername }} 已断开</template
+              >
+              <template v-else-if="minecraftStore.viewerStatus === 'error'"
+                >旁观失败: {{ minecraftStore.error }}</template
+              >
             </span>
           </div>
           <button
             v-if="minecraftStore.viewerStatus !== 'idle'"
             class="w-full px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-            :class="(minecraftStore.viewerStatus === 'joined' || minecraftStore.viewerStatus === 'left' || minecraftStore.viewerStatus === 'error')
-              ? 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
-              : 'bg-c-card/50 text-c-text-muted pointer-events-none opacity-50'"
-            :disabled="minecraftStore.viewerStatus !== 'joined' && minecraftStore.viewerStatus !== 'left' && minecraftStore.viewerStatus !== 'error'"
+            :class="
+              minecraftStore.viewerStatus === 'joined' ||
+              minecraftStore.viewerStatus === 'left' ||
+              minecraftStore.viewerStatus === 'error'
+                ? 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
+                : 'bg-c-card/50 text-c-text-muted pointer-events-none opacity-50'
+            "
+            :disabled="
+              minecraftStore.viewerStatus !== 'joined' &&
+              minecraftStore.viewerStatus !== 'left' &&
+              minecraftStore.viewerStatus !== 'error'
+            "
             @click="minecraftStore.spectate()"
           >
             👁 Spectate
@@ -367,7 +468,9 @@ onUnmounted(() => {
     <!-- Live streaming section -->
     <div v-if="activeSection === 'live'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <div>
-        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">Bilibili 直播</h3>
+        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">
+          Bilibili 直播
+        </h3>
         <p class="text-10px text-c-text-muted mb-3">连接 Bilibili 直播间并接收实时弹幕</p>
 
         <!-- Room ID input -->
@@ -378,8 +481,7 @@ onUnmounted(() => {
             type="number"
             min="1"
             placeholder="输入 Bilibili 直播间号"
-            class="w-full px-3 py-2 rounded-xl bg-c-bg/60 border border-c-border/40 text-sm text-c-text
-                   placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50 transition-colors"
+            class="w-full px-3 py-2 rounded-xl bg-c-bg/60 border border-c-border/40 text-sm text-c-text placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50 transition-colors"
             :disabled="danmakuStore.isConnecting"
           />
           <p v-if="roomError" class="text-10px text-c-error">{{ roomError }}</p>
@@ -389,10 +491,29 @@ onUnmounted(() => {
         <div class="flex items-center gap-2 mt-3 mb-3">
           <span
             class="w-2 h-2 rounded-full"
-            :class="danmakuStore.connected ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-c-error'"
+            :class="
+              danmakuStore.connected
+                ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]'
+                : 'bg-c-error'
+            "
           />
-          <span class="text-xs" :class="danmakuStore.connected ? 'text-c-success' : danmakuStore.isConnecting ? 'text-c-warning' : 'text-c-error'">
-            {{ danmakuStore.connected ? `已连接房间 ${danmakuStore.roomId}` : danmakuStore.isConnecting ? '连接处理中' : '已断开' }}
+          <span
+            class="text-xs"
+            :class="
+              danmakuStore.connected
+                ? 'text-c-success'
+                : danmakuStore.isConnecting
+                  ? 'text-c-warning'
+                  : 'text-c-error'
+            "
+          >
+            {{
+              danmakuStore.connected
+                ? `已连接房间 ${danmakuStore.roomId}`
+                : danmakuStore.isConnecting
+                  ? '连接处理中'
+                  : '已断开'
+            }}
           </span>
           <span v-if="danmakuStore.statusMessage" class="text-10px text-c-text-muted ml-1">
             {{ danmakuStore.statusMessage }}
@@ -403,14 +524,22 @@ onUnmounted(() => {
         <div class="flex gap-2">
           <button
             class="flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-            :class="danmakuStore.isConnecting
-              ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
-              : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'"
-            :disabled="danmakuStore.isConnecting || !roomInput || (danmakuStore.connected && roomInput === danmakuStore.roomId)"
+            :class="
+              danmakuStore.isConnecting
+                ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
+                : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
+            "
+            :disabled="
+              danmakuStore.isConnecting ||
+              !roomInput ||
+              (danmakuStore.connected && roomInput === danmakuStore.roomId)
+            "
             @click="handleBilibiliConnect"
           >
             <template v-if="danmakuStore.isConnecting">
-              <span class="inline-block w-3 h-3 border-2 border-c-accent border-t-transparent rounded-full animate-spin" />
+              <span
+                class="inline-block w-3 h-3 border-2 border-c-accent border-t-transparent rounded-full animate-spin"
+              />
               连接中...
             </template>
             <template v-else>
@@ -440,7 +569,9 @@ onUnmounted(() => {
         <h4 class="text-10px font-medium text-c-text-dim uppercase tracking-wider">弹幕统计</h4>
         <div class="bg-c-card/50 rounded-xl px-3 py-2 flex items-center justify-between">
           <span class="text-xs text-c-text-dim">已接收弹幕</span>
-          <span class="text-xs text-c-accent font-medium tabular-nums">{{ danmakuStore.messageCount }} 条</span>
+          <span class="text-xs text-c-accent font-medium tabular-nums"
+            >{{ danmakuStore.messageCount }} 条</span
+          >
         </div>
       </div>
     </div>
@@ -448,8 +579,12 @@ onUnmounted(() => {
     <!-- Subtitle section -->
     <div v-if="activeSection === 'subtitle'" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       <div>
-        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">📝 字幕设置</h3>
-        <p class="text-10px text-c-text-muted mb-3">在 Live2D 画布底部显示 AI 回复字幕，支持双语展示</p>
+        <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">
+          📝 字幕设置
+        </h3>
+        <p class="text-10px text-c-text-muted mb-3">
+          在 Live2D 画布底部显示 AI 回复字幕，支持双语展示
+        </p>
 
         <!-- Enable toggle -->
         <div class="flex items-center justify-between bg-c-card/50 rounded-xl px-4 py-3 mb-3">
@@ -471,16 +606,18 @@ onUnmounted(() => {
           <label class="text-xs text-c-text-dim block mb-2">显示模式</label>
           <div class="flex gap-2">
             <button
-              v-for="mode in ([
+              v-for="mode in [
                 { key: 'original' as const, label: '原文', icon: '🈶' },
                 { key: 'translated' as const, label: '翻译', icon: '🈳' },
-                { key: 'bilingual' as const, label: '双语', icon: '🌐' }
-              ])"
+                { key: 'bilingual' as const, label: '双语', icon: '🌐' },
+              ]"
               :key="mode.key"
               class="flex-1 px-2 py-2 rounded-xl text-10px font-medium transition-all"
-              :class="subtitleStore.displayMode === mode.key
-                ? 'bg-c-accent/20 text-c-accent border border-c-accent/30'
-                : 'bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent'"
+              :class="
+                subtitleStore.displayMode === mode.key
+                  ? 'bg-c-accent/20 text-c-accent border border-c-accent/30'
+                  : 'bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent'
+              "
               @click="subtitleStore.setDisplayMode(mode.key)"
             >
               {{ mode.icon }} {{ mode.label }}
@@ -493,16 +630,18 @@ onUnmounted(() => {
           <label class="text-xs text-c-text-dim block mb-2">字体大小</label>
           <div class="flex gap-2">
             <button
-              v-for="size in ([
+              v-for="size in [
                 { key: 'small' as const, label: '小 (1.5rem)' },
                 { key: 'medium' as const, label: '中 (2rem)' },
-                { key: 'large' as const, label: '大 (2.5rem)' }
-              ])"
+                { key: 'large' as const, label: '大 (2.5rem)' },
+              ]"
               :key="size.key"
               class="flex-1 px-2 py-2 rounded-xl text-10px font-medium transition-all"
-              :class="subtitleStore.fontSize === size.key
-                ? 'bg-c-accent/20 text-c-accent border border-c-accent/30'
-                : 'bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent'"
+              :class="
+                subtitleStore.fontSize === size.key
+                  ? 'bg-c-accent/20 text-c-accent border border-c-accent/30'
+                  : 'bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent'
+              "
               @click="subtitleStore.setFontSize(size.key)"
             >
               {{ size.label }}
@@ -513,9 +652,7 @@ onUnmounted(() => {
         <!-- Reset position -->
         <div class="mb-3" v-if="subtitleStore.posX != null || subtitleStore.posY != null">
           <button
-            class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all
-                   bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent
-                   flex items-center justify-center gap-2"
+            class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all bg-c-card/50 text-c-text-dim hover:bg-c-card border border-transparent flex items-center justify-center gap-2"
             @click="subtitleStore.resetPosition()"
           >
             🔄 重置字幕位置（归位到底部居中）
@@ -527,8 +664,7 @@ onUnmounted(() => {
           <label class="text-xs text-c-text-dim block mb-2">翻译目标语言</label>
           <select
             :value="subtitleStore.targetLanguage"
-            class="w-full px-3 py-2 rounded-xl bg-c-bg/60 border border-c-border/40 text-sm text-c-text
-                   focus:outline-none focus:border-c-accent/50 transition-colors appearance-none cursor-pointer"
+            class="w-full px-3 py-2 rounded-xl bg-c-bg/60 border border-c-border/40 text-sm text-c-text focus:outline-none focus:border-c-accent/50 transition-colors appearance-none cursor-pointer"
             @change="handleTargetLanguageChange"
           >
             <option value="English">English (英语)</option>
@@ -551,24 +687,36 @@ onUnmounted(() => {
         <div class="grid grid-cols-2 gap-3">
           <button
             class="flex flex-col items-center gap-2 p-4 rounded-xl border transition-all"
-            :class="currentTheme === 'dark'
-              ? 'border-c-accent bg-c-accent/10'
-              : 'border-c-border bg-c-card/50 hover:border-c-border-accent'"
+            :class="
+              currentTheme === 'dark'
+                ? 'border-c-accent bg-c-accent/10'
+                : 'border-c-border bg-c-card/50 hover:border-c-border-accent'
+            "
             @click="setTheme('dark')"
           >
             <span class="text-2xl">🌙</span>
-            <span class="text-xs font-medium" :class="currentTheme === 'dark' ? 'text-c-accent' : 'text-c-text-dim'">暗色模式</span>
+            <span
+              class="text-xs font-medium"
+              :class="currentTheme === 'dark' ? 'text-c-accent' : 'text-c-text-dim'"
+              >暗色模式</span
+            >
             <span class="text-10px text-c-text-muted">日系赛博夜晚</span>
           </button>
           <button
             class="flex flex-col items-center gap-2 p-4 rounded-xl border transition-all"
-            :class="currentTheme === 'light'
-              ? 'border-c-accent bg-c-accent/10'
-              : 'border-c-border bg-c-card/50 hover:border-c-border-accent'"
+            :class="
+              currentTheme === 'light'
+                ? 'border-c-accent bg-c-accent/10'
+                : 'border-c-border bg-c-card/50 hover:border-c-border-accent'
+            "
             @click="setTheme('light')"
           >
             <span class="text-2xl">☀️</span>
-            <span class="text-xs font-medium" :class="currentTheme === 'light' ? 'text-c-accent' : 'text-c-text-dim'">亮色模式</span>
+            <span
+              class="text-xs font-medium"
+              :class="currentTheme === 'light' ? 'text-c-accent' : 'text-c-text-dim'"
+              >亮色模式</span
+            >
             <span class="text-10px text-c-text-muted">AIRI 柔和白昼</span>
           </button>
         </div>
@@ -578,7 +726,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
 </style>

@@ -27,8 +27,11 @@ describe('useSocket same-origin bootstrap', () => {
 
     mount(Host, { global: { plugins: [createPinia()] } })
 
-    expect(io).toHaveBeenCalledWith(window.location.origin, expect.objectContaining({
-      path: '/socket.io/',
-    }))
+    expect(io).toHaveBeenCalledWith(
+      window.location.origin,
+      expect.objectContaining({
+        path: '/socket.io/',
+      }),
+    )
   })
 })

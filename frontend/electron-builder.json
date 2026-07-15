@@ -4,11 +4,7 @@
   "directories": {
     "output": "release"
   },
-  "files": [
-    "dist/**/*",
-    "electron/**/*",
-    "public/**/*"
-  ],
+  "files": ["dist/**/*", "electron/**/*", "public/**/*"],
   "win": {
     "target": [
       {

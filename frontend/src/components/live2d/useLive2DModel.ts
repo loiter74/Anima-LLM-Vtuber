@@ -1,3 +1,4 @@
+import type { Cubism4InternalModel, Live2DModel } from 'pixi-live2d-display/cubism4'
 import { getApp } from './usePixiApp'
 import { isLoaded, isLoading, loadError, updateModelInfo } from './useInteraction'
 
@@ -6,14 +7,14 @@ import { isLoaded, isLoading, loadError, updateModelInfo } from './useInteractio
 export const MODEL_PATH = 'live2d/hiyori/Hiyori.model3.json'
 // Position is computed as a fraction of canvas dimensions at load time,
 // so the model appears at the same relative position on any screen size.
-const POS_X_RATIO = 0.741   // 800/1080 = 0.741 (74.1% from left)
-const POS_Y_RATIO = 0.677   // 1300/1920 = 0.677 (67.7% from top)
+const POS_X_RATIO = 0.741 // 800/1080 = 0.741 (74.1% from left)
+const POS_Y_RATIO = 0.677 // 1300/1920 = 0.677 (67.7% from top)
 const INITIAL_SCALE = 2.59
 
 // Fixed pixel position (overrides ratio when set)
 const FIXED_X = 800
 const FIXED_Y = 1300
-const USE_FIXED_POSITION = true  // Set to false to use ratio-based positioning
+const USE_FIXED_POSITION = true // Set to false to use ratio-based positioning
 
 export { POS_X_RATIO, POS_Y_RATIO, INITIAL_SCALE, FIXED_X, FIXED_Y, USE_FIXED_POSITION }
 
@@ -25,21 +26,31 @@ export interface ScaleStrategy {
 export const STRATEGIES: Record<string, ScaleStrategy> = {
   fit: { anchor: [0.5, 0.5], yRatio: 0.5 },
   contain: { anchor: [0.5, 1.0], yRatio: 1.0 },
-  cover: { anchor: [0.5, 0.5], yRatio: 0.5 }
+  cover: { anchor: [0.5, 0.5], yRatio: 0.5 },
 }
 
 // ===== Model State =====
 
-let model: any = null
+let model: Live2DModel<Cubism4InternalModel> | null = null
 let baseBounds: { width: number; height: number } | null = null
 let userScale = 1.5
 let strategy = 'fit'
 
-export function getModel(): any { return model }
-export function getUserScale(): number { return userScale }
-export function getStrategy(): string { return strategy }
-export function setUserScale(s: number): void { userScale = s }
-export function setStrategy(s: string): void { if (STRATEGIES[s]) strategy = s }
+export function getModel(): Live2DModel<Cubism4InternalModel> | null {
+  return model
+}
+export function getUserScale(): number {
+  return userScale
+}
+export function getStrategy(): string {
+  return strategy
+}
+export function setUserScale(s: number): void {
+  userScale = s
+}
+export function setStrategy(s: string): void {
+  if (STRATEGIES[s]) strategy = s
+}
 
 // ===== Model Loading =====
 
@@ -73,12 +84,12 @@ export async function loadModel(modelPath: string): Promise<void> {
     const { Live2DModel } = await import('pixi-live2d-display/cubism4')
 
     // Wrap model creation with timeout
-    model = await Promise.race([
+    model = (await Promise.race([
       Live2DModel.from(modelPath),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('模型加载超时（30秒）')), LOAD_TIMEOUT_MS)
-      )
-    ])
+        setTimeout(() => reject(new Error('模型加载超时（30秒）')), LOAD_TIMEOUT_MS),
+      ),
+    ])) as Live2DModel<Cubism4InternalModel>
 
     // Disable idle group to prevent random idle motion cycling,
     // then play motion[0] (Hiyori_m01: gentle head sway with ParamAngleX)
@@ -86,34 +97,41 @@ export async function loadModel(modelPath: string): Promise<void> {
     try {
       model.internalModel?.motionManager?.stopAllMotions()
       if (model.internalModel?.motionManager?.groups) {
-        model.internalModel.motionManager.groups.idle = '_none'
+        const mutableGroups = model.internalModel.motionManager.groups as unknown as Record<
+          string,
+          string
+        >
+        mutableGroups.idle = '_none'
       }
     } catch {}
     // Play the gentlest motion on loop (m01 has natural head sway + breathing)
-    try { model.motion("Idle", 0) } catch {}
+    try {
+      model.motion('Idle', 0)
+    } catch {}
     model.anchor.set(0.5, 0.5)
     // Will be overridden after applyScale below to user's preferred position
     model.interactive = true
 
     app.stage.addChild(model)
+    const loadedModel = model
 
     // Wait for bounds to be available (with timeout to prevent infinite loop)
     await Promise.race([
       new Promise<void>((resolve) => {
         const check = () => {
-          const b = model.getBounds()
+          const b = loadedModel.getBounds()
           if (b?.width > 0) return resolve()
           requestAnimationFrame(check)
         }
         check()
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('模型边界计算超时')), 10_000)
-      )
+        setTimeout(() => reject(new Error('模型边界计算超时')), 10_000),
+      ),
     ])
 
     // Cache initial bounds (before any scaling) as the stable reference
-    const initialBounds = model.getBounds()
+    const initialBounds = loadedModel.getBounds()
     baseBounds = { width: initialBounds.width, height: initialBounds.height }
 
     applyScale()
@@ -130,8 +148,8 @@ export async function loadModel(modelPath: string): Promise<void> {
     isLoaded.value = true
     isLoading.value = false
     updateModelInfo()
-  } catch (err: any) {
-    loadError.value = err.message
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : '模型加载失败'
     isLoading.value = false
   }
 }
@@ -153,7 +171,7 @@ export function applyScale(): void {
   const scales: Record<string, number> = {
     fit: Math.min(canvas.width / b.width, canvas.height / b.height),
     contain: canvas.height / b.height,
-    cover: Math.max(canvas.width / b.width, canvas.height / b.height)
+    cover: Math.max(canvas.width / b.width, canvas.height / b.height),
   }
 
   model.scale.set((scales[strategy] || scales.fit) * userScale)
@@ -180,8 +198,12 @@ export function centerModel(): void {
 // ===== Expression & Motion =====
 
 export function setExpression(name: string): void {
-  if (!model?.internalModel?.motionManager?.expressionNames) return
-  const idx = model.internalModel.motionManager.expressionNames.indexOf(name)
+  if (!model) return
+  const manager = model.internalModel.motionManager as typeof model.internalModel.motionManager & {
+    expressionNames?: string[]
+  }
+  if (!manager.expressionNames) return
+  const idx = manager.expressionNames.indexOf(name)
   if (idx >= 0) model.expression(idx)
 }
 

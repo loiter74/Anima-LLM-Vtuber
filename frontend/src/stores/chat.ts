@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ChatMessage, MessageRole, MessageStatus } from '@/types/chat'
+import type { ChatMessage, MessageRole } from '@/types/chat'
 import { useMessageStore } from '@/composables/useMessageStore'
 import { usePersonalityStore } from '@/stores/personality'
 import type {
@@ -50,11 +50,14 @@ export const useChatStore = defineStore('chat', () => {
 
   // Persistence via IndexedDB
   const messageStore = useMessageStore()
-  messageStore.loadMessages().then((saved) => {
-    if (saved.length > 0) {
-      messages.value = saved
-    }
-  }).catch((e) => console.warn('[chat] Failed to load persisted messages:', e))
+  messageStore
+    .loadMessages()
+    .then((saved) => {
+      if (saved.length > 0) {
+        messages.value = saved
+      }
+    })
+    .catch((e) => console.warn('[chat] Failed to load persisted messages:', e))
 
   // Streaming state
   const currentResponse = ref('')
@@ -76,11 +79,14 @@ export const useChatStore = defineStore('chat', () => {
     source?: 'text' | 'voice',
     identity?: ChatIdentity,
   ): ChatMessage {
-    const correlatedId = identity && role !== 'system'
-      ? (role === 'user' ? identity.message_id : identity.task_id)
-      : null
+    const correlatedId =
+      identity && role !== 'system'
+        ? role === 'user'
+          ? identity.message_id
+          : identity.task_id
+        : null
     if (correlatedId) {
-      const existing = messages.value.find(message => message.id === correlatedId)
+      const existing = messages.value.find((message) => message.id === correlatedId)
       if (existing) return existing
     }
     const msg: ChatMessage = {
@@ -140,7 +146,7 @@ export const useChatStore = defineStore('chat', () => {
   function updateStreamingMessage(identity = activeIdentity.value): void {
     if (!currentResponse.value) return
     const existing = identity
-      ? messages.value.find(message => message.id === identity.task_id)
+      ? messages.value.find((message) => message.id === identity.task_id)
       : messages.value[messages.value.length - 1]
     if (existing && existing.role === 'assistant' && existing.status === 'streaming') {
       existing.text = currentResponse.value
@@ -163,7 +169,7 @@ export const useChatStore = defineStore('chat', () => {
     processBufferedChunks(true)
     const identity = activeIdentity.value
     const last = identity
-      ? messages.value.find(message => message.id === identity.task_id)
+      ? messages.value.find((message) => message.id === identity.task_id)
       : messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant' && last.status === 'streaming') {
       last.text = currentResponse.value
@@ -180,7 +186,7 @@ export const useChatStore = defineStore('chat', () => {
         recent.role === 'assistant' &&
         recent.status === 'complete' &&
         recent.text === currentResponse.value &&
-        (Date.now() - recent.timestamp) < 5000
+        Date.now() - recent.timestamp < 5000
 
       if (!isDuplicate) {
         // 🐛 Fix: Backend sends full text + is_complete in quick succession.
@@ -205,12 +211,12 @@ export const useChatStore = defineStore('chat', () => {
       activeIdentity.value = null
     }
 
-    messageStore.saveMessages(messages.value).catch((e) =>
-      console.warn('[chat] Failed to persist messages:', e)
-    )
-    messageStore.pruneMessages(500).catch((e) =>
-      console.warn('[chat] Failed to prune messages:', e)
-    )
+    messageStore
+      .saveMessages(messages.value)
+      .catch((e) => console.warn('[chat] Failed to persist messages:', e))
+    messageStore
+      .pruneMessages(500)
+      .catch((e) => console.warn('[chat] Failed to prune messages:', e))
     return true
   }
 
@@ -242,7 +248,12 @@ export const useChatStore = defineStore('chat', () => {
       if (mediaByTask.value[data.task_id]?.status === 'degraded') return false
       mediaByTask.value[data.task_id] = { status: 'degraded', reason: typed.reason }
       isSpeaking.value = false
-      createMessage('system', typed.text || 'Audio unavailable; continuing with text.', undefined, data)
+      createMessage(
+        'system',
+        typed.text || 'Audio unavailable; continuing with text.',
+        undefined,
+        data,
+      )
       const notice = messages.value[messages.value.length - 1]
       if (notice?.role === 'system') notice.id = `degradation:${data.task_id}`
       return true
@@ -270,11 +281,12 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleError(data: ChatErrorEvent): boolean {
     if (
-      data.turn_id !== data.task_id
-      || handledErrorTaskIds.has(data.task_id)
-      || completedTaskIds.has(data.task_id)
-      || (activeTaskId.value !== null && activeTaskId.value !== data.task_id)
-    ) return false
+      data.turn_id !== data.task_id ||
+      handledErrorTaskIds.has(data.task_id) ||
+      completedTaskIds.has(data.task_id) ||
+      (activeTaskId.value !== null && activeTaskId.value !== data.task_id)
+    )
+      return false
 
     handledErrorTaskIds.add(data.task_id)
     if (activeTaskId.value === data.task_id) finalizeResponse(data.task_id)
@@ -329,7 +341,7 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const response = await fetch('/api/config/reload', { method: 'POST' })
-      const payload = await response.json() as ReloadConfigResponse
+      const payload = (await response.json()) as ReloadConfigResponse
       recordReloadConfigMetadata(payload)
 
       if (!response.ok || !payload.ok) {
@@ -337,9 +349,8 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       reloadConfigStatus.value = 'success'
-      const sessionsText = typeof payload.applied?.sessions === 'number'
-        ? ` · ${payload.applied.sessions} 个会话`
-        : ''
+      const sessionsText =
+        typeof payload.applied?.sessions === 'number' ? ` · ${payload.applied.sessions} 个会话` : ''
       reloadConfigMessage.value = `已加载 ${payload.persona} · v${payload.version}${sessionsText}`
       await refreshPersonaStateAfterReload()
       return payload
@@ -383,6 +394,6 @@ export const useChatStore = defineStore('chat', () => {
     handleMediaReady,
     handleStopAudio,
     scheduleFlush,
-    reloadRuntimeConfig
+    reloadRuntimeConfig,
   }
 })

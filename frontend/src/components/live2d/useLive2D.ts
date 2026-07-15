@@ -11,14 +11,30 @@ export type { ScaleStrategy } from './useLive2DModel'
 
 // ===== Import sub-composable internals =====
 import { getApp, initPixiApp, handlePixiResize, destroyPixiApp } from './usePixiApp'
-import { loadModel, unloadModel, setExpression, playMotion, getModel, retryLoad } from './useLive2DModel'
+import {
+  loadModel,
+  unloadModel,
+  setExpression,
+  playMotion,
+  getModel,
+  retryLoad,
+} from './useLive2DModel'
 import { tickLipSync, setMouthTarget } from './useLipSync'
 import { playAudio, stopAudio } from './useAudioPlayback'
 import { playParameterTimeline, setParam, cancelTimeline } from './useParameterTimeline'
 import {
-  isLoaded, isLoading, loadError, modelInfo, isDragging,
-  startDrag, onDrag, stopDrag, focus as focusFn,
-  zoom as zoomFn, resetView as resetViewFn, setScaleStrategy as setScaleStrategyFn
+  isLoaded,
+  isLoading,
+  loadError,
+  modelInfo,
+  isDragging,
+  startDrag,
+  onDrag,
+  stopDrag,
+  focus as focusFn,
+  zoom as zoomFn,
+  resetView as resetViewFn,
+  setScaleStrategy as setScaleStrategyFn,
 } from './useInteraction'
 
 type Live2DSocket = NonNullable<ReturnType<typeof getSocket>>
@@ -91,15 +107,27 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
 
   function executeAction(action: Live2DAction): void {
     switch (action.type) {
-      case 'expression': setExpression(action.name!); break
-      case 'motion': playMotion(action.group!, action.index!); break
-      case 'param': setParam(action.name!, action.value!); break
-      case 'sequence':
+      case 'expression':
+        setExpression(action.name)
+        break
+      case 'motion':
+        playMotion(action.group, action.index)
+        break
+      case 'param':
+        setParam(action.name, action.value)
+        break
+      case 'sequence': {
         let delay = 0
-        for (const sub of (action as any).actions ?? []) {
-          if (sub.type === 'wait') { delay += sub.ms || 0 }
-          else { setTimeout(() => executeAction(sub), delay) }
+        for (const sub of action.actions) {
+          if (sub.type === 'wait') {
+            delay += sub.ms
+          } else {
+            setTimeout(() => executeAction(sub), delay)
+          }
         }
+        break
+      }
+      case 'wait':
         break
     }
   }
@@ -225,6 +253,6 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
     focus(x: number, y: number) {
       focusFn(x, y)
     },
-    destroy
+    destroy,
   }
 }

@@ -15,42 +15,87 @@ describe('SettingsPanel runtime status', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      status: 200,
-      json: vi.fn().mockResolvedValue({
-        schema_version: 1,
-        status: 'ready',
-        ready: true,
-        service: 'anima',
-        profile: 'production',
-        version: 7,
-        persona: 'anima.v0.1',
-        effective_hash: 'effective',
-        semantic_hash: 'semantic',
-        components: {
-          llm: {
-            state: 'ready', ready: true, reason: null,
-            configured: { name: 'deepseek', type: 'deepseek', provider: 'deepseek', model: 'deepseek-v4-flash', voice: null },
-            resolved: { type: 'deepseek', provider: 'deepseek', model: 'deepseek-v4-flash', voice: null },
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          schema_version: 1,
+          status: 'ready',
+          ready: true,
+          service: 'anima',
+          profile: 'production',
+          version: 7,
+          persona: 'anima.v0.1',
+          effective_hash: 'effective',
+          semantic_hash: 'semantic',
+          components: {
+            llm: {
+              state: 'ready',
+              ready: true,
+              reason: null,
+              configured: {
+                name: 'deepseek',
+                type: 'deepseek',
+                provider: 'deepseek',
+                model: 'deepseek-v4-flash',
+                voice: null,
+              },
+              resolved: {
+                type: 'deepseek',
+                provider: 'deepseek',
+                model: 'deepseek-v4-flash',
+                voice: null,
+              },
+            },
+            asr: {
+              state: 'ready',
+              ready: true,
+              reason: null,
+              configured: {
+                name: 'mimo-asr',
+                type: 'mimo',
+                provider: 'mimo',
+                model: 'mimo-v2.5-asr',
+                voice: null,
+              },
+              resolved: { type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
+            },
+            tts: {
+              state: 'ready',
+              ready: true,
+              reason: null,
+              configured: {
+                name: 'qwen-alice',
+                type: 'remote',
+                provider: 'qwen3',
+                model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base',
+                voice: 'alice',
+              },
+              resolved: {
+                type: 'remote',
+                provider: 'qwen3',
+                model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base',
+                voice: 'alice',
+              },
+            },
+            vad: {
+              state: 'ready',
+              ready: true,
+              reason: null,
+              configured: {
+                name: 'mimo-vad',
+                type: 'mimo',
+                provider: 'mimo',
+                model: 'mimo-v2.5-asr',
+                voice: null,
+              },
+              resolved: { type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
+            },
           },
-          asr: {
-            state: 'ready', ready: true, reason: null,
-            configured: { name: 'mimo-asr', type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
-            resolved: { type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
-          },
-          tts: {
-            state: 'ready', ready: true, reason: null,
-            configured: { name: 'qwen-alice', type: 'remote', provider: 'qwen3', model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', voice: 'alice' },
-            resolved: { type: 'remote', provider: 'qwen3', model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', voice: 'alice' },
-          },
-          vad: {
-            state: 'ready', ready: true, reason: null,
-            configured: { name: 'mimo-vad', type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
-            resolved: { type: 'mimo', provider: 'mimo', model: 'mimo-v2.5-asr', voice: null },
-          },
-        },
+        }),
       }),
-    }))
+    )
   })
 
   it('renders separate configured and resolved ASR/TTS identities', async () => {

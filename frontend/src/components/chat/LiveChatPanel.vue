@@ -13,7 +13,7 @@ watch(
     if (containerRef.value) {
       containerRef.value.scrollTop = containerRef.value.scrollHeight
     }
-  }
+  },
 )
 </script>
 
@@ -26,7 +26,9 @@ watch(
       <div class="flex items-center gap-1.5">
         <span
           class="w-2 h-2 rounded-full"
-          :class="store.connected ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-c-error'"
+          :class="
+            store.connected ? 'bg-c-success shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-c-error'
+          "
         />
         <span class="text-xs" :class="store.connected ? 'text-c-success' : 'text-c-error'">
           {{ store.connected ? '已连接' : '已断开' }}
@@ -35,10 +37,7 @@ watch(
     </div>
 
     <!-- Danmaku stream with pop-in animation -->
-    <div
-      ref="containerRef"
-      class="flex-1 overflow-y-auto px-5 py-4 scroll-smooth"
-    >
+    <div ref="containerRef" class="flex-1 overflow-y-auto px-5 py-4 scroll-smooth">
       <div
         v-for="(msg, i) in store.messages"
         :key="i"
@@ -63,7 +62,9 @@ watch(
     </div>
 
     <!-- Message count -->
-    <div class="px-4 py-2 border-t border-c-border/30 text-10px text-c-text-muted text-center shrink-0">
+    <div
+      class="px-4 py-2 border-t border-c-border/30 text-10px text-c-text-muted text-center shrink-0"
+    >
       共 {{ store.messageCount }} 条弹幕
     </div>
   </div>
@@ -86,8 +87,17 @@ watch(
   }
 }
 
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
 </style>

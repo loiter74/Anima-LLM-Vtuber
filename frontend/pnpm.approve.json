@@ -1,1 +1,1 @@
-{"pnpm":{"onlyBuiltDependencies":["electron","esbuild","vue-demi"]}}
+{ "pnpm": { "onlyBuiltDependencies": ["electron", "esbuild", "vue-demi"] } }

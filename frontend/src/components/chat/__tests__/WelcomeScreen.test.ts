@@ -7,21 +7,21 @@ vi.mock('gsap', () => ({
   gsap: {
     context: vi.fn((callback) => ({
       callback,
-      revert: vi.fn()
+      revert: vi.fn(),
     })),
     timeline: vi.fn(() => ({
-      from: vi.fn().mockReturnThis()
+      from: vi.fn().mockReturnThis(),
     })),
-    set: vi.fn()
-  }
+    set: vi.fn(),
+  },
 }))
 
 // Mock SceneEffects
 vi.mock('@/components/shared/SceneEffects.vue', () => ({
   default: {
     name: 'SceneEffects',
-    template: '<div class="mock-scene-effects"></div>'
-  }
+    template: '<div class="mock-scene-effects"></div>',
+  },
 }))
 
 describe('WelcomeScreen', () => {
@@ -29,7 +29,7 @@ describe('WelcomeScreen', () => {
     vi.clearAllMocks()
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(query => ({
+      value: vi.fn().mockImplementation((query) => ({
         matches: false,
         media: query,
         addEventListener: vi.fn(),
@@ -89,9 +89,10 @@ describe('WelcomeScreen', () => {
 
   it('stacks CTA buttons vertically to fit the 340px panel width', () => {
     const wrapper = mount(WelcomeScreen)
-    const cta = wrapper.find('[ref="ctaRef"]')
     // The CTA container uses flex-col (stacked) instead of sm:flex-row
-    const ctaContainer = wrapper.findAll('.flex').find(el => el.classes().includes('flex-col') && el.findAll('button').length === 2)
+    const ctaContainer = wrapper
+      .findAll('.flex')
+      .find((el) => el.classes().includes('flex-col') && el.findAll('button').length === 2)
     expect(ctaContainer).toBeTruthy()
   })
 })

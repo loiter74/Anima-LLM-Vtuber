@@ -52,12 +52,29 @@ export interface ChatControlEvent extends ChatIdentity {
   status?: 'degraded'
 }
 
+export interface ParameterTimelineParameter {
+  name: string
+  value: number
+  duration: number
+}
+
+export interface ParameterTimelineFrame {
+  timestamp: number
+  parameters: ParameterTimelineParameter[]
+}
+
+export interface ParameterTimeline {
+  frames: ParameterTimelineFrame[]
+  total_duration?: number
+}
+
 export interface AudioWithExpressionEvent extends ChatIdentity {
   audio_data: string
   format: string
   volumes?: number[]
   use_parameter_mapping?: boolean
-  expressions?: { frames?: unknown[] }
+  expressions?: ParameterTimeline
+  return_to_idle?: boolean
 }
 
 export interface ChatErrorEvent extends ChatIdentity {

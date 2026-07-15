@@ -16,8 +16,6 @@ import {
   parseMemoryGraph,
   CATEGORY_COLORS,
   RELATION_COLORS,
-  type MemoryNode,
-  type MemoryEdge,
 } from '@/types/memoryGraph'
 
 // ── Mock data matching real API shape ──────────────────────────────────
@@ -27,8 +25,7 @@ const mockPages = [
     path: 'semantic-seed-a1b2c3d4',
     title: '自分の性格について',
     page_type: 'concept',
-    content:
-      '自分の性格について:\n- いつも好奇心旺盛\n- 面白いものが大好き\n- 時々ぼんやりする',
+    content: '自分の性格について:\n- いつも好奇心旺盛\n- 面白いものが大好き\n- 時々ぼんやりする',
     tags: ['seed', 'self_knowledge', 'personality', 'character:草十郎'],
     updated_at: '2026-06-15T10:30:00+00:00',
   },
@@ -53,8 +50,7 @@ const mockPages = [
     path: 'emergent-seed-m3n4o5p6',
     title: '綜合的な信念',
     page_type: 'synthesis',
-    content:
-      '自分の信念や大切にしている言葉:\n- 常に学び続ける\n- 丁寧に接する',
+    content: '自分の信念や大切にしている言葉:\n- 常に学び続ける\n- 丁寧に接する',
     tags: ['seed', 'core_beliefs', 'catchphrases', 'character:草十郎'],
     updated_at: '2026-06-15T10:30:00+00:00',
   },
@@ -211,10 +207,8 @@ describe('parseEdges', () => {
     const extendsEdges = edges.filter(
       (e) =>
         e.type === 'EXTENDS' &&
-        ((e.source === 'semantic-seed-a1b2c3d4' &&
-          e.target === 'episodic-seed-e5f6g7h8') ||
-          (e.source === 'episodic-seed-e5f6g7h8' &&
-            e.target === 'semantic-seed-a1b2c3d4')),
+        ((e.source === 'semantic-seed-a1b2c3d4' && e.target === 'episodic-seed-e5f6g7h8') ||
+          (e.source === 'episodic-seed-e5f6g7h8' && e.target === 'semantic-seed-a1b2c3d4')),
     )
 
     // Should be exactly 1 deduplicated edge, not 2
@@ -226,10 +220,8 @@ describe('parseEdges', () => {
     const extendsEdge = edges.find(
       (e) =>
         e.type === 'EXTENDS' &&
-        ((e.source === 'semantic-seed-a1b2c3d4' &&
-          e.target === 'episodic-seed-e5f6g7h8') ||
-          (e.source === 'episodic-seed-e5f6g7h8' &&
-            e.target === 'semantic-seed-a1b2c3d4')),
+        ((e.source === 'semantic-seed-a1b2c3d4' && e.target === 'episodic-seed-e5f6g7h8') ||
+          (e.source === 'episodic-seed-e5f6g7h8' && e.target === 'semantic-seed-a1b2c3d4')),
     )
 
     // First page's relation is semantic→episodic
@@ -257,14 +249,18 @@ describe('parseEdges', () => {
   })
 
   it('omits relations whose endpoint is outside the current page', () => {
-    const pages = [{
-      ...mockPages[0],
-      relations: [{
-        source_id: mockPages[0].path,
-        target_id: 'not-loaded-on-this-page',
-        relation_type: 'EXTENDS',
-      }],
-    }]
+    const pages = [
+      {
+        ...mockPages[0],
+        relations: [
+          {
+            source_id: mockPages[0].path,
+            target_id: 'not-loaded-on-this-page',
+            relation_type: 'EXTENDS',
+          },
+        ],
+      },
+    ]
 
     expect(parseEdges(pages)).toEqual([])
   })
@@ -278,9 +274,7 @@ describe('parseEdges', () => {
     const derivesEdge = edges.find((e) => e.type === 'DERIVES')
     expect(derivesEdge?.label).toBe('derives from')
 
-    const consolidatedEdge = edges.find(
-      (e) => e.type === 'CONSOLIDATED_INTO',
-    )
+    const consolidatedEdge = edges.find((e) => e.type === 'CONSOLIDATED_INTO')
     expect(consolidatedEdge?.label).toBe('consolidated into')
   })
 
@@ -349,15 +343,7 @@ describe('parseMemoryGraph', () => {
 
 describe('CATEGORY_COLORS', () => {
   it('has colors for all expected categories', () => {
-    const expected = [
-      'skill',
-      'interest',
-      'fact',
-      'relation',
-      'knowledge',
-      'preference',
-      'other',
-    ]
+    const expected = ['skill', 'interest', 'fact', 'relation', 'knowledge', 'preference', 'other']
     for (const cat of expected) {
       expect(CATEGORY_COLORS[cat]).toBeDefined()
       expect(CATEGORY_COLORS[cat]).toMatch(/^var\(--/)

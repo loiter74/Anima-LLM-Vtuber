@@ -32,11 +32,14 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null
 const selectedTrace = computed(() => store.traces[selectedTraceIndex.value] ?? null)
 const selectedTraceDetail = computed(() => {
   const traceId = selectedTrace.value?.trace_id
-  return traceId ? store.traceDetails[traceId] ?? null : null
+  return traceId ? (store.traceDetails[traceId] ?? null) : null
 })
 const traceNodes = computed(() => buildNodeDetails(selectedTrace.value, selectedTraceDetail.value))
-const selectedNode = computed(() =>
-  traceNodes.value.find(node => node.id === selectedNodeId.value) ?? traceNodes.value[0] ?? null
+const selectedNode = computed(
+  () =>
+    traceNodes.value.find((node) => node.id === selectedNodeId.value) ??
+    traceNodes.value[0] ??
+    null,
 )
 const canGoNewer = computed(() => selectedTraceIndex.value > 0)
 const canGoOlder = computed(() => selectedTraceIndex.value < store.traces.length - 1)
@@ -46,8 +49,8 @@ const healthTone = computed(() => {
   if (selectedTrace.value.outcome === 'success') return 'success'
   return 'warning'
 })
-const executedNodeCount = computed(() =>
-  traceNodes.value.filter(node => node.status !== 'skipped').length
+const executedNodeCount = computed(
+  () => traceNodes.value.filter((node) => node.status !== 'skipped').length,
 )
 const selectedTraceTime = computed(() => formatTime(selectedTrace.value?.started_at))
 const selectedTraceTitle = computed(() => traceTitle(selectedTrace.value))
@@ -65,15 +68,21 @@ onUnmounted(() => {
 })
 
 watch(() => store.traces.length, clampSelectedTrace)
-watch(() => selectedTrace.value?.trace_id, () => {
-  userSelectedNode.value = false
-  void loadSelectedTraceDetail()
-})
-watch(() => selectedTraceDetail.value?.trace_id, (traceId) => {
-  if (traceId && traceId === selectedTrace.value?.trace_id) {
-    selectPreferredNode()
-  }
-})
+watch(
+  () => selectedTrace.value?.trace_id,
+  () => {
+    userSelectedNode.value = false
+    void loadSelectedTraceDetail()
+  },
+)
+watch(
+  () => selectedTraceDetail.value?.trace_id,
+  (traceId) => {
+    if (traceId && traceId === selectedTrace.value?.trace_id) {
+      selectPreferredNode()
+    }
+  },
+)
 
 function clampSelectedTrace() {
   if (!store.traces.length) {
@@ -85,11 +94,11 @@ function clampSelectedTrace() {
 
 function selectPreferredNode() {
   if (userSelectedNode.value) return
-  const errorNode = traceNodes.value.find(node => node.status === 'error')
+  const errorNode = traceNodes.value.find((node) => node.status === 'error')
   const activeLlmNode = traceNodes.value.find(
-    node => node.label.toLowerCase().includes('llm') && node.status !== 'skipped'
+    (node) => node.label.toLowerCase().includes('llm') && node.status !== 'skipped',
   )
-  const firstCapturedNode = traceNodes.value.find(node => node.status !== 'skipped')
+  const firstCapturedNode = traceNodes.value.find((node) => node.status !== 'skipped')
   selectedNodeId.value = errorNode?.id ?? activeLlmNode?.id ?? firstCapturedNode?.id ?? ''
 }
 
@@ -129,14 +138,15 @@ function buildNodeDetails(trace: Trace | null, detail: TraceDetail | null): Trac
   if (!detail) return []
   const operations = flattenOperations(detail.operation_tree)
   return operations.map((operation) => {
-    const events = detail.events.filter(event => event.operation_id === operation.operation_id)
+    const events = detail.events.filter((event) => event.operation_id === operation.operation_id)
     const isRoot = operation.parent_operation_id === null
     const input = isRoot
       ? contentLabel(detail.content.user, '还没有采集到用户输入。')
       : `上游操作 · ${operation.parent_operation_id}`
-    const output = operation.error_summary
-      || events.map(event => `${event.direction} · ${event.name} · ${event.phase}`).join('\n')
-      || (operation.name.includes('output')
+    const output =
+      operation.error_summary ||
+      events.map((event) => `${event.direction} · ${event.name} · ${event.phase}`).join('\n') ||
+      (operation.name.includes('output')
         ? contentLabel(detail.content.assistant, '未采集响应正文。')
         : '操作已提交，未保存业务载荷。')
 
@@ -155,14 +165,14 @@ function buildNodeDetails(trace: Trace | null, detail: TraceDetail | null): Trac
         { label: 'critical', value: operation.critical_path ? 'yes' : 'no' },
       ],
       events: events.length
-        ? events.map(event => `${event.direction} · ${event.name} · ${event.phase}`)
+        ? events.map((event) => `${event.direction} · ${event.name} · ${event.phase}`)
         : ['no committed event'],
     }
   })
 }
 
 function flattenOperations(roots: TraceOperation[]): TraceOperation[] {
-  return roots.flatMap(operation => [operation, ...flattenOperations(operation.children ?? [])])
+  return roots.flatMap((operation) => [operation, ...flattenOperations(operation.children ?? [])])
 }
 
 function layerRole(layer: TraceOperation['layer']) {
@@ -240,9 +250,7 @@ function formatTime(value?: number | string) {
       <div>
         <p class="eyebrow">Trace Debug Dashboard</p>
         <h1>对话链路观测</h1>
-        <p class="summary">
-          每次对话按节点展开，优先回答“这一次为什么坏了”，再决定是否全量重试。
-        </p>
+        <p class="summary">每次对话按节点展开，优先回答“这一次为什么坏了”，再决定是否全量重试。</p>
       </div>
 
       <div class="hero-actions">
@@ -257,9 +265,7 @@ function formatTime(value?: number | string) {
         <button class="ghost-btn" :disabled="selectedTraceIndex === 0" @click="goLatest">
           Latest
         </button>
-        <button class="primary-btn" @click="store.fetchAll">
-          全量重试
-        </button>
+        <button class="primary-btn" @click="store.fetchAll">全量重试</button>
       </div>
     </header>
 
@@ -321,7 +327,10 @@ function formatTime(value?: number | string) {
             </span>
             <span class="row-main">
               <strong>{{ traceTitle(trace) }}</strong>
-              <small>{{ formatTime(trace.started_at) }} · {{ formatDuration(trace.duration_ms ?? undefined) }}</small>
+              <small
+                >{{ formatTime(trace.started_at) }} ·
+                {{ formatDuration(trace.duration_ms ?? undefined) }}</small
+              >
             </span>
           </button>
           <div v-if="!store.traces.length" class="empty-state">
@@ -492,7 +501,10 @@ button {
   border: 1px solid var(--c-border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--c-text) 6%, transparent);
-  transition: background 200ms var(--ease-out-expo), border-color 200ms var(--ease-out-expo), transform 200ms var(--ease-out-expo);
+  transition:
+    background 200ms var(--ease-out-expo),
+    border-color 200ms var(--ease-out-expo),
+    transform 200ms var(--ease-out-expo);
 }
 
 .icon-btn {
@@ -689,7 +701,9 @@ button:disabled {
   border-radius: 12px;
   background: color-mix(in srgb, var(--c-text) 4.5%, transparent);
   text-align: left;
-  transition: background 200ms var(--ease-out-expo), border-color 200ms var(--ease-out-expo);
+  transition:
+    background 200ms var(--ease-out-expo),
+    border-color 200ms var(--ease-out-expo);
 }
 
 .trace-row.active,
@@ -768,7 +782,11 @@ button:disabled {
   border-radius: 16px;
   background:
     linear-gradient(color-mix(in srgb, var(--c-text) 3.5%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--c-text) 3.5%, transparent) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--c-text) 3.5%, transparent) 1px,
+      transparent 1px
+    ),
     color-mix(in srgb, var(--c-bg) 48%, transparent);
   background-size: 28px 28px;
 }
@@ -789,7 +807,10 @@ button:disabled {
   background: color-mix(in srgb, var(--c-panel) 92%, transparent);
   text-align: left;
   box-shadow: 0 18px 34px color-mix(in srgb, var(--c-bg) 72%, transparent);
-  transition: transform 200ms var(--ease-out-expo), border-color 200ms var(--ease-out-expo), box-shadow 200ms var(--ease-out-expo);
+  transition:
+    transform 200ms var(--ease-out-expo),
+    border-color 200ms var(--ease-out-expo),
+    box-shadow 200ms var(--ease-out-expo);
 }
 
 .flow-node strong {

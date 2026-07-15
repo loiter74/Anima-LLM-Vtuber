@@ -35,6 +35,54 @@ describe('useSubtitleStore', () => {
       expect(store.posX).toBeNull()
       expect(store.posY).toBeNull()
     })
+
+    it('loads a valid ratio-based persisted config', () => {
+      localStorage.setItem(
+        'animetta_subtitle_config',
+        JSON.stringify({
+          _version: 2,
+          enabled: false,
+          displayMode: 'translated',
+          fontSize: 'small',
+          targetLanguage: 'Japanese',
+          posX: 0.25,
+          posY: 0.75,
+        }),
+      )
+
+      const store = useSubtitleStore()
+
+      expect(store.enabled).toBe(false)
+      expect(store.displayMode).toBe('translated')
+      expect(store.fontSize).toBe('small')
+      expect(store.targetLanguage).toBe('Japanese')
+      expect(store.posX).toBe(0.25)
+      expect(store.posY).toBe(0.75)
+    })
+
+    it('falls back safely when persisted fields have invalid types', () => {
+      localStorage.setItem(
+        'animetta_subtitle_config',
+        JSON.stringify({
+          _version: 2,
+          enabled: 'yes',
+          displayMode: 'invalid',
+          fontSize: 99,
+          targetLanguage: null,
+          posX: 'left',
+          posY: {},
+        }),
+      )
+
+      const store = useSubtitleStore()
+
+      expect(store.enabled).toBe(true)
+      expect(store.displayMode).toBe('bilingual')
+      expect(store.fontSize).toBe('large')
+      expect(store.targetLanguage).toBe('English')
+      expect(store.posX).toBeNull()
+      expect(store.posY).toBeNull()
+    })
   })
 
   describe('toggle', () => {

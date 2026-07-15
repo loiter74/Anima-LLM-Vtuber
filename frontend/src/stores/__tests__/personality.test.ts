@@ -40,9 +40,7 @@ describe('usePersonalityStore', () => {
 
   it('updates current persona from persona:updated events', () => {
     const store = usePersonalityStore()
-    const listener = socket.on.mock.calls.find(
-      ([event]) => event === Events.PERSONA.UPDATED
-    )?.[1]
+    const listener = socket.on.mock.calls.find(([event]) => event === Events.PERSONA.UPDATED)?.[1]
 
     listener?.({ persona_name: 'streamer', mbti: null })
 

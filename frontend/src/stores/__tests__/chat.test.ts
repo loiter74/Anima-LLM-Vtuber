@@ -5,9 +5,9 @@ import type { ChatIdentity, SentenceEvent } from '@/types/socket-events'
 import type { ChatMessage } from '@/types/chat'
 
 const fetchAvailablePersonasMock = vi.hoisted(() => vi.fn())
-const loadMessagesMock = vi.hoisted(() => vi.fn<() => Promise<ChatMessage[]>>(
-  () => Promise.resolve([]),
-))
+const loadMessagesMock = vi.hoisted(() =>
+  vi.fn<() => Promise<ChatMessage[]>>(() => Promise.resolve([])),
+)
 
 // Mock IndexedDB-backed message store — IndexedDB is not available in happy-dom
 vi.mock('@/composables/useMessageStore', () => ({
@@ -47,13 +47,15 @@ describe('useChatStore', () => {
 
   describe('initial state', () => {
     it('loads legacy persisted messages without identity fields', async () => {
-      loadMessagesMock.mockResolvedValueOnce([{
-        id: 'legacy-1',
-        role: 'assistant',
-        text: 'old conversation',
-        timestamp: 1,
-        status: 'complete',
-      }])
+      loadMessagesMock.mockResolvedValueOnce([
+        {
+          id: 'legacy-1',
+          role: 'assistant',
+          text: 'old conversation',
+          timestamp: 1,
+          status: 'complete',
+        },
+      ])
 
       const store = useChatStore()
       await Promise.resolve()
@@ -167,9 +169,14 @@ describe('useChatStore', () => {
       store.handleSentence({ ...ids, text: '', seq: 1, is_complete: true })
       expect(store.mediaByTask[ids.task_id].status).toBe('pending')
 
-      expect(store.handleMediaReady({
-        ...ids, audio_data: 'UklGRg==', format: 'wav', volumes: [],
-      })).toBe(true)
+      expect(
+        store.handleMediaReady({
+          ...ids,
+          audio_data: 'UklGRg==',
+          format: 'wav',
+          volumes: [],
+        }),
+      ).toBe(true)
       expect(store.isSpeaking).toBe(true)
       expect(store.mediaByTask[ids.task_id].status).toBe('ready')
 
@@ -183,13 +190,18 @@ describe('useChatStore', () => {
       const first = identity()
       store.registerTask(first)
       const degraded = {
-        ...first, type: 'media-degraded', status: 'degraded', reason: 'timeout',
+        ...first,
+        type: 'media-degraded',
+        status: 'degraded',
+        reason: 'timeout',
         text: 'Audio unavailable; continuing with text.',
       }
       expect(store.handleControl(degraded)).toBe(true)
       expect(store.handleControl(degraded)).toBe(false)
       expect(store.mediaByTask[first.task_id].status).toBe('degraded')
-      expect(store.messages.filter(message => message.id === `degradation:${first.task_id}`)).toHaveLength(1)
+      expect(
+        store.messages.filter((message) => message.id === `degradation:${first.task_id}`),
+      ).toHaveLength(1)
 
       const second = identity('00000000-0000-4000-8000-000000000004')
       store.registerTask(second)
@@ -203,9 +215,14 @@ describe('useChatStore', () => {
       const current = identity('00000000-0000-4000-8000-000000000004')
       store.registerTask(old)
       store.registerTask(current)
-      expect(store.handleMediaReady({
-        ...old, audio_data: 'UklGRg==', format: 'wav', volumes: [],
-      })).toBe(false)
+      expect(
+        store.handleMediaReady({
+          ...old,
+          audio_data: 'UklGRg==',
+          format: 'wav',
+          volumes: [],
+        }),
+      ).toBe(false)
       expect(store.handleStopAudio(old)).toBe(false)
       expect(store.isSpeaking).toBe(false)
     })
@@ -438,12 +455,16 @@ describe('useChatStore', () => {
     it('sets loading state while reload request is pending', async () => {
       const store = useChatStore()
       let resolveJson!: (value: unknown) => void
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => new Promise((resolve) => {
-          resolveJson = resolve
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () =>
+            new Promise((resolve) => {
+              resolveJson = resolve
+            }),
         }),
-      }))
+      )
 
       const pending = store.reloadRuntimeConfig()
       await Promise.resolve()
@@ -464,12 +485,13 @@ describe('useChatStore', () => {
       const store = useChatStore()
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          ok: true,
-          version: 3,
-          persona: 'anima.v0.1',
-          refreshed: ['persona', 'llm'],
-        }),
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            version: 3,
+            persona: 'anima.v0.1',
+            refreshed: ['persona', 'llm'],
+          }),
       })
       vi.stubGlobal('fetch', fetchMock)
 
@@ -491,22 +513,26 @@ describe('useChatStore', () => {
 
     it('records structured reload application metadata', async () => {
       const store = useChatStore()
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
           ok: true,
-          version: 4,
-          persona: 'anima.v0.1',
-          refreshed: ['persona', 'llm'],
-          preserved: false,
-          applied: {
-            version: 4,
-            persona: 'anima.v0.1',
-            sessions: 2,
-            prompt_warnings: ['Live2D prompt unavailable: template missing'],
-          },
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              version: 4,
+              persona: 'anima.v0.1',
+              refreshed: ['persona', 'llm'],
+              preserved: false,
+              applied: {
+                version: 4,
+                persona: 'anima.v0.1',
+                sessions: 2,
+                prompt_warnings: ['Live2D prompt unavailable: template missing'],
+              },
+            }),
         }),
-      }))
+      )
 
       await store.reloadRuntimeConfig()
 
@@ -524,17 +550,21 @@ describe('useChatStore', () => {
 
     it('records API failure without adding chat messages', async () => {
       const store = useChatStore()
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: false,
-        json: () => Promise.resolve({
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
           ok: false,
-          version: 1,
-          persona: 'anima.v0.1',
-          refreshed: [],
-          error: 'persona yaml invalid',
-          preserved: true,
+          json: () =>
+            Promise.resolve({
+              ok: false,
+              version: 1,
+              persona: 'anima.v0.1',
+              refreshed: [],
+              error: 'persona yaml invalid',
+              preserved: true,
+            }),
         }),
-      }))
+      )
 
       await expect(store.reloadRuntimeConfig()).rejects.toThrow('persona yaml invalid')
 

@@ -3,8 +3,12 @@ import { computed } from 'vue'
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
-  CategoryScale, LinearScale, BarElement,
-  Title, Tooltip, Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
 } from 'chart.js'
 import { useDashboardStore } from '../../stores/dashboardStore'
 
@@ -13,14 +17,16 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const store = useDashboardStore()
 
 const chartData = computed(() => ({
-  labels: store.nodeStats.map(n => `${n.layer} · ${n.name}`),
-  datasets: [{
-    label: 'Avg Duration (ms)',
-    data: store.nodeStats.map(n => n.avg_duration_ms),
-    backgroundColor: 'rgba(99, 102, 241, 0.7)',
-    borderColor: 'rgb(99, 102, 241)',
-    borderWidth: 1,
-  }],
+  labels: store.nodeStats.map((n) => `${n.layer} · ${n.name}`),
+  datasets: [
+    {
+      label: 'Avg Duration (ms)',
+      data: store.nodeStats.map((n) => n.avg_duration_ms),
+      backgroundColor: 'rgba(99, 102, 241, 0.7)',
+      borderColor: 'rgb(99, 102, 241)',
+      borderWidth: 1,
+    },
+  ],
 }))
 
 const chartOptions = {

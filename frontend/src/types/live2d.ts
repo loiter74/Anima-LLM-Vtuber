@@ -7,14 +7,12 @@ export interface Live2DConfig {
 
 export type ExpressionType = string
 
-export interface Live2DAction {
-  type: 'expression' | 'motion' | 'param' | 'sequence' | 'wait'
-  name?: string
-  group?: string
-  index?: number
-  value?: number
-  duration?: number
-}
+export type Live2DAction =
+  | { type: 'expression'; name: string }
+  | { type: 'motion'; group: string; index: number }
+  | { type: 'param'; name: string; value: number }
+  | { type: 'sequence'; actions: Live2DAction[] }
+  | { type: 'wait'; ms: number }
 
 export interface AudioWithExpression {
   audio_path: string

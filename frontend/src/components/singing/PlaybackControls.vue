@@ -86,7 +86,7 @@ function onBarMouseUp() {
 }
 
 const progressPercent = computed(() =>
-  props.duration > 0 ? (currentTime.value / props.duration) * 100 : 0
+  props.duration > 0 ? (currentTime.value / props.duration) * 100 : 0,
 )
 </script>
 
@@ -108,14 +108,15 @@ const progressPercent = computed(() =>
       <div
         class="absolute inset-y-0 left-0 bg-c-accent rounded-full transition-all"
         :style="{ width: `${progressPercent}%` }"
-      />\n    </div>
+      />
+      \n
+    </div>
 
     <!-- Controls -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <button
-          class="w-10 h-10 flex items-center justify-center rounded-full
-                 bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-all"
+          class="w-10 h-10 flex items-center justify-center rounded-full bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-all"
           @click="togglePlay"
         >
           <svg v-if="isPlaying" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

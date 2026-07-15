@@ -179,13 +179,14 @@ export interface SingProcessPayload {
 
 export interface SingCompletePayload {
   audio_url: string
-  subtitle_url: string
-  tts_audio_url: string
-  vocals_url: string
-  video_title: string
+  subtitle_url?: string
+  tts_audio_url?: string
+  vocals_url?: string
+  original_url?: string
+  video_title?: string
   duration: number
-  lyrics: Array<{ text: string; translation: string; start_ms: number; end_ms: number }>
-  volumes: number[]
+  lyrics?: Array<{ text: string; translation: string; start_ms: number; end_ms: number }>
+  volumes?: number[]
 }
 
 export interface PersonaSetPayload {
@@ -211,12 +212,7 @@ export interface BilibiliConnectPayload {
 }
 
 export type LivestreamState =
-  | 'stopped'
-  | 'connecting'
-  | 'live'
-  | 'reconnecting'
-  | 'stopping'
-  | 'error'
+  'stopped' | 'connecting' | 'live' | 'reconnecting' | 'stopping' | 'error'
 
 export interface BilibiliCommandAck {
   accepted: boolean

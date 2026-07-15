@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 
@@ -9,6 +10,10 @@ MAINTAINED_PYTHON_ROOTS = {"src", "tooling", "scripts", "evaluations", "tests"}
 
 def _load_config() -> dict:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+
+def _load_frontend_package() -> dict:
+    return json.loads((ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))
 
 
 def test_ruff_formatter_normalizes_python_line_endings() -> None:
@@ -66,3 +71,11 @@ def test_ruff_keeps_every_maintained_python_root_in_scope() -> None:
     }
 
     assert hidden_roots == set()
+
+
+def test_frontend_package_exposes_fail_closed_lint_and_format_commands() -> None:
+    package = _load_frontend_package()
+
+    assert package["scripts"]["lint"] == "eslint . --max-warnings 0"
+    assert package["scripts"]["format"] == "prettier --write ."
+    assert package["scripts"]["format:check"] == "prettier --check ."

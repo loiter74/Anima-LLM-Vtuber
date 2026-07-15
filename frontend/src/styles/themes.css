@@ -19,7 +19,7 @@
   --c-gold: #f5c872;
   --c-violet: #a882ff;
   --c-violet-soft: rgba(168, 130, 255, 0.15);
-  --c-violet-glow: rgba(168, 130, 255, 0.50);
+  --c-violet-glow: rgba(168, 130, 255, 0.5);
   --c-success: #4ade80;
   --c-warning: #fbbf24;
   --c-error: #f87171;
@@ -55,7 +55,7 @@
   --c-border: #d0d8e4;
   --c-border-accent: rgba(212, 104, 140, 0.25);
   --c-user-bubble: rgba(124, 140, 245, 0.12);
-  --c-ai-bubble: rgba(212, 104, 140, 0.10);
+  --c-ai-bubble: rgba(212, 104, 140, 0.1);
   --c-glow: rgba(212, 104, 140, 0.25);
   --c-glow-soft: rgba(212, 104, 140, 0.08);
 }
