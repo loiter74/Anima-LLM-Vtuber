@@ -8,10 +8,10 @@ app = "animetta-demo"
 primary_region = "hkg"
 
 [build]
-  dockerfile = "Dockerfile.cuda"
+  dockerfile = "Dockerfile"
 
 [http_service]
-  internal_port = 12394
+  internal_port = 80
   force_https = true
   auto_stop_machines = "stop"    # Free tier: stop when idle
   auto_start_machines = true     # Start on first request
@@ -34,9 +34,7 @@ primary_region = "hkg"
 [env]
   ANIMETTA_HOST = "0.0.0.0"
   ANIMETTA_PORT = "12394"
-  ANIMETTA_LOG_LEVEL = "INFO"
-  ANIMETTA_TTS = "kokoro"
-  ANIMETTA_DEVICE = "cuda"
+  ANIMETTA_PROFILE = "production"
   PYTHONPATH = "/app/src"
 
 [[mounts]]

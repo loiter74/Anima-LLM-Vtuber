@@ -30,8 +30,11 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
             "FROM python:3.13-slim-bookworm AS python-builder",
             "FROM python:3.13-slim-bookworm AS runtime",
         ),
-        "Dockerfile.cuda": ("FROM python:3.13-slim-bookworm AS python-builder",),
-        "docker-compose.cpu.yml": ("RUNTIME_IMAGE: python:3.13-slim-bookworm",),
+        "Dockerfile.qwen-tts": (
+            "FROM python:3.13-slim-bookworm AS python-builder",
+            "nvidia/cuda:12.8.2-runtime-ubuntu24.04@sha256:deba835fb9667364adda8791883ad4d099715a9afc354d2f0352116ba43f6d40",
+        ),
+        "docker-compose.cpu.yml": ("dockerfile: Dockerfile",),
         "observability/Dockerfile.notifier": ("FROM python:3.13-slim-bookworm",),
         "scripts/health_check.py": ("CANONICAL_PYTHON = (3, 13)",),
         "README.md": ("python-3.13",),
@@ -49,6 +52,8 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
         ".github/workflows/test.yml",
         ".github/workflows/deploy-zeabur.yml",
     ):
+        if not (ROOT / relative_path).exists():
+            continue
         content = _read(relative_path)
         setup_count = content.count("uses: actions/setup-python@v5")
         version_file_count = content.count("python-version-file: .python-version")
@@ -78,13 +83,17 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
         "tests/AGENTS.md": ("Python 3.12",),
     }
     for relative_path, fragments in forbidden_fragments.items():
+        if not (ROOT / relative_path).exists():
+            continue
         content = _read(relative_path)
         for fragment in fragments:
             if fragment in content:
                 problems.append(f"{relative_path} still contains unsupported {fragment!r}")
 
-    workflow = _read(".github/workflows/test.yml")
-    if re.search(r"python-version:\s*\[", workflow):
-        problems.append(".github/workflows/test.yml still defines a Python version matrix")
+    workflow_path = ROOT / ".github/workflows/test.yml"
+    if workflow_path.exists():
+        workflow = _read(".github/workflows/test.yml")
+        if re.search(r"python-version:\s*\[", workflow):
+            problems.append(".github/workflows/test.yml still defines a Python version matrix")
 
     assert not problems, "Python runtime policy drift:\n- " + "\n- ".join(problems)

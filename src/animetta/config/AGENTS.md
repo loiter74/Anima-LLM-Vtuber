@@ -22,7 +22,7 @@ config/
 │   └── separation/           # 4 files: base, demucs, mock + factory
 ├── persona/                  # Character personality models (base, enhanced)
 ├── data_models/              # Shared data models (meme)
-├── app.py                    # AppConfig — main configuration (433 lines)
+├── manifest.py               # Canonical manifest + immutable EffectiveConfig
 ├── system.py                 # SystemConfig
 ├── agent.py                  # AgentConfig
 ├── user.py                   # UserSettings (renamed from user_settings.py)
@@ -43,7 +43,7 @@ config/
 ## KEY PATTERNS
 - **@ProviderRegistry.register_config**: Decorator-based registration — no if/elif chains
 - **Config ↔ Service pairing**: Every provider config at `config/providers/{type}/` mirrors an implementation at `services/{type}/` (flat, no speech/intelligence nesting)
-- **YAML-driven**: `config/config.yaml` → `config/services.yaml` → Pydantic validation → runtime objects
+- **Single-manifest**: `config/animetta.yaml` → strict Pydantic validation → immutable EffectiveConfig
 - **Pydantic V2 only**: `model_config = ConfigDict(...)` — `class Config:` is forbidden
 
 ## ANTI-PATTERNS

@@ -21,6 +21,11 @@ class TestTTSFactory:
         engine = TTSFactory.create("mock")
         assert isinstance(unwrap_tracing_proxy(engine), TTSInterface)
 
+    def test_legacy_keyword_provider_still_selects_implementation(self):
+        engine = TTSFactory.create(provider="mock")
+
+        assert isinstance(unwrap_tracing_proxy(engine), MockTTS)
+
     def test_create_unknown_returns_mock(self):
         engine = TTSFactory.create("nonexistent_provider")
         assert isinstance(unwrap_tracing_proxy(engine), MockTTS)

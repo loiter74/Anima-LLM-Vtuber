@@ -31,6 +31,7 @@ coverage/
 
 # Keep frontend/ for build but exclude dev artifacts
 frontend/node_modules/
+frontend/.pnpm-store/
 frontend/dist/
 frontend/.vite/
 
@@ -38,6 +39,7 @@ frontend/.vite/
 # docker/
 docker/minecraft-server/data/
 src/animetta/tools/minecraft/bot/node_modules/
+config/personas/voices/
 
 # Exclude runtime data
 data/

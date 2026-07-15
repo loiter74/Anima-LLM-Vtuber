@@ -119,12 +119,37 @@ class TestAutoConfig:
 
     # ── setup_all ────────────────────────────────────────────────────
 
+    def test_generate_env_file_copies_canonical_example_without_business_overrides(
+        self, auto_config, tmp_path
+    ):
+        auto_config.project_root = tmp_path
+        canonical = (
+            "ANIMETTA_PROFILE=test\n"
+            "ANIMETTA_HOST=127.0.0.1\n"
+            "ANIMETTA_PORT=12394\n"
+            "DEEPSEEK_API_KEY=\n"
+        )
+        (tmp_path / ".env.example").write_text(canonical, encoding="utf-8")
+
+        generated = auto_config.generate_env_file()
+
+        assert generated.read_text(encoding="utf-8") == canonical
+        assert "ANIMETTA_BASE_MODEL_PATH" not in generated.read_text(encoding="utf-8")
+        assert "ANIMETTA_LORA_PATH" not in generated.read_text(encoding="utf-8")
+
+    def test_setup_all_never_generates_a_secondary_provider_config(self, auto_config):
+        assert not hasattr(auto_config, "generate_local_lora_config")
+        with (
+            patch.object(auto_config, "generate_env_file"),
+            patch.object(auto_config, "setup_data_dir"),
+        ):
+            assert auto_config.setup_all(auto_fix=False) is True
+
     def test_setup_all_no_auto_fix(self, auto_config):
         """setup_all(auto_fix=False) should not install dependencies."""
         with patch.multiple(
             auto_config,
             generate_env_file=MagicMock(),
-            generate_local_lora_config=MagicMock(),
             setup_data_dir=MagicMock(return_value=Path("/tmp")),
         ):
             result = auto_config.setup_all(auto_fix=False)

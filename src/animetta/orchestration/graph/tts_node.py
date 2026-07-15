@@ -8,6 +8,9 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.core.readiness import resolve_service_identity, unwrap_tracing_proxy
+from animetta.services.tts.remote_tts import RemoteTTSError
+
 from .media_status import MediaStatus
 from .node_error import log_node_error
 from .state import AgentState, log_timing
@@ -48,6 +51,34 @@ def _get_service_context(config: RunnableConfig | None) -> Any | None:
     return None
 
 
+def _resolve_provider_identity(
+    service_context: Any,
+    tts_engine: Any,
+) -> tuple[str, str | None, bool]:
+    """Return bounded actual provider metadata and config-match status."""
+    runtime_config = getattr(service_context, "config", None)
+    providers = getattr(runtime_config, "providers", None)
+    configured = providers.get("tts") if hasattr(providers, "get") else None
+    if configured is not None:
+        identity = resolve_service_identity("tts", tts_engine, configured)
+        if identity is None:
+            return "unknown", None, False
+        expected = configured.public_identity()
+        matches = all(
+            identity.get(field) == expected.get(field)
+            for field in ("type", "provider", "model", "voice")
+            if expected.get(field) is not None
+        )
+        provider = identity.get("provider") or identity.get("type") or "unknown"
+        return provider, identity.get("type"), matches
+
+    target = unwrap_tracing_proxy(tts_engine)
+    if target is None:
+        return "unknown", None, False
+    class_name = type(target).__name__
+    return class_name, None, True
+
+
 async def tts_node(
     state: AgentState,
     config: RunnableConfig | None = None,
@@ -85,12 +116,29 @@ async def tts_node(
         }
 
     system = getattr(getattr(service_context, "config", None), "system", None)
-    golden = getattr(system, "runtime_profile", None) == "golden"
-    provider = type(tts_engine).__name__
-    if golden and provider.lower() == "mocktts":
+    golden = getattr(system, "runtime_profile", None) in {
+        "smoke",
+        "production",
+        "golden",
+    }
+    provider, provider_type, identity_matches = _resolve_provider_identity(
+        service_context,
+        tts_engine,
+    )
+    if golden and (provider_type == "mock" or provider == "mock"):
         return {
             "tts_audio": None,
             "media_status": MediaStatus("degraded", "mock_forbidden", provider, False),
+        }
+    if golden and not identity_matches:
+        return {
+            "tts_audio": None,
+            "media_status": MediaStatus(
+                "degraded",
+                "identity_mismatch",
+                provider,
+                False,
+            ),
         }
 
     # Strip emoji and emotion tags before TTS so the voice doesn't read them aloud
@@ -121,6 +169,36 @@ async def tts_node(
                 "degradation_reason": "timeout",
             },
         }
+    except RemoteTTSError as e:
+        category = e.category
+        log_timing(
+            state,
+            "tts.synthesize",
+            (time.perf_counter() - started) * 1000,
+            f"degraded:{category}",
+        )
+        logger.warning(
+            "[{}] [TTSNode] Remote TTS degraded: category={}, retryable={}",
+            session_id,
+            category,
+            e.retryable,
+        )
+        await log_node_error(session_id, "tts_node", category, duration_ms=0)
+        return {
+            "tts_audio": None,
+            "media_status": MediaStatus(
+                "degraded",
+                category,
+                provider,
+                e.retryable,
+            ),
+            "metadata": {
+                **state.get("metadata", {}),
+                "tts_provider": provider,
+                "media_status": "degraded",
+                "degradation_reason": category,
+            },
+        }
     except Exception as e:
         log_timing(
             state,
@@ -128,7 +206,11 @@ async def tts_node(
             (time.perf_counter() - started) * 1000,
             "degraded:provider_error",
         )
-        logger.warning(f"[{session_id}] [TTSNode] TTS failed ({type(e).__name__}): {e}")
+        logger.warning(
+            "[{}] [TTSNode] TTS failed: error_type={}",
+            session_id,
+            type(e).__name__,
+        )
         await log_node_error(session_id, "tts_node", "network_error", duration_ms=0)
         return {
             "tts_audio": None,

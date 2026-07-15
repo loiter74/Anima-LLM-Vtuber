@@ -17,12 +17,20 @@ def _compose_env(path: str) -> dict[str, str]:
     return env
 
 
-def test_docker_defaults_use_real_llm_provider():
-    for compose_file in ("docker-compose.yml", "docker-compose.cpu.yml"):
+def test_docker_profiles_match_release_and_cpu_remote_roles():
+    manifest = yaml.safe_load((ROOT / "config" / "animetta.yaml").read_text(encoding="utf-8"))
+    expected = {
+        "docker-compose.yml": "production",
+        "docker-compose.cpu.yml": "${ANIMETTA_PROFILE:-smoke}",
+    }
+    for compose_file, profile in expected.items():
         env = _compose_env(compose_file)
-        assert env["ANIMETTA_LLM"] == "deepseek"
+        assert env["ANIMETTA_PROFILE"] == profile
+    assert manifest["profiles"]["production"]["services"]["llm"] == "deepseek"
+    assert manifest["profiles"]["smoke"]["services"]["llm"] == "deepseek"
+    assert manifest["profiles"]["smoke"]["services"]["tts"] == "mimo-tts"
 
 
 def test_default_runtime_persona_is_anima_v01():
-    config = yaml.safe_load((ROOT / "config" / "config.yaml").read_text(encoding="utf-8"))
-    assert config["persona"] == "anima.v0.1"
+    config = yaml.safe_load((ROOT / "config" / "animetta.yaml").read_text(encoding="utf-8"))
+    assert config["application"]["persona"] == "anima.v0.1"

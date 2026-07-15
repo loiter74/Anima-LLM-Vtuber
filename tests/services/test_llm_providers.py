@@ -468,9 +468,9 @@ class TestGLMLLM:
         """from_config should return a GLMLLM instance with the config."""
         instance = GLMLLM.from_config(glm_llm_config)
         assert isinstance(instance, GLMLLM)
-        assert instance.core.config == glm_llm_config
-        assert instance.core.config.api_key == "test-glm-key"
-        assert instance.core.config.model == "glm-4-flash"
+        assert instance.config == glm_llm_config
+        assert instance.config.api_key == "test-glm-key"
+        assert instance.config.model == "glm-4-flash"
 
     @pytest.mark.asyncio
     async def test_chat_returns_string(self):

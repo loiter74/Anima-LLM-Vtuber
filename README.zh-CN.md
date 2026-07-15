@@ -66,18 +66,15 @@ cd frontend && pnpm install
 
 ### 2. 配置
 
-```bash
-cp config/config.golden.yaml config/config.yaml
-```
-
-编辑 `config/config.yaml` 选择 `profile`（mock / openai / glm / ollama）和 `persona`，然后设置 API Key（**不要把真实凭据写入 `config/*.yaml`**）：
+编辑 `config/animetta.yaml` 选择人格，并为 `test`、`smoke`、`production` 三个 profile 声明完整服务映射。服务选择只能写在这份清单中；环境变量只传 profile、endpoint 和 secret。
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填写实际使用的 key：
+# 选择 profile，并填写它实际需要的 key：
+#   ANIMETTA_PROFILE="test"
 #   DEEPSEEK_API_KEY="..."
-#   OPENAI_API_KEY="..."
-#   GLM_API_KEY="..."
+#   MIMO_API_KEY="..."
+#   QWEN_TTS_API_KEY="..."
 ```
 
 ### 3. 启动

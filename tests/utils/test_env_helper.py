@@ -132,22 +132,16 @@ class TestEnvHelperGetDataDir:
             assert str(data_dir) == "/custom/data/dir"
 
 
-import sys as _sys3
-
-
-@pytest.mark.skipif(_sys3.platform != "linux", reason="WSL tests only run on Linux")
 class TestDefaultModelConfig:
-    """Default model config generation."""
+    """Compatibility view exposes only canonical runtime inputs."""
 
-    @patch("animetta.utils.env_helper.EnvHelper.get_data_dir", return_value=Path("/data"))
-    def test_default_model_config(self, mock_get_data_dir):
+    def test_default_model_config(self):
         config = EnvHelper.get_default_model_config()
-        assert "ANIMA_DATA_DIR" in config
-        assert "ANIMA_BASE_MODEL_PATH" in config
-        assert "ANIMA_LORA_PATH" in config
-        assert "ANIMA_VECTOR_DB_PATH" in config
-        assert "ANIMA_HISTORY_PATH" in config
-        assert "/data" in config["ANIMA_DATA_DIR"]
+        assert config["ANIMETTA_PROFILE"] == "test"
+        assert config["ANIMETTA_HOST"] == "127.0.0.1"
+        assert config["ANIMETTA_PORT"] == "12394"
+        assert "ANIMETTA_BASE_MODEL_PATH" not in config
+        assert "ANIMETTA_LORA_PATH" not in config
 
 
 class TestSetupEnvFile:

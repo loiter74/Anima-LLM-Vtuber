@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "forbidden_runtime_files": [
+    "config/config.yaml",
+    "config/config.golden.yaml",
+    "config/services.yaml",
+    "config/services/llm/local_lora.yaml",
+    "config/services/llm/local_lora.yaml.bak"
+  ],
+  "forbidden_environment_selectors": [
+    "ANIMETTA_CONFIG",
+    "ANIMETTA_LLM",
+    "ANIMETTA_ASR",
+    "ANIMETTA_TTS",
+    "ANIMETTA_VAD",
+    "ANIMETTA_LOCAL_LLM",
+    "ANIMETTA_BASE_MODEL_PATH",
+    "ANIMETTA_LORA_PATH",
+    "VITE_API_URL"
+  ],
+  "allowed_environment_inputs": {
+    "profile": ["ANIMETTA_PROFILE"],
+    "endpoints": [
+      "ANIMETTA_HOST",
+      "ANIMETTA_PORT",
+      "ANIMETTA_BACKEND_URL",
+      "QWEN_TTS_URL"
+    ],
+    "secrets": [
+      "DEEPSEEK_API_KEY",
+      "MIMO_API_KEY",
+      "QWEN_TTS_API_KEY"
+    ]
+  },
+  "source_rules": [
+    {
+      "scope": "python",
+      "roots": ["src", "scripts"],
+      "exclude": ["src/animetta/config/manifest.py"],
+      "forbidden_patterns": [
+        "config/config.yaml",
+        "config/config.golden.yaml",
+        "config/services.yaml",
+        "ANIMETTA_CONFIG",
+        "ANIMETTA_LLM",
+        "ANIMETTA_ASR",
+        "ANIMETTA_TTS",
+        "ANIMETTA_VAD",
+        "ANIMETTA_LOCAL_LLM",
+        "ANIMETTA_BASE_MODEL_PATH",
+        "ANIMETTA_LORA_PATH",
+        "config/services/llm",
+        "generate_local_lora_config",
+        "AppConfig"
+      ]
+    },
+    {
+      "scope": "documentation",
+      "roots": ["CONTRIBUTING.md", "README.md", "README.zh-CN.md", "config", "docs"],
+      "forbidden_patterns": [
+        "config/config.yaml",
+        "config/config.golden.yaml",
+        "config/services.yaml",
+        "ANIMETTA_CONFIG",
+        "ANIMETTA_LLM",
+        "ANIMETTA_ASR",
+        "ANIMETTA_TTS",
+        "ANIMETTA_VAD",
+        "ANIMETTA_LOCAL_LLM",
+        "ANIMETTA_BASE_MODEL_PATH",
+        "ANIMETTA_LORA_PATH",
+        "config/services/llm",
+        "VITE_API_URL",
+        "Dockerfile.cuda",
+        "AppConfig"
+      ]
+    },
+    {
+      "scope": "frontend",
+      "roots": [".env.example", "frontend"],
+      "exclude": ["frontend/src/__tests__/runtimeConfigSources.test.ts"],
+      "forbidden_patterns": ["VITE_API_URL"]
+    },
+    {
+      "scope": "deployment",
+      "roots": [
+        "docker-compose.yml",
+        "docker-compose.cpu.yml",
+        "docker-compose.core.yml",
+        "fly.toml",
+        "zeabur.json",
+        "Dockerfile",
+        "Dockerfile.qwen-tts",
+        "docker"
+      ],
+      "forbidden_patterns": [
+        "ANIMETTA_CONFIG",
+        "ANIMETTA_LLM",
+        "ANIMETTA_ASR",
+        "ANIMETTA_TTS",
+        "ANIMETTA_VAD",
+        "VITE_API_URL"
+      ]
+    }
+  ],
+  "replacement": "Use config/animetta.yaml plus ANIMETTA_PROFILE; inject only declared endpoints and secrets."
+}

@@ -101,7 +101,7 @@ pnpm test:run                # Frontend tests (Vitest + happy-dom)
 
 ## NOTES
 
-- **33 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
+- **37 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
 - Live2D model files (`.moc3`, textures) are loaded from `assets/` at runtime.
 - Bilingual subtitle feature uses LLM translation — configured in Settings panel.
 - **Dev server runs on port 3000** (Vite, not 5173). Electron builder is not configured.

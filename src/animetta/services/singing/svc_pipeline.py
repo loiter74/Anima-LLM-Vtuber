@@ -290,26 +290,17 @@ class SVCPipeline(SingingService):
         self, session_dir: Path, backing_path: str,
         lyric_lines: list[LyricLine], session_id: str,
     ) -> str:
-        """Generate TTS-processed vocals using project's GPT-SoVITS voice.
+        """Generate TTS-processed vocals using the singing pipeline voice.
 
-        Loads the Evil voice config from services.yaml and calls GPT-SoVITS /tts
-        endpoint to generate vocals, then mixes with backing track.
+        The typed ``SingingConfig`` is the only input.  This deliberately avoids
+        reopening a second runtime-services file behind the canonical manifest.
 
         Returns:
             Path to TTS vocal mix file, or empty string on failure.
         """
-        # Load project's TTS voice config
-        try:
-            import yaml
-            services_yaml = Path(__file__).parent.parent.parent.parent.parent / "config" / "services.yaml"
-            with open(services_yaml, encoding="utf-8") as f:
-                svc_cfg = yaml.safe_load(f)
-            tts_cfg = (svc_cfg or {}).get("tts", {}).get("gpt_sovits_evil", {})
-            if not tts_cfg or not tts_cfg.get("ref_audio_path"):
-                logger.info("TTS voice config not found, skipping TTS generation")
-                return ""
-        except Exception as e:
-            logger.warning(f"Failed to load TTS voice config: {e}")
+        tts_cfg = self.config.gpt_sovits
+        if not tts_cfg.ref_audio_path:
+            logger.info("Singing TTS reference audio is not configured; skipping")
             return ""
 
         # Concatenate lyrics into text
@@ -318,33 +309,29 @@ class SVCPipeline(SingingService):
             logger.warning("No lyrics text for TTS generation")
             return ""
 
-        logger.info(f"Generating TTS vocals with Evil voice: {len(full_text)} chars")
+        logger.info(f"Generating singing TTS vocals: {len(full_text)} chars")
 
         # Call GPT-SoVITS TTS
         try:
             import httpx
-            base_url = tts_cfg.get("base_url", "http://127.0.0.1:9880")
+            base_url = tts_cfg.base_url
             timeout = httpx.Timeout(600.0, connect=10.0)  # up to 10 min for long singing
             async with httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout) as client:
                 payload = {
                     "text": full_text,
-                    "text_lang": tts_cfg.get("text_lang", "auto"),
-                    "ref_audio_path": tts_cfg["ref_audio_path"],
-                    "prompt_text": tts_cfg.get("prompt_text", ""),
-                    "prompt_lang": tts_cfg.get("prompt_lang", "en"),
-                    "top_k": tts_cfg.get("top_k", 15),
-                    "top_p": tts_cfg.get("top_p", 1.0),
-                    "temperature": tts_cfg.get("temperature", 1.0),
-                    "speed_factor": tts_cfg.get("speed", 1.0),
+                    "text_lang": tts_cfg.text_lang,
+                    "ref_audio_path": tts_cfg.ref_audio_path,
+                    "prompt_text": tts_cfg.prompt_text,
+                    "prompt_lang": tts_cfg.text_lang,
+                    "top_k": tts_cfg.top_k,
+                    "top_p": tts_cfg.top_p,
+                    "temperature": tts_cfg.temperature,
+                    "speed_factor": tts_cfg.speed,
                     "media_type": "wav",
                     "text_split_method": tts_cfg.get("text_split_method", "cut5"),
-                    "sample_steps": tts_cfg.get("sample_steps", 32),
+                    "sample_steps": 32,
                     "seed": -1,
                 }
-                aux_refs = tts_cfg.get("aux_ref_audio_paths")
-                if aux_refs:
-                    payload["aux_ref_audio_paths"] = aux_refs
-
                 resp = await client.post("/tts", json=payload)
                 if resp.status_code != 200:
                     logger.warning(f"TTS generation failed (HTTP {resp.status_code}): {resp.text[:200]}")

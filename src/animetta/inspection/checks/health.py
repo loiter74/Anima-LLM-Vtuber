@@ -10,6 +10,7 @@ from typing import Any
 
 from ..models import CheckResult
 from ..runtime import InspectionRuntime
+from .metrics import controlled_metric_delta
 
 _llm_connectivity_cache: dict[str, object] = {"ok": None, "status": "pending"}
 
@@ -59,6 +60,11 @@ async def check_all_components(
         _check_service_pool(runtime),
         _check_memory_runtime(runtime),
         _check_metrics_projection(runtime),
+        *(
+            (_check_remote_tts(runtime),)
+            if runtime.remote_tts_probe is not None
+            else ()
+        ),
     )
     return {result.name: result for result in results}
 
@@ -66,6 +72,9 @@ async def check_all_components(
 async def _check_observation_ledger(runtime: InspectionRuntime) -> CheckResult:
     started = time.perf_counter()
     try:
+        if runtime.observation_write_probe is None:
+            raise RuntimeError("observation write probe is not configured")
+        await runtime.observation_write_probe()
         health, overview = await asyncio.gather(
             runtime.observation_query.observation_health(),
             runtime.observation_query.overview(),
@@ -77,6 +86,7 @@ async def _check_observation_ledger(runtime: InspectionRuntime) -> CheckResult:
             "dropped_records": health.dropped_records,
             "writer_errors": health.writer_errors,
             "schema_version": overview.get("schema_version"),
+            "write_probe": True,
         }
         ok = bool(
             health.enabled
@@ -117,6 +127,7 @@ async def _check_memory_runtime(runtime: InspectionRuntime) -> CheckResult:
         health = dict(await runtime.memory_runtime.health())
         ok = bool(
             health.get("ready") is True
+            and health.get("degraded") is not True
             and int(health.get("ingestion_failed", 0)) == 0
             and not health.get("last_error")
         )
@@ -128,18 +139,64 @@ async def _check_memory_runtime(runtime: InspectionRuntime) -> CheckResult:
 async def _check_metrics_projection(runtime: InspectionRuntime) -> CheckResult:
     started = time.perf_counter()
     try:
-        snapshot = runtime.metrics_snapshot()
-        expected = ("anima_active_sessions", "anima_trace_outcomes_total")
-        detail = {f"has_{name}": name in snapshot for name in expected}
-        detail["body_length"] = len(snapshot)
+        if runtime.observation_write_probe is None:
+            raise RuntimeError("metrics activity probe is not configured")
+        before = runtime.metrics_snapshot()
+        await runtime.observation_write_probe()
+        delta = controlled_metric_delta(
+            before,
+            runtime.metrics_snapshot(),
+            ("anima_readiness_probe_total",),
+        )
+        for _ in range(10):
+            if delta["anima_readiness_probe_total"] > 0:
+                break
+            await asyncio.sleep(0.01)
+            delta = controlled_metric_delta(
+                before,
+                runtime.metrics_snapshot(),
+                ("anima_readiness_probe_total",),
+            )
+        detail = {
+            "has_anima_readiness_probe_total": "anima_readiness_probe_total" in before,
+            "anima_readiness_probe_total_delta": delta[
+                "anima_readiness_probe_total"
+            ],
+        }
         return _result(
             "metrics_projection",
-            all(detail[f"has_{name}"] for name in expected),
+            bool(
+                detail["has_anima_readiness_probe_total"]
+                and detail["anima_readiness_probe_total_delta"] > 0
+            ),
             started,
             detail,
         )
     except Exception as exc:
         return _exception_result("metrics_projection", started, exc)
+
+
+async def _check_remote_tts(runtime: InspectionRuntime) -> CheckResult:
+    started = time.perf_counter()
+    try:
+        if runtime.remote_tts_probe is None:
+            raise RuntimeError("remote TTS probe is not configured")
+        payload = await runtime.remote_tts_probe()
+        ok = bool(
+            payload.get("ready") is True
+            and payload.get("service") == "qwen-tts"
+            and payload.get("api_version") == "v1"
+        )
+        return _result(
+            "remote_tts",
+            ok,
+            started,
+            {
+                "contract_valid": ok,
+            },
+        )
+    except Exception as exc:
+        return _exception_result("remote_tts", started, exc)
 
 
 def _result(name: str, ok: bool, started: float, detail: dict[str, Any]) -> CheckResult:

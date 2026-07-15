@@ -12,7 +12,7 @@ from .base import VADBaseConfig
 class SileroVADConfig(VADBaseConfig):
     """Silero VAD configuration
 
-    Default values are consistent with config/services.yaml
+    Default values match the canonical runtime manifest declaration.
     """
     type: Literal["silero"] = "silero"
     prob_threshold: float = Field(default=0.15, description="Speech probability threshold")

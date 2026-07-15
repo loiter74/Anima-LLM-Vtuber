@@ -13,8 +13,8 @@ from loguru import logger
 from animetta.avatar.factory import EmotionAnalyzerFactory
 from animetta.avatar.prompts import EmotionPromptBuilder
 from animetta.config.agent import AgentConfig
-from animetta.config.app import AppConfig
 from animetta.config.live2d import get_live2d_config
+from animetta.config.manifest import EffectiveConfig
 from animetta.config.persona.base import PersonaConfig
 from animetta.config.providers.asr import ASRConfig
 from animetta.config.providers.tts import TTSConfig
@@ -44,7 +44,7 @@ class ServiceContext:
         model_manager: ModelLoadingManager | None = None,
         observation_recorder: ObservationRecorder | None = None,
     ):
-        self.config: AppConfig | None = None
+        self.config: EffectiveConfig | Any | None = None
         self.model_manager = model_manager
         self.observation_recorder = (
             observation_recorder or NoOpObservationRecorder()
@@ -66,6 +66,7 @@ class ServiceContext:
         # Session state
         self.session_id: str | None = None
         self.runtime_config_version: int = 1
+        self.runtime_config_hash: str | None = None
         self.is_speaking: bool = False
         self.is_processing: bool = False
 
@@ -98,11 +99,24 @@ class ServiceContext:
         )
 
     @staticmethod
-    def _is_golden_profile(config: AppConfig | None) -> bool:
-        """Return whether *config* selects fail-closed golden runtime behavior."""
+    def _is_golden_profile(config: EffectiveConfig | Any | None) -> bool:
+        """Return whether *config* selects fail-closed real-provider behavior."""
         if config is None:
             return False
+        policy = getattr(config, "policy", None)
+        allow_mock = getattr(policy, "allow_mock", None)
+        if isinstance(allow_mock, bool):
+            return not allow_mock
         system = getattr(config, "system", None)
+        return getattr(system, "runtime_profile", None) in {
+            "smoke",
+            "production",
+            "golden",
+        }
+
+    @staticmethod
+    def _is_legacy_golden_profile(config: EffectiveConfig | Any | None) -> bool:
+        system = getattr(config, "system", None) if config is not None else None
         return getattr(system, "runtime_profile", None) == "golden"
 
     @staticmethod
@@ -151,12 +165,14 @@ class ServiceContext:
     # Initialization methods
     async def load_from_config(
         self,
-        config: AppConfig,
+        config: EffectiveConfig | Any,
         *,
         initialize_memory: bool = True,
     ) -> None:
         """Load all services from config"""
         self.config = config
+        self.runtime_config_version = int(getattr(config, "version", 1) or 1)
+        self.runtime_config_hash = getattr(config, "effective_hash", None)
         logger.info(f"[{self.session_id}] Loading services from config...")
 
         await self.init_asr(config.asr)
@@ -170,7 +186,7 @@ class ServiceContext:
             await self.init_memory()
         await self.init_emotion_analyzer(config)
 
-        if self._is_golden_profile(config):
+        if self._is_legacy_golden_profile(config):
             self._validate_golden_cached_engines(
                 llm_engine=self.llm_engine,
                 tts_engine=self.tts_engine,
@@ -202,19 +218,21 @@ class ServiceContext:
 
     async def load_cache(
         self,
-        config: AppConfig,
+        config: EffectiveConfig | Any,
         asr_engine: ASRInterface | None = None,
         tts_engine: TTSInterface | None = None,
         llm_engine: LLMInterface | None = None,
         send_text: Callable | None = None,
     ) -> None:
         """Load services from cache (reuse existing instances)"""
-        if self._is_golden_profile(config):
+        if self._is_legacy_golden_profile(config):
             self._validate_golden_cached_engines(
                 llm_engine=llm_engine,
                 tts_engine=tts_engine,
             )
         self.config = config
+        self.runtime_config_version = int(getattr(config, "version", 1) or 1)
+        self.runtime_config_hash = getattr(config, "effective_hash", None)
         self.asr_engine = asr_engine
         self.tts_engine = tts_engine
         self.llm_engine = llm_engine
@@ -251,6 +269,7 @@ class ServiceContext:
             hotword=getattr(asr_config, 'hotword', None),
             model_hub=getattr(asr_config, 'model_hub', 'ms'),
             disable_update=getattr(asr_config, 'disable_update', True),
+            strict=self._is_golden_profile(self.config),
             observation_recorder=self.observation_recorder,
         )
 
@@ -286,7 +305,7 @@ class ServiceContext:
         logger.info(f"[{self.session_id}] Initializing TTS: {provider}/{model}")
 
         # Convert the config object to dict and pass all fields to factory
-        tts_kwargs = {"provider": provider}
+        tts_kwargs = {}
         if hasattr(tts_config, 'model_dump'):
             cfg_dict = tts_config.model_dump(exclude={'type'})
             tts_kwargs.update(cfg_dict)
@@ -303,6 +322,7 @@ class ServiceContext:
         # --- Fallback chain ---
         # 1. Try requested config (e.g. kokoro + cuda)
         tts_engine = TTSFactory.create(
+            provider,
             **tts_kwargs,
             strict=golden,
             observation_recorder=self.observation_recorder,
@@ -341,7 +361,7 @@ class ServiceContext:
         if hasattr(self.tts_engine, 'preload') and self.model_manager is not None:
             self.model_manager.register("tts", self.tts_engine.preload, "tts")
 
-    async def init_llm(self, agent_config: AgentConfig, persona_config: PersonaConfig, app_config: AppConfig = None) -> None:
+    async def init_llm(self, agent_config: AgentConfig, persona_config: PersonaConfig, app_config: EffectiveConfig | Any = None) -> None:
         """Initialize LLM service"""
         if self.llm_engine is not None:
             logger.debug(f"[{self.session_id}] LLM already initialized, skipping")
@@ -377,7 +397,7 @@ class ServiceContext:
         if hasattr(self.llm_engine, 'preload') and self.model_manager is not None:
             self.model_manager.register("llm", self.llm_engine.preload, "llm")
 
-    async def init_local_llm(self, llm_config, app_config: AppConfig = None) -> None:
+    async def init_local_llm(self, llm_config, app_config: EffectiveConfig | Any = None) -> None:
         """Initialize local LLM service (no persona)"""
         if self.local_llm_engine is not None:
             logger.debug(f"[{self.session_id}] Local LLM already initialized, skipping")
@@ -433,6 +453,7 @@ class ServiceContext:
         try:
             self.vad_engine = VADFactory.create_from_config(
                 vad_config,
+                strict=self._is_golden_profile(self.config),
                 observation_recorder=self.observation_recorder,
             )
             logger.info(f"[{self.session_id}] VAD engine created: {type(self.vad_engine).__name__}")
@@ -447,6 +468,8 @@ class ServiceContext:
                            f"required_hits={getattr(self.vad_engine, 'required_hits', 'N/A')}, "
                            f"required_misses={getattr(self.vad_engine, 'required_misses', 'N/A')}")
         except Exception as e:
+            if self._is_golden_profile(self.config):
+                raise
             logger.error(f"[{self.session_id}] VAD engine creation failed: {e}")
             self.vad_engine = None
 
@@ -490,7 +513,7 @@ class ServiceContext:
         self.memory_system = memory_system
         self._owns_memory_system = owned
 
-    async def init_emotion_analyzer(self, config: AppConfig) -> None:
+    async def init_emotion_analyzer(self, config: EffectiveConfig) -> None:
         """Initialize emotion analyzer"""
         try:
             live2d_config = get_live2d_config()
@@ -774,7 +797,7 @@ class ServiceContext:
             self.is_processing = False
 
     # Configuration switching
-    async def handle_config_switch(self, new_config: AppConfig) -> None:
+    async def handle_config_switch(self, new_config: EffectiveConfig) -> None:
         """Handle configuration switch"""
         logger.info(f"[{self.session_id}] Switching configuration...")
         await self.close()

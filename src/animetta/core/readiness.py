@@ -47,6 +47,10 @@ class RuntimeReadinessSnapshot:
     profile: str
     acceptance_eligible: bool
     components: dict[str, dict[str, Any]]
+    version: int = 0
+    persona: str = ""
+    effective_hash: str = ""
+    semantic_hash: str = ""
 
     @property
     def status(self) -> str:
@@ -60,6 +64,10 @@ class RuntimeReadinessSnapshot:
             "ready": self.ready,
             "service": "anima",
             "profile": self.profile,
+            "version": self.version,
+            "persona": self.persona,
+            "effective_hash": self.effective_hash,
+            "semantic_hash": self.semantic_hash,
             "acceptance_eligible": self.acceptance_eligible,
             "components": {
                 name: dict(component)
@@ -100,9 +108,23 @@ def build_runtime_readiness_snapshot(
     connectivity: Any,
     frontend: Any,
     development_ready: bool,
+    pool_config: Any | None = None,
+    resolved_identities: Any | None = None,
 ) -> RuntimeReadinessSnapshot:
     """Build a readiness snapshot without performing I/O."""
     profile = _runtime_profile(config)
+    if profile in {"test", "smoke", "production"} and hasattr(
+        config, "effective_hash"
+    ):
+        return _effective_config_snapshot(
+            config=config,
+            pool_config=pool_config,
+            resolved_identities=resolved_identities,
+            init_state=init_state,
+            init_reason=init_reason,
+            connectivity=connectivity,
+            frontend=frontend,
+        )
     frontend_component = _frontend_component(frontend, required=profile == "golden")
 
     if profile != "golden":
@@ -261,11 +283,203 @@ def normalize_reference_path(value: Any) -> str | None:
 
 
 def _runtime_profile(config: Any) -> str:
+    direct = getattr(config, "profile", None)
+    if direct in {"test", "smoke", "production"}:
+        return direct
     try:
         value = getattr(getattr(config, "system", None), "runtime_profile", None)
     except Exception:
         value = None
-    return value if value in {"development", "test", "golden"} else "development"
+    return (
+        value
+        if value in {"development", "test", "smoke", "production", "golden"}
+        else "development"
+    )
+
+
+def resolve_service_identity(
+    category: str,
+    engine: Any,
+    configured_provider: Any,
+) -> dict[str, str | None] | None:
+    """Resolve a bounded service identity from already-constructed objects."""
+    from animetta.config.core.registry import ProviderRegistry
+
+    target = unwrap_tracing_proxy(engine)
+    if target is None:
+        return None
+    registered_types = ProviderRegistry.service_types_for_instance(category, target)
+    if not registered_types:
+        return None
+    supplied = getattr(target, "resolved_identity", None)
+    provider_hints = (
+        supplied.get("type") if isinstance(supplied, dict) else None,
+        _proxy_metadata(engine, "_provider"),
+        getattr(target, "provider_identity", None),
+        getattr(target, "provider", None),
+    )
+    actual_type = next(
+        (
+            hint
+            for hint in provider_hints
+            if isinstance(hint, str) and hint in registered_types
+        ),
+        registered_types[0] if len(registered_types) == 1 else None,
+    )
+    if actual_type is None:
+        return None
+    if isinstance(supplied, dict):
+        return {
+            "type": actual_type,
+            "provider": _safe_identity_value(supplied.get("provider")),
+            "model": _safe_identity_value(supplied.get("model")),
+            "voice": _safe_identity_value(supplied.get("voice")),
+        }
+
+    proxy_provider = _proxy_metadata(engine, "_provider")
+    proxy_model = _proxy_metadata(engine, "_model")
+    provider = getattr(target, "provider_identity", None)
+    if provider is None:
+        provider = getattr(target, "provider", None)
+    if provider is None:
+        provider = proxy_provider
+    class_identity = f"{type(target).__module__}.{type(target).__name__}".lower()
+    if "mock" in class_identity:
+        provider = "mock"
+    model = proxy_model if proxy_model is not None else getattr(target, "model", None)
+    voice = getattr(target, "voice", None)
+    if voice is None and category == "tts":
+        voice = getattr(target, "speaker", None)
+    if provider == "mock":
+        model = None
+        voice = None
+    return {
+        "type": actual_type,
+        "provider": _safe_identity_value(provider),
+        "model": _safe_identity_value(model),
+        "voice": _safe_identity_value(voice),
+    }
+
+
+def _proxy_metadata(engine: Any, name: str) -> Any:
+    current = engine
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        try:
+            value = object.__getattribute__(current, name)
+        except (AttributeError, TypeError):
+            value = None
+        if value is not None:
+            return value
+        try:
+            current = object.__getattribute__(current, "_target")
+        except (AttributeError, TypeError):
+            break
+    return None
+
+
+def _safe_identity_value(value: Any) -> str | None:
+    return str(value) if isinstance(value, (str, int, float)) else None
+
+
+def _effective_config_snapshot(
+    *,
+    config: Any,
+    pool_config: Any,
+    resolved_identities: Any,
+    init_state: str,
+    init_reason: str | None,
+    connectivity: Any,
+    frontend: Any,
+) -> RuntimeReadinessSnapshot:
+    profile = config.profile
+    frontend_component = _frontend_component(
+        frontend,
+        required=profile in {"smoke", "production"},
+    )
+    stale = (
+        pool_config is not None
+        and (
+            getattr(pool_config, "version", None) != config.version
+            or getattr(pool_config, "effective_hash", None) != config.effective_hash
+        )
+    )
+    if pool_config is None:
+        pool_reason = "pool_unavailable"
+    elif stale:
+        pool_reason = "stale_config_snapshot"
+    elif init_state == "failed":
+        pool_reason = (
+            init_reason if init_reason in _SAFE_INIT_REASONS else "initialization_failed"
+        )
+    elif init_state != "ready":
+        pool_reason = None
+    else:
+        pool_reason = None
+    pool_ready = pool_config is not None and not stale and init_state == "ready"
+    pool_component = {
+        "state": "ready" if pool_ready else _safe_lifecycle_state(init_state),
+        "ready": pool_ready,
+        "reason": pool_reason,
+    }
+
+    identities = resolved_identities if isinstance(resolved_identities, dict) else {}
+    components: dict[str, dict[str, Any]] = {"pool": pool_component}
+    for category in ("llm", "asr", "tts", "vad"):
+        configured = config.providers[category].public_identity()
+        supplied = identities.get(category)
+        resolved = {
+            "type": supplied.get("type") if isinstance(supplied, dict) else None,
+            "provider": supplied.get("provider") if isinstance(supplied, dict) else None,
+            "model": supplied.get("model") if isinstance(supplied, dict) else None,
+            "voice": supplied.get("voice") if isinstance(supplied, dict) else None,
+        }
+        identity_ready = supplied is not None and all(
+            configured[field] == resolved[field]
+            for field in ("type", "provider", "model", "voice")
+        )
+        reason = None if identity_ready else (
+            "identity_unavailable" if supplied is None else "identity_mismatch"
+        )
+        component_ready = pool_ready and identity_ready
+        if category == "llm" and profile in {"smoke", "production"}:
+            connectivity_ready = (
+                isinstance(connectivity, dict)
+                and connectivity.get("state") == "ready"
+                and connectivity.get("ready") is True
+            )
+            component_ready = component_ready and connectivity_ready
+            if identity_ready and not connectivity_ready:
+                supplied_reason = connectivity.get("reason") if isinstance(connectivity, dict) else None
+                reason = (
+                    supplied_reason
+                    if supplied_reason in _SAFE_CONNECTIVITY_REASONS
+                    else "connectivity_status_unavailable"
+                )
+        components[category] = {
+            "state": "ready" if component_ready else "failed",
+            "ready": component_ready,
+            "configured": configured,
+            "resolved": resolved,
+            "reason": reason,
+        }
+    components["frontend"] = frontend_component
+    ready = bool(
+        pool_ready
+        and frontend_component["ready"]
+        and all(components[name]["ready"] for name in ("llm", "asr", "tts", "vad"))
+    )
+    return RuntimeReadinessSnapshot(
+        ready=ready,
+        profile=profile,
+        acceptance_eligible=profile == "production",
+        components=components,
+        version=config.version,
+        persona=config.persona,
+        effective_hash=config.effective_hash,
+        semantic_hash=config.semantic_hash,
+    )
 
 
 def _safe_lifecycle_state(value: Any) -> str:

@@ -9,8 +9,11 @@ from unittest.mock import AsyncMock
 import pytest
 from langgraph.types import RunnableConfig
 
+from animetta.observability.service_proxy import instrument_service
 from animetta.orchestration.graph import tts_node
 from animetta.orchestration.graph.state import create_initial_state
+from animetta.services.tts.mock_tts import MockTTS
+from animetta.services.tts.remote_tts import RemoteTTS, RemoteTTSUpstreamError
 
 _tts_node_module = sys.modules["animetta.orchestration.graph.tts_node"]
 
@@ -125,3 +128,116 @@ class TestTTSNode:
         )
         assert observed == [7.0]
         assert result["media_status"].reason == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_production_remote_failure_preserves_text_and_retries_same_voice_next_turn(
+        self, mock_service_context
+    ):
+        mock_service_context.config = SimpleNamespace(
+            system=SimpleNamespace(
+                runtime_profile="production",
+                golden_tts_timeout_seconds=20.0,
+            )
+        )
+        engine = mock_service_context.tts_engine
+        engine.synthesize = AsyncMock(
+            side_effect=[
+                RemoteTTSUpstreamError(
+                    "Remote TTS request failed",
+                    category="busy",
+                    request_id="first",
+                    retryable=True,
+                    status_code=429,
+                ),
+                b"RIFF-alice",
+            ]
+        )
+        first_state = self._make_state(response_text="第一轮文字仍然保留")
+        first_state["live2d_emotion"] = "happy"
+        second_state = self._make_state(response_text="第二轮继续 Alice")
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
+
+        first = await tts_node(first_state, config)
+        second = await tts_node(second_state, config)
+
+        assert first_state["response_text"] == "第一轮文字仍然保留"
+        assert first_state["live2d_emotion"] == "happy"
+        assert first["tts_audio"] is None
+        assert first["media_status"].reason == "busy"
+        assert first["media_status"].retryable is True
+        assert first["metadata"]["degradation_reason"] == "busy"
+        assert second["tts_audio"] == b"RIFF-alice"
+        assert mock_service_context.tts_engine is engine
+        assert engine.synthesize.await_count == 2
+
+    @staticmethod
+    def _production_context(tts_engine):
+        configured = SimpleNamespace(
+            type="remote",
+            model="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+            voice="alice",
+            public_identity=lambda: {
+                "type": "remote",
+                "provider": "qwen3",
+                "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+                "voice": "alice",
+            },
+        )
+        return SimpleNamespace(
+            tts_engine=tts_engine,
+            config=SimpleNamespace(
+                system=SimpleNamespace(
+                    runtime_profile="production",
+                    golden_tts_timeout_seconds=20.0,
+                ),
+                providers={"tts": configured},
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_instrumented_remote_reports_resolved_provider_not_wrapper_name(self):
+        target = RemoteTTS(
+            api_key="test",
+            base_url="http://qwen-tts:8766",
+            provider="qwen3",
+            model="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+            voice="alice",
+            response_format="wav",
+            language="Chinese",
+            timeout_seconds=20.0,
+            revision="revision",
+        )
+        target.synthesize = AsyncMock(return_value=b"RIFF-alice")  # type: ignore[method-assign]
+        engine = instrument_service(
+            target,
+            None,
+            "tts",
+            provider="remote",
+            model=target.model,
+        )
+        context = self._production_context(engine)
+
+        result = await tts_node(
+            self._make_state(response_text="你好"),
+            RunnableConfig(configurable={"service_context": context}),
+        )
+
+        assert result["media_status"].provider == "qwen3"
+        assert result["metadata"]["tts_provider"] == "qwen3"
+        assert "Proxy" not in result["metadata"]["tts_provider"]
+
+    @pytest.mark.asyncio
+    async def test_instrumented_mock_is_forbidden_in_production(self):
+        target = MockTTS()
+        target.synthesize = AsyncMock(return_value=b"should-not-run")  # type: ignore[method-assign]
+        engine = instrument_service(target, None, "tts", provider="mock", model="mock")
+        context = self._production_context(engine)
+
+        result = await tts_node(
+            self._make_state(response_text="你好"),
+            RunnableConfig(configurable={"service_context": context}),
+        )
+
+        assert result["tts_audio"] is None
+        assert result["media_status"].reason == "mock_forbidden"
+        target.synthesize.assert_not_awaited()  # type: ignore[attr-defined]

@@ -48,9 +48,7 @@ def _run_git(repo_root: Path, *args: str) -> bytes:
             capture_output=True,
         )
     except OSError as exc:
-        raise ChangeDiscoveryError(
-            f"unable to execute git: {type(exc).__name__}: {exc}"
-        ) from exc
+        raise ChangeDiscoveryError(f"unable to execute git: {type(exc).__name__}: {exc}") from exc
     if completed.returncode != 0:
         stderr = completed.stderr.decode("utf-8", errors="replace").strip()
         raise ChangeDiscoveryError(stderr or f"git {' '.join(args)} failed")
@@ -81,9 +79,7 @@ def _parse_name_status(payload: bytes, repo_root: Path) -> list[Change]:
             old_path = normalize_repo_path(fields[index].decode("utf-8"), repo_root)
             new_path = normalize_repo_path(fields[index + 1].decode("utf-8"), repo_root)
             index += 2
-            changes.append(
-                Change(path=new_path, old_path=old_path, status=ChangeStatus.RENAMED)
-            )
+            changes.append(Change(path=new_path, old_path=old_path, status=ChangeStatus.RENAMED))
             continue
         if index >= len(fields):
             raise ChangeDiscoveryError("truncated Git name-status record")

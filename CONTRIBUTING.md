@@ -48,8 +48,20 @@ tests/              # Test suite
 ## Testing
 
 ```bash
-# Run all tests
-PYTHONPATH=src python -m pytest tests/
+# Validate the quality catalog
+make quality-validate
+
+# Fast local feedback; exact hermetic cache + weighted scheduler
+make test-quick
+
+# Current-worktree impact closure
+make test-affected
+
+# Cold repository-wide release gate
+make test-full
+
+# Compare against the cache-off, dominance-disabled sequential plan
+make test-affected-shadow
 
 # With coverage
 PYTHONPATH=src python -m pytest tests/ --cov=src/animetta
@@ -59,6 +71,8 @@ PYTHONPATH=src python -m pytest tests/orchestration/graph/test_llm_node.py -v
 ```
 
 See [Testing Guide](docs/development/testing.md) for detailed test conventions.
+
+`tooling/quality.yml` is the sole component-to-test and Docker-scope mapping. Cache reuse is limited to successful hermetic results in the same repository and trust scope. Browser, live-service, and Docker-runtime acceptance always records fresh evidence.
 
 ## Pull Request Process
 
@@ -127,5 +141,5 @@ docker compose restart animetta
 
 1. Create config class with `@ProviderRegistry.register_config`
 2. Create service implementation with `@ProviderRegistry.register_service`
-3. Add config to `config/services.yaml`
+3. Add the typed provider declaration to `config/animetta.yaml` and reference it from each intended profile
 4. Write tests for registration + basic functionality

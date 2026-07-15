@@ -26,6 +26,11 @@ class Qwen3TTSConfig(TTSBaseConfig):
         default="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
         description="HuggingFace model ID or local directory path",
     )
+    revision: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9._-]+$",
+        description="Optional exact local Hugging Face snapshot revision",
+    )
 
     # === Inference device ===
     device: str = Field(

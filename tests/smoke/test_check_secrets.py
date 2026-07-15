@@ -28,7 +28,7 @@ llm:
 
 
 def test_find_plaintext_secrets_reports_location_without_secret_value(tmp_path: Path):
-    secret_value = "tp-cnw2lg3ag0pm5au71lp3e34xmg2d1mct7dprkc3pzpmbuxhx"
+    secret_value = "nonplaceholder-" + ("z" * 40)
     config = tmp_path / "services.yaml"
     config.write_text(
         f"""

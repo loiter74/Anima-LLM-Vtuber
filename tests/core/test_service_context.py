@@ -138,7 +138,7 @@ def mock_persona_config():
 
 @pytest.fixture
 def app_config(mock_agent_config, mock_persona_config):
-    """Mock AppConfig with all sub-configs wired up."""
+    """Mock effective config with all sub-configs wired up."""
     cfg = MagicMock()
     cfg.persona = "test_persona"
     cfg.get_persona = MagicMock(return_value=mock_persona_config)
@@ -182,7 +182,7 @@ def qwen_tts_config():
 
 @pytest.fixture
 def app_config_no_local_llm(mock_agent_config, mock_persona_config):
-    """AppConfig with local_llm=None."""
+    """Effective config with local_llm=None."""
     cfg = MagicMock()
     cfg.persona = "test_persona"
     cfg.get_persona = MagicMock(return_value=mock_persona_config)
@@ -600,8 +600,7 @@ class TestServiceContextInitTTS:
             await ctx.init_tts(mock_tts_config)
 
         mock_create.assert_called_once()
-        kwargs = mock_create.call_args.kwargs
-        assert kwargs["provider"] == "mock"
+        assert mock_create.call_args.args == ("mock",)
         assert ctx.tts_engine is engine_without_preload
 
     @pytest.mark.asyncio
@@ -642,8 +641,8 @@ class TestServiceContextInitTTS:
             await ctx.init_tts(cfg)
 
         mock_create.assert_called_once()
+        assert mock_create.call_args.args == ("mock",)
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["provider"] == "mock"
         assert kwargs["model"] == "my-model"
         assert kwargs["voice"] == "my-voice"
 
@@ -1026,6 +1025,7 @@ class TestServiceContextInitVAD:
 
         mock_create.assert_called_once_with(
             vad_config,
+            strict=False,
             observation_recorder=ctx.observation_recorder,
         )
         assert ctx.vad_engine is engine
@@ -1538,8 +1538,8 @@ class TestServiceContextFactoryParameters:
                    return_value=engine) as mock_create:
             await ctx.init_tts(cfg)
 
+        assert mock_create.call_args.args == ("edge_tts",)
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["provider"] == "edge_tts"
         assert kwargs["voice"] == "zh-CN-XiaoxiaoNeural"
         assert kwargs["speed"] == 1.2
 
@@ -1558,5 +1558,42 @@ class TestServiceContextFactoryParameters:
 
         mock_create.assert_called_once_with(
             cfg,
+            strict=False,
             observation_recorder=ctx.observation_recorder,
         )
+
+
+class TestRealProfileFailClosedFactories:
+    @pytest.mark.asyncio
+    async def test_asr_receives_strict_policy(self, ctx):
+        ctx.config = MagicMock()
+        ctx.config.policy.allow_mock = False
+        config = MagicMock()
+        config.type = "mimo"
+        config.language = "auto"
+
+        with patch(
+            "animetta.core.service_context.ASRFactory.create",
+            return_value=MagicMock(),
+        ) as create:
+            await ctx.init_asr(config)
+
+        assert create.call_args.kwargs["strict"] is True
+
+    @pytest.mark.asyncio
+    async def test_vad_creation_failure_is_not_silenced(self, ctx):
+        ctx.config = MagicMock()
+        ctx.config.policy.allow_mock = False
+        config = MagicMock()
+        config.type = "mimo"
+
+        with (
+            patch(
+                "animetta.core.service_context.VADFactory.create_from_config",
+                side_effect=RuntimeError("provider failed"),
+            ) as create,
+            pytest.raises(RuntimeError, match="provider failed"),
+        ):
+            await ctx.init_vad(config)
+
+        assert create.call_args.kwargs["strict"] is True

@@ -1,0 +1,59 @@
+ARG RUNTIME_IMAGE=nvidia/cuda:12.8.2-runtime-ubuntu24.04@sha256:deba835fb9667364adda8791883ad4d099715a9afc354d2f0352116ba43f6d40
+
+FROM python:3.13-slim-bookworm AS python-builder
+WORKDIR /build
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get install -y --no-install-recommends gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-qwen-tts.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --user -r requirements-qwen-tts.txt
+
+FROM ${RUNTIME_IMAGE} AS runtime
+ARG QWEN_TTS_BUILD_FINGERPRINT=untracked
+LABEL org.animetta.build-fingerprint="${QWEN_TTS_BUILD_FINGERPRINT}"
+WORKDIR /app
+
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get install -y --no-install-recommends curl ffmpeg gcc libc6-dev libsndfile1 sox \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python-builder /usr/local/bin /usr/local/bin
+COPY --from=python-builder /usr/local/include /usr/local/include
+COPY --from=python-builder /usr/local/lib /usr/local/lib
+COPY --from=python-builder /root/.local /root/.local
+RUN echo /usr/local/lib > /etc/ld.so.conf.d/python313.conf && ldconfig \
+    && ln -sf /usr/local/bin/python3 /usr/bin/python3 \
+    && ln -sf /usr/local/bin/python3 /usr/bin/python
+
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/app/src
+ENV CC=/usr/bin/gcc
+ENV QWEN_TTS_BIND_HOST=0.0.0.0
+ENV QWEN_TTS_BIND_PORT=8766
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
+ENV HF_HOME=/models/huggingface
+
+# Keep the worker image independent from orchestration, memory, tools, and UI
+# changes. Only the canonical config loader and Qwen provider boundary belong here.
+COPY src/animetta/__init__.py src/animetta/__init__.py
+COPY src/animetta/config/ src/animetta/config/
+COPY src/animetta/services/__init__.py src/animetta/services/__init__.py
+COPY src/animetta/services/tts/__init__.py src/animetta/services/tts/__init__.py
+COPY src/animetta/services/tts/audio_validation.py src/animetta/services/tts/audio_validation.py
+COPY src/animetta/services/tts/interface.py src/animetta/services/tts/interface.py
+COPY src/animetta/services/tts/qwen3_tts.py src/animetta/services/tts/qwen3_tts.py
+COPY src/animetta_qwen_tts/ src/animetta_qwen_tts/
+COPY config/ config/
+
+EXPOSE 8766
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=360s \
+    CMD curl --fail --silent http://localhost:8766/health || exit 1
+
+CMD ["sh", "-c", "python -m animetta_qwen_tts"]

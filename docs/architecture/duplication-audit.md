@@ -142,9 +142,9 @@ persisted to `src/.user_settings.yaml` instead of the project root.
 
 ### Duplicate Bilibili configuration entrypoint
 
-`AppConfig` already loads the optional Bilibili danmaku settings from
+The former mutable configuration object already loaded optional Bilibili settings from
 `config/bilibili.yaml`, but `WebSocketServer` still tried to read a top-level
-`bilibili` key from `config/config.yaml` by hand during route setup. This
+`bilibili` key from the removed main manifest by hand during route setup. This
 created two competing configuration entrypoints and prevented the parsed
 runtime config object from controlling Bilibili auto-start.
 
@@ -171,7 +171,7 @@ state seen by extracted handlers.
 
 After `BaseSocketHandler` gained the shared `get_active_config()` helper,
 `ConfigHandlers.on_get_config()` still kept its own
-`self.global_config or AppConfig.load()` fallback. That left two server-handler
+an independent disk-load fallback. That left two server-handler
 config fallback entrypoints and made future handler moves more likely to drift.
 
 ### Duplicated persona catalog path and listing logic
@@ -181,7 +181,7 @@ Persona loading, enhanced persona prompt loading, `config:get`, and
 listing logic. That made the persona catalog boundary drift-prone and left
 server handlers responsible for filesystem details already owned by config.
 After the first catalog cleanup, `persona:list` still reloaded the active
-persona by name to extract MBTI data even when `AppConfig` already held the
+persona by name to extract MBTI data even when the active config already held the
 current cached persona.
 
 ### Persona handler config logging leak
@@ -193,7 +193,7 @@ details through object `repr()` output in runtime logs.
 
 ### Config expansion debug logging leak
 
-`AppConfig._apply_env_expansion()` logged full provider config dumps before and
+The former environment-expansion path logged full provider config dumps before and
 after environment expansion, and `expand_env_vars()` logged API-key prefixes
 for GLM. This made debug logs a second copy of provider secrets after
 environment expansion.
@@ -207,7 +207,7 @@ metadata such as enabled state and key names.
 
 ### Direct config load boundary classification
 
-The remaining production `AppConfig.load()` calls are now classified by timing:
+Before the single-manifest migration, remaining direct config loads were classified by timing:
 
 - `core/socketio_server.py` is bootstrap-time runtime config initialization.
 - `config/runtime_reload.py` is an explicit runtime reload path.
@@ -376,19 +376,19 @@ catalog-valid events, but no server-side business boundary received them.
 | Made the RVC VC provider lazy so `VCFactory` and `MockVC` do not require optional RVC/audio dependencies at package import time. | `src/animetta/services/vc/__init__.py`, `src/animetta/services/vc/factory.py`, `tests/services/vc/test_vc_factory.py` |
 | Updated stale tests from removed `.core.config` wrapper assertions to the current direct `.config` attributes and current handler config propagation. | `tests/core/test_service_context.py`, `tests/orchestration/server/test_websocket.py`, `tests/avatar/test_position_strategy.py`, `tests/services/test_live2d_viseme_sync.py`, `tests/orchestration/server/test_routes.py` |
 | Fixed split server handlers that still relied on missing imports or removed `.core.config` wrappers in Bilibili, translation, and persona event paths. | `src/animetta/orchestration/server/handlers/bilibili_handlers.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
-| Routed Bilibili auto-start through the active `AppConfig.bilibili` object instead of re-reading YAML from `WebSocketServer`. | `src/animetta/orchestration/server/websocket.py`, `tests/orchestration/server/test_websocket.py` |
+| Routed Bilibili auto-start through the active config object instead of re-reading YAML from `WebSocketServer`. | `src/animetta/orchestration/server/websocket.py`, `tests/orchestration/server/test_websocket.py` |
 | Fixed `config:get` to list personas from the project config directory and to load Live2D settings through the current `get_live2d_config()` entrypoint. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Fixed enhanced persona prompt loading to use the project `config/personas` directory by default. | `src/animetta/config/persona/enhanced.py`, `tests/config/test_persona.py` |
 | Centralized the Socket.IO entrypoint project root path so user settings, `.env`, logs, and frontend serving resolve from the same project root. | `src/animetta/core/socketio_server.py`, `tests/core/test_socketio_server.py` |
 | Closed partially initialized pooled LLM/TTS/ASR engines when `ServicePool` initialization fails. | `src/animetta/core/service_pool.py`, `tests/core/test_service_pool.py` |
 | Moved Memory/Wiki socket business logic out of the route facade and routed it through the shared handler config/context boundary. | `src/animetta/orchestration/server/routes.py`, `src/animetta/orchestration/server/handlers/base_handler.py`, `src/animetta/orchestration/server/handlers/memory_handlers.py`, `tests/orchestration/server/test_routes.py` |
-| Routed `config:get` through the shared handler `get_active_config()` fallback instead of a second direct `AppConfig.load()` call. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Routed `config:get` through the shared handler `get_active_config()` boundary instead of a second disk load. | `src/animetta/orchestration/server/handlers/config_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Centralized persona catalog path resolution and available-persona listing behind config-level helpers used by persona loading and server handlers. | `src/animetta/config/persona/base.py`, `src/animetta/config/persona/enhanced.py`, `src/animetta/orchestration/server/handlers/config_handlers.py`, `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/config/test_persona.py` |
 | Re-aligned inspection checks with the current probe filter, Socket.IO event catalog, runtime log filename, and idle-safe StatsStore reachability semantics. | `src/animetta/inspection/checks/pipeline.py`, `src/animetta/inspection/checks/consistency.py`, `tests/inspection/test_pipeline.py`, `tests/inspection/test_consistency.py` |
-| Routed `persona:list` MBTI extraction through the active `AppConfig.get_persona()` cache instead of reloading the current persona by name. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
+| Routed `persona:list` MBTI extraction through the active config snapshot instead of reloading the current persona by name. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Sanitized persona-handler config diagnostics, including `persona:list`, so they report propagation state without logging full config object representations. | `src/animetta/orchestration/server/handlers/persona_handlers.py`, `tests/orchestration/server/test_routes.py` |
 | Made `/health` return HTTP 503 for degraded component checks and HTTP 500 when the health-check runner itself crashes instead of returning 200 with an unhealthy body. | `src/animetta/orchestration/server/stats_api.py`, `tests/orchestration/server/test_stats_api.py` |
-| Replaced full config dumps and API-key prefix logging during config env expansion with provider type and key-length diagnostics. | `src/animetta/config/app.py`, `tests/config/test_app_config.py` |
+| Replaced full config dumps and API-key prefix logging during config expansion with redacted diagnostics; the legacy loader was later removed. | configuration tests |
 | Replaced full tool-config logging during orchestrator creation and `tools.yaml` loading with enabled-state and key-name diagnostics. | `src/animetta/orchestration/server/session.py`, `tests/orchestration/server/test_session.py` |
 | Covered `/api/stats/inspection/latest` and updated the API reference to the persisted StatsStore report shape. | `tests/orchestration/server/test_stats_api.py`, `docs/reference/backend-api.md` |
 | Added `/metrics` to the lightweight ASGI route smoke probe so observability routing is covered by the health gate. | `scripts/route_smoke.py`, `tests/smoke/test_route_smoke.py` |

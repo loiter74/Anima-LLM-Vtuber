@@ -330,30 +330,28 @@ export TORCH_CUDA_ARCH_LIST="8.6;9.0;12.0"  # WSL2/Linux
 
 在 GPT-SoVITS 服务正常运行后，配置 Anima 使用它：
 
-### 修改 `config/services.yaml`
+### 修改 `config/animetta.yaml`
 
 ```yaml
-tts:
-  gpt_sovits:
-    type: gpt_sovits
-    base_url: "http://127.0.0.1:9880"    # GPT-SoVITS api_v2.py 地址
-    ref_audio_path: "/home/yourname/voice/my_reference.wav"  # 参考音频路径
-    prompt_text: "这是参考音频的文字内容"
-    prompt_lang: "zh"
-    text_lang: "zh"
-```
-
-### 修改 `config/config.yaml`
-
-```yaml
-services:
-  tts: gpt_sovits   # 切换到 GPT-SoVITS
+providers:
+  tts:
+    gpt-sovits:
+      type: gpt_sovits
+      base_url: "http://127.0.0.1:9880"
+      ref_audio_path: "/home/yourname/voice/my_reference.wav"
+      prompt_text: "这是参考音频的文字内容"
+      prompt_lang: "zh"
+      text_lang: "zh"
+profiles:
+  smoke:
+    services:
+      tts: gpt-sovits
 ```
 
 ### 启动 Anima
 
 ```bash
-python scripts/start.py
+ANIMETTA_PROFILE=smoke python -m animetta.core.socketio_server
 ```
 
 查看日志确认 TTS 初始化成功：

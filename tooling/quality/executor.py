@@ -4,10 +4,14 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
+from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from .manifest import LoadedCatalog
 from .models import (
@@ -130,8 +134,38 @@ def _timeout_output(exc: subprocess.TimeoutExpired, env: dict[str, str]) -> str:
 
 
 def _existing_artifacts(root: Path, group: VerificationGroup) -> tuple[str, ...]:
-    return tuple(
-        artifact for artifact in group.artifacts if (root / artifact).exists()
+    return tuple(artifact for artifact in group.artifacts if (root / artifact).exists())
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+        return
+    try:
+        kill_process_group = getattr(os, "killpg")
+        kill_process_group(process.pid, signal.SIGTERM)
+        process.wait(timeout=2)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                kill_process_group(process.pid, getattr(signal, "SIGKILL"))
+
+
+def _joined_output(stdout: str | None, stderr: str | None, env: dict[str, str]) -> str:
+    return _redact_output(
+        "\n".join(part for part in (stdout, stderr) if part),
+        env,
     )
 
 
@@ -142,15 +176,14 @@ def run_group(
     plan_hash: str,
     repo_root: str | Path,
     available_capabilities: frozenset[Capability] | None = None,
+    cancellation_event: threading.Event | None = None,
 ) -> VerificationResult:
     if group_id not in loaded.catalog.groups:
         raise KeyError(f"unknown verification group: {group_id}")
     group = loaded.catalog.groups[group_id]
     root = Path(repo_root).resolve()
     available = (
-        detect_capabilities(root)
-        if available_capabilities is None
-        else available_capabilities
+        detect_capabilities(root) if available_capabilities is None else available_capabilities
     )
     missing = sorted(capability.value for capability in group.capabilities - available)
     if missing:
@@ -177,52 +210,86 @@ def run_group(
     )
     command_env = _command_environment(root)
     redaction_env = _redaction_environment(root, command_env)
+    cancellation = cancellation_event or threading.Event()
     started = time.perf_counter()
     try:
-        completed = subprocess.run(
+        popen_kwargs: dict[str, Any] = {}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
+        process = subprocess.Popen(
             argv,
             cwd=root / group.cwd,
             env=command_env,
-            check=False,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=group.timeout_seconds,
             shell=False,
+            **popen_kwargs,
         )
+        deadline = started + group.timeout_seconds
+        stdout = ""
+        stderr = ""
+        while True:
+            if cancellation.is_set():
+                _terminate_process_tree(process)
+                stdout, stderr = process.communicate()
+                duration = time.perf_counter() - started
+                return VerificationResult(
+                    group_id=group_id,
+                    required=group.required,
+                    status=ResultStatus.CANCELLED,
+                    exit_code=None,
+                    duration_seconds=duration,
+                    run_seconds=duration,
+                    failure_kind="cancelled",
+                    artifacts=_existing_artifacts(root, group),
+                    plan_hash=plan_hash,
+                    manifest_hash=loaded.manifest_hash,
+                    output=_joined_output(stdout, stderr, redaction_env),
+                    remediation="Cancelled during execution",
+                )
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                _terminate_process_tree(process)
+                stdout, stderr = process.communicate()
+                duration = time.perf_counter() - started
+                return VerificationResult(
+                    group_id=group_id,
+                    required=group.required,
+                    status=ResultStatus.FAILED,
+                    exit_code=None,
+                    duration_seconds=duration,
+                    run_seconds=duration,
+                    failure_kind="timeout",
+                    artifacts=_existing_artifacts(root, group),
+                    plan_hash=plan_hash,
+                    manifest_hash=loaded.manifest_hash,
+                    output=_joined_output(stdout, stderr, redaction_env),
+                    remediation=f"Group exceeded timeout of {group.timeout_seconds} seconds",
+                )
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.1, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
         duration = time.perf_counter() - started
-        output = _redact_output(
-            "\n".join(part for part in (completed.stdout, completed.stderr) if part),
-            redaction_env,
-        )
+        output = _joined_output(stdout, stderr, redaction_env)
         return VerificationResult(
             group_id=group_id,
             required=group.required,
-            status=(
-                ResultStatus.PASSED if completed.returncode == 0 else ResultStatus.FAILED
-            ),
-            exit_code=completed.returncode,
+            status=(ResultStatus.PASSED if process.returncode == 0 else ResultStatus.FAILED),
+            exit_code=process.returncode,
             duration_seconds=duration,
-            failure_kind=None if completed.returncode == 0 else "process",
+            run_seconds=duration,
+            failure_kind=None if process.returncode == 0 else "process",
             artifacts=_existing_artifacts(root, group),
             plan_hash=plan_hash,
             manifest_hash=loaded.manifest_hash,
             output=output,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return VerificationResult(
-            group_id=group_id,
-            required=group.required,
-            status=ResultStatus.FAILED,
-            exit_code=None,
-            duration_seconds=time.perf_counter() - started,
-            failure_kind="timeout",
-            artifacts=_existing_artifacts(root, group),
-            plan_hash=plan_hash,
-            manifest_hash=loaded.manifest_hash,
-            output=_timeout_output(exc, redaction_env),
-            remediation=f"Group exceeded timeout of {group.timeout_seconds} seconds",
         )
     except OSError as exc:
         return VerificationResult(
@@ -234,12 +301,11 @@ def run_group(
             failure_kind="launch",
             plan_hash=plan_hash,
             manifest_hash=loaded.manifest_hash,
-            remediation=(
-                f"Unable to launch group in {group.cwd}: "
-                f"{type(exc).__name__}: {exc}"
-            ),
+            remediation=(f"Unable to launch group in {group.cwd}: {type(exc).__name__}: {exc}"),
         )
     except KeyboardInterrupt:
+        if "process" in locals():
+            _terminate_process_tree(process)
         return VerificationResult(
             group_id=group_id,
             required=group.required,

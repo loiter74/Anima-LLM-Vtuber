@@ -1,16 +1,17 @@
 # Runtime Config Reload
 
-Animetta supports runtime reload for persona YAML and lightweight LLM settings without restarting the server.
+Animetta atomically reloads the canonical runtime manifest for persona content and allowlisted lightweight settings without restarting the server.
 
 ## Scope
 
 Reload currently covers:
 
-- `config/personas/*.yaml`
-- `config/config.yaml` persona selection
-- `config/services.yaml` lightweight LLM fields: `model`, `temperature`, `top_p`, `max_tokens`, and DeepSeek `thinking`
+- `config/animetta.yaml` `application.persona`
+- the selected `config/personas/*.yaml` content
+- selected LLM `temperature`, `top_p`, `max_tokens`, and DeepSeek `thinking`
+- subtitle and active-meme UI toggles
 
-Reload does not recreate heavyweight services such as ASR, TTS, VAD, model managers, or network clients. Change those by restarting the service.
+Profile, provider reference, provider type, model, voice, endpoint, authentication, policy, and service lifecycle changes return `restart_required` and preserve the current snapshot and engines.
 
 ## API
 
@@ -28,7 +29,10 @@ Success response:
   "version": 2,
   "persona": "anima.v0.1",
   "refreshed": ["persona", "llm"],
-  "error": null
+  "error": null,
+  "effective_hash": "...",
+  "semantic_hash": "...",
+  "restart_required": []
 }
 ```
 

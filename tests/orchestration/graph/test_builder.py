@@ -168,9 +168,11 @@ class TestBuildGraph:
         assert node_names == [
             "asr",
             "personality",
+            "conversation_start",
             "llm",
             "humor_rewrite",
             "humor_validation",
+            "reply_output",
             "tts",
             "emotion",
             "output",
@@ -184,9 +186,11 @@ class TestBuildGraph:
                 {
                     "asr",
                     "personality",
+                    "conversation_start",
                     "llm",
                     "humor_rewrite",
                     "humor_validation",
+                    "reply_output",
                     "tts",
                     "emotion",
                     "output",
@@ -235,7 +239,7 @@ class TestBuildGraph:
 
         node_names = [c.args[0] for c in graph.add_node.call_args_list]
         assert "tools" in node_names
-        assert len(node_names) == 9
+        assert len(node_names) == 11
 
     def test_build_graph_sets_conditional_entry_point(self, mock_state_graph):
         """Entry point is set with route_input and asr/llm mapping."""
@@ -244,7 +248,7 @@ class TestBuildGraph:
             build_graph()
 
         graph.set_conditional_entry_point.assert_called_once_with(
-            route_input, {"asr": "asr", "llm": "personality"}
+            route_input, {"asr": "asr", "llm": "conversation_start"}
         )
 
     def test_build_graph_edges_without_tools(self, mock_state_graph):
@@ -254,11 +258,13 @@ class TestBuildGraph:
             build_graph()
 
         edge_calls = graph.add_edge.call_args_list
-        assert call("asr", "personality") in edge_calls
+        assert call("asr", "conversation_start") in edge_calls
+        assert call("conversation_start", "personality") in edge_calls
         assert call("personality", "llm") in edge_calls
         assert call("llm", "humor_rewrite") in edge_calls
         assert call("humor_rewrite", "humor_validation") in edge_calls
-        assert call("humor_validation", "tts") in edge_calls
+        assert call("humor_validation", "reply_output") in edge_calls
+        assert call("reply_output", "tts") in edge_calls
         assert call("llm", "tts") not in edge_calls
         assert call("tts", "emotion") in edge_calls
         assert call("emotion", "output") in edge_calls
@@ -280,7 +286,8 @@ class TestBuildGraph:
         )
         assert call("tools", "llm") in edge_calls
         assert call("humor_rewrite", "humor_validation") in edge_calls
-        assert call("humor_validation", "tts") in edge_calls
+        assert call("humor_validation", "reply_output") in edge_calls
+        assert call("reply_output", "tts") in edge_calls
 
     def test_build_graph_passes_checkpointer(self, mock_state_graph):
         """Compile receives the supplied checkpointer."""

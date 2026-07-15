@@ -256,11 +256,10 @@ Starlette + Socket.IO ASGI app:
 ## Configuration Layering
 
 ```yaml
-config/config.yaml       # User-facing settings (persona, services)
-config/services.yaml     # Provider credentials and parameters
+config/animetta.yaml     # Canonical profiles, provider declarations, and runtime policy
 config/personas/         # Character personality definitions
 config/tools.yaml        # Tool and MCP server configuration
-.env                     # Secrets (API keys)
+.env                     # Selected profile, endpoints, and secrets only
 ```
 
 ---

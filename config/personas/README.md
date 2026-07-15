@@ -7,18 +7,18 @@
 ### 在主配置中指定人设
 
 ```yaml
-# config/config.yaml
-profile: "glm"              # 服务配置方案（profiles/ 目录）
-persona: "neuro-vtuber"     # 人设配置（personas/ 目录）
+# config/animetta.yaml
+application:
+  persona: "neuro-vtuber"
 ```
 
 ### 通过代码加载
 
 ```python
-from animetta.config import AppConfig, PersonaConfig
+from animetta.config import PersonaConfig, load_effective_config
 
-# 方式1：通过 AppConfig
-config = AppConfig.load()
+# 方式1：通过唯一运行时清单
+config = load_effective_config(profile="test")
 system_prompt = config.get_system_prompt()
 
 # 方式2：直接加载人设

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
+from animetta.config.providers.vad import MimoVADConfig
 from animetta.services.vad.factory import VADFactory
 from animetta.services.vad.interface import VADInterface, VADState
 from animetta.services.vad.mock_vad import MockVAD
@@ -24,6 +27,31 @@ class TestVADFactory:
         assert isinstance(engine, MockVAD)
         assert engine.sample_rate == 8000
         assert engine.db_threshold == -20.0
+
+    def test_strict_unknown_provider_fails_without_constructing_mock(self):
+        with (
+            patch(
+                "animetta.services.vad.factory.MockVAD",
+                side_effect=AssertionError("MockVAD must not be constructed"),
+            ),
+            pytest.raises(ValueError, match="Unknown VAD provider"),
+        ):
+            VADFactory.create("nonexistent_provider", strict=True)
+
+    def test_strict_registry_failure_propagates_without_constructing_mock(self):
+        config = MimoVADConfig(api_key="secret")
+        with (
+            patch(
+                "animetta.services.vad.factory.ProviderRegistry.create_service",
+                side_effect=RuntimeError("provider failed"),
+            ),
+            patch(
+                "animetta.services.vad.factory.MockVAD",
+                side_effect=AssertionError("MockVAD must not be constructed"),
+            ),
+            pytest.raises(RuntimeError, match="provider failed"),
+        ):
+            VADFactory.create_from_config(config, strict=True)
 
 
 class TestMockVAD:

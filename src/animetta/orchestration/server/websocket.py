@@ -20,8 +20,9 @@ from animetta.config.runtime_reload import (
     apply_runtime_config_to_contexts,
     build_runtime_system_prompt,
 )
+from animetta.core.component_readiness import ComponentReadinessCache
 from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.readiness import frontend_asset_readiness
+from animetta.core.readiness import frontend_asset_readiness, unwrap_tracing_proxy
 from animetta.core.service_pool import ServicePool
 from animetta.core.shared_memory_runtime import SharedMemoryRuntime
 from animetta.inspection.runtime import InspectionRuntime
@@ -45,6 +46,7 @@ from .routes import RouteHandlers, register_routes
 from .session import SessionManager
 from .stats_api import (
     get_stats_routes,
+    set_component_readiness_cache,
     set_model_manager,
     set_runtime_readiness_context,
 )
@@ -187,6 +189,7 @@ class WebSocketServer:
         @asynccontextmanager
         async def lifespan(_app):
             await self._start_observability()
+            await self.component_readiness_cache.start()
             if self.route_handlers:
                 await self.route_handlers.start_runtime()
             try:
@@ -206,6 +209,10 @@ class WebSocketServer:
         self.memory_runtime = SharedMemoryRuntime(
             observation_recorder=self.observation_recorder
         )
+        self.component_readiness_cache = ComponentReadinessCache(
+            self.inspection_runtime()
+        )
+        set_component_readiness_cache(self.component_readiness_cache)
         self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
             lambda payload: self.sio.emit(
                 EVENTS["memory"]["changed"]["name"], payload
@@ -300,7 +307,43 @@ class WebSocketServer:
                 frontend=self.frontend_readiness,
             ),
             metrics_snapshot=lambda: generate_latest(self.metrics_registry).decode(),
+            observation_write_probe=self._probe_observation_pipeline,
+            remote_tts_probe=(
+                self._probe_remote_tts_dependency
+                if self._requires_remote_tts()
+                else None
+            ),
         )
+
+    def _requires_remote_tts(self) -> bool:
+        providers = getattr(self.config, "providers", None)
+        configured = providers.get("tts") if hasattr(providers, "get") else None
+        return getattr(configured, "type", None) == "remote"
+
+    async def _probe_remote_tts_dependency(self) -> dict[str, Any]:
+        """Probe the selected remote worker from the background readiness owner."""
+        target = unwrap_tracing_proxy(ServicePool.get_context().get("tts_engine"))
+        check_readiness = getattr(target, "check_readiness", None)
+        if not callable(check_readiness):
+            raise RuntimeError("remote TTS readiness is unavailable")
+        payload = await check_readiness()
+        if not isinstance(payload, dict):
+            raise RuntimeError("remote TTS readiness contract is invalid")
+        return payload
+
+    async def _probe_observation_pipeline(self) -> None:
+        """Prove the local ledger is writable and the metric registry is live."""
+        if self.observation_ledger is None:
+            raise RuntimeError("observation ledger is unavailable")
+        await self.observation_ledger.probe_write()
+        mirrors = [
+            mirror
+            for mirror in self.observation_mirrors
+            if isinstance(mirror, PrometheusMirror)
+        ]
+        if not mirrors:
+            raise RuntimeError("prometheus mirror is unavailable")
+        await asyncio.gather(*(mirror.probe() for mirror in mirrors))
 
     def set_config(self, config) -> None:
         """Set application config"""
@@ -319,6 +362,8 @@ class WebSocketServer:
             self.runtime_reloader.version = version
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
+        ServicePool.configure_runtime(config, self.model_manager)
+        set_runtime_readiness_context(config, self.frontend_readiness)
 
         llm_config = config.agent.llm_config if config.agent else None
         runtime_prompt = build_runtime_system_prompt(config)
@@ -358,6 +403,7 @@ class WebSocketServer:
             model_manager=self.model_manager,
             observation_recorder=self.observation_recorder,
         )
+        await self.component_readiness_cache.refresh()
 
     def _load_bilibili_config(self) -> dict[str, Any] | None:
         """Return Bilibili configuration from the active app config."""
@@ -453,6 +499,7 @@ class WebSocketServer:
         logger.info("Starting to clean up all resources...")
 
         await self._stop_background_tasks()
+        await self.component_readiness_cache.stop()
 
         if self.route_handlers:
             try:
@@ -476,6 +523,7 @@ class WebSocketServer:
         if self.observation_ledger is not None:
             await self.observation_ledger.close()
             self.cached_observation_health = await self.observation_ledger.health()
+        set_component_readiness_cache(None)
         logger.info("All resources cleaned up")
 
     def get_app(self):

@@ -7,7 +7,7 @@
 # Build:  docker build -t animetta:core .
 # Run:    docker compose -f docker-compose.core.yml up -d
 #
-# For full local AI (GPU), use Dockerfile.cuda instead.
+# GPU inference is isolated in Dockerfile.qwen-tts.
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,9 @@ WORKDIR /build
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
@@ -64,12 +66,16 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ---------------------------------------------------------------------------
 FROM python:3.13-slim-bookworm AS runtime
 
+ARG ANIMETTA_BUILD_FINGERPRINT=untracked
+LABEL org.animetta.build-fingerprint="${ANIMETTA_BUILD_FINGERPRINT}"
+
 WORKDIR /app
 
 # Install runtime system deps
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
     && apt-get install -y --no-install-recommends ffmpeg nginx curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -78,7 +84,7 @@ COPY --from=python-builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy backend source
-COPY src/ src/
+COPY src/animetta/ src/animetta/
 COPY config/ config/
 COPY scripts/ scripts/
 COPY .env.example .env.example
@@ -101,7 +107,7 @@ RUN chmod +x /app/entrypoint.sh
 ENV PYTHONPATH=/app/src
 ENV ANIMETTA_HOST=0.0.0.0
 ENV ANIMETTA_PORT=12394
-ENV ANIMETTA_LOG_LEVEL=INFO
+ENV ANIMETTA_PROFILE=test
 
 # Expose nginx (80) and backend (12394)
 EXPOSE 80 12394

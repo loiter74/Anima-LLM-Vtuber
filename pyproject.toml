@@ -15,8 +15,13 @@ markers = [
     "asyncio: mark test as asyncio",
     "integration: mark as integration test (requires external services)",
     "slow: mark test as slow and potentially hanging (skipped in default CI run)",
+    "config_unit: deterministic canonical manifest and EffectiveConfig tests",
+    "provider_contract: deterministic remote provider contract tests",
+    "real_smoke: real DeepSeek and MiMo validation requiring credentials",
+    "production_fault: production-only fault injection and recovery rehearsal",
+    "production_soak: ten-minute production acceptance requiring full services",
 ]
-addopts = "-v --tb=short -n auto -m \"not slow and not integration\" --timeout=30 --timeout-method=thread"
+addopts = "-v --tb=short -n auto -m \"not slow and not integration and not real_smoke and not production_fault and not production_soak\" --timeout=30 --timeout-method=thread"
 
 [tool.coverage.run]
 source = ["src/animetta"]

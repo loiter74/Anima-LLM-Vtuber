@@ -35,6 +35,11 @@ jobs:
       has_service: ${{ steps.plan.outputs.has_service }}
       plan_hash: ${{ steps.plan.outputs.plan_hash }}
       tier: ${{ steps.plan.outputs.tier }}
+      cache_mode: ${{ steps.plan.outputs.cache_mode }}
+      trust_scope: ${{ steps.plan.outputs.trust_scope }}
+      cache_trust: ${{ steps.plan.outputs.cache_trust }}
+      docker_services: ${{ steps.plan.outputs.docker_services }}
+      has_docker_build: ${{ steps.plan.outputs.has_docker_build }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,6 +86,19 @@ jobs:
             --output artifacts/test-impact/ci/plan.json \
             --github-output "$GITHUB_OUTPUT"
           echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+          if [[ "$TIER" == "full" || "$TIER" == "nightly" ]]; then
+            echo "cache_mode=off" >> "$GITHUB_OUTPUT"
+            echo "trust_scope=release" >> "$GITHUB_OUTPUT"
+            echo "cache_trust=release" >> "$GITHUB_OUTPUT"
+          elif [[ "$EVENT" == "pull_request" ]]; then
+            echo "cache_mode=read-write" >> "$GITHUB_OUTPUT"
+            echo "trust_scope=pr" >> "$GITHUB_OUTPUT"
+            echo "cache_trust=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache_mode=read-write" >> "$GITHUB_OUTPUT"
+            echo "trust_scope=main" >> "$GITHUB_OUTPUT"
+            echo "cache_trust=main" >> "$GITHUB_OUTPUT"
+          fi
           echo "### Quality plan: $TIER" >> "$GITHUB_STEP_SUMMARY"
           python -m tooling.quality plan \
             --tier "$TIER" \
@@ -123,10 +141,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore trust-scoped quality cache
+        if: needs.plan.outputs.cache_mode == 'read-write'
+        uses: actions/cache@v4
+        with:
+          path: artifacts/test-impact/cache-v1
+          key: quality-v1-${{ runner.os }}-${{ needs.plan.outputs.cache_trust }}-python-${{ matrix.group }}-${{ hashFiles('tooling/quality.yml', 'pyproject.toml', 'requirements*.txt') }}
+
       - name: Run selected Python group
         run: >-
           python -m tooling.quality run-group "${{ matrix.group }}"
           --plan artifacts/test-impact/ci/plan.json
+          --cache "${{ needs.plan.outputs.cache_mode }}"
+          --trust-scope "${{ needs.plan.outputs.trust_scope }}"
           --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
 
       - name: Upload structured Python result
@@ -183,10 +210,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
 
+      - name: Restore trust-scoped quality cache
+        if: needs.plan.outputs.cache_mode == 'read-write'
+        uses: actions/cache@v4
+        with:
+          path: artifacts/test-impact/cache-v1
+          key: quality-v1-${{ runner.os }}-${{ needs.plan.outputs.cache_trust }}-node-${{ matrix.group }}-${{ hashFiles('tooling/quality.yml', 'frontend/pnpm-lock.yaml') }}
+
       - name: Run selected Node group
         run: >-
           python -m tooling.quality run-group "${{ matrix.group }}"
           --plan artifacts/test-impact/ci/plan.json
+          --cache "${{ needs.plan.outputs.cache_mode }}"
+          --trust-scope "${{ needs.plan.outputs.trust_scope }}"
           --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
 
       - name: Upload structured Node result
@@ -216,6 +252,10 @@ jobs:
     if: needs.plan.outputs.has_service == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      ANIMETTA_PROFILE: test
+      HF_CACHE_DIR: /tmp/animetta-ci-hf
+      ALICE_REF_AUDIO: /tmp/animetta-ci-alice.wav
     strategy:
       fail-fast: false
       matrix:
@@ -231,6 +271,12 @@ jobs:
         with:
           python-version-file: .python-version
       - run: python -m pip install pydantic pyyaml
+
+      - name: Prepare Compose-only mount sources
+        shell: bash
+        run: |
+          mkdir -p /tmp/animetta-ci-hf
+          touch /tmp/animetta-ci-alice.wav
 
       - uses: pnpm/action-setup@v4
         if: matrix.group == 'frontend-playwright-smoke'
@@ -270,6 +316,8 @@ jobs:
         run: >-
           python -m tooling.quality run-group "${{ matrix.group }}"
           --plan artifacts/test-impact/ci/plan.json
+          --cache "${{ needs.plan.outputs.cache_mode }}"
+          --trust-scope "${{ needs.plan.outputs.trust_scope }}"
           --output "artifacts/test-impact/ci/results/${{ matrix.group }}.json"
 
       - name: Capture service logs
@@ -307,9 +355,121 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  docker:
+    name: docker build
+    needs: plan
+    if: >-
+      needs.plan.outputs.has_docker_build == 'true' &&
+      needs.plan.outputs.tier != 'full' &&
+      needs.plan.outputs.tier != 'nightly'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install pydantic pyyaml
+
+      - name: Prepare Compose-only mount sources
+        shell: bash
+        run: |
+          mkdir -p /tmp/animetta-ci-hf artifacts/test-impact/ci
+          touch /tmp/animetta-ci-alice.wav
+          echo "HF_CACHE_DIR=/tmp/animetta-ci-hf" >> "$GITHUB_ENV"
+          echo "ALICE_REF_AUDIO=/tmp/animetta-ci-alice.wav" >> "$GITHUB_ENV"
+
+      - name: Build selected Docker services
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m tooling.quality docker-build \
+            --plan artifacts/test-impact/ci/plan.json \
+            --json | tee artifacts/test-impact/ci/docker-build.json
+
+      - name: Upload Docker build evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-diagnostics-docker-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/docker-build.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  release-runtime:
+    name: cold production runtime
+    needs: plan
+    if: >-
+      needs.plan.outputs.tier == 'full' ||
+      needs.plan.outputs.tier == 'nightly'
+    runs-on: [self-hosted, windows, gpu, animetta-release]
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+      QWEN_TTS_API_KEY: ${{ secrets.QWEN_TTS_API_KEY }}
+      HF_CACHE_DIR: ${{ secrets.HF_CACHE_DIR }}
+      ALICE_REF_AUDIO: ${{ secrets.ALICE_REF_AUDIO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quality-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: python -m pip install pydantic pyyaml python-dotenv
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install fresh browser environment
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install chromium
+
+      - name: Run cold production startup and recovery gate
+        shell: pwsh
+        run: >-
+          python scripts/release_runtime_gate.py
+          --plan artifacts/test-impact/ci/plan.json
+          --output artifacts/test-impact/ci/release-runtime/evidence.json
+
+      - name: Capture failure diagnostics
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/test-impact/ci/release-runtime | Out-Null
+          docker compose logs --no-color 2>&1 | Out-File -Encoding utf8 artifacts/test-impact/ci/release-runtime/workflow-docker.log
+
+      - name: Upload release runtime evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-release-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/test-impact/ci/release-runtime/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Stop production stack
+        if: ${{ always() }}
+        run: docker compose down --remove-orphans
+
   quality-gate:
     name: quality-gate
-    needs: [plan, python, node, service]
+    needs: [plan, python, node, service, docker, release-runtime]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -328,6 +488,21 @@ jobs:
         with:
           python-version-file: .python-version
       - run: python -m pip install pydantic pyyaml
+
+      - name: Enforce selected Docker build
+        shell: bash
+        run: |
+          set -euo pipefail
+          TIER="${{ needs.plan.outputs.tier }}"
+          if [[ "$TIER" == "full" || "$TIER" == "nightly" ]]; then
+            if [[ "${{ needs.release-runtime.result }}" != "success" ]]; then
+              echo "Cold production runtime gate did not succeed: ${{ needs.release-runtime.result }}" >&2
+              exit 1
+            fi
+          elif [[ "${{ needs.plan.outputs.has_docker_build }}" == "true" && "${{ needs.docker.result }}" != "success" ]]; then
+            echo "Selected Docker build did not succeed: ${{ needs.docker.result }}" >&2
+            exit 1
+          fi
 
       - name: Aggregate required results
         run: >-

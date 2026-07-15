@@ -8,6 +8,8 @@ import { useMinecraftStore } from '@/stores/minecraft'
 import type { SubtitleDisplayMode, SubtitleFontSize } from '@/stores/subtitle'
 import BackgroundSettings from './BackgroundSettings.vue'
 import { Events } from '@/constants/socket-events'
+import { fetchRuntimeStatus } from '@/services/runtimeStatus'
+import type { ProviderIdentity, RuntimeServiceStatus } from '@/types/runtime-status'
 
 const danmakuStore = useDanmakuStore()
 const {
@@ -27,8 +29,12 @@ function resetLive2dView(): void {
 }
 
 interface ServiceInfo {
+  category: 'llm' | 'asr' | 'tts' | 'vad'
   name: string
-  value: string
+  configured: string
+  resolved: string
+  ready: boolean
+  reason: string | null
 }
 
 interface ConfigData {
@@ -44,8 +50,47 @@ const services = ref<ServiceInfo[]>([])
 const personaName = ref('')
 const modelInfo = ref('')
 const backendInfo = ref('')
+const profileInfo = ref('')
+const versionInfo = ref(0)
+const semanticHash = ref('')
 const loading = ref(true)
 const error = ref('')
+
+function formatIdentity(identity: ProviderIdentity): string {
+  return [identity.provider || identity.type, identity.model, identity.voice]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ') || '-'
+}
+
+function serviceInfo(
+  category: ServiceInfo['category'],
+  name: string,
+  status: RuntimeServiceStatus,
+): ServiceInfo {
+  return {
+    category,
+    name,
+    configured: formatIdentity(status.configured),
+    resolved: formatIdentity(status.resolved),
+    ready: status.ready,
+    reason: status.reason,
+  }
+}
+
+async function loadRuntimeStatus(): Promise<void> {
+  const status = await fetchRuntimeStatus()
+  services.value = [
+    serviceInfo('asr', 'ASR 语音识别', status.components.asr),
+    serviceInfo('tts', 'TTS 语音合成', status.components.tts),
+    serviceInfo('llm', 'LLM 语言模型', status.components.llm),
+    serviceInfo('vad', 'VAD 语音检测', status.components.vad),
+  ]
+  personaName.value = status.persona || '-'
+  profileInfo.value = status.profile
+  versionInfo.value = status.version
+  semanticHash.value = status.semantic_hash
+  backendInfo.value = window.location.origin
+}
 async function handleBilibiliConnect(): Promise<void> {
   if (!roomInput.value) return
   if (roomInput.value <= 0) {
@@ -96,32 +141,29 @@ function setTheme(theme: 'light' | 'dark'): void {
 
 let cleanup: (() => void) | null = null
 
-onMounted(() => {
+onMounted(async () => {
   minecraftStore.setupListener()
   const socket = getSocket()
-  if (!socket) {
-    loading.value = false
-    error.value = '未连接后端'
-    return
-  }
 
   const handler = (data: ConfigData) => {
-    services.value = [
-      { name: 'ASR 语音识别', value: data.active_services.asr || data.services.asr || '-' },
-      { name: 'TTS 语音合成', value: data.active_services.tts || data.services.tts || '-' },
-      { name: 'LLM 语言模型', value: data.active_services.llm || data.services.agent || '-' },
-      { name: 'VAD 语音检测', value: data.active_services.vad || data.services.vad || '-' },
-    ]
-    personaName.value = data.persona || 'neuro-vtuber'
+    if (!personaName.value) personaName.value = data.persona || '-'
     const modelPath = data.live2d?.model_path || ''
     modelInfo.value = modelPath ? modelPath.split('/').pop() || modelPath : '默认'
-    backendInfo.value = `${data.system?.host || 'localhost'}:${data.system?.port || 12394}`
-    loading.value = false
   }
 
-  socket.on(Events.CONFIG.DATA, handler)
-  cleanup = () => socket.off(Events.CONFIG.DATA, handler)
-  socket.emit(Events.CONFIG.GET, {})
+  if (socket) {
+    socket.on(Events.CONFIG.DATA, handler)
+    cleanup = () => socket.off(Events.CONFIG.DATA, handler)
+    socket.emit(Events.CONFIG.GET, {})
+  }
+
+  try {
+    await loadRuntimeStatus()
+  } catch {
+    error.value = '无法读取运行状态'
+  } finally {
+    loading.value = false
+  }
 })
 
 onUnmounted(() => {
@@ -191,10 +233,24 @@ onUnmounted(() => {
         </div>
         <div class="mb-4">
           <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">服务配置</h3>
-          <div class="space-y-1.5">
-            <div v-for="svc in services" :key="svc.name" class="bg-c-card/50 rounded-xl px-3 py-2 flex items-center justify-between">
-              <span class="text-xs text-c-text-dim">{{ svc.name }}</span>
-              <span class="text-xs text-c-accent font-medium">{{ svc.value }}</span>
+          <div class="space-y-2">
+            <div
+              v-for="svc in services"
+              :key="svc.category"
+              :data-service="svc.category"
+              class="bg-c-card/50 rounded-xl px-3 py-2.5"
+            >
+              <div class="flex items-center justify-between gap-3 mb-1.5">
+                <span class="text-xs text-c-text-dim">{{ svc.name }}</span>
+                <span
+                  class="text-10px font-mono"
+                  :class="svc.ready ? 'text-c-success' : 'text-c-error'"
+                >{{ svc.ready ? 'READY' : (svc.reason || 'NOT READY') }}</span>
+              </div>
+              <div class="grid gap-1 text-10px font-mono">
+                <div class="flex gap-2"><span class="text-c-text-muted shrink-0">配置</span><span class="text-c-text truncate" :title="svc.configured">{{ svc.configured }}</span></div>
+                <div class="flex gap-2"><span class="text-c-text-muted shrink-0">实际</span><span class="text-c-accent truncate" :title="svc.resolved">{{ svc.resolved }}</span></div>
+              </div>
             </div>
           </div>
         </div>
@@ -202,11 +258,12 @@ onUnmounted(() => {
           <h3 class="text-sm font-medium text-c-text-dim uppercase tracking-wider mb-3">后端</h3>
           <div class="bg-c-card/50 rounded-xl px-3 py-2 flex items-center gap-2">
             <span class="text-xs">🖥️</span>
-            <span class="text-xs text-c-text-dim">{{ backendInfo }}</span>
+            <span class="text-xs text-c-text-dim">{{ backendInfo }} · {{ profileInfo }} · v{{ versionInfo }}</span>
           </div>
+          <p class="mt-2 text-10px font-mono text-c-text-muted truncate" :title="semanticHash">semantic · {{ semanticHash }}</p>
         </div>
         <div class="pt-4 border-t border-c-border/40">
-          <p class="text-10px text-c-text-muted text-center">配置通过 config.yaml 管理 · 重启后生效</p>
+          <p class="text-10px text-c-text-muted text-center">配置通过 config/animetta.yaml 管理 · 生命周期字段需重启</p>
         </div>
       </template>
     </div>

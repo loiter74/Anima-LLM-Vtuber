@@ -30,6 +30,7 @@ Exit code:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 import time
@@ -49,7 +50,7 @@ DEFAULT_URL = os.environ.get("ANIMA_BACKEND_URL", "http://localhost")
 # When running outside Docker, the backend speaks Socket.IO on its raw port.
 # Inside Docker (nginx on :80), the same namespace is reverse-proxied.
 if DEFAULT_URL == "http://localhost" and not os.environ.get("ANIMA_BACKEND_URL"):
-    # Try the configured backend port first (matches config/config.yaml).
+    # Try the canonical manifest's configured backend port first.
     DEFAULT_URL = "http://localhost:12394"
 
 CONNECT_TIMEOUT = 8.0          # seconds to establish connection
@@ -148,10 +149,8 @@ async def _run_case(
     except Exception as exc:
         result.error = f"during collection: {exc!r}"
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await sio.disconnect()
-        except Exception:
-            pass
 
     result.duration_ms = (time.perf_counter() - start) * 1000
     return result
@@ -260,10 +259,10 @@ def _format_result(name: str, res: CaseResult, ok: bool, detail: str) -> str:
 
 async def main() -> int:
     url = DEFAULT_URL
-    print(f"═" * 70)
-    print(f"历史串台虫 fix — end-to-end smoke test")
+    print("═" * 70)
+    print("历史串台虫 fix — end-to-end smoke test")
     print(f"Backend: {url}")
-    print(f"═" * 70)
+    print("═" * 70)
 
     cases = [
         test_a_inspection_flag_skipped,

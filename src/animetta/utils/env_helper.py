@@ -203,19 +203,18 @@ class EnvHelper:
     @staticmethod
     def get_default_model_config() -> dict:
         """
-        Get default model config for current environment
+        Return the canonical minimal runtime environment template.
 
         Returns:
-            dict: Model path configuration
+            dict: Profile, bind endpoint, and empty provider secrets
         """
-        data_dir = EnvHelper.get_data_dir()
-
         return {
-            "ANIMETTA_DATA_DIR": str(data_dir),
-            "ANIMETTA_BASE_MODEL_PATH": str(data_dir / "models" / "base_models" / "Qwen1.5-1.8B-Chat"),
-            "ANIMETTA_LORA_PATH": str(data_dir / "models" / "checkpoints" / "neuro-vtuber-v1"),
-            "ANIMETTA_VECTOR_DB_PATH": str(data_dir / "vectordb"),
-            "ANIMETTA_HISTORY_PATH": str(data_dir / "histories"),
+            "ANIMETTA_PROFILE": "test",
+            "ANIMETTA_HOST": "127.0.0.1",
+            "ANIMETTA_PORT": "12394",
+            "DEEPSEEK_API_KEY": "",
+            "MIMO_API_KEY": "",
+            "QWEN_TTS_API_KEY": "",
         }
 
     @staticmethod
@@ -260,7 +259,7 @@ class EnvHelper:
         # Write to file
         env_file.write_text("\n".join(lines) + "\n")
         logger.info(f"[EnvHelper] ✅ .env file generated: {env_file}")
-        logger.info(f"[EnvHelper] 📝 Data directory: {config['ANIMETTA_DATA_DIR']}")
+        logger.info("[EnvHelper] Runtime profile template: {}", config["ANIMETTA_PROFILE"])
 
         return env_file
 

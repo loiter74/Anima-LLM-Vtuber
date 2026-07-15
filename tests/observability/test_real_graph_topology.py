@@ -12,10 +12,12 @@ from animetta.orchestration.graph.state import create_initial_state
         (
             False,
             [
+                "conversation_start",
                 "personality",
                 "llm",
                 "humor_rewrite",
                 "humor_validation",
+                "reply_output",
                 "tts",
                 "emotion",
                 "output",

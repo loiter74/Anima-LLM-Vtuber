@@ -66,6 +66,9 @@ make quality-validate
 make test-quick
 make test-affected
 make test-full
+make test-affected-shadow
+make benchmark-quick
+make benchmark-affected
 
 # Default run (parallel, skip slow/integration)
 PYTHONPATH=src python -m pytest tests/
@@ -88,7 +91,7 @@ cd frontend && pnpm test:run && pnpm test:coverage
 
 > `conftest.py` auto-injects `src/` to `sys.path`, but keep `PYTHONPATH=src` prefix in docs/CI for safety.
 
-`quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. `full` runs the repository contract and executes `backend-full` once with coverage. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups run only when selected and when their declared capabilities are present.
+`quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. Both use exact content fingerprints, a bounded weighted scheduler, and trust-scoped reuse of successful cacheable hermetic results. `full` is a cold release gate (`cache off`) and executes `backend-full` once with coverage. `test-affected-shadow` disables dominance and cache for sequential comparison. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path or Docker-scope map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups always collect fresh evidence when selected and when their declared capabilities are present.
 
 ## ANTI-PATTERNS
 

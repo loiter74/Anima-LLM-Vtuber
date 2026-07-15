@@ -13,6 +13,7 @@ from .mimo import MimoTTSConfig  # noqa: F401
 from .mock import MockTTSConfig  # noqa: F401
 from .openai import OpenAITTSConfig  # noqa: F401
 from .qwen3 import Qwen3TTSConfig  # noqa: F401
+from .remote import RemoteTTSConfig  # noqa: F401
 from .vibe_voice import VibeVoiceTTSConfig  # noqa: F401
 
 # Discriminated Union type — auto-generated from registered configs
@@ -22,4 +23,5 @@ __all__ = [
     "TTSBaseConfig",
     "TTSConfig",
     "MimoTTSConfig",
+    "RemoteTTSConfig",
 ]

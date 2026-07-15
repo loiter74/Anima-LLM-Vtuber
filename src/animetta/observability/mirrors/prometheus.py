@@ -95,6 +95,11 @@ class PrometheusMirror:
             ("direction", "name", "phase"),
             registry=registry,
         )
+        self._readiness_probe = Counter(
+            "anima_readiness_probe_total",
+            "Controlled readiness probes emitted by the local runtime",
+            registry=registry,
+        )
 
     @property
     def dynamic_label_cardinality(self) -> int:
@@ -121,6 +126,11 @@ class PrometheusMirror:
             writer_errors=self._errors,
             last_error=self._last_error,
         )
+
+    async def probe(self) -> None:
+        """Increment a controlled sample used to verify live metric projection."""
+        async with self._lock:
+            self._readiness_probe.inc()
 
     def _apply(self, record: CommittedObservation) -> None:
         if isinstance(record, TraceStarted):

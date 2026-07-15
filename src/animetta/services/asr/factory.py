@@ -42,6 +42,7 @@ class ASRFactory:
     def create(
         provider: str,
         *,
+        strict: bool = False,
         observation_recorder: ObservationRecorder | None = None,
         **kwargs,
     ) -> ASRInterface:
@@ -60,6 +61,8 @@ class ASRFactory:
         # Build a config object matching the provider type
         config = ASRFactory._build_config(provider, kwargs)
         if config is None:
+            if strict:
+                raise ValueError(f"Unknown ASR provider: {provider}")
             logger.warning(f"Unknown ASR provider: {provider}, using Mock implementation")
             return instrument_service(
                 MockASR(), observation_recorder, "asr", provider="mock", model="mock"
@@ -80,11 +83,17 @@ class ASRFactory:
                 try:
                     import_module(module_name, __package__)
                 except ImportError as exc:
+                    if strict:
+                        raise
                     logger.warning(
                         "ASR provider import unavailable: "
                         f"type={provider}, error={type(exc).__name__}"
                     )
             svc = ProviderRegistry.create_service("asr", config)
+            if strict and provider != "mock" and isinstance(svc, MockASR):
+                raise RuntimeError(
+                    "Strict ASR provider creation returned MockASR for a non-mock config"
+                )
             return instrument_service(
                 svc,
                 observation_recorder,
@@ -93,6 +102,8 @@ class ASRFactory:
                 model=getattr(config, "model", None),
             )
         except Exception as e:
+            if strict:
+                raise
             logger.warning(
                 "ASR provider failed to initialize; falling back to MockASR: "
                 f"type={provider}, error={type(e).__name__}"

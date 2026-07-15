@@ -9,6 +9,7 @@ def test_initial_state_includes_runtime_config_version():
     ctx = MagicMock()
     ctx.session_id = "sid"
     ctx.runtime_config_version = 6
+    ctx.runtime_config_hash = "sha256-effective-config"
     orchestrator = LangGraphOrchestrator(service_context=ctx, socketio=None)
     orchestrator._get_persona_dict = MagicMock(return_value={})
     orchestrator._get_system_prompt = MagicMock(return_value="Base.")
@@ -17,3 +18,4 @@ def test_initial_state_includes_runtime_config_version():
 
     assert state["config_version"] == 6
     assert state["metadata"]["config_version"] == 6
+    assert state["metadata"]["config_hash"] == "sha256-effective-config"

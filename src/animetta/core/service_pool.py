@@ -38,6 +38,7 @@ class ServicePool:
     _shutdown_task: asyncio.Task[None] | None = None
     _shutdown_requested: bool = False
     _shutdown_errors: tuple[str, ...] = ()
+    _resolved_identities: dict[str, dict[str, str | None]] = {}
     _llm_connectivity: dict[str, Any] = {
         "state": "pending",
         "ready": False,
@@ -122,6 +123,7 @@ class ServicePool:
             "reason": None,
         }
         cls._ready = False
+        cls._resolved_identities = {}
 
         from .service_context import ServiceContext
 
@@ -139,6 +141,7 @@ class ServicePool:
             cls._tts = ctx.tts_engine
             cls._asr = ctx.asr_engine
             cls._ctx = ctx
+            vad_engine = ctx.vad_engine
 
             # Close per-session services — they are NOT shared.
             if ctx.vad_engine is not None:
@@ -152,8 +155,9 @@ class ServicePool:
             if ctx.audio_processor is not None:
                 ctx.audio_processor = None
 
-            golden = cls._runtime_profile(config) == "golden"
-            if golden:
+            profile = cls._runtime_profile(config)
+            strict_runtime = profile in {"smoke", "production", "golden"}
+            if strict_runtime:
                 # ServiceContext registers preload functions before returning.
                 # Await a post-registration pass even though the ASGI bootstrap
                 # also launches an intentionally early, possibly empty warmup.
@@ -178,6 +182,28 @@ class ServicePool:
                         {"state": "pending", "ready": False, "reason": None},
                     )
                 )
+
+            if hasattr(config, "providers"):
+                from .readiness import resolve_service_identity
+
+                engines = {
+                    "llm": cls._llm,
+                    "asr": cls._asr,
+                    "tts": cls._tts,
+                    "vad": vad_engine,
+                }
+                cls._resolved_identities = {
+                    category: identity
+                    for category, engine in engines.items()
+                    if (
+                        identity := resolve_service_identity(
+                            category,
+                            engine,
+                            config.providers[category],
+                        )
+                    )
+                    is not None
+                }
 
             # Engine construction has reached a terminal state.  Golden
             # readiness is computed from the real provider, connectivity, and
@@ -211,8 +237,11 @@ class ServicePool:
     @classmethod
     def configure_runtime(cls, config: Any, model_manager: Any | None = None) -> None:
         """Register the effective profile before background initialization starts."""
-        if cls._init_state in {"pending", "closed"} and cls._ctx is None:
+        if cls._init_state not in {"closing"}:
             cls._runtime_config = config
+            if model_manager is not None:
+                cls._model_manager = model_manager
+        if cls._init_state in {"pending", "closed"} and cls._ctx is None:
             cls._model_manager = model_manager
             if cls._init_state == "closed":
                 cls._init_state = "pending"
@@ -227,9 +256,13 @@ class ServicePool:
         Golden callers fail closed so they cannot allocate a second engine set.
         """
         if not cls.is_ready():
-            if cls._runtime_profile(cls._runtime_config) == "golden":
+            if cls._runtime_profile(cls._runtime_config) in {
+                "smoke",
+                "production",
+                "golden",
+            }:
                 raise RuntimeError(
-                    "Golden ServicePool is not ready; refusing per-session engine initialization"
+                    "Real-profile ServicePool is not ready; refusing per-session engine initialization"
                 )
             return {}
         return {
@@ -331,6 +364,7 @@ class ServicePool:
             cls._initializing_task = None
             cls._shutdown_requested = False
             cls._shutdown_errors = tuple(errors)
+            cls._resolved_identities = {}
             cls._llm_connectivity = {
                 "state": "pending",
                 "ready": False,
@@ -379,6 +413,8 @@ class ServicePool:
             connectivity=cls._llm_connectivity,
             frontend=frontend_status,
             development_ready=cls._ready,
+            pool_config=cls._runtime_config,
+            resolved_identities=cls._resolved_identities,
         )
 
     @classmethod
@@ -386,7 +422,8 @@ class ServicePool:
         """Evaluate cached engine readiness without frontend policy or I/O."""
         if cls._shutdown_requested or cls._init_state in {"closing", "closed"}:
             return False
-        if cls._runtime_profile(cls._runtime_config) != "golden":
+        profile = cls._runtime_profile(cls._runtime_config)
+        if profile not in {"smoke", "production", "golden"}:
             return cls._ready or (
                 cls._init_state == "ready"
                 and cls._llm is not None
@@ -399,11 +436,18 @@ class ServicePool:
 
     @staticmethod
     def _runtime_profile(config: Any | None) -> str:
+        direct = getattr(config, "profile", None)
+        if direct in {"test", "smoke", "production"}:
+            return direct
         try:
             profile = config.system.runtime_profile
         except Exception:
             return "development"
-        return profile if profile in {"development", "test", "golden"} else "development"
+        return (
+            profile
+            if profile in {"development", "test", "smoke", "production", "golden"}
+            else "development"
+        )
 
     @classmethod
     async def _abort_initialization(cls, ctx: Any, reason: str) -> None:

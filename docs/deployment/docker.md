@@ -20,7 +20,7 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-Verify: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
+Verify: `docker run --rm --gpus all nvidia/cuda:12.8.2-base-ubuntu24.04 nvidia-smi`
 
 ## Quick Start
 
@@ -44,8 +44,10 @@ The container exposes:
 
 | | GPU (`docker-compose.yml`) | CPU (`docker-compose.cpu.yml`) |
 |---|---|---|
-| TTS | Kokoro (GPU-accelerated) | Kokoro (CPU fallback) |
-| ASR | Whisper (faster-whisper, GPU) | Whisper (CPU) |
+| Profile | `production` | `smoke` |
+| LLM | DeepSeek remote API | DeepSeek remote API |
+| TTS | Isolated Qwen3 Alice GPU service | MiMo remote API |
+| ASR / VAD | MiMo remote API | MiMo remote API |
 | Command | `docker compose up -d` | `docker compose -f docker-compose.cpu.yml up -d` |
 
 ```bash
@@ -62,7 +64,7 @@ docker compose -f docker-compose.cpu.yml up -d --build
 |---|---|---|
 | `animetta-memory-db` | `/app/memory_db` | Wiki memory, Chroma vector DB, SQLite |
 | `animetta-data` | `/app/data` | Downloaded models, stats |
-| `.env` (bind) | `/app/.env` | API keys (read-only) |
+| `.env` (Compose interpolation) | not mounted | Supplies only explicitly listed profile secrets/endpoints |
 
 Named volumes persist across container rebuilds. To reset data:
 
@@ -77,18 +79,13 @@ Set in `.env` or pass via `docker compose`:
 | Variable | Default | Description |
 |---|---|---|
 | `MIMO_API_KEY` | — | Mimo provider API key |
-| `GLM_API_KEY` | — | Zhipu AI API key |
-| `OPENAI_API_KEY` | — | OpenAI/DeepSeek API key |
-| `OPENAI_BASE_URL` | — | Custom OpenAI-compatible endpoint |
-| `ANIMETTA_LOG_LEVEL` | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
+| `DEEPSEEK_API_KEY` | — | DeepSeek LLM API key |
+| `QWEN_TTS_API_KEY` | — | Shared authentication for the isolated Qwen TTS service |
+| `QWEN_TTS_URL` | profile/Compose value | Qwen TTS service endpoint |
+| `ANIMETTA_PROFILE` | required | `test`, `smoke`, or `production` |
+| `ANIMETTA_HOST` / `ANIMETTA_PORT` | required | Core bind endpoint |
 
-Service overrides (in `.env`):
-
-| Variable | Options | Default |
-|---|---|---|
-| `ANIMETTA_LLM` | `deepseek`, `glm`, `openai`, `ollama` | `deepseek` |
-| `ANIMETTA_TTS` | `vibe_voice`, `kokoro`, `openai`, `mock` | `vibe_voice` |
-| `ANIMETTA_ASR` | `faster_whisper`, `openai`, `funasr`, `mock` | `faster_whisper` |
+Provider names, models, and voices are selected only in `config/animetta.yaml`; deployment environment variables cannot override them.
 
 ## Troubleshooting
 
@@ -102,10 +99,10 @@ docker compose logs -f animetta   # Check startup logs
 
 ```bash
 # Verify NVIDIA runtime
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.8.2-base-ubuntu24.04 nvidia-smi
 
 # Check inside container
-docker compose exec animetta python -c "import torch; print(torch.cuda.is_available())"
+docker compose exec qwen-tts python -c "import torch; print(torch.cuda.is_available())"
 ```
 
 ### Health check failing
@@ -116,13 +113,11 @@ curl http://localhost/health
 # Expected: {"status": "ok", ...}
 ```
 
-### Models not downloading
+### Qwen model or Alice prompt is unavailable
 
-Check if the download script ran in logs. Manually trigger:
-
-```bash
-docker compose exec animetta bash scripts/download-models.sh
-```
+The production worker is intentionally offline and never downloads weights during
+readiness. Set `HF_CACHE_DIR` to a populated Hugging Face cache and
+`ALICE_REF_AUDIO` to the Alice reference WAV, then recreate `qwen-tts`.
 
 ### Frontend not loading
 

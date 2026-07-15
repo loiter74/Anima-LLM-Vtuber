@@ -46,10 +46,15 @@ def test_reload_config_endpoint_returns_structured_success():
         "refreshed": ["persona", "llm"],
         "error": None,
         "preserved": False,
+        "effective_hash": "",
+        "semantic_hash": "",
+        "restart_required": [],
         "applied": {
             "version": 3,
             "persona": "anima.v0.1",
             "sessions": 0,
+            "effective_hash": "",
+            "semantic_hash": "",
             "prompt_warnings": [],
         },
     }
@@ -81,7 +86,7 @@ def test_reload_config_endpoint_applies_reloaded_config_to_contexts():
     assert server.config is new_config
     assert ctx.config is new_config
     assert ctx.runtime_config_version == 5
-    assert ctx.llm_engine.model == "updated-model"
+    assert ctx.llm_engine.model == "old-model"
 
 
 def test_reload_config_endpoint_returns_400_on_validation_failure():

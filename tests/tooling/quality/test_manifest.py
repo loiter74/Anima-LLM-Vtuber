@@ -11,6 +11,18 @@ from tooling.quality.models import Catalog
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_tooling_quality_test_modules_do_not_collide_with_other_test_modules() -> None:
+    tooling_root = ROOT / "tests" / "tooling" / "quality"
+    tooling_names = {path.name for path in tooling_root.glob("test_*.py")}
+    other_names = {
+        path.name
+        for path in (ROOT / "tests").rglob("test_*.py")
+        if tooling_root not in path.parents
+    }
+
+    assert tooling_names.isdisjoint(other_names), sorted(tooling_names & other_names)
+
+
 def _valid_catalog() -> dict:
     return {
         "schema_version": 1,
@@ -48,6 +60,65 @@ def _valid_catalog() -> dict:
             "repository": ["repository-full"],
         },
     }
+
+
+def _catalog_with_acceleration() -> dict:
+    data = _valid_catalog()
+    data["input_sets"] = {
+        "quality-engine": {
+            "paths": ["tooling/quality/**", "tooling/quality.yml"],
+        },
+        "python-toolchain": {
+            "paths": ["pyproject.toml", "requirements*.txt"],
+        },
+    }
+    data["default_input_sets"] = ["quality-engine"]
+    data["scheduler"] = {
+        "max_workers": 4,
+        "max_weight": 4,
+        "max_heavy": 1,
+        "max_exclusive": 1,
+    }
+    data["groups"]["backend-unit"].update(
+        {
+            "cacheable": True,
+            "resource_class": "cpu",
+            "resource_weight": 2,
+            "input_sets": ["python-toolchain"],
+        }
+    )
+    data["groups"]["repository-full"].update(
+        {
+            "cacheable": True,
+            "resource_class": "heavy",
+            "resource_weight": 4,
+            "input_sets": ["python-toolchain"],
+            "covers": ["backend-unit"],
+        }
+    )
+    data["docker_watch_paths"] = [
+        "Dockerfile*",
+        "docker-compose*.yml",
+        "docker/**",
+        "requirements*.txt",
+    ]
+    data["docker_scopes"] = {
+        "animetta": {
+            "service": "animetta",
+            "paths": ["Dockerfile", "requirements-core.txt", "src/animetta/**"],
+            "environment_identity_fields": ["ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"],
+        },
+        "qwen-tts": {
+            "service": "qwen-tts",
+            "paths": [
+                "Dockerfile.qwen-tts",
+                "requirements-qwen-tts.txt",
+                "src/animetta_qwen_tts/**",
+            ],
+            "environment_identity_fields": ["QWEN_TTS_API_KEY", "QWEN_TTS_URL"],
+        },
+    }
+    return data
 
 
 def test_catalog_rejects_unknown_enum_value() -> None:
@@ -90,9 +161,9 @@ def test_catalog_rejects_unsafe_group_and_component_ids() -> None:
         Catalog.model_validate(unsafe_group)
 
     unsafe_component = _valid_catalog()
-    unsafe_component["components"]["backend/core"] = unsafe_component[
-        "components"
-    ].pop("backend-core")
+    unsafe_component["components"]["backend/core"] = unsafe_component["components"].pop(
+        "backend-core"
+    )
 
     with pytest.raises(ValidationError, match="safe kebab-case"):
         Catalog.model_validate(unsafe_component)
@@ -167,3 +238,151 @@ def test_repository_catalog_covers_runtime_environments() -> None:
         "frontend",
         "repository",
     }
+
+
+def test_catalog_accepts_valid_acceleration_metadata() -> None:
+    catalog = Catalog.model_validate(_catalog_with_acceleration())
+
+    assert catalog.default_input_sets == ("quality-engine",)
+    assert catalog.input_sets["python-toolchain"].paths == (
+        "pyproject.toml",
+        "requirements*.txt",
+    )
+    assert catalog.scheduler.max_workers == 4
+    assert catalog.groups["backend-unit"].cacheable is True
+    assert catalog.groups["backend-unit"].resource_class.value == "cpu"
+    assert catalog.groups["repository-full"].covers == ("backend-unit",)
+    assert catalog.docker_scopes["qwen-tts"].service == "qwen-tts"
+    assert catalog.docker_scopes["qwen-tts"].environment_identity_fields == (
+        "QWEN_TTS_API_KEY",
+        "QWEN_TTS_URL",
+    )
+
+
+def test_catalog_rejects_cacheable_non_hermetic_group() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["backend-unit"]["isolation"] = "service"
+
+    with pytest.raises(ValidationError, match="cacheable.*hermetic"):
+        Catalog.model_validate(data)
+
+
+def test_catalog_rejects_unknown_group_input_set() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["backend-unit"]["input_sets"] = ["missing-inputs"]
+
+    with pytest.raises(ValidationError, match="missing-inputs"):
+        Catalog.model_validate(data)
+
+
+@pytest.mark.parametrize("weight", [0, 5])
+def test_catalog_rejects_group_weight_outside_scheduler_budget(weight: int) -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["backend-unit"]["resource_weight"] = weight
+
+    with pytest.raises(ValidationError, match="resource_weight"):
+        Catalog.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("covering", "covered", "message"),
+    [
+        ("backend-unit", "missing-group", "missing-group"),
+        ("backend-unit", "backend-unit", "cover itself"),
+    ],
+)
+def test_catalog_rejects_unknown_or_self_coverage(
+    covering: str,
+    covered: str,
+    message: str,
+) -> None:
+    data = _catalog_with_acceleration()
+    data["groups"][covering]["covers"] = [covered]
+
+    with pytest.raises(ValidationError, match=message):
+        Catalog.model_validate(data)
+
+
+def test_catalog_rejects_coverage_cycle() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["backend-unit"]["covers"] = ["repository-full"]
+
+    with pytest.raises(ValidationError, match="coverage cycle"):
+        Catalog.model_validate(data)
+
+
+def test_catalog_rejects_incompatible_coverage_runner() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["repository-full"]["runner"] = "python"
+    data["groups"]["repository-full"]["entrypoint"] = "scripts/check.py"
+    data["groups"]["repository-full"].pop("targets")
+
+    with pytest.raises(ValidationError, match="compatible runner"):
+        Catalog.model_validate(data)
+
+
+@pytest.mark.parametrize("mutation", ["required", "isolation", "capabilities"])
+def test_catalog_rejects_coverage_with_weaker_execution_contract(mutation: str) -> None:
+    data = _catalog_with_acceleration()
+    covering = data["groups"]["repository-full"]
+    covered = data["groups"]["backend-unit"]
+    if mutation == "required":
+        covering["required"] = False
+    elif mutation == "isolation":
+        covered["cacheable"] = False
+        covered["isolation"] = "service"
+    else:
+        covered["cacheable"] = False
+        covered["capabilities"] = ["network"]
+
+    with pytest.raises(ValidationError, match="coverage.*contract"):
+        Catalog.model_validate(data)
+
+
+def test_catalog_rejects_pytest_coverage_that_does_not_cover_target() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["repository-full"]["targets"] = ["tests/services"]
+
+    with pytest.raises(ValidationError, match="does not cover target"):
+        Catalog.model_validate(data)
+
+
+def test_catalog_rejects_pytest_coverage_with_narrower_selection_filter() -> None:
+    data = _catalog_with_acceleration()
+    data["groups"]["repository-full"]["args"] = ["-q", "-k", "smoke"]
+
+    with pytest.raises(ValidationError, match="selection filters"):
+        Catalog.model_validate(data)
+
+
+def test_catalog_accepts_matching_pytest_marker_filter_for_coverage() -> None:
+    data = _catalog_with_acceleration()
+    marker_args = ["-m", "not slow and not integration"]
+    data["groups"]["backend-unit"]["args"] = marker_args
+    data["groups"]["repository-full"]["args"] = marker_args
+
+    Catalog.model_validate(data)
+
+
+def test_catalog_rejects_incomplete_or_unsafe_docker_scope() -> None:
+    no_paths = _catalog_with_acceleration()
+    no_paths["docker_scopes"]["animetta"]["paths"] = []
+    with pytest.raises(ValidationError, match="paths"):
+        Catalog.model_validate(no_paths)
+
+    unsafe_service = _catalog_with_acceleration()
+    unsafe_service["docker_scopes"]["animetta"]["service"] = "../animetta"
+    with pytest.raises(ValidationError, match="safe kebab-case"):
+        Catalog.model_validate(unsafe_service)
+
+
+def test_catalog_rejects_secret_or_escaping_fingerprint_inputs() -> None:
+    secret = _catalog_with_acceleration()
+    secret["input_sets"]["python-toolchain"]["paths"] = [".env"]
+    with pytest.raises(ValidationError, match="secret"):
+        Catalog.model_validate(secret)
+
+    escaping = _catalog_with_acceleration()
+    escaping["docker_scopes"]["qwen-tts"]["paths"] = ["../outside"]
+    with pytest.raises(ValidationError, match="repository-relative"):
+        Catalog.model_validate(escaping)

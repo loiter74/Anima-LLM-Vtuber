@@ -23,6 +23,7 @@ from animetta.observability.ports import ObservationQuery
 # ── Module-level references for health check enrichment ──────
 _model_manager: Any | None = None
 _runtime_config: Any | None = None
+_component_readiness_cache: Any | None = None
 _frontend_readiness: dict[str, str | bool | None] = {
     "state": "failed",
     "ready": False,
@@ -44,6 +45,12 @@ def set_runtime_readiness_context(
     global _runtime_config, _frontend_readiness
     _runtime_config = config
     _frontend_readiness = dict(frontend)
+
+
+def set_component_readiness_cache(cache: Any | None) -> None:
+    """Register the background-owned local component readiness cache."""
+    global _component_readiness_cache
+    _component_readiness_cache = cache
 
 # Dashboard frontend file directory
 STATS_FRONTEND_DIR = str(
@@ -158,6 +165,7 @@ async def readiness_check(request: Request) -> JSONResponse:
             frontend=_frontend_readiness,
         )
         payload = snapshot.to_dict()
+        _merge_component_readiness(payload)
         return JSONResponse(payload, status_code=200 if payload["ready"] else 503)
     except Exception as exc:
         logger.warning(
@@ -173,6 +181,54 @@ async def readiness_check(request: Request) -> JSONResponse:
             },
             status_code=503,
         )
+
+
+def _merge_component_readiness(payload: dict[str, Any]) -> None:
+    """Merge cached local checks into canonical-profile readiness without I/O."""
+    if payload.get("profile") not in {"test", "smoke", "production"}:
+        return
+    required = {"memory_runtime"}
+    observation = getattr(_runtime_config, "observability", None)
+    if getattr(observation, "enabled", False):
+        required.add("observation_ledger")
+        if getattr(getattr(observation, "prometheus", None), "enabled", False):
+            required.add("metrics_projection")
+    providers = getattr(_runtime_config, "providers", None)
+    configured_tts = providers.get("tts") if hasattr(providers, "get") else None
+    if getattr(configured_tts, "type", None) == "remote":
+        required.add("remote_tts")
+
+    if _component_readiness_cache is None:
+        local_snapshot = {
+            "age_seconds": None,
+            "components": {
+                name: {
+                    "state": "failed",
+                    "ready": False,
+                    "reason": "cache_unavailable",
+                }
+                for name in required
+            },
+        }
+    else:
+        local_snapshot = _component_readiness_cache.snapshot()
+
+    components = payload.setdefault("components", {})
+    local_components = local_snapshot.get("components", {})
+    local_ready = True
+    for name in required:
+        component = dict(
+            local_components.get(
+                name,
+                {"state": "failed", "ready": False, "reason": "cache_unavailable"},
+            )
+        )
+        component["required"] = True
+        components[name] = component
+        local_ready = local_ready and component.get("ready") is True
+    payload["component_status_age_seconds"] = local_snapshot.get("age_seconds")
+    payload["ready"] = bool(payload.get("ready") and local_ready)
+    payload["status"] = "ready" if payload["ready"] else "not_ready"
 
 
 def _get_gpu_info() -> dict[str, Any]:

@@ -50,6 +50,7 @@ class _Command:
         "operation_finish",
         "event",
         "inspection_report",
+        "readiness_probe",
         "barrier",
         "stop",
     ]
@@ -189,6 +190,10 @@ class SQLiteObservationLedger:
         await self._queue.put(_Command("barrier", acknowledgement=acknowledgement))
         await acknowledgement
         self._raise_pending_error()
+
+    async def probe_write(self) -> None:
+        """Commit one bounded health row to prove the ledger remains writable."""
+        await self._submit_confirmed(_Command("readiness_probe", time.time()))
 
     async def health(self) -> ObservationHealth:
         writer_failed = bool(self._writer_task and self._writer_task.done())
@@ -477,6 +482,18 @@ class SQLiteObservationLedger:
         if command.kind == "inspection_report":
             await self._insert_inspection_report(_expect_mapping(command.payload))
             return None
+        if command.kind == "readiness_probe":
+            if not isinstance(command.payload, (int, float)):
+                raise LedgerIntegrityError("invalid readiness probe timestamp")
+            await self._require_db().execute(
+                """
+                INSERT INTO observation_readiness_probe (id, checked_at)
+                VALUES (1, ?)
+                ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at
+                """,
+                (float(command.payload),),
+            )
+            return None
         raise LedgerIntegrityError(f"unsupported ledger command: {command.kind}")
 
     async def _insert_trace(self, record: TraceStarted) -> None:
@@ -738,6 +755,11 @@ class SQLiteObservationLedger:
                 finished_at REAL NOT NULL,
                 overall_ok INTEGER NOT NULL,
                 checks_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS observation_readiness_probe (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                checked_at REAL NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_observation_traces_started

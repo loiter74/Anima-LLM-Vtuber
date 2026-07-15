@@ -16,9 +16,9 @@ def __getattr__(name: str):
     if name == "AgentConfig":
         from .config import AgentConfig
         return AgentConfig
-    if name == "AppConfig":
-        from .config import AppConfig
-        return AppConfig
+    if name == "EffectiveConfig":
+        from .config import EffectiveConfig
+        return EffectiveConfig
     if name == "ASRConfig":
         from .config import ASRConfig
         return ASRConfig
@@ -49,7 +49,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module 'animetta' has no attribute {name!r}")
 
 __all__ = [
-    "AppConfig",
+    "EffectiveConfig",
     "ASRConfig",
     "TTSConfig",
     "LLMConfig",

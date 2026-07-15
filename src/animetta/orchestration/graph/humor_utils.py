@@ -22,7 +22,7 @@ def get_service_context(config: RunnableConfig | None) -> Any | None:
 
 
 def resolve_humor_config(config: RunnableConfig | None, service_context: Any) -> HumorConfig:
-    """Resolve Humor Agent config from RunnableConfig or AppConfig."""
+    """Resolve Humor Agent config from runnable or effective runtime config."""
     explicit = get_config_value(config, "humor_config", None)
     if isinstance(explicit, HumorConfig):
         return explicit

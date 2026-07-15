@@ -1,6 +1,9 @@
-.PHONY: lint typecheck deadcode test quality-validate test-quick test-affected test-full health docker-health docker-test docker-lint
+.PHONY: lint typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint
 
 PYTHON ?= python
+QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
+QUALITY_DOCKER_FULL_PLAN ?= artifacts/test-impact/docker-full-plan.json
+QUALITY_RELEASE_EVIDENCE ?= artifacts/test-impact/release-runtime/evidence.json
 
 # ── Local targets ────────────────────────────────────────────────────────
 
@@ -23,13 +26,28 @@ quality-validate:
 	$(PYTHON) -m tooling.quality validate
 
 test-quick:
-	$(PYTHON) -m tooling.quality verify --tier quick --worktree
+	$(PYTHON) -m tooling.quality verify --tier quick --worktree --cache read-write
 
 test-affected:
-	$(PYTHON) -m tooling.quality verify --tier affected --worktree
+	$(PYTHON) -m tooling.quality verify --tier affected --worktree --cache read-write
 
 test-full:
-	$(PYTHON) -m tooling.quality verify --tier full --worktree
+	$(PYTHON) -m tooling.quality verify --tier full --worktree --cache off
+	$(PYTHON) -m tooling.quality plan --tier full --worktree --output $(QUALITY_DOCKER_FULL_PLAN)
+	$(PYTHON) scripts/release_runtime_gate.py --plan $(QUALITY_DOCKER_FULL_PLAN) --output $(QUALITY_RELEASE_EVIDENCE)
+
+test-affected-shadow:
+	$(PYTHON) -m tooling.quality verify --tier affected --worktree --shadow-sequential --cache off
+
+benchmark-quick:
+	$(PYTHON) -m tooling.quality benchmark --tier quick --worktree --iterations 5 --output artifacts/test-impact/benchmark-quick.json
+
+benchmark-affected:
+	$(PYTHON) -m tooling.quality benchmark --tier affected --worktree --iterations 5 --output artifacts/test-impact/benchmark-affected.json
+
+docker-build-affected:
+	$(PYTHON) -m tooling.quality plan --tier affected --worktree --output $(QUALITY_DOCKER_PLAN)
+	$(PYTHON) -m tooling.quality docker-build --plan $(QUALITY_DOCKER_PLAN)
 
 health:
 	@echo "=== Lint ==="

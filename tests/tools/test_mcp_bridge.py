@@ -92,12 +92,19 @@ class TestMCPManager:
         assert "/some/path" in args
 
     @pytest.mark.asyncio
-    async def test_load_handles_docker_unavailable(self):
+    async def test_load_handles_docker_unavailable(self, monkeypatch):
         """load() should not crash when Docker is unavailable."""
 
+        def unavailable_stdio_client(*_args, **_kwargs):
+            raise FileNotFoundError("docker executable is unavailable")
+
+        monkeypatch.setattr(
+            "animetta.tools.mcp_bridge.stdio_client",
+            unavailable_stdio_client,
+        )
+
         mgr = MCPManager()
-        # Simulate a Docker-based MCP server config — Docker isn't running,
-        # so this should degrade gracefully
+        # Simulate a Docker-based MCP server config without touching host Docker.
         configs = [{
             "name": "filesystem",
             "transport": "stdio",

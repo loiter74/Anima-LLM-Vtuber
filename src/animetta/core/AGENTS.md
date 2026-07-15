@@ -13,7 +13,7 @@
 
 | File | Role |
 |------|------|
-| `socketio_server.py` | Entry point. Parses `--redis-url`, loads `.env`, builds `AppConfig`, constructs `WebSocketServer`, runs uvicorn ASGI factory. |
+| `socketio_server.py` | Entry point. Parses `--redis-url`, resolves one immutable `EffectiveConfig`, constructs `WebSocketServer`, runs uvicorn ASGI factory. |
 | `service_pool.py` | Class-level singleton holding shared LLM/TTS/ASR engines. Stateless engines only — VAD/Memory/emotion are per-session. |
 | `service_context.py` | Request-scoped container: ASR/TTS/LLM/VAD/Memory/emotion/audio per session. 460 lines. |
 | `model_loading_manager.py` | `ModelLoadingManager` + `ModelSlot` — concurrent warmup, asyncio.Event-based waiting, Socket.IO status reporting. |
@@ -35,7 +35,7 @@
 ## STARTUP SEQUENCE (`get_asgi_app`)
 
 `_INIT_DONE` Event guards against double-init on uvicorn reload. Order:
-1. Load `.env` (module top) → parse `--redis-url` → load `AppConfig` + `UserSettings` + log level.
+1. Load `.env` (module top) → parse `--redis-url` → resolve `config/animetta.yaml` for `ANIMETTA_PROFILE` + `UserSettings` + log level.
 2. Add file logger `logs/animetta.log` (daily rotation, 7-day retention, for Loki).
 3. `_setup_checkpointer()` → if `--redis-url`: `AsyncRedisSaver` + `set_external_checkpointer`; else MemorySaver default.
 4. `create_server(config)` → initializes tracing/routes/lifecycle, then `_server.set_user_settings(...)`.

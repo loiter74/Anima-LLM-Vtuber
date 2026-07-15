@@ -9,7 +9,6 @@ broadcast_to_desktop_clients, etc.).
 import json
 from typing import TYPE_CHECKING
 
-from animetta.config.app import AppConfig
 from animetta.config.live2d import get_live2d_config
 
 if TYPE_CHECKING:
@@ -71,8 +70,10 @@ class BaseSocketHandler:
         return self.make_send_callback(sid)
 
     def get_active_config(self):
-        """Return the active runtime config, loading from disk only as fallback."""
-        return self.global_config or AppConfig.load()
+        """Return the one bootstrap snapshot; handlers never reload independently."""
+        if self.global_config is None:
+            raise RuntimeError("Runtime EffectiveConfig has not been published")
+        return self.global_config
 
     async def get_or_create_context(self, sid: str, send_callback=None):
         """Create a session context using the shared handler config boundary."""

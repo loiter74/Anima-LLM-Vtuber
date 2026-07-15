@@ -230,8 +230,8 @@ grep "工具调用已启用" logs/animetta.log
 
 3. 检查 LLM 模型：
 ```bash
-# 确认使用的是 GLM-4 系列（支持工具调用）
-grep "model=" config/services.yaml
+# 确认 smoke/production 的 LLM 声明支持工具调用
+grep -A12 "deepseek:" config/animetta.yaml
 ```
 
 ### 问题：工具调用报错

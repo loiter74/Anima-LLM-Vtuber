@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCKERFILES = ("Dockerfile", "Dockerfile.cuda")
+DOCKERFILES = ("Dockerfile",)
 
 
 def test_docker_frontend_build_uses_pnpm_lockfile() -> None:

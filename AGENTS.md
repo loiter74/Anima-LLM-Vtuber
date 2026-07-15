@@ -102,8 +102,11 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 - Stable local entrypoints are `make test-quick`, `make test-affected`, and `make test-full`; validate the catalog with `make quality-validate`.
 - `tooling/quality.yml` is the only component-to-test mapping. Do not duplicate path-selection logic in scripts or CI YAML.
 - Verification is machine-selected from the changed paths, impact closure, risk level, tier, and declared capabilities. An AI agent may not manually omit a required selected group.
+- Quick and affected runs use exact content fingerprints, a bounded weighted DAG scheduler, and a repository/trust-scoped cache. Only successful cacheable hermetic results may be reused; full/nightly release gates run with `cache off`.
+- Coverage dominance is allowed only when declared and validated in `tooling/quality.yml`; every omitted group is recorded with its covering group and reason in the frozen plan.
 - Catalog labels such as `[backend, hermetic]` mean “backend ownership” and “runs without a live browser/service”; capability requirements such as an installed Docker CLI are declared separately.
 - `docker-compose-contract` is a hermetic static configuration check and does not start containers. Selected Playwright or live Docker service groups require fresh runtime evidence; Playwright must use a fresh page capture and live Docker verification must follow the sub-agent startup protocol below.
+- An exact warm-topology match may avoid an unnecessary rebuild/restart, but never reuses health, readiness, log, TTS recovery, request, console, page, or screenshot evidence.
 - Every run persists the frozen plan and per-group result evidence under `artifacts/test-impact/`; CI matrices contain group IDs only and execute the same frozen plan.
 
 ### 服务启动（Docker 启动协议）

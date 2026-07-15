@@ -2,39 +2,58 @@ services:
   animetta:
     build:
       context: .
-      dockerfile: Dockerfile.cuda
+      dockerfile: Dockerfile
+      args:
+        ANIMETTA_BUILD_FINGERPRINT: ${ANIMETTA_BUILD_FINGERPRINT:-untracked}
     ports:
       - "80:80"
       - "${ANIMETTA_PORT:-12394}:12394"
-    env_file:
-      - path: .env
-        required: false
     environment:
+      - ANIMETTA_PROFILE=production
       - ANIMETTA_HOST=0.0.0.0
       - ANIMETTA_PORT=12394
-      - ANIMETTA_LOG_LEVEL=${ANIMETTA_LOG_LEVEL:-INFO}
-      - ANIMETTA_CONFIG=/app/config/config.golden.yaml
-      - ANIMETTA_DEVICE=cuda
-      - ANIMETTA_ASR=mock
-      - ANIMETTA_TTS=alice_vc
-      - ANIMETTA_LLM=deepseek
-      - ANIMETTA_VAD=silero
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - HF_HUB_OFFLINE=1
-      - TRANSFORMERS_OFFLINE=1
-      - HF_HOME=/root/.cache/huggingface
+      - MIMO_API_KEY=${MIMO_API_KEY:-}
+      - QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}
+      - QWEN_TTS_URL=http://qwen-tts:8766
+    depends_on:
+      qwen-tts:
+        condition: service_healthy
     volumes:
       - animetta-memory-db:/app/memory_db
       - animetta-data:/app/data
-      - ${HF_CACHE_DIR:?Set HF_CACHE_DIR to the host Hugging Face cache}:/root/.cache/huggingface:ro
-      - ${ALICE_REF_AUDIO:?Set ALICE_REF_AUDIO to Alice reference WAV}:/app/config/personas/voices/alice_ref.wav:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:80/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 180s
+      start_period: 360s
+
+  qwen-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen-tts
+      args:
+        QWEN_TTS_BUILD_FINGERPRINT: ${QWEN_TTS_BUILD_FINGERPRINT:-untracked}
+    environment:
+      - QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}
+      - QWEN_TTS_URL=http://qwen-tts:8766
+      - QWEN_TTS_BIND_HOST=0.0.0.0
+      - QWEN_TTS_BIND_PORT=8766
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HOME=/models/huggingface
+    volumes:
+      - ${HF_CACHE_DIR:?Set HF_CACHE_DIR to the host Hugging Face cache}:/models/huggingface:ro
+      - ${ALICE_REF_AUDIO:?Set ALICE_REF_AUDIO to Alice reference WAV}:/models/alice/alice_ref.wav:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8766/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 360s
     deploy:
       resources:
         reservations:

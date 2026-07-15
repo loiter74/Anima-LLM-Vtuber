@@ -1,7 +1,7 @@
 # Animetta 唱歌模块配置
-# 唱歌模块使用独立的人物模型和音频处理管线，与主服务配置(services.yaml)分离。
+# 唱歌模块使用独立的人物模型和音频处理管线，与主对话运行时分离。
 # singing.yaml 的 rvc/separation 配置用于歌曲转换和伴奏分离，
-# 而 services.yaml 的 vc/separation 用于实时对话的声音转换。
+# 主对话服务选择统一由 animetta.yaml 管理。
 singing:
   asr:
     download_root: E:/animetta_data/models/whisper

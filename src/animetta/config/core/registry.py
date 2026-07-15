@@ -162,6 +162,15 @@ class ProviderRegistry:
         """List all registered service class names for a category."""
         return list(cls._services.get(category, {}).keys())
 
+    @classmethod
+    def service_types_for_instance(cls, category: str, service: object) -> tuple[str, ...]:
+        """Return registered provider types implemented by an actual instance."""
+        return tuple(
+            provider_type
+            for provider_type, service_class in cls._services.get(category, {}).items()
+            if isinstance(service, service_class)
+        )
+
     # ==================== Union Type Factory ====================
 
     @classmethod

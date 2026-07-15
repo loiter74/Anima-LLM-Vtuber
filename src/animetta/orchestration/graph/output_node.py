@@ -15,6 +15,7 @@ from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMod
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.utils.tempfiles import write_temp_bytes
 
+from .media_status import MediaStatus
 from .persistence_policy import PersistenceMode, PersistenceRequest, decide_persistence
 from .state import AgentState
 from .subtitle_translator import translate_subtitle_text
@@ -32,6 +33,25 @@ def _is_golden_profile(config: RunnableConfig | None) -> bool:
     context = _get_from_config(config, "service_context")
     system = getattr(getattr(context, "config", None), "system", None)
     return getattr(system, "runtime_profile", None) == "golden"
+
+
+def _public_tts_degradation_reason(reason: str | None) -> str:
+    """Map provider-specific failures onto the declared public chat contract."""
+    if reason == "timeout":
+        return "timeout"
+    if reason in {"busy", "rate_limit"}:
+        return "rate_limit"
+    if reason in {"empty_audio", "invalid_audio"}:
+        return "empty_audio"
+    if reason in {
+        "connection",
+        "not_ready",
+        "provider_unavailable",
+        "service_unavailable",
+        "unavailable",
+    }:
+        return "unavailable"
+    return "provider_error"
 
 
 async def output_node(
@@ -71,8 +91,10 @@ async def output_node(
         else ChatDelivery(sio, identity, transport_mode)
     )
 
-    # Send conversation-start signal
-    await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
+    # Split-delivery graphs publish start/text before the blocking TTS node.
+    # Legacy/direct callers still receive the complete event sequence here.
+    if "conversation_started_at" not in metadata:
+        await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
 
     # Store conversation in memory system
     if not _is_golden_profile(config):
@@ -80,7 +102,7 @@ async def output_node(
 
     # Send text response
     response_text = state.get("response_text", "")
-    if response_text:
+    if response_text and "text_ready_at" not in metadata:
         # ── 1. Send original text immediately (no blocking) ──
         lang = translation_state.source_language.lower()[:2]
         sentence_payload = {
@@ -99,46 +121,47 @@ async def output_node(
         )
         logger.debug(f"[{session_id}] [OutputNode] ✅ Sent stream end marker")
 
-        # ── 2. Run translation in background (non-blocking) ──
-        # Golden turns have a hard two-call budget. Subtitle translation must
-        # therefore use a non-LLM implementation in a later phase; the legacy
-        # LLM-backed translator is disabled here.
-        if translation_state.enabled and response_text and not _is_golden_profile(config):
+    # Run translation concurrently after the canonical text has been delivered.
+    # Golden turns have a hard two-call budget, so their legacy LLM translator
+    # remains disabled.
+    translation_task: asyncio.Task[None] | None = None
+    translation_window_open = True
+    if translation_state.enabled and response_text and not _is_golden_profile(config):
 
-            async def _translate_and_emit():
-                with noncritical_observation_context():
-                    try:
-                        service_context = _get_from_config(config, "service_context")
-                        if (
-                            service_context
-                            and hasattr(service_context, "llm_engine")
-                            and service_context.llm_engine
-                        ):
-                            llm = service_context.llm_engine
-                            translated = await translate_subtitle_text(
-                                llm,
-                                response_text,
-                                source_lang=translation_state.source_language,
-                                target_lang=translation_state.target_language,
+        async def _translate_and_emit():
+            with noncritical_observation_context():
+                try:
+                    service_context = _get_from_config(config, "service_context")
+                    if (
+                        service_context
+                        and hasattr(service_context, "llm_engine")
+                        and service_context.llm_engine
+                    ):
+                        llm = service_context.llm_engine
+                        translated = await translate_subtitle_text(
+                            llm,
+                            response_text,
+                            source_lang=translation_state.source_language,
+                            target_lang=translation_state.target_language,
+                        )
+                        if translated and translation_window_open:
+                            target_lang = translation_state.target_language.lower()[:2]
+                            await delivery.emit(
+                                "chat",
+                                "subtitle_translation",
+                                {
+                                    "translation": translated,
+                                    "target_lang": target_lang,
+                                },
+                                to=to,
                             )
-                            if translated:
-                                target_lang = translation_state.target_language.lower()[:2]
-                                await delivery.emit(
-                                    "chat",
-                                    "subtitle_translation",
-                                    {
-                                        "translation": translated,
-                                        "target_lang": target_lang,
-                                    },
-                                    to=to,
-                                )
-                                logger.info(
-                                    f"[{session_id}] [OutputNode] ✅ Translated response to {translation_state.target_language}"
-                                )
-                    except Exception as e:
-                        logger.warning(f"[{session_id}] [OutputNode] Translation failed: {e}")
+                            logger.info(
+                                f"[{session_id}] [OutputNode] ✅ Translated response to {translation_state.target_language}"
+                            )
+                except Exception as e:
+                    logger.warning(f"[{session_id}] [OutputNode] Translation failed: {e}")
 
-            asyncio.create_task(_translate_and_emit())
+        translation_task = asyncio.create_task(_translate_and_emit())
 
     # Send emotion event — also send motion command to frontend
     emotion = state.get("emotion")
@@ -231,6 +254,39 @@ async def output_node(
                 },
                 to=to,
             )
+    else:
+        media_status = state.get("media_status")
+        if isinstance(media_status, MediaStatus) and media_status.status == "degraded":
+            await delivery.emit(
+                "chat",
+                "control",
+                {
+                    "type": "media-degraded",
+                    "status": "degraded",
+                    "component": "tts",
+                    "phase": "media",
+                    "reason": _public_tts_degradation_reason(media_status.reason),
+                    "retryable": media_status.retryable,
+                    "text": "Audio unavailable; continuing with text.",
+                },
+                to=to,
+            )
+
+    # conversation-end is terminal for this turn. Give the non-critical
+    # translator a short grace window, then cancel it before publishing the
+    # terminal frame so no late chat event can leak into the next turn.
+    if translation_task is not None:
+        try:
+            await asyncio.wait_for(asyncio.shield(translation_task), timeout=1.0)
+        except TimeoutError:
+            translation_window_open = False
+            translation_task.cancel()
+            try:
+                await translation_task
+            except asyncio.CancelledError:
+                logger.debug(
+                    f"[{session_id}] [OutputNode] Translation cancelled before terminal frame"
+                )
 
     # Send conversation-end signal
     await delivery.emit("chat", "control", {"signal": "conversation-end"}, to=to)

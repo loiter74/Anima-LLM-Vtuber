@@ -64,4 +64,20 @@ describe('usePersonalityStore', () => {
     expect(store.currentPersona).toBe('anima')
     expect(store.personaError).toBeNull()
   })
+
+  it('keeps the current persona when persona:set is rejected', async () => {
+    socket.emit.mockImplementation((event, _payload, callback) => {
+      if (event === Events.PERSONA.SET) {
+        callback({ error: 'canonical config reload required' })
+      }
+    })
+
+    const store = usePersonalityStore()
+    store.currentPersona = 'default'
+    await store.setPersona('anima')
+
+    expect(store.currentPersona).toBe('default')
+    expect(store.personaSuccess).toBe(false)
+    expect(store.personaError).toBe('canonical config reload required')
+  })
 })

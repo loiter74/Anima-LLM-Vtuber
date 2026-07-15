@@ -21,7 +21,7 @@ def _http(status: int = 200, payload: dict[str, Any] | None = None):
 
 def test_success_writes_timestamped_atomic_json_evidence(tmp_path: Path) -> None:
     exit_code, evidence_path, report = run_baseline(
-        config_path=Path("config/config.golden.yaml"),
+        config_path=Path("config/animetta.yaml"),
         project_root=Path.cwd(),
         base_url="http://localhost",
         output_dir=tmp_path,

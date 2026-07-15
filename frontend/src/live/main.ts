@@ -15,8 +15,7 @@ declare global {
 
 window.PIXI = PIXI
 
-const socketUrl = import.meta.env.VITE_API_URL || window.location.origin
-const socket = io(socketUrl, {
+const socket = io(window.location.origin, {
   path: '/socket.io/',
   transports: ['websocket', 'polling'],
   reconnection: true,

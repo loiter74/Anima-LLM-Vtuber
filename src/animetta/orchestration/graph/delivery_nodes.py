@@ -11,7 +11,7 @@ from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMod
 from animetta.orchestration.chat_delivery import ChatDelivery
 
 from .media_status import MediaStatus
-from .output_node import _compute_volumes
+from .output_node import _compute_volumes, _public_tts_degradation_reason
 from .state import AgentState, log_timing
 from .translation_state import translation_state
 
@@ -98,7 +98,7 @@ async def performance_output_node(
     elif media.status == "degraded":
         await delivery.emit("chat", "control", {
             "type": "media-degraded", "status": "degraded", "component": "tts",
-            "phase": "media", "reason": media.reason or "provider_error",
+            "phase": "media", "reason": _public_tts_degradation_reason(media.reason),
             "retryable": media.retryable, "text": "Audio unavailable; continuing with text.",
         }, to=to)
 

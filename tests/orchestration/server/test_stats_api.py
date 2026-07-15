@@ -10,7 +10,12 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from animetta.orchestration.server.stats_api import _get_gpu_info, get_stats_routes
+from animetta.orchestration.server.stats_api import (
+    _get_gpu_info,
+    get_stats_routes,
+    set_component_readiness_cache,
+    set_runtime_readiness_context,
+)
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -171,6 +176,65 @@ class TestHealthEndpoint:
 
         assert resp.status_code == 200
         assert resp.json()["ready"] is True
+
+    @pytest.mark.parametrize(
+        "failed_component",
+        ["observation_ledger", "memory_runtime", "metrics_projection"],
+    )
+    def test_ready_merges_cached_required_local_component_degradation(
+        self,
+        failed_component: str,
+    ):
+        snapshot = MagicMock()
+        snapshot.to_dict.return_value = {
+            "status": "ready",
+            "ready": True,
+            "profile": "production",
+            "acceptance_eligible": True,
+            "components": {},
+        }
+        components = {
+            name: {
+                "state": "failed" if name == failed_component else "ready",
+                "ready": name != failed_component,
+                "reason": "component_degraded" if name == failed_component else None,
+            }
+            for name in ("observation_ledger", "memory_runtime", "metrics_projection")
+        }
+        cache = SimpleNamespace(
+            snapshot=lambda: {
+                "ready": False,
+                "components": components,
+                "age_seconds": 0.1,
+            }
+        )
+        config = SimpleNamespace(
+            profile="production",
+            observability=SimpleNamespace(
+                enabled=True,
+                prometheus=SimpleNamespace(enabled=True),
+            ),
+        )
+        set_runtime_readiness_context(
+            config,
+            {"state": "ready", "ready": True, "reason": None},
+        )
+        set_component_readiness_cache(cache)
+        try:
+            with patch(
+                "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+                return_value=snapshot,
+            ):
+                app = _build_test_app()
+                with TestClient(app) as client:
+                    response = client.get("/ready")
+        finally:
+            set_component_readiness_cache(None)
+
+        assert response.status_code == 503
+        payload = response.json()
+        assert payload["ready"] is False
+        assert payload["components"][failed_component]["ready"] is False
 
     def test_ready_fails_closed_and_redacts_snapshot_errors(self):
         with patch(

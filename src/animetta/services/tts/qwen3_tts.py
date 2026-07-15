@@ -39,14 +39,32 @@ from .interface import TTSInterface
 _HF_PATCH_LOCK = threading.Lock()
 
 
-def _resolve_cached_model_source(model: str) -> str:
+def _resolve_cached_model_source(model: str, revision: str | None = None) -> str:
     """Resolve a Hub model id to its active local snapshot when available."""
     if "/" not in model:
         return model
     hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
     model_root = hf_home / "hub" / f"models--{model.replace('/', '--')}"
-    refs_main = model_root / "refs" / "main"
     snapshots_root = model_root / "snapshots"
+    if revision is not None:
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", revision):
+            raise ValueError("Pinned Qwen model revision has an invalid format")
+        try:
+            resolved_snapshots = snapshots_root.resolve()
+            snapshot = (resolved_snapshots / revision).resolve()
+            if snapshot.is_relative_to(resolved_snapshots) and (
+                snapshot / "config.json"
+            ).is_file():
+                return str(snapshot)
+        except (OSError, ValueError) as exc:
+            raise FileNotFoundError(
+                "Pinned Qwen model revision is unavailable in the local cache"
+            ) from exc
+        raise FileNotFoundError(
+            "Pinned Qwen model revision is unavailable in the local cache"
+        )
+
+    refs_main = model_root / "refs" / "main"
     try:
         revision = refs_main.read_text(encoding="utf-8").strip()
         if not revision or not re.fullmatch(r"[A-Za-z0-9._-]+", revision):
@@ -125,6 +143,7 @@ class Qwen3TTSTTS(TTSInterface):
     def __init__(
         self,
         model: str = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        revision: str | None = None,
         speaker: str = "Vivian",
         device: str = "cuda:0",
         dtype: str = "bfloat16",
@@ -140,6 +159,7 @@ class Qwen3TTSTTS(TTSInterface):
         x_vector_only: bool = True,
     ) -> None:
         self.model = model
+        self.revision = revision
         self.speaker = speaker
         self.device = device
         self.dtype = dtype
@@ -337,6 +357,7 @@ class Qwen3TTSTTS(TTSInterface):
                 return
 
             logger.info("Qwen3-TTS model load started")
+            model_source = _resolve_cached_model_source(self.model, self.revision)
             try:
                 import torch
                 from qwen_tts import Qwen3TTSModel
@@ -374,7 +395,6 @@ class Qwen3TTSTTS(TTSInterface):
                 logger.debug("Qwen3-TTS FlashAttention requested")
 
             try:
-                model_source = _resolve_cached_model_source(self.model)
                 if "Darwin-TTS" in self.model and model_source == self.model:
                     logger.info("Qwen3-TTS Darwin compatibility download started")
                     # Darwin intentionally keeps its legacy online first load,
@@ -459,6 +479,7 @@ class Qwen3TTSTTS(TTSInterface):
         """Create instance from config object"""
         return cls(
             model=config.model,
+            revision=config.revision,
             speaker=config.speaker,
             device=config.device,
             dtype=config.dtype,

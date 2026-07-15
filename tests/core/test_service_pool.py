@@ -577,7 +577,7 @@ class TestApplyLlmConfig:
 
         ServicePool.apply_llm_config(Config())
 
-        assert engine.model == "new-model"
+        assert engine.model == "old-model"
         assert engine.temperature == 0.7
         assert engine.top_p == 0.8
         assert engine.max_tokens == 256
@@ -613,7 +613,7 @@ class TestApplyLlmConfig:
         assert ServicePool._llm is engine
         assert ServicePool._tts is tts
         assert ServicePool._asr is asr
-        assert engine.model == "new-model"
+        assert engine.model == "old-model"
         assert engine.temperature == 0.7
         assert engine.top_p == 0.8
         assert engine.max_tokens == 256

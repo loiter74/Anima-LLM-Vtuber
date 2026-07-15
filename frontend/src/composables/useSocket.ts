@@ -1,16 +1,11 @@
 import { io, Socket } from 'socket.io-client'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted } from 'vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useModelLoadingStore } from '@/stores/modelLoading'
 import { useSingingStore } from '@/stores/singing'
 import type { ModelStatusPayload } from '@/types/model-loading'
-import type { ConnectionStatus } from '@/types/socket-events'
-import type { PipelineStage, SongResult } from '@/types/singing'
+import type { PipelineStage } from '@/types/singing'
 import { Events } from '@/constants/socket-events'
-
-// Connect via same-origin (nginx in Docker, Vite proxy in dev) to avoid
-// CORS + WSL2 WebSocket relay issues. Set VITE_API_URL to override (e.g. ngrok).
-const SOCKET_URL = import.meta.env.VITE_API_URL || ''
 
 let socket: Socket | null = null
 let _initialized = false
@@ -25,8 +20,7 @@ export function useSocket() {
   const store = useConnectionStore()
 
   if (!_initialized && !socket) {
-    const url = SOCKET_URL || window.location.origin
-    socket = io(url, {
+    socket = io(window.location.origin, {
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
       reconnection: true,

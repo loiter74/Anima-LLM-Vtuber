@@ -1,0 +1,160 @@
+schema_version: 1
+
+application:
+  persona: anima.v0.1
+  system:
+    host: ${ANIMETTA_HOST}
+    port: ${ANIMETTA_PORT}
+  observability:
+    enabled: true
+    database_path: data/observations.db
+    queue_capacity: 4096
+    busy_timeout_ms: 5000
+    drain_timeout_seconds: 5.0
+    privacy:
+      test: full
+      smoke: redacted
+      production: redacted
+      digest_salt: animetta-local-observation
+    prometheus:
+      enabled: true
+    otlp:
+      enabled: false
+      endpoint: null
+      max_export_batch_size: 512
+      schedule_delay_millis: 5000
+  humor:
+    enabled: false
+
+providers:
+  llm:
+    mock:
+      type: mock
+    deepseek:
+      type: deepseek
+      api_key: ${DEEPSEEK_API_KEY}
+      model: deepseek-v4-flash
+      base_url: https://api.deepseek.com/v1
+      thinking: disabled
+      temperature: 0.9
+      top_p: 0.93
+      max_tokens: 4096
+
+  asr:
+    mock:
+      type: mock
+    mimo-asr:
+      type: mimo
+      api_key: ${MIMO_API_KEY}
+      model: mimo-v2.5-asr
+      base_url: https://api.xiaomimimo.com/v1
+      language: auto
+      sample_rate: 16000
+      input_audio_format: pcm_s16le
+
+  tts:
+    mock:
+      type: mock
+      voice: default
+    mimo-tts:
+      type: mimo
+      api_key: ${MIMO_API_KEY}
+      model: mimo-v2.5-tts
+      base_url: https://api.xiaomimimo.com/v1
+      voice: mimo_default
+      response_format: wav
+    qwen-alice:
+      type: remote
+      api_key: ${QWEN_TTS_API_KEY}
+      base_url: ${QWEN_TTS_URL}
+      provider: qwen3
+      model: Qwen/Qwen3-TTS-12Hz-0.6B-Base
+      voice: alice
+      response_format: wav
+      timeout_seconds: 20.0
+      worker:
+        revision: 5d83992436eae1d760afd27aff78a71d676296fc
+        device: cuda
+        dtype: bfloat16
+        language: Chinese
+        use_flash_attn: false
+        # 12 Hz codec tokens: 48 caps one request near four seconds of audio.
+        # This leaves latency headroom on the local RTX 5090 acceptance host.
+        max_new_tokens: 48
+        temperature: 0.6
+        top_p: 0.8
+        repetition_penalty: 1.05
+        ref_audio_path: /models/alice/alice_ref.wav
+        ref_text: 私まで呼ばれるなんて、他の魔術師の工房を見…
+        x_vector_only: false
+
+  vad:
+    mock:
+      type: mock
+      sample_rate: 16000
+      db_threshold: -30.0
+      min_speech_duration: 5
+      min_silence_duration: 15
+    mimo-vad:
+      type: mimo
+      api_key: ${MIMO_API_KEY}
+      model: mimo-v2.5-asr
+      base_url: https://api.xiaomimimo.com/v1
+      language: auto
+      sample_rate: 16000
+      db_threshold: -35.0
+      min_speech_duration: 2
+      min_silence_duration: 8
+      confirm_with_asr: true
+
+profiles:
+  test:
+    services:
+      llm: mock
+      asr: mock
+      tts: mock
+      vad: mock
+    policy:
+      allow_mock: true
+      require_remote_identity: false
+    runtime:
+      debug: true
+      long_term_memory_mode: "off"
+      enable_tools: false
+      enable_subtitle_translation: false
+      enable_active_memes: false
+      tts_timeout_seconds: 5.0
+
+  smoke:
+    services:
+      llm: deepseek
+      asr: mimo-asr
+      tts: mimo-tts
+      vad: mimo-vad
+    policy:
+      allow_mock: false
+      require_remote_identity: true
+    runtime:
+      debug: false
+      long_term_memory_mode: "off"
+      enable_tools: false
+      enable_subtitle_translation: false
+      enable_active_memes: false
+      tts_timeout_seconds: 20.0
+
+  production:
+    services:
+      llm: deepseek
+      asr: mimo-asr
+      tts: qwen-alice
+      vad: mimo-vad
+    policy:
+      allow_mock: false
+      require_remote_identity: true
+    runtime:
+      debug: false
+      long_term_memory_mode: "off"
+      enable_tools: false
+      enable_subtitle_translation: false
+      enable_active_memes: false
+      tts_timeout_seconds: 20.0

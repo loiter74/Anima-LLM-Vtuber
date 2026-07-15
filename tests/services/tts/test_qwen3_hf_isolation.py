@@ -322,6 +322,52 @@ def test_loader_passes_active_local_snapshot_to_qwen(
     assert runtime.model_sources == [str(snapshot.resolve())]
 
 
+def test_loader_uses_explicit_pinned_revision_instead_of_active_main(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime = _install_fake_runtime(monkeypatch)
+    model_root = tmp_path / "hub" / "models--Qwen--Qwen3-TTS-12Hz-0.6B-Base"
+    pinned_revision = "pinned0123456789"
+    active_revision = "active9876543210"
+    for revision in (pinned_revision, active_revision):
+        snapshot = model_root / "snapshots" / revision
+        snapshot.mkdir(parents=True)
+        (snapshot / "config.json").write_text("{}", encoding="utf-8")
+    refs = model_root / "refs"
+    refs.mkdir()
+    (refs / "main").write_text(active_revision, encoding="utf-8")
+    monkeypatch.setenv("HF_HOME", str(tmp_path))
+    provider = Qwen3TTSTTS(
+        model="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        revision=pinned_revision,
+        device="cpu",
+        dtype="float16",
+        use_flash_attn=False,
+    )
+
+    provider._load_model()
+
+    expected = str((model_root / "snapshots" / pinned_revision).resolve())
+    assert _resolve_cached_model_source(provider.model, pinned_revision) == expected
+    assert runtime.model_sources == [expected]
+
+
+def test_loader_fails_closed_when_pinned_revision_is_not_cached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HF_HOME", str(tmp_path))
+    provider = Qwen3TTSTTS(
+        model="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        revision="missing-revision",
+        device="cpu",
+        dtype="float16",
+        use_flash_attn=False,
+    )
+
+    with pytest.raises(FileNotFoundError, match="Pinned Qwen model revision is unavailable"):
+        provider._load_model()
+
+
 @pytest.mark.parametrize(
     "stage",
     [

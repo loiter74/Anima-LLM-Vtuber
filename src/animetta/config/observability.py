@@ -21,6 +21,8 @@ class OtlpMirrorConfig(BaseConfig):
 class ObservationPrivacyConfig(BaseConfig):
     development: Literal["full", "redacted"] = "full"
     golden: Literal["full", "redacted"] = "redacted"
+    test: Literal["full", "redacted"] = "full"
+    smoke: Literal["full", "redacted"] = "redacted"
     production: Literal["full", "redacted"] = "redacted"
     digest_salt: str = "animetta-local-observation"
 

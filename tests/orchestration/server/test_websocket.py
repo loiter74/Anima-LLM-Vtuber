@@ -3,14 +3,34 @@ from __future__ import annotations
 """Tests for WebSocketServer — server init, routes, lifecycle, and prewarm."""
 
 import asyncio
+import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
-from animetta.config.app import AppConfig
+from animetta.config.manifest import load_effective_config
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
+
+
+def _effective_config(*, observability: dict | None = None):
+    with patch.dict(
+        os.environ,
+        {
+            "ANIMETTA_PROFILE": "test",
+            "ANIMETTA_HOST": "127.0.0.1",
+            "ANIMETTA_PORT": "12394",
+        },
+        clear=True,
+    ):
+        config = load_effective_config("config/animetta.yaml", profile="test")
+    if observability is None:
+        return config
+    application = config.application.model_copy(
+        update={"observability": observability}
+    )
+    return config.model_copy(update={"application": application})
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -121,7 +141,7 @@ class TestSingingMediaRoutes:
 
     def test_metrics_endpoint_exposes_committed_record_projection(self, tmp_path):
         server = self._server_with_real_routes(
-            AppConfig(
+            _effective_config(
                 observability={
                     "database_path": str(tmp_path / "observations.db"),
                     "otlp": {"enabled": False},
@@ -223,7 +243,7 @@ class TestSetupRoutes:
             assert websocket_server.model_manager._socketio is websocket_server.sio
 
     def test_setup_routes_uses_app_config_bilibili(self, websocket_server):
-        """Bilibili startup config should come from AppConfig.bilibili."""
+        """Bilibili startup config should come from the effective config."""
         websocket_server.config = SimpleNamespace(
             bilibili=SimpleNamespace(
                 enabled=True,

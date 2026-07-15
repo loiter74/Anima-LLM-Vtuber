@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+import time
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
 
 from tooling.quality.aggregate import aggregate_results
 from tooling.quality.executor import build_argv, run_group, write_result
 from tooling.quality.manifest import load_catalog
 from tooling.quality.models import (
     AggregateStatus,
+    AggregateSummary,
     PlannedGroup,
     ResultStatus,
     Runner,
@@ -254,9 +260,7 @@ def test_run_group_redacts_sensitive_values_loaded_indirectly_from_dotenv(
     tmp_path: Path,
 ) -> None:
     secret = "compose-" + ("s" * 40)
-    (tmp_path / ".env").write_text(
-        f"COMPOSE_TEST_SECRET={secret}\n", encoding="utf-8"
-    )
+    (tmp_path / ".env").write_text(f"COMPOSE_TEST_SECRET={secret}\n", encoding="utf-8")
     script = tmp_path / "read_dotenv.py"
     script.write_text(
         "from pathlib import Path\nprint(Path('.env').read_text().split('=', 1)[1])\n",
@@ -280,9 +284,7 @@ def test_run_group_redacts_sensitive_values_loaded_indirectly_from_dotenv(
 def test_run_group_reports_timeout_from_real_process(tmp_path: Path, monkeypatch) -> None:
     script = tmp_path / "slow.py"
     script.write_text(
-        "import os, time\n"
-        "print(os.environ['QUALITY_TEST_TOKEN'], flush=True)\n"
-        "time.sleep(5)\n",
+        "import os, time\nprint(os.environ['QUALITY_TEST_TOKEN'], flush=True)\ntime.sleep(5)\n",
         encoding="utf-8",
     )
     secret = "live-" + ("t" * 40)
@@ -302,6 +304,39 @@ def test_run_group_reports_timeout_from_real_process(tmp_path: Path, monkeypatch
     assert result.exit_code is None
     assert secret not in result.output
     assert "<redacted:QUALITY_TEST_TOKEN>" in result.output
+
+
+def test_run_group_cancels_real_child_process_promptly(tmp_path: Path) -> None:
+    script = tmp_path / "cancel.py"
+    script.write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        "Path('pid.txt').write_text(str(os.getpid()))\n"
+        "print('started', flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    loaded = load_catalog(_write_python_catalog(tmp_path, script.name, timeout=60))
+    cancellation = threading.Event()
+    timer = threading.Timer(0.2, cancellation.set)
+    timer.start()
+    started = time.perf_counter()
+    try:
+        result = run_group(
+            loaded,
+            "python-check",
+            plan_hash="c" * 64,
+            repo_root=tmp_path,
+            available_capabilities=frozenset(),
+            cancellation_event=cancellation,
+        )
+    finally:
+        timer.cancel()
+
+    assert time.perf_counter() - started < 3
+    assert result.status is ResultStatus.CANCELLED
+    assert result.failure_kind == "cancelled"
+    assert "started" in result.output
 
 
 def test_run_group_reports_process_launch_error_as_structured_result(
@@ -387,3 +422,30 @@ def test_aggregate_records_missing_optional_group_as_degraded() -> None:
 
     assert summary.status is AggregateStatus.DEGRADED
     assert summary.missing_groups == ("frontend-playwright-smoke",)
+
+
+def test_plan_result_and_summary_require_current_evidence_schema() -> None:
+    plan = _plan_with_group("backend-core-unit")
+    result = VerificationResult(
+        group_id="backend-core-unit",
+        required=True,
+        status=ResultStatus.PASSED,
+        exit_code=0,
+        duration_seconds=0.1,
+        plan_hash=plan.plan_hash,
+        manifest_hash=plan.manifest_hash,
+    )
+    summary = aggregate_results(plan, [result])
+
+    assert plan.schema_version == 2
+    assert result.schema_version == 2
+    assert summary.schema_version == 2
+
+    for model, payload in (
+        (VerificationPlan, plan.model_dump(mode="json")),
+        (VerificationResult, result.model_dump(mode="json")),
+        (AggregateSummary, summary.model_dump(mode="json")),
+    ):
+        payload["schema_version"] = 1
+        with pytest.raises(ValidationError, match="schema_version"):
+            model.model_validate(payload)

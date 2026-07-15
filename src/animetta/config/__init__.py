@@ -8,17 +8,17 @@ Architecture:
 - agent.py: Agent configuration (combined LLM)
 - persona.py: Persona configuration (includes avatar, etc.)
 - system.py: System configuration
-- app.py: Application configuration
+- manifest.py: Canonical runtime manifest and immutable effective configuration
 """
 
 # Core
 # Composite configs
 from .agent import AgentConfig
-from .app import AppConfig
 from .core.base import BaseConfig
 from .core.mixins import ApiKeyMixin, DeviceMixin, ModelMixin, TemperatureMixin
 from .core.registry import ProviderRegistry
 from .humor import HumorConfig
+from .manifest import EffectiveConfig, load_effective_config
 from .persona import (
     BehaviorRules,
     MBTIDimensionDelta,
@@ -73,6 +73,7 @@ from .providers.tts import (
     MockTTSConfig,
     OpenAITTSConfig,
     Qwen3TTSConfig,
+    RemoteTTSConfig,
     TTSBaseConfig,
     TTSConfig,
     VibeVoiceTTSConfig,
@@ -134,6 +135,7 @@ __all__ = [
     "KokoroTTSConfig",
     "GPTSoVITSConfig",
     "Qwen3TTSConfig",
+    "RemoteTTSConfig",
     # VAD Providers
     "VADConfig",
     "VADBaseConfig",
@@ -163,5 +165,6 @@ __all__ = [
     "MBTIDimensionDelta",
     "MBTIProfile",
     # App
-    "AppConfig",
+    "EffectiveConfig",
+    "load_effective_config",
 ]

@@ -2,7 +2,7 @@
 
 | 决策 / 里程碑 | 权威证据 |
 |---|---|
-| D1 产品边界 | `config/config.golden.yaml` 的冻结开关；`docs/scope-2026-07.md` |
+| D1 产品边界 | `config/animetta.yaml` 的 profile/runtime policy；`docs/scope-2026-07.md` |
 | D2 真实 DeepSeek/Qwen Alice | `/ready` 快照；`scripts/smoke_qwen_alice.py`；preflight 测试 |
 | D3 固定两次 LLM | `test_dialogue_nodes.py` 调用计数；golden graph 节点清单 |
 | D4 四层事件与身份 | `socket-events.json`；contract/real Socket.IO tests；event validator |

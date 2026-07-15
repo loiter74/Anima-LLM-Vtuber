@@ -270,10 +270,12 @@ class LangGraphOrchestrator:
             initial_state["metadata"] = metadata
 
         config_version = int(getattr(self.service_context, "runtime_config_version", 1) or 1)
+        config_hash = getattr(self.service_context, "runtime_config_hash", None)
         initial_state["config_version"] = config_version
         initial_state["metadata"] = {
             **initial_state.get("metadata", {}),
             "config_version": config_version,
+            "config_hash": config_hash,
             "message_id": message_id,
             "conversation_id": conversation_id,
             "task_id": task_id,

@@ -54,19 +54,19 @@ def _sanitize(value: Any) -> Any:
 
 
 def _default_preflight(config_path: Path, project_root: Path) -> dict[str, Any]:
-    from animetta.config import AppConfig
-    from animetta.core.golden_preflight import (
-        GoldenPreflightContext,
-        run_golden_preflight,
-    )
+    from animetta.config.manifest import load_effective_config
 
-    config = AppConfig.from_yaml(str(config_path))
-    context = GoldenPreflightContext(
-        scope="static",
-        project_root=project_root,
-        env=dict(os.environ),
-    )
-    return run_golden_preflight(config, context).to_dict()
+    del project_root
+    config = load_effective_config(config_path)
+    public = config.to_public_dict()
+    return {
+        "ok": all(item["ready"] for item in public["providers"].values()),
+        "profile": config.profile,
+        "version": config.version,
+        "effective_hash": config.effective_hash,
+        "semantic_hash": config.semantic_hash,
+        "providers": public["providers"],
+    }
 
 
 def _default_http_get(url: str, timeout: float) -> tuple[int, str, bytes]:
@@ -177,7 +177,7 @@ def run_baseline(
         {
             "schema_version": 1,
             "recorded_at": recorded_at.isoformat().replace("+00:00", "Z"),
-            "profile": "golden",
+            "profile": preflight_check.get("payload", {}).get("profile", "unknown"),
             "config": str(config_path),
             "base_url": _safe_url(base_url),
             "mode": "static" if static_only else "runtime",
@@ -191,7 +191,7 @@ def run_baseline(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("config/config.golden.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("config/animetta.yaml"))
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--base-url", default="http://localhost")
     parser.add_argument("--output-dir", type=Path, default=Path("data/baseline"))

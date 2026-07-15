@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from animetta.services.asr.factory import ASRFactory
@@ -25,6 +27,30 @@ class TestASRFactory:
     def test_create_mock_is_mock_asr(self):
         engine = ASRFactory.create("mock")
         assert isinstance(unwrap_tracing_proxy(engine), MockASR)
+
+    def test_strict_unknown_provider_fails_without_constructing_mock(self):
+        with (
+            patch(
+                "animetta.services.asr.factory.MockASR",
+                side_effect=AssertionError("MockASR must not be constructed"),
+            ),
+            pytest.raises(ValueError, match="Unknown ASR provider"),
+        ):
+            ASRFactory.create("nonexistent_provider", strict=True)
+
+    def test_strict_provider_failure_propagates_without_constructing_mock(self):
+        with (
+            patch(
+                "animetta.services.asr.factory.ProviderRegistry.create_service",
+                side_effect=RuntimeError("provider failed"),
+            ),
+            patch(
+                "animetta.services.asr.factory.MockASR",
+                side_effect=AssertionError("MockASR must not be constructed"),
+            ),
+            pytest.raises(RuntimeError, match="provider failed"),
+        ):
+            ASRFactory.create("mimo", api_key="secret", strict=True)
 
 
 class TestMockASR:

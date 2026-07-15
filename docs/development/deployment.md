@@ -13,9 +13,9 @@
 flyctl auth login
 
 # 2. Set secrets (API keys)
-flyctl secrets set GLM_API_KEY=your_key_here
-flyctl secrets set OPENAI_API_KEY=your_key_here
-flyctl secrets set OPENAI_BASE_URL=https://api.deepseek.com/v1
+flyctl secrets set DEEPSEEK_API_KEY=your_key_here
+flyctl secrets set MIMO_API_KEY=your_key_here
+flyctl secrets set QWEN_TTS_API_KEY=your_internal_auth_token
 
 # 3. Launch
 flyctl launch --ha=false
@@ -36,17 +36,12 @@ The `fly.toml` is configured for Fly's free tier:
 - **512MB RAM**: Sufficient for mock/API-only mode
 - **Hong Kong region**: Low latency for Asia
 
-## Mock Mode (No API Keys)
+## Local Test Profile (No API Keys)
 
-For a demo without API keys, switch all services to mock:
+For a local validation without API keys, use the manifest's fixed test profile:
 
-```yaml
-# config/config.yaml
-services:
-  agent: mock
-  asr: mock
-  tts: mock
-  vad: mock
+```bash
+ANIMETTA_PROFILE=test docker compose -f docker-compose.core.yml up -d --build
 ```
 
 The app will respond with canned responses. Socket.IO and Live2D still work.

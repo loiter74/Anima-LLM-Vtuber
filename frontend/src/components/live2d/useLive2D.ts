@@ -21,6 +21,14 @@ import {
   zoom as zoomFn, resetView as resetViewFn, setScaleStrategy as setScaleStrategyFn
 } from './useInteraction'
 
+type Live2DSocket = NonNullable<ReturnType<typeof getSocket>>
+
+let socketListenerOwners = 0
+let listenerSocket: Live2DSocket | null = null
+let live2dActionListener: ((data: unknown) => void) | null = null
+let audioWithExpressionListener: ((data: AudioWithExpressionEvent) => void) | null = null
+let stopAudioListener: ((data: ChatIdentity) => void) | null = null
+
 // ===== Main Composable =====
 
 /**
@@ -28,6 +36,8 @@ import {
  * while maintaining the identical public API surface.
  */
 export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
+  let ownsSocketListeners = false
+
   // ===== Init =====
 
   async function init(): Promise<void> {
@@ -97,34 +107,60 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
   // ===== Socket Listeners =====
 
   function setupSocketListeners(): void {
+    if (ownsSocketListeners) return
+
     const socket = getSocket()
     if (!socket) return
 
-    socket.on(Events.CHAT.LIVE2D_ACTION, (data: unknown) => {
-      executeAction(data as Live2DAction)
-    })
+    ownsSocketListeners = true
+    socketListenerOwners += 1
+    if (listenerSocket) return
 
-    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, (data: AudioWithExpressionEvent) => {
+    listenerSocket = socket
+    live2dActionListener = (data: unknown) => {
+      executeAction(data as Live2DAction)
+    }
+
+    audioWithExpressionListener = (data: AudioWithExpressionEvent) => {
       if (!isCurrentChatTask(data)) return
       if (data.use_parameter_mapping && data.expressions?.frames) {
         playParameterTimeline({ ...data, expressions: data.expressions })
       } else {
         playAudio(data)
       }
-    })
+    }
 
-    socket.on(Events.CHAT.STOP_AUDIO, (data: ChatIdentity) => {
+    stopAudioListener = (data: ChatIdentity) => {
       if (!isCurrentChatTask(data)) return
       stopAudio()
-    })
+    }
+
+    socket.on(Events.CHAT.LIVE2D_ACTION, live2dActionListener)
+    socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, audioWithExpressionListener)
+    socket.on(Events.CHAT.STOP_AUDIO, stopAudioListener)
   }
 
   function teardownSocketListeners(): void {
-    const socket = getSocket()
-    if (!socket) return
-    socket.off(Events.CHAT.LIVE2D_ACTION)
-    socket.off(Events.CHAT.AUDIO_WITH_EXPRESSION)
-    socket.off(Events.CHAT.STOP_AUDIO)
+    if (!ownsSocketListeners) return
+
+    ownsSocketListeners = false
+    socketListenerOwners = Math.max(0, socketListenerOwners - 1)
+    if (socketListenerOwners > 0 || !listenerSocket) return
+
+    if (live2dActionListener) {
+      listenerSocket.off(Events.CHAT.LIVE2D_ACTION, live2dActionListener)
+    }
+    if (audioWithExpressionListener) {
+      listenerSocket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, audioWithExpressionListener)
+    }
+    if (stopAudioListener) {
+      listenerSocket.off(Events.CHAT.STOP_AUDIO, stopAudioListener)
+    }
+
+    listenerSocket = null
+    live2dActionListener = null
+    audioWithExpressionListener = null
+    stopAudioListener = null
   }
 
   // ===== Destroy =====

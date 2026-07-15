@@ -1,7 +1,8 @@
+import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from animetta.config.app import AppConfig
+from animetta.config.manifest import EffectiveConfig, load_effective_config
 from animetta.config.observability import ObservabilityConfig
 from animetta.observability.ledger import SQLiteObservationLedger
 from animetta.observability.mirrors import OTelMirror, PrometheusMirror
@@ -11,6 +12,27 @@ from animetta.observability.ports import (
     NoOpObservationReportStore,
 )
 from animetta.orchestration.server.websocket import WebSocketServer
+
+
+def _config(observability: dict | None = None) -> EffectiveConfig:
+    with patch.dict(
+        os.environ,
+        {
+            "ANIMETTA_PROFILE": "test",
+            "ANIMETTA_HOST": "127.0.0.1",
+            "ANIMETTA_PORT": "12394",
+        },
+        clear=True,
+    ):
+        config = load_effective_config("config/animetta.yaml", profile="test")
+    if observability is None:
+        return config
+    application_payload = config.application.manifest_dict()
+    application_payload["observability"] = observability
+    application = type(config.application).model_validate(
+        application_payload
+    )
+    return config.model_copy(update={"application": application})
 
 
 def test_observability_config_defaults_local_on_and_otlp_off() -> None:
@@ -24,7 +46,7 @@ def test_observability_config_defaults_local_on_and_otlp_off() -> None:
     assert config.otlp.enabled is False
     assert config.privacy.development == "full"
     assert config.privacy.golden == "redacted"
-    assert AppConfig().observability == config
+    assert _config().observability == config
 
 
 def _server(config):
@@ -39,9 +61,7 @@ def _server(config):
 
 
 def test_server_constructs_one_application_owned_ledger_and_injects_ports(tmp_path) -> None:
-    config = AppConfig(
-        observability={"database_path": str(tmp_path / "observations.db")}
-    )
+    config = _config({"database_path": str(tmp_path / "observations.db")})
     server = _server(config)
 
     assert isinstance(server.observation_ledger, SQLiteObservationLedger)
@@ -65,7 +85,7 @@ def test_server_constructs_one_application_owned_ledger_and_injects_ports(tmp_pa
 
 
 def test_disabled_mode_installs_explicit_noop_ports() -> None:
-    server = _server(AppConfig(observability={"enabled": False}))
+    server = _server(_config({"enabled": False}))
 
     assert server.observation_ledger is None
     assert isinstance(server.observation_recorder, NoOpObservationRecorder)
@@ -75,8 +95,8 @@ def test_disabled_mode_installs_explicit_noop_ports() -> None:
 
 
 def test_otlp_mirror_is_constructed_only_when_enabled(tmp_path) -> None:
-    config = AppConfig(
-        observability={
+    config = _config(
+        {
             "database_path": str(tmp_path / "observations.db"),
             "prometheus": {"enabled": False},
             "otlp": {"enabled": True, "endpoint": "http://collector:4317"},
@@ -95,8 +115,8 @@ def test_otlp_mirror_is_constructed_only_when_enabled(tmp_path) -> None:
 
 
 async def test_missing_optional_otlp_exporter_degrades_health(tmp_path) -> None:
-    config = AppConfig(
-        observability={
+    config = _config(
+        {
             "database_path": str(tmp_path / "observations.db"),
             "prometheus": {"enabled": False},
             "otlp": {"enabled": True},
@@ -117,7 +137,7 @@ async def test_missing_optional_otlp_exporter_degrades_health(tmp_path) -> None:
 
 
 async def test_ledger_starts_before_other_runtime_work_and_closes_after_workers() -> None:
-    server = _server(AppConfig())
+    server = _server(_config())
     order: list[str] = []
     server.observation_ledger = SimpleNamespace(
         start=AsyncMock(side_effect=lambda: order.append("ledger.start")),

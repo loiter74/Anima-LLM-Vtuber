@@ -18,6 +18,7 @@ from animetta.observability.context import ObservationContext, observation_conte
 from animetta.observability.domain import PrivacyMode
 from animetta.observability.service_proxy import InstrumentedServiceProxy
 from animetta.orchestration.graph import output_node
+from animetta.orchestration.graph.media_status import MediaStatus
 from animetta.orchestration.graph.state import create_initial_state
 
 _output_node_module = sys.modules["animetta.orchestration.graph.output_node"]
@@ -106,6 +107,38 @@ class TestOutputNode:
         assert sentence_calls[0][0][1]["text"] == "Hello world"
 
     @pytest.mark.asyncio
+    async def test_pre_emitted_start_and_text_are_not_duplicated_late(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Already delivered"
+        state["metadata"] = {
+            "conversation_started_at": 1.0,
+            "text_ready_at": 2.0,
+        }
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        control_payloads = [
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:control"
+        ]
+        assert [payload.get("signal") for payload in control_payloads] == [
+            "conversation-end"
+        ]
+        assert not any(
+            call.args[0] == "chat:sentence"
+            for call in mock_socketio.emit.call_args_list
+        )
+
+    @pytest.mark.asyncio
     async def test_golden_output_never_spends_third_llm_call_on_translation(
         self, mock_socketio, monkeypatch
     ):
@@ -124,6 +157,42 @@ class TestOutputNode:
             "service_context": context,
         }))
         translate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_translation_never_emits_after_conversation_end(
+        self, mock_socketio, monkeypatch
+    ):
+        translate = AsyncMock(return_value="Hello.")
+        monkeypatch.setattr(_output_node_module, "translate_subtitle_text", translate)
+        monkeypatch.setattr(_output_node_module.translation_state, "enabled", True)
+        context = SimpleNamespace(
+            config=SimpleNamespace(system=SimpleNamespace(runtime_profile="production")),
+            llm_engine=object(),
+            memory_system=None,
+        )
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好。"
+
+        await output_node(
+            state,
+            RunnableConfig(
+                configurable={
+                    "socketio": mock_socketio,
+                    "service_context": context,
+                }
+            ),
+        )
+        await asyncio.sleep(0)
+
+        events = [call.args[0] for call in mock_socketio.emit.call_args_list]
+        assert "chat:subtitle_translation" in events
+        assert events.index("chat:subtitle_translation") < max(
+            index
+            for index, event in enumerate(events)
+            if event == "chat:control"
+            and mock_socketio.emit.call_args_list[index].args[1].get("signal")
+            == "conversation-end"
+        )
 
     @pytest.mark.asyncio
     async def test_background_translation_service_operation_is_noncritical(
@@ -348,6 +417,47 @@ class TestOutputNode:
         assert degradation["reason"] == "provider_error"
         assert degradation["task_id"] == state["task_id"]
         assert degradation["turn_id"] == state["task_id"]
+
+    @pytest.mark.asyncio
+    async def test_typed_tts_degradation_emits_visible_correlated_control_once(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "Text survives"
+        state["tts_audio"] = None
+        state["media_status"] = MediaStatus(
+            "degraded",
+            "busy",
+            "RemoteTTS",
+            True,
+        )
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        degradations = [
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:control"
+            and call.args[1].get("type") == "media-degraded"
+        ]
+        assert len(degradations) == 1
+        degradation = degradations[0]
+        assert degradation["text"] == "Audio unavailable; continuing with text."
+        assert degradation["component"] == "tts"
+        assert degradation["reason"] == "rate_limit"
+        assert degradation["retryable"] is True
+        assert degradation["task_id"] == state["task_id"]
+        assert degradation["turn_id"] == state["task_id"]
+        assert not any(
+            call.args[0] == "chat:audio_with_expression"
+            for call in mock_socketio.emit.call_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_legacy_turn_emits_only_declared_legacy_names(

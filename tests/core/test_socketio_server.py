@@ -107,31 +107,54 @@ class TestInitConfig:
     """init_config() — global configuration loading."""
 
     def test_loads_from_default_path(self, mod):
-        """Without config_path, calls AppConfig.load()."""
-        mock_config = MagicMock()
-        mock_config.system.host = "localhost"
-        mock_config.system.port = 12394
-
-        mod.global_config = None
-        with patch("animetta.core.socketio_server.AppConfig.load", return_value=mock_config):
-            mod.init_config()
-
-        assert mod.global_config is mock_config
-
-    def test_loads_from_specified_path(self, mod):
-        """With config_path, calls AppConfig.from_yaml(path)."""
+        """Without config_path, resolves the canonical manifest once."""
         mock_config = MagicMock()
         mock_config.system.host = "localhost"
         mock_config.system.port = 12394
 
         mod.global_config = None
         with patch(
-            "animetta.core.socketio_server.AppConfig.from_yaml", return_value=mock_config
-        ) as mock_from_yaml:
-            mod.init_config(config_path="/custom/path/config.yaml")
+            "animetta.core.socketio_server.load_effective_config",
+            return_value=mock_config,
+        ) as load:
+            result = mod.init_config()
 
         assert mod.global_config is mock_config
-        mock_from_yaml.assert_called_once_with("/custom/path/config.yaml")
+        assert result is mock_config
+        load.assert_called_once_with(mod._PROJECT_ROOT / "config" / "animetta.yaml")
+
+    def test_loads_from_specified_path(self, mod):
+        """An explicit manifest path is forwarded to the canonical loader."""
+        mock_config = MagicMock()
+        mock_config.system.host = "localhost"
+        mock_config.system.port = 12394
+
+        mod.global_config = None
+        with patch(
+            "animetta.core.socketio_server.load_effective_config",
+            return_value=mock_config,
+        ) as load:
+            result = mod.init_config(config_path="/custom/path/animetta.yaml")
+
+        assert mod.global_config is mock_config
+        assert result is mock_config
+        load.assert_called_once_with(Path("/custom/path/animetta.yaml"))
+
+    def test_repeated_init_reuses_the_same_effective_config(self, mod):
+        mock_config = MagicMock()
+        mock_config.system.host = "localhost"
+        mock_config.system.port = 12394
+        mod.global_config = None
+
+        with patch(
+            "animetta.core.socketio_server.load_effective_config",
+            return_value=mock_config,
+        ) as load:
+            first = mod.init_config()
+            second = mod.init_config()
+
+        assert first is second is mock_config
+        load.assert_called_once()
 
 
 # ── TestSetupCheckpointer ───────────────────────────────────────────

@@ -4,13 +4,23 @@ import fnmatch
 import hashlib
 import json
 from collections import deque
+from pathlib import Path
 
+from .docker_plan import compose_identity, plan_docker_actions
+from .fingerprint import (
+    FINGERPRINT_SCHEMA_VERSION,
+    FingerprintContext,
+    GroupFingerprint,
+    fingerprint_group,
+    is_safe_fingerprint_pattern,
+)
 from .manifest import LoadedCatalog
 from .models import (
     Capability,
     Change,
     ChangeSet,
     Domain,
+    DominatedGroup,
     PlannedGroup,
     Risk,
     Tier,
@@ -55,6 +65,14 @@ def _plan_hash(payload: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _repository_root(manifest_path: Path) -> Path:
+    start = manifest_path.resolve().parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return start.parent if start.name == "tooling" else start
+
+
 def verification_plan_hash(plan: VerificationPlan) -> str:
     payload = {
         "schema_version": plan.schema_version,
@@ -68,6 +86,11 @@ def verification_plan_hash(plan: VerificationPlan) -> str:
             capability.value for capability in plan.required_capabilities
         ),
         "fallbacks": sorted(plan.fallbacks),
+        "dominated_groups": [group.model_dump(mode="json") for group in plan.dominated_groups],
+        "docker_actions": [action.model_dump(mode="json") for action in plan.docker_actions],
+        "docker_scope_fingerprints": dict(sorted(plan.docker_scope_fingerprints.items())),
+        "compose_identity": plan.compose_identity,
+        "scheduler": plan.scheduler.model_dump(mode="json"),
         "manifest_hash": plan.manifest_hash,
     }
     return _plan_hash(payload)
@@ -79,21 +102,36 @@ def plan_verification(
     tier: Tier | str,
     *,
     discovery_failure: str | None = None,
+    apply_dominance: bool = True,
 ) -> VerificationPlan:
     selected_tier = Tier(tier)
     catalog = loaded.catalog
     reasons: dict[str, set[str]] = {}
     fallbacks: list[str] = []
+    fallback_changes: dict[str, dict[tuple[str, str, str], Change]] = {}
+    cache_disabled_groups: set[str] = set()
 
     def add_group(group_id: str, reason: str) -> None:
         reasons.setdefault(group_id, set()).add(reason)
         for dependency_id in catalog.groups[group_id].depends_on:
             add_group(dependency_id, f"execution dependency of {group_id}")
 
-    def add_fallback(domain: Domain, reason: str) -> None:
+    def add_fallback(
+        domain: Domain,
+        reason: str,
+        *,
+        changes: tuple[Change, ...] = (),
+        disable_cache: bool = False,
+    ) -> None:
         fallbacks.append(reason)
         for group_id in catalog.fallbacks.for_domain(domain):
             add_group(group_id, reason)
+            by_identity = fallback_changes.setdefault(group_id, {})
+            for change in changes:
+                key = (change.path, change.status.value, change.old_path or "")
+                by_identity[key] = change
+            if disable_cache:
+                cache_disabled_groups.add(group_id)
 
     def add_full_policy() -> None:
         for group_id, group in catalog.groups.items():
@@ -111,8 +149,9 @@ def plan_verification(
         if selected_tier in {Tier.FULL, Tier.NIGHTLY}:
             fallbacks.append(reason)
             add_full_policy()
+            cache_disabled_groups.update(reasons)
         else:
-            add_fallback(Domain.REPOSITORY, reason)
+            add_fallback(Domain.REPOSITORY, reason, disable_cache=True)
     elif selected_tier in {Tier.FULL, Tier.NIGHTLY}:
         add_full_policy()
     else:
@@ -126,7 +165,11 @@ def plan_verification(
                         matched_for_path.add(component_id)
                 if not matched_for_path:
                     domain = _infer_domain(path)
-                    add_fallback(domain, f"unknown {domain.value} path: {path}")
+                    add_fallback(
+                        domain,
+                        f"unknown {domain.value} path: {path}",
+                        changes=(change,),
+                    )
                 matched_for_change.update(matched_for_path)
             seed_components.update(matched_for_change)
 
@@ -152,14 +195,18 @@ def plan_verification(
         for component_id in sorted(seed_components):
             component = catalog.components[component_id]
             if component.risk is Risk.GLOBAL:
-                domain = (
-                    Domain.REPOSITORY
-                    if selected_tier is Tier.AFFECTED
-                    else component.domain
+                domain = Domain.REPOSITORY if selected_tier is Tier.AFFECTED else component.domain
+                add_fallback(
+                    domain,
+                    f"global-risk component: {component_id}",
+                    changes=change_set.changes,
                 )
-                add_fallback(domain, f"global-risk component: {component_id}")
             elif component.risk is Risk.HIGH and selected_tier is Tier.AFFECTED:
-                add_fallback(component.domain, f"high-risk component: {component_id}")
+                add_fallback(
+                    component.domain,
+                    f"high-risk component: {component_id}",
+                    changes=change_set.changes,
+                )
 
     ordered_group_ids: list[str] = []
     ordered_seen: set[str] = set()
@@ -175,28 +222,139 @@ def plan_verification(
     for group_id in sorted(reasons):
         append_with_dependencies(group_id)
 
-    planned_groups = tuple(
-        PlannedGroup(
-            id=group_id,
-            domain=group.domain,
-            kind=group.kind,
-            runner=group.runner,
-            isolation=group.isolation,
-            capabilities=group.capabilities,
-            depends_on=group.depends_on,
-            artifacts=group.artifacts,
-            required=group.required,
-            reasons=tuple(sorted(reasons[group_id])),
+    dominated_groups: tuple[DominatedGroup, ...] = ()
+    if apply_dominance:
+        selected_ids = set(ordered_group_ids)
+        coverage_closure: dict[str, set[str]] = {}
+
+        def covered_by(group_id: str) -> set[str]:
+            cached = coverage_closure.get(group_id)
+            if cached is not None:
+                return cached
+            covered: set[str] = set()
+            for covered_id in catalog.groups[group_id].covers:
+                covered.add(covered_id)
+                covered.update(covered_by(covered_id))
+            coverage_closure[group_id] = covered
+            return covered
+
+        dependency_ids = {
+            dependency_id
+            for selected_id in selected_ids
+            for dependency_id in catalog.groups[selected_id].depends_on
+        }
+        maximal_coverers = {
+            group_id
+            for group_id in selected_ids
+            if not any(
+                group_id in covered_by(other_id)
+                for other_id in selected_ids
+                if other_id != group_id
+            )
+        }
+        dominated: list[DominatedGroup] = []
+        for covered_id in sorted(selected_ids - dependency_ids):
+            coverers = [
+                covering_id
+                for covering_id in maximal_coverers
+                if covered_id in covered_by(covering_id)
+            ]
+            if not coverers:
+                continue
+            covering_id = sorted(
+                coverers,
+                key=lambda candidate: (-len(covered_by(candidate)), candidate),
+            )[0]
+            dominated.append(
+                DominatedGroup(
+                    id=covered_id,
+                    covering_group=covering_id,
+                    reasons=(f"explicitly covered by selected group {covering_id}",),
+                )
+            )
+        dominated_groups = tuple(dominated)
+        dominated_ids = {group.id for group in dominated_groups}
+        ordered_group_ids = [
+            group_id for group_id in ordered_group_ids if group_id not in dominated_ids
+        ]
+
+    fingerprint_context = FingerprintContext(_repository_root(loaded.path))
+    group_fingerprints: dict[str, GroupFingerprint] = {}
+    planned_group_list: list[PlannedGroup] = []
+    for group_id in ordered_group_ids:
+        group = catalog.groups[group_id]
+        dependency_fingerprints = {
+            dependency_id: group_fingerprints[dependency_id].digest
+            for dependency_id in group.depends_on
+        }
+        related_changes = tuple(
+            change for _, change in sorted(fallback_changes.get(group_id, {}).items())
         )
-        for group_id in ordered_group_ids
-        for group in (catalog.groups[group_id],)
-    )
+        extra_input_patterns = tuple(
+            sorted(
+                {
+                    path
+                    for change in related_changes
+                    for path in _change_paths(change)
+                    if is_safe_fingerprint_pattern(path)
+                }
+            )
+        )
+        if any(
+            not is_safe_fingerprint_pattern(path)
+            for change in related_changes
+            for path in _change_paths(change)
+        ):
+            cache_disabled_groups.add(group_id)
+        fingerprint = fingerprint_group(
+            fingerprint_context,
+            catalog,
+            loaded.manifest_hash,
+            group_id,
+            dependency_fingerprints,
+            extra_input_patterns=extra_input_patterns,
+            change_identity=related_changes,
+        )
+        group_fingerprints[group_id] = fingerprint
+        planned_group_list.append(
+            PlannedGroup(
+                id=group_id,
+                domain=group.domain,
+                kind=group.kind,
+                runner=group.runner,
+                isolation=group.isolation,
+                capabilities=group.capabilities,
+                depends_on=group.depends_on,
+                artifacts=group.artifacts,
+                required=group.required,
+                reasons=tuple(sorted(reasons[group_id])),
+                cacheable=group.cacheable and group_id not in cache_disabled_groups,
+                resource_class=group.resource_class,
+                resource_weight=group.resource_weight,
+                fingerprint_schema_version=FINGERPRINT_SCHEMA_VERSION,
+                input_fingerprint=fingerprint.digest,
+                input_file_count=fingerprint.file_count,
+                input_patterns=fingerprint.patterns,
+                toolchain_identity=fingerprint.toolchain_identity,
+            )
+        )
+    planned_groups = tuple(planned_group_list)
     capabilities: frozenset[Capability] = frozenset(
         capability
         for group in planned_groups
         for capability in group.capabilities
         if group.required
     )
+    docker_actions = plan_docker_actions(
+        catalog,
+        change_set,
+        selected_tier,
+        fingerprint_context,
+    )
+    docker_scope_fingerprints = {
+        action.scope_id: action.input_fingerprint for action in docker_actions
+    }
+    current_compose_identity = compose_identity(catalog, fingerprint_context)
 
     plan = VerificationPlan(
         tier=selected_tier,
@@ -207,6 +365,11 @@ def plan_verification(
         groups=planned_groups,
         required_capabilities=capabilities,
         fallbacks=tuple(sorted(set(fallbacks))),
+        dominated_groups=dominated_groups,
+        docker_actions=docker_actions,
+        docker_scope_fingerprints=docker_scope_fingerprints,
+        compose_identity=current_compose_identity,
+        scheduler=catalog.scheduler,
         manifest_hash=loaded.manifest_hash,
         plan_hash="0" * 64,
     )

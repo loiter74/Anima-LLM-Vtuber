@@ -13,6 +13,17 @@ from tooling.quality.change_sources import (
 )
 from tooling.quality.models import ChangeStatus
 
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_repository_ignores_quality_generated_worktree_outputs() -> None:
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+    assert "artifacts/test-impact/" in gitignore
+    assert "evidence/runtime-config/" in gitignore
+    assert "coverage.xml" in gitignore
+    assert "junit.xml" in gitignore
+
 
 def _git(repo: Path, *args: str) -> str:
     completed = subprocess.run(

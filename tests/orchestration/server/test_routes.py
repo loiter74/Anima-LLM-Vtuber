@@ -211,7 +211,6 @@ class TestRouteHandlersDispatch:
         mock_orch.process_text = AsyncMock()
         mock_session_manager.get_or_create_orchestrator = AsyncMock(return_value=mock_orch)
 
-        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
         monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: MagicMock())
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -374,7 +373,6 @@ class TestRouteHandlersDispatch:
         mock_processor.process_chunk = AsyncMock()
         mock_session_manager.get_audio_processor.return_value = mock_processor
 
-        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
         monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: MagicMock())
 
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -640,36 +638,26 @@ class TestRouteHandlersDispatch:
             translation_state.enabled = old_enabled
 
     @pytest.mark.asyncio
-    async def test_on_set_persona_uses_current_context_config(
-        self, mock_socketio, mock_session_manager, monkeypatch
+    async def test_on_set_persona_requires_canonical_config_reload(
+        self, mock_socketio, mock_session_manager
     ):
-        """Persona switching should use ServiceContext.config directly."""
+        """Persona switching must not mutate an active config or engine."""
 
-        from animetta.config.persona import PersonaConfig
-
-        new_persona = SimpleNamespace(personality=None)
-        monkeypatch.setattr(PersonaConfig, "load", MagicMock(return_value=new_persona))
-        monkeypatch.setattr(
-            "animetta.config.live2d.get_live2d_config",
-            MagicMock(return_value=SimpleNamespace(enabled=False)),
-        )
-
-        llm = MagicMock()
         config = MagicMock()
-        config.get_system_prompt.return_value = "new prompt"
-        ctx = SimpleNamespace(llm_engine=llm, config=config)
-        mock_session_manager.get_context.return_value = ctx
-        mock_session_manager.get_orchestrator.return_value = MagicMock()
-
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.set_global_config(config)
 
         await handlers.on_set_persona("sid1", {"persona_name": "anima"})
 
-        llm.set_system_prompt.assert_called_once_with("new prompt")
         mock_socketio.emit.assert_any_call(
-            "persona:updated",
-            {"persona_name": "anima", "mbti": None},
+            "system:error",
+            {
+                "type": "config_reload_required",
+                "message": (
+                    "Update application.persona in config/animetta.yaml, then reload "
+                    "the canonical runtime configuration"
+                ),
+            },
             to="sid1",
         )
 
@@ -696,7 +684,7 @@ class TestRouteHandlersDispatch:
     async def test_on_get_available_personas_uses_active_config_persona_cache(
         self, mock_socketio, mock_session_manager, monkeypatch
     ):
-        """persona:list should read MBTI from the active AppConfig persona cache."""
+        """persona:list should read MBTI from the active config snapshot."""
 
         mbti = SimpleNamespace(
             type="INTJ",
@@ -998,7 +986,6 @@ class TestRegisterRoutes:
         )
         chat_logger = MagicMock()
 
-        monkeypatch.setattr("animetta.config.AppConfig.load", MagicMock)
         monkeypatch.setattr(
             "animetta.config.live2d.get_live2d_config", lambda: MagicMock()
         )

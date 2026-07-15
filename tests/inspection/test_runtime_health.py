@@ -10,6 +10,12 @@ from animetta.observability.domain import ObservationHealth
 
 
 def _runtime() -> InspectionRuntime:
+    metric_probe_count = 0
+
+    async def observation_write_probe() -> None:
+        nonlocal metric_probe_count
+        metric_probe_count += 1
+
     query = MagicMock()
     query.observation_health = AsyncMock(
         return_value=ObservationHealth(True, True, False, queue_depth=0)
@@ -46,7 +52,9 @@ def _runtime() -> InspectionRuntime:
         metrics_snapshot=lambda: (
             "anima_active_sessions 0\n"
             'anima_trace_outcomes_total{outcome="success"} 1\n'
+            f"anima_readiness_probe_total {metric_probe_count}\n"
         ),
+        observation_write_probe=observation_write_probe,
     )
 
 
@@ -86,6 +94,57 @@ async def test_memory_backlog_and_errors_are_reported_as_degraded() -> None:
     assert result.ok is False
     assert result.detail["index_backlog"] == 2
     assert result.detail["ingestion_failed"] == 1
+
+
+async def test_healthy_memory_backlog_remains_ready_while_work_is_in_flight() -> None:
+    runtime = _runtime()
+    runtime.memory_runtime.health.return_value = {
+        "ready": True,
+        "degraded": False,
+        "ingestion_queue_depth": 3,
+        "index_backlog": 2,
+        "ingestion_failed": 0,
+        "last_error": None,
+    }
+
+    result = (await check_all_components(runtime))["memory_runtime"]
+
+    assert result.ok is True
+    assert result.detail["ingestion_queue_depth"] == 3
+    assert result.detail["index_backlog"] == 2
+
+
+async def test_observation_read_only_probe_fails_component_health() -> None:
+    runtime = _runtime()
+    read_only_runtime = InspectionRuntime(
+        observation_query=runtime.observation_query,
+        report_store=runtime.report_store,
+        memory_runtime=runtime.memory_runtime,
+        readiness_snapshot=runtime.readiness_snapshot,
+        metrics_snapshot=runtime.metrics_snapshot,
+        observation_write_probe=AsyncMock(side_effect=PermissionError("read only")),
+    )
+
+    result = (await check_all_components(read_only_runtime))["observation_ledger"]
+
+    assert result.ok is False
+
+
+async def test_unchanged_metrics_fail_component_health() -> None:
+    runtime = _runtime()
+    unchanged_runtime = InspectionRuntime(
+        observation_query=runtime.observation_query,
+        report_store=runtime.report_store,
+        memory_runtime=runtime.memory_runtime,
+        readiness_snapshot=runtime.readiness_snapshot,
+        metrics_snapshot=lambda: "anima_readiness_probe_total 1\n",
+        observation_write_probe=AsyncMock(),
+    )
+
+    result = (await check_all_components(unchanged_runtime))["metrics_projection"]
+
+    assert result.ok is False
+    assert result.detail["anima_readiness_probe_total_delta"] == 0
 
 
 async def test_inspection_report_persists_through_report_port() -> None:

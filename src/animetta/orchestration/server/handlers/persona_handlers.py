@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.config.persona import PersonaConfig, list_available_personas
-from animetta.config.runtime_reload import apply_runtime_llm_config, build_runtime_system_prompt
 
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
@@ -18,6 +17,7 @@ if TYPE_CHECKING:
     from ..desktop import DesktopClientManager
     from ..live2d import Live2DManager
     from ..session import SessionManager
+
 
 class PersonaHandlers(BaseSocketHandler):
     """Persona and personality mode event handlers.
@@ -82,7 +82,11 @@ class PersonaHandlers(BaseSocketHandler):
                         current_persona = active_config.get_persona()
                     else:
                         current_persona = PersonaConfig.load(current_persona_name)
-                    if current_persona and current_persona.personality and current_persona.personality.mbti:
+                    if (
+                        current_persona
+                        and current_persona.personality
+                        and current_persona.personality.mbti
+                    ):
                         mbti = current_persona.personality.mbti
                         mbti_data = {
                             "type": mbti.type,
@@ -111,8 +115,8 @@ class PersonaHandlers(BaseSocketHandler):
             logger.error(f"[{sid}] 获取人设列表失败: {e}")
             return {"personas": ["default"], "error": str(e)}
 
-    async def on_set_persona(self, sid: str, data: dict) -> None:
-        """运行时切换人设"""
+    async def on_set_persona(self, sid: str, data: dict) -> dict[str, object]:
+        """Reject direct persona mutation outside the canonical reload path."""
         persona_name = data.get("persona_name", "")
         if not persona_name:
             logger.warning(f"[{sid}] 切换人设失败: 人设名称为空")
@@ -121,91 +125,34 @@ class PersonaHandlers(BaseSocketHandler):
                 {"type": "error", "message": "persona_name is required"},
                 to=sid,
             )
-            return
+            return {
+                "ok": False,
+                "type": "error",
+                "error": "persona_name is required",
+            }
 
-        logger.info(f"[{sid}] 切换人设: {persona_name}")
-
-        try:
-            ctx = self.session_manager.get_context(sid)
-            if not ctx:
-                await self.sio.emit(
-                    EVENTS["system"]["error"]["name"],
-                    {"type": "error", "message": "会话未初始化"},
-                    to=sid,
-                )
-                return
-
-            new_persona = PersonaConfig.load(persona_name, strict=True)
-            if not new_persona:
-                await self.sio.emit(
-                    EVENTS["system"]["error"]["name"],
-                    {"type": "error", "message": f"无法加载人设: {persona_name}"},
-                    to=sid,
-                )
-                return
-
-            active_global_config = self.global_config
-            if active_global_config:
-                active_global_config.persona = persona_name
-                active_global_config._persona = new_persona
-
-            ctx_config = getattr(ctx, "config", None)
-            if ctx_config is None:
-                legacy_core = getattr(ctx, "core", None)
-                ctx_config = getattr(legacy_core, "config", None)
-
-            if ctx_config and ctx_config is not active_global_config:
-                ctx_config.persona = persona_name
-                ctx_config._persona = new_persona
-
-            if ctx.llm_engine and ctx_config:
-                runtime_prompt = build_runtime_system_prompt(ctx_config)
-                llm_config = (
-                    ctx_config.agent.llm_config
-                    if getattr(ctx_config, "agent", None)
-                    else None
-                )
-                apply_runtime_llm_config(
-                    ctx.llm_engine,
-                    llm_config,
-                    runtime_prompt.system_prompt,
-                )
-                for warning in runtime_prompt.warnings:
-                    logger.warning("[PersonaHandlers] {}", warning)
-                logger.info(f"[{sid}] 已更新 LLM 系统提示词")
-
-            orchestrator = self.session_manager.get_orchestrator(sid)
-            if orchestrator:
-                logger.info(f"[{sid}] 编排器已感知人设变更")
-
-            logger.info(f"[{sid}] 人设切换完成: {persona_name}")
-
-            # Build MBTI data for frontend
-            mbti_data = None
-            if new_persona.personality and new_persona.personality.mbti:
-                mbti = new_persona.personality.mbti
-                mbti_data = {
-                    "type": mbti.type,
-                    "dimensions": {
-                        "ei": mbti.dimensions.ei,
-                        "sn": mbti.dimensions.sn,
-                        "tf": mbti.dimensions.tf,
-                        "jp": mbti.dimensions.jp,
-                    },
-                    "description": mbti.description,
-                }
-
-            await self.sio.emit(
-                EVENTS["persona"]["updated"]["name"],
-                {"persona_name": persona_name, "mbti": mbti_data},
-                to=sid,
-            )
-
-        except Exception as e:
-            logger.error(f"[{sid}] 切换人设失败: {e}", exc_info=True)
-            await self.sio.emit(
-                EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
-            )
+        logger.warning(
+            "[{}] Direct persona switch rejected; requested_persona={}",
+            sid,
+            persona_name,
+        )
+        message = (
+            "Update application.persona in config/animetta.yaml, then reload "
+            "the canonical runtime configuration"
+        )
+        await self.sio.emit(
+            EVENTS["system"]["error"]["name"],
+            {
+                "type": "config_reload_required",
+                "message": message,
+            },
+            to=sid,
+        )
+        return {
+            "ok": False,
+            "type": "config_reload_required",
+            "error": message,
+        }
 
     async def on_set_personality_mode(self, sid: str, data: dict) -> None:
         """设置个性模式（运行时切换）"""
@@ -213,7 +160,9 @@ class PersonaHandlers(BaseSocketHandler):
         if not mode:
             logger.warning(f"[{sid}] 设置个性模式失败: mode 为空")
             await self.sio.emit(
-                EVENTS["system"]["error"]["name"], {"type": "error", "message": "mode is required"}, to=sid
+                EVENTS["system"]["error"]["name"],
+                {"type": "error", "message": "mode is required"},
+                to=sid,
             )
             return
 
@@ -228,7 +177,9 @@ class PersonaHandlers(BaseSocketHandler):
                 orchestrator._personality_mode["mode"] = mode
                 logger.info(f"[{sid}] 编排器已更新个性模式")
 
-            await self.sio.emit(EVENTS["persona"]["personality_updated"]["name"], {"mode": mode}, to=sid)
+            await self.sio.emit(
+                EVENTS["persona"]["personality_updated"]["name"], {"mode": mode}, to=sid
+            )
             logger.info(f"[{sid}] 个性模式已设置: {mode}")
 
         except Exception as e:

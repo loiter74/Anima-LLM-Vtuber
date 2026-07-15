@@ -145,9 +145,11 @@ def build_graph(
         logger.info("[LangGraph] Golden two-pass graph built")
         return graph.compile(checkpointer=None)
 
+    add_observed_node("conversation_start", conversation_start_node)
     add_observed_node("llm", llm_node)
     add_observed_node("humor_rewrite", humor_rewrite_node)
     add_observed_node("humor_validation", humor_validation_node)
+    add_observed_node("reply_output", reply_output_node)
     add_observed_node("tts", tts_node)
     add_observed_node("emotion", emotion_node)
     add_observed_node("output", output_node)
@@ -155,9 +157,11 @@ def build_graph(
     registered_nodes = [
         "asr",
         "personality",
+        "conversation_start",
         "llm",
         "humor_rewrite",
         "humor_validation",
+        "reply_output",
         "tts",
         "emotion",
         "output",
@@ -170,10 +174,14 @@ def build_graph(
     logger.info(f"[LangGraph] Registered nodes: {registered_nodes}")
 
     # Set entry point
-    graph.set_conditional_entry_point(route_input, {"asr": "asr", "llm": "personality"})
+    graph.set_conditional_entry_point(
+        route_input,
+        {"asr": "asr", "llm": "conversation_start"},
+    )
 
     # Add edges
-    graph.add_edge("asr", "personality")
+    graph.add_edge("asr", "conversation_start")
+    graph.add_edge("conversation_start", "personality")
     graph.add_edge("personality", "llm")
 
     if enable_tools:
@@ -188,7 +196,8 @@ def build_graph(
         graph.add_edge("llm", "humor_rewrite")
 
     graph.add_edge("humor_rewrite", "humor_validation")
-    graph.add_edge("humor_validation", "tts")
+    graph.add_edge("humor_validation", "reply_output")
+    graph.add_edge("reply_output", "tts")
     graph.add_edge("tts", "emotion")
     graph.add_edge("emotion", "output")
     graph.add_edge("output", END)

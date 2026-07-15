@@ -2,6 +2,110 @@ schema_version: 1
 
 quick_groups: [backend-route-smoke]
 
+input_sets:
+  quality-engine:
+    paths:
+      - tooling/quality/**
+      - tooling/quality.yml
+  python-toolchain:
+    paths:
+      - pyproject.toml
+      - requirements*.txt
+  python-runtime:
+    paths:
+      - src/**/*.py
+      - config/**/*.yaml
+  frontend-toolchain:
+    paths:
+      - frontend/package.json
+      - frontend/pnpm-lock.yaml
+      - frontend/vite.config.ts
+      - frontend/vitest.config.ts
+      - frontend/tsconfig*.json
+      - frontend/uno.config.ts
+  frontend-runtime:
+    paths:
+      - frontend/src/**
+      - frontend/public/**
+  documentation-source:
+    paths:
+      - README.md
+      - CONTRIBUTING.md
+      - AGENTS.md
+      - tests/AGENTS.md
+      - docs/**
+
+default_input_sets: [quality-engine]
+
+scheduler:
+  max_workers: 6
+  max_weight: 8
+  max_heavy: 1
+  max_exclusive: 1
+
+docker_watch_paths:
+  - .dockerignore
+  - Dockerfile*
+  - docker-compose*.yml
+  - docker/entrypoint.sh
+  - docker/nginx.conf
+  - requirements*.txt
+  - frontend/package.json
+  - frontend/pnpm-lock.yaml
+  - frontend/src/**
+  - frontend/public/**
+  - src/animetta/**
+  - src/animetta_qwen_tts/**
+  - config/**
+
+docker_scopes:
+  animetta:
+    service: animetta
+    environment_identity_fields:
+      - ANIMETTA_PROFILE
+      - ANIMETTA_HOST
+      - ANIMETTA_PORT
+      - DEEPSEEK_API_KEY
+      - MIMO_API_KEY
+      - QWEN_TTS_API_KEY
+      - QWEN_TTS_URL
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker-compose*.yml
+      - docker/entrypoint.sh
+      - docker/nginx.conf
+      - requirements-core.txt
+      - frontend/**
+      - src/animetta/**
+      - config/**
+      - scripts/**
+      - .env.example
+  qwen-tts:
+    service: qwen-tts
+    environment_identity_fields:
+      - QWEN_TTS_API_KEY
+      - QWEN_TTS_URL
+      - QWEN_TTS_BIND_HOST
+      - QWEN_TTS_BIND_PORT
+      - HF_HUB_OFFLINE
+      - TRANSFORMERS_OFFLINE
+      - HF_HOME
+    paths:
+      - Dockerfile.qwen-tts
+      - .dockerignore
+      - docker-compose*.yml
+      - requirements-qwen-tts.txt
+      - src/animetta_qwen_tts/**
+      - src/animetta/__init__.py
+      - src/animetta/config/**
+      - src/animetta/services/__init__.py
+      - src/animetta/services/tts/__init__.py
+      - src/animetta/services/tts/audio_validation.py
+      - src/animetta/services/tts/interface.py
+      - src/animetta/services/tts/qwen3_tts.py
+      - config/**
+
 groups:
   backend-static:
     domain: backend
@@ -10,15 +114,23 @@ groups:
     targets: [src, tooling, tests]
     timeout_seconds: 180
     include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
 
   backend-typecheck:
     domain: backend
     kind: typecheck
     runner: mypy
-    targets: [src/animetta]
+    targets: [src/animetta, src/animetta_qwen_tts]
     args: [--ignore-missing-imports]
     timeout_seconds: 300
     include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 3
+    input_sets: [python-toolchain]
 
   backend-tooling-typecheck:
     domain: repository
@@ -28,6 +140,10 @@ groups:
     args: [--ignore-missing-imports]
     timeout_seconds: 180
     include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
 
   backend-tooling-quality:
     domain: repository
@@ -36,6 +152,10 @@ groups:
     targets: [tests/tooling/quality]
     args: [-q, -o, addopts=]
     timeout_seconds: 180
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-core-unit:
     domain: backend
@@ -44,6 +164,10 @@ groups:
     targets: [tests/core]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-config-unit:
     domain: backend
@@ -52,6 +176,10 @@ groups:
     targets: [tests/config]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-server-unit:
     domain: backend
@@ -60,6 +188,10 @@ groups:
     targets: [tests/orchestration/server]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-graph-unit:
     domain: backend
@@ -68,6 +200,10 @@ groups:
     targets: [tests/orchestration/graph]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 420
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-services-unit:
     domain: backend
@@ -76,6 +212,10 @@ groups:
     targets: [tests/services]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 420
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 3
+    input_sets: [python-toolchain]
 
   backend-memory-unit:
     domain: backend
@@ -84,6 +224,10 @@ groups:
     targets: [tests/memory_v2]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-tools-unit:
     domain: backend
@@ -92,6 +236,10 @@ groups:
     targets: [tests/tools]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 600
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 3
+    input_sets: [python-toolchain]
 
   backend-observability-unit:
     domain: backend
@@ -100,6 +248,10 @@ groups:
     targets: [tests/observability, tests/tracing, tests/inspection]
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-route-smoke:
     domain: backend
@@ -108,6 +260,10 @@ groups:
     entrypoint: scripts/route_smoke.py
     timeout_seconds: 120
     include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-runtime]
 
   backend-events-contract:
     domain: repository
@@ -116,6 +272,10 @@ groups:
     entrypoint: scripts/validate-events.py
     timeout_seconds: 120
     include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-runtime, frontend-runtime]
 
   security-secrets:
     domain: repository
@@ -124,6 +284,8 @@ groups:
     entrypoint: scripts/check_secrets.py
     timeout_seconds: 120
     include_in_full: true
+    resource_class: light
+    resource_weight: 1
 
   docs-contract:
     domain: repository
@@ -136,6 +298,10 @@ groups:
     args: [-q, -o, addopts=]
     timeout_seconds: 120
     include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, documentation-source]
 
   backend-full:
     domain: backend
@@ -160,6 +326,19 @@ groups:
     timeout_seconds: 1800
     artifacts: [coverage.xml]
     include_in_full: true
+    cacheable: true
+    resource_class: heavy
+    resource_weight: 8
+    input_sets: [python-toolchain, python-runtime]
+    covers:
+      - backend-core-unit
+      - backend-config-unit
+      - backend-server-unit
+      - backend-graph-unit
+      - backend-services-unit
+      - backend-memory-unit
+      - backend-tools-unit
+      - backend-observability-unit
 
   frontend-tests:
     domain: frontend
@@ -169,6 +348,10 @@ groups:
     args: [test:run]
     timeout_seconds: 300
     include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [frontend-toolchain, frontend-runtime]
 
   frontend-typecheck:
     domain: frontend
@@ -178,6 +361,10 @@ groups:
     args: [typecheck]
     timeout_seconds: 300
     include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [frontend-toolchain, frontend-runtime]
 
   frontend-build:
     domain: frontend
@@ -186,7 +373,12 @@ groups:
     cwd: frontend
     args: [build]
     timeout_seconds: 420
+    artifacts: [frontend/dist]
     include_in_full: true
+    cacheable: true
+    resource_class: heavy
+    resource_weight: 4
+    input_sets: [frontend-toolchain, frontend-runtime]
 
   frontend-playwright-smoke:
     domain: frontend
@@ -200,6 +392,9 @@ groups:
     artifacts: [smoke-test-homepage.png]
     required: false
     include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+    input_sets: [frontend-toolchain, frontend-runtime]
 
   docker-compose-contract:
     domain: repository
@@ -211,6 +406,8 @@ groups:
     timeout_seconds: 180
     include_in_full: true
     include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
 
 components:
   quality-control-plane:
@@ -256,7 +453,9 @@ components:
 
   backend-services:
     domain: backend
-    paths: [src/animetta/services/**]
+    paths:
+      - src/animetta/services/**
+      - src/animetta_qwen_tts/**
     direct_groups: [backend-services-unit]
     impacts: [orchestration-graph]
     risk: normal
@@ -307,7 +506,7 @@ components:
   docker-infrastructure:
     domain: repository
     paths:
-      - Dockerfile
+      - Dockerfile*
       - docker-compose*.yml
       - docker/**
     direct_groups: [docker-compose-contract]
@@ -323,6 +522,7 @@ components:
       - Makefile
       - docs/development/project-health.md
       - openspec/changes/add-impact-aware-quality-pipeline/**
+      - openspec/changes/accelerate-impact-aware-verification/**
     direct_groups: [backend-tooling-quality, docs-contract]
     impacts: []
     risk: normal

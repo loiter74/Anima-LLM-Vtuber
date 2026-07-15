@@ -17,7 +17,7 @@ if str(src_dir) not in sys.path:
 
 from loguru import logger
 
-from animetta.config.app import AppConfig
+from animetta.config.manifest import EffectiveConfig, load_effective_config
 from animetta.config.user import UserSettings
 from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
@@ -59,7 +59,7 @@ _server_args = parse_server_args()
 
 
 # Global configuration
-global_config: AppConfig = None
+global_config: EffectiveConfig | None = None
 
 # User settings
 user_settings = UserSettings(_PROJECT_ROOT)
@@ -70,7 +70,7 @@ logger_manager.set_level(initial_log_level)
 logger.info(f"Applying user log level configuration: {initial_log_level}")
 
 
-def init_config(config_path: str = None) -> None:
+def init_config(config_path: str | None = None) -> EffectiveConfig:
     """
     Initialize global configuration
 
@@ -79,9 +79,18 @@ def init_config(config_path: str = None) -> None:
     """
     global global_config
 
-    global_config = AppConfig.from_yaml(config_path) if config_path else AppConfig.load()
+    if global_config is not None:
+        return global_config
+
+    manifest_path = (
+        Path(config_path)
+        if config_path is not None
+        else _PROJECT_ROOT / "config" / "animetta.yaml"
+    )
+    global_config = load_effective_config(manifest_path)
 
     logger.info(f"Configuration loaded: {global_config.system.host}:{global_config.system.port}")
+    return global_config
 
 
 def run_server():

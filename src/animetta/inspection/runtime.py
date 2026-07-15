@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,3 +19,5 @@ class InspectionRuntime:
     memory_runtime: Any
     readiness_snapshot: Callable[[], Any]
     metrics_snapshot: Callable[[], str]
+    observation_write_probe: Callable[[], Awaitable[None]] | None = None
+    remote_tts_probe: Callable[[], Awaitable[dict[str, Any]]] | None = None

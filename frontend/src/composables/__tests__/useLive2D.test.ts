@@ -3,14 +3,16 @@ import { ref, type Ref } from 'vue'
 
 // Mock pixi.js before any imports
 vi.mock('pixi.js', () => ({
-  Application: vi.fn(() => ({
+  Application: vi.fn(function ApplicationMock() {
+    return {
     view: document.createElement('canvas'),
     screen: { width: 800, height: 600 },
     renderer: { resize: vi.fn() },
     ticker: { add: vi.fn(), remove: vi.fn() },
     stage: { addChild: vi.fn(), removeChild: vi.fn() },
     destroy: vi.fn(),
-  })),
+    }
+  }),
 }))
 
 // Mock pixi-live2d-display cubism4 before any imports
@@ -42,9 +44,13 @@ vi.mock('pixi-live2d-display/cubism4', () => ({
   },
 }))
 
-// Mock socket — return null so all socket operations are no-ops
+const mockSocket = vi.hoisted(() => ({
+  on: vi.fn(),
+  off: vi.fn(),
+}))
+
 vi.mock('@/composables/useSocket', () => ({
-  getSocket: () => null,
+  getSocket: () => mockSocket,
 }))
 
 describe('useLive2D', () => {
@@ -186,6 +192,35 @@ describe('useLive2D', () => {
     it('can be called without error', () => {
       const live2d = useLive2D(canvasRef)
       expect(() => live2d.destroy()).not.toThrow()
+    })
+
+    it('owns one socket listener set across repeated initialization', async () => {
+      const live2d = useLive2D(canvasRef)
+
+      await live2d.init()
+      await live2d.init()
+
+      expect(mockSocket.on).toHaveBeenCalledTimes(3)
+      const registrations = mockSocket.on.mock.calls
+      live2d.destroy()
+      expect(mockSocket.off).toHaveBeenCalledTimes(3)
+      expect(mockSocket.off.mock.calls).toEqual(
+        registrations.map(([event, callback]) => [event, callback]),
+      )
+    })
+
+    it('keeps shared socket listeners until the last instance is destroyed', async () => {
+      const first = useLive2D(canvasRef)
+      const second = useLive2D(canvasRef)
+
+      await first.init()
+      await second.init()
+
+      expect(mockSocket.on).toHaveBeenCalledTimes(3)
+      first.destroy()
+      expect(mockSocket.off).not.toHaveBeenCalled()
+      second.destroy()
+      expect(mockSocket.off).toHaveBeenCalledTimes(3)
     })
   })
 

@@ -107,18 +107,15 @@ cd frontend && pnpm install
 
 ### 2. Configure
 
-```bash
-cp config/config.golden.yaml config/config.yaml
-```
-
-Edit `config/config.yaml` to choose your `persona` and the service providers under `services:` (e.g. `agent: deepseek`, `tts: edge`, `asr: mock`). Then set API keys via environment — **never commit real credentials to `config/*.yaml`**:
+Edit `config/animetta.yaml` to choose the persona and the complete provider map for the `test`, `smoke`, and `production` profiles. Provider selection lives only in this manifest; environment variables supply profile, endpoints, and secrets.
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in the keys you actually use, e.g.:
+# Choose test, smoke, or production and fill only the keys it needs:
+#   ANIMETTA_PROFILE="test"
 #   DEEPSEEK_API_KEY="..."
-#   OPENAI_API_KEY="..."
-#   GLM_API_KEY="..."
+#   MIMO_API_KEY="..."
+#   QWEN_TTS_API_KEY="..."
 ```
 
 ### 3. Run

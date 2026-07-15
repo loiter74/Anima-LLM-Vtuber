@@ -31,7 +31,7 @@ This feature allows Animetta to use a **real Minecraft client** as the visual pr
 
 ### 1. Configure the viewer account
 
-Add to your `config/services.yaml` or environment:
+Add to the `minecraft` section of `config/tools.yaml`:
 
 ```yaml
 minecraft:

@@ -26,6 +26,7 @@ from animetta.config.providers.tts import (
     MockTTSConfig,
     OpenAITTSConfig,
     Qwen3TTSConfig,
+    RemoteTTSConfig,
     VibeVoiceTTSConfig,
 )
 from animetta.observability.ports import ObservationRecorder
@@ -38,6 +39,7 @@ from animetta.tracing.proxy import TracingProxy
 from .interface import TTSInterface
 from .mimo_tts import MimoTTS  # noqa: F401 - ensure provider registration
 from .mock_tts import MockTTS
+from .remote_tts import RemoteTTS  # noqa: F401 - ensure provider registration
 
 _AVAILABLE_TTS_PROVIDERS = (
     "mock",
@@ -45,6 +47,7 @@ _AVAILABLE_TTS_PROVIDERS = (
     "mimo",
     "gpt_sovits",
     "qwen3",
+    "remote",
     "glm",
     "chattts",
     "kokoro",
@@ -64,7 +67,7 @@ class TTSFactory:
 
     @staticmethod
     def create(
-        provider: str,
+        provider_type: str | None = None,
         *,
         strict: bool = False,
         observation_recorder: ObservationRecorder | None = None,
@@ -74,7 +77,7 @@ class TTSFactory:
         Creates TTS instance by provider via ProviderRegistry.
 
         Args:
-            provider: Provider name
+            provider_type: Registered provider type used to select the implementation
             strict: Reject unknown providers and propagate creation failures
             **kwargs: Parameters passed to build the config object
 
@@ -83,11 +86,17 @@ class TTSFactory:
 
         Falls back to MockTTS on failure unless ``strict`` is enabled.
         """
-        config = TTSFactory._build_config(provider, kwargs, strict=strict)
+        if provider_type is None:
+            provider_type = kwargs.pop("provider", None)
+        if not provider_type:
+            raise ValueError("TTS provider type is required")
+        config = TTSFactory._build_config(provider_type, kwargs, strict=strict)
         if config is None:
             if strict:
-                raise ValueError(f"Unknown TTS provider: {provider}")
-            logger.warning(f"Unknown TTS provider: {provider}, using Mock implementation")
+                raise ValueError(f"Unknown TTS provider: {provider_type}")
+            logger.warning(
+                f"Unknown TTS provider: {provider_type}, using Mock implementation"
+            )
             return instrument_service(
                 MockTTS(), observation_recorder, "tts", provider="mock", model="mock"
             )
@@ -102,11 +111,12 @@ class TTSFactory:
                 "mimo-tts": ".mimo_tts",
                 "gpt_sovits": ".gpt_sovits_tts",
                 "qwen3": ".qwen3_tts",
+                "remote": ".remote_tts",
                 "glm": ".contrib.glm_tts",
                 "chattts": ".contrib.chattts_tts",
                 "kokoro": ".contrib.kokoro_tts",
                 "vibe_voice": ".contrib.vibe_voice_tts",
-            }.get(provider)
+            }.get(provider_type)
             if module_name is not None:
                 try:
                     import_module(module_name, __package__)
@@ -115,12 +125,12 @@ class TTSFactory:
                         raise
                     logger.warning(
                         "TTS provider import unavailable: "
-                        f"type={provider}, error={type(exc).__name__}"
+                        f"type={provider_type}, error={type(exc).__name__}"
                     )
             svc = ProviderRegistry.create_service("tts", config)
             if (
                 strict
-                and provider != "mock"
+                and provider_type != "mock"
                 and isinstance(_unwrap_tracing_proxy(svc), MockTTS)
             ):
                 raise RuntimeError(
@@ -131,19 +141,19 @@ class TTSFactory:
                 svc,
                 observation_recorder,
                 "tts",
-                provider=provider,
+                provider=provider_type,
                 model=getattr(config, "model", None),
             )
         except Exception as e:
             if strict:
                 logger.error(
                     "Strict TTS service creation failed: "
-                    f"type={provider}, error={type(e).__name__}"
+                    f"type={provider_type}, error={type(e).__name__}"
                 )
                 raise
             logger.warning(
                 "TTS provider failed to initialize; falling back to MockTTS: "
-                f"type={provider}, error={type(e).__name__}"
+                f"type={provider_type}, error={type(e).__name__}"
             )
             return instrument_service(
                 MockTTS(), observation_recorder, "tts", provider="mock", model="mock"
@@ -242,6 +252,7 @@ class TTSFactory:
             elif provider == "qwen3":
                 return Qwen3TTSConfig(
                     model=kwargs.get("model", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
+                    revision=kwargs.get("revision"),
                     speaker=kwargs.get("speaker", "Vivian"),
                     device=kwargs.get("device", "cuda:0"),
                     dtype=kwargs.get("dtype", "bfloat16"),
@@ -256,6 +267,8 @@ class TTSFactory:
                     ref_text=kwargs.get("ref_text"),
                     x_vector_only=kwargs.get("x_vector_only", True),
                 )
+            elif provider == "remote":
+                return RemoteTTSConfig.model_validate({"type": "remote", **kwargs})
             else:
                 return None
         except ImportError as e:
