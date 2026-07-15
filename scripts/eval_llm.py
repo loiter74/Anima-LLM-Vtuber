@@ -257,7 +257,9 @@ def format_markdown(summaries: list[ProviderSummary], results: list[EvalResult])
         else:
             lines.append(f"- **Similarity:** {r.similarity:.4f}")
             lines.append(f"- **Latency:** {r.latency_s:.3f}s")
-            lines.append(f"- **Response:** {r.response[:200]}{'...' if len(r.response) > 200 else ''}")
+            lines.append(
+                f"- **Response:** {r.response[:200]}{'...' if len(r.response) > 200 else ''}"
+            )
             lines.append(f"- **Reference:** {r.reference[:200]}\n")
 
     return "\n".join(lines)

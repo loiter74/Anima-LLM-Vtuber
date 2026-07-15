@@ -8,14 +8,15 @@ Usage:
 Default: feishu_to_docs (Feishu is source of truth)
 """
 
-import subprocess
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 # Config
 FEISHU_TOKEN = "Io94sSOnShYdkXtuLl4c6FLDnnd"
 DOCS_DIR = Path(__file__).parent.parent / "docs"
+
 
 def run_lark_cli(args: list[str]) -> dict:
     """Run lark-cli command and return JSON output."""
@@ -26,14 +27,21 @@ def run_lark_cli(args: list[str]) -> dict:
         sys.exit(1)
     return json.loads(result.stdout)
 
+
 def read_sheet(sheet_name: str, range_str: str) -> list[list[str]]:
     """Read data from Feishu sheet."""
-    data = run_lark_cli([
-        "sheets", "+csv-get",
-        "--spreadsheet-token", FEISHU_TOKEN,
-        "--sheet-name", sheet_name,
-        "--range", range_str
-    ])
+    data = run_lark_cli(
+        [
+            "sheets",
+            "+csv-get",
+            "--spreadsheet-token",
+            FEISHU_TOKEN,
+            "--sheet-name",
+            sheet_name,
+            "--range",
+            range_str,
+        ]
+    )
     # Parse CSV output
     csv_text = data.get("data", {}).get("csv", "")
     rows = []
@@ -44,10 +52,11 @@ def read_sheet(sheet_name: str, range_str: str) -> list[list[str]]:
         rows.append(line.split(","))
     return rows
 
+
 def sync_roadmap():
     """Sync Roadmap sheet to docs/roadmap.md."""
     rows = read_sheet("Roadmap", "Roadmap!A1:D10")
-    
+
     content = """# Animetta Roadmap
 
 > 未来几个月的大方向安排。防止每天被新想法带跑。
@@ -59,11 +68,11 @@ def sync_roadmap():
 | 时间范围 | 目标 | 关键交付物 | 状态 |
 |----------|------|------------|------|
 """
-    
+
     for row in rows[1:]:  # Skip header
         if len(row) >= 4:
             content += f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |\n"
-    
+
     content += """
 ---
 
@@ -77,17 +86,18 @@ def sync_roadmap():
 
 *Last synced: {timestamp}*
 """
-    
+
     # Write to file
     roadmap_path = DOCS_DIR / "roadmap.md"
     roadmap_path.parent.mkdir(parents=True, exist_ok=True)
     roadmap_path.write_text(content, encoding="utf-8")
     print(f"✓ Synced Roadmap → {roadmap_path}")
 
+
 def sync_scope():
     """Sync Scope-2026-07 sheet to docs/scope-2026-07.md."""
     rows = read_sheet("Scope-2026-07", "Scope-2026-07!A1:C20")
-    
+
     in_scope = []
     out_scope = []
     for row in rows[1:]:  # Skip header
@@ -96,7 +106,7 @@ def sync_scope():
                 in_scope.append((row[1], row[2]))
             elif row[0] == "不做":
                 out_scope.append((row[1], row[2]))
-    
+
     content = f"""# Animetta Scope - 2026年7月
 
 > 这次到底做什么，不做什么。项目失败很多时候不是因为做得少，而是因为 Scope 一直膨胀。
@@ -110,7 +120,7 @@ def sync_scope():
 """
     for item, reason in in_scope:
         content += f"| {item} | {reason} |\n"
-    
+
     content += """
 ## 不做（Out of Scope）
 
@@ -119,7 +129,7 @@ def sync_scope():
 """
     for item, reason in out_scope:
         content += f"| {item} | {reason} |\n"
-    
+
     content += """
 ## 验收标准
 
@@ -144,16 +154,17 @@ def sync_scope():
 
 *Last synced: {timestamp}*
 """
-    
+
     scope_path = DOCS_DIR / "scope-2026-07.md"
     scope_path.parent.mkdir(parents=True, exist_ok=True)
     scope_path.write_text(content, encoding="utf-8")
     print(f"✓ Synced Scope → {scope_path}")
 
+
 def sync_risk_log():
     """Sync Risk Log sheet to docs/risk-log.md."""
     rows = read_sheet("Risk Log", "Risk Log!A1:D10")
-    
+
     content = """# Animetta Risk Log
 
 > 哪些事情最可能让项目失败。每个月更新一次。
@@ -165,11 +176,11 @@ def sync_risk_log():
 | 风险 | 严重程度 | 应对方案 | 状态 |
 |------|----------|----------|------|
 """
-    
+
     for row in rows[1:]:  # Skip header
         if len(row) >= 4:
             content += f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |\n"
-    
+
     content += """
 ## 风险应对原则
 
@@ -194,16 +205,17 @@ def sync_risk_log():
 
 *Last synced: {timestamp}*
 """
-    
+
     risk_path = DOCS_DIR / "risk-log.md"
     risk_path.parent.mkdir(parents=True, exist_ok=True)
     risk_path.write_text(content, encoding="utf-8")
     print(f"✓ Synced Risk Log → {risk_path}")
 
+
 def sync_backlog():
     """Sync Backlog sheet to docs/backlog.md."""
     rows = read_sheet("Backlog", "Backlog!A1:D20")
-    
+
     content = """# Animetta Backlog
 
 > 想做但暂时没排期的任务集合。不是垃圾桶，而是"想法仓库"。
@@ -215,11 +227,11 @@ def sync_backlog():
 | 任务 | 优先级 | 依赖 | 备注 |
 |------|--------|------|------|
 """
-    
+
     for row in rows[1:]:  # Skip header
         if len(row) >= 4:
             content += f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |\n"
-    
+
     content += """
 ## 优先级说明
 
@@ -236,16 +248,17 @@ def sync_backlog():
 
 *Last synced: {timestamp}*
 """
-    
+
     backlog_path = DOCS_DIR / "backlog.md"
     backlog_path.parent.mkdir(parents=True, exist_ok=True)
     backlog_path.write_text(content, encoding="utf-8")
     print(f"✓ Synced Backlog → {backlog_path}")
 
+
 def sync_not_now():
     """Sync Not Now sheet to docs/not-now.md."""
     rows = read_sheet("Not Now", "Not Now!A1:C10")
-    
+
     content = """# Animetta Not Now - 2026年7月
 
 > 本月明确禁止做的事情。防止 Scope 膨胀。
@@ -257,11 +270,11 @@ def sync_not_now():
 | 任务 | 禁止原因 | 解禁条件 |
 |------|----------|----------|
 """
-    
+
     for row in rows[1:]:  # Skip header
         if len(row) >= 3:
             content += f"| {row[0]} | {row[1]} | {row[2]} |\n"
-    
+
     content += """
 ## 使用规则
 
@@ -279,28 +292,30 @@ def sync_not_now():
 
 *Last synced: {timestamp}*
 """
-    
+
     not_now_path = DOCS_DIR / "not-now.md"
     not_now_path.parent.mkdir(parents=True, exist_ok=True)
     not_now_path.write_text(content, encoding="utf-8")
     print(f"✓ Synced Not Now → {not_now_path}")
 
+
 def main():
     """Main sync function."""
     import datetime
+
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    
+
     print("Syncing Feishu sheets to project docs...")
     print(f"Timestamp: {timestamp}")
     print()
-    
+
     try:
         sync_roadmap()
         sync_scope()
         sync_risk_log()
         sync_backlog()
         sync_not_now()
-        
+
         print()
         print("✓ All synced successfully!")
         print()
@@ -308,10 +323,11 @@ def main():
         print("1. Review the synced docs")
         print("2. Commit changes to git")
         print("3. Run this script weekly or before monthly review")
-        
+
     except Exception as e:
         print(f"✗ Error: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

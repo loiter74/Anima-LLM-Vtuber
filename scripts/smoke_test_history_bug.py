@@ -53,9 +53,9 @@ if DEFAULT_URL == "http://localhost" and not os.environ.get("ANIMA_BACKEND_URL")
     # Try the canonical manifest's configured backend port first.
     DEFAULT_URL = "http://localhost:12394"
 
-CONNECT_TIMEOUT = 8.0          # seconds to establish connection
-COLLECTION_WINDOW = 12.0       # seconds to collect events per test case
-SETTLE_BETWEEN_TESTS = 1.5     # cool-down between cases
+CONNECT_TIMEOUT = 8.0  # seconds to establish connection
+COLLECTION_WINDOW = 12.0  # seconds to collect events per test case
+SETTLE_BETWEEN_TESTS = 1.5  # cool-down between cases
 
 # Events that indicate the LLM pipeline ran (Layer 1 negative signal).
 # Backend emits namespaced event names ("chat:sentence" etc., see
@@ -71,6 +71,7 @@ REAL_DANMAKU = "旅人，今天酒馆有什么推荐的吗？"
 
 # ── Result bookkeeping ────────────────────────────────────────────────
 
+
 class CaseResult:
     def __init__(self, name: str):
         self.name = name
@@ -79,9 +80,7 @@ class CaseResult:
         self.duration_ms: float = 0.0
 
     def record(self, event: str, data: Any) -> None:
-        self.events.setdefault(event, []).append(
-            {"data": data, "t": time.time()}
-        )
+        self.events.setdefault(event, []).append({"data": data, "t": time.time()})
 
     @property
     def got_sentence(self) -> bool:
@@ -106,6 +105,7 @@ class CaseResult:
 
 
 # ── Harness ───────────────────────────────────────────────────────────
+
 
 async def _connect(sio: socketio.AsyncClient, url: str) -> str | None:
     """Connect, returning None on success or an error message."""
@@ -158,37 +158,48 @@ async def _run_case(
 
 # ── Individual test cases ────────────────────────────────────────────
 
+
 async def test_a_inspection_flag_skipped(url: str) -> tuple[CaseResult, bool, str]:
     """A: is_inspection=True must NOT trigger the LLM pipeline."""
     res = await _run_case(
-        url, "A_inspection_flag",
+        url,
+        "A_inspection_flag",
         {"text": "[inspection] ping", "mode": "text", "is_inspection": True},
         expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
     ok = not res.got_sentence
-    return res, ok, (
-        "probe dropped before LLM (no sentence)"
-        if ok else
-        f"FAIL: probe reached LLM, got sentence: {res.first_sentence_text!r}"
+    return (
+        res,
+        ok,
+        (
+            "probe dropped before LLM (no sentence)"
+            if ok
+            else f"FAIL: probe reached LLM, got sentence: {res.first_sentence_text!r}"
+        ),
     )
 
 
 async def test_b_inspection_text_skipped(url: str) -> tuple[CaseResult, bool, str]:
     """B: [inspection] text without flag must still be dropped (text fallback)."""
     res = await _run_case(
-        url, "B_inspection_text",
+        url,
+        "B_inspection_text",
         {"text": "[inspection] ping", "mode": "text"},
         expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
     ok = not res.got_sentence
-    return res, ok, (
-        "text-shaped probe dropped (no sentence)"
-        if ok else
-        f"FAIL: text probe reached LLM: {res.first_sentence_text!r}"
+    return (
+        res,
+        ok,
+        (
+            "text-shaped probe dropped (no sentence)"
+            if ok
+            else f"FAIL: text probe reached LLM: {res.first_sentence_text!r}"
+        ),
     )
 
 
@@ -201,7 +212,8 @@ async def test_c_real_danmaku_full_pipeline(url: str) -> tuple[CaseResult, bool,
     requirements are: a sentence (LLM ran) and an expression (emotion node ran).
     """
     res = await _run_case(
-        url, "C_real_danmaku",
+        url,
+        "C_real_danmaku",
         {"text": REAL_DANMAKU, "mode": "text"},
         expect_llm=True,
     )
@@ -229,27 +241,31 @@ async def test_c_real_danmaku_full_pipeline(url: str) -> tuple[CaseResult, bool,
 async def test_d_bare_ping_skipped(url: str) -> tuple[CaseResult, bool, str]:
     """D: bare 'ping' token must be dropped (token fallback in should_skip_llm)."""
     res = await _run_case(
-        url, "D_bare_ping",
+        url,
+        "D_bare_ping",
         {"text": "ping", "mode": "text"},
         expect_llm=False,
     )
     if res.error:
         return res, False, f"infra error: {res.error}"
     ok = not res.got_sentence
-    return res, ok, (
-        "bare 'ping' dropped (no sentence)"
-        if ok else
-        f"FAIL: 'ping' reached LLM: {res.first_sentence_text!r}"
+    return (
+        res,
+        ok,
+        (
+            "bare 'ping' dropped (no sentence)"
+            if ok
+            else f"FAIL: 'ping' reached LLM: {res.first_sentence_text!r}"
+        ),
     )
 
 
 # ── Reporting ────────────────────────────────────────────────────────
 
+
 def _format_result(name: str, res: CaseResult, ok: bool, detail: str) -> str:
     status = "PASS" if ok else "FAIL"
-    event_summary = ", ".join(
-        f"{e}×{len(v)}" for e, v in sorted(res.events.items())
-    ) or "(none)"
+    event_summary = ", ".join(f"{e}×{len(v)}" for e, v in sorted(res.events.items())) or "(none)"
     return (
         f"  [{status}] {name}  ({res.duration_ms:.0f} ms)\n"
         f"          {detail}\n"

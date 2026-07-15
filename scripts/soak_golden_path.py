@@ -28,12 +28,18 @@ from animetta.acceptance.golden_soak import (
 )
 
 PROMPTS = [
-    "晚上好，简单介绍一下你自己。", "我今天工作有点累，你怎么看？",
-    "延续刚才的话题，给我一个能马上执行的小建议。", "用你自己的世界观形容一次普通加班。",
-    "讲一个不过分的职场冷笑话。", "你认为什么样的休息才算真正有效？",
-    "还记得我刚才说累吗？把建议再具体一点。", "如果这里是一间酒馆，今晚的招牌饮料是什么？",
-    "直接回答：明天第一件事应该做什么？", "保持你的角色口吻，鼓励我一句。",
-    "总结我们刚才聊过的三个重点。", "最后用一句自然的话和我道晚安。",
+    "晚上好，简单介绍一下你自己。",
+    "我今天工作有点累，你怎么看？",
+    "延续刚才的话题，给我一个能马上执行的小建议。",
+    "用你自己的世界观形容一次普通加班。",
+    "讲一个不过分的职场冷笑话。",
+    "你认为什么样的休息才算真正有效？",
+    "还记得我刚才说累吗？把建议再具体一点。",
+    "如果这里是一间酒馆，今晚的招牌饮料是什么？",
+    "直接回答：明天第一件事应该做什么？",
+    "保持你的角色口吻，鼓励我一句。",
+    "总结我们刚才聊过的三个重点。",
+    "最后用一句自然的话和我道晚安。",
 ]
 
 
@@ -41,6 +47,7 @@ async def _get_json(url: str) -> dict[str, Any]:
     def read() -> dict[str, Any]:
         with urllib.request.urlopen(url, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
+
     return await asyncio.to_thread(read)
 
 
@@ -59,9 +66,7 @@ def _is_connection_bootstrap(event: str, payload: dict[str, Any]) -> bool:
 
 def _revision() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True, timeout=5
-        ).strip()
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, timeout=5).strip()
     except Exception:
         return "unknown"
 
@@ -114,10 +119,16 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
     try:
         probe = _identity(conversation_id)
         active = TurnTracker(probe, time.perf_counter())
-        await client.emit("chat:text", {
-            **probe, "text": "[inspection] ping", "source": "text",
-            "is_inspection": True, "is_acceptance": False,
-        })
+        await client.emit(
+            "chat:text",
+            {
+                **probe,
+                "text": "[inspection] ping",
+                "source": "text",
+                "is_inspection": True,
+                "is_acceptance": False,
+            },
+        )
         await asyncio.sleep(args.probe_seconds)
         if active.events:
             raise GateFailureError("inspection_probe_leaked")
@@ -131,10 +142,16 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
             terminal.clear()
             active = TurnTracker(identity, time.perf_counter())
             prompt = PROMPTS[index % len(PROMPTS)]
-            await client.emit("chat:text", {
-                **identity, "text": prompt, "source": "text",
-                "is_inspection": False, "is_acceptance": True,
-            })
+            await client.emit(
+                "chat:text",
+                {
+                    **identity,
+                    "text": prompt,
+                    "source": "text",
+                    "is_inspection": False,
+                    "is_acceptance": True,
+                },
+            )
             try:
                 await asyncio.wait_for(terminal.wait(), timeout=args.turn_timeout)
             except TimeoutError as exc:
@@ -161,9 +178,9 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
         turns = writer.data["turns"]
         degradation_ok, degradation_reason = evaluate_degradation_budget(turns)
         text_p95 = percentile([turn["text_ready_ms"] for turn in turns], 95)
-        media_p95 = percentile([
-            turn["media_ready_ms"] for turn in turns if not turn["degraded"]
-        ], 95)
+        media_p95 = percentile(
+            [turn["media_ready_ms"] for turn in turns if not turn["degraded"]], 95
+        )
         decisions = {
             "duration": elapsed >= args.duration,
             "turn_count": len(turns) >= args.turns,
@@ -174,9 +191,9 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
             "degradation_reason": degradation_reason,
         }
         if args.log_file:
-            violations = scan_sanitized_logs(Path(args.log_file).read_text(
-                encoding="utf-8", errors="replace"
-            ))
+            violations = scan_sanitized_logs(
+                Path(args.log_file).read_text(encoding="utf-8", errors="replace")
+            )
             decisions["log_scan"] = not violations
             writer.update(log_scan={"path": args.log_file, "violations": violations})
         writer.update(
@@ -194,8 +211,10 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
 def _identity(conversation_id: str) -> dict[str, str]:
     task_id = str(uuid4())
     return {
-        "message_id": str(uuid4()), "conversation_id": conversation_id,
-        "task_id": task_id, "turn_id": task_id,
+        "message_id": str(uuid4()),
+        "conversation_id": conversation_id,
+        "task_id": task_id,
+        "turn_id": task_id,
     }
 
 
@@ -211,14 +230,22 @@ def main() -> int:
     args = parser.parse_args()
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = Path(args.evidence_dir) / f"golden-soak-{stamp}.json"
-    writer = EvidenceWriter(path, {
-        "status": "running", "turns": [],
-        "environment": {
-            "url": args.url, "platform": platform.platform(), "python": platform.python_version(),
-            "revision": _revision(), "gpu": os.getenv("NVIDIA_VISIBLE_DEVICES", "unknown"),
-            "duration_required": args.duration, "turns_required": args.turns,
+    writer = EvidenceWriter(
+        path,
+        {
+            "status": "running",
+            "turns": [],
+            "environment": {
+                "url": args.url,
+                "platform": platform.platform(),
+                "python": platform.python_version(),
+                "revision": _revision(),
+                "gpu": os.getenv("NVIDIA_VISIBLE_DEVICES", "unknown"),
+                "duration_required": args.duration,
+                "turns_required": args.turns,
+            },
         },
-    })
+    )
     try:
         asyncio.run(run(args, writer))
     except Exception as exc:

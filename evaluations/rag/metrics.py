@@ -18,9 +18,8 @@ ChunkId = tuple[str, int, int]
 
 # ── Helper ──────────────────────────────────────────────────────────────
 
-def _intersect_count(
-    retrieved: list[ChunkId], expected: list[ChunkId], k: int
-) -> int:
+
+def _intersect_count(retrieved: list[ChunkId], expected: list[ChunkId], k: int) -> int:
     """Count unique expected chunks found in the first k retrieved chunks.
 
     Uses set intersection (∩) per the mathematical definition,
@@ -33,9 +32,8 @@ def _intersect_count(
 
 # ── Retrieval Quality Metrics ───────────────────────────────────────────
 
-def recall_at_k(
-    retrieved: list[ChunkId], expected: list[ChunkId], k: int
-) -> float:
+
+def recall_at_k(retrieved: list[ChunkId], expected: list[ChunkId], k: int) -> float:
     """|retrieved[:k] ∩ expected| / |expected|.
 
     Returns 0.0 if expected is empty.
@@ -48,9 +46,7 @@ def recall_at_k(
     return hits / len(expected)
 
 
-def precision_at_k(
-    retrieved: list[ChunkId], expected: list[ChunkId], k: int
-) -> float:
+def precision_at_k(retrieved: list[ChunkId], expected: list[ChunkId], k: int) -> float:
     """|retrieved[:k] ∩ expected| / min(k, |retrieved|).
 
     Returns 0.0 if retrieved is empty.
@@ -64,9 +60,7 @@ def precision_at_k(
     return hits / denominator
 
 
-def mrr(
-    retrieved: list[ChunkId], expected: list[ChunkId]
-) -> float:
+def mrr(retrieved: list[ChunkId], expected: list[ChunkId]) -> float:
     """Mean Reciprocal Rank: 1 / rank of first hit.
 
     Rank is 1-based. Returns 0.0 if no expected chunks are found,
@@ -81,9 +75,7 @@ def mrr(
     return 0.0
 
 
-def ndcg_at_k(
-    retrieved: list[ChunkId], expected: list[ChunkId], k: int
-) -> float:
+def ndcg_at_k(retrieved: list[ChunkId], expected: list[ChunkId], k: int) -> float:
     """Normalized Discounted Cumulative Gain at k.
 
     Relevance = 1 if chunk in expected, 0 otherwise.
@@ -117,6 +109,7 @@ def ndcg_at_k(
 
 # ── Performance Metrics ─────────────────────────────────────────────────
 
+
 def latency_percentiles(timings_ms: list[float]) -> dict[str, float]:
     """Compute latency percentiles from a list of timing values.
 
@@ -126,9 +119,14 @@ def latency_percentiles(timings_ms: list[float]) -> dict[str, float]:
     """
     if not timings_ms:
         return {
-            "p50": 0.0, "p75": 0.0, "p90": 0.0,
-            "p95": 0.0, "p99": 0.0,
-            "mean": 0.0, "min": 0.0, "max": 0.0,
+            "p50": 0.0,
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
         }
 
     sorted_data = sorted(timings_ms)
@@ -158,6 +156,7 @@ def latency_percentiles(timings_ms: list[float]) -> dict[str, float]:
 
 # ── Diversity Metrics ───────────────────────────────────────────────────
 
+
 def chunk_diversity(retrieved_chunks: list[dict[str, Any]]) -> float:
     """Fraction of distinct source documents among retrieved chunks.
 
@@ -171,6 +170,7 @@ def chunk_diversity(retrieved_chunks: list[dict[str, Any]]) -> float:
 
 
 # ── Statistical Tools ───────────────────────────────────────────────────
+
 
 def bootstrap_ci(
     samples: list[float],

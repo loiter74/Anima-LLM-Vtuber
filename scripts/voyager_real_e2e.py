@@ -86,9 +86,7 @@ class StrategyGenerator:
             "await craft('wooden_sword', 1); "
             "await mine_shaft(50, 1);"
         ),
-        "stone_pickaxe": (
-            "await craft('stick', 2); await craft('stone_pickaxe', 1);"
-        ),
+        "stone_pickaxe": ("await craft('stick', 2); await craft('stone_pickaxe', 1);"),
         "furnace": "await craft('furnace', 1);",
         "iron_ingot": (
             "await collect('oak_log', 3); await craft('oak_planks', 3); "
@@ -100,9 +98,7 @@ class StrategyGenerator:
             "await collect('coal', 1); "
             "await smelt('raw_iron', 'coal', 1);"
         ),
-        "iron_pickaxe": (
-            "await craft('stick', 2); await craft('iron_pickaxe', 1);"
-        ),
+        "iron_pickaxe": ("await craft('stick', 2); await craft('iron_pickaxe', 1);"),
     }
 
     async def generate(self, *, node, observation=None, **_: Any) -> str:
@@ -119,9 +115,7 @@ class StrategyGenerator:
             if missing_iron:
                 actions.append(f"await collect('raw_iron', {missing_iron});")
                 actions.append("await collect('coal', 1);")
-                actions.append(
-                    f"await smelt('raw_iron', 'coal', {missing_iron});"
-                )
+                actions.append(f"await smelt('raw_iron', 'coal', {missing_iron});")
             if inventory.get("stick", 0) < 2:
                 actions.append("await craft('stick', 1);")
             actions.append("await craft('iron_pickaxe', 1);")
@@ -194,9 +188,7 @@ class StrategyGenerator:
                 ]
             )
             return " ".join(actions)
-        if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get(
-            "stick", 0
-        ) >= 2:
+        if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get("stick", 0) >= 2:
             return f"await craft('{node.id}', 1);"
         return self.STRATEGIES[node.id]
 
@@ -327,8 +319,7 @@ async def reset_player_before_measurement() -> list[dict[str, str]]:
         region_index = progression_runs * FIXTURE_REGION_ATTEMPTS + region_attempt + 1
         search_x, search_z = fixture_search_origin(region_index)
         locate_command = (
-            f"execute positioned {search_x} 100 {search_z} "
-            f"run locate biome {FIXTURE_BIOME}"
+            f"execute positioned {search_x} 100 {search_z} run locate biome {FIXTURE_BIOME}"
         )
         locate_output = await asyncio.to_thread(rcon, locate_command)
         audit.append({"command": locate_command, "output": locate_output})
@@ -440,9 +431,7 @@ async def negative_runtime_audit(
             },
             timeout=10.0,
         )
-        attempts.append(
-            {"kind": "capability", "capability": capability, "response": result}
-        )
+        attempts.append({"kind": "capability", "capability": capability, "response": result})
 
     chat = await bridge.send_command(
         "execute_action",
@@ -509,9 +498,7 @@ async def run_progression(
         mode=VoyagerMode.LEARN,
         runtime=runtime,
         manifest=manifest,
-        authorized_capabilities=frozenset(
-            capability.name for capability in manifest.capabilities
-        ),
+        authorized_capabilities=frozenset(capability.name for capability in manifest.capabilities),
         repository=repository,
     )
     library = SkillLibrary()
@@ -576,8 +563,7 @@ async def advance_progression(
             return outcomes, False
         outcomes.append(outcome.model_dump(mode="json"))
         if outcome.status in {"candidate", "trusted"} and (
-            outcome.node_id not in targets
-            or outcome.node_id not in session.progress.unlocked_nodes
+            outcome.node_id not in targets or outcome.node_id not in session.progress.unlocked_nodes
         ):
             return outcomes, False
     return outcomes, targets.issubset(session.progress.unlocked_nodes)
@@ -681,14 +667,10 @@ async def main(mode: str) -> None:
             )
 
         if mode in {"progression", "all"}:
-            progression, repository, session_id, progress = await run_progression(
-                runtime, manifest
-            )
+            progression, repository, session_id, progress = await run_progression(runtime, manifest)
             artifact["progression"] = progression
             if not progression["completed"]:
-                raise AssertionError(
-                    f"progression stopped: {progression['outcomes'][-1]}"
-                )
+                raise AssertionError(f"progression stopped: {progression['outcomes'][-1]}")
             if mode in {"recovery", "all"}:
                 artifact["recovery"] = await recovery_audit(
                     bridge,

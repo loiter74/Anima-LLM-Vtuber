@@ -20,7 +20,7 @@ import sys
 import tempfile
 import time
 import traceback
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -36,12 +36,12 @@ for _p in (str(_PROJECT_ROOT), str(_SRC_ROOT)):
 
 
 from evaluations.rag.metrics import (
-    recall_at_k,
-    precision_at_k,
+    chunk_diversity,
+    latency_percentiles,
     mrr,
     ndcg_at_k,
-    latency_percentiles,
-    chunk_diversity,
+    precision_at_k,
+    recall_at_k,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,9 +54,11 @@ ChunkId = tuple[str, int, int]  # (path, start_line, end_line)
 # EvalConfig
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class EvalConfig:
     """Single experiment configuration — mirrors MemoryConfig parameters."""
+
     name: str
     vector_weight: float = 0.7
     keyword_weight: float = 0.3
@@ -92,9 +94,10 @@ class EvalConfig:
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _search_result_to_chunk_id(sr) -> ChunkId:
     """Convert a SearchResult to a ChunkId tuple for metrics.
-    
+
     Normalizes path separators to forward slash for cross-platform matching.
     """
     normalized_path = sr.path.replace("\\", "/")
@@ -103,20 +106,15 @@ def _search_result_to_chunk_id(sr) -> ChunkId:
 
 def _expected_to_chunk_ids(expected_chunks: list[dict]) -> list[ChunkId]:
     """Convert dataset expected_chunks to ChunkId tuples.
-    
+
     Normalizes path separators to forward slash for cross-platform matching.
     """
-    return [
-        (c["path"].replace("\\", "/"), c["start_line"], c["end_line"])
-        for c in expected_chunks
-    ]
+    return [(c["path"].replace("\\", "/"), c["start_line"], c["end_line"]) for c in expected_chunks]
 
 
-def _normalize_expected(
-    expected: list[ChunkId], retrieved: list[ChunkId]
-) -> list[ChunkId]:
+def _normalize_expected(expected: list[ChunkId], retrieved: list[ChunkId]) -> list[ChunkId]:
     """Remap expected chunk IDs to match actual retrieved chunk boundaries.
-    
+
     The dataset annotates specific line ranges (e.g., L19-L21), but the
     chunker produces larger chunks (e.g., L1-L22). This function uses
     "contains" matching: if a retrieved chunk covers the expected line
@@ -152,6 +150,7 @@ def load_jsonl(path: str | Path) -> list[dict]:
 def get_git_commit() -> str:
     """Get current git commit (short hash), or 'unknown'."""
     import subprocess
+
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -187,6 +186,7 @@ def _copy_corpus(project_root: Path, workspace: Path) -> int:
 # ═══════════════════════════════════════════════════════════════════════
 # EvalRunner
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class EvalRunner:
     """Runs a single experiment configuration against a dataset."""
@@ -253,10 +253,7 @@ class EvalRunner:
             ndcg_val = ndcg_at_k(retrieved_chunk_ids, normalized_expected, k)
 
             # ── Chunk diversity ──
-            retrieved_chunks_for_diversity = [
-                {"path": sr.path}
-                for sr in search_results[:k]
-            ]
+            retrieved_chunks_for_diversity = [{"path": sr.path} for sr in search_results[:k]]
             div = chunk_diversity(retrieved_chunks_for_diversity)
 
             # ── Store per-query result ──
@@ -271,21 +268,23 @@ class EvalRunner:
                 for sr in search_results[:k]
             ]
 
-            per_query.append({
-                "id": item["id"],
-                "query": query,
-                "category": item.get("category", "unknown"),
-                "difficulty": item.get("difficulty", "unknown"),
-                "retrieved_chunks": retrieved_summary,
-                "expected_chunks": item.get("expected_chunks", []),
-                "expected_docs": item.get("expected_docs", []),
-                "recall_at_k": round(rec, 4),
-                "precision_at_k": round(prec, 4),
-                "mrr": round(mrr_val, 4),
-                "ndcg_at_k": round(ndcg_val, 4),
-                "latency_ms": round(elapsed_ms, 2),
-                "chunk_diversity": round(div, 4),
-            })
+            per_query.append(
+                {
+                    "id": item["id"],
+                    "query": query,
+                    "category": item.get("category", "unknown"),
+                    "difficulty": item.get("difficulty", "unknown"),
+                    "retrieved_chunks": retrieved_summary,
+                    "expected_chunks": item.get("expected_chunks", []),
+                    "expected_docs": item.get("expected_docs", []),
+                    "recall_at_k": round(rec, 4),
+                    "precision_at_k": round(prec, 4),
+                    "mrr": round(mrr_val, 4),
+                    "ndcg_at_k": round(ndcg_val, 4),
+                    "latency_ms": round(elapsed_ms, 2),
+                    "chunk_diversity": round(div, 4),
+                }
+            )
 
             # ── Accumulate per category ──
             cat = item.get("category", "unknown")
@@ -306,10 +305,14 @@ class EvalRunner:
 
         summary = {
             "recall_at_k": round(sum(all_recall) / len(all_recall), 4) if all_recall else 0.0,
-            "precision_at_k": round(sum(all_precision) / len(all_precision), 4) if all_precision else 0.0,
+            "precision_at_k": round(sum(all_precision) / len(all_precision), 4)
+            if all_precision
+            else 0.0,
             "mrr": round(sum(all_mrr) / len(all_mrr), 4) if all_mrr else 0.0,
             "ndcg_at_k": round(sum(all_ndcg) / len(all_ndcg), 4) if all_ndcg else 0.0,
-            "chunk_diversity": round(sum(all_diversity) / len(all_diversity), 4) if all_diversity else 0.0,
+            "chunk_diversity": round(sum(all_diversity) / len(all_diversity), 4)
+            if all_diversity
+            else 0.0,
             "latency_p50_ms": round(lpc["p50"], 2),
             "latency_p95_ms": round(lpc["p95"], 2),
             "latency_p99_ms": round(lpc["p99"], 2),
@@ -354,33 +357,42 @@ class EvalRunner:
 # Main / CLI
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="RAG Evaluation Runner — run retrieval experiments against a dataset.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--config", required=True,
+        "--config",
+        required=True,
         help="Path to configs.yaml (experiment matrix)",
     )
     parser.add_argument(
-        "--group", default="baseline",
+        "--group",
+        default="baseline",
         help="Experiment group name from configs.yaml (default: baseline)",
     )
     parser.add_argument(
-        "--dataset", required=True,
+        "--dataset",
+        required=True,
         help="Path to dataset.jsonl",
     )
     parser.add_argument(
-        "--k", type=int, default=5,
+        "--k",
+        type=int,
+        default=5,
         help="Top-k for retrieval metrics (default: 5)",
     )
     parser.add_argument(
-        "--output", default="evaluations/rag/results/",
+        "--output",
+        default="evaluations/rag/results/",
         help="Output directory for result files (default: evaluations/rag/results/)",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Enable debug logging",
     )
     return parser.parse_args(argv)
@@ -406,8 +418,12 @@ def main(argv: list[str] | None = None) -> None:
 
     experiments = all_configs.get("experiments", {})
     if args.group not in experiments:
-        logger.error("Experiment group '%s' not found in %s. Available: %s",
-                      args.group, config_path, list(experiments.keys()))
+        logger.error(
+            "Experiment group '%s' not found in %s. Available: %s",
+            args.group,
+            config_path,
+            list(experiments.keys()),
+        )
         sys.exit(1)
 
     group_configs = experiments[args.group]
@@ -429,8 +445,10 @@ def main(argv: list[str] | None = None) -> None:
     corpus_raw = project_root / "memory_db" / "raw"
     has_corpus = corpus_wiki.exists() or corpus_raw.exists()
     if not has_corpus:
-        logger.warning("memory_db/ corpus not found at %s — search will return empty results",
-                       project_root / "memory_db")
+        logger.warning(
+            "memory_db/ corpus not found at %s — search will return empty results",
+            project_root / "memory_db",
+        )
 
     # ── Output directory ──
     output_dir = Path(args.output).resolve()
@@ -448,7 +466,9 @@ def main(argv: list[str] | None = None) -> None:
         eval_config = EvalConfig(name=exp_name, **merged)
 
         # Create isolated workspace
-        with tempfile.TemporaryDirectory(prefix=f"rag_eval_{exp_name}_", ignore_cleanup_errors=True) as tmpdir:
+        with tempfile.TemporaryDirectory(
+            prefix=f"rag_eval_{exp_name}_", ignore_cleanup_errors=True
+        ) as tmpdir:
             ws = Path(tmpdir)
             logger.debug("Workspace: %s", ws)
 
@@ -490,10 +510,10 @@ def main(argv: list[str] | None = None) -> None:
     # ── Generate reports ──
     if all_results:
         from evaluations.rag.reporter import (
+            save_charts,
             save_json_results,
             save_json_summary,
             save_markdown_report,
-            save_charts,
         )
 
         for result in all_results:

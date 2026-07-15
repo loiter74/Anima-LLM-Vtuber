@@ -119,9 +119,7 @@ def validate_ts_file(events: dict[str, str]) -> list[str]:
 
 def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
     """Check frontend socket event literals use event names from the JSON."""
-    if not FRONTEND_SRC_DIR.exists() and not any(
-        path.exists() for path in FRONTEND_ENTRY_FILES
-    ):
+    if not FRONTEND_SRC_DIR.exists() and not any(path.exists() for path in FRONTEND_ENTRY_FILES):
         return []
 
     event_names = set(events.values())
@@ -132,9 +130,7 @@ def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
 
     source_files = list(FRONTEND_SRC_DIR.rglob("*")) if FRONTEND_SRC_DIR.exists() else []
     source_files.extend(
-        path
-        for path in FRONTEND_ENTRY_FILES
-        if path.exists() and path.is_relative_to(ROOT)
+        path for path in FRONTEND_ENTRY_FILES if path.exists() and path.is_relative_to(ROOT)
     )
 
     for source_file in source_files:
@@ -152,9 +148,7 @@ def validate_frontend_event_literals(events: dict[str, str]) -> list[str]:
                 continue
             if event_name not in event_names:
                 rel = source_file.relative_to(ROOT).as_posix()
-                errors.append(
-                    f"{rel}: {operation}('{event_name}') not in socket-events.json"
-                )
+                errors.append(f"{rel}: {operation}('{event_name}') not in socket-events.json")
 
     return errors
 
@@ -171,9 +165,7 @@ def validate_python_emits(events: dict[str, str]) -> list[str]:
     call_pattern = re.compile(
         r'(?:await\s+)?(?:sio|socket|client)\.(emit|on|off|once)\(\s*["\']([^"\']+)["\']'
     )
-    decorator_pattern = re.compile(
-        r'@(?:sio|socket|client)\.on\(\s*["\']([^"\']+)["\']'
-    )
+    decorator_pattern = re.compile(r'@(?:sio|socket|client)\.on\(\s*["\']([^"\']+)["\']')
 
     for event_dir in PYTHON_EVENT_DIRS:
         if not event_dir.exists():
@@ -191,9 +183,7 @@ def validate_python_emits(events: dict[str, str]) -> list[str]:
                     continue
                 if event_name not in event_names:
                     rel = py_file.relative_to(ROOT).as_posix()
-                    errors.append(
-                        f"{rel}: {operation}('{event_name}') not in socket-events.json"
-                    )
+                    errors.append(f"{rel}: {operation}('{event_name}') not in socket-events.json")
             for match in decorator_pattern.finditer(content):
                 event_name = match.group(1)
                 if event_name.startswith("{") or event_name.startswith("$"):
@@ -202,9 +192,7 @@ def validate_python_emits(events: dict[str, str]) -> list[str]:
                     continue
                 if event_name not in event_names:
                     rel = py_file.relative_to(ROOT).as_posix()
-                    errors.append(
-                        f"{rel}: on('{event_name}') not in socket-events.json"
-                    )
+                    errors.append(f"{rel}: on('{event_name}') not in socket-events.json")
 
     return errors
 

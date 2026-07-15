@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Test the MC Bot Skill system with persistence and learning loop."""
+
 import asyncio
 import os
 import sys
 import tempfile
 
 # Add the src directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 # Force UTF-8 output on Windows
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from animetta.tools.minecraft.skill_library import SkillLibrary, Skill, SkillStep
 from animetta.tools.minecraft.predefined_skills import get_predefined_skills
+from animetta.tools.minecraft.skill_library import Skill, SkillLibrary, SkillStep
 
 
 async def main():
@@ -99,9 +100,11 @@ async def main():
         skill_with_stats = await library3.get_skill("smoke_learned_test")
         assert skill_with_stats.success_count == 2
         assert skill_with_stats.fail_count == 1
-        print(f"   ✓ Stats: success={skill_with_stats.success_count}, "
-              f"fail={skill_with_stats.fail_count}, "
-              f"rate={skill_with_stats.success_rate:.0%}")
+        print(
+            f"   ✓ Stats: success={skill_with_stats.success_count}, "
+            f"fail={skill_with_stats.fail_count}, "
+            f"rate={skill_with_stats.success_rate:.0%}"
+        )
 
         # Restart and verify stats persisted
         await library3.close_db()

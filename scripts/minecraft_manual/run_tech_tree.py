@@ -5,6 +5,7 @@ TechTreeRunner Execution Script
 Runs the full tech tree unlock sequence on a Minecraft server.
 Target: 1 hour autonomous run to unlock wood → stone → iron → diamond
 """
+
 import asyncio
 import os
 import sys
@@ -12,7 +13,7 @@ import time
 
 from loguru import logger
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from animetta.tools.minecraft.bridge import MinecraftBridge
 from animetta.tools.minecraft.config import MinecraftBotConfig, MinecraftConfig
@@ -33,12 +34,7 @@ async def main():
     # 1. Initialize components
     print("[1/5] Initializing components...")
     config = MinecraftConfig(
-        enabled=True,
-        bot=MinecraftBotConfig(
-            host="localhost",
-            port=25565,
-            username="AnimettaBot"
-        )
+        enabled=True, bot=MinecraftBotConfig(host="localhost", port=25565, username="AnimettaBot")
     )
     bridge = MinecraftBridge(config)
     skill_library = SkillLibrary()
@@ -53,9 +49,13 @@ async def main():
     # 2. Create TechTree config
     print("\n[2/5] Creating tech tree config...")
     tech_tree_config = create_default_tech_tree()
-    print(f"  [OK] {len(tech_tree_config.phases)} phases, {tech_tree_config.total_time_budget_minutes}min total")
+    print(
+        f"  [OK] {len(tech_tree_config.phases)} phases, {tech_tree_config.total_time_budget_minutes}min total"
+    )
     for phase in tech_tree_config.phases:
-        print(f"    - {phase.name}: {phase.time_budget_minutes}min → {list(phase.required_items.keys())}")
+        print(
+            f"    - {phase.name}: {phase.time_budget_minutes}min → {list(phase.required_items.keys())}"
+        )
 
     # 3. Start bridge
     print("\n[3/5] Starting Minecraft bot...")
@@ -72,7 +72,9 @@ async def main():
         if status.get("status") == "success":
             result = status.get("result", {})
             pos = result.get("position", {})
-            print(f"  [OK] Position: ({pos.get('x', 0):.0f}, {pos.get('y', 0):.0f}, {pos.get('z', 0):.0f})")
+            print(
+                f"  [OK] Position: ({pos.get('x', 0):.0f}, {pos.get('y', 0):.0f}, {pos.get('z', 0):.0f})"
+            )
             print(f"  [OK] Health: {result.get('health', '?')}")
             print(f"  [OK] Food: {result.get('food', '?')}")
         else:
@@ -84,11 +86,7 @@ async def main():
 
     # 4. Create TechTreeRunner
     print("\n[4/5] Creating TechTreeRunner...")
-    runner = TechTreeRunner(
-        bridge=bridge,
-        skill_library=skill_library,
-        config=tech_tree_config
-    )
+    runner = TechTreeRunner(bridge=bridge, skill_library=skill_library, config=tech_tree_config)
     print("  [OK] Runner created")
 
     # 5. Run!
@@ -111,7 +109,7 @@ async def main():
         print("  Tech Tree Unlock Complete!")
         print("=" * 60)
         print(f"\n  Result: {'SUCCESS' if len(metrics.phases_completed) == 4 else 'PARTIAL'}")
-        print(f"  Time: {elapsed/60:.1f} minutes")
+        print(f"  Time: {elapsed / 60:.1f} minutes")
         print(f"  Phases completed: {len(metrics.phases_completed)}/4")
         print(f"  Items collected: {len(metrics.items_collected)}")
         print(f"  Skills learned: {metrics.skills_learned}")

@@ -1,4 +1,5 @@
 """End-to-end test: text input → LLM → mc tool call → bot execution."""
+
 import asyncio
 
 import socketio
@@ -7,10 +8,12 @@ SERVER = "http://localhost:12394"
 
 events_log = []
 
+
 def log(evt, data):
     msg = f"[EVENT] {evt}: {str(data)[:200]}"
     print(msg)
     events_log.append((evt, data))
+
 
 async def main():
     sio = socketio.AsyncClient()
@@ -78,7 +81,9 @@ async def main():
 
     print("\n[3] Bot connected! Sending text instruction ...")
     # Send a text that should trigger an mc_* tool call
-    await sio.emit("chat:text", {"text": "帮我看看周围有什么方块，然后挖1个橡木", "from_name": "测试员"})
+    await sio.emit(
+        "chat:text", {"text": "帮我看看周围有什么方块，然后挖1个橡木", "from_name": "测试员"}
+    )
 
     print("    waiting for LLM response + tool call (up to 60s) ...")
     # Collect events for 60s
@@ -88,7 +93,9 @@ async def main():
     seen = set(e for e, _ in events_log)
     print(f"    event types: {seen}")
 
-    text_chunks = [d.get("text", "") for e, d in events_log if e == "chat:sentence" and isinstance(d, dict)]
+    text_chunks = [
+        d.get("text", "") for e, d in events_log if e == "chat:sentence" and isinstance(d, dict)
+    ]
     full_text = "".join(text_chunks)
     print(f"\n[LLM 文本回复]:\n{full_text[:1500]}")
 
@@ -99,5 +106,6 @@ async def main():
 
     await sio.disconnect()
     print("\n[DONE]")
+
 
 asyncio.run(main())

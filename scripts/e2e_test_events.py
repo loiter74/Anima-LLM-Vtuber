@@ -11,6 +11,7 @@ Tests:
 
 import sys
 import time
+
 import socketio
 
 BASE_URL = "http://localhost:12394"
@@ -33,19 +34,38 @@ def on_disconnect():
 def make_catcher(event_name):
     def handler(data):
         events_received.append({"event": event_name, "data": data, "time": time.time()})
+
     return handler
 
 
 # Known events from socket-events.json
 KNOWN_EVENTS = [
-    "chat:sentence", "chat:control", "chat:expression", "chat:transcript",
-    "chat:audio_with_expression", "chat:live2d_action", "chat:subtitle_translation",
-    "system:connection_established", "system:model_status", "system:error",
-    "config:data", "config:heartbeat_ack",
-    "sing:progress", "sing:complete", "sing:error", "sing:lyrics_ready", "sing:subtitle_line",
-    "persona:list", "persona:set", "persona:updated", "persona:personality_updated",
-    "memory:list_pages", "memory:organize_progress", "memory:organize_result",
-    "bilibili:danmaku", "bilibili:danmaku_status",
+    "chat:sentence",
+    "chat:control",
+    "chat:expression",
+    "chat:transcript",
+    "chat:audio_with_expression",
+    "chat:live2d_action",
+    "chat:subtitle_translation",
+    "system:connection_established",
+    "system:model_status",
+    "system:error",
+    "config:data",
+    "config:heartbeat_ack",
+    "sing:progress",
+    "sing:complete",
+    "sing:error",
+    "sing:lyrics_ready",
+    "sing:subtitle_line",
+    "persona:list",
+    "persona:set",
+    "persona:updated",
+    "persona:personality_updated",
+    "memory:list_pages",
+    "memory:organize_progress",
+    "memory:organize_result",
+    "bilibili:danmaku",
+    "bilibili:danmaku_status",
     "minecraft:status",
 ]
 

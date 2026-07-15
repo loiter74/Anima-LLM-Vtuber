@@ -25,8 +25,10 @@ logger = logging.getLogger(__name__)
 # ── Matplotlib (non-interactive backend) ──────────────────────────────
 try:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     _HAS_MPL = True
 except ImportError:
     _HAS_MPL = False
@@ -35,6 +37,7 @@ except ImportError:
 # ── Jinja2 ─────────────────────────────────────────────────────────────
 try:
     import jinja2
+
     _HAS_JINJA2 = True
 except ImportError:
     _HAS_JINJA2 = False
@@ -44,6 +47,7 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def get_git_commit() -> str:
     """Get current git commit (short hash), or 'unknown'."""
@@ -65,6 +69,7 @@ def _ensure_dir(path: Path) -> Path:
 # A. JSON detailed results
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def save_json_results(data: dict[str, Any], output_dir: Path) -> Path:
     """Save full per-query results as results.json."""
     _ensure_dir(output_dir)
@@ -78,6 +83,7 @@ def save_json_results(data: dict[str, Any], output_dir: Path) -> Path:
 # ═══════════════════════════════════════════════════════════════════════
 # B. JSON summary
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def save_json_summary(data: dict[str, Any], output_dir: Path) -> Path:
     """Save compact summary as summary.json."""
@@ -228,6 +234,7 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
     }
 
     from jinja2 import Template as Jinja2Template
+
     template = Jinja2Template(_MD_TEMPLATE)
     report = template.render(**ctx)
 
@@ -241,6 +248,7 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
 # ═══════════════════════════════════════════════════════════════════════
 # D. Charts (matplotlib)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def save_charts(
     all_results: list[dict[str, Any]],
@@ -352,6 +360,7 @@ def _save_latency_distribution(
 # E. Convenience — generate all outputs
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def generate_all(data: dict[str, Any], output_dir: str | Path) -> dict[str, Path]:
     """Generate all outputs for a single result: JSON, summary, markdown, charts.
 
@@ -378,6 +387,7 @@ def generate_all(data: dict[str, Any], output_dir: str | Path) -> dict[str, Path
 # CLI (standalone — for regenerating reports from saved results.json)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _cli() -> None:
     import argparse
 
@@ -385,11 +395,13 @@ def _cli() -> None:
         description="RAG Evaluation Reporter — generate reports from results.json",
     )
     parser.add_argument(
-        "--results", required=True,
+        "--results",
+        required=True,
         help="Path to results.json (from runner output)",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output directory (default: same as results.json parent)",
     )
     args = parser.parse_args()

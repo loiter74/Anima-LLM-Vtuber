@@ -61,7 +61,7 @@ async def send_one(payload: dict, label: str) -> dict:
                 expressions.append(data.get("emotion", ""))
 
     await sio.connect(URL, transports=["websocket"])
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"【{label}】")
     print(f"  弹幕 → {payload['text']}")
     await sio.emit("chat:text", payload)
@@ -92,16 +92,23 @@ async def main() -> int:
 
     # ── 弹幕设计（直播间观众视角）──
     turns = [
-        ("第1轮·首次进直播间",
-         {"text": "第一次刷到这个直播间，主播这角色扮演挺有意思的", "mode": "text"}),
-        ("第2轮·debug查看",
-         {"text": "【debug】主播你对我这个新观众印象怎么样", "mode": "text"}),
-        ("第3轮·真诚互动",
-         {"text": "看了你几期录播，那种毒舌里带温柔的风格真的很治愈，工作一天下来听你说话特别放松", "mode": "text"}),
-        ("第4轮·再次debug",
-         {"text": "【debug】我现在想知道你对我的好感度变了没", "mode": "text"}),
-        ("第5轮·日常弹幕",
-         {"text": "今天加班到现在，外面的雨下得贼大，通勤人的痛谁知道", "mode": "text"}),
+        (
+            "第1轮·首次进直播间",
+            {"text": "第一次刷到这个直播间，主播这角色扮演挺有意思的", "mode": "text"},
+        ),
+        ("第2轮·debug查看", {"text": "【debug】主播你对我这个新观众印象怎么样", "mode": "text"}),
+        (
+            "第3轮·真诚互动",
+            {
+                "text": "看了你几期录播，那种毒舌里带温柔的风格真的很治愈，工作一天下来听你说话特别放松",
+                "mode": "text",
+            },
+        ),
+        ("第4轮·再次debug", {"text": "【debug】我现在想知道你对我的好感度变了没", "mode": "text"}),
+        (
+            "第5轮·日常弹幕",
+            {"text": "今天加班到现在，外面的雨下得贼大，通勤人的痛谁知道", "mode": "text"},
+        ),
     ]
 
     results = []

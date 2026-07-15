@@ -51,6 +51,7 @@ ignore = ["E402", "E501", "UP007"]  # E402: lazy imports intentional, E501: Chin
 "tests/**/*.py" = ["N803", "N806", "N815", "N802", "N805", "N817", "N811"]
 
 [tool.ruff.format]
+line-ending = "lf"
 quote-style = "double"
 
 [tool.mypy]

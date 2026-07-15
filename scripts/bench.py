@@ -19,10 +19,9 @@ import sys
 import time
 from pathlib import Path
 from statistics import median, stdev
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 
 
 class Benchmark:
@@ -40,7 +39,9 @@ class Benchmark:
         """Quick benchmark: text E2E with configurable turns, concurrency, and providers."""
         use_real = provider is not None
         mode_label = f"real ({provider})" if use_real else "mock"
-        print(f"Quick benchmark (text E2E, {mode_label} providers, {turns} turns, concurrency={concurrency})...")
+        print(
+            f"Quick benchmark (text E2E, {mode_label} providers, {turns} turns, concurrency={concurrency})..."
+        )
 
         test_inputs = [
             "你好，请介绍一下你自己。",
@@ -51,7 +52,9 @@ class Benchmark:
         ]
 
         if concurrency > 1:
-            latencies = await self._run_concurrent(test_inputs, turns, concurrency, provider=provider)
+            latencies = await self._run_concurrent(
+                test_inputs, turns, concurrency, provider=provider
+            )
             scenario_name = f"text_e2e_{'real_' + provider if use_real else 'mock'}_c{concurrency}"
         else:
             if use_real:
@@ -73,9 +76,9 @@ class Benchmark:
                     await orch.process_text(text=text, user_id="bench", user_name="Bench")
                     elapsed = (time.perf_counter() - start) * 1000
                     latencies.append(elapsed)
-                    print(f"  [{i+1}/{turns}] {elapsed:.0f}ms")
+                    print(f"  [{i + 1}/{turns}] {elapsed:.0f}ms")
                 except Exception as e:
-                    print(f"  [{i+1}/{turns}] FAILED: {e}")
+                    print(f"  [{i + 1}/{turns}] FAILED: {e}")
 
             scenario_name = f"text_e2e_{'real_' + provider if use_real else 'mock'}"
 
@@ -86,11 +89,13 @@ class Benchmark:
             "provider": provider,
         }
 
-        self.results["scenarios"].append({
-            "name": scenario_name,
-            "iterations": len(latencies),
-            "latencies_ms": latencies,
-        })
+        self.results["scenarios"].append(
+            {
+                "name": scenario_name,
+                "iterations": len(latencies),
+                "latencies_ms": latencies,
+            }
+        )
         self._print_summary(scenario_name, latencies)
 
         # Calculate and store QPS
@@ -108,12 +113,15 @@ class Benchmark:
 
     async def _create_mock_context(self) -> ServiceContext:
         """Create a ServiceContext with all mock providers."""
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
+
         ctx = MagicMock(spec=ServiceContext)
         ctx.llm_engine = AsyncMock()
         ctx.llm_engine.chat_stream = AsyncMock()
+
         async def _mock_stream():
             yield "mock response"
+
         ctx.llm_engine.chat_stream.return_value = _mock_stream()
         ctx.llm_engine.close = AsyncMock()
         ctx.tts_engine = AsyncMock()
@@ -130,7 +138,7 @@ class Benchmark:
 
     async def _create_real_context(self, provider: str) -> ServiceContext:
         """Create a ServiceContext with a real LLM provider + mock TTS/ASR."""
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         # Build the appropriate config for the provider
         provider_lower = provider.lower()
@@ -169,11 +177,15 @@ class Benchmark:
         """Estimate API cost based on provider pricing (USD per 1M tokens)."""
         pricing = {
             "deepseek": {"prompt": 0.14, "completion": 0.28},
-            "openai":   {"prompt": 1.50, "completion": 2.00},
-            "glm":      {"prompt": 1.00, "completion": 1.00},
+            "openai": {"prompt": 1.50, "completion": 2.00},
+            "glm": {"prompt": 1.00, "completion": 1.00},
         }
         p = pricing.get(provider.lower(), {"prompt": 0, "completion": 0})
-        return round((prompt_tokens / 1_000_000 * p["prompt"]) + (completion_tokens / 1_000_000 * p["completion"]), 6)
+        return round(
+            (prompt_tokens / 1_000_000 * p["prompt"])
+            + (completion_tokens / 1_000_000 * p["completion"]),
+            6,
+        )
 
     @staticmethod
     def _calculate_qps(latencies: List[float]) -> float:
@@ -211,7 +223,7 @@ class Benchmark:
                     elapsed = (time.perf_counter() - start) * 1000
                 except Exception as e:
                     elapsed = -1
-                    print(f"  [{idx+1}/{turns}] FAILED: {e}")
+                    print(f"  [{idx + 1}/{turns}] FAILED: {e}")
                 async with lock:
                     if elapsed >= 0:
                         latencies.append(elapsed)
@@ -302,19 +314,23 @@ class Benchmark:
                 await asyncio.wait_for(done.wait(), timeout=120)
                 elapsed = (time.perf_counter() - start) * 1000
                 latencies.append(elapsed)
-                print(f"  [{i}/{len(prompts)}] {elapsed:.0f}ms | response: {(responses[-1] if responses else '?')[:50]}")
+                print(
+                    f"  [{i}/{len(prompts)}] {elapsed:.0f}ms | response: {(responses[-1] if responses else '?')[:50]}"
+                )
             except asyncio.TimeoutError:
                 print(f"  [{i}/{len(prompts)}] TIMEOUT")
 
         await sio.disconnect()
 
         if latencies:
-            self.results["scenarios"].append({
-                "name": "text_e2e_live",
-                "iterations": len(latencies),
-                "latencies_ms": latencies,
-                "server_url": url,
-            })
+            self.results["scenarios"].append(
+                {
+                    "name": "text_e2e_live",
+                    "iterations": len(latencies),
+                    "latencies_ms": latencies,
+                    "server_url": url,
+                }
+            )
             self._print_summary("text_e2e_live", latencies)
 
     def save_results(self, output_path: str | None = None):
@@ -402,14 +418,13 @@ class Benchmark:
         for scenario in self.results["scenarios"]:
             all_lats.extend(scenario["latencies_ms"])
         if len(all_lats) > 1:
-            lines.append(
-                f"\n| **Std** | | {stdev(all_lats):.0f}ms | | | | |\n"
-            )
+            lines.append(f"\n| **Std** | | {stdev(all_lats):.0f}ms | | | | |\n")
         lines.append("\n")
 
         # ── Canonical observation ledger data ──
         try:
             import sqlite3
+
             db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
             if Path(db_path).exists():
                 lines.append("## Per-Operation Timing (Observation Ledger)\n\n")
@@ -430,7 +445,9 @@ class Benchmark:
                     lines.append("| Node | Calls | Avg (ms) | Min | Max |\n")
                     lines.append("|------|-------|----------|-----|-----|\n")
                     for r in rows:
-                        lines.append(f"| {r['node_name']} | {r['cnt']} | {r['avg_ms']:.0f} | {r['min_ms']:.0f} | {r['max_ms']:.0f} |\n")
+                        lines.append(
+                            f"| {r['node_name']} | {r['cnt']} | {r['avg_ms']:.0f} | {r['min_ms']:.0f} | {r['max_ms']:.0f} |\n"
+                        )
                     lines.append("\n")
                 else:
                     lines.append("_No node timing data available._\n\n")
@@ -465,6 +482,7 @@ class Benchmark:
 # Auto Benchmark — Start Real Server → Test → Collect → Report
 # ═══════════════════════════════════════════════════════════════
 
+
 class RealServer:
     """Manages a real Animetta server subprocess for benchmarking."""
 
@@ -484,17 +502,27 @@ class RealServer:
                 self.port = test_port
                 break
         else:
-            raise RuntimeError(f"Cannot find free port after {self.MAX_PORT_TRIES} tries (tried {self.port}+)")
+            raise RuntimeError(
+                f"Cannot find free port after {self.MAX_PORT_TRIES} tries (tried {self.port}+)"
+            )
 
         import subprocess
+
         log_path = Path(__file__).parent.parent / "data" / f"benchmark-server-{self.port}.log"
         self._log_file = open(log_path, "w", encoding="utf-8")
         self._process = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn",
-             "animetta.core.socketio_server:get_asgi_app",
-             "--host", "127.0.0.1",
-             "--port", str(self.port),
-             "--log-level", "info"],
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "animetta.core.socketio_server:get_asgi_app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(self.port),
+                "--log-level",
+                "info",
+            ],
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
         )
@@ -503,6 +531,7 @@ class RealServer:
     async def wait_ready(self) -> bool:
         """Wait until /health returns 200 or timeout."""
         import urllib.request
+
         deadline = time.monotonic() + self.START_TIMEOUT
         while time.monotonic() < deadline:
             try:
@@ -529,6 +558,7 @@ class RealServer:
     @staticmethod
     def _port_free(port: int) -> bool:
         import socket
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(("127.0.0.1", port)) != 0
 
@@ -565,9 +595,9 @@ async def run_auto():
     """Auto benchmark: start real server → test → collect → report."""
     import atexit
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Animetta Auto Benchmark (Real Services)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # 1. Validate
     _validate_env()
@@ -613,6 +643,7 @@ async def run_auto():
 
     try:
         import sqlite3
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
 
@@ -689,15 +720,15 @@ async def run_auto():
     # Baseline comparison
     _print_baseline_diff(runs_dir, run_data)
 
-    print(f"\n{'='*60}\n")
+    print(f"\n{'=' * 60}\n")
 
 
 def _print_auto_report(bench, traces, spans, otel_spans):
     """Print a structured auto benchmark report."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  🔍 Auto Benchmark Report")
     print(f"  {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Summary
     latencies = []
@@ -707,41 +738,51 @@ def _print_auto_report(bench, traces, spans, otel_spans):
         latencies.sort()
         print(f"\n  ── End-to-End Latency ──")
         print(f"  Prompts:  {len(latencies)}")
-        print(f"  P50:      {latencies[len(latencies)//2]:.0f}ms")
-        print(f"  P95:      {latencies[int(len(latencies)*0.95)]:.0f}ms")
-        print(f"  P99:      {latencies[int(len(latencies)*0.99)]:.0f}ms")
-        print(f"  Avg:      {sum(latencies)/len(latencies):.0f}ms")
+        print(f"  P50:      {latencies[len(latencies) // 2]:.0f}ms")
+        print(f"  P95:      {latencies[int(len(latencies) * 0.95)]:.0f}ms")
+        print(f"  P99:      {latencies[int(len(latencies) * 0.99)]:.0f}ms")
+        print(f"  Avg:      {sum(latencies) / len(latencies):.0f}ms")
         print(f"  Min/Max:  {min(latencies):.0f}ms / {max(latencies):.0f}ms")
 
     # Node breakdown
     if spans:
         print(f"\n  ── Node Timing ──")
         print(f"  {'Node':25s} {'Calls':>6s} {'Avg(ms)':>8s} {'Min':>8s} {'Max':>8s}")
-        print(f"  {'-'*55}")
+        print(f"  {'-' * 55}")
         by_node = {}
         for s in spans:
             n = s["node_name"]
             if n not in by_node:
                 by_node[n] = {"durations": []}
             by_node[n]["durations"].append(s["duration_ms"])
-        for name, data in sorted(by_node.items(), key=lambda x: sum(x[1]["durations"])/len(x[1]["durations"]), reverse=True):
+        for name, data in sorted(
+            by_node.items(),
+            key=lambda x: sum(x[1]["durations"]) / len(x[1]["durations"]),
+            reverse=True,
+        ):
             d = data["durations"]
-            print(f"  {name:25s} {len(d):>6d} {sum(d)/len(d):>8.0f} {min(d):>8.0f} {max(d):>8.0f}")
+            print(
+                f"  {name:25s} {len(d):>6d} {sum(d) / len(d):>8.0f} {min(d):>8.0f} {max(d):>8.0f}"
+            )
 
     # OTel sub-steps
     if otel_spans:
         print(f"\n  ── Service-Level Spans (OTel) ──")
         print(f"  {'Step':30s} {'Calls':>6s} {'Avg(ms)':>8s}")
-        print(f"  {'-'*44}")
+        print(f"  {'-' * 44}")
         by_step = {}
         for s in otel_spans:
             n = s["node_name"]
             if n not in by_step:
                 by_step[n] = {"durations": []}
             by_step[n]["durations"].append(s["duration_ms"])
-        for name, data in sorted(by_step.items(), key=lambda x: sum(x[1]["durations"])/len(x[1]["durations"]), reverse=True):
+        for name, data in sorted(
+            by_step.items(),
+            key=lambda x: sum(x[1]["durations"]) / len(x[1]["durations"]),
+            reverse=True,
+        ):
             d = data["durations"]
-            print(f"  {name:30s} {len(d):>6d} {sum(d)/len(d):>8.0f}")
+            print(f"  {name:30s} {len(d):>6d} {sum(d) / len(d):>8.0f}")
 
 
 def _print_baseline_diff(runs_dir: Path, run_data: dict):
@@ -785,9 +826,11 @@ def _print_baseline_diff(runs_dir: Path, run_data: dict):
 
     print(f"\n  ── Baseline Comparison ──")
     print(f"  {'Metric':20s} {'Before':>10s} {'After':>10s} {'Δ%':>8s}")
-    print(f"  {'-'*48}")
+    print(f"  {'-' * 48}")
     print(f"  {'P95':20s} {old_p95:>8.0f}ms {new_p95:>8.0f}ms {delta:+7.1f}% {icon}")
-    print(f"  {'Avg':20s} {sum(old_lats)/len(old_lats):>8.0f}ms {sum(new_lats)/len(new_lats):>8.0f}ms {_pct(sum(new_lats)/len(new_lats), sum(old_lats)/len(old_lats)):+7.1f}%")
+    print(
+        f"  {'Avg':20s} {sum(old_lats) / len(old_lats):>8.0f}ms {sum(new_lats) / len(new_lats):>8.0f}ms {_pct(sum(new_lats) / len(new_lats), sum(old_lats) / len(old_lats)):+7.1f}%"
+    )
 
     if abs(delta) > 20:
         print(f"\n  ⚠️  P95 changed by {delta:.0f}% — significant shift detected!")
@@ -799,24 +842,33 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the benchmark suite."""
     parser = argparse.ArgumentParser(description="Animetta performance benchmark")
     parser.add_argument(
-        "--turns", type=int, default=10,
-        help="Number of conversation turns (default: 10)")
+        "--turns", type=int, default=10, help="Number of conversation turns (default: 10)"
+    )
     parser.add_argument(
-        "--concurrency", type=int, default=1,
-        help="Concurrent turn execution count (default: 1 = sequential)")
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Concurrent turn execution count (default: 1 = sequential)",
+    )
     parser.add_argument(
-        "--provider", type=str, default=None,
-        help="Real LLM provider name for real-provider mode (e.g. deepseek, openai, glm)")
+        "--provider",
+        type=str,
+        default=None,
+        help="Real LLM provider name for real-provider mode (e.g. deepseek, openai, glm)",
+    )
     parser.add_argument(
-        "--mock", action="store_true",
-        help="Force mock providers (overrides --provider if both given)")
+        "--mock",
+        action="store_true",
+        help="Force mock providers (overrides --provider if both given)",
+    )
+    parser.add_argument("--output", type=str, default=None, help="Custom JSON output path")
     parser.add_argument(
-        "--output", type=str, default=None,
-        help="Custom JSON output path")
-    parser.add_argument(
-        "mode", nargs="?", default="quick",
+        "mode",
+        nargs="?",
+        default="quick",
         choices=["quick", "full", "compare", "report", "live", "stats", "diff", "auto"],
-        help="Benchmark mode (default: quick)")
+        help="Benchmark mode (default: quick)",
+    )
     return parser.parse_args()
 
 
@@ -832,6 +884,7 @@ async def main():
     if mode == "stats":
         """Read the canonical observation ledger and print a performance report."""
         import sqlite3
+
         db_path = str(Path(__file__).parent.parent / "data" / "observations.db")
         if not Path(db_path).exists():
             print(f"Observation ledger not found: {db_path}")
@@ -860,17 +913,19 @@ async def main():
             """)
             durs = [x[0] for x in cur2.fetchall()]
 
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("  Observation Ledger Report")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             print(f"  Total requests:  {total}")
-            print(f"  Success rate:    {r['succ']/total*100:.1f}%" if total > 0 else "  No data")
+            print(
+                f"  Success rate:    {r['succ'] / total * 100:.1f}%" if total > 0 else "  No data"
+            )
             if durs:
                 print(f"  Avg duration:    {r['avg_dur']:.0f}ms")
                 print(f"  Max duration:    {r['max_dur']:.0f}ms")
-                print(f"  P50:             {durs[len(durs)//2]:.0f}ms")
-                print(f"  P95:             {durs[int(len(durs)*0.95)]:.0f}ms")
-                print(f"  P99:             {durs[int(len(durs)*0.99)]:.0f}ms")
+                print(f"  P50:             {durs[len(durs) // 2]:.0f}ms")
+                print(f"  P95:             {durs[int(len(durs) * 0.95)]:.0f}ms")
+                print(f"  P99:             {durs[int(len(durs) * 0.99)]:.0f}ms")
 
             # Per-node
             cur3 = conn.execute("""
@@ -884,7 +939,9 @@ async def main():
             if rows:
                 print(f"\n  -- Node Timing --")
                 for n in rows:
-                    print(f"  {n['node_name']:20s}  calls={n['cnt']:4d}  avg={n['avg_ms']:8.0f}ms  min={n['min_ms']:7.0f}ms  max={n['max_ms']:7.0f}ms")
+                    print(
+                        f"  {n['node_name']:20s}  calls={n['cnt']:4d}  avg={n['avg_ms']:8.0f}ms  min={n['min_ms']:7.0f}ms  max={n['max_ms']:7.0f}ms"
+                    )
 
             # Sub-node
             cur4 = conn.execute("""
@@ -899,7 +956,7 @@ async def main():
                 for n in rows2:
                     print(f"  {n['node_name']:25s}  calls={n['cnt']:4d}  avg={n['avg_ms']:8.0f}ms")
 
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
         finally:
             conn.close()
         return
@@ -915,19 +972,25 @@ async def main():
         _run_diff([args.output] if args.output else [])
         return
     elif mode == "quick":
-        await bench.run_quick(turns=args.turns, concurrency=args.concurrency, provider=effective_provider)
+        await bench.run_quick(
+            turns=args.turns, concurrency=args.concurrency, provider=effective_provider
+        )
     elif mode == "live":
         url = args.output if args.output else "http://localhost:12394"
         await bench.run_live(url=url)
     elif mode == "full":
-        await bench.run_quick(turns=args.turns, concurrency=args.concurrency, provider=effective_provider)
+        await bench.run_quick(
+            turns=args.turns, concurrency=args.concurrency, provider=effective_provider
+        )
         if await _check_server("http://localhost:12394"):
             await bench.run_live(url="http://localhost:12394")
         else:
             print("  (skip live -- server not reachable)")
     elif mode == "compare":
         print("Provider comparison not yet implemented")
-        await bench.run_quick(turns=args.turns, concurrency=args.concurrency, provider=effective_provider)
+        await bench.run_quick(
+            turns=args.turns, concurrency=args.concurrency, provider=effective_provider
+        )
     else:
         print(f"Unknown mode: {mode}")
         print("Usage: python scripts/benchmark.py [auto|quick|full|compare|report|live|stats|diff]")
@@ -955,7 +1018,7 @@ def _run_diff(args: list):
         print(f"\nAvailable runs ({len(runs)}):")
         for r in runs[-10:]:
             sz = r.stat().st_size
-            print(f"  {r.stem}  ({sz//1024}KB)")
+            print(f"  {r.stem}  ({sz // 1024}KB)")
         print("\nUsage: python scripts/benchmark.py diff <run1> <run2>")
         return
 
@@ -990,17 +1053,19 @@ def _run_diff(args: list):
     def _p(a, b):
         return (a - b) / b * 100 if b else 0
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Diff: {args[0]} vs {args[1]}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  {'Metric':20s} {args[0]:>12s} {args[1]:>12s} {'Δ%':>8s}")
-    print(f"  {'-'*52}")
+    print(f"  {'-' * 52}")
     for pct in [50, 95, 99]:
-        v1 = l1[int(len(l1)*pct/100)]
-        v2 = l2[int(len(l2)*pct/100)]
+        v1 = l1[int(len(l1) * pct / 100)]
+        v2 = l2[int(len(l2) * pct / 100)]
         d = _p(v2, v1)
-        print(f"  {'P'+str(pct):20s} {v1:>8.0f}ms {v2:>8.0f}ms {d:+7.1f}%")
-    print(f"  {'Avg':20s} {sum(l1)/len(l1):>8.0f}ms {sum(l2)/len(l2):>8.0f}ms {_p(sum(l2)/len(l2), sum(l1)/len(l1)):+7.1f}%")
+        print(f"  {'P' + str(pct):20s} {v1:>8.0f}ms {v2:>8.0f}ms {d:+7.1f}%")
+    print(
+        f"  {'Avg':20s} {sum(l1) / len(l1):>8.0f}ms {sum(l2) / len(l2):>8.0f}ms {_p(sum(l2) / len(l2), sum(l1) / len(l1)):+7.1f}%"
+    )
 
     # Node comparison
     for label, key in [("Spans", "spans"), ("OTel Spans", "otel_spans")]:
@@ -1020,6 +1085,7 @@ def _run_diff(args: list):
 async def _check_server(url: str) -> bool:
     """Check if a server is reachable."""
     import urllib.request
+
     try:
         urllib.request.urlopen(f"{url}/health", timeout=3)
         return True
