@@ -347,7 +347,7 @@ def _qwen_logs(qwen_compose_file: Path, started_at: datetime) -> str:
 
 
 def _preload_event_count(logs: str) -> int:
-    return logs.count("Qwen TTS preload started")
+    return logs.count("Qwen3-TTS model load started")
 
 
 def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]:

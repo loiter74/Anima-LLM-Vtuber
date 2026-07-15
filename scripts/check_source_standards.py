@@ -29,6 +29,7 @@ class SourceKind(StrEnum):
     YAML = "yaml"
     JSON = "json"
     TOML = "toml"
+    MISPLACED_JAVASCRIPT = "misplaced-javascript"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,8 @@ def classify_path(path: PurePosixPath) -> SourceKind | None:
         return SourceKind.JSON
     if suffix == ".toml":
         return SourceKind.TOML
+    if path.parts[:1] == ("src",) and suffix in {".js", ".mjs", ".cjs", ".ts"}:
+        return SourceKind.MISPLACED_JAVASCRIPT
     return None
 
 
@@ -100,6 +103,13 @@ def validate_source(path: PurePosixPath, content: str) -> list[SourceViolation]:
         return _validate_json(path, content)
     if kind is SourceKind.TOML:
         return _validate_toml(path, content)
+    if kind is SourceKind.MISPLACED_JAVASCRIPT:
+        return [
+            _violation(
+                path,
+                "JavaScript must live in a dedicated package with lint and format gates",
+            )
+        ]
     return []
 
 

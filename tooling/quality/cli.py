@@ -51,6 +51,7 @@ from .warm_topology import (
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "tooling" / "quality.yml"
+MINIMUM_PYTHON = (3, 13)
 
 
 def _add_catalog_arguments(parser: argparse.ArgumentParser) -> None:
@@ -858,6 +859,13 @@ def _command_benchmark(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if sys.version_info < MINIMUM_PYTHON:
+        actual = ".".join(str(part) for part in sys.version_info[:3])
+        print(
+            f"Python 3.13 or newer is required; current interpreter is {actual}",
+            file=sys.stderr,
+        )
+        return 2
     parser = build_parser()
     args = parser.parse_args(argv)
     commands = {

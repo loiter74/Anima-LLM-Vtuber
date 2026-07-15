@@ -14,6 +14,16 @@ from tooling.quality.models import AggregateStatus, AggregateSummary
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_quality_cli_rejects_python_older_than_313(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(quality_cli.sys, "version_info", (3, 11, 15))
+
+    assert main(["validate"]) == 2
+    assert "Python 3.13 or newer is required" in capsys.readouterr().err
+
+
 def test_machine_json_is_ascii_safe_for_windows_console_encodings() -> None:
     class Payload(BaseModel):
         output: str

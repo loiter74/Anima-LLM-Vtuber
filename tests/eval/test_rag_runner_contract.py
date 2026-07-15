@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from evaluations.rag.runner import EvalConfig, EvalRunner
+from evaluations.rag.runner import EvalConfig, EvalRunner, main
 
 
 class FakeSearchBackend:
@@ -45,3 +45,58 @@ def test_eval_runner_owns_injected_search_backend_lifecycle(tmp_path) -> None:
     assert backend.synced is True
     assert backend.closed is True
     assert result["summary"]["total_queries"] == 0
+
+
+def test_rag_cli_returns_nonzero_when_every_experiment_fails(tmp_path) -> None:
+    config = tmp_path / "configs.yaml"
+    config.write_text(
+        "experiments:\n  baseline:\n    broken: {}\n",
+        encoding="utf-8",
+    )
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text("", encoding="utf-8")
+
+    def failing_factory(workspace, eval_config):
+        raise RuntimeError("backend unavailable")
+
+    exit_code = main(
+        [
+            "--config",
+            str(config),
+            "--dataset",
+            str(dataset),
+            "--output",
+            str(tmp_path / "results"),
+        ],
+        manager_factory=failing_factory,
+    )
+
+    assert exit_code == 1
+
+
+def test_rag_cli_requires_an_explicit_backend_factory(tmp_path) -> None:
+    config = tmp_path / "configs.yaml"
+    config.write_text("experiments:\n  baseline:\n    one: {}\n", encoding="utf-8")
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text("", encoding="utf-8")
+
+    exit_code = main(
+        ["--config", str(config), "--dataset", str(dataset)],
+        manager_factory=None,
+    )
+
+    assert exit_code == 2
+
+
+def test_rag_cli_rejects_an_empty_experiment_group(tmp_path) -> None:
+    config = tmp_path / "configs.yaml"
+    config.write_text("experiments:\n  baseline: {}\n", encoding="utf-8")
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text("", encoding="utf-8")
+
+    exit_code = main(
+        ["--config", str(config), "--dataset", str(dataset)],
+        manager_factory=lambda workspace, eval_config: FakeSearchBackend(),
+    )
+
+    assert exit_code == 1

@@ -8,6 +8,7 @@ import io
 import math
 import wave
 from pathlib import Path
+from typing import Any
 
 from animetta.config.core.registry import ProviderRegistry
 from animetta.config.providers.tts.mock import MockTTSConfig
@@ -22,13 +23,24 @@ class MockTTS(TTSInterface):
     Generates a small deterministic WAV tone so downstream audio plumbing is real.
     """
 
-    def __init__(self, sample_rate: int = 24000):
+    def __init__(self, sample_rate: int = 24000, voice: str = "default") -> None:
         self._sample_rate = sample_rate
+        self.voice = voice
 
     @classmethod
-    def from_config(cls, config: MockTTSConfig, **kwargs):
+    def from_config(cls, config: MockTTSConfig | None, **kwargs: Any) -> MockTTS:
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
-        return cls()
+        return cls(voice=config.voice if config is not None else "default")
+
+    @property
+    def resolved_identity(self) -> dict[str, str | None]:
+        """Return the exact identity used by the runtime readiness contract."""
+        return {
+            "type": "mock",
+            "provider": "mock",
+            "model": None,
+            "voice": self.voice,
+        }
 
     async def synthesize(
         self, text: str, output_path: str | Path | None = None, **kwargs

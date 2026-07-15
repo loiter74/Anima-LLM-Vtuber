@@ -302,6 +302,63 @@ def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:
     }.issubset(gated_paths)
 
 
+def test_python_source_boundary_rejects_ungated_javascript() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["python-source-boundary"]
+
+    assert component.paths == (
+        "src/**/*.js",
+        "src/**/*.mjs",
+        "src/**/*.cjs",
+        "src/**/*.ts",
+    )
+    assert component.direct_groups == ("operational-source-contract",)
+
+
+def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    expected = {
+        "docker-compose-contract": (
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-cpu-contract": (
+            "compose",
+            "-f",
+            "docker-compose.cpu.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-core-contract": (
+            "compose",
+            "-f",
+            "docker-compose.core.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-qwen-contract": (
+            "compose",
+            "--env-file",
+            ".env.example",
+            "-f",
+            "docker-compose.qwen.yml",
+            "config",
+            "--quiet",
+        ),
+    }
+
+    for group_id, expected_args in expected.items():
+        group = catalog.groups[group_id]
+        assert group.runner.value == "docker"
+        assert group.args == expected_args
+        assert group.include_in_full is True
+
+    assert set(expected).issubset(catalog.components["docker-infrastructure"].direct_groups)
+
+
 def test_repository_catalog_has_dead_code_and_duplication_gates() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
 

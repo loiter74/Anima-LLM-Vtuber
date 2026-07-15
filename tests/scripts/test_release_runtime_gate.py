@@ -29,6 +29,16 @@ RESOLVED_IDENTITY = {
 }
 
 
+def test_preload_counter_uses_the_qwen_runtime_log_event() -> None:
+    logs = (
+        "Qwen3-TTS model load started\n"
+        "Qwen3-TTS model loaded successfully\n"
+        "Qwen3-TTS model load started\n"
+    )
+
+    assert gate._preload_event_count(logs) == 2
+
+
 def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
     completed = subprocess.run(
         [sys.executable, "scripts/release_runtime_gate.py", "--help"],
@@ -267,7 +277,7 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
                 ]
             )
         elif "logs" in command:
-            stdout = "Qwen TTS preload started\nall services ready\nerror_count=0\n"
+            stdout = "Qwen3-TTS model load started\nall services ready\nerror_count=0\n"
         else:
             stdout = ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")

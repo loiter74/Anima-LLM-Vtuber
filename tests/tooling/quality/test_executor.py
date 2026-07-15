@@ -210,7 +210,8 @@ def test_docker_contract_validates_quietly_without_serializing_compose_secrets()
 
     argv = build_argv(loaded.catalog.groups["docker-compose-contract"])
 
-    assert argv[-3:] == ["compose", "config", "--quiet"]
+    assert argv[-2:] == ["config", "--quiet"]
+    assert "--format" not in argv
 
 
 def test_run_group_blocks_when_required_capability_is_missing() -> None:
@@ -237,7 +238,14 @@ def test_docker_contract_validates_quietly_without_rendering_environment() -> No
         docker_executable="docker",
     )
 
-    assert argv == ["docker", "compose", "config", "--quiet"]
+    assert argv == [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "config",
+        "--quiet",
+    ]
 
 
 def test_run_group_executes_real_python_process_and_writes_result(tmp_path: Path) -> None:

@@ -127,6 +127,17 @@ def test_affected_expands_declared_component_impacts() -> None:
     assert any("impact" in reason for reason in graph.reasons)
 
 
+def test_embedded_javascript_selects_the_source_boundary_gate() -> None:
+    changes = from_paths(
+        ["src/animetta/tools/embedded.mjs"],
+        repo_root=ROOT,
+    )
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert "operational-source-contract" in _group_ids(plan)
+
+
 def test_affected_high_risk_component_adds_domain_fallback() -> None:
     changes = from_paths(
         ["src/animetta/core/service_pool.py"],

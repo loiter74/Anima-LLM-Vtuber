@@ -510,7 +510,53 @@ groups:
     kind: smoke
     runner: docker
     isolation: hermetic
-    args: [compose, config, --quiet]
+    args: [compose, -f, docker-compose.yml, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  docker-compose-cpu-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args: [compose, -f, docker-compose.cpu.yml, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  docker-compose-core-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args: [compose, -f, docker-compose.core.yml, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  docker-compose-qwen-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args:
+      - compose
+      - --env-file
+      - .env.example
+      - -f
+      - docker-compose.qwen.yml
+      - config
+      - --quiet
     capabilities: [docker]
     timeout_seconds: 180
     include_in_full: true
@@ -532,6 +578,17 @@ groups:
     input_sets: [operational-source]
 
 components:
+  python-source-boundary:
+    domain: repository
+    paths:
+      - src/**/*.js
+      - src/**/*.mjs
+      - src/**/*.cjs
+      - src/**/*.ts
+    direct_groups: [operational-source-contract]
+    impacts: []
+    risk: high
+
   quality-control-plane:
     domain: repository
     paths:
@@ -705,7 +762,11 @@ components:
       - tests/scripts/test_qwen_preflight.py
       - tests/scripts/test_runtime_lifecycle.py
       - tests/scripts/test_release_runtime_gate.py
-    direct_groups: [docker-compose-contract]
+    direct_groups:
+      - docker-compose-contract
+      - docker-compose-cpu-contract
+      - docker-compose-core-contract
+      - docker-compose-qwen-contract
     impacts: []
     risk: high
 
@@ -797,4 +858,7 @@ fallbacks:
     - frontend-typecheck
     - frontend-build
     - docker-compose-contract
+    - docker-compose-cpu-contract
+    - docker-compose-core-contract
+    - docker-compose-qwen-contract
     - operational-source-contract

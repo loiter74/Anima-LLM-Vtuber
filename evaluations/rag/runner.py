@@ -6,6 +6,7 @@ Usage:
         --config evaluations/rag/configs.yaml \\
         --group baseline \\
         --dataset evaluations/rag/dataset.jsonl \\
+        --backend-factory your_package.rag:create_backend \\
         --k 5 \\
         --output evaluations/rag/results/
 """
@@ -13,13 +14,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import shutil
 import sys
 import tempfile
 import time
-import traceback
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -395,6 +396,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to dataset.jsonl",
     )
     parser.add_argument(
+        "--backend-factory",
+        help="Import path module:callable for the Memory V2 search backend",
+    )
+    parser.add_argument(
         "--k",
         type=int,
         default=5,
@@ -414,7 +419,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> None:
+def _load_backend_factory(spec: str) -> SearchBackendFactory:
+    module_name, separator, attribute = spec.partition(":")
+    if not separator or not module_name or not attribute:
+        raise ValueError("backend factory must use the form module:callable")
+    module = importlib.import_module(module_name)
+    factory = getattr(module, attribute, None)
+    if not callable(factory):
+        raise ValueError(f"backend factory is not callable: {spec}")
+    return factory
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    manager_factory: SearchBackendFactory | None = None,
+) -> int:
     args = parse_args(argv)
 
     # ── Logging ──
@@ -422,6 +442,19 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+
+    if manager_factory is None:
+        if not args.backend_factory:
+            logger.error(
+                "RAG evaluation requires --backend-factory module:callable; "
+                "the legacy MemoryManager was removed by the Memory V2 migration"
+            )
+            return 2
+        try:
+            manager_factory = _load_backend_factory(args.backend_factory)
+        except (ImportError, AttributeError, ValueError) as exc:
+            logger.error("Invalid RAG backend factory: %s", exc)
+            return 2
 
     # ── Load configs YAML ──
     config_path = Path(args.config).resolve()
@@ -472,6 +505,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # ── Run experiments ──
     all_results: list[dict] = []
+    failed_experiments = 0
     total_configs = len(group_configs)
 
     for idx, (exp_name, exp_params) in enumerate(group_configs.items(), 1):
@@ -498,16 +532,14 @@ def main(argv: list[str] | None = None) -> None:
                 (ws / "raw").mkdir(parents=True, exist_ok=True)
 
             # Run evaluation
+            runner = EvalRunner(ws, eval_config, manager_factory=manager_factory)
             try:
-                runner = EvalRunner(ws, eval_config)
                 runner.setup()
                 runner.sync()
 
                 t_start = time.perf_counter()
                 result = runner.run(dataset, k=args.k)
                 elapsed = time.perf_counter() - t_start
-
-                runner.teardown()
 
                 logger.info(
                     "  recall@%d=%.3f  mrr=%.3f  p50_latency=%.1fms  total=%.1fs",
@@ -520,8 +552,10 @@ def main(argv: list[str] | None = None) -> None:
                 all_results.append(result)
 
             except Exception:
+                failed_experiments += 1
                 logger.exception("Failed to run experiment: %s", exp_name)
-                traceback.print_exc()
+            finally:
+                runner.teardown()
 
     # ── Generate reports ──
     if all_results:
@@ -545,8 +579,10 @@ def main(argv: list[str] | None = None) -> None:
 
         logger.info("All results saved to %s", output_dir)
     else:
-        logger.warning("No results generated.")
+        logger.error("No results generated.")
+
+    return 1 if failed_experiments or not all_results else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

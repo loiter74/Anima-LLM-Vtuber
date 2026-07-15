@@ -19,6 +19,10 @@ from scripts import check_source_standards as standards
         ("config/animetta.yaml", standards.SourceKind.YAML),
         ("config/socket-events.json", standards.SourceKind.JSON),
         ("pyproject.toml", standards.SourceKind.TOML),
+        (
+            "src/animetta/tools/embedded.mjs",
+            standards.SourceKind.MISPLACED_JAVASCRIPT,
+        ),
         ("src/animetta/core/server.py", None),
     ],
 )
@@ -62,6 +66,17 @@ def test_batch_validation_rejects_machine_specific_user_paths() -> None:
     )
 
     assert any("machine-specific user path" in item.message for item in violations)
+
+
+def test_python_source_tree_rejects_ungated_javascript() -> None:
+    violations = standards.validate_source(
+        PurePosixPath("src/animetta/tools/embedded.mjs"),
+        "console.log('not in a JavaScript package')\n",
+    )
+
+    assert [item.message for item in violations] == [
+        "JavaScript must live in a dedicated package with lint and format gates"
+    ]
 
 
 def test_valid_structured_and_batch_sources_have_no_violations() -> None:
