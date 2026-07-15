@@ -131,14 +131,17 @@ def test_router_blocks_serious_scenes_and_allows_explicit():
     router = MemeRouter()
     state = MemeState()
 
-    assert router.route(
-        "上班好累",
-        mood="light_complaint",
-        scene="mental_health",
-        state=state,
-        turn_index=1,
-        semi_active_enabled=True,
-    ).action == "none"
+    assert (
+        router.route(
+            "上班好累",
+            mood="light_complaint",
+            scene="mental_health",
+            state=state,
+            turn_index=1,
+            semi_active_enabled=True,
+        ).action
+        == "none"
+    )
 
     explicit = router.route(
         "meme:zhouli 上班好累",

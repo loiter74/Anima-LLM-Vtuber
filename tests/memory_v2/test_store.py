@@ -22,8 +22,11 @@ async def store():
 class TestAtomStoreCRUD:
     async def test_create_and_get(self, store):
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="测试记忆",
-            occurred_at=datetime.now(UTC), confidence=0.8,
+            id="a1",
+            layer=Layer.RAW,
+            content="测试记忆",
+            occurred_at=datetime.now(UTC),
+            confidence=0.8,
         )
         created_id = await store.create(atom)
         assert created_id == "a1"
@@ -40,7 +43,9 @@ class TestAtomStoreCRUD:
 
     async def test_update_atom(self, store):
         atom = MemoryAtom(
-            id="a2", layer=Layer.RAW, content="原始内容",
+            id="a2",
+            layer=Layer.RAW,
+            content="原始内容",
             occurred_at=datetime.now(UTC),
         )
         await store.create(atom)
@@ -55,7 +60,9 @@ class TestAtomStoreCRUD:
 
     async def test_create_version_chain(self, store):
         atom = MemoryAtom(
-            id="v1", layer=Layer.SEMANTIC, content="v1 内容",
+            id="v1",
+            layer=Layer.SEMANTIC,
+            content="v1 内容",
             occurred_at=datetime.now(UTC),
         )
         await store.create(atom)
@@ -72,14 +79,19 @@ class TestAtomStoreCRUD:
 
     async def test_get_all_active(self, store):
         a1 = MemoryAtom(
-            id="act1", layer=Layer.RAW, content="active",
+            id="act1",
+            layer=Layer.RAW,
+            content="active",
             occurred_at=datetime.now(UTC),
             salience=0.8,
         )
         a2 = MemoryAtom(
-            id="act2", layer=Layer.RAW, content="archived",
+            id="act2",
+            layer=Layer.RAW,
+            content="archived",
             occurred_at=datetime.now(UTC),
-            salience=0.5, is_archived=True,
+            salience=0.5,
+            is_archived=True,
         )
         await store.create(a1)
         await store.create(a2)
@@ -90,21 +102,35 @@ class TestAtomStoreCRUD:
         assert "act2" not in ids  # archived
 
     async def test_count_active(self, store):
-        await store.create(MemoryAtom(
-            id="c1", layer=Layer.RAW, content="test",
-            occurred_at=datetime.now(UTC),
-        ))
+        await store.create(
+            MemoryAtom(
+                id="c1",
+                layer=Layer.RAW,
+                content="test",
+                occurred_at=datetime.now(UTC),
+            )
+        )
         assert await store.count_active() >= 1
 
     async def test_archive_below_threshold(self, store):
-        await store.create(MemoryAtom(
-            id="low1", layer=Layer.RAW, content="low salience",
-            occurred_at=datetime.now(UTC), salience=0.05,
-        ))
-        await store.create(MemoryAtom(
-            id="high1", layer=Layer.RAW, content="high salience",
-            occurred_at=datetime.now(UTC), salience=0.9,
-        ))
+        await store.create(
+            MemoryAtom(
+                id="low1",
+                layer=Layer.RAW,
+                content="low salience",
+                occurred_at=datetime.now(UTC),
+                salience=0.05,
+            )
+        )
+        await store.create(
+            MemoryAtom(
+                id="high1",
+                layer=Layer.RAW,
+                content="high salience",
+                occurred_at=datetime.now(UTC),
+                salience=0.9,
+            )
+        )
         count = await store.archive_below_threshold(0.1)
         assert count >= 1
 
@@ -112,6 +138,7 @@ class TestAtomStoreCRUD:
         assert low.is_archived is True
         high = await store.get("high1")
         assert high.is_archived is False
+
 
 class TestAtomStoreEdgeCases:
     @pytest.mark.asyncio
@@ -121,8 +148,9 @@ class TestAtomStoreEdgeCases:
 
     @pytest.mark.asyncio
     async def test_hybrid_search_cjk(self, store):
-        atom = MemoryAtom(id="cjk", layer=Layer.RAW, content="我喜欢咖啡",
-                          occurred_at=datetime.now(UTC))
+        atom = MemoryAtom(
+            id="cjk", layer=Layer.RAW, content="我喜欢咖啡", occurred_at=datetime.now(UTC)
+        )
         await store.create(atom)
         results = await store.hybrid_search("咖啡", 10)
         assert len(results) >= 0  # Should not error

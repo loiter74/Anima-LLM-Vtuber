@@ -13,10 +13,15 @@ from animetta.tools.minecraft.other.world_state import Entity, WorldState
 
 # ── Helpers ──
 
+
 def status_response(
-    x=0, y=64, z=0,
-    health=20.0, food=20.0,
-    time_of_day="day", weather="clear",
+    x=0,
+    y=64,
+    z=0,
+    health=20.0,
+    food=20.0,
+    time_of_day="day",
+    weather="clear",
     inventory=None,
     nearby_entities=None,
     fall_distance=0.0,
@@ -45,7 +50,7 @@ def status_response(
             "fall_distance": fall_distance,
             "on_ground": on_ground,
             "velocity": velocity or {"x": 0.0, "y": 0.0, "z": 0.0},
-        }
+        },
     }
 
 
@@ -89,6 +94,7 @@ def _close_created_task(coro):
 
 
 # ── Test Classes ──
+
 
 class TestCooldownTracker:
     """CooldownTracker unit tests."""
@@ -280,7 +286,9 @@ class TestAutonomousLoopEvaluate:
         loop = self._make_loop()
         loop._base_pos = {"x": 100, "y": 64, "z": 100}
         state = self._make_state(
-            x=200, y=64, z=200,  # far from base
+            x=200,
+            y=64,
+            z=200,  # far from base
             health=20.0,
             time="night",
         )
@@ -292,7 +300,9 @@ class TestAutonomousLoopEvaluate:
         loop = self._make_loop()
         loop._base_pos = {"x": 0, "y": 64, "z": 0}
         state = self._make_state(
-            x=1, y=64, z=1,
+            x=1,
+            y=64,
+            z=1,
             health=20.0,
             time="night",
         )
@@ -314,7 +324,9 @@ class TestAutonomousLoopEvaluate:
             target="house",
             blueprint="platform",
             required_materials={"cobblestone": 10},
-            build_plan=[BuildPlanStep(action="place", block="cobblestone", description="place block")],
+            build_plan=[
+                BuildPlanStep(action="place", block="cobblestone", description="place block")
+            ],
         )
 
         loop = AutonomousLoop(bridge, rules=rules)
@@ -345,7 +357,10 @@ class TestAutonomousLoopEvaluate:
         state = self._make_state(health=20.0, time="day", x=10, z=10)
 
         loop._cooldown.reset("explore")
-        with patch("random.random", return_value=1.0), patch("random.randint", return_value=5):  # suppress chat random
+        with (
+            patch("random.random", return_value=1.0),
+            patch("random.randint", return_value=5),
+        ):  # suppress chat random
             action, params = await loop._evaluate(state)
             assert action == loop.ACTION_EXPLORE
             assert "x" in params
@@ -452,27 +467,21 @@ class TestAutonomousLoopChatTrigger:
     def test_chat_cooldown_active_returns_none(self):
         loop = self._make_loop()
         loop._chat_cooldown_until = time.time() + 999
-        state = WorldState(
-            entities=[Entity(name="Steve", type="player", distance=5, count=1)]
-        )
+        state = WorldState(entities=[Entity(name="Steve", type="player", distance=5, count=1)])
         with patch("random.random", return_value=0.1):  # under chance
             result = loop._get_chat_trigger(state)
         assert result is None
 
     def test_random_check_above_threshold_returns_none(self):
         loop = self._make_loop()
-        state = WorldState(
-            entities=[Entity(name="Steve", type="player", distance=5, count=1)]
-        )
+        state = WorldState(entities=[Entity(name="Steve", type="player", distance=5, count=1)])
         with patch("random.random", return_value=0.9):  # above 0.25 chance
             result = loop._get_chat_trigger(state)
         assert result is None
 
     def test_player_nearby_triggers_chat(self):
         loop = self._make_loop()
-        state = WorldState(
-            entities=[Entity(name="Steve", type="player", distance=5, count=1)]
-        )
+        state = WorldState(entities=[Entity(name="Steve", type="player", distance=5, count=1)])
         with patch("random.random", return_value=0.1):
             result = loop._get_chat_trigger(state)
         assert result == "player_nearby"
@@ -516,7 +525,11 @@ class TestAutonomousLoopThreatCheck:
     async def test_threat_check_no_threat_returns_false(self):
         loop = self._make_loop()
         loop._bridge.send_command.return_value = status_response(
-            x=0, y=64, z=0, health=20.0, time_of_day="day",
+            x=0,
+            y=64,
+            z=0,
+            health=20.0,
+            time_of_day="day",
         )
         result = await loop._threat_check()
         assert result is False
@@ -525,7 +538,10 @@ class TestAutonomousLoopThreatCheck:
         loop = self._make_loop()
         loop._bridge.send_command.side_effect = [
             status_response(
-                x=0, y=64, z=0, health=20.0,
+                x=0,
+                y=64,
+                z=0,
+                health=20.0,
                 nearby_entities=hostile_nearby(distance=5, count=3),
             ),
             {"status": "success", "result": "attacked"},

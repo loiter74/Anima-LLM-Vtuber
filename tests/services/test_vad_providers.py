@@ -47,7 +47,6 @@ _ORIGINAL_SILERO_FROM_CONFIG = SileroVAD.from_config  # saved for test use
 SileroVAD.from_config = MagicMock(return_value=None)
 
 
-
 # ── VADState Enum Tests ─────────────────────────────────────────────
 
 
@@ -158,9 +157,7 @@ class TestVADInterface:
             providers.append(sv_mod.SileroVAD)
 
         for cls in providers:
-            assert issubclass(cls, VADInterface), (
-                f"{cls.__name__} does not inherit VADInterface"
-            )
+            assert issubclass(cls, VADInterface), f"{cls.__name__} does not inherit VADInterface"
 
     def test_all_abstract_methods_implemented(self):
         """Each concrete provider must implement every abstract method."""
@@ -329,8 +326,9 @@ class TestSileroVAD:
 
     def test_from_config_returns_instance(self, mock_model):
         """from_config should return a SileroVAD instance with correct params."""
-        with patch("silero_vad.load_silero_vad", return_value=mock_model), patch.object(
-            SileroVAD, "from_config", wraps=_ORIGINAL_SILERO_FROM_CONFIG
+        with (
+            patch("silero_vad.load_silero_vad", return_value=mock_model),
+            patch.object(SileroVAD, "from_config", wraps=_ORIGINAL_SILERO_FROM_CONFIG),
         ):
             config = MagicMock()
             config.sample_rate = 16000

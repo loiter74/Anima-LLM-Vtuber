@@ -33,9 +33,7 @@ def test_init_bridge_never_starts_legacy_autonomous_owner() -> None:
     }
     tools._bridge = None
     try:
-        with patch(
-            "animetta.tools.minecraft.core.bridge.MinecraftBridge"
-        ) as bridge_class:
+        with patch("animetta.tools.minecraft.core.bridge.MinecraftBridge") as bridge_class:
             tools.init_bridge(config)
 
         assert bridge_class.call_args.kwargs["autonomous"] is False

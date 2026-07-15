@@ -49,14 +49,14 @@ def _full_body() -> str:
     return (
         "# HELP anima_trace_outcomes_total Completed traces\n"
         "# TYPE anima_trace_outcomes_total counter\n"
-        "anima_trace_outcomes_total{outcome=\"success\"} 3\n"
+        'anima_trace_outcomes_total{outcome="success"} 3\n'
         "# HELP anima_node_duration_seconds LangGraph node duration\n"
         "# TYPE anima_node_duration_seconds histogram\n"
-        "anima_node_duration_seconds_bucket{node=\"llm\",le=\"0.5\"} 10\n"
-        "anima_node_duration_seconds_bucket{node=\"llm\",le=\"1.0\"} 25\n"
-        "anima_node_duration_seconds_bucket{node=\"llm\",le=\"+Inf\"} 30\n"
-        "anima_node_duration_seconds_sum{node=\"llm\"} 22.5\n"
-        "anima_node_duration_seconds_count{node=\"llm\"} 30\n"
+        'anima_node_duration_seconds_bucket{node="llm",le="0.5"} 10\n'
+        'anima_node_duration_seconds_bucket{node="llm",le="1.0"} 25\n'
+        'anima_node_duration_seconds_bucket{node="llm",le="+Inf"} 30\n'
+        'anima_node_duration_seconds_sum{node="llm"} 22.5\n'
+        'anima_node_duration_seconds_count{node="llm"} 30\n'
     )
 
 

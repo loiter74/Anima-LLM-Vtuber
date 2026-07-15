@@ -78,9 +78,7 @@ async def test_synthesize_posts_mimo_chat_completion_and_decodes_audio():
     assert request.headers["api-key"] == "key-123"
     payload = base64_json_body(request)
     assert payload["model"] == "mimo-v2.5-tts"
-    assert payload["messages"] == [
-        {"role": "assistant", "content": "今晚想听一首轻快的歌。"}
-    ]
+    assert payload["messages"] == [{"role": "assistant", "content": "今晚想听一首轻快的歌。"}]
     assert payload["audio"] == {"format": "wav", "voice": "mimo_default"}
     assert payload["stream"] is False
 

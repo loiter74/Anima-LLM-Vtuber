@@ -121,7 +121,9 @@ class TestVADAudioProcessor:
         on_end.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_unconfirmed_speech_end_discards_buffer(self, processor, mock_vad, mock_callbacks):
+    async def test_unconfirmed_speech_end_discards_buffer(
+        self, processor, mock_vad, mock_callbacks
+    ):
         """speech_detected=False should clear state without invoking on_speech_end."""
         on_start, on_end = mock_callbacks
         mock_vad.detect_speech.side_effect = [
@@ -178,7 +180,10 @@ class TestVADAudioProcessor:
         on_start, on_end = mock_callbacks
         mock_vad.detect_speech.return_value = _active_result(is_speech_start=True)
 
-        with patch.object(processor, "_max_audio_duration", 0.001), patch("time.time", side_effect=[100.0, 100.002]):
+        with (
+            patch.object(processor, "_max_audio_duration", 0.001),
+            patch("time.time", side_effect=[100.0, 100.002]),
+        ):
             await processor.process_chunk([0.1] * 160)  # 10ms of audio
 
         on_start.assert_awaited_once()

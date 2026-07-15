@@ -94,7 +94,7 @@ async def test_emotion_node_falls_back_to_response_text_when_no_chunks():
     state: dict[str, Any] = {
         "session_id": "test",
         "response_text": "你好呀！[happy]",  # tags still here (edge case)
-        "response_chunks": [],               # empty chunks
+        "response_chunks": [],  # empty chunks
     }
 
     config: dict[str, Any] = {

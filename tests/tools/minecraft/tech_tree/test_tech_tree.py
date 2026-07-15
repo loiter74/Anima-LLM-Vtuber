@@ -35,6 +35,7 @@ from animetta.tools.minecraft.tech_tree.main import (
 @dataclass
 class _FakeBenchmarkMetrics:
     """Stub for benchmark.BenchmarkMetrics used in tests."""
+
     time_to_milestone: float = 0.0
     unique_items_collected: int = 0
     skills_created: int = 0
@@ -278,9 +279,7 @@ class TestTechTreeConfig:
 
     def test_validate_duplicate_names(self):
         """Duplicate phase names warn."""
-        config = TechTreeConfig(
-            phases=[make_phase(name="dup"), make_phase(name="dup")]
-        )
+        config = TechTreeConfig(phases=[make_phase(name="dup"), make_phase(name="dup")])
         warnings = config.validate()
         assert any("duplicate" in w.lower() for w in warnings)
 
@@ -327,9 +326,7 @@ class TestTechTreeMetrics:
 
     def test_completion_rate_full(self):
         """Completion rate is 1.0 when all predefined phases done."""
-        m = TechTreeMetrics(
-            phases_completed=[p.name for p in _PREDEFINED_PHASES]
-        )
+        m = TechTreeMetrics(phases_completed=[p.name for p in _PREDEFINED_PHASES])
         assert m.completion_rate == 1.0
 
     def test_total_skills_used(self):
@@ -520,10 +517,17 @@ class TestMilestoneChecking:
     def test_milestone_cross_phase_inventory(self):
         """Inventory with items from multiple phases satisfies correct milestones."""
         mixed = {
-            "wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-            "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-            "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1,
-            "diamond_pickaxe": 1, "diamond_sword": 1,
+            "wooden_pickaxe": 1,
+            "wooden_sword": 1,
+            "crafting_table": 1,
+            "stone_pickaxe": 1,
+            "stone_sword": 1,
+            "furnace": 1,
+            "iron_pickaxe": 1,
+            "iron_sword": 1,
+            "iron_chestplate": 1,
+            "diamond_pickaxe": 1,
+            "diamond_sword": 1,
         }
         for phase in _PREDEFINED_PHASES:
             assert phase.is_complete(mixed) is True, f"Phase '{phase.name}' should be complete"
@@ -655,10 +659,17 @@ class TestTechTreeRunnerRun:
         """Runner completes all phases when inventory satisfies milestones."""
         # Inventory that satisfies all phase requirements
         full_inventory = {
-            "wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-            "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-            "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1,
-            "diamond_pickaxe": 1, "diamond_sword": 1,
+            "wooden_pickaxe": 1,
+            "wooden_sword": 1,
+            "crafting_table": 1,
+            "stone_pickaxe": 1,
+            "stone_sword": 1,
+            "furnace": 1,
+            "iron_pickaxe": 1,
+            "iron_sword": 1,
+            "iron_chestplate": 1,
+            "diamond_pickaxe": 1,
+            "diamond_sword": 1,
         }
         bridge = make_bridge(inventory=full_inventory)
         lib = make_skill_library()
@@ -806,9 +817,7 @@ class TestGenerateReport:
         config = TechTreeConfig(phases=[make_phase()])
         runner = TechTreeRunner(bridge, lib, config)
 
-        runner._phase_details = [
-            {"name": "test", "completed": True, "elapsed_seconds": 5.0}
-        ]
+        runner._phase_details = [{"name": "test", "completed": True, "elapsed_seconds": 5.0}]
         report = runner.generate_report()
 
         assert len(report.phase_details) == 1
@@ -1036,10 +1045,14 @@ class TestExecuteTask:
         lib.search_skills = AsyncMock(return_value=[])
 
         runner = TechTreeRunner(bridge, lib)
-        resp = await runner._execute_task("collect_oak_log", "collect", {"block_type": "oak_log", "count": 4})
+        resp = await runner._execute_task(
+            "collect_oak_log", "collect", {"block_type": "oak_log", "count": 4}
+        )
 
         assert resp["status"] == "success"
-        bridge.send_command.assert_any_call("collect", {"block_type": "oak_log", "count": 4}, timeout=120.0)
+        bridge.send_command.assert_any_call(
+            "collect", {"block_type": "oak_log", "count": 4}, timeout=120.0
+        )
 
     async def test_execute_task_craft_timeout(self):
         """_execute_task uses 60s timeout for craft actions."""
@@ -1072,7 +1085,9 @@ class TestExecuteTask:
         lib.update_failure = AsyncMock()
 
         runner = TechTreeRunner(bridge, lib)
-        resp = await runner._execute_task("craft_wooden_pickaxe", "craft", {"recipe": "wooden_pickaxe"})
+        resp = await runner._execute_task(
+            "craft_wooden_pickaxe", "craft", {"recipe": "wooden_pickaxe"}
+        )
 
         assert resp["status"] == "success"
         assert runner._metrics.skills_reused == 1
@@ -1107,9 +1122,7 @@ class TestExecuteTask:
     async def test_execute_task_bridge_error_response(self):
         """_execute_task returns error response from bridge without crashing."""
         bridge = MagicMock()
-        bridge.send_command = AsyncMock(
-            return_value={"status": "error", "result": "timeout"}
-        )
+        bridge.send_command = AsyncMock(return_value={"status": "error", "result": "timeout"})
         lib = make_skill_library()
         lib.search_by_keyword = AsyncMock(return_value=[])
         lib.search_skills = AsyncMock(return_value=[])
@@ -1192,10 +1205,17 @@ class TestCheckMilestone:
         runner = TechTreeRunner(bridge, lib)
 
         full_inv = {
-            "wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-            "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-            "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1,
-            "diamond_pickaxe": 1, "diamond_sword": 1,
+            "wooden_pickaxe": 1,
+            "wooden_sword": 1,
+            "crafting_table": 1,
+            "stone_pickaxe": 1,
+            "stone_sword": 1,
+            "furnace": 1,
+            "iron_pickaxe": 1,
+            "iron_sword": 1,
+            "iron_chestplate": 1,
+            "diamond_pickaxe": 1,
+            "diamond_sword": 1,
         }
         for phase in _PREDEFINED_PHASES:
             assert await runner._check_milestone(phase, full_inv) is True
@@ -1259,16 +1279,18 @@ class TestRunnerHelpers:
     async def test_build_context_success(self):
         """_build_context extracts health/food/day from bridge status."""
         bridge = MagicMock()
-        bridge.send_command = AsyncMock(return_value={
-            "status": "success",
-            "result": {
-                "health": 15,
-                "food": 18,
-                "is_day": False,
-                "is_night": True,
-                "inventory": {"sword": 1},
-            },
-        })
+        bridge.send_command = AsyncMock(
+            return_value={
+                "status": "success",
+                "result": {
+                    "health": 15,
+                    "food": 18,
+                    "is_day": False,
+                    "is_night": True,
+                    "inventory": {"sword": 1},
+                },
+            }
+        )
         lib = make_skill_library()
         runner = TechTreeRunner(bridge, lib)
 
@@ -1300,9 +1322,12 @@ class TestGenerateBenchmarkMetrics:
         """Return a context manager that injects a fake benchmark module."""
         fake_module = MagicMock()
         fake_module.BenchmarkMetrics = _FakeBenchmarkMetrics
-        return patch.dict(sys.modules, {
-            "animetta.tools.minecraft.benchmark.main.main": fake_module,
-        })
+        return patch.dict(
+            sys.modules,
+            {
+                "animetta.tools.minecraft.benchmark.main.main": fake_module,
+            },
+        )
 
     def test_benchmark_metrics_all_phases_completed(self):
         """Benchmark shows completed=True when all phases are done."""
@@ -1315,10 +1340,17 @@ class TestGenerateBenchmarkMetrics:
             phases_completed=["wood", "stone", "iron", "diamond"],
             total_time_seconds=300.0,
             items_collected={
-                "wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-                "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-                "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1,
-                "diamond_pickaxe": 1, "diamond_sword": 1,
+                "wooden_pickaxe": 1,
+                "wooden_sword": 1,
+                "crafting_table": 1,
+                "stone_pickaxe": 1,
+                "stone_sword": 1,
+                "furnace": 1,
+                "iron_pickaxe": 1,
+                "iron_sword": 1,
+                "iron_chestplate": 1,
+                "diamond_pickaxe": 1,
+                "diamond_sword": 1,
             },
             skills_learned=4,
             skills_reused=6,
@@ -1433,15 +1465,38 @@ class TestRunnerRunIntegration:
         inventories = [
             {},  # initial
             {"wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1},  # after wood
-            {"wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-             "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1},  # after stone
-            {"wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-             "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-             "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1},  # after iron
-            {"wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
-             "stone_pickaxe": 1, "stone_sword": 1, "furnace": 1,
-             "iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1,
-             "diamond_pickaxe": 1, "diamond_sword": 1},  # after diamond
+            {
+                "wooden_pickaxe": 1,
+                "wooden_sword": 1,
+                "crafting_table": 1,
+                "stone_pickaxe": 1,
+                "stone_sword": 1,
+                "furnace": 1,
+            },  # after stone
+            {
+                "wooden_pickaxe": 1,
+                "wooden_sword": 1,
+                "crafting_table": 1,
+                "stone_pickaxe": 1,
+                "stone_sword": 1,
+                "furnace": 1,
+                "iron_pickaxe": 1,
+                "iron_sword": 1,
+                "iron_chestplate": 1,
+            },  # after iron
+            {
+                "wooden_pickaxe": 1,
+                "wooden_sword": 1,
+                "crafting_table": 1,
+                "stone_pickaxe": 1,
+                "stone_sword": 1,
+                "furnace": 1,
+                "iron_pickaxe": 1,
+                "iron_sword": 1,
+                "iron_chestplate": 1,
+                "diamond_pickaxe": 1,
+                "diamond_sword": 1,
+            },  # after diamond
         ]
 
         async def mock_send_command(action, params=None, timeout=60.0):
@@ -1478,13 +1533,15 @@ class TestRunnerRunIntegration:
         bridge = make_bridge(inventory={})
         lib = make_skill_library()
         config = TechTreeConfig(
-            phases=[TechTreePhase(
-                name="empty",
-                time_budget_minutes=1,
-                required_items={},
-                skills_to_learn=[],
-                description="No-op phase",
-            )],
+            phases=[
+                TechTreePhase(
+                    name="empty",
+                    time_budget_minutes=1,
+                    required_items={},
+                    skills_to_learn=[],
+                    description="No-op phase",
+                )
+            ],
             total_time_budget_minutes=5,
         )
         runner = TechTreeRunner(bridge, lib, config)
@@ -1496,7 +1553,9 @@ class TestRunnerRunIntegration:
     async def test_run_records_phase_details(self):
         """Runner records phase_details during execution."""
         full_inv = {
-            "wooden_pickaxe": 1, "wooden_sword": 1, "crafting_table": 1,
+            "wooden_pickaxe": 1,
+            "wooden_sword": 1,
+            "crafting_table": 1,
         }
         bridge = make_bridge(inventory=full_inv)
         lib = make_skill_library()

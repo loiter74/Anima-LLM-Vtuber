@@ -24,14 +24,14 @@ import pytest
 # EmotionAnalyzerFactory
 # ============================================================
 
+
 class TestEmotionAnalyzerFactory:
     """EmotionAnalyzerFactory create / register / list."""
 
     def test_create_llm_tag_analyzer(self):
         """Create llm_tag_analyzer with config."""
         analyzer = EmotionAnalyzerFactory.create(
-            "llm_tag_analyzer",
-            config={"valid_emotions": ["happy", "sad"]}
+            "llm_tag_analyzer", config={"valid_emotions": ["happy", "sad"]}
         )
         assert isinstance(analyzer, StandaloneLLMTagAnalyzer)
         assert analyzer.valid_emotions == {"happy", "sad"}
@@ -39,8 +39,7 @@ class TestEmotionAnalyzerFactory:
     def test_create_keyword_analyzer(self):
         """Create keyword_analyzer with config."""
         analyzer = EmotionAnalyzerFactory.create(
-            "keyword_analyzer",
-            config={"confidence_mode": "binary"}
+            "keyword_analyzer", config={"confidence_mode": "binary"}
         )
         assert isinstance(analyzer, KeywordAnalyzer)
         assert analyzer._confidence_mode == "binary"
@@ -72,9 +71,11 @@ class TestEmotionAnalyzerFactory:
 
     def test_register_new_analyzer(self):
         """Register a new custom analyzer."""
+
         class MockAnalyzer(IEmotionAnalyzer):
             def extract(self, text, context=None):
                 return EmotionData(primary="neutral", confidence=0.0)
+
             @property
             def name(self):
                 return "mock_analyzer"
@@ -90,6 +91,7 @@ class TestEmotionAnalyzerFactory:
 
     def test_register_non_interface_class_raises(self):
         """Registering a class that doesn't implement IEmotionAnalyzer should raise."""
+
         class NotAnAnalyzer:
             pass
 
@@ -98,9 +100,11 @@ class TestEmotionAnalyzerFactory:
 
     def test_register_overwrite_warning(self):
         """Registering an existing name should overwrite (no error)."""
+
         class MockAnalyzer(IEmotionAnalyzer):
             def extract(self, text, context=None):
                 return EmotionData(primary="neutral", confidence=0.0)
+
             @property
             def name(self):
                 return "mock2"
@@ -116,6 +120,7 @@ class TestEmotionAnalyzerFactory:
 # ============================================================
 # TimelineStrategyFactory
 # ============================================================
+
 
 class TestTimelineStrategyFactory:
     """TimelineStrategyFactory create / register / list."""
@@ -138,8 +143,7 @@ class TestTimelineStrategyFactory:
     def test_create_with_config(self):
         """Create strategy with config."""
         strategy = TimelineStrategyFactory.create(
-            "position_based",
-            config={"enable_smoothing": False}
+            "position_based", config={"enable_smoothing": False}
         )
         assert isinstance(strategy, PositionBasedStrategy)
         assert strategy._enable_smoothing is False
@@ -166,9 +170,11 @@ class TestTimelineStrategyFactory:
 
     def test_register_new_strategy(self):
         """Register a new custom strategy."""
+
         class MockStrategy(ITimelineStrategy):
             def calculate(self, emotions, text, audio_duration, config=None, **kwargs):
                 return []
+
             @property
             def name(self):
                 return "mock_strategy"
@@ -183,6 +189,7 @@ class TestTimelineStrategyFactory:
 
     def test_register_non_interface_class_raises(self):
         """Registering a class that doesn't implement ITimelineStrategy should raise."""
+
         class NotAStrategy:
             pass
 
@@ -191,9 +198,11 @@ class TestTimelineStrategyFactory:
 
     def test_register_overwrite_warning(self):
         """Overwriting an existing strategy should work."""
+
         class MockStrategy(ITimelineStrategy):
             def calculate(self, emotions, text, audio_duration, config=None, **kwargs):
                 return []
+
             @property
             def name(self):
                 return "mock_strat2"
@@ -209,6 +218,7 @@ class TestTimelineStrategyFactory:
 # Convenience functions
 # ============================================================
 
+
 class TestConvenienceFunctions:
     """create_emotion_analyzer and create_timeline_strategy."""
 
@@ -219,10 +229,7 @@ class TestConvenienceFunctions:
 
     def test_create_emotion_analyzer_with_config(self):
         """Convenience function should pass config."""
-        analyzer = create_emotion_analyzer(
-            "keyword_analyzer",
-            config={"confidence_mode": "count"}
-        )
+        analyzer = create_emotion_analyzer("keyword_analyzer", config={"confidence_mode": "count"})
         assert analyzer._confidence_mode == "count"
 
     def test_create_timeline_strategy(self):
@@ -232,8 +239,5 @@ class TestConvenienceFunctions:
 
     def test_create_timeline_strategy_with_config(self):
         """Convenience function should pass config."""
-        strategy = create_timeline_strategy(
-            "duration_based",
-            config={"min_emotion_duration": 1.0}
-        )
+        strategy = create_timeline_strategy("duration_based", config={"min_emotion_duration": 1.0})
         assert strategy._min_emotion_duration == 1.0

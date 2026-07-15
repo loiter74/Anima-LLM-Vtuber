@@ -15,9 +15,14 @@ from animetta.orchestration.graph.output_node import _compute_volumes, _trim_lea
 # helpers
 # ============================================================
 
-def _create_sine_wave_wav(path: str, duration_sec: float = 1.0,
-                           freq: float = 440, sample_rate: int = 16000,
-                           max_amplitude: float = 0.5) -> str:
+
+def _create_sine_wave_wav(
+    path: str,
+    duration_sec: float = 1.0,
+    freq: float = 440,
+    sample_rate: int = 16000,
+    max_amplitude: float = 0.5,
+) -> str:
     """Create a simple sine-wave WAV file for testing."""
     n_samples = int(sample_rate * duration_sec)
     data = []
@@ -34,8 +39,7 @@ def _create_sine_wave_wav(path: str, duration_sec: float = 1.0,
     return path
 
 
-def _create_silent_wav(path: str, duration_sec: float = 1.0,
-                        sample_rate: int = 16000) -> str:
+def _create_silent_wav(path: str, duration_sec: float = 1.0, sample_rate: int = 16000) -> str:
     """Create a silent WAV file."""
     n_samples = int(sample_rate * duration_sec)
     data = [0] * n_samples
@@ -47,9 +51,9 @@ def _create_silent_wav(path: str, duration_sec: float = 1.0,
     return path
 
 
-def _create_wav_with_leading_silence(path: str, silence_sec: float = 0.3,
-                                      duration_sec: float = 1.0,
-                                      sample_rate: int = 16000) -> str:
+def _create_wav_with_leading_silence(
+    path: str, silence_sec: float = 0.3, duration_sec: float = 1.0, sample_rate: int = 16000
+) -> str:
     """Create a WAV file with leading silence followed by sine wave."""
     silence_samples = int(sample_rate * silence_sec)
     tone_samples = int(sample_rate * duration_sec)
@@ -69,6 +73,7 @@ def _create_wav_with_leading_silence(path: str, silence_sec: float = 0.3,
 # ============================================================
 # AudioAnalyzer tests
 # ============================================================
+
 
 class TestAudioAnalyzerInit:
     """AudioAnalyzer initialization."""
@@ -205,6 +210,7 @@ class TestAudioAnalyzerDuration:
 # Convenience function compute_volume_envelope
 # ============================================================
 
+
 class TestConvenienceComputeVolumeEnvelope:
     """Standalone compute_volume_envelope convenience function."""
 
@@ -254,6 +260,7 @@ class TestConvenienceComputeVolumeEnvelope:
 # ============================================================
 # output_node _compute_volumes integration tests
 # ============================================================
+
 
 class TestOutputNodeComputeVolumes:
     """_compute_volumes function in output_node."""
@@ -306,20 +313,21 @@ class TestOutputNodeComputeVolumes:
     def test_trim_leading_silence_removes_silence(self, tmp_path):
         """Audio with leading silence should be trimmed."""
         wav = _create_wav_with_leading_silence(
-            str(tmp_path / "has_silence.wav"),
-            silence_sec=0.3, duration_sec=0.3)
+            str(tmp_path / "has_silence.wav"), silence_sec=0.3, duration_sec=0.3
+        )
         result = _trim_leading_silence(wav)
         assert result is not None, "Should trim audio with leading silence"
         # Trimmed file should be about 0.3s (only the tone part)
         from pydub import AudioSegment
+
         trimmed = AudioSegment.from_file(result)
         assert abs(len(trimmed) - 300) < 100, f"Trimmed length {len(trimmed)}ms, expected ~300ms"
 
     def test_trim_leading_silence_short_silence_ignored(self, tmp_path):
         """Leading silence shorter than 50ms should not be trimmed."""
         wav = _create_wav_with_leading_silence(
-            str(tmp_path / "short_silence.wav"),
-            silence_sec=0.03, duration_sec=0.3)
+            str(tmp_path / "short_silence.wav"), silence_sec=0.03, duration_sec=0.3
+        )
         result = _trim_leading_silence(wav)
         assert result is None, "Should not trim <50ms silence"
 
@@ -332,8 +340,8 @@ class TestOutputNodeComputeVolumes:
     def test_compute_volumes_skips_leading_silence(self, tmp_path):
         """_trim_leading_silence should remove silence so volumes match speech onset."""
         wav = _create_wav_with_leading_silence(
-            str(tmp_path / "silence_lead.wav"),
-            silence_sec=0.3, duration_sec=0.5)
+            str(tmp_path / "silence_lead.wav"), silence_sec=0.3, duration_sec=0.5
+        )
 
         # Trim silence, then compute volumes from trimmed audio
         trimmed = _trim_leading_silence(wav)
@@ -343,7 +351,8 @@ class TestOutputNodeComputeVolumes:
         # First volumes should now represent speech, not silence
         first_few = volumes[:5]
         assert any(v > 0.01 for v in first_few), (
-            f"First 5 volumes are all near zero after silence trim: {first_few}")
+            f"First 5 volumes are all near zero after silence trim: {first_few}"
+        )
 
     def test_compute_volumes_silent_audio_no_trim_error(self, tmp_path):
         """_compute_volumes should handle fully silent audio gracefully."""

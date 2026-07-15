@@ -159,7 +159,12 @@ async def test_run_goal_skill_fail_below_threshold_no_degrade():
     """失败但未达阈值 → 不降权（仍 validated），但仍兜底。"""
     lib = SkillLibrary()
     await lib.save_skill(_skill("ok", "collect wood", success_count=5, fail_count=0))
-    agent = LiveAgent(lib, AsyncMock(), degrade_threshold=3, fallback_fn=AsyncMock(return_value={"completed": False}))
+    agent = LiveAgent(
+        lib,
+        AsyncMock(),
+        degrade_threshold=3,
+        fallback_fn=AsyncMock(return_value={"completed": False}),
+    )
     lib.execute_skill_by_id = AsyncMock(return_value=SkillResult(success=False, skill_id="ok"))
 
     out = await agent.run_goal("collect wood")

@@ -71,17 +71,16 @@ class TestOutputNode:
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "Hello"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         # Check control signals
-        control_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:control"
-        ]
+        control_calls = [c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:control"]
         signals = [c[0][1]["signal"] for c in control_calls]
         assert "conversation-start" in signals
         assert "conversation-end" in signals
@@ -92,15 +91,16 @@ class TestOutputNode:
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "Hello world"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         sentence_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:sentence"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:sentence"
         ]
         assert len(sentence_calls) >= 1
         # First sentence call should have the text
@@ -130,12 +130,9 @@ class TestOutputNode:
             for call in mock_socketio.emit.call_args_list
             if call.args[0] == "chat:control"
         ]
-        assert [payload.get("signal") for payload in control_payloads] == [
-            "conversation-end"
-        ]
+        assert [payload.get("signal") for payload in control_payloads] == ["conversation-end"]
         assert not any(
-            call.args[0] == "chat:sentence"
-            for call in mock_socketio.emit.call_args_list
+            call.args[0] == "chat:sentence" for call in mock_socketio.emit.call_args_list
         )
 
     @pytest.mark.asyncio
@@ -152,16 +149,19 @@ class TestOutputNode:
         )
         state = create_initial_state(session_id="test")
         state["response_text"] = "Hello world"
-        await output_node(state, RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": context,
-        }))
+        await output_node(
+            state,
+            RunnableConfig(
+                configurable={
+                    "socketio": mock_socketio,
+                    "service_context": context,
+                }
+            ),
+        )
         translate.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_translation_never_emits_after_conversation_end(
-        self, mock_socketio, monkeypatch
-    ):
+    async def test_translation_never_emits_after_conversation_end(self, mock_socketio, monkeypatch):
         translate = AsyncMock(return_value="Hello.")
         monkeypatch.setattr(_output_node_module, "translate_subtitle_text", translate)
         monkeypatch.setattr(_output_node_module.translation_state, "enabled", True)
@@ -190,8 +190,7 @@ class TestOutputNode:
             index
             for index, event in enumerate(events)
             if event == "chat:control"
-            and mock_socketio.emit.call_args_list[index].args[1].get("signal")
-            == "conversation-end"
+            and mock_socketio.emit.call_args_list[index].args[1].get("signal") == "conversation-end"
         )
 
     @pytest.mark.asyncio
@@ -253,22 +252,20 @@ class TestOutputNode:
         state = create_initial_state(session_id="test")
         state["response_text"] = "I'm happy"
         state["emotion"] = "happy"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
-        expr_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:expression"
-        ]
+        expr_calls = [c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:expression"]
         assert len(expr_calls) >= 1
         assert expr_calls[0][0][1]["emotion"] == "happy"
 
         action_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:live2d_action"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:live2d_action"
         ]
         assert len(action_calls) >= 1
         assert action_calls[0][0][1]["index"] == 3  # happy -> 3
@@ -288,10 +285,12 @@ class TestOutputNode:
         state["emotion"] = "neutral"
         state["metadata"] = {"dialogue_status": "composer"}
         mock_service_context.config.system.long_term_memory_mode = "read_write"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         # Verify memory storage was called
@@ -322,10 +321,12 @@ class TestOutputNode:
             "channel": "bilibili",
             "stream_id": "bilibili:100",
         }
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
 
         await output_node(state, config)
 
@@ -348,10 +349,15 @@ class TestOutputNode:
         state = create_initial_state(session_id="test", user_text="private")
         state["response_text"] = "final"
         state["metadata"] = {"dialogue_status": "composer"}
-        await output_node(state, RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        }))
+        await output_node(
+            state,
+            RunnableConfig(
+                configurable={
+                    "socketio": mock_socketio,
+                    "service_context": mock_service_context,
+                }
+            ),
+        )
         mock_service_context.memory_system.encode.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -377,8 +383,7 @@ class TestOutputNode:
             "chat:live2d_action",
         }
         calls = [
-            call for call in mock_socketio.emit.call_args_list
-            if call.args[0] in golden_events
+            call for call in mock_socketio.emit.call_args_list if call.args[0] in golden_events
         ]
         assert calls
         expected = {
@@ -410,8 +415,7 @@ class TestOutputNode:
         degradation = next(
             call.args[1]
             for call in mock_socketio.emit.call_args_list
-            if call.args[0] == "chat:control"
-            and call.args[1].get("status") == "degraded"
+            if call.args[0] == "chat:control" and call.args[1].get("status") == "degraded"
         )
         assert degradation["component"] == "tts"
         assert degradation["reason"] == "provider_error"
@@ -443,8 +447,7 @@ class TestOutputNode:
         degradations = [
             call.args[1]
             for call in mock_socketio.emit.call_args_list
-            if call.args[0] == "chat:control"
-            and call.args[1].get("type") == "media-degraded"
+            if call.args[0] == "chat:control" and call.args[1].get("type") == "media-degraded"
         ]
         assert len(degradations) == 1
         degradation = degradations[0]
@@ -499,10 +502,12 @@ class TestUnpersistableResponseGuard:
             user_text="讲个笑话",
         )
         state["response_text"] = "I need a moment to think about that."
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         mock_service_context.memory_system.encode.assert_not_called()
@@ -519,10 +524,12 @@ class TestUnpersistableResponseGuard:
         # A response that does not match any marker but is flagged as timeout
         state["response_text"] = "[一些部分生成的内容]"
         state["metadata"] = {"error_type": "timeout"}
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         mock_service_context.memory_system.encode.assert_not_called()
@@ -539,10 +546,12 @@ class TestUnpersistableResponseGuard:
             user_text="ping",
         )
         state["response_text"] = "你好！你说的是：「ping」。有什么我可以帮助你的吗？"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         mock_service_context.memory_system.encode.assert_not_called()
@@ -559,10 +568,12 @@ class TestUnpersistableResponseGuard:
             user_text="你是谁",
         )
         state["response_text"] = "收到你的消息：「你是谁」。我是一个 Mock LLM，用于测试和开发。"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         mock_service_context.memory_system.encode.assert_not_called()
@@ -586,10 +597,12 @@ class TestUnpersistableResponseGuard:
         state["response_text"] = "又来了。酒馆还没开门你就堵在门口，我帮你倒杯红茶？"
         state["metadata"] = {"dialogue_status": "composer"}
         mock_service_context.config.system.long_term_memory_mode = "read_write"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         mock_service_context.memory_system.encode.assert_called_once()
@@ -635,15 +648,16 @@ class TestTurnIdentity:
         """chat:sentence payload should include turn_id."""
         state = create_initial_state(session_id="test")
         state["response_text"] = "你好"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         sentence_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:sentence"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:sentence"
         ]
         # First sentence call should have turn_id
         assert len(sentence_calls) >= 1
@@ -657,15 +671,16 @@ class TestTurnIdentity:
         """The text sentence and complete marker should share the same turn_id."""
         state = create_initial_state(session_id="test")
         state["response_text"] = "你好"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         sentence_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:sentence"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:sentence"
         ]
         assert len(sentence_calls) >= 2
         turn_id_text = sentence_calls[0][0][1].get("turn_id")
@@ -680,15 +695,16 @@ class TestTurnIdentity:
         state = create_initial_state(session_id="test")
         state["response_text"] = "你好"
         state["metadata"] = {"turn_id": "custom_turn_abc"}
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         sentence_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:sentence"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:sentence"
         ]
         assert sentence_calls[0][0][1]["turn_id"] == state["task_id"]
 
@@ -697,15 +713,16 @@ class TestTurnIdentity:
         """Existing fields (text, seq, lang) must still be present for old clients."""
         state = create_initial_state(session_id="test")
         state["response_text"] = "你好"
-        config = RunnableConfig(configurable={
-            "socketio": mock_socketio,
-            "service_context": mock_service_context,
-        })
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
         await output_node(state, config)
 
         sentence_calls = [
-            c for c in mock_socketio.emit.call_args_list
-            if c[0][0] == "chat:sentence"
+            c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:sentence"
         ]
         payload = sentence_calls[0][0][1]
         # Old fields must still be present

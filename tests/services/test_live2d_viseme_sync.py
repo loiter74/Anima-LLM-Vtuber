@@ -50,20 +50,20 @@ class TestVisemeConfig:
 
     def test_default_bands(self, viseme_config):
         """Default frequency bands are set correctly."""
-        assert viseme_config.bands['low'] == (120, 360)
-        assert viseme_config.bands['lowMid'] == (360, 900)
-        assert viseme_config.bands['mid'] == (900, 1800)
-        assert viseme_config.bands['highMid'] == (1800, 3200)
-        assert viseme_config.bands['high'] == (3200, 5200)
+        assert viseme_config.bands["low"] == (120, 360)
+        assert viseme_config.bands["lowMid"] == (360, 900)
+        assert viseme_config.bands["mid"] == (900, 1800)
+        assert viseme_config.bands["highMid"] == (1800, 3200)
+        assert viseme_config.bands["high"] == (3200, 5200)
 
     def test_default_weights(self, viseme_config):
         """Default viseme weights are set for all 5 visemes."""
-        assert 'a' in viseme_config.weights
-        assert 'i' in viseme_config.weights
-        assert 'u' in viseme_config.weights
-        assert 'e' in viseme_config.weights
-        assert 'o' in viseme_config.weights
-        assert len(viseme_config.weights['a']) == 5  # 5 bands
+        assert "a" in viseme_config.weights
+        assert "i" in viseme_config.weights
+        assert "u" in viseme_config.weights
+        assert "e" in viseme_config.weights
+        assert "o" in viseme_config.weights
+        assert len(viseme_config.weights["a"]) == 5  # 5 bands
 
     def test_default_smoothing_params(self, viseme_config):
         """Default smoothing/attack/release are set."""
@@ -73,10 +73,10 @@ class TestVisemeConfig:
 
     def test_custom_bands(self):
         """Custom frequency bands override defaults."""
-        custom_bands = {'low': (100, 400), 'mid': (400, 2000)}
-        cfg = VisemeConfig(bands=custom_bands, weights={'a': [0.5, 0.5]})
-        assert cfg.bands['low'] == (100, 400)
-        assert cfg.bands['mid'] == (400, 2000)
+        custom_bands = {"low": (100, 400), "mid": (400, 2000)}
+        cfg = VisemeConfig(bands=custom_bands, weights={"a": [0.5, 0.5]})
+        assert cfg.bands["low"] == (100, 400)
+        assert cfg.bands["mid"] == (400, 2000)
 
     def test_custom_smoothing(self):
         """Custom smoothing values are stored."""
@@ -186,22 +186,22 @@ class TestProcessAudio:
     def test_process_audio_returns_mouth_params(self, viseme_sync, sine_audio):
         """process_audio returns Dict with ParamMouthOpen and ParamMouthForm."""
         result = viseme_sync.process_audio(sine_audio, voice_energy=0.8)
-        assert 'ParamMouthOpen' in result
-        assert 'ParamMouthForm' in result
-        assert isinstance(result['ParamMouthOpen'], float)
-        assert isinstance(result['ParamMouthForm'], float)
+        assert "ParamMouthOpen" in result
+        assert "ParamMouthForm" in result
+        assert isinstance(result["ParamMouthOpen"], float)
+        assert isinstance(result["ParamMouthForm"], float)
 
     def test_process_audio_mouth_open_positive_for_sound(self, viseme_sync, sine_audio):
         """Non-silent audio produces positive mouth openness."""
         result = viseme_sync.process_audio(sine_audio, voice_energy=1.0)
-        assert result['ParamMouthOpen'] >= 0.0
+        assert result["ParamMouthOpen"] >= 0.0
 
     def test_process_audio_silence_zeros_everything(self, viseme_sync):
         """Silent audio with zero energy produces zero mouth params."""
         silent = np.zeros(2048, dtype=np.float32)
         result = viseme_sync.process_audio(silent, voice_energy=0.0)
-        assert result['ParamMouthOpen'] == 0.0
-        assert result['ParamMouthForm'] == 0.0
+        assert result["ParamMouthOpen"] == 0.0
+        assert result["ParamMouthForm"] == 0.0
 
     def test_reset_clears_state(self, viseme_sync):
         """reset() zeros internal weights."""
@@ -218,7 +218,7 @@ class TestProcessAudio:
         result_low = viseme_sync.process_audio(sine_audio, voice_energy=0.3)
         viseme_sync.reset()
         result_high = viseme_sync.process_audio(sine_audio, voice_energy=1.0)
-        assert result_high['ParamMouthOpen'] >= result_low['ParamMouthOpen']
+        assert result_high["ParamMouthOpen"] >= result_low["ParamMouthOpen"]
 
 
 # ── SimpleLipSync ────────────────────────────────────────────────────

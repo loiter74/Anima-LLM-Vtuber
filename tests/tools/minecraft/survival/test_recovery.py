@@ -32,19 +32,25 @@ class TestExtractError:
 
 class TestMapCollectFailure:
     def test_unknown_block_aborts(self):
-        plan = map_collect_failure("nonexistent_block", "Unknown block: nonexistent_block", SurvivalPhase.WOOD)
+        plan = map_collect_failure(
+            "nonexistent_block", "Unknown block: nonexistent_block", SurvivalPhase.WOOD
+        )
         assert plan.should_abort is True
         assert "nonexistent_block" in plan.abort_reason
 
     def test_not_found_retries(self):
-        plan = map_collect_failure("oak_log", "No more oak_log nearby, collected 0", SurvivalPhase.WOOD)
+        plan = map_collect_failure(
+            "oak_log", "No more oak_log nearby, collected 0", SurvivalPhase.WOOD
+        )
         assert plan.should_abort is False
         assert len(plan.actions) == 1
         assert plan.actions[0].action == "collect"
         assert plan.actions[0].params["block_type"] == "oak_log"
 
     def test_timeout_retries(self):
-        plan = map_collect_failure("stone", "Command timed out after 60s", SurvivalPhase.COBBLESTONE)
+        plan = map_collect_failure(
+            "stone", "Command timed out after 60s", SurvivalPhase.COBBLESTONE
+        )
         assert plan.should_abort is False
         assert len(plan.actions) == 2
         assert plan.actions[0].action == "stop"
@@ -235,7 +241,8 @@ class TestMapSmeltFailure:
 
     def test_structured_no_furnace_code(self):
         plan = map_smelt_failure(
-            "raw_iron", "coal",
+            "raw_iron",
+            "coal",
             {"message": "No furnace found", "code": "NO_FURNACE"},
         )
         assert plan.should_abort is False
@@ -243,15 +250,21 @@ class TestMapSmeltFailure:
 
     def test_structured_unknown_fuel_code(self):
         plan = map_smelt_failure(
-            "raw_iron", "lava_bucket",
-            {"message": "fuel not recognized", "code": "UNKNOWN_FUEL", "reason": "lava_bucket not burnable"},
+            "raw_iron",
+            "lava_bucket",
+            {
+                "message": "fuel not recognized",
+                "code": "UNKNOWN_FUEL",
+                "reason": "lava_bucket not burnable",
+            },
         )
         assert plan.actions[0].params["fuel"] == "coal"
         assert "lava_bucket not burnable" in plan.actions[0].description
 
     def test_structured_generic_with_reason(self):
         plan = map_smelt_failure(
-            "raw_iron", "coal",
+            "raw_iron",
+            "coal",
             {"message": "something else", "reason": "inventory full"},
         )
         assert "inventory full" in plan.actions[0].description

@@ -49,6 +49,7 @@ def _load_dataset(n: int | None = None) -> list[dict]:
 # TestRAGQuality
 # ═════════════════════════════════════════════════════════════════════════
 
+
 class TestRAGQuality:
     """CI regression tests for RAG retrieval quality."""
 
@@ -68,18 +69,14 @@ class TestRAGQuality:
             assert isinstance(q.get("expected_docs"), list), (
                 f"Missing/invalid 'expected_docs': {q.get('id')}"
             )
-            assert isinstance(q.get("category"), str), (
-                f"Missing/invalid 'category': {q.get('id')}"
-            )
+            assert isinstance(q.get("category"), str), f"Missing/invalid 'category': {q.get('id')}"
 
         # Verify category coverage (minimum required set)
         categories = {q["category"] for q in dataset}
         required = {"factual", "contextual", "temporal", "persona", "multi_hop", "robustness"}
         missing = required - categories
         extra = categories - required
-        assert not missing, (
-            f"Missing required categories: {missing}. Found: {sorted(categories)}"
-        )
+        assert not missing, f"Missing required categories: {missing}. Found: {sorted(categories)}"
         if extra:
             print(f"Note: dataset has extra categories beyond required set: {extra}")
 
@@ -149,8 +146,7 @@ class TestRAGQuality:
 
             # ── Assert thresholds ──
             assert summary["recall_at_k"] >= THRESHOLDS["recall_at_5"], (
-                f"Recall@5 regression: {summary['recall_at_k']:.3f} "
-                f"< {THRESHOLDS['recall_at_5']}"
+                f"Recall@5 regression: {summary['recall_at_k']:.3f} < {THRESHOLDS['recall_at_5']}"
             )
             assert summary["precision_at_k"] >= THRESHOLDS["precision_at_5"], (
                 f"Precision@5 regression: {summary['precision_at_k']:.3f} "
@@ -160,8 +156,7 @@ class TestRAGQuality:
                 f"MRR regression: {summary['mrr']:.3f} < {THRESHOLDS['mrr']}"
             )
             assert summary["ndcg_at_k"] >= THRESHOLDS["ndcg_at_5"], (
-                f"nDCG@5 regression: {summary['ndcg_at_k']:.3f} "
-                f"< {THRESHOLDS['ndcg_at_5']}"
+                f"nDCG@5 regression: {summary['ndcg_at_k']:.3f} < {THRESHOLDS['ndcg_at_5']}"
             )
             assert summary["latency_p95_ms"] <= THRESHOLDS["latency_p95_ms"], (
                 f"Latency p95 regression: {summary['latency_p95_ms']:.1f}ms "
@@ -175,6 +170,7 @@ class TestRAGQuality:
 # ═════════════════════════════════════════════════════════════════════════
 # TestRAGRegression — validates that CI catches known-broken configs
 # ═════════════════════════════════════════════════════════════════════════
+
 
 class TestRAGRegression:
     """Verify that intentionally degraded configs fail CI thresholds.

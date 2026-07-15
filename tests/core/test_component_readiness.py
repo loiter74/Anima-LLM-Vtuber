@@ -61,8 +61,7 @@ def test_cache_fails_closed_before_first_refresh() -> None:
 
     assert snapshot["ready"] is False
     assert all(
-        component["reason"] == "cache_unavailable"
-        for component in snapshot["components"].values()
+        component["reason"] == "cache_unavailable" for component in snapshot["components"].values()
     )
 
 
@@ -135,8 +134,7 @@ async def test_stale_cache_fails_closed_without_running_probes_in_snapshot() -> 
 
     assert snapshot["ready"] is False
     assert all(
-        component["reason"] == "stale_status"
-        for component in snapshot["components"].values()
+        component["reason"] == "stale_status" for component in snapshot["components"].values()
     )
 
 
@@ -180,11 +178,7 @@ async def test_real_ledger_commit_and_prometheus_delta_feed_cached_readiness(
 
     assert snapshot["ready"] is True
     assert snapshot["components"]["observation_ledger"]["write_probe"] is True
-    assert (
-        snapshot["components"]["metrics_projection"]
-        ["anima_readiness_probe_total_delta"]
-        > 0
-    )
+    assert snapshot["components"]["metrics_projection"]["anima_readiness_probe_total_delta"] > 0
 
 
 async def test_required_remote_tts_outage_and_recovery_refresh_cached_readiness() -> None:

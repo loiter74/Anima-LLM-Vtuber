@@ -7,17 +7,21 @@ import socketio
 
 PORT, URL = 12394, "http://localhost:12394"
 
+
 class TestASR:
     @pytest.mark.asyncio
     async def test_asr(self, server):
         sio, ev = socketio.AsyncClient(), {}
+
         @sio.on("*")
-        async def _(e, d=None): ev.setdefault(e, []).append(d)
+        async def _(e, d=None):
+            ev.setdefault(e, []).append(d)
+
         await sio.connect(URL, transports=["websocket"], wait_timeout=10)
         await sio.emit("chat:audio", {"audio": [], "sample_rate": 16000})
         await asyncio.sleep(10)
         await sio.disconnect()
-        errs = ev.get("system:error",[])
+        errs = ev.get("system:error", [])
         print(f"events={sorted(ev.keys())} errors={errs}")
         assert "system:connection_established" in ev, "connect"
         assert not errs, f"errors: {errs}"

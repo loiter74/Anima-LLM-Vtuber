@@ -39,9 +39,9 @@ async def test_start_and_final_text_are_emitted_before_qwen_completes() -> None:
 
     context = SimpleNamespace(
         tts_engine=SimpleNamespace(synthesize=synthesize),
-        config=SimpleNamespace(system=SimpleNamespace(
-            runtime_profile="golden", golden_tts_timeout_seconds=20.0
-        )),
+        config=SimpleNamespace(
+            system=SimpleNamespace(runtime_profile="golden", golden_tts_timeout_seconds=20.0)
+        ),
     )
     config = RunnableConfig(configurable={"socketio": socket, "service_context": context})
     current = state()
@@ -70,19 +70,16 @@ async def test_degraded_media_keeps_live2d_and_emits_no_audio() -> None:
     socket = AsyncMock()
     current = state()
     current["tts_audio"] = None
-    current["media_status"] = MediaStatus(
-        "degraded", "timeout", "Qwen3TTSTTS", True
-    )
-    await performance_output_node(
-        current, RunnableConfig(configurable={"socketio": socket})
-    )
+    current["media_status"] = MediaStatus("degraded", "timeout", "Qwen3TTSTTS", True)
+    await performance_output_node(current, RunnableConfig(configurable={"socketio": socket}))
     events = emitted(socket)
     names = [event for event, _ in events]
     assert "chat:expression" in names
     assert "chat:live2d_action" in names
     assert "chat:audio_with_expression" not in names
     degradation = next(
-        payload for event, payload in events
+        payload
+        for event, payload in events
         if event == "chat:control" and payload.get("type") == "media-degraded"
     )
     assert degradation["reason"] == "timeout"

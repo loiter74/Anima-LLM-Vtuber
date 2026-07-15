@@ -17,6 +17,7 @@ import pytest
 
 # ── Fixtures ──
 
+
 @pytest.fixture
 def mock_llm():
     """Create a mock LLM service with a chat method."""
@@ -31,15 +32,22 @@ def sample_plan_json():
         "goal": "Build a small house",
         "reasoning": "Need oak logs for walls and planks for floor",
         "steps": [
-            {"action": "collect", "params": {"block_type": "oak_log", "count": 16},
-             "description": "Collect 16 oak logs"},
-            {"action": "place", "params": {"block_type": "oak_planks", "x": 0, "y": 65, "z": 0},
-             "description": "Place floor"},
-        ]
+            {
+                "action": "collect",
+                "params": {"block_type": "oak_log", "count": 16},
+                "description": "Collect 16 oak logs",
+            },
+            {
+                "action": "place",
+                "params": {"block_type": "oak_planks", "x": 0, "y": 65, "z": 0},
+                "description": "Place floor",
+            },
+        ],
     }
 
 
 # ── Test Classes ──
+
 
 class TestPlanStepDataclass:
     """PlanStep data model tests."""
@@ -203,6 +211,7 @@ class TestMinecraftPlannerExtractJson:
 
     def test_extract_no_valid_json_raises(self):
         import json as json_mod
+
         planner = MinecraftPlanner()
         with pytest.raises(json_mod.JSONDecodeError):
             planner._extract_json("just plain text with no json")
@@ -228,10 +237,7 @@ class TestMinecraftPlannerParsePlan:
 
     def test_parse_plan_missing_description(self):
         planner = MinecraftPlanner()
-        raw = {
-            "goal": "test",
-            "steps": [{"action": "goto", "params": {"x": 1, "y": 2, "z": 3}}]
-        }
+        raw = {"goal": "test", "steps": [{"action": "goto", "params": {"x": 1, "y": 2, "z": 3}}]}
         plan = planner._parse_plan("test", raw)
         assert plan.steps[0].description == ""
         assert plan.steps[0].params == {"x": 1, "y": 2, "z": 3}
@@ -248,16 +254,13 @@ class TestMinecraftPlannerValidatePlan:
                 PlanStep(action="goto", params={"x": 0, "y": 64, "z": 0}),
                 PlanStep(action="collect", params={"block_type": "wood", "count": 5}),
                 PlanStep(action="mine", params={"block_type": "stone", "count": 10}),
-            ]
+            ],
         )
         planner._validate_plan(plan)  # Should not raise
 
     def test_validate_unknown_action_logs_warning(self):
         planner = MinecraftPlanner()
-        plan = Plan(
-            goal="test",
-            steps=[PlanStep(action="fly_to_moon", params={})]
-        )
+        plan = Plan(goal="test", steps=[PlanStep(action="fly_to_moon", params={})])
         planner._validate_plan(plan)  # Should not raise, just log warning
 
     def test_validate_non_dict_params_fixed(self):
@@ -285,7 +288,9 @@ class TestMinecraftPlannerReplan:
             goal="Build a house",
             steps=[
                 PlanStep(action="collect", params={"block_type": "oak_log", "count": 16}),
-                PlanStep(action="place", params={"block_type": "oak_planks", "x": 0, "y": 65, "z": 0}),
+                PlanStep(
+                    action="place", params={"block_type": "oak_planks", "x": 0, "y": 65, "z": 0}
+                ),
             ],
         )
 

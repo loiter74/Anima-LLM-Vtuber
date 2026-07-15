@@ -81,7 +81,9 @@ async def _repository(inventory: dict[str, int]):
     return repository
 
 
-async def test_recovery_cancels_action_invalidates_partial_receipts_and_restores_checkpoint() -> None:
+async def test_recovery_cancels_action_invalidates_partial_receipts_and_restores_checkpoint() -> (
+    None
+):
     recovery = _recovery()
     repository = await _repository({"oak_log": 1})
     runtime = FakeRecoveryRuntime(_observation("fresh", {"oak_log": 1}))
@@ -105,9 +107,7 @@ async def test_recovery_cancels_action_invalidates_partial_receipts_and_restores
 async def test_recovery_quarantines_unexplained_positive_inventory_delta() -> None:
     recovery = _recovery()
     repository = await _repository({"oak_log": 1})
-    runtime = FakeRecoveryRuntime(
-        _observation("fresh", {"oak_log": 1, "iron_pickaxe": 1})
-    )
+    runtime = FakeRecoveryRuntime(_observation("fresh", {"oak_log": 1, "iron_pickaxe": 1}))
     coordinator = recovery.RecoveryCoordinator(runtime=runtime, repository=repository)
 
     result = await coordinator.recover(

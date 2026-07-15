@@ -308,8 +308,7 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
         if any(part.endswith("probe_release_turn.py") for part in command)
     ]
     conversation_ids = {
-        command[command.index("--conversation-id") + 1]
-        for command in probe_commands
+        command[command.index("--conversation-id") + 1] for command in probe_commands
     }
     assert len(conversation_ids) == 1
     assert str(UUID(next(iter(conversation_ids)))) == next(iter(conversation_ids))

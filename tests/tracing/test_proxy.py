@@ -14,6 +14,7 @@ from animetta.tracing.proxy import TracingProxy
 
 class _TestExporter(SpanExporter):
     """In-memory exporter that captures exported spans."""
+
     def __init__(self):
         self.spans = []
 
@@ -70,7 +71,6 @@ def proxy(mock_service):
 
 
 class TestTracingProxy:
-
     async def test_wraps_async_method(self, proxy):
         """Async methods should create a span and return result."""
         result = await proxy.chat("hello")
@@ -115,7 +115,7 @@ class TestTracingProxy:
         assert "TracingProxy" in r
         assert "MockService" in r or "_MockService" in r
 
-    async     def test_bool_delegated(self):
+    async def test_bool_delegated(self):
         """__bool__ delegates to target."""
         svc = MagicMock()
         svc.__bool__ = MagicMock(return_value=True)

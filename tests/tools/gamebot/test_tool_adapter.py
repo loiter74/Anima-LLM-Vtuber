@@ -18,7 +18,9 @@ class FakeClient:
         self.last_params: dict[str, Any] | None = None
         self.last_timeout: float | None = None
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         self.last_action = action
         self.last_params = params
         self.last_timeout = timeout

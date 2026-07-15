@@ -27,12 +27,8 @@ async def test_ledger_creates_versioned_schema_with_foreign_keys(tmp_path) -> No
         operation_fks = connection.execute(
             "PRAGMA foreign_key_list(observation_operations)"
         ).fetchall()
-        event_fks = connection.execute(
-            "PRAGMA foreign_key_list(observation_events)"
-        ).fetchall()
-        schema_version = connection.execute(
-            "SELECT version FROM observation_schema"
-        ).fetchone()
+        event_fks = connection.execute("PRAGMA foreign_key_list(observation_events)").fetchall()
+        schema_version = connection.execute("SELECT version FROM observation_schema").fetchone()
     finally:
         connection.close()
 

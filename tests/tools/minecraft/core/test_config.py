@@ -114,7 +114,5 @@ class TestMinecraftConfig:
         assert cfg.bot.username == "TestBot"
 
     def test_nested_safety_config(self):
-        cfg = MinecraftConfig(
-            safety=MinecraftSafetyConfig(max_distance=300)
-        )
+        cfg = MinecraftConfig(safety=MinecraftSafetyConfig(max_distance=300))
         assert cfg.safety.max_distance == 300

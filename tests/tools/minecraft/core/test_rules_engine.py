@@ -26,7 +26,12 @@ def _make_rules_yaml(overrides: dict = None) -> dict:
             "blueprint": "A simple test house",
             "required_materials": {"oak_log": 10, "cobblestone": 20},
             "build_plan": [
-                {"action": "foundation", "block": "cobblestone", "area": "3x3", "description": "Foundation"},
+                {
+                    "action": "foundation",
+                    "block": "cobblestone",
+                    "area": "3x3",
+                    "description": "Foundation",
+                },
             ],
         },
         "safety": {
@@ -54,7 +59,9 @@ class TestRulesEngineLoading:
     def test_load_valid_rules(self):
 
         sample = _make_rules_yaml()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -77,7 +84,9 @@ class TestRulesEngineLoading:
 
     def test_defaults_on_empty_file(self):
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             f.write("")
             path = f.name
 
@@ -92,7 +101,9 @@ class TestRulesEngineLoading:
         """Partial YAML should merge with defaults, not replace them entirely."""
 
         partial = {"character_name": "PartialBot"}
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(partial, f)
             path = f.name
 
@@ -113,7 +124,9 @@ class TestRulesEngineValidation:
         """Empty priorities should not override defaults."""
 
         sample = _make_rules_yaml({"priorities": []})
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -128,7 +141,9 @@ class TestRulesEngineValidation:
         """High auto_heal_threshold should be accepted (warnings go to loguru)."""
 
         sample = _make_rules_yaml({"safety": {"auto_heal_threshold": 25}})
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -147,7 +162,9 @@ class TestRulesEngineQueries:
     def engine(self):
 
         sample = _make_rules_yaml()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -199,7 +216,9 @@ class TestRulesEngineSafetyOverride:
     def test_safety_override_applied(self):
 
         sample = _make_rules_yaml()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -213,7 +232,9 @@ class TestRulesEngineSafetyOverride:
     def test_safety_override_not_applied_when_larger(self):
 
         sample = _make_rules_yaml()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".md", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 

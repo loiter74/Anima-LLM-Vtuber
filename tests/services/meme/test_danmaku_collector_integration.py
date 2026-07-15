@@ -16,11 +16,13 @@ import pytest
 @pytest.fixture
 def mock_llm():
     llm = MagicMock()
-    llm.chat_messages = AsyncMock(return_value={
-        "content": """
+    llm.chat_messages = AsyncMock(
+        return_value={
+            "content": """
         [{"text": "绝绝子", "context_hint": "吐槽", "frequency": 5, "tags": ["流行"]}]
         """,
-    })
+        }
+    )
     return llm
 
 
@@ -54,6 +56,7 @@ class TestCollectorWithDanmakuBuffer:
         phrases = c._fetch_danmaku_phrases()
         # Should be awaitable (coroutine)
         import asyncio
+
         phrases = asyncio.run(c._fetch_danmaku_phrases())
 
         # Should contain at least the hot phrase from buffer
@@ -65,6 +68,7 @@ class TestCollectorWithDanmakuBuffer:
 
         c = MemeCollector(llm_client=mock_llm, danmaku_buffer=None)
         import asyncio
+
         phrases = asyncio.run(c._fetch_danmaku_phrases())
         assert phrases == []
 
@@ -81,13 +85,17 @@ class TestCollectorWithDanmakuBuffer:
 
         mock_videos = [
             CollectedVideo(
-                bvid="BV1xx", title="测试视频", tags=["搞笑"],
-                view_count=1000, danmaku_count=100,
+                bvid="BV1xx",
+                title="测试视频",
+                tags=["搞笑"],
+                view_count=1000,
+                danmaku_count=100,
             ),
         ]
 
-        with patch.object(c, '_fetch_trending_videos', return_value=mock_videos):
+        with patch.object(c, "_fetch_trending_videos", return_value=mock_videos):
             import asyncio
+
             candidates = asyncio.run(c.collect())
 
             # Check that LLM was called (danmaku data should be in context)

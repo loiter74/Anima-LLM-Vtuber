@@ -256,7 +256,9 @@ class TestTargetLanguageControl:
         ]
 
         for line in source_lines:
-            assert await translate_subtitle_text(llm, line, "Chinese", "English") == "English subtitle"
+            assert (
+                await translate_subtitle_text(llm, line, "Chinese", "English") == "English subtitle"
+            )
 
         assert len(llm.chat_messages_calls) == 13
         for call in llm.chat_messages_calls:
@@ -281,9 +283,7 @@ class TestPrefersChatMessages:
         """When LLM has native chat_messages(), it should be used."""
         llm = _NativeChatMessagesLLM(translation="You're lagging again, streamer")
 
-        result = await translate_subtitle_text(
-            llm, "主播你又卡了", "Chinese", "English"
-        )
+        result = await translate_subtitle_text(llm, "主播你又卡了", "Chinese", "English")
 
         assert result == "You're lagging again, streamer"
         assert len(llm.chat_messages_calls) == 1
@@ -342,9 +342,7 @@ class TestFallbackBehavior:
         """When LLM has get_history/clear_history, history should be restored."""
         llm = _FallbackLLM(translation="lagging again")
 
-        result = await translate_subtitle_text(
-            llm, "主播你又卡了", "Chinese", "English"
-        )
+        result = await translate_subtitle_text(llm, "主播你又卡了", "Chinese", "English")
 
         assert result == "lagging again"
         # History should have been restored (clear_history called)
@@ -355,9 +353,7 @@ class TestFallbackBehavior:
         """When LLM lacks history safety, translation should be skipped."""
         llm = _UnsafeLLM()
 
-        result = await translate_subtitle_text(
-            llm, "主播你又卡了", "Chinese", "English"
-        )
+        result = await translate_subtitle_text(llm, "主播你又卡了", "Chinese", "English")
 
         assert result is None
         # chat() should NOT have been called
@@ -369,9 +365,7 @@ class TestFallbackBehavior:
         llm = _FallbackLLM(translation="")
         llm._chat_mock = AsyncMock(return_value="")
 
-        result = await translate_subtitle_text(
-            llm, "测试", "Chinese", "English"
-        )
+        result = await translate_subtitle_text(llm, "测试", "Chinese", "English")
 
         assert result is None
 

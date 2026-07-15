@@ -27,10 +27,9 @@ def _effective_config(*, observability: dict | None = None):
         config = load_effective_config("config/animetta.yaml", profile="test")
     if observability is None:
         return config
-    application = config.application.model_copy(
-        update={"observability": observability}
-    )
+    application = config.application.model_copy(update={"observability": observability})
     return config.model_copy(update={"application": application})
+
 
 # ── Fixtures ───────────────────────────────────────────────────────
 
@@ -38,10 +37,12 @@ def _effective_config(*, observability: dict | None = None):
 @pytest.fixture
 def websocket_server():
     """WebSocketServer with mocked internals."""
-    with patch("socketio.AsyncServer") as mock_sio_cls, \
-         patch("socketio.ASGIApp") as mock_asgi, \
-         patch("starlette.applications.Starlette") as mock_starlette, \
-         patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm:
+    with (
+        patch("socketio.AsyncServer") as mock_sio_cls,
+        patch("socketio.ASGIApp") as mock_asgi,
+        patch("starlette.applications.Starlette") as mock_starlette,
+        patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm,
+    ):
         mock_sio_cls.return_value = MagicMock()
         mock_asgi.return_value = MagicMock()
         mock_starlette.return_value = MagicMock()
@@ -58,10 +59,12 @@ class TestWebSocketServerInit:
 
     def test_init_creates_sio_and_asgi(self):
         """__init__ creates Socket.IO server and Starlette ASGI app."""
-        with patch("socketio.AsyncServer") as mock_sio_cls, \
-             patch("socketio.ASGIApp") as mock_asgi, \
-             patch("starlette.applications.Starlette") as mock_starlette, \
-             patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm:
+        with (
+            patch("socketio.AsyncServer") as mock_sio_cls,
+            patch("socketio.ASGIApp") as mock_asgi,
+            patch("starlette.applications.Starlette") as mock_starlette,
+            patch("animetta.orchestration.server.websocket.ModelLoadingManager") as mock_mlm,
+        ):
             mock_sio_cls.return_value = MagicMock()
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
@@ -99,10 +102,12 @@ class TestWebSocketServerInit:
 
     def test_init_stores_config(self):
         """Config is stored when provided."""
-        with patch("socketio.AsyncServer") as mock_sio_cls, \
-             patch("socketio.ASGIApp") as mock_asgi, \
-             patch("starlette.applications.Starlette") as mock_starlette, \
-             patch("animetta.orchestration.server.websocket.ModelLoadingManager"):
+        with (
+            patch("socketio.AsyncServer") as mock_sio_cls,
+            patch("socketio.ASGIApp") as mock_asgi,
+            patch("starlette.applications.Starlette") as mock_starlette,
+            patch("animetta.orchestration.server.websocket.ModelLoadingManager"),
+        ):
             mock_sio_cls.return_value = MagicMock()
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
@@ -312,10 +317,12 @@ class TestPrewarmServices:
     @pytest.mark.asyncio
     async def test_prewarm_services_no_config(self):
         """prewarm_services skips when config is None."""
-        with patch("socketio.AsyncServer") as mock_sio_cls, \
-             patch("socketio.ASGIApp") as mock_asgi, \
-             patch("starlette.applications.Starlette") as mock_starlette, \
-             patch("animetta.orchestration.server.websocket.ModelLoadingManager"):
+        with (
+            patch("socketio.AsyncServer") as mock_sio_cls,
+            patch("socketio.ASGIApp") as mock_asgi,
+            patch("starlette.applications.Starlette") as mock_starlette,
+            patch("animetta.orchestration.server.websocket.ModelLoadingManager"),
+        ):
             mock_sio_cls.return_value = MagicMock()
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
@@ -323,8 +330,8 @@ class TestPrewarmServices:
             server = WebSocketServer(config=None)
 
         with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
-                await server.prewarm_services()
-                mock_pool.init.assert_not_called()
+            await server.prewarm_services()
+            mock_pool.init.assert_not_called()
 
 
 # ── WebSocketServer — cleanup ──────────────────────────────────────
@@ -376,12 +383,13 @@ class TestCleanup:
             side_effect=RuntimeError("sensitive-session-error")
         )
 
-        with patch(
-            "animetta.orchestration.server.websocket.ServicePool.shutdown",
-            new=AsyncMock(),
-        ) as shutdown, patch(
-            "animetta.orchestration.server.websocket.logger.warning"
-        ) as warning:
+        with (
+            patch(
+                "animetta.orchestration.server.websocket.ServicePool.shutdown",
+                new=AsyncMock(),
+            ) as shutdown,
+            patch("animetta.orchestration.server.websocket.logger.warning") as warning,
+        ):
             await websocket_server._cleanup_all_resources()
 
         shutdown.assert_awaited_once_with()
@@ -401,9 +409,7 @@ class TestBackgroundTaskSupervisor:
         async def fail() -> None:
             raise RuntimeError("sensitive-background-error")
 
-        with patch(
-            "animetta.orchestration.server.websocket.logger.warning"
-        ) as warning:
+        with patch("animetta.orchestration.server.websocket.logger.warning") as warning:
             task = websocket_server.supervise_background(
                 fail(),
                 name="service-prewarm",
@@ -460,8 +466,10 @@ class TestStart:
     @pytest.mark.asyncio
     async def test_start_calls_setup_methods(self, websocket_server):
         """start() calls setup_routes and setup_lifecycle."""
-        with patch.object(websocket_server, "setup_routes") as mock_routes, \
-             patch.object(websocket_server, "setup_lifecycle") as mock_lifecycle:
+        with (
+            patch.object(websocket_server, "setup_routes") as mock_routes,
+            patch.object(websocket_server, "setup_lifecycle") as mock_lifecycle,
+        ):
             await websocket_server.start()
 
             mock_routes.assert_called_once()
@@ -476,18 +484,22 @@ class TestCreateServer:
 
     def test_create_server_creates_and_configures(self):
         """create_server builds server, routes, and lifecycle."""
-        with patch("socketio.AsyncServer") as mock_sio_cls, \
-             patch("socketio.ASGIApp") as mock_asgi, \
-             patch("starlette.applications.Starlette") as mock_starlette, \
-             patch("animetta.orchestration.server.websocket.ModelLoadingManager"):
+        with (
+            patch("socketio.AsyncServer") as mock_sio_cls,
+            patch("socketio.ASGIApp") as mock_asgi,
+            patch("starlette.applications.Starlette") as mock_starlette,
+            patch("animetta.orchestration.server.websocket.ModelLoadingManager"),
+        ):
             mock_sio_cls.return_value = MagicMock()
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
 
             cfg = MagicMock()
 
-            with patch.object(WebSocketServer, "setup_routes") as mock_routes, \
-                 patch.object(WebSocketServer, "setup_lifecycle") as mock_lifecycle:
+            with (
+                patch.object(WebSocketServer, "setup_routes") as mock_routes,
+                patch.object(WebSocketServer, "setup_lifecycle") as mock_lifecycle,
+            ):
                 server = create_server(config=cfg)
 
                 assert isinstance(server, WebSocketServer)

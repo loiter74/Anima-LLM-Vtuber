@@ -34,14 +34,15 @@ X = ("wiki/x.md", 100, 110)
 Y = ("wiki/y.md", 200, 210)
 Z = ("wiki/z.md", 300, 310)
 
-RETRIEVED = [A, B, C, D, E]          # 5 ordered chunks
-EXPECTED = [A, C, E]                  # 3 ground-truth chunks (positions 0, 2, 4)
-DISJOINT = [X, Y, Z]                  # no overlap with EXPECTED
+RETRIEVED = [A, B, C, D, E]  # 5 ordered chunks
+EXPECTED = [A, C, E]  # 3 ground-truth chunks (positions 0, 2, 4)
+DISJOINT = [X, Y, Z]  # no overlap with EXPECTED
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # recall_at_k
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestRecallAtK:
     """Tests for recall_at_k(retrieved, expected, k)."""
@@ -76,6 +77,7 @@ class TestRecallAtK:
 # ═══════════════════════════════════════════════════════════════════════════
 # precision_at_k
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestPrecisionAtK:
     """Tests for precision_at_k(retrieved, expected, k)."""
@@ -112,6 +114,7 @@ class TestPrecisionAtK:
 # mrr
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMRR:
     """Tests for mrr(retrieved, expected)."""
 
@@ -140,6 +143,7 @@ class TestMRR:
 # ═══════════════════════════════════════════════════════════════════════════
 # ndcg_at_k
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestNDCGAtK:
     """Tests for ndcg_at_k(retrieved, expected, k)."""
@@ -174,6 +178,7 @@ class TestNDCGAtK:
 # ═══════════════════════════════════════════════════════════════════════════
 # latency_percentiles
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestLatencyPercentiles:
     """Tests for latency_percentiles(timings_ms)."""
@@ -217,14 +222,18 @@ class TestLatencyPercentiles:
 # chunk_diversity
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestChunkDiversity:
     """Tests for chunk_diversity(retrieved_chunks)."""
 
     def test_all_unique_paths(self):
         """When every chunk comes from a different document, diversity = 1.0."""
         chunks = [
-            {"path": "a.md"}, {"path": "b.md"}, {"path": "c.md"},
-            {"path": "d.md"}, {"path": "e.md"},
+            {"path": "a.md"},
+            {"path": "b.md"},
+            {"path": "c.md"},
+            {"path": "d.md"},
+            {"path": "e.md"},
         ]
         result = chunk_diversity(chunks)
         assert result == pytest.approx(1.0)
@@ -232,8 +241,11 @@ class TestChunkDiversity:
     def test_all_same_path(self):
         """When all chunks come from the same document, diversity = 1/N."""
         chunks = [
-            {"path": "same.md"}, {"path": "same.md"}, {"path": "same.md"},
-            {"path": "same.md"}, {"path": "same.md"},
+            {"path": "same.md"},
+            {"path": "same.md"},
+            {"path": "same.md"},
+            {"path": "same.md"},
+            {"path": "same.md"},
         ]
         result = chunk_diversity(chunks)
         assert result == pytest.approx(1.0 / 5.0)
@@ -247,6 +259,7 @@ class TestChunkDiversity:
 # ═══════════════════════════════════════════════════════════════════════════
 # bootstrap_ci
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestBootstrapCI:
     """Tests for bootstrap_ci(samples, n_bootstrap, ci)."""
@@ -274,6 +287,7 @@ class TestBootstrapCI:
 # Edge Cases (cross-metric)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestEdgeCases:
     """Edge case tests that apply across multiple metrics."""
 
@@ -299,5 +313,5 @@ class TestEdgeCases:
         result_precision = precision_at_k(dup_retrieved, expected, k=5)
 
         # Set intersection deduplicates: {A,B,C} ∩ {A,C} = {A,C}, size=2
-        assert result_recall == pytest.approx(1.0)    # 2 unique / 2 expected
+        assert result_recall == pytest.approx(1.0)  # 2 unique / 2 expected
         assert result_precision == pytest.approx(0.4)  # 2 unique / 5 retrieved

@@ -72,15 +72,17 @@ class TestLivingMemorySystem:
 
         pages = await system.list_wiki_pages(limit=50)
 
-        assert pages == [{
-            "path": atom.id,
-            "title": atom.content[:80],
-            "content": atom.content,
-            "page_type": "source",
-            # Transport/session ids are trace metadata, never semantic tags.
-            "tags": [],
-            "updated_at": atom.rewritten_at.isoformat(),
-        }]
+        assert pages == [
+            {
+                "path": atom.id,
+                "title": atom.content[:80],
+                "content": atom.content,
+                "page_type": "source",
+                # Transport/session ids are trace metadata, never semantic tags.
+                "tags": [],
+                "updated_at": atom.rewritten_at.isoformat(),
+            }
+        ]
 
     async def test_encode_with_sad_emotion(self, system):
         atom = await system.encode(
@@ -120,6 +122,7 @@ class TestLivingMemorySystem:
             assert first.emotion_valence > second.emotion_valence, (
                 f"Happy memory should rank first. Got valence {first.emotion_valence} vs {second.emotion_valence}"
             )
+
 
 class TestLivingMemorySystemEdgeCases:
     @pytest.mark.asyncio

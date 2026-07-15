@@ -2,7 +2,6 @@
 Tests for Skill Library
 """
 
-
 import pytest
 
 from animetta.tools.minecraft.skill.library import (
@@ -29,7 +28,7 @@ def sample_skill():
         preconditions=["has_tool('axe')"],
         body={"type": "plan", "steps": [{"action": "mine", "params": {"block_type": "oak_log"}}]},
         postconditions=["inventory_gte('oak_log', count)"],
-        tags=["mining", "wood", "resources"]
+        tags=["mining", "wood", "resources"],
     )
 
 
@@ -45,11 +44,7 @@ class TestSkill:
     def test_skill_success_rate(self):
         """Success rate calculation is correct"""
         skill = Skill(
-            id="test",
-            name="Test",
-            description="Test skill",
-            success_count=7,
-            fail_count=3
+            id="test", name="Test", description="Test skill", success_count=7, fail_count=3
         )
         assert skill.success_rate == 0.7
 
@@ -324,63 +319,58 @@ class TestCheckPreconditions:
     def test_all_pass_true(self) -> None:
         """All conditions met → True."""
         ctx = {"inventory": {"oak_log": 8}, "food": 10}
-        assert check_preconditions(
-            ["has_oak_log >= 3", "food < 15"], ctx
-        ) is True
+        assert check_preconditions(["has_oak_log >= 3", "food < 15"], ctx) is True
 
     def test_one_fails_false(self) -> None:
         """One condition fails → False (AND semantics)."""
         ctx = {"inventory": {"oak_log": 8}, "food": 10}
-        assert check_preconditions(
-            ["has_oak_log >= 10", "food < 15"], ctx
-        ) is False
+        assert check_preconditions(["has_oak_log >= 10", "food < 15"], ctx) is False
 
     def test_all_fail_false(self) -> None:
         """All conditions fail → False."""
         ctx = {"inventory": {"oak_log": 1}, "food": 18}
-        assert check_preconditions(
-            ["has_oak_log >= 10", "food < 5"], ctx
-        ) is False
+        assert check_preconditions(["has_oak_log >= 10", "food < 5"], ctx) is False
 
     def test_mixed_context_keys(self) -> None:
         """Mixture of has_X and standard keys works."""
         ctx = {"inventory": {"cobblestone": 40, "oak_log": 20}, "is_night": True, "health": 8}
-        assert check_preconditions(
-            ["has_cobblestone >= 32", "has_oak_log >= 16", "is_night", "health > 6"],
-            ctx,
-        ) is True
+        assert (
+            check_preconditions(
+                ["has_cobblestone >= 32", "has_oak_log >= 16", "is_night", "health > 6"],
+                ctx,
+            )
+            is True
+        )
 
     def test_mixed_context_partial_fail(self) -> None:
         """Mixed conditions, one has_X fails."""
         ctx = {"inventory": {"cobblestone": 10}, "health": 8}
-        assert check_preconditions(
-            ["has_cobblestone >= 32", "health > 6"],
-            ctx,
-        ) is False
+        assert (
+            check_preconditions(
+                ["has_cobblestone >= 32", "health > 6"],
+                ctx,
+            )
+            is False
+        )
 
     def test_real_world_build_house_preconditions(self) -> None:
         """build_house preconditions (has_cobblestone >= 32, has_oak_log >= 16)."""
         ctx = {"inventory": {"cobblestone": 40, "oak_log": 20}}
-        assert check_preconditions(
-            ["has_cobblestone >= 32", "has_oak_log >= 16"], ctx
-        ) is True
+        assert check_preconditions(["has_cobblestone >= 32", "has_oak_log >= 16"], ctx) is True
 
     def test_real_world_craft_armor_preconditions(self) -> None:
         """craft_armor preconditions (has_iron_ingot >= 24)."""
         ctx = {"inventory": {"iron_ingot": 30}}
-        assert check_preconditions(
-            ["has_iron_ingot >= 24"], ctx
-        ) is True
+        assert check_preconditions(["has_iron_ingot >= 24"], ctx) is True
 
     def test_real_world_craft_armor_fail(self) -> None:
         """craft_armor fails when iron_ingot < 24."""
         ctx = {"inventory": {"iron_ingot": 20}}
-        assert check_preconditions(
-            ["has_iron_ingot >= 24"], ctx
-        ) is False
+        assert check_preconditions(["has_iron_ingot >= 24"], ctx) is False
 
 
 # ── SQLite Persistence Tests ─────────────────────────────────────────────────
+
 
 class TestSkillLibraryPersistence:
     """Tests for SkillLibraryDB persistence layer."""
@@ -508,4 +498,3 @@ class TestSkillLibraryPersistence:
         loaded = await lib.get_skill("memory_only")
         assert loaded is not None
         # No DB to close
-

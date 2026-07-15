@@ -127,13 +127,17 @@ class TestSimulatedStateCanExecute:
 
     def test_place_with_item_passes(self):
         state = SimulatedState(inventory={"cobblestone": 10})
-        step = SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0})
+        step = SkillStep(
+            name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+        )
         ok, reason = state.can_execute(step)
         assert ok is True
 
     def test_place_without_item_fails(self):
         state = SimulatedState(inventory={})
-        step = SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0})
+        step = SkillStep(
+            name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+        )
         ok, reason = state.can_execute(step)
         assert ok is False
         assert "not in simulated inventory" in reason
@@ -189,7 +193,9 @@ class TestSimulatedStateApplyStep:
 
     def test_place_removes_from_inventory(self):
         state = SimulatedState(inventory={"cobblestone": 9})
-        step = SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0, "count": 1})
+        step = SkillStep(
+            name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0, "count": 1}
+        )
         state.apply_step(step)
         assert state.inventory["cobblestone"] == 8
 
@@ -279,12 +285,16 @@ class TestActionValidation:
 
     def test_known_actions_pass(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
-            SkillStep(name="collect", params={"block_type": "oak_log", "count": 5}),
-            SkillStep(name="mine", params={"block_type": "stone", "count": 3}),
-            SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
+                SkillStep(name="collect", params={"block_type": "oak_log", "count": 5}),
+                SkillStep(name="mine", params={"block_type": "stone", "count": 3}),
+                SkillStep(
+                    name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+                ),
+            ]
+        )
         result = ValidationResult(passed=True)
         validator._check_actions(skill, result)
         assert CHECK_ACTION in result.checks
@@ -292,19 +302,23 @@ class TestActionValidation:
 
     def test_unknown_action_fails(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="fly_to_moon", params={}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="fly_to_moon", params={}),
+            ]
+        )
         result = ValidationResult(passed=True)
         validator._check_actions(skill, result)
         assert any("fly_to_moon" in f for f in result.failures)
 
     def test_mixed_valid_and_invalid(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
-            SkillStep(name="teleport", params={}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
+                SkillStep(name="teleport", params={}),
+            ]
+        )
         result = ValidationResult(passed=True)
         validator._check_actions(skill, result)
         assert any("teleport" in f for f in result.failures)
@@ -320,10 +334,12 @@ class TestSimulation:
 
     def test_simulation_passes_with_valid_steps(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="goto", params={"x": 100, "y": 64, "z": -200}),
-            SkillStep(name="collect", params={"block_type": "oak_log", "count": 5}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="goto", params={"x": 100, "y": 64, "z": -200}),
+                SkillStep(name="collect", params={"block_type": "oak_log", "count": 5}),
+            ]
+        )
         state = SimulatedState()
         result = ValidationResult(passed=True)
         validator._simulate(skill, state, result)
@@ -332,9 +348,11 @@ class TestSimulation:
 
     def test_simulation_fails_on_low_health(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="goto", params={"x": 0, "y": 64, "z": 0}),
+            ]
+        )
         state = SimulatedState(health=1.0)
         result = ValidationResult(passed=True)
         validator._simulate(skill, state, result)
@@ -342,9 +360,13 @@ class TestSimulation:
 
     def test_simulation_fails_on_missing_place_item(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(
+                    name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+                ),
+            ]
+        )
         state = SimulatedState(inventory={})
         result = ValidationResult(passed=True)
         validator._simulate(skill, state, result)
@@ -353,10 +375,12 @@ class TestSimulation:
     def test_simulation_advances_state(self):
         """After collecting, the simulated inventory should reflect the gain."""
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="collect", params={"block_type": "oak_log", "count": 10}),
-            SkillStep(name="craft", params={"recipe": "oak_planks", "count": 4}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="collect", params={"block_type": "oak_log", "count": 10}),
+                SkillStep(name="craft", params={"recipe": "oak_planks", "count": 4}),
+            ]
+        )
         state = SimulatedState(inventory={})
         result = ValidationResult(passed=True)
         validator._simulate(skill, state, result)
@@ -367,10 +391,14 @@ class TestSimulation:
     def test_simulation_stops_on_first_failure(self):
         """Simulation should hard-stop at the first blocking failure."""
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}),
-            SkillStep(name="goto", params={"x": 10, "y": 64, "z": 10}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(
+                    name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+                ),
+                SkillStep(name="goto", params={"x": 10, "y": 64, "z": 10}),
+            ]
+        )
         state = SimulatedState(inventory={})
         result = ValidationResult(passed=True)
         validator._simulate(skill, state, result)
@@ -406,9 +434,11 @@ class TestValidateIntegration:
     def test_action_failure_skips_simulation(self):
         """When action check fails, simulation should be skipped."""
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="fly", params={}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(name="fly", params={}),
+            ]
+        )
         result = validator.validate(skill)
         assert result.passed is False
         assert CHECK_SIMULATION not in result.checks
@@ -416,9 +446,13 @@ class TestValidateIntegration:
     def test_simulation_failure_with_context(self):
         """Simulation uses context to initialise state."""
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(
+                    name="place", params={"block_type": "cobblestone", "x": 0, "y": 63, "z": 0}
+                ),
+            ]
+        )
         context = {"inventory": {"cobblestone": 20}, "health": 20.0, "food": 20}
         result = validator.validate(skill, context=context)
         assert result.passed is True
@@ -426,9 +460,13 @@ class TestValidateIntegration:
 
     def test_simulation_failure_without_enough_items(self):
         validator = SkillValidator()
-        skill = _make_skill(steps=[
-            SkillStep(name="place", params={"block_type": "diamond_block", "x": 0, "y": 63, "z": 0}),
-        ])
+        skill = _make_skill(
+            steps=[
+                SkillStep(
+                    name="place", params={"block_type": "diamond_block", "x": 0, "y": 63, "z": 0}
+                ),
+            ]
+        )
         context = {"inventory": {"cobblestone": 20}}
         result = validator.validate(skill, context=context)
         assert result.passed is False
@@ -451,11 +489,13 @@ class TestValidActions:
 
     def test_contains_step_types(self):
         from animetta.tools.minecraft.skill.validator import VALID_ACTIONS
+
         for step_type in ("goto", "collect", "mine", "place", "craft", "chat", "check", "wait"):
             assert step_type in VALID_ACTIONS
 
     def test_contains_available_tools(self):
         from animetta.tools.minecraft.skill.validator import VALID_ACTIONS
+
         # At minimum, goto, collect, mine, place, attack, chat should be there
         assert "attack" in VALID_ACTIONS
         assert "chat" in VALID_ACTIONS

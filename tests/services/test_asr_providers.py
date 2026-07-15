@@ -36,7 +36,6 @@ sys.modules["zai"] = MagicMock()
 sys.modules["funasr"] = MagicMock()
 
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 
@@ -66,9 +65,7 @@ class TestASRInterface:
     def test_all_providers_inherit_interface(self):
         """Each provider class must be a concrete subclass of ASRInterface."""
         for cls in self.PROVIDER_CLASSES:
-            assert issubclass(cls, ASRInterface), (
-                f"{cls.__name__} does not inherit ASRInterface"
-            )
+            assert issubclass(cls, ASRInterface), f"{cls.__name__} does not inherit ASRInterface"
 
     def test_all_abstract_methods_implemented(self):
         """Each provider must implement every abstract method (not leave it abstract)."""
@@ -496,9 +493,7 @@ class TestASRFactory:
     def test_build_config_funasr(self):
         """_build_config should build a FunASRConfig."""
 
-        config = ASRFactory._build_config(
-            "funasr", {"model": "paraformer-zh", "device": "cpu"}
-        )
+        config = ASRFactory._build_config("funasr", {"model": "paraformer-zh", "device": "cpu"})
         assert isinstance(config, FunASRConfig)
         assert config.model == "paraformer-zh"
 

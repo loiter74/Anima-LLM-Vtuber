@@ -14,9 +14,7 @@ def test_core_service_factories_use_recorder_backed_proxy() -> None:
         LLMFactory.create("mock", observation_recorder=recorder),
         TTSFactory.create("mock", observation_recorder=recorder),
         ASRFactory.create("mock", observation_recorder=recorder),
-        VADFactory.create_from_config(
-            MockVADConfig(), observation_recorder=recorder
-        ),
+        VADFactory.create_from_config(MockVADConfig(), observation_recorder=recorder),
     ]
 
     assert all(isinstance(service, InstrumentedServiceProxy) for service in services)

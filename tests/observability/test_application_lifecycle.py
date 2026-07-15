@@ -29,9 +29,7 @@ def _config(observability: dict | None = None) -> EffectiveConfig:
         return config
     application_payload = config.application.manifest_dict()
     application_payload["observability"] = observability
-    application = type(config.application).model_validate(
-        application_payload
-    )
+    application = type(config.application).model_validate(application_payload)
     return config.model_copy(update={"application": application})
 
 
@@ -78,10 +76,7 @@ def test_server_constructs_one_application_owned_ledger_and_injects_ports(tmp_pa
 
     assert register.call_args.kwargs["observation_recorder"] is server.observation_recorder
     assert register.call_args.kwargs["observation_query"] is server.observation_query
-    assert (
-        register.call_args.kwargs["observation_report_store"]
-        is server.observation_report_store
-    )
+    assert register.call_args.kwargs["observation_report_store"] is server.observation_report_store
 
 
 def test_disabled_mode_installs_explicit_noop_ports() -> None:
@@ -149,12 +144,8 @@ async def test_ledger_starts_before_other_runtime_work_and_closes_after_workers(
     server.session_manager.cleanup_all = AsyncMock(
         side_effect=lambda: order.append("sessions.stop")
     )
-    server.memory_runtime.initialize = AsyncMock(
-        side_effect=lambda: order.append("memory.start")
-    )
-    server.memory_runtime.shutdown = AsyncMock(
-        side_effect=lambda: order.append("memory.stop")
-    )
+    server.memory_runtime.initialize = AsyncMock(side_effect=lambda: order.append("memory.start"))
+    server.memory_runtime.shutdown = AsyncMock(side_effect=lambda: order.append("memory.stop"))
 
     with patch("animetta.orchestration.server.websocket.ServicePool") as pool:
         pool.init = AsyncMock(side_effect=lambda *args, **kwargs: order.append("pool.start"))

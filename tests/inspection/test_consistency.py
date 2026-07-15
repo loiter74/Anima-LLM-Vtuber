@@ -14,9 +14,7 @@ from animetta.observability.domain import ObservationHealth
 
 def _runtime() -> InspectionRuntime:
     query = MagicMock()
-    query.observation_health = AsyncMock(
-        return_value=ObservationHealth(True, True, False)
-    )
+    query.observation_health = AsyncMock(return_value=ObservationHealth(True, True, False))
     query.overview = AsyncMock(return_value={"schema_version": 2})
     query.recent_traces = AsyncMock(return_value=[{"trace_id": "task-1"}])
     memory = MagicMock()

@@ -9,10 +9,7 @@ import scripts.voyager_real_e2e as harness
 
 
 def test_locate_biome_output_yields_fresh_fixture_center() -> None:
-    output = (
-        "The nearest minecraft:forest is at [20352, 100, 20192] "
-        "(400 blocks away)"
-    )
+    output = "The nearest minecraft:forest is at [20352, 100, 20192] (400 blocks away)"
 
     parser = getattr(harness, "parse_locate_coordinates", None)
 
@@ -50,10 +47,7 @@ def test_entity_position_output_yields_surface_height() -> None:
     parser = getattr(harness, "parse_entity_y", None)
 
     assert parser is not None
-    output = (
-        "VoyagerAudit has the following entity data: "
-        "[81664.5d, 111.0d, -41636.25d]"
-    )
+    output = "VoyagerAudit has the following entity data: [81664.5d, 111.0d, -41636.25d]"
     assert parser(output) == 111.0
 
 
@@ -84,8 +78,15 @@ async def test_fixture_positioning_retries_until_natural_ground(monkeypatch) -> 
     await position(20352, 20192, audit, max_attempts=3)
 
     assert len([command for command in commands if command.startswith("spreadplayers")]) == 2
-    assert len([command for command in commands if "if block ~ ~-1 ~ minecraft:grass_block" in command]) == 2
-    assert len([command for command in commands if "data get entity VoyagerAudit Pos" in command]) == 2
+    assert (
+        len(
+            [command for command in commands if "if block ~ ~-1 ~ minecraft:grass_block" in command]
+        )
+        == 2
+    )
+    assert (
+        len([command for command in commands if "data get entity VoyagerAudit Pos" in command]) == 2
+    )
     assert audit[-1]["output"].endswith("[20354.5d, 64.0d, 20194.5d]")
 
 
@@ -117,9 +118,7 @@ def test_real_cobblestone_strategy_prepares_early_survival_weapon() -> None:
 
 async def test_real_cobblestone_strategy_reuses_observed_wooden_tools() -> None:
     generator = harness.StrategyGenerator()
-    observation = SimpleNamespace(
-        inventory={"wooden_pickaxe": 1, "wooden_sword": 1}
-    )
+    observation = SimpleNamespace(inventory={"wooden_pickaxe": 1, "wooden_sword": 1})
     node = SimpleNamespace(id="cobblestone")
 
     code = await generator.generate(node=node, observation=observation)
@@ -196,9 +195,7 @@ async def test_real_pickaxe_strategy_reuses_observed_sticks() -> None:
 
 async def test_real_stone_pickaxe_strategy_replenishes_missing_cobblestone() -> None:
     generator = harness.StrategyGenerator()
-    observation = SimpleNamespace(
-        inventory={"stick": 4, "cobblestone": 1, "wooden_pickaxe": 1}
-    )
+    observation = SimpleNamespace(inventory={"stick": 4, "cobblestone": 1, "wooden_pickaxe": 1})
     node = SimpleNamespace(id="stone_pickaxe")
 
     code = await generator.generate(node=node, observation=observation)
@@ -333,9 +330,7 @@ async def test_real_iron_strategy_reuses_observed_tool_and_support() -> None:
 
 async def test_real_iron_strategy_prepares_stone_sword_for_long_search() -> None:
     generator = harness.StrategyGenerator()
-    observation = SimpleNamespace(
-        inventory={"stone_pickaxe": 1, "cobblestone": 16, "stick": 2}
-    )
+    observation = SimpleNamespace(inventory={"stone_pickaxe": 1, "cobblestone": 16, "stick": 2})
     node = SimpleNamespace(id="iron_ingot")
 
     code = await generator.generate(node=node, observation=observation)
@@ -346,17 +341,12 @@ async def test_real_iron_strategy_prepares_stone_sword_for_long_search() -> None
 
 async def test_real_iron_strategy_closes_receipt_chain_after_timed_out_smelt() -> None:
     generator = harness.StrategyGenerator()
-    observation = SimpleNamespace(
-        inventory={"iron_ingot": 4, "raw_iron": 2, "coal": 3}
-    )
+    observation = SimpleNamespace(inventory={"iron_ingot": 4, "raw_iron": 2, "coal": 3})
     node = SimpleNamespace(id="iron_ingot")
 
     code = await generator.generate(node=node, observation=observation)
 
-    assert code == (
-        "await collect('cobblestone', 1); "
-        "await smelt('raw_iron', 'coal', 1);"
-    )
+    assert code == ("await collect('cobblestone', 1); await smelt('raw_iron', 'coal', 1);")
 
 
 async def test_real_furnace_strategy_collects_only_missing_cobblestone() -> None:

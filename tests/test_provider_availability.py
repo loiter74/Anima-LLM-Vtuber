@@ -120,12 +120,16 @@ def test_tts_strict_mode_preserves_provider_import_error() -> None:
 
     missing = ModuleNotFoundError("missing GLM dependency", name="zhipuai")
 
-    with patch(
-        "animetta.services.tts.factory.import_module",
-        side_effect=missing,
-    ), patch(
-        "animetta.services.tts.factory.ProviderRegistry.create_service",
-    ) as create_service, pytest.raises(ModuleNotFoundError) as exc_info:
+    with (
+        patch(
+            "animetta.services.tts.factory.import_module",
+            side_effect=missing,
+        ),
+        patch(
+            "animetta.services.tts.factory.ProviderRegistry.create_service",
+        ) as create_service,
+        pytest.raises(ModuleNotFoundError) as exc_info,
+    ):
         TTSFactory.create("glm", api_key="test-key", strict=True)
 
     assert exc_info.value is missing
@@ -149,22 +153,27 @@ class TestMockProvidersImportable:
 
     def test_mock_tts_importable(self):
         from animetta.services.tts.mock_tts import MockTTS
+
         assert MockTTS is not None
 
     def test_mock_asr_importable(self):
         from animetta.services.asr.mock_asr import MockASR
+
         assert MockASR is not None
 
     def test_mock_llm_importable(self):
         from animetta.services.llm.mock_llm import MockLLM
+
         assert MockLLM is not None
 
     def test_mock_vad_importable(self):
         from animetta.services.vad.mock_vad import MockVAD
+
         assert MockVAD is not None
 
     def test_edge_tts_importable(self):
         from animetta.services.tts.edge_tts import EdgeTTS
+
         assert EdgeTTS is not None
 
 
@@ -184,18 +193,21 @@ class TestHeavyProviderDegradation:
     def test_tts_init_has_guarded_imports(self):
         """TTS __init__ should not crash even without torch/kokoro."""
         import animetta.services.tts as tts_mod
+
         # These should exist (may be None if deps missing)
         assert hasattr(tts_mod, "Qwen3TTSTTS")
 
     def test_asr_init_has_guarded_imports(self):
         """ASR __init__ should not crash even without faster-whisper/funasr."""
         import animetta.services.asr as asr_mod
+
         assert hasattr(asr_mod, "FasterWhisperASR")
         assert hasattr(asr_mod, "FunASRASR")
 
     def test_vad_init_has_guarded_imports(self):
         """VAD __init__ should not crash even without silero."""
         import animetta.services.vad as vad_mod
+
         assert hasattr(vad_mod, "SileroVAD")
 
 
@@ -246,24 +258,46 @@ class TestConfigRegistry:
 
     def test_all_tts_configs_registered(self):
         from animetta.config.core.registry import ProviderRegistry
+
         registry = ProviderRegistry._configs.get("tts", {})
-        expected = {"mock", "edge", "openai", "kokoro", "qwen3", "chattts", "glm", "gpt_sovits", "vibe_voice"}
-        assert expected.issubset(set(registry.keys())), f"Missing TTS configs: {expected - set(registry.keys())}"
+        expected = {
+            "mock",
+            "edge",
+            "openai",
+            "kokoro",
+            "qwen3",
+            "chattts",
+            "glm",
+            "gpt_sovits",
+            "vibe_voice",
+        }
+        assert expected.issubset(set(registry.keys())), (
+            f"Missing TTS configs: {expected - set(registry.keys())}"
+        )
 
     def test_all_asr_configs_registered(self):
         from animetta.config.core.registry import ProviderRegistry
+
         registry = ProviderRegistry._configs.get("asr", {})
         expected = {"mock"}
-        assert expected.issubset(set(registry.keys())), f"Missing ASR configs: {expected - set(registry.keys())}"
+        assert expected.issubset(set(registry.keys())), (
+            f"Missing ASR configs: {expected - set(registry.keys())}"
+        )
 
     def test_all_llm_configs_registered(self):
         from animetta.config.core.registry import ProviderRegistry
+
         registry = ProviderRegistry._configs.get("llm", {})
         expected = {"mock", "openai", "glm", "deepseek"}
-        assert expected.issubset(set(registry.keys())), f"Missing LLM configs: {expected - set(registry.keys())}"
+        assert expected.issubset(set(registry.keys())), (
+            f"Missing LLM configs: {expected - set(registry.keys())}"
+        )
 
     def test_all_vad_configs_registered(self):
         from animetta.config.core.registry import ProviderRegistry
+
         registry = ProviderRegistry._configs.get("vad", {})
         expected = {"mock", "silero"}
-        assert expected.issubset(set(registry.keys()), ), f"Missing VAD configs: {expected - set(registry.keys())}"
+        assert expected.issubset(
+            set(registry.keys()),
+        ), f"Missing VAD configs: {expected - set(registry.keys())}"

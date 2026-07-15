@@ -177,9 +177,7 @@ class TestCreateInitialState:
 
     def test_override_system_prompt(self):
         """system_prompt can be provided."""
-        state = create_initial_state(
-            session_id="sess_01", system_prompt="Be helpful."
-        )
+        state = create_initial_state(session_id="sess_01", system_prompt="Be helpful.")
         assert state["system_prompt"] == "Be helpful."
 
     def test_metadata_mutable_per_call(self):

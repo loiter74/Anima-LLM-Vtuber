@@ -12,7 +12,9 @@ import pytest
 def mock_bridge():
     """Mock MinecraftBridge for testing"""
     bridge = AsyncMock()
-    bridge.send_command = AsyncMock(return_value={"status": "success", "result": "Moved to (100, 65, 200)"})
+    bridge.send_command = AsyncMock(
+        return_value={"status": "success", "result": "Moved to (100, 65, 200)"}
+    )
     bridge.is_running = True
     return bridge
 
@@ -29,8 +31,8 @@ def mock_status():
             "inventory": {"oak_log": 5, "stone": 10},
             "nearby_entities": {"zombie": 2},
             "time": "day",
-            "weather": "clear"
-        }
+            "weather": "clear",
+        },
     }
 
 

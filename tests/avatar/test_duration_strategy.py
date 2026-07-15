@@ -12,6 +12,7 @@ import pytest
 # Initialization
 # ============================================================
 
+
 class TestDurationBasedStrategyInit:
     """Initialization."""
 
@@ -32,9 +33,7 @@ class TestDurationBasedStrategyInit:
 
     def test_custom_min_max(self):
         """Custom min/max duration should be honored."""
-        strategy = DurationBasedStrategy(
-            min_emotion_duration=1.0, max_emotion_duration=3.0
-        )
+        strategy = DurationBasedStrategy(min_emotion_duration=1.0, max_emotion_duration=3.0)
         assert strategy._min_emotion_duration == 1.0
         assert strategy._max_emotion_duration == 3.0
 
@@ -48,15 +47,14 @@ class TestDurationBasedStrategyInit:
 # Weight-based allocation
 # ============================================================
 
+
 class TestDurationBasedStrategyWeights:
     """Emotion-weight based time allocation."""
 
     def test_sad_gets_longer_than_happy(self):
         """Sad (weight 1.5) should get more time than happy (weight 1.0)."""
         strategy = DurationBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "sad"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "sad"], "text", audio_duration=10.0)
         assert len(segments) == 2
         # sad has higher weight, so should get more time
         assert segments[1].duration > segments[0].duration
@@ -78,17 +76,13 @@ class TestDurationBasedStrategyWeights:
     def test_thinking_longer_than_neutral(self):
         """Thinking (weight 1.3) should get more time than neutral (weight 1.0)."""
         strategy = DurationBasedStrategy()
-        segments = strategy.calculate(
-            ["neutral", "thinking"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["neutral", "thinking"], "text", audio_duration=10.0)
         assert segments[1].duration > segments[0].duration
 
     def test_unknown_emotion_default_weight(self):
         """Unknown emotion should use default weight of 1.0."""
         strategy = DurationBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "unknown_emotion"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "unknown_emotion"], "text", audio_duration=10.0)
         assert len(segments) == 2
         # Both weight 1.0, so equal time
         assert abs(segments[0].duration - segments[1].duration) < 0.1
@@ -97,24 +91,21 @@ class TestDurationBasedStrategyWeights:
         """Same emotions with same weight should get equal time.
         Disable smoothing to prevent merge."""
         strategy = DurationBasedStrategy(enable_smoothing=False)
-        segments = strategy.calculate(
-            ["happy", "happy"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "happy"], "text", audio_duration=10.0)
         assert len(segments) == 2
         assert abs(segments[0].duration - segments[1].duration) < 0.1
 
     def test_last_emotion_extends_to_end(self):
         """Last emotion should always extend to audio_duration end."""
         strategy = DurationBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "sad"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "sad"], "text", audio_duration=10.0)
         assert segments[-1].end_time == 10.0
 
 
 # ============================================================
 # No emotions
 # ============================================================
+
 
 class TestDurationBasedStrategyNoEmotions:
     """Behavior when no emotions provided."""
@@ -139,6 +130,7 @@ class TestDurationBasedStrategyNoEmotions:
 # Min/max duration constraints
 # ============================================================
 
+
 class TestDurationBasedStrategyConstraints:
     """Min/max duration constraints."""
 
@@ -147,8 +139,7 @@ class TestDurationBasedStrategyConstraints:
         strategy = DurationBasedStrategy(min_emotion_duration=2.0)
         # Many emotions with short total duration — each should be at least 2.0
         segments = strategy.calculate(
-            ["happy", "sad", "angry", "surprised"],
-            "text", audio_duration=4.0
+            ["happy", "sad", "angry", "surprised"], "text", audio_duration=4.0
         )
         for seg in segments:
             assert seg.duration >= 2.0 - 0.01
@@ -157,18 +148,19 @@ class TestDurationBasedStrategyConstraints:
         """Non-last segments should respect max_emotion_duration.
         Last segment always extends to audio_duration end."""
         strategy = DurationBasedStrategy(max_emotion_duration=1.0)
-        segments = strategy.calculate(
-            ["happy", "sad", "neutral"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "sad", "neutral"], "text", audio_duration=10.0)
         # The first two segments should be clamped to max_emotion_duration
         for i, seg in enumerate(segments):
             if i < len(segments) - 1:
-                assert seg.duration <= 1.0 + 0.01, f"Segment {i} ({seg.emotion}) duration {seg.duration} > max"
+                assert seg.duration <= 1.0 + 0.01, (
+                    f"Segment {i} ({seg.emotion}) duration {seg.duration} > max"
+                )
 
 
 # ============================================================
 # Weight management
 # ============================================================
+
 
 class TestDurationBasedStrategyWeightManagement:
     """set_duration_weight and get_duration_weight."""
@@ -202,6 +194,7 @@ class TestDurationBasedStrategyWeightManagement:
 # Segment info
 # ============================================================
 
+
 class TestDurationBasedStrategySegmentInfo:
     """get_segment_info()."""
 
@@ -226,6 +219,7 @@ class TestDurationBasedStrategySegmentInfo:
 # ============================================================
 # Properties
 # ============================================================
+
 
 class TestDurationBasedStrategyProperties:
     """Properties."""

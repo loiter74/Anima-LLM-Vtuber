@@ -57,7 +57,10 @@ def test_section_warnings_collected():
     """Warnings inside section metadata are included."""
     sections = [
         PromptSection(
-            "mem", SectionRole.MEMORY, 200, "context",
+            "mem",
+            SectionRole.MEMORY,
+            200,
+            "context",
             metadata={"warnings": ["recall partial"]},
         ),
     ]

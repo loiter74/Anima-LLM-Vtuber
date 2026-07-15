@@ -27,8 +27,10 @@ class TestAudioProcessorInterfaceABC:
         class Incomplete(AudioProcessorInterface):
             async def process_end(self) -> None:
                 pass
+
             def reset(self) -> None:
                 pass
+
             def is_speaking(self) -> bool:
                 return False
 
@@ -41,8 +43,10 @@ class TestAudioProcessorInterfaceABC:
         class Incomplete(AudioProcessorInterface):
             async def process_chunk(self, audio_data) -> None:
                 pass
+
             def reset(self) -> None:
                 pass
+
             def is_speaking(self) -> bool:
                 return False
 
@@ -55,8 +59,10 @@ class TestAudioProcessorInterfaceABC:
         class Incomplete(AudioProcessorInterface):
             async def process_chunk(self, audio_data) -> None:
                 pass
+
             async def process_end(self) -> None:
                 pass
+
             def is_speaking(self) -> bool:
                 return False
 
@@ -69,8 +75,10 @@ class TestAudioProcessorInterfaceABC:
         class Incomplete(AudioProcessorInterface):
             async def process_chunk(self, audio_data) -> None:
                 pass
+
             async def process_end(self) -> None:
                 pass
+
             def reset(self) -> None:
                 pass
 
@@ -176,10 +184,10 @@ class TestVADAudioProcessorCompliance:
 
     def test_vad_audio_processor_implements_all_methods(self):
         """VADAudioProcessor has all 4 required abstract methods."""
-        assert hasattr(VADAudioProcessor, 'process_chunk')
-        assert hasattr(VADAudioProcessor, 'process_end')
-        assert hasattr(VADAudioProcessor, 'reset')
-        assert hasattr(VADAudioProcessor, 'is_speaking')
+        assert hasattr(VADAudioProcessor, "process_chunk")
+        assert hasattr(VADAudioProcessor, "process_end")
+        assert hasattr(VADAudioProcessor, "reset")
+        assert hasattr(VADAudioProcessor, "is_speaking")
 
     def test_vad_audio_processor_instantiates(self):
         """VADAudioProcessor can be instantiated (with VAD mock)."""

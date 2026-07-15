@@ -35,8 +35,16 @@ def test_known_heartbeat_event() -> None:
 
 def test_known_event_types_cover_protocol() -> None:
     """Verify KNOWN_EVENT_TYPES includes all protocol-level events."""
-    for expected in ["login", "spawn", "heartbeat", "disconnect", "initial_loadout",
-                     "viewer_joined", "viewer_left", "client_viewer_status"]:
+    for expected in [
+        "login",
+        "spawn",
+        "heartbeat",
+        "disconnect",
+        "initial_loadout",
+        "viewer_joined",
+        "viewer_left",
+        "client_viewer_status",
+    ]:
         assert expected in KNOWN_EVENT_TYPES, f"Missing known event type: {expected}"
 
 
@@ -60,7 +68,9 @@ def test_unknown_event_does_not_raise() -> None:
 
 
 def test_parse_event_from_response_line_success() -> None:
-    line = json.dumps({"id": None, "status": "event", "result": {"type": "login", "username": "Bot"}})
+    line = json.dumps(
+        {"id": None, "status": "event", "result": {"type": "login", "username": "Bot"}}
+    )
     event = parse_event_from_response_line(line)
     assert event is not None
     assert event.type == "login"

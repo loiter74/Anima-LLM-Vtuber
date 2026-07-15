@@ -57,12 +57,8 @@ async def test_prometheus_mirror_counts_each_committed_record_once() -> None:
     registry = CollectorRegistry()
     mirror = PrometheusMirror(registry=registry)
     started = _trace_started()
-    workflow = _operation(
-        "workflow-1", layer=ObservationLayer.WORKFLOW, name="llm_node"
-    )
-    finished = OperationFinished(
-        "workflow-1", OperationStatus.SUCCESS, finished_at=12.5
-    )
+    workflow = _operation("workflow-1", layer=ObservationLayer.WORKFLOW, name="llm_node")
+    finished = OperationFinished("workflow-1", OperationStatus.SUCCESS, finished_at=12.5)
 
     for record in (started, started, workflow, workflow, finished, finished):
         await mirror.publish(record)
@@ -71,14 +67,9 @@ async def test_prometheus_mirror_counts_each_committed_record_once() -> None:
     await mirror.publish(trace_finished)
 
     metrics = generate_latest(registry).decode()
-    assert 'anima_active_sessions 0.0' in metrics
-    assert (
-        'anima_trace_outcomes_total{outcome="degraded"} 1.0' in metrics
-    )
-    assert (
-        'anima_node_duration_seconds_count{node_name="llm_node",status="success"} 1.0'
-        in metrics
-    )
+    assert "anima_active_sessions 0.0" in metrics
+    assert 'anima_trace_outcomes_total{outcome="degraded"} 1.0' in metrics
+    assert 'anima_node_duration_seconds_count{node_name="llm_node",status="success"} 1.0' in metrics
 
 
 async def test_prometheus_mirror_records_service_and_rag_durations() -> None:
@@ -134,9 +125,7 @@ async def test_prometheus_mirror_bounds_dynamic_label_cardinality() -> None:
                 model=f"model-{index}",
             )
         )
-        await mirror.publish(
-            OperationFinished(operation_id, OperationStatus.SUCCESS, 12.0 + index)
-        )
+        await mirror.publish(OperationFinished(operation_id, OperationStatus.SUCCESS, 12.0 + index))
 
     # Four dynamic service dimensions, each capped independently at two values.
     assert mirror.dynamic_label_cardinality <= 8
@@ -151,9 +140,7 @@ async def test_prometheus_mirror_exposes_all_typed_outcomes(
     mirror = PrometheusMirror(registry=registry)
     started = _trace_started(trace_id=f"task-{outcome.value}")
     await mirror.publish(started)
-    await mirror.publish(
-        TraceFinished(started.trace_id, outcome, finished_at=11.0)
-    )
+    await mirror.publish(TraceFinished(started.trace_id, outcome, finished_at=11.0))
     assert (
         f'anima_trace_outcomes_total{{outcome="{outcome.value}"}} 1.0'
         in generate_latest(registry).decode()
@@ -190,9 +177,7 @@ async def test_mirror_failure_degrades_health_without_blocking_or_recursing(
         async def health(self) -> ObservationHealth:
             return ObservationHealth(enabled=True, ready=True, degraded=False)
 
-    ledger = SQLiteObservationLedger(
-        tmp_path / "observations.db", mirrors=(FailingMirror(),)
-    )
+    ledger = SQLiteObservationLedger(tmp_path / "observations.db", mirrors=(FailingMirror(),))
     await ledger.start()
     await asyncio.wait_for(ledger.start_trace(_trace_started()), timeout=0.5)
     await asyncio.sleep(0)

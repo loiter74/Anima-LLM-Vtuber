@@ -11,6 +11,7 @@ from animetta.tools.minecraft.skill.predefined import get_predefined_skills
 
 # ── Fixtures ──
 
+
 def _all_skills() -> list[Skill]:
     return get_predefined_skills()
 

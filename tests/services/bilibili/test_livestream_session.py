@@ -379,6 +379,7 @@ def test_danmaku_service_gateway_adapts_existing_service_callbacks() -> None:
         sessdata="cookie",
         service_factory=FakeService,
     )
+
     def message_callback(_message) -> None:
         return None
 

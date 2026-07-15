@@ -25,7 +25,9 @@ class FakeTransport:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         self.commands.append((action, params, timeout))
         return self.responses.get(action, {"status": "success", "result": f"fake_{action}"})
 
@@ -180,7 +182,9 @@ async def test_client_execute_action_returns_typed_receipt(client, fake_transpor
     assert timeout == 30.0
 
 
-async def test_client_eval_skill_cancel_and_health_are_runtime_operations(client, fake_transport) -> None:
+async def test_client_eval_skill_cancel_and_health_are_runtime_operations(
+    client, fake_transport
+) -> None:
     fake_transport.responses["eval_skill"] = {
         "status": "success",
         "result": {

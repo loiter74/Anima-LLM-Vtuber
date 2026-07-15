@@ -21,7 +21,6 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
 
-
 # ═══════════════════════════════════════════════════════════════
 # Sample YAML data for tests
 # ═══════════════════════════════════════════════════════════════
@@ -90,6 +89,7 @@ _PARSED_PERSONA_DATA = {
 # Test PersonalityTraits
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestPersonalityTraitsDefaults:
     """Tests for PersonalityTraits default values"""
 
@@ -120,6 +120,7 @@ class TestPersonalityTraitsDefaults:
 # Test BehaviorRules
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestBehaviorRulesDefaults:
     """Tests for BehaviorRules default values"""
 
@@ -147,6 +148,7 @@ class TestBehaviorRulesDefaults:
 # ═══════════════════════════════════════════════════════════════
 # Test PersonaConfig defaults
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestPersonaConfigDefaults:
     """Tests for PersonaConfig default values"""
@@ -207,6 +209,7 @@ class TestPersonaConfigDefaults:
 # ═══════════════════════════════════════════════════════════════
 # Test build_system_prompt
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestBuildSystemPrompt:
     """Tests for PersonaConfig.build_system_prompt"""
@@ -284,7 +287,9 @@ class TestBuildSystemPrompt:
 
     def test_skips_behavior_when_empty(self):
         """build_system_prompt skips behavior section when no rules set"""
-        config = PersonaConfig(behavior=BehaviorRules(forbidden_phrases=[], response_to_praise=None))
+        config = PersonaConfig(
+            behavior=BehaviorRules(forbidden_phrases=[], response_to_praise=None)
+        )
         prompt = config.build_system_prompt()
         # The keyword "行为准则" appears in mandatory instructions; check section header instead
         assert "## 行为准则 (Behavior Rules)" not in prompt
@@ -367,6 +372,7 @@ class TestBuildSystemPrompt:
 # Test from_yaml
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestFromYaml:
     """Tests for PersonaConfig.from_yaml"""
 
@@ -426,6 +432,7 @@ class TestFromYaml:
 # ═══════════════════════════════════════════════════════════════
 # Test load classmethod
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestLoad:
     """Tests for PersonaConfig.load"""

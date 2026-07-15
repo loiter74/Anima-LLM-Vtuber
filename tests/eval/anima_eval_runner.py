@@ -64,6 +64,7 @@ async def run_live_eval(
 
     # Build system prompt from the persona under evaluation.
     from animetta.config.persona.base import PersonaConfig
+
     persona = PersonaConfig.load("anima.v0.1")
     llm.set_system_prompt(persona.build_system_prompt())
 
@@ -88,7 +89,7 @@ def format_report(results: list[EvalResult], title: str = "Anima v0.1 Eval") -> 
     lines = [f"# {title}", ""]
     passed = sum(1 for r in results if r.passed)
     total = len(results)
-    lines.append(f"**Pass rate:** {passed}/{total} ({100*passed/total:.0f}%)")
+    lines.append(f"**Pass rate:** {passed}/{total} ({100 * passed / total:.0f}%)")
     lines.append("")
 
     for r in results:

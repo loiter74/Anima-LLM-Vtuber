@@ -18,7 +18,6 @@ async def test_session_persists_with_redis():
     """Session state survives checkpointer re-creation (simulating restart)."""
     pytest.importorskip("redis", reason="redis-py not installed")
 
-
     redis_url = "redis://localhost:6379/15"
 
     # Try to connect — skip if Redis is not running
@@ -62,7 +61,6 @@ async def test_session_persists_with_redis():
 async def test_redis_saver_handles_missing_key():
     """aget_tuple returns None for a thread_id with no stored checkpoint."""
     pytest.importorskip("redis", reason="redis-py not installed")
-
 
     redis_url = "redis://localhost:6379/15"
 
@@ -128,7 +126,6 @@ async def test_redis_fallback_on_invalid_url():
     This test verifies the exception is raised so the fallback can trigger.
     """
     pytest.importorskip("redis", reason="redis-py not installed")
-
 
     try:
         AsyncRedisSaver("redis://nonexistent-host:9999/0")

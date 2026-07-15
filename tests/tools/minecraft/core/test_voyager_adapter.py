@@ -119,9 +119,7 @@ async def test_fallback_factory_uses_deterministic_survival_runner(monkeypatch) 
         def __init__(self, bridge, *, skill_library):
             self.run = runner
 
-    survival_runner = importlib.import_module(
-        "animetta.tools.minecraft.survival.runner"
-    )
+    survival_runner = importlib.import_module("animetta.tools.minecraft.survival.runner")
     monkeypatch.setattr(survival_runner, "SurvivalIronRunner", FakeRunner)
     bridge = AsyncMock()
     bridge.is_running = True

@@ -247,10 +247,7 @@ class TestParsingAndFilters:
         metadata = record_humor_validation({}, result)
 
         assert metadata[HUMOR_VALIDATION_KEY]["accepted"] is False
-        assert (
-            metadata[HUMOR_VALIDATION_KEY]["fallback_reason"]
-            == "customer_service_phrase"
-        )
+        assert metadata[HUMOR_VALIDATION_KEY]["fallback_reason"] == "customer_service_phrase"
 
 
 class TestHumorAgent:

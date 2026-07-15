@@ -21,6 +21,7 @@ def live2d_manager():
 @pytest.fixture
 def mock_action_message():
     """Factory for creating mock ActionMessage data."""
+
     def _make(action_data=None, action_id="test_action", queue_policy="append", duration=0.5):
         return {
             "action_data": action_data or {"expression": "smile", "intensity": 0.8},
@@ -28,6 +29,7 @@ def mock_action_message():
             "queue_policy": queue_policy,
             "duration": duration,
         }
+
     return _make
 
 
@@ -93,8 +95,10 @@ class TestLazyInit:
 
     def test_lazy_init_logs_message(self, live2d_manager):
         """Lazy init logs an info message."""
-        with patch("animetta.orchestration.server.live2d.logger") as mock_logger, \
-             patch("animetta.services.live2d.Live2DActionQueue") as mock_q:
+        with (
+            patch("animetta.orchestration.server.live2d.logger") as mock_logger,
+            patch("animetta.services.live2d.Live2DActionQueue") as mock_q,
+        ):
             mock_q.return_value = MagicMock()
             _ = live2d_manager.action_queue
             mock_logger.info.assert_called_once_with("[Live2D] Action queue initialized")
@@ -108,6 +112,7 @@ class TestSetExecuteCallback:
 
     def test_set_execute_callback_stores_callback(self, live2d_manager):
         """set_execute_callback stores the callback."""
+
         async def mock_cb(action):
             pass
 
@@ -127,6 +132,7 @@ class TestSetExecuteCallback:
 
     def test_set_execute_callback_skips_queue_when_not_initialized(self, live2d_manager):
         """When queue is not initialized, callback is stored but not propagated."""
+
         async def mock_cb(action):
             pass
 

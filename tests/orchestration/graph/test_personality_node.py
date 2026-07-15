@@ -73,9 +73,7 @@ class TestPersonalityNode:
             llm_engine=SimpleNamespace(system_prompt="你是 Anima，酒馆的魔女。")
         )
 
-        result = await personality_node(
-            state, {"configurable": {"service_context": context}}
-        )
+        result = await personality_node(state, {"configurable": {"service_context": context}})
 
         assert result["system_prompt"].startswith("你是 Anima，酒馆的魔女。")
         assert "直播模式" in result["system_prompt"]

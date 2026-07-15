@@ -12,6 +12,7 @@ import pytest
 
 # ── Fixtures ──
 
+
 @pytest.fixture
 def mock_config():
     """Create a mock MinecraftConfig."""
@@ -57,6 +58,7 @@ async def _timeout_ready_wait(awaitable, timeout):  # noqa: ARG001
 
 # ── Test Classes ──
 
+
 class TestMinecraftBridgeInit:
     """Bridge construction and initial state tests."""
 
@@ -73,10 +75,14 @@ class TestMinecraftBridgeInit:
         bridge_module._bridge = None
 
         try:
-            with patch("animetta.tools.minecraft.core.config.MinecraftConfig", return_value=mock_config), \
-                 patch("animetta.tools.minecraft.core.bridge.MinecraftBridge") as bridge_cls, \
-                 patch("animetta.tools.minecraft.core.tools.asyncio.get_running_loop") as get_loop, \
-                 patch("animetta.tools.minecraft.core.tools.asyncio.ensure_future"):
+            with (
+                patch(
+                    "animetta.tools.minecraft.core.config.MinecraftConfig", return_value=mock_config
+                ),
+                patch("animetta.tools.minecraft.core.bridge.MinecraftBridge") as bridge_cls,
+                patch("animetta.tools.minecraft.core.tools.asyncio.get_running_loop") as get_loop,
+                patch("animetta.tools.minecraft.core.tools.asyncio.ensure_future"),
+            ):
                 mock_loop = MagicMock()
                 mock_loop.is_running.return_value = True
                 get_loop.return_value = mock_loop
@@ -112,7 +118,10 @@ class TestMinecraftBridgeInit:
         with patch("os.path.isdir", return_value=False):
             resolved = bridge._resolve_bot_dir()
 
-        assert resolved.endswith("C:\\missing\\voyager-mc-bot") or resolved == "C:/missing/voyager-mc-bot"
+        assert (
+            resolved.endswith("C:\\missing\\voyager-mc-bot")
+            or resolved == "C:/missing/voyager-mc-bot"
+        )
 
     def test_resolve_bot_dir_uses_embedded_path_only_when_enabled(self, mock_config):
         mock_config.runtime.runtime_path = ""
@@ -164,9 +173,11 @@ class TestMinecraftBridgeStart:
     async def test_start_successful(self, mock_is_available, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             result = await bridge.start()
 
         assert result is True
@@ -174,14 +185,18 @@ class TestMinecraftBridgeStart:
         assert bridge._process is mock_process
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_start_passes_configured_minecraft_version(self, mock_is_available, mock_config, mock_process):
+    async def test_start_passes_configured_minecraft_version(
+        self, mock_is_available, mock_config, mock_process
+    ):
         mock_config.bot.version = "1.21"
         create_proc = AsyncMock(return_value=mock_process)
         bridge = MinecraftBridge(mock_config)
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", new=create_proc), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", new=create_proc),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             result = await bridge.start()
 
         assert result is True
@@ -196,12 +211,16 @@ class TestMinecraftBridgeStart:
         )
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_start_login_timeout_stops_unready_runtime(self, mock_is_available, mock_config, mock_process):
+    async def test_start_login_timeout_stops_unready_runtime(
+        self, mock_is_available, mock_config, mock_process
+    ):
         bridge = MinecraftBridge(mock_config)
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", side_effect=_timeout_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)),
+            patch("asyncio.wait_for", side_effect=_timeout_ready_wait),
+        ):
             result = await bridge.start()
 
         assert result is False
@@ -210,20 +229,26 @@ class TestMinecraftBridgeStart:
     async def test_start_exception_returns_false(self, mock_config):
         bridge = MinecraftBridge(mock_config)
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", side_effect=RuntimeError("spawn failed")):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=RuntimeError("spawn failed")),
+        ):
             result = await bridge.start()
 
         assert result is False
         assert bridge.is_running is False
 
-    async def test_legacy_autonomous_flag_does_not_start_competing_loop(self, mock_config, mock_process):
+    async def test_legacy_autonomous_flag_does_not_start_competing_loop(
+        self, mock_config, mock_process
+    ):
         bridge = MinecraftBridge(mock_config, autonomous=True)
 
-        with patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True), \
-             patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True),
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             result = await bridge.start()
 
         assert result is True
@@ -373,10 +398,12 @@ class TestMinecraftBridgeReadStdout:
         bridge._pending[1] = future
 
         line = json.dumps({"id": 1, "status": "success", "result": "done"}).encode("utf-8") + b"\n"
-        mock_process.stdout.readline = AsyncMock(side_effect=[
-            line,
-            b"",  # EOF → stops loop
-        ])
+        mock_process.stdout.readline = AsyncMock(
+            side_effect=[
+                line,
+                b"",  # EOF → stops loop
+            ]
+        )
 
         await bridge._read_stdout()
         assert future.done()
@@ -387,10 +414,12 @@ class TestMinecraftBridgeReadStdout:
         bridge._running = True
         bridge._process = mock_process
 
-        mock_process.stdout.readline = AsyncMock(side_effect=[
-            b"not json\n",
-            b"",  # EOF
-        ])
+        mock_process.stdout.readline = AsyncMock(
+            side_effect=[
+                b"not json\n",
+                b"",  # EOF
+            ]
+        )
 
         # Should not crash on invalid JSON
         await bridge._read_stdout()
@@ -400,10 +429,12 @@ class TestMinecraftBridgeReadStdout:
         bridge._running = True
         bridge._process = mock_process
 
-        line = json.dumps({
-            "id": None, "status": "event",
-            "result": {"type": "login", "username": "AnimaBot"}
-        }).encode("utf-8") + b"\n"
+        line = (
+            json.dumps(
+                {"id": None, "status": "event", "result": {"type": "login", "username": "AnimaBot"}}
+            ).encode("utf-8")
+            + b"\n"
+        )
 
         mock_process.stdout.readline = AsyncMock(side_effect=[line, b""])
 
@@ -424,11 +455,16 @@ class TestMinecraftBridgeReadStdout:
             "mode": "spectator",
             "reason": "poll_detected",
         }
-        line = json.dumps({
-            "id": None,
-            "status": "event",
-            "result": payload,
-        }).encode("utf-8") + b"\n"
+        line = (
+            json.dumps(
+                {
+                    "id": None,
+                    "status": "event",
+                    "result": payload,
+                }
+            ).encode("utf-8")
+            + b"\n"
+        )
         mock_process.stdout.readline = AsyncMock(side_effect=[line, b""])
 
         await bridge._read_stdout()
@@ -450,7 +486,9 @@ class TestMinecraftBridgeReadStdout:
         bridge._running = True
         bridge._process = mock_process
 
-        line = json.dumps({"id": 999, "status": "success", "result": "orphan"}).encode("utf-8") + b"\n"
+        line = (
+            json.dumps({"id": 999, "status": "success", "result": "orphan"}).encode("utf-8") + b"\n"
+        )
         mock_process.stdout.readline = AsyncMock(side_effect=[line, b""])
 
         await bridge._read_stdout()
@@ -524,7 +562,9 @@ class TestMinecraftBridgeModeCommands:
             return await future
 
         with patch("asyncio.wait_for", side_effect=resolve_future):
-            result = await bridge.set_planner_mode([{"action": "goto", "params": {"x": 0, "y": 64, "z": 0}}])
+            result = await bridge.set_planner_mode(
+                [{"action": "goto", "params": {"x": 0, "y": 64, "z": 0}}]
+            )
 
         assert result["status"] == "success"
 

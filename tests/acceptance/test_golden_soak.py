@@ -17,17 +17,16 @@ from scripts.soak_golden_path import _is_connection_bootstrap
 
 def identity() -> dict[str, str]:
     return {
-        "message_id": "m", "conversation_id": "c", "task_id": "t", "turn_id": "t",
+        "message_id": "m",
+        "conversation_id": "c",
+        "task_id": "t",
+        "turn_id": "t",
     }
 
 
 def test_only_legacy_start_mic_control_is_connection_bootstrap() -> None:
-    assert _is_connection_bootstrap(
-        "chat:control", {"type": "control", "text": "start-mic"}
-    )
-    assert not _is_connection_bootstrap(
-        "chat:control", {"signal": "conversation-end"}
-    )
+    assert _is_connection_bootstrap("chat:control", {"type": "control", "text": "start-mic"})
+    assert not _is_connection_bootstrap("chat:control", {"signal": "conversation-end"})
     assert not _is_connection_bootstrap("chat:sentence", {"text": "orphan"})
 
 
@@ -38,14 +37,28 @@ def complete_turn(*, degraded: bool = False) -> TurnTracker:
     tracker.accept("chat:expression", {**identity(), "emotion": "happy"}, 1.2)
     tracker.accept("chat:live2d_action", {**identity(), "type": "motion"}, 1.3)
     if degraded:
-        tracker.accept("chat:control", {
-            **identity(), "type": "media-degraded", "status": "degraded",
-            "component": "tts", "reason": "timeout",
-        }, 1.4)
+        tracker.accept(
+            "chat:control",
+            {
+                **identity(),
+                "type": "media-degraded",
+                "status": "degraded",
+                "component": "tts",
+                "reason": "timeout",
+            },
+            1.4,
+        )
     else:
-        tracker.accept("chat:audio_with_expression", {
-            **identity(), "audio_data": "UklGRg==", "format": "wav", "volumes": [0.2],
-        }, 1.4)
+        tracker.accept(
+            "chat:audio_with_expression",
+            {
+                **identity(),
+                "audio_data": "UklGRg==",
+                "format": "wav",
+                "volumes": [0.2],
+            },
+            1.4,
+        )
     tracker.accept("chat:control", {**identity(), "signal": "conversation-end"}, 1.5)
     return tracker
 
@@ -66,10 +79,13 @@ def test_identity_mismatch_and_duplicate_text_fail() -> None:
         tracker.accept("chat:sentence", {**identity(), "text": "two"}, 2)
 
 
-@pytest.mark.parametrize("text,reason", [
-    ("作为 AI，我建议你休息。", "roleplay_drift"),
-    ("[affinity:2] 你好", "runtime_marker_leak"),
-])
+@pytest.mark.parametrize(
+    "text,reason",
+    [
+        ("作为 AI，我建议你休息。", "roleplay_drift"),
+        ("[affinity:2] 你好", "runtime_marker_leak"),
+    ],
+)
 def test_drift_and_marker_checks(text: str, reason: str) -> None:
     tracker = complete_turn()
     tracker.final_text = text
@@ -82,13 +98,20 @@ def test_percentile_uses_nearest_rank() -> None:
 
 
 def test_degradation_budget_requires_recovery_and_rejects_repeat() -> None:
-    assert evaluate_degradation_budget([
-        {"degraded": True}, {"degraded": False},
-    ])[0]
+    assert evaluate_degradation_budget(
+        [
+            {"degraded": True},
+            {"degraded": False},
+        ]
+    )[0]
     assert not evaluate_degradation_budget([{"degraded": True}])[0]
-    assert not evaluate_degradation_budget([
-        {"degraded": True}, {"degraded": True}, {"degraded": False},
-    ])[0]
+    assert not evaluate_degradation_budget(
+        [
+            {"degraded": True},
+            {"degraded": True},
+            {"degraded": False},
+        ]
+    )[0]
 
 
 def test_log_scan_allows_typed_warning_but_rejects_fatal_patterns() -> None:

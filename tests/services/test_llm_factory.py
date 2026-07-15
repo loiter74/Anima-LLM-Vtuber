@@ -57,12 +57,15 @@ class TestCreateFromConfig:
 
         mock_svc = _mock_service()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ) as mock_create, patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda x, *args, **kw: x,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ) as mock_create,
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda x, *args, **kw: x,
+            ),
         ):
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config, system_prompt="Hello")
@@ -76,12 +79,15 @@ class TestCreateFromConfig:
 
         mock_svc = _mock_service()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ) as mock_create, patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda x, *args, **kw: x,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ) as mock_create,
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda x, *args, **kw: x,
+            ),
         ):
             config = OpenAILLMConfig(api_key="sk-test", model="gpt-4")
             result = LLMFactory.create_from_config(config)
@@ -94,12 +100,15 @@ class TestCreateFromConfig:
         service = object.__new__(OpenAILLM)
         service._provider_identity = None
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=service,
-        ), patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda target, *args, **_: target,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=service,
+            ),
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda target, *args, **_: target,
+            ),
         ):
             result = LLMFactory.create_from_config(
                 DeepSeekLLMConfig(api_key="test"),
@@ -113,12 +122,15 @@ class TestCreateFromConfig:
 
         mock_svc = _mock_service()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ) as mock_create, patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda x, *args, **kw: x,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ) as mock_create,
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda x, *args, **kw: x,
+            ),
         ):
             config = GLMLLMConfig(api_key="glm-key", model="glm-4")
             result = LLMFactory.create_from_config(config, system_prompt="Be helpful")
@@ -131,12 +143,15 @@ class TestCreateFromConfig:
 
         mock_svc = _mock_service()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ) as mock_create, patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda x, *args, **kw: x,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ) as mock_create,
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda x, *args, **kw: x,
+            ),
         ):
             config = OllamaLLMConfig(model="llama3.2")
             result = LLMFactory.create_from_config(config)
@@ -151,13 +166,16 @@ class TestCreateFromConfig:
 
         mock_svc = _mock_service()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ), patch(
-            "animetta.services.llm.factory.instrument_service",
-            return_value="proxy-wrapped",
-        ) as mock_proxy:
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ),
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                return_value="proxy-wrapped",
+            ) as mock_proxy,
+        ):
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config)
 
@@ -169,12 +187,15 @@ class TestCreateFromConfig:
     def test_fallback_to_mock_on_error(self):
         """When ProviderRegistry raises, factory falls back to MockLLM."""
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            side_effect=ValueError("unknown provider"),
-        ), patch(
-            "animetta.services.llm.mock_llm.MockLLM",
-        ) as MockMockLLM:
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                side_effect=ValueError("unknown provider"),
+            ),
+            patch(
+                "animetta.services.llm.mock_llm.MockLLM",
+            ) as MockMockLLM,
+        ):
             mock_instance = _mock_service()
             MockMockLLM.return_value = mock_instance
 
@@ -188,12 +209,15 @@ class TestCreateFromConfig:
     def test_fallback_to_mock_on_import_error(self):
         """ImportError during service creation also triggers fallback."""
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            side_effect=ImportError("missing dependency"),
-        ), patch(
-            "animetta.services.llm.mock_llm.MockLLM",
-        ) as MockMockLLM:
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                side_effect=ImportError("missing dependency"),
+            ),
+            patch(
+                "animetta.services.llm.mock_llm.MockLLM",
+            ) as MockMockLLM,
+        ):
             mock_instance = _mock_service()
             MockMockLLM.return_value = mock_instance
 
@@ -207,12 +231,15 @@ class TestCreateFromConfig:
     def test_fallback_uses_original_system_prompt(self):
         """Fallback MockLLM receives the same system_prompt."""
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            side_effect=Exception("fail"),
-        ), patch(
-            "animetta.services.llm.mock_llm.MockLLM",
-        ) as MockMockLLM:
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                side_effect=Exception("fail"),
+            ),
+            patch(
+                "animetta.services.llm.mock_llm.MockLLM",
+            ) as MockMockLLM,
+        ):
             mock_instance = _mock_service()
             MockMockLLM.return_value = mock_instance
 
@@ -225,12 +252,15 @@ class TestCreateFromConfig:
         """Strict creation preserves the provider error and never constructs MockLLM."""
         provider_error = RuntimeError("provider initialization failed")
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            side_effect=provider_error,
-        ), patch(
-            "animetta.services.llm.mock_llm.MockLLM",
-        ) as mock_llm:
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                side_effect=provider_error,
+            ),
+            patch(
+                "animetta.services.llm.mock_llm.MockLLM",
+            ) as mock_llm,
+        ):
             config = OpenAILLMConfig(api_key="test")
 
             with pytest.raises(RuntimeError) as exc_info:
@@ -272,12 +302,15 @@ class TestCreateFromConfig:
         """Strict means no implicit fallback; an explicitly selected mock remains valid."""
         mock_svc = MockLLM()
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=mock_svc,
-        ) as mock_create, patch(
-            "animetta.services.llm.factory.instrument_service",
-            side_effect=lambda target, *args, **_: target,
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=mock_svc,
+            ) as mock_create,
+            patch(
+                "animetta.services.llm.factory.instrument_service",
+                side_effect=lambda target, *args, **_: target,
+            ),
         ):
             config = MockLLMConfig()
             result = LLMFactory.create_from_config(config, strict=True)
@@ -294,10 +327,13 @@ class TestCreateFromConfig:
             imported.append(name)
             return original_import(name, *args, **kwargs)
 
-        with patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-            return_value=MockLLM(),
-        ), patch("builtins.__import__", side_effect=guarded_import):
+        with (
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+                return_value=MockLLM(),
+            ),
+            patch("builtins.__import__", side_effect=guarded_import),
+        ):
             LLMFactory.create_from_config(MockLLMConfig(), strict=True)
 
         assert "openai_llm" not in imported
@@ -306,12 +342,16 @@ class TestCreateFromConfig:
         """Strict creation reports the missing dependency instead of registry drift."""
         missing = ModuleNotFoundError("missing GLM dependency", name="zhipuai")
 
-        with patch(
-            "animetta.services.llm.factory.import_module",
-            side_effect=missing,
-        ), patch(
-            "animetta.services.llm.factory.ProviderRegistry.create_service",
-        ) as create_service, pytest.raises(ModuleNotFoundError) as exc_info:
+        with (
+            patch(
+                "animetta.services.llm.factory.import_module",
+                side_effect=missing,
+            ),
+            patch(
+                "animetta.services.llm.factory.ProviderRegistry.create_service",
+            ) as create_service,
+            pytest.raises(ModuleNotFoundError) as exc_info,
+        ):
             LLMFactory.create_from_config(
                 GLMLLMConfig(api_key="test"),
                 strict=True,
@@ -442,9 +482,7 @@ class TestCreate:
         ) as mock_create:
             mock_create.return_value = _mock_service()
 
-            with patch(
-                "animetta.services.llm.factory.logger.warning"
-            ) as mock_warn:
+            with patch("animetta.services.llm.factory.logger.warning") as mock_warn:
                 LLMFactory.create("unknown_xyz")
 
                 mock_warn.assert_called_once()

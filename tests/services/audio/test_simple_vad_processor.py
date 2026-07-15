@@ -16,8 +16,10 @@ from animetta.services.vad.mock_vad import MockVAD
 
 class _TensorLike:
     """Mimics a PyTorch tensor with .item() for test mocks."""
+
     def __init__(self, value: float) -> None:
         self._value = value
+
     def item(self) -> float:
         return self._value
 
@@ -62,7 +64,8 @@ class TestSimpleVADProcessor:
 
         vad_no_model = MagicMock(spec=VADInterface)
         p = SimpleVADProcessor(
-            session_id="test", vad_engine=vad_no_model,
+            session_id="test",
+            vad_engine=vad_no_model,
             on_speech_end=AsyncMock(),
         )
         assert p._get_speech_prob([0.1, 0.2]) == 0.0
@@ -162,7 +165,8 @@ class TestSimpleVADProcessor:
 
         mock_vad.model.return_value = _TensorLike(0.85)
         p = SimpleVADProcessor(
-            session_id="test", vad_engine=mock_vad,
+            session_id="test",
+            vad_engine=mock_vad,
             on_speech_end=AsyncMock(),
         )
         prob = p._get_speech_prob([0.1] * 160)
@@ -174,7 +178,8 @@ class TestSimpleVADProcessor:
 
         mock_vad.model.side_effect = RuntimeError("model crash")
         p = SimpleVADProcessor(
-            session_id="test", vad_engine=mock_vad,
+            session_id="test",
+            vad_engine=mock_vad,
             on_speech_end=AsyncMock(),
         )
         assert p._get_speech_prob([0.1]) == 0.0
@@ -212,7 +217,10 @@ class TestSimpleVADProcessor:
 
     @pytest.mark.asyncio
     async def test_silence_ends_speech_after_threshold(
-        self, processor, mock_vad, mock_callbacks,
+        self,
+        processor,
+        mock_vad,
+        mock_callbacks,
     ):
         """Sufficient silence after sufficient speech triggers on_speech_end."""
         mock_vad.model.return_value = _TensorLike(0.9)
@@ -232,7 +240,10 @@ class TestSimpleVADProcessor:
 
     @pytest.mark.asyncio
     async def test_silence_too_short_does_not_end(
-        self, processor, mock_vad, mock_callbacks,
+        self,
+        processor,
+        mock_vad,
+        mock_callbacks,
     ):
         """Short silence (< min_silence_duration) should not end speech."""
         mock_vad.model.return_value = _TensorLike(0.9)
@@ -248,7 +259,10 @@ class TestSimpleVADProcessor:
 
     @pytest.mark.asyncio
     async def test_speech_too_short_does_not_end(
-        self, processor, mock_vad, mock_callbacks,
+        self,
+        processor,
+        mock_vad,
+        mock_callbacks,
     ):
         """Short speech (< min_speech_duration) should not end even with silence."""
         mock_vad.model.return_value = _TensorLike(0.9)

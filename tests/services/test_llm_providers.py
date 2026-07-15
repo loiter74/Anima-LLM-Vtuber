@@ -44,6 +44,7 @@ def _ensure_mock_module(name: str):
     """Create a fake module in sys.modules for optional deps."""
     import sys
     from unittest.mock import MagicMock
+
     if name not in sys.modules:
         sys.modules[name] = MagicMock()
 
@@ -144,6 +145,7 @@ class TestLLMInterface:
         ]:
             try:
                 import importlib
+
                 mod = importlib.import_module(mod_name)
                 cls = getattr(mod, cls_name, None)
                 if cls is not None:
@@ -169,6 +171,7 @@ class TestLLMInterface:
         ]:
             try:
                 import importlib
+
                 mod = importlib.import_module(mod_name)
                 cls = getattr(mod, cls_name, None)
                 if cls is not None:
@@ -405,6 +408,7 @@ class TestOpenAILLM:
         """chat_stream() should yield strings from the mocked streaming API."""
 
         with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
+
             async def mock_stream():
                 for token in ["Hello", " ", "World"]:
                     chunk = MagicMock()
@@ -708,6 +712,7 @@ class TestLocalLoraLLM:
 
             # We mock PeftModel.from_pretrained to return our mock
             import peft
+
             peft.PeftModel.from_pretrained.return_value = mock_model
 
             llm = LocalLoraLLM(base_model_name="test", lora_path="test", device="cpu")
@@ -765,18 +770,14 @@ class TestLLMFactory:
     """Tests for the LLMFactory."""
 
     @patch("animetta.services.llm.factory.ProviderRegistry.create_service")
-    def test_create_from_config_returns_correct_type(
-        self, mock_create_service, openai_llm_config
-    ):
+    def test_create_from_config_returns_correct_type(self, mock_create_service, openai_llm_config):
         """create_from_config should return the type returned by ProviderRegistry."""
 
         mock_llm = MagicMock()
         mock_create_service.return_value = mock_llm
 
         result = LLMFactory.create_from_config(openai_llm_config, system_prompt="test")
-        mock_create_service.assert_called_once_with(
-            "llm", openai_llm_config, system_prompt="test"
-        )
+        mock_create_service.assert_called_once_with("llm", openai_llm_config, system_prompt="test")
         assert result is not None
 
     @patch("animetta.services.llm.factory.ProviderRegistry.create_service")

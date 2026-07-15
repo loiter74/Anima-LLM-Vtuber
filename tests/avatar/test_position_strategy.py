@@ -13,6 +13,7 @@ import pytest
 # Initialization
 # ============================================================
 
+
 class TestPositionBasedStrategyInit:
     """Initialization."""
 
@@ -38,6 +39,7 @@ class TestPositionBasedStrategyInit:
 # ============================================================
 # calculate
 # ============================================================
+
 
 class TestPositionBasedStrategyCalculate:
     """calculate() — even time distribution."""
@@ -112,15 +114,14 @@ class TestPositionBasedStrategyCalculate:
 # Smoothing (merge adjacent same emotions)
 # ============================================================
 
+
 class TestPositionBasedStrategySmoothing:
     """Adjacent same emotion merging."""
 
     def test_merge_adjacent_same_emotions(self):
         """Adjacent same emotions should be merged when smoothing enabled."""
         strategy = PositionBasedStrategy(enable_smoothing=True)
-        segments = strategy.calculate(
-            ["happy", "happy", "sad"], "text", audio_duration=9.0
-        )
+        segments = strategy.calculate(["happy", "happy", "sad"], "text", audio_duration=9.0)
         assert len(segments) == 2  # happy merged, sad remains
         assert segments[0].emotion == "happy"
         assert segments[1].emotion == "sad"
@@ -128,17 +129,13 @@ class TestPositionBasedStrategySmoothing:
     def test_no_merge_when_smoothing_disabled(self):
         """Adjacent same emotions should NOT be merged when smoothing disabled."""
         strategy = PositionBasedStrategy(enable_smoothing=False)
-        segments = strategy.calculate(
-            ["happy", "happy", "sad"], "text", audio_duration=9.0
-        )
+        segments = strategy.calculate(["happy", "happy", "sad"], "text", audio_duration=9.0)
         assert len(segments) == 3
 
     def test_merge_multiple_groups(self):
         """Multiple groups of same emotions should each be merged."""
         strategy = PositionBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "happy", "sad", "sad"], "text", audio_duration=8.0
-        )
+        segments = strategy.calculate(["happy", "happy", "sad", "sad"], "text", audio_duration=8.0)
         assert len(segments) == 2
         assert segments[0].emotion == "happy"
         assert segments[1].emotion == "sad"
@@ -147,6 +144,7 @@ class TestPositionBasedStrategySmoothing:
 # ============================================================
 # Full coverage
 # ============================================================
+
 
 class TestPositionBasedStrategyCoverage:
     """Full audio duration coverage."""
@@ -174,6 +172,7 @@ class TestPositionBasedStrategyCoverage:
 # ============================================================
 # Segment info
 # ============================================================
+
 
 class TestPositionBasedStrategySegmentInfo:
     """get_segment_info()."""
@@ -210,6 +209,7 @@ class TestPositionBasedStrategySegmentInfo:
 # Filter short segments
 # ============================================================
 
+
 class TestPositionBasedStrategyFilter:
     """Short segment filtering."""
 
@@ -239,6 +239,7 @@ class TestPositionBasedStrategyFilter:
 # ============================================================
 # Properties
 # ============================================================
+
 
 class TestPositionBasedStrategyProperties:
     """Properties."""

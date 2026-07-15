@@ -27,6 +27,7 @@ class TestCallbackPropagationLifecycle:
 
     def test_callback_stored_before_init(self, live2d_manager):
         """Setting callback before queue init stores it on manager but does NOT propagate yet."""
+
         async def my_callback(action):
             pass
 
@@ -108,6 +109,7 @@ class TestEnqueueProcessLifecycle:
         _ = live2d_manager.action_queue
 
         executed = []
+
         async def track_callback(action):
             executed.append(action.action_id)
 
@@ -135,11 +137,15 @@ class TestEnqueueProcessLifecycle:
 
         # Enqueue first action
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="first", duration=0.02,
+            action_data={"type": "test"},
+            action_id="first",
+            duration=0.02,
         )
         # Enqueue second while first is (potentially) processing
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="second", duration=0.01,
+            action_data={"type": "test"},
+            action_id="second",
+            duration=0.01,
         )
 
         await asyncio.sleep(0.8)
@@ -153,10 +159,14 @@ class TestEnqueueProcessLifecycle:
         _ = live2d_manager.action_queue
 
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="a1", duration=0.5,
+            action_data={"type": "test"},
+            action_id="a1",
+            duration=0.5,
         )
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="a2", duration=0.5,
+            action_data={"type": "test"},
+            action_id="a2",
+            duration=0.5,
         )
 
         # Both should be in queue (no callback, so they pile up without being "executed")
@@ -183,7 +193,9 @@ class TestStopClearLifecycle:
 
         # Enqueue and stop
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="before_stop", duration=0.01,
+            action_data={"type": "test"},
+            action_id="before_stop",
+            duration=0.01,
         )
         await asyncio.sleep(0.05)
         await live2d_manager.action_queue.stop()
@@ -194,7 +206,9 @@ class TestStopClearLifecycle:
 
         # Enqueue again — should restart
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="after_stop", duration=0.01,
+            action_data={"type": "test"},
+            action_id="after_stop",
+            duration=0.01,
         )
         await asyncio.sleep(0.1)
 
@@ -209,10 +223,14 @@ class TestStopClearLifecycle:
 
         # Enqueue several actions without processing (no callback)
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="a1", duration=0.5,
+            action_data={"type": "test"},
+            action_id="a1",
+            duration=0.5,
         )
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="a2", duration=0.5,
+            action_data={"type": "test"},
+            action_id="a2",
+            duration=0.5,
         )
 
         assert live2d_manager.action_queue.queue_size >= 1
@@ -227,7 +245,9 @@ class TestStopClearLifecycle:
     async def test_no_callback_enqueue_does_not_crash(self, live2d_manager):
         """Enqueuing without callback set should not raise errors."""
         result = await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="nocb", duration=0.01,
+            action_data={"type": "test"},
+            action_id="nocb",
+            duration=0.01,
         )
         assert result["ok"] is True
 
@@ -238,7 +258,8 @@ class TestStopClearLifecycle:
     async def test_enqueue_with_minimal_action_data(self, live2d_manager):
         """Enqueuing with empty action_data dict should succeed."""
         result = await live2d_manager.enqueue_action(
-            action_data={}, action_id="minimal",
+            action_data={},
+            action_id="minimal",
         )
         assert result["ok"] is True
         await live2d_manager.action_queue.stop()
@@ -264,16 +285,24 @@ class TestReplaceInterruptLifecycle:
 
         # Enqueue with APPEND first
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="old1", duration=0.5, queue_policy="append",
+            action_data={"type": "test"},
+            action_id="old1",
+            duration=0.5,
+            queue_policy="append",
         )
         await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="old2", duration=0.5, queue_policy="append",
+            action_data={"type": "test"},
+            action_id="old2",
+            duration=0.5,
+            queue_policy="append",
         )
 
         # Now REPLACE should clear those and leave only the new one
         result = await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="new_only",
-            duration=0.01, queue_policy="replace",
+            action_data={"type": "test"},
+            action_id="new_only",
+            duration=0.01,
+            queue_policy="replace",
         )
         assert result["ok"] is True
 
@@ -286,9 +315,12 @@ class TestReplaceInterruptLifecycle:
     @pytest.mark.asyncio
     async def test_default_queue_policy_is_append(self, live2d_manager):
         """Default queue_policy in Live2DManager.enqueue_action is 'append'."""
-        with patch.object(live2d_manager.action_queue, 'enqueue', new=AsyncMock(return_value={"ok": True})):
+        with patch.object(
+            live2d_manager.action_queue, "enqueue", new=AsyncMock(return_value={"ok": True})
+        ):
             await live2d_manager.enqueue_action(
-                action_data={"type": "test"}, action_id="default_policy",
+                action_data={"type": "test"},
+                action_id="default_policy",
             )
             call_arg = live2d_manager.action_queue.enqueue.call_args[0][0]
             assert call_arg.queue_policy == QueuePolicy.APPEND
@@ -315,7 +347,9 @@ class TestEdgeCases:
     async def test_enqueue_with_very_long_duration(self, live2d_manager):
         """Very long duration actions are accepted."""
         result = await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="long_one", duration=999.0,
+            action_data={"type": "test"},
+            action_id="long_one",
+            duration=999.0,
         )
         assert result["ok"] is True
         await live2d_manager.action_queue.stop()
@@ -324,7 +358,8 @@ class TestEdgeCases:
     async def test_enqueue_with_empty_action_id(self, live2d_manager):
         """Empty action_id is valid."""
         result = await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="",
+            action_data={"type": "test"},
+            action_id="",
         )
         assert result["ok"] is True
         await live2d_manager.action_queue.stop()
@@ -338,7 +373,9 @@ class TestEdgeCases:
         live2d_manager.set_execute_callback(callback)
 
         result = await live2d_manager.enqueue_action(
-            action_data={"type": "test"}, action_id="size_check", duration=0.01,
+            action_data={"type": "test"},
+            action_id="size_check",
+            duration=0.01,
         )
         assert "queue_size" in result
         assert isinstance(result["queue_size"], int)

@@ -25,6 +25,7 @@ from animetta.config.persona import (
 # Test MBTIDimensions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestMBTIDimensions:
     """Tests for MBTIDimensions default values and methods"""
 
@@ -137,6 +138,7 @@ class TestMBTIDimensions:
 # Test MBTIDimensionDelta
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestMBTIDimensionDelta:
     """Tests for MBTIDimensionDelta"""
 
@@ -161,6 +163,7 @@ class TestMBTIDimensionDelta:
 
     def test_confidence_is_clamped_to_0_1(self):
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             MBTIDimensionDelta(delta=1, confidence=2.0)
         with pytest.raises(ValidationError):
@@ -174,6 +177,7 @@ class TestMBTIDimensionDelta:
 # ═══════════════════════════════════════════════════════════════
 # Test MBTIProfile
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestMBTIProfile:
     """Tests for MBTIProfile default values"""
@@ -214,6 +218,7 @@ class TestMBTIProfile:
 # ═══════════════════════════════════════════════════════════════
 # Test PersonalityTraits + MBTI integration
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestPersonalityTraitsMBTI:
     """Tests for MBTI field in PersonalityTraits"""
@@ -275,6 +280,7 @@ class TestPersonalityTraitsMBTI:
 # ═══════════════════════════════════════════════════════════════
 # Test build_system_prompt with MBTI
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestBuildSystemPromptMBTI:
     """Tests for build_system_prompt MBTI section"""

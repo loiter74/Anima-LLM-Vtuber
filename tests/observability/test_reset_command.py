@@ -16,9 +16,7 @@ async def test_reset_removes_legacy_data_and_bootstraps_schema_v2(tmp_path) -> N
     assert not (data_dir / "stats.db").exists()
     assert path.is_file()
     with sqlite3.connect(path) as connection:
-        version = connection.execute(
-            "SELECT version FROM observation_schema"
-        ).fetchone()
+        version = connection.execute("SELECT version FROM observation_schema").fetchone()
         tables = {
             row[0]
             for row in connection.execute(

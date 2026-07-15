@@ -56,9 +56,7 @@ async def test_typed_memory_acknowledgements_are_deterministic(memory_handler) -
 
     pinned = await handler.on_pin("socket-a", {"id": atom.id, "pinned": True})
     assert pinned["data"]["item"]["retention_policy"] == "pinned"
-    changed = await handler.on_change(
-        "socket-a", {"id": atom.id, "summary": "观众喜欢拿铁"}
-    )
+    changed = await handler.on_change("socket-a", {"id": atom.id, "summary": "观众喜欢拿铁"})
     assert changed["data"]["item"]["summary"] == "观众喜欢拿铁"
     forgotten = await handler.on_forget("socket-a", {"id": atom.id})
     assert forgotten["data"]["item"]["is_archived"] is True

@@ -122,9 +122,7 @@ def _query() -> MagicMock:
     )
     query.trace_events = AsyncMock(return_value=[event])
     query.inspection_reports = AsyncMock(return_value=[])
-    query.observation_health = AsyncMock(
-        return_value=ObservationHealth(True, True, False)
-    )
+    query.observation_health = AsyncMock(return_value=ObservationHealth(True, True, False))
     return query
 
 
@@ -189,7 +187,8 @@ def test_events_and_health_are_versioned() -> None:
 
 def test_stats_api_does_not_import_legacy_store_or_probe_private_db() -> None:
     source = (
-        __import__("pathlib").Path("src/animetta/orchestration/server/stats_api.py")
+        __import__("pathlib")
+        .Path("src/animetta/orchestration/server/stats_api.py")
         .read_text(encoding="utf-8")
     )
     assert "get_stats_store" not in source

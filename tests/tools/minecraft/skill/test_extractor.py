@@ -199,6 +199,7 @@ class TestExtractJson:
 
     def test_no_json_raises(self):
         import json as json_mod
+
         with pytest.raises(json_mod.JSONDecodeError):
             SkillExtractor._extract_json("just plain text, no json here")
 
@@ -242,9 +243,7 @@ class TestExtractSuccess:
 
     async def test_extract_success(self, extractor, mock_llm, mock_library):
         trace = _make_task_trace()
-        mock_llm.chat.return_value = _mock_llm_response(
-            json.dumps(_sample_skill_json())
-        )
+        mock_llm.chat.return_value = _mock_llm_response(json.dumps(_sample_skill_json()))
 
         skill = await extractor.extract(trace)
 
@@ -256,9 +255,7 @@ class TestExtractSuccess:
 
     async def test_extract_passes_context_to_prompt(self, extractor, mock_llm, mock_library):
         trace = _make_task_trace()
-        mock_llm.chat.return_value = _mock_llm_response(
-            json.dumps(_sample_skill_json())
-        )
+        mock_llm.chat.return_value = _mock_llm_response(json.dumps(_sample_skill_json()))
         context = {"time": "day", "biome": "forest"}
 
         await extractor.extract(trace, context=context)
@@ -271,9 +268,7 @@ class TestExtractSuccess:
 
     async def test_extract_system_prompt_includes_few_shot(self, extractor, mock_llm, mock_library):
         trace = _make_task_trace()
-        mock_llm.chat.return_value = _mock_llm_response(
-            json.dumps(_sample_skill_json())
-        )
+        mock_llm.chat.return_value = _mock_llm_response(json.dumps(_sample_skill_json()))
 
         await extractor.extract(trace)
 
@@ -350,9 +345,7 @@ class TestDuplicateDetection:
         existing_skill.success_count = 2
         existing_skill.fail_count = 8  # 20% success rate < 0.8 threshold
         mock_library.search_skills.return_value = [existing_skill]
-        mock_llm.chat.return_value = _mock_llm_response(
-            json.dumps(_sample_skill_json())
-        )
+        mock_llm.chat.return_value = _mock_llm_response(json.dumps(_sample_skill_json()))
 
         trace = _make_task_trace()
         result = await extractor.extract(trace)
@@ -363,9 +356,7 @@ class TestDuplicateDetection:
     async def test_no_library_skips_duplicate_check(self, mock_llm):
         """Without a library, duplicate check is skipped entirely."""
         extractor = SkillExtractor(llm_service=mock_llm, skill_library=None)
-        mock_llm.chat.return_value = _mock_llm_response(
-            json.dumps(_sample_skill_json())
-        )
+        mock_llm.chat.return_value = _mock_llm_response(json.dumps(_sample_skill_json()))
 
         trace = _make_task_trace()
         result = await extractor.extract(trace)
@@ -423,10 +414,7 @@ class TestJsonParsing:
         """LLM sometimes prefixes with explanation text before the JSON block."""
         trace = _make_task_trace()
         raw = (
-            "Here is the extracted skill:\n\n"
-            "```json\n"
-            + json.dumps(_sample_skill_json())
-            + "\n```"
+            "Here is the extracted skill:\n\n```json\n" + json.dumps(_sample_skill_json()) + "\n```"
         )
         mock_llm.chat.return_value = _mock_llm_response(raw)
 

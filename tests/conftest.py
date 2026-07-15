@@ -104,9 +104,9 @@ def mock_chroma():
     mock = MagicMock()
     mock_collection = MagicMock()
     mock_collection.add = MagicMock()
-    mock_collection.query = MagicMock(return_value={
-        "ids": [[]], "distances": [[]], "metadatas": [[]], "documents": [[]]
-    })
+    mock_collection.query = MagicMock(
+        return_value={"ids": [[]], "distances": [[]], "metadatas": [[]], "documents": [[]]}
+    )
     mock_collection.delete = MagicMock()
     mock_collection.upsert = MagicMock()
     mock_collection.count = MagicMock(return_value=0)
@@ -138,9 +138,9 @@ def mock_minecraft_bridge():
     mock.connect = AsyncMock()
     mock.disconnect = AsyncMock()
     mock.send_command = AsyncMock(return_value={"success": True, "result": "done"})
-    mock.get_status = MagicMock(return_value={
-        "connected": True, "position": {"x": 0, "y": 64, "z": 0}
-    })
+    mock.get_status = MagicMock(
+        return_value={"connected": True, "position": {"x": 0, "y": 64, "z": 0}}
+    )
     return mock
 
 

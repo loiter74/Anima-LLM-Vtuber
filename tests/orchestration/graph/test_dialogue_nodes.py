@@ -32,16 +32,30 @@ class SequencedLLM(LLMInterface):
             raise RuntimeError("provider failure")
         return response
 
-    async def chat(self, user_input: str, **kwargs) -> str: raise AssertionError
+    async def chat(self, user_input: str, **kwargs) -> str:
+        raise AssertionError
+
     async def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         if False:
             yield ""
-    def set_system_prompt(self, prompt: str) -> None: pass
-    def get_history(self) -> list[dict]: return list(self.history)
-    def clear_history(self) -> None: self.history.clear()
-    async def close(self) -> None: pass
-    def handle_interrupt(self, heard_response: str = "") -> None: pass
-    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None: pass
+
+    def set_system_prompt(self, prompt: str) -> None:
+        pass
+
+    def get_history(self) -> list[dict]:
+        return list(self.history)
+
+    def clear_history(self) -> None:
+        self.history.clear()
+
+    async def close(self) -> None:
+        pass
+
+    def handle_interrupt(self, heard_response: str = "") -> None:
+        pass
+
+    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
+        pass
 
 
 class SharedSessionLLM(SequencedLLM):
@@ -55,22 +69,31 @@ class SharedSessionLLM(SequencedLLM):
         current = messages[-1]["content"]
         await asyncio.sleep(0)
         if "normal_response" in system:
-            return json.dumps({
-                "normal_response": f"reasoned:{current}", "stance": "direct",
-                "humor": "", "worldview": "",
-            })
+            return json.dumps(
+                {
+                    "normal_response": f"reasoned:{current}",
+                    "stance": "direct",
+                    "humor": "",
+                    "worldview": "",
+                }
+            )
         payload = json.loads(current)
-        return json.dumps({
-            "final_response": f"final:{payload['user_input']}",
-            "mood": "neutral", "affinity_delta": 0,
-        })
+        return json.dumps(
+            {
+                "final_response": f"final:{payload['user_input']}",
+                "mood": "neutral",
+                "affinity_delta": 0,
+            }
+        )
 
 
 def config(llm: LLMInterface) -> dict:
-    return {"configurable": {
-        "service_context": SimpleNamespace(llm_engine=llm),
-        "conversation_session": ConversationSessionState(),
-    }}
+    return {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=llm),
+            "conversation_session": ConversationSessionState(),
+        }
+    }
 
 
 def state():
@@ -81,10 +104,12 @@ def state():
 
 @pytest.mark.asyncio
 async def test_normal_turn_calls_reasoner_then_composer_exactly_once() -> None:
-    llm = SequencedLLM([
-        '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
-        '{"final_response":"旅人，你好呀。","mood":"bright","affinity_delta":1}',
-    ])
+    llm = SequencedLLM(
+        [
+            '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
+            '{"final_response":"旅人，你好呀。","mood":"bright","affinity_delta":1}',
+        ]
+    )
     current = state()
     current.update(await reasoner_node(current, config(llm)))
     current.update(await anima_composer_node(current, config(llm)))
@@ -97,10 +122,12 @@ async def test_normal_turn_calls_reasoner_then_composer_exactly_once() -> None:
 
 @pytest.mark.asyncio
 async def test_response_guard_hides_emotion_tag_but_preserves_raw_analysis_chunk() -> None:
-    llm = SequencedLLM([
-        '{"normal_response":"晚上好","stance":"友好","humor":"","worldview":""}',
-        '{"final_response":"晚上好呀[happy] 今天想喝点什么？","mood":"bright","affinity_delta":1}',
-    ])
+    llm = SequencedLLM(
+        [
+            '{"normal_response":"晚上好","stance":"友好","humor":"","worldview":""}',
+            '{"final_response":"晚上好呀[happy] 今天想喝点什么？","mood":"bright","affinity_delta":1}',
+        ]
+    )
     current = state()
     current.update(await reasoner_node(current, config(llm)))
     current.update(await anima_composer_node(current, config(llm)))
@@ -112,10 +139,12 @@ async def test_response_guard_hides_emotion_tag_but_preserves_raw_analysis_chunk
 
 @pytest.mark.asyncio
 async def test_composer_failure_uses_reasoner_with_no_third_call() -> None:
-    llm = SequencedLLM([
-        '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
-        "RAISE",
-    ])
+    llm = SequencedLLM(
+        [
+            '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
+            "RAISE",
+        ]
+    )
     current = state()
     current.update(await reasoner_node(current, config(llm)))
     current.update(await anima_composer_node(current, config(llm)))
@@ -138,15 +167,19 @@ async def test_filtered_probe_makes_no_llm_call() -> None:
 
 @pytest.mark.asyncio
 async def test_finalizer_commits_once_and_clears_scratch() -> None:
-    llm = SequencedLLM([
-        '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
-        '{"final_response":"旅人，你好呀。","mood":"bright","affinity_delta":1}',
-    ])
+    llm = SequencedLLM(
+        [
+            '{"normal_response":"你好","stance":"友好","humor":"","worldview":""}',
+            '{"final_response":"旅人，你好呀。","mood":"bright","affinity_delta":1}',
+        ]
+    )
     session = ConversationSessionState()
-    runtime = {"configurable": {
-        "service_context": SimpleNamespace(llm_engine=llm),
-        "conversation_session": session,
-    }}
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=llm),
+            "conversation_session": session,
+        }
+    }
     current = state()
     current.update(await reasoner_node(current, runtime))
     current.update(await anima_composer_node(current, runtime))
@@ -176,13 +209,15 @@ async def test_finalizer_clears_failure_scratch_without_commit() -> None:
 async def test_finalizer_writes_only_selected_final_in_read_write_mode() -> None:
     memory = SimpleNamespace(encode=AsyncMock())
     session = ConversationSessionState()
-    runtime = {"configurable": {
-        "service_context": SimpleNamespace(
-            memory_system=memory,
-            config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write")),
-        ),
-        "conversation_session": session,
-    }}
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(
+                memory_system=memory,
+                config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write")),
+            ),
+            "conversation_session": session,
+        }
+    }
     current = state()
     current["response_text"] = "selected final"
     current["metadata"] = {"dialogue_status": "composer"}
@@ -201,13 +236,15 @@ async def test_concurrent_sessions_share_provider_without_state_or_identity_leak
 
     async def run(user: str, task: str):
         session = ConversationSessionState()
-        runtime = {"configurable": {
-            "service_context": SimpleNamespace(
-                llm_engine=llm,
-                config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="off")),
-            ),
-            "conversation_session": session,
-        }}
+        runtime = {
+            "configurable": {
+                "service_context": SimpleNamespace(
+                    llm_engine=llm,
+                    config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="off")),
+                ),
+                "conversation_session": session,
+            }
+        }
         current = create_initial_state("session-" + user, user_text=user, task_id=task)
         current["system_prompt"] = "你是 Anima。"
         current.update(await reasoner_node(current, runtime))

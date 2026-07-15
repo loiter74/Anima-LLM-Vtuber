@@ -30,9 +30,7 @@ def test_domain_and_ports_have_no_runtime_or_infrastructure_dependencies() -> No
 
     violations = {
         str(path.relative_to(ROOT)): sorted(
-            module
-            for module in _imported_modules(path)
-            if module.startswith(FORBIDDEN_IMPORTS)
+            module for module in _imported_modules(path) if module.startswith(FORBIDDEN_IMPORTS)
         )
         for path in boundaries
     }

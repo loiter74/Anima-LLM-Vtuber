@@ -105,16 +105,18 @@ class TestMCPManager:
 
         mgr = MCPManager()
         # Simulate a Docker-based MCP server config without touching host Docker.
-        configs = [{
-            "name": "filesystem",
-            "transport": "stdio",
-            "sandbox": {
-                "type": "docker",
-                "image": "anima-mcp-filesystem",
-                "mounts": ["./data:/data:rw"],
-            },
-            "args": ["/data"],
-        }]
+        configs = [
+            {
+                "name": "filesystem",
+                "transport": "stdio",
+                "sandbox": {
+                    "type": "docker",
+                    "image": "anima-mcp-filesystem",
+                    "mounts": ["./data:/data:rw"],
+                },
+                "args": ["/data"],
+            }
+        ]
         # Should not raise
         tools = await mgr.load(configs)
         assert isinstance(tools, list)
@@ -281,11 +283,13 @@ class TestMCPManagerAdvanced:
         """Loading SSE config without mcp package should degrade gracefully."""
 
         mgr = MCPManager()
-        configs = [{
-            "name": "sse-server",
-            "transport": "sse",
-            "url": "http://localhost:8080/sse",
-        }]
+        configs = [
+            {
+                "name": "sse-server",
+                "transport": "sse",
+                "url": "http://localhost:8080/sse",
+            }
+        ]
         tools = await mgr.load(configs)
         assert isinstance(tools, list)
 

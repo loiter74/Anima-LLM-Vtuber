@@ -52,8 +52,9 @@ class TestRouteHandlersInit:
         """Explicit desktop_manager and live2d_manager are used."""
         dcm = DesktopClientManager()
         l2d = Live2DManager()
-        handlers = RouteHandlers(mock_socketio, mock_session_manager,
-                                 desktop_manager=dcm, live2d_manager=l2d)
+        handlers = RouteHandlers(
+            mock_socketio, mock_session_manager, desktop_manager=dcm, live2d_manager=l2d
+        )
         assert handlers.desktop_manager is dcm
         assert handlers.live2d_manager is l2d
 
@@ -131,17 +132,13 @@ class TestRouteHandlersInit:
         assert handlers.base.user_settings is settings
         assert handlers.config_handlers.user_settings is settings
 
-    def test_memory_events_are_owned_by_memory_handler(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_memory_events_are_owned_by_memory_handler(self, mock_socketio, mock_session_manager):
         """RouteHandlers remains a facade for memory/wiki events."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
         assert handlers.memory.global_config is handlers.global_config
 
-    def test_meme_events_are_owned_by_meme_handler(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_meme_events_are_owned_by_meme_handler(self, mock_socketio, mock_session_manager):
         """RouteHandlers remains a facade for meme review events."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
@@ -153,9 +150,7 @@ class TestRouteHandlersInit:
         assert handlers.live2d_manager._execute_callback is not None
 
     @pytest.mark.asyncio
-    async def test_base_exposes_public_send_callback(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_base_exposes_public_send_callback(self, mock_socketio, mock_session_manager):
         """Routes should use the public callback factory, not private helpers."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
@@ -182,17 +177,13 @@ class TestRouteHandlersInit:
         ctx = MagicMock()
         orchestrator = MagicMock()
         mock_session_manager.get_or_create_context = AsyncMock(return_value=ctx)
-        mock_session_manager.get_or_create_orchestrator = AsyncMock(
-            return_value=orchestrator
-        )
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
         mock_session_manager.get_or_create_audio_processor = AsyncMock()
 
         await handlers.base._get_or_create_orchestrator("sid1")
 
         context_callback = mock_session_manager.get_or_create_context.await_args.args[2]
-        orchestrator_callback = (
-            mock_session_manager.get_or_create_orchestrator.await_args.args[2]
-        )
+        orchestrator_callback = mock_session_manager.get_or_create_orchestrator.await_args.args[2]
         assert context_callback is orchestrator_callback
 
 
@@ -286,9 +277,7 @@ class TestRouteHandlersDispatch:
         mock_orch.process_text.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_on_text_input_error_emits_error(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_text_input_error_emits_error(self, mock_socketio, mock_session_manager):
         """Exception during text processing emits error event."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
@@ -383,9 +372,7 @@ class TestRouteHandlersDispatch:
         mock_processor.process_chunk.assert_called_once_with([0.1, 0.2, 0.3])
 
     @pytest.mark.asyncio
-    async def test_on_raw_audio_data_empty_returns_early(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_raw_audio_data_empty_returns_early(self, mock_socketio, mock_session_manager):
         """Empty audio data returns without calling processor."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         mock_processor = MagicMock()
@@ -395,9 +382,7 @@ class TestRouteHandlersDispatch:
         mock_processor.process_chunk.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_on_mic_audio_end_calls_process_end(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_mic_audio_end_calls_process_end(self, mock_socketio, mock_session_manager):
         """on_mic_audio_end calls processor.process_end()."""
         mock_processor = AsyncMock()
         mock_processor.process_end = AsyncMock()
@@ -410,9 +395,7 @@ class TestRouteHandlersDispatch:
         mock_processor.process_end.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_on_mic_audio_end_no_processor_logs(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_mic_audio_end_no_processor_logs(self, mock_socketio, mock_session_manager):
         """on_mic_audio_end handles missing processor gracefully."""
         mock_session_manager.get_audio_processor.return_value = None
 
@@ -453,9 +436,7 @@ class TestRouteHandlersDispatch:
             assert stop_payload[field] == control_payload[field]
 
     @pytest.mark.asyncio
-    async def test_on_get_config_lists_project_personas(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_get_config_lists_project_personas(self, mock_socketio, mock_session_manager):
         """config:get should list personas from the project config directory."""
 
         config = SimpleNamespace(
@@ -818,14 +799,16 @@ class TestRouteHandlersDispatch:
     ):
         """memory:list_pages should not reach through MemorySystem into its store."""
 
-        pages = [{
-            "path": "raw-1",
-            "title": "Latte",
-            "content": "用户: 我喜欢拿铁",
-            "page_type": "source",
-            "tags": ["s1"],
-            "updated_at": "2026-07-06T00:00:00+00:00",
-        }]
+        pages = [
+            {
+                "path": "raw-1",
+                "title": "Latte",
+                "content": "用户: 我喜欢拿铁",
+                "page_type": "source",
+                "tags": ["s1"],
+                "updated_at": "2026-07-06T00:00:00+00:00",
+            }
+        ]
 
         class PublicMemorySystem:
             store = SimpleNamespace(get_revision=AsyncMock(return_value=7))
@@ -921,9 +904,7 @@ class TestRouteHandlersConnection:
     """Connection and disconnection handlers."""
 
     @pytest.mark.asyncio
-    async def test_on_connect_saves_session_and_emits(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_connect_saves_session_and_emits(self, mock_socketio, mock_session_manager):
         """on_connect saves session and emits connection-established."""
         mock_socketio.save_session = AsyncMock()
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -943,9 +924,7 @@ class TestRouteHandlersConnection:
         assert found, "system:connection_established event was not emitted"
 
     @pytest.mark.asyncio
-    async def test_on_connect_electron_no_start_mic(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_connect_electron_no_start_mic(self, mock_socketio, mock_session_manager):
         """Electron clients should NOT get start-mic signal."""
         mock_socketio.save_session = AsyncMock()
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
@@ -958,9 +937,7 @@ class TestRouteHandlersConnection:
                 assert call_args[0][1].get("text") != "start-mic"
 
     @pytest.mark.asyncio
-    async def test_on_disconnect_cleans_up(
-        self, mock_socketio, mock_session_manager
-    ):
+    async def test_on_disconnect_cleans_up(self, mock_socketio, mock_session_manager):
         """on_disconnect unregisters client and cleans up session."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
 
@@ -981,14 +958,10 @@ class TestRegisterRoutes:
         """A normal chat:text payload should traverse the registered route cleanly."""
         mock_orchestrator = AsyncMock()
         mock_orchestrator.process_text = AsyncMock(return_value={})
-        mock_session_manager.get_or_create_orchestrator = AsyncMock(
-            return_value=mock_orchestrator
-        )
+        mock_session_manager.get_or_create_orchestrator = AsyncMock(return_value=mock_orchestrator)
         chat_logger = MagicMock()
 
-        monkeypatch.setattr(
-            "animetta.config.live2d.get_live2d_config", lambda: MagicMock()
-        )
+        monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: MagicMock())
         monkeypatch.setattr(
             "animetta.orchestration.server.handlers.chat_handlers.logger",
             chat_logger,
@@ -996,9 +969,7 @@ class TestRegisterRoutes:
         handlers = register_routes(mock_socketio, mock_session_manager)
         handlers.global_config = MagicMock()
         chat_text_handler = next(
-            call.args[1]
-            for call in mock_socketio.on.call_args_list
-            if call.args[0] == "chat:text"
+            call.args[1] for call in mock_socketio.on.call_args_list if call.args[0] == "chat:text"
         )
 
         await chat_text_handler(
@@ -1050,9 +1021,7 @@ class TestRegisterRoutes:
         assert "connect" in events_bound
         assert "disconnect" in events_bound
 
-    def test_register_routes_binds_conversation_events(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_register_routes_binds_conversation_events(self, mock_socketio, mock_session_manager):
         """Key conversation events are bound."""
         register_routes(mock_socketio, mock_session_manager)
 
@@ -1066,9 +1035,7 @@ class TestRegisterRoutes:
     ):
         handlers = register_routes(mock_socketio, mock_session_manager)
         handlers.chat.on_text_command = AsyncMock()
-        registered = {
-            call.args[0]: call.args[1] for call in mock_socketio.on.call_args_list
-        }
+        registered = {call.args[0]: call.args[1] for call in mock_socketio.on.call_args_list}
         identity = {
             "message_id": str(uuid4()),
             "conversation_id": str(uuid4()),
@@ -1092,9 +1059,9 @@ class TestRegisterRoutes:
         self, mock_socketio, mock_session_manager, monkeypatch
     ):
         monkeypatch.setitem(
-            __import__(
-                "animetta.orchestration.socket_events", fromlist=["EVENTS"]
-            ).EVENTS["chat"]["text"],
+            __import__("animetta.orchestration.socket_events", fromlist=["EVENTS"]).EVENTS["chat"][
+                "text"
+            ],
             "aliases",
             ["legacy_chat_input"],
         )
@@ -1105,9 +1072,7 @@ class TestRegisterRoutes:
         assert "legacy_chat_input" in events_bound
         assert "text_input" not in events_bound
 
-    def test_register_routes_binds_meme_events(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_register_routes_binds_meme_events(self, mock_socketio, mock_session_manager):
         """Meme review catalog events are bound to backend handlers."""
         register_routes(mock_socketio, mock_session_manager)
 
@@ -1115,9 +1080,7 @@ class TestRegisterRoutes:
         for event in ("meme:add", "meme:list", "meme:review", "meme:dataset", "meme:collect"):
             assert event in events_bound, f"{event} should be registered"
 
-    def test_register_routes_binds_desktop_events(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_register_routes_binds_desktop_events(self, mock_socketio, mock_session_manager):
         """Desktop client events are bound."""
         register_routes(mock_socketio, mock_session_manager)
 
@@ -1125,9 +1088,7 @@ class TestRegisterRoutes:
         for event in ("desktop:register", "desktop:live2d_action", "desktop:chat_message"):
             assert event in events_bound, f"{event} should be registered"
 
-    def test_register_routes_returns_route_handlers(
-        self, mock_socketio, mock_session_manager
-    ):
+    def test_register_routes_returns_route_handlers(self, mock_socketio, mock_session_manager):
         """register_routes returns the RouteHandlers instance."""
         result = register_routes(mock_socketio, mock_session_manager)
 

@@ -63,9 +63,7 @@ async def test_query_returns_aggregates_tree_events_and_post_turn_state(ledger) 
             model="gpt-test",
         )
     )
-    await ledger.finish_operation(
-        OperationFinished("llm", OperationStatus.SUCCESS, time.time())
-    )
+    await ledger.finish_operation(OperationFinished("llm", OperationStatus.SUCCESS, time.time()))
     await ledger.finish_operation(
         OperationFinished("reasoner", OperationStatus.SUCCESS, time.time())
     )
@@ -82,9 +80,7 @@ async def test_query_returns_aggregates_tree_events_and_post_turn_state(ledger) 
             True,
         )
     )
-    await ledger.finish_trace(
-        "task-query", TraceOutcome.SUCCESS, finished_at=time.time()
-    )
+    await ledger.finish_trace("task-query", TraceOutcome.SUCCESS, finished_at=time.time())
     await ledger.start_operation(
         OperationStarted(
             "memory",

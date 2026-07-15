@@ -56,12 +56,10 @@ class TestSetupSignalHandlers:
             assert lifecycle._signal_handlers_set is True
             # SIGINT and SIGTERM are registered
             sigint_calls = [
-                call for call in mock_signal.call_args_list
-                if call.args[0] == signal.SIGINT
+                call for call in mock_signal.call_args_list if call.args[0] == signal.SIGINT
             ]
             sigterm_calls = [
-                call for call in mock_signal.call_args_list
-                if call.args[0] == signal.SIGTERM
+                call for call in mock_signal.call_args_list if call.args[0] == signal.SIGTERM
             ]
             assert len(sigint_calls) == 1
             assert len(sigterm_calls) == 1
@@ -89,6 +87,7 @@ class TestRegisterCleanupCallback:
 
         def cb():
             return None
+
         lifecycle.register_cleanup_callback(cb)
         assert cb in lifecycle._cleanup_callbacks
         assert len(lifecycle._cleanup_callbacks) == 1
@@ -161,6 +160,7 @@ class TestSignalHandler:
 
     def test_signal_handler_skips_async_callbacks(self, lifecycle):
         """_signal_handler warns about async callbacks but does not call them."""
+
         async def async_cb():
             pass
 

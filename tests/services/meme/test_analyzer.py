@@ -203,12 +203,12 @@ class TestMemeCognitiveAnalyzer:
 
     def test_parse_json_with_markdown_fence(self, analyzer):
         """Markdown-fenced JSON should be stripped."""
-        raw = "```json\n{\"a\": 1}\n```"
+        raw = '```json\n{"a": 1}\n```'
         assert analyzer._parse_json(raw) == {"a": 1}
 
     def test_parse_json_with_plain_fence(self, analyzer):
         """Plain ``` fence (no json tag) should also be stripped."""
-        raw = "```\n{\"a\": 1}\n```"
+        raw = '```\n{"a": 1}\n```'
         assert analyzer._parse_json(raw) == {"a": 1}
 
     def test_parse_json_invalid_returns_empty(self, analyzer):

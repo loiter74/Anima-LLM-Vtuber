@@ -10,9 +10,20 @@ from animetta.memory.v2.emotion_field import VAD_MAP, EmotionalField, VADVector
 class TestVADMap:
     def test_all_14_emotions_mapped(self):
         expected = {
-            "happy", "sad", "angry", "surprised", "neutral", "thinking",
-            "confused", "love", "shy", "excited", "suspicious", "tired",
-            "proud", "resigned",
+            "happy",
+            "sad",
+            "angry",
+            "surprised",
+            "neutral",
+            "thinking",
+            "confused",
+            "love",
+            "shy",
+            "excited",
+            "suspicious",
+            "tired",
+            "proud",
+            "resigned",
         }
         assert set(VAD_MAP.keys()) == expected
 
@@ -88,7 +99,7 @@ class TestEmotionalField:
     def test_emotion_shift_toward_current(self):
         """Reconsolidation shifts memory emotion toward current."""
         memory = VAD_MAP["neutral"]  # (0, 0, 0)
-        current = VAD_MAP["happy"]   # (0.81, 0.51, 0.67)
+        current = VAD_MAP["happy"]  # (0.81, 0.51, 0.67)
         shifted = EmotionalField.emotion_shift(current, memory)
         # Should move toward happy
         assert shifted.valence > 0.0
@@ -102,6 +113,7 @@ class TestEmotionalField:
         # Should not flip signs
         assert shifted.valence < 0.0  # still mostly negative
         assert shifted.arousal > 0.0  # still high (shift bounded)
+
 
 class TestEmotionalFieldEdgeCases:
     def test_cosine_zero_vector(self):

@@ -29,9 +29,7 @@ class TestTools:
         await asyncio.sleep(30)
         await sio.disconnect()
         txt = " ".join(
-            d.get("text", "")
-            for d in ev.get("chat:sentence", [])
-            if isinstance(d, dict)
+            d.get("text", "") for d in ev.get("chat:sentence", []) if isinstance(d, dict)
         )
         errs = ev.get("system:error", [])
         print(f"response={txt[:200]} errors={errs}")
@@ -58,9 +56,7 @@ class TestTools:
         await asyncio.sleep(30)
         await sio.disconnect()
         txt = " ".join(
-            d.get("text", "")
-            for d in ev.get("chat:sentence", [])
-            if isinstance(d, dict)
+            d.get("text", "") for d in ev.get("chat:sentence", []) if isinstance(d, dict)
         )
         errs = ev.get("system:error", [])
         print(f"response={txt[:200]} errors={errs}")

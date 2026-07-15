@@ -67,11 +67,16 @@ async def test_real_socket_chat_selects_one_correlated_contract(
     assert received.get(sentence_event), received
     assert opposite_sentence not in received
     assert opposite_control not in received
-    assert len([
-        event
-        for event in received.get(sentence_event, [])
-        if event.get("is_complete") or event.get("text") == ""
-    ]) == 1
+    assert (
+        len(
+            [
+                event
+                for event in received.get(sentence_event, [])
+                if event.get("is_complete") or event.get("text") == ""
+            ]
+        )
+        == 1
+    )
 
     correlated = [
         item

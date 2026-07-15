@@ -48,7 +48,9 @@ def _mock_llm(response_json: str | None = None) -> MagicMock:
     """Create a mock LLM service."""
     llm = MagicMock()
     if response_json is None:
-        response_json = '{"goal": "test", "steps": [{"action": "goto", "params": {"x": 0, "y": 64, "z": 0}}]}'
+        response_json = (
+            '{"goal": "test", "steps": [{"action": "goto", "params": {"x": 0, "y": 64, "z": 0}}]}'
+        )
     mock_response = MagicMock()
     mock_response.content = response_json
     llm.chat = AsyncMock(return_value=mock_response)

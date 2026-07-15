@@ -88,9 +88,7 @@ async def test_run_graph_reuses_task_id_for_canonical_observation() -> None:
     )
     orchestrator.graph = MagicMock()
     state = create_initial_state(session_id="sid", user_text="hello", **identity)
-    orchestrator.graph.ainvoke = AsyncMock(
-        return_value={**state, "response_text": "reply"}
-    )
+    orchestrator.graph.ainvoke = AsyncMock(return_value={**state, "response_text": "reply"})
     await orchestrator._run_graph(state)
 
     assert recorder.started[0].trace_id == identity["task_id"]

@@ -14,7 +14,9 @@ def _read(relative_path: str) -> str:
 def test_active_python_version_configuration_matches_canonical_pin() -> None:
     problems: list[str] = []
     version_file = ROOT / ".python-version"
-    pinned_version = version_file.read_text(encoding="utf-8").strip() if version_file.exists() else ""
+    pinned_version = (
+        version_file.read_text(encoding="utf-8").strip() if version_file.exists() else ""
+    )
     if pinned_version != CANONICAL_VERSION:
         problems.append(
             f".python-version must contain {CANONICAL_VERSION!r}, found {pinned_version!r}"

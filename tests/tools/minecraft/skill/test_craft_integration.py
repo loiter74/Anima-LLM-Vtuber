@@ -126,16 +126,12 @@ class TestCraftSkillStructure:
     def test_craft_skills_have_tags(self) -> None:
         """All craft skills have 'crafting' tag."""
         for skill in _craft_skills():
-            assert "crafting" in skill.tags, (
-                f"Skill '{skill.id}' missing 'crafting' tag"
-            )
+            assert "crafting" in skill.tags, f"Skill '{skill.id}' missing 'crafting' tag"
 
     def test_craft_skills_have_preconditions(self) -> None:
         """All craft skills have preconditions."""
         for skill in _craft_skills():
-            assert len(skill.preconditions) > 0, (
-                f"Skill '{skill.id}' missing preconditions"
-            )
+            assert len(skill.preconditions) > 0, f"Skill '{skill.id}' missing preconditions"
 
 
 # ── 4.2 Material Shortage Scenario ────────────────────────────────────────────
@@ -217,14 +213,16 @@ class TestWorkbenchScenario:
         skill = _skill_by_id("craft_equipment")
         # Items requiring 3x3 crafting: pickaxes, axes, swords, armor
         three_by_three = [
-            "wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "diamond_pickaxe",
-            "iron_axe", "iron_sword",
+            "wooden_pickaxe",
+            "stone_pickaxe",
+            "iron_pickaxe",
+            "diamond_pickaxe",
+            "iron_axe",
+            "iron_sword",
         ]
         recipes = [s.params["recipe"] for s in skill.steps if s.name == "craft"]
         for item in three_by_three:
-            assert item in recipes, (
-                f"craft_equipment should include 3x3 recipe: {item}"
-            )
+            assert item in recipes, f"craft_equipment should include 3x3 recipe: {item}"
 
     def test_craft_basic_tools_includes_both_2x2_and_3x3(self) -> None:
         """craft_basic_tools includes sticks (2x2) and tools (3x3)."""
@@ -240,18 +238,16 @@ class TestWorkbenchScenario:
         skill = _skill_by_id("craft_armor")
         recipes = [s.params["recipe"] for s in skill.steps if s.name == "craft"]
         for recipe in recipes:
-            assert recipe in (
-                "iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"
-            ), f"Unexpected armor recipe: {recipe}"
+            assert recipe in ("iron_helmet", "iron_chestplate", "iron_leggings", "iron_boots"), (
+                f"Unexpected armor recipe: {recipe}"
+            )
 
     def test_skill_library_does_not_check_workbench_at_python_level(self) -> None:
         """Workbench detection is a JS-side concern; Python skills only check inventory."""
         skill = _skill_by_id("craft_equipment")
         # Preconditions are only about materials, not workbench presence
         for cond in skill.preconditions:
-            assert cond.startswith("has_"), (
-                f"Preconditions should be material checks, got: {cond}"
-            )
+            assert cond.startswith("has_"), f"Preconditions should be material checks, got: {cond}"
 
 
 # ── 4.4 Skill Matching and Execution ──────────────────────────────────────────
@@ -269,7 +265,8 @@ class TestCraftSkillMatching:
         return lib
 
     async def test_match_craft_skills_with_wood(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """match_skills finds craft skills when oak_log >= 3."""
         ctx = _inventory_ctx({"oak_log": 10})
@@ -281,7 +278,8 @@ class TestCraftSkillMatching:
         assert "craft_armor" not in matched_ids, "craft_armor should NOT match without iron"
 
     async def test_match_craft_skills_with_iron(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """match_skills finds armor skill when iron_ingot >= 24."""
         ctx = _inventory_ctx({"iron_ingot": 30})
@@ -290,7 +288,8 @@ class TestCraftSkillMatching:
         assert "craft_armor" in matched_ids, "craft_armor should match"
 
     async def test_match_craft_skills_with_both(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """All 3 craft skills match when both wood and iron available."""
         ctx = _inventory_ctx({"oak_log": 10, "iron_ingot": 30})
@@ -301,7 +300,8 @@ class TestCraftSkillMatching:
         assert "craft_armor" in matched_ids
 
     async def test_no_craft_skills_match_empty(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """No craft skills match with empty inventory."""
         ctx = _inventory_ctx({})
@@ -312,7 +312,8 @@ class TestCraftSkillMatching:
         assert "craft_armor" not in matched_ids
 
     async def test_search_craft_skills_by_keyword(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """Searching '装备' finds craft_equipment."""
         results = await lib_with_craft_skills.search_skills("装备")
@@ -320,7 +321,8 @@ class TestCraftSkillMatching:
         assert "craft_equipment" in result_ids
 
     async def test_search_craft_skills_by_tag(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """Searching by 'crafting' tag finds all craft skills."""
         results = await lib_with_craft_skills.search_by_tags(["crafting"], limit=10)
@@ -330,18 +332,18 @@ class TestCraftSkillMatching:
         assert "craft_armor" in result_ids
 
     async def test_execute_skill_blocks_on_unmet_preconditions(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """execute_skill_by_id fails when preconditions not met."""
         ctx = _inventory_ctx({"iron_ingot": 10})  # not enough iron
         # Create a minimal bridge mock that won't be called
         from unittest.mock import AsyncMock, MagicMock
+
         mock_bridge = MagicMock()
         mock_bridge.send_command = AsyncMock()
 
-        result = await lib_with_craft_skills.execute_skill_by_id(
-            "craft_armor", mock_bridge, ctx
-        )
+        result = await lib_with_craft_skills.execute_skill_by_id("craft_armor", mock_bridge, ctx)
         assert result.success is False, (
             f"craft_armor should fail with only 10 iron, got: {result.reason}"
         )
@@ -351,13 +353,13 @@ class TestCraftSkillMatching:
         )
 
     async def test_execute_skill_skips_when_not_found(
-        self, lib_with_craft_skills: SkillLibrary,
+        self,
+        lib_with_craft_skills: SkillLibrary,
     ) -> None:
         """execute_skill_by_id fails for unknown skill."""
         from unittest.mock import MagicMock
-        result = await lib_with_craft_skills.execute_skill_by_id(
-            "nonexistent_skill", MagicMock()
-        )
+
+        result = await lib_with_craft_skills.execute_skill_by_id("nonexistent_skill", MagicMock())
         assert result.success is False
         assert "not found" in result.reason.lower()
 
@@ -365,6 +367,7 @@ class TestCraftSkillMatching:
         """Step-level preconditions are checked during execution."""
         # Create a skill with a check step that validates inventory
         from animetta.tools.minecraft.skill.library import SkillStep
+
         skill = Skill(
             id="test_equip_check",
             name="Test Equip Check",

@@ -112,6 +112,7 @@ class TestRegisterAndGet:
     @pytest.mark.asyncio
     async def test_register_async_loader_stays_unloaded(self, manager):
         """An async loader function should leave the slot UNLOADED."""
+
         async def async_loader():
             return "async_result"
 
@@ -151,6 +152,7 @@ class TestWarmupAndAwait:
     @pytest.mark.asyncio
     async def test_get_triggers_lazy_load(self, manager):
         """First get() on an UNLOADED async model should load it."""
+
         async def lazy_loader():
             await asyncio.sleep(0.02)
             return "lazy_result"
@@ -264,6 +266,7 @@ class TestLoadError:
     @pytest.mark.asyncio
     async def test_sync_load_error_propagates(self, manager):
         """Sync loader that raises should propagate immediately."""
+
         def failing_loader():
             raise RuntimeError("sync fail")
 
@@ -276,6 +279,7 @@ class TestLoadError:
     @pytest.mark.asyncio
     async def test_async_load_error_during_warmup(self, manager):
         """Async loader that fails should record error without crashing warmup."""
+
         async def failing_loader():
             raise ValueError("async fail")
 
@@ -292,6 +296,7 @@ class TestLoadError:
     @pytest.mark.asyncio
     async def test_async_load_error_during_get(self, manager):
         """Lazy load via get() should propagate the loader error."""
+
         async def failing_loader():
             raise RuntimeError("lazy fail")
 
@@ -305,6 +310,7 @@ class TestLoadError:
     @pytest.mark.asyncio
     async def test_one_failure_does_not_block_others(self, manager):
         """One failing loader should not prevent others from loading."""
+
         async def good_loader():
             await asyncio.sleep(0.02)
             return "good_result"
@@ -429,10 +435,7 @@ class TestSocketIOIntegration:
         await mgr.warmup()
 
         # Should have loading + loaded emissions
-        emitted_statuses = [
-            call[0][1]["status"]
-            for call in mock_sio.emit.call_args_list
-        ]
+        emitted_statuses = [call[0][1]["status"] for call in mock_sio.emit.call_args_list]
         assert "loading" in emitted_statuses
         assert "loaded" in emitted_statuses
 

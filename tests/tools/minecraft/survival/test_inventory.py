@@ -142,15 +142,28 @@ class TestCheckPhaseInventory:
 class TestPhaseData:
     def test_all_phases_have_requirements(self):
         for phase_name in [
-            "crafting_table", "wooden_pickaxe", "cobblestone",
-            "stone_kit", "fuel", "iron_ore", "smelt_iron", "iron_gear",
+            "crafting_table",
+            "wooden_pickaxe",
+            "cobblestone",
+            "stone_kit",
+            "fuel",
+            "iron_ore",
+            "smelt_iron",
+            "iron_gear",
         ]:
             assert phase_name in PHASE_REQUIREMENTS, f"Missing requirements for {phase_name}"
 
     def test_all_phases_have_completion(self):
         for phase_name in [
-            "wood", "crafting_table", "wooden_pickaxe", "cobblestone",
-            "stone_kit", "fuel", "iron_ore", "smelt_iron", "iron_gear",
+            "wood",
+            "crafting_table",
+            "wooden_pickaxe",
+            "cobblestone",
+            "stone_kit",
+            "fuel",
+            "iron_ore",
+            "smelt_iron",
+            "iron_gear",
         ]:
             assert phase_name in PHASE_COMPLETION, f"Missing completion for {phase_name}"
 
