@@ -1,4 +1,4 @@
-.PHONY: lint typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -8,10 +8,19 @@ QUALITY_RELEASE_EVIDENCE ?= artifacts/test-impact/release-runtime/evidence.json
 # ── Local targets ────────────────────────────────────────────────────────
 
 lint:
-	PYTHONPATH=src ruff check src/ tests/
+	PYTHONPATH=src ruff check src/ tooling/ scripts/ evaluations/ tests/
 
 format:
-	PYTHONPATH=src ruff format src/ tests/
+	PYTHONPATH=src ruff format src/ tooling/ scripts/ evaluations/ tests/
+
+format-check:
+	PYTHONPATH=src ruff format --check src/ tooling/ scripts/ evaluations/ tests/
+
+frontend-lint:
+	pnpm --dir frontend lint
+
+frontend-format-check:
+	pnpm --dir frontend format:check
 
 typecheck:
 	PYTHONPATH=src mypy src/animetta --ignore-missing-imports

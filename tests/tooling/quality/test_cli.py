@@ -703,6 +703,13 @@ def test_makefile_exposes_stable_quality_entrypoints() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "quality-validate:" in makefile
+    assert "format-check:" in makefile
+    assert "frontend-lint:" in makefile
+    assert "frontend-format-check:" in makefile
+    assert "ruff check src/ tooling/ scripts/ evaluations/ tests/" in makefile
+    assert "ruff format --check src/ tooling/ scripts/ evaluations/ tests/" in makefile
+    assert "pnpm --dir frontend lint" in makefile
+    assert "pnpm --dir frontend format:check" in makefile
     assert "test-quick:" in makefile
     assert "test-affected:" in makefile
     assert "test-full:" in makefile

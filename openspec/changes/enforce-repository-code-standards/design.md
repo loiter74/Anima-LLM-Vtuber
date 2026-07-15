@@ -2,7 +2,7 @@
 
 Animetta is a mixed Python 3.13, Vue 3/TypeScript, Electron, and operational-script repository. The repository already has an impact-aware verification control plane in `tooling/quality.yml`, but its current code-standard coverage is asymmetric: Ruff lint is present, Ruff formatting is not enforced, mypy skips broad production package trees, and the frontend has strict type checking without lint or format gates. The approved change is repository-wide and behavior-preserving.
 
-The clean `f0b0e635` baseline passes the Python 3.13 quick smoke and all 297 frontend tests. It also shows 451 Python files outside Ruff's canonical format. A separate branch is moving Qwen out of the Docker topology; this change must avoid competing edits while the branches are independent and must verify the merged topology before completion.
+The clean `f0b0e635` baseline passes the Python 3.13 quick smoke and all 297 frontend tests. Across the complete maintained Python scope, it shows 483 files outside Ruff's canonical format and 332 lint diagnostics. A separate branch is moving Qwen out of the Docker topology; this change must avoid competing edits while the branches are independent and must verify the merged topology before completion.
 
 ## Goals / Non-Goals
 

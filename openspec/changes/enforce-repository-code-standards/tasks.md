@@ -1,12 +1,12 @@
 ## 1. Baseline and quality-control contracts
 
-- [ ] 1.1 Record the clean Python 3.13 quick-smoke, frontend typecheck/test, Ruff lint, Ruff format, and mypy baseline with maintained-root file counts
-- [ ] 1.2 Add failing quality-manifest tests for Python format, expanded Python roots, frontend lint/format, and operational-source groups
-- [ ] 1.3 Add failing runner and CLI contract tests proving every new group resolves to the canonical local command and fails closed when its tool is unavailable
-- [ ] 1.4 Extend quality models and runners only as required by the tests, preserving `tooling/quality.yml` as the sole path-to-group catalog
-- [ ] 1.5 Extend `tooling/quality.yml` input sets, groups, components, full-tier inclusion, capabilities, and Docker watch scope for every maintained source root
-- [ ] 1.6 Update Make targets and GitHub quality execution to expose the manifest-defined format and lint gates without duplicating selection logic
-- [ ] 1.7 Run quality catalog validation and focused `tests/tooling/quality` verification on the control-plane batch
+- [x] 1.1 Record the clean Python 3.13 quick-smoke, frontend typecheck/test, Ruff lint, Ruff format, and mypy baseline with maintained-root file counts
+- [x] 1.2 Add failing quality-manifest tests for Python format, expanded Python roots, frontend lint/format, and operational-source groups
+- [x] 1.3 Add failing runner and CLI contract tests proving every new group resolves to the canonical local command and fails closed when its tool is unavailable
+- [x] 1.4 Extend quality models and runners only as required by the tests, preserving `tooling/quality.yml` as the sole path-to-group catalog
+- [x] 1.5 Extend `tooling/quality.yml` input sets, groups, components, full-tier inclusion, capabilities, and Docker watch scope for every maintained source root
+- [x] 1.6 Update Make targets and GitHub quality execution to expose the manifest-defined format and lint gates without duplicating selection logic
+- [x] 1.7 Run quality catalog validation and focused `tests/tooling/quality` verification on the control-plane batch
 
 ## 2. Python canonical formatting
 

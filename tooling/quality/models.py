@@ -27,6 +27,7 @@ class VerificationKind(StrEnum):
 
 class Runner(StrEnum):
     RUFF = "ruff"
+    RUFF_FORMAT = "ruff-format"
     MYPY = "mypy"
     PYTEST = "pytest"
     PYTHON = "python"
@@ -244,7 +245,7 @@ class VerificationGroup(FrozenModel):
     def validate_runner_payload(self) -> VerificationGroup:
         if self.runner is Runner.PYTHON and not self.entrypoint:
             raise ValueError("python runner requires entrypoint")
-        if self.runner in {Runner.RUFF, Runner.MYPY, Runner.PYTEST} and not self.targets:
+        if self.runner in {Runner.RUFF, Runner.RUFF_FORMAT, Runner.MYPY, Runner.PYTEST} and not self.targets:
             raise ValueError(f"{self.runner.value} runner requires targets")
         if self.cacheable and self.isolation is not Isolation.HERMETIC:
             raise ValueError("cacheable groups must use hermetic isolation")

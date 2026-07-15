@@ -15,6 +15,13 @@ input_sets:
     paths:
       - src/**/*.py
       - config/**/*.yaml
+  python-maintained-source:
+    paths:
+      - src/**/*.py
+      - tooling/**/*.py
+      - scripts/**/*.py
+      - evaluations/**/*.py
+      - tests/**/*.py
   frontend-toolchain:
     paths:
       - frontend/package.json
@@ -27,6 +34,20 @@ input_sets:
     paths:
       - frontend/src/**
       - frontend/public/**
+      - frontend/electron/**
+      - frontend/scripts/**
+      - frontend/*.mjs
+      - frontend/*.ts
+  operational-source:
+    paths:
+      - Dockerfile*
+      - docker-compose*.yml
+      - docker/**/*.sh
+      - scripts/**/*.ps1
+      - scripts/**/*.bat
+      - config/**/*.yaml
+      - .github/workflows/**/*.yml
+      - "**/*.toml"
   documentation-source:
     paths:
       - README.md
@@ -107,17 +128,30 @@ docker_scopes:
       - config/**
 
 groups:
-  backend-static:
-    domain: backend
+  python-format:
+    domain: repository
     kind: lint
-    runner: ruff
-    targets: [src, tooling, tests]
+    runner: ruff-format
+    targets: [src, tooling, scripts, evaluations, tests]
+    args: [--check]
     timeout_seconds: 180
     include_in_full: true
     cacheable: true
     resource_class: light
     resource_weight: 1
-    input_sets: [python-toolchain]
+    input_sets: [python-toolchain, python-maintained-source]
+
+  backend-static:
+    domain: backend
+    kind: lint
+    runner: ruff
+    targets: [src, tooling, scripts, evaluations, tests]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source]
 
   backend-typecheck:
     domain: backend
@@ -132,18 +166,18 @@ groups:
     resource_weight: 3
     input_sets: [python-toolchain]
 
-  backend-tooling-typecheck:
+  backend-support-typecheck:
     domain: repository
     kind: typecheck
     runner: mypy
-    targets: [tooling/quality]
+    targets: [tooling/quality, scripts, evaluations]
     args: [--ignore-missing-imports]
     timeout_seconds: 180
     include_in_full: true
     cacheable: true
     resource_class: light
     resource_weight: 1
-    input_sets: [python-toolchain]
+    input_sets: [python-toolchain, python-maintained-source]
 
   backend-tooling-quality:
     domain: repository
@@ -152,6 +186,7 @@ groups:
     targets: [tests/tooling/quality]
     args: [-q, -o, addopts=]
     timeout_seconds: 180
+    include_in_full: true
     cacheable: true
     resource_class: cpu
     resource_weight: 2
@@ -353,6 +388,32 @@ groups:
     resource_weight: 2
     input_sets: [frontend-toolchain, frontend-runtime]
 
+  frontend-lint:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [lint]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-format:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [format:check]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [frontend-toolchain, frontend-runtime]
+
   frontend-typecheck:
     domain: frontend
     kind: typecheck
@@ -409,6 +470,19 @@ groups:
     resource_class: exclusive
     resource_weight: 8
 
+  operational-source-contract:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/check_source_standards.py
+    args: [--check]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [operational-source]
+
 components:
   quality-control-plane:
     domain: repository
@@ -417,14 +491,23 @@ components:
       - tests/tooling/**
       - scripts/health_check.py
       - tests/smoke/test_health_check.py
-    direct_groups: [backend-tooling-quality, backend-tooling-typecheck, backend-static]
+    direct_groups:
+      - backend-tooling-quality
+      - backend-support-typecheck
+      - backend-static
+      - python-format
     impacts: []
     risk: high
 
   backend-core:
     domain: backend
     paths: [src/animetta/core/**]
-    direct_groups: [backend-core-unit, backend-route-smoke]
+    direct_groups:
+      - backend-core-unit
+      - backend-route-smoke
+      - python-format
+      - backend-static
+      - backend-typecheck
     impacts: [orchestration-server, orchestration-graph]
     risk: high
 
@@ -433,21 +516,31 @@ components:
     paths:
       - src/animetta/config/**
       - config/**
-    direct_groups: [backend-config-unit, backend-core-unit]
+    direct_groups:
+      - backend-config-unit
+      - backend-core-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
     impacts: [backend-core]
     risk: high
 
   orchestration-server:
     domain: backend
     paths: [src/animetta/orchestration/server/**]
-    direct_groups: [backend-server-unit, backend-route-smoke]
+    direct_groups:
+      - backend-server-unit
+      - backend-route-smoke
+      - python-format
+      - backend-static
+      - backend-typecheck
     impacts: [orchestration-graph]
     risk: normal
 
   orchestration-graph:
     domain: backend
     paths: [src/animetta/orchestration/graph/**]
-    direct_groups: [backend-graph-unit]
+    direct_groups: [backend-graph-unit, python-format, backend-static, backend-typecheck]
     impacts: []
     risk: normal
 
@@ -456,21 +549,25 @@ components:
     paths:
       - src/animetta/services/**
       - src/animetta_qwen_tts/**
-    direct_groups: [backend-services-unit]
+    direct_groups:
+      - backend-services-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
     impacts: [orchestration-graph]
     risk: normal
 
   backend-memory:
     domain: backend
     paths: [src/animetta/memory/**]
-    direct_groups: [backend-memory-unit]
+    direct_groups: [backend-memory-unit, python-format, backend-static, backend-typecheck]
     impacts: [orchestration-graph]
     risk: normal
 
   backend-tools:
     domain: backend
     paths: [src/animetta/tools/**]
-    direct_groups: [backend-tools-unit]
+    direct_groups: [backend-tools-unit, python-format, backend-static, backend-typecheck]
     impacts: [orchestration-server]
     risk: normal
 
@@ -480,14 +577,23 @@ components:
       - src/animetta/observability/**
       - src/animetta/tracing/**
       - src/animetta/inspection/**
-    direct_groups: [backend-observability-unit]
+    direct_groups:
+      - backend-observability-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
     impacts: [backend-core]
     risk: normal
 
   frontend-source:
     domain: frontend
-    paths: [frontend/src/**]
-    direct_groups: [frontend-tests, frontend-typecheck]
+    paths:
+      - frontend/src/**
+      - frontend/electron/**
+      - frontend/scripts/**
+      - frontend/*.mjs
+      - frontend/*.ts
+    direct_groups: [frontend-tests, frontend-typecheck, frontend-lint, frontend-format]
     impacts: [frontend-build-control]
     risk: normal
 
@@ -499,7 +605,7 @@ components:
       - frontend/vite.config.ts
       - frontend/vitest.config.ts
       - frontend/uno.config.ts
-    direct_groups: [frontend-typecheck, frontend-build]
+    direct_groups: [frontend-typecheck, frontend-build, frontend-lint, frontend-format]
     impacts: []
     risk: high
 
@@ -512,6 +618,21 @@ components:
     direct_groups: [docker-compose-contract]
     impacts: []
     risk: high
+
+  operational-source-standards:
+    domain: repository
+    paths:
+      - Dockerfile*
+      - docker-compose*.yml
+      - docker/**/*.sh
+      - scripts/**/*.ps1
+      - scripts/**/*.bat
+      - config/**/*.yaml
+      - .github/workflows/**/*.yml
+      - "**/*.toml"
+    direct_groups: [operational-source-contract]
+    impacts: []
+    risk: normal
 
   repository-governance:
     domain: repository
@@ -549,22 +670,32 @@ components:
 
 fallbacks:
   backend:
+    - python-format
     - backend-static
     - backend-typecheck
     - backend-route-smoke
     - backend-events-contract
     - backend-full
-  frontend: [frontend-tests, frontend-typecheck, frontend-build]
+  frontend:
+    - frontend-lint
+    - frontend-format
+    - frontend-tests
+    - frontend-typecheck
+    - frontend-build
   repository:
+    - python-format
     - backend-static
     - backend-typecheck
-    - backend-tooling-typecheck
+    - backend-support-typecheck
     - backend-route-smoke
     - backend-events-contract
     - docs-contract
     - security-secrets
     - backend-full
     - frontend-tests
+    - frontend-lint
+    - frontend-format
     - frontend-typecheck
     - frontend-build
     - docker-compose-contract
+    - operational-source-contract

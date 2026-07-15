@@ -32,6 +32,8 @@ def build_argv(
 ) -> list[str]:
     if group.runner is Runner.RUFF:
         return [python_executable, "-m", "ruff", "check", *group.targets, *group.args]
+    if group.runner is Runner.RUFF_FORMAT:
+        return [python_executable, "-m", "ruff", "format", *group.args, *group.targets]
     if group.runner is Runner.MYPY:
         return [python_executable, "-m", "mypy", *group.targets, *group.args]
     if group.runner is Runner.PYTEST:

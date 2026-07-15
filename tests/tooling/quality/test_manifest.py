@@ -240,6 +240,91 @@ def test_repository_catalog_covers_runtime_environments() -> None:
     }
 
 
+def test_repository_catalog_covers_full_python_standard_scope() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    expected_targets = ("src", "tooling", "scripts", "evaluations", "tests")
+
+    assert catalog.groups["python-format"].runner.value == "ruff-format"
+    assert catalog.groups["python-format"].targets == expected_targets
+    assert catalog.groups["python-format"].include_in_full is True
+    assert catalog.groups["backend-static"].targets == expected_targets
+    assert catalog.groups["backend-support-typecheck"].targets == (
+        "tooling/quality",
+        "scripts",
+        "evaluations",
+    )
+
+    for component_id in {
+        "backend-core",
+        "backend-config",
+        "orchestration-server",
+        "orchestration-graph",
+        "backend-services",
+        "backend-memory",
+        "backend-tools",
+        "backend-observability",
+    }:
+        assert {
+            "python-format",
+            "backend-static",
+            "backend-typecheck",
+        }.issubset(catalog.components[component_id].direct_groups)
+
+    assert {
+        "python-format",
+        "backend-static",
+        "backend-support-typecheck",
+    }.issubset(catalog.components["quality-control-plane"].direct_groups)
+
+
+def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+
+    assert catalog.groups["frontend-lint"].runner.value == "pnpm"
+    assert catalog.groups["frontend-lint"].args == ("lint",)
+    assert catalog.groups["frontend-lint"].include_in_full is True
+    assert catalog.groups["frontend-format"].runner.value == "pnpm"
+    assert catalog.groups["frontend-format"].args == ("format:check",)
+    assert catalog.groups["frontend-format"].include_in_full is True
+
+    gated_paths = {
+        path
+        for component in catalog.components.values()
+        if {"frontend-lint", "frontend-format"}.issubset(component.direct_groups)
+        for path in component.paths
+    }
+    assert {
+        "frontend/src/**",
+        "frontend/electron/**",
+        "frontend/scripts/**",
+    }.issubset(gated_paths)
+
+
+def test_repository_catalog_has_operational_source_contract() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    group = catalog.groups["operational-source-contract"]
+
+    assert group.runner.value == "python"
+    assert group.entrypoint == "scripts/check_source_standards.py"
+    assert group.include_in_full is True
+    assert group.cacheable is True
+
+    operational_paths = {
+        path
+        for component in catalog.components.values()
+        if "operational-source-contract" in component.direct_groups
+        for path in component.paths
+    }
+    assert {
+        "Dockerfile*",
+        "docker/**/*.sh",
+        "scripts/**/*.ps1",
+        "scripts/**/*.bat",
+        "config/**/*.yaml",
+        "**/*.toml",
+    }.issubset(operational_paths)
+
+
 def test_catalog_accepts_valid_acceleration_metadata() -> None:
     catalog = Catalog.model_validate(_catalog_with_acceleration())
 

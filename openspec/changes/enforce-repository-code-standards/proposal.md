@@ -1,6 +1,6 @@
 ## Why
 
-Animetta has repository-wide coding conventions, but enforcement is incomplete: 451 Python files are outside the canonical formatter state, broad Ruff and mypy exemptions hide defects in core packages, and the Vue/TypeScript codebase has no lint or format gate. A full, behavior-preserving convergence is needed now so the existing impact-aware quality system prevents the debt from returning.
+Animetta has repository-wide coding conventions, but enforcement is incomplete: 483 Python files across the full maintained scope are outside the canonical formatter state, broad Ruff and mypy exemptions hide defects in core packages, and the Vue/TypeScript codebase has no lint or format gate. A full, behavior-preserving convergence is needed now so the existing impact-aware quality system prevents the debt from returning.
 
 ## What Changes
 

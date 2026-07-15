@@ -60,6 +60,9 @@ def test_quality_workflow_maps_events_to_tiers_and_group_id_matrices() -> None:
         commands = "\n".join(step.get("run", "") for step in job["steps"] if isinstance(step, dict))
         assert "tooling.quality run-group" in commands
         assert "matrix.group" in commands
+        assert "ruff check" not in commands
+        assert "eslint" not in commands
+        assert "prettier" not in commands
 
     for job_id in ("python", "node", "service"):
         assert workflow["jobs"][job_id]["continue-on-error"] == "true"

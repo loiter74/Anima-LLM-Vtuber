@@ -82,7 +82,13 @@ def test_quick_selects_direct_server_groups_without_impact_expansion() -> None:
 
     plan = plan_verification(_catalog(), changes, Tier.QUICK)
 
-    assert _group_ids(plan) == ["backend-route-smoke", "backend-server-unit"]
+    assert _group_ids(plan) == [
+        "backend-route-smoke",
+        "backend-server-unit",
+        "backend-static",
+        "backend-typecheck",
+        "python-format",
+    ]
     assert "backend-graph-unit" not in _group_ids(plan)
 
 
@@ -111,6 +117,9 @@ def test_affected_expands_declared_component_impacts() -> None:
         "backend-route-smoke",
         "backend-server-unit",
         "backend-graph-unit",
+        "backend-static",
+        "backend-typecheck",
+        "python-format",
     }
     graph = next(group for group in plan.groups if group.id == "backend-graph-unit")
     assert any("impact" in reason for reason in graph.reasons)
@@ -243,6 +252,21 @@ def test_full_selects_each_hermetic_full_group_once() -> None:
     assert "docker" in {capability.value for capability in plan.required_capabilities}
 
 
+def test_full_selects_every_repository_code_standard_group() -> None:
+    plan = plan_verification(_catalog(), from_paths([], repo_root=ROOT), Tier.FULL)
+
+    assert {
+        "python-format",
+        "backend-static",
+        "backend-typecheck",
+        "backend-support-typecheck",
+        "frontend-lint",
+        "frontend-format",
+        "frontend-typecheck",
+        "operational-source-contract",
+    }.issubset(_group_ids(plan))
+
+
 def test_nightly_extends_full_with_service_groups() -> None:
     changes = from_paths([], repo_root=ROOT)
 
@@ -274,6 +298,7 @@ def test_unknown_backend_path_falls_back_to_backend_full() -> None:
     plan = plan_verification(_catalog(), changes, Tier.QUICK)
 
     assert {
+        "python-format",
         "backend-static",
         "backend-typecheck",
         "backend-route-smoke",

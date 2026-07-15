@@ -403,6 +403,7 @@ class FingerprintContext:
         }
         package_by_runner = {
             Runner.RUFF: "ruff",
+            Runner.RUFF_FORMAT: "ruff",
             Runner.MYPY: "mypy",
             Runner.PYTEST: "pytest",
             Runner.PLAYWRIGHT: "playwright",
