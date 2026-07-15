@@ -15,6 +15,7 @@ class DemucsSeparationConfig(SeparationBaseConfig):
     Uses a pre-trained Music Source Separation model for stem separation.
     Supports vocal/instrumental separation and multi-stem decomposition.
     """
+
     type: Literal["demucs"] = "demucs"
 
     # === Model configuration ===

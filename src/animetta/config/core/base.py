@@ -21,6 +21,7 @@ class ProviderConfig(BaseModel):
             type: Literal["openai"] = "openai"
             model: str = "gpt-4o-mini"
     """
+
     type: str = Field(description="Provider type, used for discriminating configuration types")
 
     model_config = ConfigDict(extra="forbid", validate_default=True)

@@ -9,6 +9,7 @@ from .core.base import BaseConfig
 
 class SystemConfig(BaseConfig):
     """System configuration"""
+
     host: str = Field(default="localhost", description="Server address")
     port: int = Field(default=12394, description="Server port")
     debug: bool = Field(default=False, description="Debug mode")
@@ -34,7 +35,9 @@ class SystemConfig(BaseConfig):
         description="Allow active meme generation paths",
     )
     golden_tts_timeout_seconds: float = Field(
-        default=20.0, ge=1.0, le=60.0,
+        default=20.0,
+        ge=1.0,
+        le=60.0,
         description="Per-turn Qwen synthesis timeout in the golden profile",
     )
     gpt_sovits: dict = Field(default={}, description="GPT-SoVITS server path, python, port config")

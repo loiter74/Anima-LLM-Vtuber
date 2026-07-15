@@ -11,6 +11,7 @@ from .base import LLMBaseConfig
 @ProviderRegistry.register_config("llm", "glm")
 class GLMLLMConfig(LLMBaseConfig):
     """Zhipu AI GLM configuration"""
+
     type: Literal["glm"] = "glm"
     model: str = Field(default="glm-4-flash", description="Model name")
     enable_thinking: bool = Field(default=False, description="Enable deep thinking mode")

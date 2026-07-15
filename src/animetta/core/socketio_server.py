@@ -28,7 +28,8 @@ from animetta.utils.logger_manager import logger_manager
 # Load environment variables from .env file (must be before other imports)
 try:
     from dotenv import load_dotenv
-    env_path = _PROJECT_ROOT / '.env'
+
+    env_path = _PROJECT_ROOT / ".env"
     if env_path.exists():
         load_dotenv(env_path, override=True)
         logger.info(f"[OK] Environment variables loaded from: {env_path}")
@@ -83,9 +84,7 @@ def init_config(config_path: str | None = None) -> EffectiveConfig:
         return global_config
 
     manifest_path = (
-        Path(config_path)
-        if config_path is not None
-        else _PROJECT_ROOT / "config" / "animetta.yaml"
+        Path(config_path) if config_path is not None else _PROJECT_ROOT / "config" / "animetta.yaml"
     )
     global_config = load_effective_config(manifest_path)
 
@@ -124,7 +123,9 @@ def run_server():
     logger.info("Socket.IO async_mode: asgi (uvicorn)")
     logger.info("=" * 50)
     logger.info(f"Visit http://{global_config.system.host}:{global_config.system.port} to test")
-    logger.info(f"WebSocket URL: ws://{global_config.system.host}:{global_config.system.port}/socket.io/")
+    logger.info(
+        f"WebSocket URL: ws://{global_config.system.host}:{global_config.system.port}/socket.io/"
+    )
 
     # Run uvicorn server - use factory function to ensure proper initialization
     uvicorn.run(
@@ -132,7 +133,7 @@ def run_server():
         host=global_config.system.host,
         port=global_config.system.port,
         log_level="info",
-        factory=True
+        factory=True,
     )
 
 
@@ -209,7 +210,6 @@ def get_asgi_app():
 
         # ── Start daily inspection scheduler ────────────────────────
         try:
-
             _inspection_scheduler = InspectionScheduler(
                 runtime=_server.inspection_runtime(), interval_hours=24
             )
@@ -221,9 +221,7 @@ def get_asgi_app():
             )
             logger.info("[Inspection] Daily inspection scheduler registered")
         except Exception as e:
-            logger.warning(
-                f"[Inspection] Failed to start inspection scheduler (non-fatal): {e}"
-            )
+            logger.warning(f"[Inspection] Failed to start inspection scheduler (non-fatal): {e}")
 
         asgi_app = _server.get_app()
         _INIT_DONE.set()
@@ -319,10 +317,9 @@ def _setup_checkpointer() -> None:
         logger.info(f"[Checkpoint] Redis checkpointer active: {redis_url}")
     except Exception as e:
         logger.warning(
-            f"[Checkpoint] Redis unavailable ({e}), "
-            f"falling back to in-memory MemorySaver"
+            f"[Checkpoint] Redis unavailable ({e}), falling back to in-memory MemorySaver"
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_server()

@@ -14,4 +14,5 @@ class SeparationBaseConfig(ProviderConfig, DeviceMixin):
     Source separation decomposes an audio mixture into its constituent
     stems (e.g., vocals, drums, bass, other).
     """
+
     sample_rate: int = Field(default=44100, description="Target sample rate for processing")

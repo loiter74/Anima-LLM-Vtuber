@@ -50,10 +50,14 @@ class ProviderRegistry:
         Returns:
             Decorator function
         """
+
         def decorator(config_class: type[ProviderConfig]) -> type[ProviderConfig]:
             cls._configs.setdefault(category, {})[provider_type] = config_class
-            logger.debug(f"Registered config class: {category}.{provider_type} -> {config_class.__name__}")
+            logger.debug(
+                f"Registered config class: {category}.{provider_type} -> {config_class.__name__}"
+            )
             return config_class
+
         return decorator
 
     # ==================== Service Class Registration ====================
@@ -69,10 +73,14 @@ class ProviderRegistry:
         Returns:
             Decorator function
         """
+
         def decorator(service_class: type) -> type:
             cls._services.setdefault(category, {})[provider_type] = service_class
-            logger.debug(f"Registered service class: {category}.{provider_type} -> {service_class.__name__}")
+            logger.debug(
+                f"Registered service class: {category}.{provider_type} -> {service_class.__name__}"
+            )
             return service_class
+
         return decorator
 
     # ==================== Config Class Access ====================
@@ -150,7 +158,7 @@ class ProviderRegistry:
                 f"Available services: {cls.list_services(category)}"
             )
 
-        if hasattr(service_class, 'from_config'):
+        if hasattr(service_class, "from_config"):
             return service_class.from_config(config, **extra_kwargs)
         else:
             raise ValueError(

@@ -14,8 +14,13 @@ from animetta.orchestration.prompting.roleplay_guard import detect_drift
 
 IDENTITY_KEYS = ("message_id", "conversation_id", "task_id", "turn_id")
 GOLDEN_EVENTS = {
-    "chat:control", "chat:sentence", "chat:expression", "chat:live2d_action",
-    "chat:audio_with_expression", "chat:subtitle_translation", "system:error",
+    "chat:control",
+    "chat:sentence",
+    "chat:expression",
+    "chat:live2d_action",
+    "chat:audio_with_expression",
+    "chat:subtitle_translation",
+    "system:error",
 }
 _MARKERS = re.compile(
     r"<\|(?:assistant|system|think)\|>|\[affinity:|\[(?:happy|sad|angry|neutral|thinking)\]|```(?:json)?|normal_response|final_response",
@@ -127,8 +132,11 @@ def scan_sanitized_logs(text: str) -> list[str]:
         r"Traceback|\bERROR\b|MockLLM|MockTTS|provider\s+(?:substitution|fallback)|orphan(?:ed)?\s+task",
         re.IGNORECASE,
     )
-    return [f"line:{index}:{match.group(0)}" for index, line in enumerate(text.splitlines(), 1)
-            if (match := forbidden.search(line))]
+    return [
+        f"line:{index}:{match.group(0)}"
+        for index, line in enumerate(text.splitlines(), 1)
+        if (match := forbidden.search(line))
+    ]
 
 
 class EvidenceWriter:
@@ -159,8 +167,18 @@ def safe_excerpt(text: str) -> str:
 
 def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
     allowed = {
-        *IDENTITY_KEYS, "seq", "is_complete", "signal", "type", "status",
-        "component", "phase", "reason", "retryable", "format", "emotion",
+        *IDENTITY_KEYS,
+        "seq",
+        "is_complete",
+        "signal",
+        "type",
+        "status",
+        "component",
+        "phase",
+        "reason",
+        "retryable",
+        "format",
+        "emotion",
     }
     result = {key: payload[key] for key in allowed if key in payload}
     if payload.get("text"):

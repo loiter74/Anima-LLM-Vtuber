@@ -16,6 +16,7 @@ class VibeVoiceTTSConfig(TTSBaseConfig):
     Default Remote mode points to local VibeVoice inference service at localhost:8765.
     RTX 5090D can run 1.5B (~6GB VRAM) and 7B (~16GB VRAM) models smoothly.
     """
+
     type: Literal["vibe_voice"] = "vibe_voice"
 
     # === Model identifier ===

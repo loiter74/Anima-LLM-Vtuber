@@ -31,6 +31,7 @@ class TimelineSegment:
         >>> segment.duration
         2.5
     """
+
     emotion: str
     start_time: float
     end_time: float
@@ -52,7 +53,7 @@ class TimelineSegment:
             "emotion": self.emotion,
             "time": self.start_time,
             "duration": self.duration,
-            "intensity": self.intensity
+            "intensity": self.intensity,
         }
 
     def to_frontend_format(self) -> dict[str, Any]:
@@ -66,15 +67,17 @@ class TimelineSegment:
             "emotion": self.emotion,
             "time": self.start_time,
             "duration": self.duration,
-            "intensity": self.intensity
+            "intensity": self.intensity,
         }
 
     def __repr__(self) -> str:
         """String representation"""
-        return (f"TimelineSegment(emotion={self.emotion}, "
-                f"start={self.start_time:.2f}s, "
-                f"end={self.end_time:.2f}s, "
-                f"intensity={self.intensity:.2f})")
+        return (
+            f"TimelineSegment(emotion={self.emotion}, "
+            f"start={self.start_time:.2f}s, "
+            f"end={self.end_time:.2f}s, "
+            f"intensity={self.intensity:.2f})"
+        )
 
     def contains_time(self, time: float) -> bool:
         """
@@ -88,7 +91,7 @@ class TimelineSegment:
         """
         return self.start_time <= time < self.end_time
 
-    def overlaps_with(self, other: 'TimelineSegment') -> bool:
+    def overlaps_with(self, other: "TimelineSegment") -> bool:
         """
         Check if this segment overlaps with another segment
 
@@ -98,8 +101,7 @@ class TimelineSegment:
         Returns:
             bool: True if the two segments overlap
         """
-        return not (self.end_time <= other.start_time or
-                   self.start_time >= other.end_time)
+        return not (self.end_time <= other.start_time or self.start_time >= other.end_time)
 
 
 @dataclass
@@ -115,6 +117,7 @@ class TimelineConfig:
         transition_duration: Transition duration (seconds)
         enable_smoothing: Whether to enable smooth transitions
     """
+
     default_emotion: str = "neutral"
     min_segment_duration: float = 0.1
     transition_duration: float = 0.3
@@ -167,7 +170,7 @@ class ITimelineStrategy(ABC):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **_kwargs
+        **_kwargs,
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -222,12 +225,7 @@ class ITimelineStrategy(ABC):
         """
         pass
 
-    def validate_input(
-        self,
-        emotions: list[str],
-        text: str,
-        audio_duration: float
-    ) -> bool:
+    def validate_input(self, emotions: list[str], text: str, audio_duration: float) -> bool:
         """
         Validate input parameters (optional method)
 
@@ -241,17 +239,13 @@ class ITimelineStrategy(ABC):
         Returns:
             bool: Whether the input is valid
         """
-        return (
-            audio_duration > 0
-            and text is not None
-            and len(text) >= 0
-        )
+        return audio_duration > 0 and text is not None and len(text) >= 0
 
     def ensure_full_coverage(
         self,
         segments: list[TimelineSegment],
         audio_duration: float,
-        default_emotion: str = "neutral"
+        default_emotion: str = "neutral",
     ) -> list[TimelineSegment]:
         """
         Ensure the timeline covers the entire audio duration
@@ -269,11 +263,7 @@ class ITimelineStrategy(ABC):
         """
         if not segments:
             return [
-                TimelineSegment(
-                    emotion=default_emotion,
-                    start_time=0.0,
-                    end_time=audio_duration
-                )
+                TimelineSegment(emotion=default_emotion, start_time=0.0, end_time=audio_duration)
             ]
 
         # Sort by start time
@@ -286,29 +276,26 @@ class ITimelineStrategy(ABC):
         for segment in sorted_segments:
             # If there's a gap, fill with default emotion
             if segment.start_time > last_end:
-                result.append(TimelineSegment(
-                    emotion=default_emotion,
-                    start_time=last_end,
-                    end_time=segment.start_time
-                ))
+                result.append(
+                    TimelineSegment(
+                        emotion=default_emotion, start_time=last_end, end_time=segment.start_time
+                    )
+                )
 
             result.append(segment)
             last_end = max(last_end, segment.end_time)
 
         # Check if end is covered
         if last_end < audio_duration:
-            result.append(TimelineSegment(
-                emotion=default_emotion,
-                start_time=last_end,
-                end_time=audio_duration
-            ))
+            result.append(
+                TimelineSegment(
+                    emotion=default_emotion, start_time=last_end, end_time=audio_duration
+                )
+            )
 
         return result
 
-    def merge_adjacent_same_emotion(
-        self,
-        segments: list[TimelineSegment]
-    ) -> list[TimelineSegment]:
+    def merge_adjacent_same_emotion(self, segments: list[TimelineSegment]) -> list[TimelineSegment]:
         """
         Merge adjacent segments with the same emotion
 
@@ -332,13 +319,12 @@ class ITimelineStrategy(ABC):
 
         for next_seg in sorted_segments[1:]:
             # If same emotion and overlapping or adjacent, merge
-            if (next_seg.emotion == current.emotion and
-                next_seg.start_time <= current.end_time):
+            if next_seg.emotion == current.emotion and next_seg.start_time <= current.end_time:
                 current = TimelineSegment(
                     emotion=current.emotion,
                     start_time=current.start_time,
                     end_time=max(current.end_time, next_seg.end_time),
-                    intensity=max(current.intensity, next_seg.intensity)
+                    intensity=max(current.intensity, next_seg.intensity),
                 )
             else:
                 result.append(current)

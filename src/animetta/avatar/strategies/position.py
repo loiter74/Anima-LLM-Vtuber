@@ -44,11 +44,7 @@ class PositionBasedStrategy(ITimelineStrategy):
         3
     """
 
-    def __init__(
-        self,
-        config: TimelineConfig = None,
-        enable_smoothing: bool = True
-    ):
+    def __init__(self, config: TimelineConfig = None, enable_smoothing: bool = True):
         """
         Initialize the strategy
 
@@ -65,7 +61,7 @@ class PositionBasedStrategy(ITimelineStrategy):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **_kwargs
+        **_kwargs,
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -88,23 +84,18 @@ class PositionBasedStrategy(ITimelineStrategy):
 
         # Validate input
         if not self.validate_input(emotions, text, audio_duration):
-            raise ValueError(f"Invalid input parameters: emotions={emotions}, audio_duration={audio_duration}")
+            raise ValueError(
+                f"Invalid input parameters: emotions={emotions}, audio_duration={audio_duration}"
+            )
 
         try:
             # Case 1: No emotions
             if not emotions:
                 logger.debug(f"[{self.name}] No emotions, using default emotion")
-                return self._create_default_segment(
-                    timeline_config.default_emotion,
-                    audio_duration
-                )
+                return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
             # Case 2: Has emotions, distribute time evenly
-            segments = self._calculate_even_segments(
-                emotions,
-                audio_duration,
-                timeline_config
-            )
+            segments = self._calculate_even_segments(emotions, audio_duration, timeline_config)
 
             # Optional: Merge adjacent same emotions
             if self._enable_smoothing:
@@ -112,16 +103,11 @@ class PositionBasedStrategy(ITimelineStrategy):
 
             # Ensure full coverage of audio duration
             segments = self.ensure_full_coverage(
-                segments,
-                audio_duration,
-                timeline_config.default_emotion
+                segments, audio_duration, timeline_config.default_emotion
             )
 
             # Apply minimum segment duration filter
-            segments = self._filter_short_segments(
-                segments,
-                timeline_config.min_segment_duration
-            )
+            segments = self._filter_short_segments(segments, timeline_config.min_segment_duration)
 
             logger.debug(
                 f"[{self.name}] Calculated {len(segments)} timeline segments, "
@@ -133,16 +119,10 @@ class PositionBasedStrategy(ITimelineStrategy):
         except Exception as e:
             logger.error(f"[{self.name}] Failed to calculate timeline: {e}")
             # Return default timeline
-            return self._create_default_segment(
-                timeline_config.default_emotion,
-                audio_duration
-            )
+            return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
     def _calculate_even_segments(
-        self,
-        emotions: list[str],
-        audio_duration: float,
-        config: TimelineConfig
+        self, emotions: list[str], audio_duration: float, config: TimelineConfig
     ) -> list[TimelineSegment]:
         """
         Calculate evenly distributed segments
@@ -165,21 +145,15 @@ class PositionBasedStrategy(ITimelineStrategy):
             # Calculate intensity (can be extended to be emotion-based)
             intensity = self._calculate_intensity(emotion, i, len(emotions))
 
-            segments.append(TimelineSegment(
-                emotion=emotion,
-                start_time=start_time,
-                end_time=end_time,
-                intensity=intensity
-            ))
+            segments.append(
+                TimelineSegment(
+                    emotion=emotion, start_time=start_time, end_time=end_time, intensity=intensity
+                )
+            )
 
         return segments
 
-    def _calculate_intensity(
-        self,
-        emotion: str,
-        _index: int,
-        _total_emotions: int
-    ) -> float:
+    def _calculate_intensity(self, emotion: str, _index: int, _total_emotions: int) -> float:
         """
         Calculate emotion intensity
 
@@ -198,9 +172,7 @@ class PositionBasedStrategy(ITimelineStrategy):
         return 1.0
 
     def _filter_short_segments(
-        self,
-        segments: list[TimelineSegment],
-        min_duration: float
+        self, segments: list[TimelineSegment], min_duration: float
     ) -> list[TimelineSegment]:
         """
         Filter out segments that are too short
@@ -230,11 +202,7 @@ class PositionBasedStrategy(ITimelineStrategy):
 
         return filtered
 
-    def _create_default_segment(
-        self,
-        emotion: str,
-        duration: float
-    ) -> list[TimelineSegment]:
+    def _create_default_segment(self, emotion: str, duration: float) -> list[TimelineSegment]:
         """
         Create a default timeline segment
 
@@ -245,26 +213,14 @@ class PositionBasedStrategy(ITimelineStrategy):
         Returns:
             List[TimelineSegment]: List containing a single segment
         """
-        return [
-            TimelineSegment(
-                emotion=emotion,
-                start_time=0.0,
-                end_time=duration,
-                intensity=1.0
-            )
-        ]
+        return [TimelineSegment(emotion=emotion, start_time=0.0, end_time=duration, intensity=1.0)]
 
     @property
     def name(self) -> str:
         """Strategy name"""
         return "position_based"
 
-    def validate_input(
-        self,
-        emotions: list[str],
-        text: str,
-        audio_duration: float
-    ) -> bool:
+    def validate_input(self, emotions: list[str], text: str, audio_duration: float) -> bool:
         """
         Validate input parameters
 
@@ -304,12 +260,7 @@ class PositionBasedStrategy(ITimelineStrategy):
             Dict: Statistics
         """
         if not segments:
-            return {
-                "count": 0,
-                "total_duration": 0.0,
-                "emotions": [],
-                "average_duration": 0.0
-            }
+            return {"count": 0, "total_duration": 0.0, "emotions": [], "average_duration": 0.0}
 
         emotion_counts: dict[str, int] = {}
         for seg in segments:
@@ -322,5 +273,5 @@ class PositionBasedStrategy(ITimelineStrategy):
             "emotion_counts": emotion_counts,
             "average_duration": sum(seg.duration for seg in segments) / len(segments),
             "min_duration": min(seg.duration for seg in segments),
-            "max_duration": max(seg.duration for seg in segments)
+            "max_duration": max(seg.duration for seg in segments),
         }

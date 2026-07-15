@@ -10,11 +10,11 @@ from .keyword import KeywordAnalyzer
 from .llm_tag import EmotionExtractionResult, EmotionTag, StandaloneLLMTagAnalyzer
 
 __all__ = [
-    'IEmotionAnalyzer',
-    'EmotionData',
-    'KeywordAnalyzer',
-    'StandaloneLLMTagAnalyzer',
-    'EmotionTag',
-    'EmotionExtractionResult',
-    'AudioAnalyzer',
+    "IEmotionAnalyzer",
+    "EmotionData",
+    "KeywordAnalyzer",
+    "StandaloneLLMTagAnalyzer",
+    "EmotionTag",
+    "EmotionExtractionResult",
+    "AudioAnalyzer",
 ]

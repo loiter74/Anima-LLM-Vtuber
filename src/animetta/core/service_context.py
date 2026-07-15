@@ -46,9 +46,7 @@ class ServiceContext:
     ):
         self.config: EffectiveConfig | Any | None = None
         self.model_manager = model_manager
-        self.observation_recorder = (
-            observation_recorder or NoOpObservationRecorder()
-        )
+        self.observation_recorder = observation_recorder or NoOpObservationRecorder()
 
         # Service instances
         self.asr_engine: ASRInterface | None = None
@@ -156,9 +154,7 @@ class ServiceContext:
         except Exception:
             provider_identity = None
         if provider_identity != "deepseek":
-            raise RuntimeError(
-                "Golden profile requires DeepSeek provider identity"
-            )
+            raise RuntimeError("Golden profile requires DeepSeek provider identity")
         if not isinstance(concrete_tts, Qwen3TTSTTS):
             raise RuntimeError("Golden profile requires a real TTS engine")
 
@@ -197,12 +193,9 @@ class ServiceContext:
 
         # Trigger preload for all registered services via model manager
         if self.model_manager is not None and (
-            self._model_warmup_task is None
-            or self._model_warmup_task.done()
+            self._model_warmup_task is None or self._model_warmup_task.done()
         ):
-            self._model_warmup_task = asyncio.create_task(
-                self.model_manager.warmup()
-            )
+            self._model_warmup_task = asyncio.create_task(self.model_manager.warmup())
 
         logger.info(f"[{self.session_id}] Services loaded")
         logger.info(get_availability_summary())
@@ -246,34 +239,34 @@ class ServiceContext:
             return
 
         provider = asr_config.type
-        model = getattr(asr_config, 'model', 'default')
+        model = getattr(asr_config, "model", "default")
         logger.info(f"[{self.session_id}] Initializing ASR: {provider}/{model}")
 
         self.asr_engine = ASRFactory.create(
             provider=provider,
-            api_key=getattr(asr_config, 'api_key', None),
-            model=getattr(asr_config, 'model', 'whisper-1'),
+            api_key=getattr(asr_config, "api_key", None),
+            model=getattr(asr_config, "model", "whisper-1"),
             language=asr_config.language,
-            base_url=getattr(asr_config, 'base_url', None),
-            stream=getattr(asr_config, 'stream', False),
-            device=getattr(asr_config, 'device', 'auto'),
-            compute_type=getattr(asr_config, 'compute_type', 'default'),
-            download_root=getattr(asr_config, 'download_root', None),
-            beam_size=getattr(asr_config, 'beam_size', 5),
-            vad_filter=getattr(asr_config, 'vad_filter', True),
-            vad_parameters=getattr(asr_config, 'vad_parameters', {}),
-            ncpu=getattr(asr_config, 'ncpu', 4),
-            vad_model=getattr(asr_config, 'vad_model', None),
-            punc_model=getattr(asr_config, 'punc_model', None),
-            spk_model=getattr(asr_config, 'spk_model', None),
-            hotword=getattr(asr_config, 'hotword', None),
-            model_hub=getattr(asr_config, 'model_hub', 'ms'),
-            disable_update=getattr(asr_config, 'disable_update', True),
+            base_url=getattr(asr_config, "base_url", None),
+            stream=getattr(asr_config, "stream", False),
+            device=getattr(asr_config, "device", "auto"),
+            compute_type=getattr(asr_config, "compute_type", "default"),
+            download_root=getattr(asr_config, "download_root", None),
+            beam_size=getattr(asr_config, "beam_size", 5),
+            vad_filter=getattr(asr_config, "vad_filter", True),
+            vad_parameters=getattr(asr_config, "vad_parameters", {}),
+            ncpu=getattr(asr_config, "ncpu", 4),
+            vad_model=getattr(asr_config, "vad_model", None),
+            punc_model=getattr(asr_config, "punc_model", None),
+            spk_model=getattr(asr_config, "spk_model", None),
+            hotword=getattr(asr_config, "hotword", None),
+            model_hub=getattr(asr_config, "model_hub", "ms"),
+            disable_update=getattr(asr_config, "disable_update", True),
             strict=self._is_golden_profile(self.config),
             observation_recorder=self.observation_recorder,
         )
 
-        if hasattr(self.asr_engine, 'preload') and self.model_manager is not None:
+        if hasattr(self.asr_engine, "preload") and self.model_manager is not None:
             self.model_manager.register("asr", self.asr_engine.preload, "asr")
 
     async def _preload_tokenizers(self) -> None:
@@ -282,13 +275,16 @@ class ServiceContext:
             import asyncio
 
             import tiktoken
+
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, lambda: tiktoken.get_encoding("cl100k_base"))
             logger.info(f"[{self.session_id}] tiktoken tokenizer preloaded")
         except ImportError:
             logger.debug(f"[{self.session_id}] tiktoken not installed, skipping preload")
         except Exception as e:
-            logger.warning(f"[{self.session_id}] Tokenizer preload failed (does not affect operation): {e}")
+            logger.warning(
+                f"[{self.session_id}] Tokenizer preload failed (does not affect operation): {e}"
+            )
 
     async def init_tts(self, tts_config: TTSConfig) -> None:
         """Initialize TTS, retaining the legacy CPU/Mock chain outside golden mode."""
@@ -301,20 +297,36 @@ class ServiceContext:
         if golden and provider == "mock":
             raise RuntimeError("MockTTS is forbidden in the golden profile")
 
-        model = getattr(tts_config, 'model', 'default')
+        model = getattr(tts_config, "model", "default")
         logger.info(f"[{self.session_id}] Initializing TTS: {provider}/{model}")
 
         # Convert the config object to dict and pass all fields to factory
         tts_kwargs = {}
-        if hasattr(tts_config, 'model_dump'):
-            cfg_dict = tts_config.model_dump(exclude={'type'})
+        if hasattr(tts_config, "model_dump"):
+            cfg_dict = tts_config.model_dump(exclude={"type"})
             tts_kwargs.update(cfg_dict)
         else:
-            for field in ['api_key', 'model', 'voice', 'base_url', 'response_format',
-                          'speed', 'volume', 'ref_audio_path', 'prompt_text',
-                          'prompt_lang', 'text_lang', 'top_k', 'top_p', 'temperature',
-                          'media_type', 'streaming_mode', 'text_split_method',
-                          'sample_steps', 'seed']:
+            for field in [
+                "api_key",
+                "model",
+                "voice",
+                "base_url",
+                "response_format",
+                "speed",
+                "volume",
+                "ref_audio_path",
+                "prompt_text",
+                "prompt_lang",
+                "text_lang",
+                "top_k",
+                "top_p",
+                "temperature",
+                "media_type",
+                "streaming_mode",
+                "text_split_method",
+                "sample_steps",
+                "seed",
+            ]:
                 val = getattr(tts_config, field, None)
                 if val is not None:
                     tts_kwargs[field] = val
@@ -358,10 +370,15 @@ class ServiceContext:
                 f"[{self.session_id}] TTS fallback: '{provider}' unavailable, using MockTTS (silent)"
             )
 
-        if hasattr(self.tts_engine, 'preload') and self.model_manager is not None:
+        if hasattr(self.tts_engine, "preload") and self.model_manager is not None:
             self.model_manager.register("tts", self.tts_engine.preload, "tts")
 
-    async def init_llm(self, agent_config: AgentConfig, persona_config: PersonaConfig, app_config: EffectiveConfig | Any = None) -> None:
+    async def init_llm(
+        self,
+        agent_config: AgentConfig,
+        persona_config: PersonaConfig,
+        app_config: EffectiveConfig | Any = None,
+    ) -> None:
         """Initialize LLM service"""
         if self.llm_engine is not None:
             logger.debug(f"[{self.session_id}] LLM already initialized, skipping")
@@ -394,7 +411,7 @@ class ServiceContext:
         self.llm_engine = llm_engine
         logger.info(f"[{self.session_id}] LLM created: {type(self.llm_engine).__name__}")
 
-        if hasattr(self.llm_engine, 'preload') and self.model_manager is not None:
+        if hasattr(self.llm_engine, "preload") and self.model_manager is not None:
             self.model_manager.register("llm", self.llm_engine.preload, "llm")
 
     async def init_local_llm(self, llm_config, app_config: EffectiveConfig | Any = None) -> None:
@@ -414,7 +431,9 @@ class ServiceContext:
                 raise RuntimeError("MockLLM is forbidden in the golden profile")
             raise RuntimeError("Local LLM is forbidden in the golden profile")
 
-        logger.info(f"[{self.session_id}] Initializing local LLM: {llm_config.type}/{llm_config.model}")
+        logger.info(
+            f"[{self.session_id}] Initializing local LLM: {llm_config.type}/{llm_config.model}"
+        )
         local_llm_engine = LLMFactory.create_from_config(
             config=llm_config,
             system_prompt="",
@@ -422,7 +441,9 @@ class ServiceContext:
             observation_recorder=self.observation_recorder,
         )
         self.local_llm_engine = local_llm_engine
-        logger.info(f"[{self.session_id}] Local LLM created: {type(self.local_llm_engine).__name__}")
+        logger.info(
+            f"[{self.session_id}] Local LLM created: {type(self.local_llm_engine).__name__}"
+        )
 
     def _get_live2d_prompt(self) -> str | None:
         """Get Live2D emotion prompt"""
@@ -431,7 +452,9 @@ class ServiceContext:
             if not live2d_config.enabled:
                 return None
 
-            builder = EmotionPromptBuilder.from_config({"valid_emotions": live2d_config.valid_emotions})
+            builder = EmotionPromptBuilder.from_config(
+                {"valid_emotions": live2d_config.valid_emotions}
+            )
             return builder.build_prompt()
         except Exception as e:
             logger.warning(f"Failed to get Live2D prompt: {e}")
@@ -458,15 +481,17 @@ class ServiceContext:
             )
             logger.info(f"[{self.session_id}] VAD engine created: {type(self.vad_engine).__name__}")
 
-            if hasattr(self.vad_engine, 'preload') and self.model_manager is not None:
+            if hasattr(self.vad_engine, "preload") and self.model_manager is not None:
                 self.model_manager.register("vad", self.vad_engine.preload, "vad")
 
-            if hasattr(self.vad_engine, 'prob_threshold'):
-                logger.info(f"[{self.session_id}] VAD config: "
-                           f"prob_threshold={self.vad_engine.prob_threshold}, "
-                           f"db_threshold={getattr(self.vad_engine, 'db_threshold', 'N/A')}, "
-                           f"required_hits={getattr(self.vad_engine, 'required_hits', 'N/A')}, "
-                           f"required_misses={getattr(self.vad_engine, 'required_misses', 'N/A')}")
+            if hasattr(self.vad_engine, "prob_threshold"):
+                logger.info(
+                    f"[{self.session_id}] VAD config: "
+                    f"prob_threshold={self.vad_engine.prob_threshold}, "
+                    f"db_threshold={getattr(self.vad_engine, 'db_threshold', 'N/A')}, "
+                    f"required_hits={getattr(self.vad_engine, 'required_hits', 'N/A')}, "
+                    f"required_misses={getattr(self.vad_engine, 'required_misses', 'N/A')}"
+                )
         except Exception as e:
             if self._is_golden_profile(self.config):
                 raise
@@ -475,11 +500,13 @@ class ServiceContext:
 
     async def init_audio_processor(self) -> None:
         """Initialize audio processor"""
-        if hasattr(self, 'audio_processor') and self.audio_processor is not None:
+        if hasattr(self, "audio_processor") and self.audio_processor is not None:
             logger.debug(f"[{self.session_id}] AudioProcessor already initialized, skipping")
             return
         if self.vad_engine is None:
-            logger.debug(f"[{self.session_id}] No VAD engine, skipping audio processor initialization")
+            logger.debug(
+                f"[{self.session_id}] No VAD engine, skipping audio processor initialization"
+            )
             return
         logger.debug(f"[{self.session_id}] Audio processor will be created by SessionManager")
 
@@ -492,9 +519,8 @@ class ServiceContext:
             return
         try:
             from animetta.memory.v2.system import LivingMemorySystem
-            self.memory_system = LivingMemorySystem(
-                db_path="memory_db/living_memory.sqlite"
-            )
+
+            self.memory_system = LivingMemorySystem(db_path="memory_db/living_memory.sqlite")
             await self.memory_system.initialize()
             self._owns_memory_system = True
             logger.info(f"[{self.session_id}] LivingMemory V2 initialized")
@@ -518,12 +544,13 @@ class ServiceContext:
         try:
             live2d_config = get_live2d_config()
             if not live2d_config.enabled:
-                logger.info(f"[{self.session_id}] Live2D not enabled, skipping emotion analyzer initialization")
+                logger.info(
+                    f"[{self.session_id}] Live2D not enabled, skipping emotion analyzer initialization"
+                )
                 return
 
             self.emotion_analyzer = EmotionAnalyzerFactory.create(
-                name="llm_tag_analyzer",
-                config={"valid_emotions": live2d_config.valid_emotions}
+                name="llm_tag_analyzer", config={"valid_emotions": live2d_config.valid_emotions}
             )
             logger.info(f"[{self.session_id}] Emotion analyzer initialized")
 
@@ -569,8 +596,8 @@ class ServiceContext:
         if self.vad_engine:
             await self.vad_engine.close()
             self.vad_engine = None
-        if hasattr(self, 'audio_processor') and self.audio_processor:
-            if hasattr(self.audio_processor, 'reset'):
+        if hasattr(self, "audio_processor") and self.audio_processor:
+            if hasattr(self.audio_processor, "reset"):
                 self.audio_processor.reset()
             self.audio_processor = None
 
@@ -584,9 +611,7 @@ class ServiceContext:
     def start_llm_connectivity_probe(self) -> asyncio.Task[dict[str, Any]]:
         """Start the explicit startup probe once and retain its task."""
         if self._llm_connectivity_task is None:
-            self._llm_connectivity_task = asyncio.create_task(
-                self.verify_llm_connectivity()
-            )
+            self._llm_connectivity_task = asyncio.create_task(self.verify_llm_connectivity())
         return self._llm_connectivity_task
 
     async def wait_for_llm_connectivity(self) -> dict[str, Any]:
@@ -618,11 +643,7 @@ class ServiceContext:
             "ok": ready,
             "status": state,
             **({"error": reason} if reason else {}),
-            **(
-                {"latency_ms": round(latency_ms, 1)}
-                if latency_ms is not None
-                else {}
-            ),
+            **({"latency_ms": round(latency_ms, 1)} if latency_ms is not None else {}),
         }
         return dict(status)
 
@@ -667,9 +688,7 @@ class ServiceContext:
                     ready=False,
                     reason="endpoint_missing",
                 )
-            configured_endpoint = canonical_deepseek_endpoint(
-                configured_raw_endpoint
-            )
+            configured_endpoint = canonical_deepseek_endpoint(configured_raw_endpoint)
             engine_endpoint = canonical_deepseek_endpoint(engine_raw_endpoint)
             if configured_endpoint is None or engine_endpoint is None:
                 return self._set_llm_connectivity_status(
@@ -725,9 +744,7 @@ class ServiceContext:
             )
         except Exception as exc:
             reason = (
-                "unauthorized"
-                if getattr(exc, "status_code", None) == 401
-                else "request_failed"
+                "unauthorized" if getattr(exc, "status_code", None) == 401 else "request_failed"
             )
             logger.warning("[health] LLM connectivity failed: {}", reason)
             return self._set_llm_connectivity_status(
@@ -762,17 +779,13 @@ class ServiceContext:
             return False
         try:
             entries = (
-                catalog.get("data")
-                if isinstance(catalog, dict)
-                else getattr(catalog, "data", None)
+                catalog.get("data") if isinstance(catalog, dict) else getattr(catalog, "data", None)
             )
             if not isinstance(entries, (list, tuple)):
                 return False
             for entry in entries:
                 model_id = (
-                    entry.get("id")
-                    if isinstance(entry, dict)
-                    else getattr(entry, "id", None)
+                    entry.get("id") if isinstance(entry, dict) else getattr(entry, "id", None)
                 )
                 if model_id == expected_model:
                     return True

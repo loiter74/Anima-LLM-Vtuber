@@ -9,4 +9,5 @@ from .base import TTSBaseConfig
 @ProviderRegistry.register_config("tts", "mock")
 class MockTTSConfig(TTSBaseConfig):
     """Mock TTS configuration - for testing"""
+
     type: Literal["mock"] = "mock"

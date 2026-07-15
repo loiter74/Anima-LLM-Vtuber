@@ -15,6 +15,7 @@ from loguru import logger
 
 class Environment:
     """Environment type constants"""
+
     WINDOWS = "windows"
     WSL = "wsl"
     LINUX = "linux"
@@ -86,7 +87,7 @@ class EnvHelper:
         path = Path(windows_path)
 
         # Handle Windows drive letter
-        if len(path.parts) >= 1 and len(path.parts[0]) == 2 and path.parts[0][1] == ':':
+        if len(path.parts) >= 1 and len(path.parts[0]) == 2 and path.parts[0][1] == ":":
             drive = path.parts[0][0].lower()
             rest = path.as_posix()[3:]  # Strip "X:/"
             return f"/mnt/{drive}/{rest}"

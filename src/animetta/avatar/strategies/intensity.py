@@ -46,14 +46,14 @@ class IntensityBasedStrategy(ITimelineStrategy):
 
     # Default emotion intensity values (0.0 - 1.0)
     DEFAULT_EMOTION_INTENSITIES = {
-        "happy": 0.8,          # High intensity
-        "sad": 0.6,            # Medium intensity
-        "angry": 0.9,          # Very high intensity
-        "surprised": 0.95,     # Extremely high intensity (short but strong)
-        "thinking": 0.4,       # Lower intensity
-        "neutral": 0.3,        # Low intensity
-        "listening": 0.3,      # Low intensity
-        "speaking": 0.7,       # Medium-high intensity
+        "happy": 0.8,  # High intensity
+        "sad": 0.6,  # Medium intensity
+        "angry": 0.9,  # Very high intensity
+        "surprised": 0.95,  # Extremely high intensity (short but strong)
+        "thinking": 0.4,  # Lower intensity
+        "neutral": 0.3,  # Low intensity
+        "listening": 0.3,  # Low intensity
+        "speaking": 0.7,  # Medium-high intensity
     }
 
     def __init__(
@@ -62,7 +62,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
         emotion_intensities: dict[str, float] | None = None,
         min_intensity: float = 0.2,
         intensity_factor: float = 0.5,
-        enable_smoothing: bool = True
+        enable_smoothing: bool = True,
     ):
         """
         Initialize the strategy
@@ -86,7 +86,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **_kwargs
+        **_kwargs,
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -114,17 +114,10 @@ class IntensityBasedStrategy(ITimelineStrategy):
             # Case 1: No emotions
             if not emotions:
                 logger.debug(f"[{self.name}] No emotions, using default emotion")
-                return self._create_default_segment(
-                    timeline_config.default_emotion,
-                    audio_duration
-                )
+                return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
             # Case 2: Allocate time and intensity based on intensity values
-            segments = self._calculate_intensity_segments(
-                emotions,
-                audio_duration,
-                timeline_config
-            )
+            segments = self._calculate_intensity_segments(emotions, audio_duration, timeline_config)
 
             # Optional: Merge adjacent same emotions
             if self._enable_smoothing:
@@ -132,15 +125,12 @@ class IntensityBasedStrategy(ITimelineStrategy):
 
             # Ensure full coverage
             segments = self.ensure_full_coverage(
-                segments,
-                audio_duration,
-                timeline_config.default_emotion
+                segments, audio_duration, timeline_config.default_emotion
             )
 
             # Apply minimum intensity filter
             segments = self._filter_low_intensity_segments(
-                segments,
-                timeline_config.min_segment_duration
+                segments, timeline_config.min_segment_duration
             )
 
             logger.debug(
@@ -152,16 +142,10 @@ class IntensityBasedStrategy(ITimelineStrategy):
 
         except Exception as e:
             logger.error(f"[{self.name}] Failed to calculate timeline: {e}")
-            return self._create_default_segment(
-                timeline_config.default_emotion,
-                audio_duration
-            )
+            return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
     def _calculate_intensity_segments(
-        self,
-        emotions: list[str],
-        audio_duration: float,
-        config: TimelineConfig
+        self, emotions: list[str], audio_duration: float, config: TimelineConfig
     ) -> list[TimelineSegment]:
         """
         Calculate time allocation and intensity values based on intensity
@@ -217,11 +201,9 @@ class IntensityBasedStrategy(ITimelineStrategy):
         segments = []
         current_time = 0.0
 
-        for i, (emotion, intensity, weight) in enumerate(zip(
-            filtered_emotions,
-            filtered_intensities,
-            weights
-        )):
+        for i, (emotion, intensity, weight) in enumerate(
+            zip(filtered_emotions, filtered_intensities, weights)
+        ):
             # Calculate duration
             if total_weight == 0:
                 duration = audio_duration / len(filtered_emotions)
@@ -235,12 +217,14 @@ class IntensityBasedStrategy(ITimelineStrategy):
             if i == len(filtered_emotions) - 1:
                 end_time = audio_duration
 
-            segments.append(TimelineSegment(
-                emotion=emotion,
-                start_time=start_time,
-                end_time=end_time,
-                intensity=intensity  # Use emotion's intensity value
-            ))
+            segments.append(
+                TimelineSegment(
+                    emotion=emotion,
+                    start_time=start_time,
+                    end_time=end_time,
+                    intensity=intensity,  # Use emotion's intensity value
+                )
+            )
 
             current_time = end_time
 
@@ -250,9 +234,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
         return segments
 
     def _filter_low_intensity_segments(
-        self,
-        segments: list[TimelineSegment],
-        min_duration: float
+        self, segments: list[TimelineSegment], min_duration: float
     ) -> list[TimelineSegment]:
         """
         Filter out segments with low intensity or short duration
@@ -281,11 +263,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
 
         return filtered
 
-    def _create_default_segment(
-        self,
-        emotion: str,
-        duration: float
-    ) -> list[TimelineSegment]:
+    def _create_default_segment(self, emotion: str, duration: float) -> list[TimelineSegment]:
         """
         Create a default timeline segment
 
@@ -301,7 +279,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
                 emotion=emotion,
                 start_time=0.0,
                 end_time=duration,
-                intensity=0.5  # Default medium intensity
+                intensity=0.5,  # Default medium intensity
             )
         ]
 
@@ -310,12 +288,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
         """Strategy name"""
         return "intensity_based"
 
-    def validate_input(
-        self,
-        emotions: list[str],
-        text: str,
-        audio_duration: float
-    ) -> bool:
+    def validate_input(self, emotions: list[str], text: str, audio_duration: float) -> bool:
         """
         Validate input parameters
 
@@ -383,7 +356,7 @@ class IntensityBasedStrategy(ITimelineStrategy):
                 "total_duration": 0.0,
                 "emotions": [],
                 "average_duration": 0.0,
-                "average_intensity": 0.0
+                "average_intensity": 0.0,
             }
 
         emotion_counts: dict[str, int] = {}
@@ -415,5 +388,5 @@ class IntensityBasedStrategy(ITimelineStrategy):
             "emotion_intensities": avg_intensities,
             "average_duration": sum(seg.duration for seg in segments) / len(segments),
             "min_duration": min(seg.duration for seg in segments),
-            "max_duration": max(seg.duration for seg in segments)
+            "max_duration": max(seg.duration for seg in segments),
         }

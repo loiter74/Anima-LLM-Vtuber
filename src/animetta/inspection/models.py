@@ -84,7 +84,5 @@ class InspectionReport(BaseModel):
         failed = total - passed
         if failed == 0:
             return f"[{self.run_id[:8]}] All {total} checks passed ✓"
-        failed_names = ", ".join(
-            name for name, c in self.checks.items() if not c.ok
-        )
+        failed_names = ", ".join(name for name, c in self.checks.items() if not c.ok)
         return f"[{self.run_id[:8]}] {passed}/{total} passed · Failed: {failed_names}"

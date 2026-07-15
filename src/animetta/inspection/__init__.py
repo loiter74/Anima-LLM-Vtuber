@@ -6,7 +6,6 @@ Provides:
 - CheckResult / InspectionReport — data models
 """
 
-
 __all__ = [
     "CheckResult",
     "InspectionReport",

@@ -15,6 +15,7 @@ class RVCConfig(VCBaseConfig):
     Uses a local RVC model checkpoint and feature index for
     zero-shot voice timbre conversion.
     """
+
     type: Literal["rvc"] = "rvc"
 
     # === Model paths ===

@@ -26,9 +26,12 @@ class BilibiliConfig(BaseConfig):
     and which room to connect to. The sessdata cookie enables
     authenticated access for premium features.
     """
+
     enabled: bool = Field(default=False, description="Enable bilibili live danmaku integration")
     room_id: int = Field(default=0, ge=0, description="Bilibili live room ID to connect to")
-    sessdata: str = Field(default="", description="Bilibili SESSDATA cookie for authenticated access")
+    sessdata: str = Field(
+        default="", description="Bilibili SESSDATA cookie for authenticated access"
+    )
     reply_policy: ReplyPolicyConfig = Field(default_factory=ReplyPolicyConfig)
 
     def to_public_dict(self) -> dict[str, object]:

@@ -42,10 +42,9 @@ class TracingProxy:
         object.__setattr__(self, "_target", target)
         object.__setattr__(self, "_tracer", tracer)  # None = resolve lazily
         object.__setattr__(self, "_service", service_name)
-        object.__setattr__(self, "_public_methods", {
-            name for name in dir(target)
-            if not name.startswith("_")
-        })
+        object.__setattr__(
+            self, "_public_methods", {name for name in dir(target) if not name.startswith("_")}
+        )
 
     def _get_tracer(self) -> trace.Tracer:
         tracer = object.__getattribute__(self, "_tracer")
@@ -69,6 +68,7 @@ class TracingProxy:
 
         # Handle async generators (async def with yield) — e.g. chat_stream
         if inspect.isasyncgenfunction(raw):
+
             @functools.wraps(raw)
             async def _traced_gen(*args, **kwargs):
                 tracer = self._get_tracer()
@@ -82,14 +82,17 @@ class TracingProxy:
                         span.set_status(Status(StatusCode.ERROR, str(e)[:500]))
                         span.record_exception(e)
                         raise
+
             return _traced_gen
 
         # Handle coroutine functions (async def) — e.g. chat, synthesize, transcribe
         if asyncio.iscoroutinefunction(raw):
+
             @functools.wraps(raw)
             async def _traced_call(*args, **kwargs):
                 tracer = self._get_tracer()
                 return await self._call_with_span(tracer, service, name, raw, args, kwargs)
+
             return _traced_call
 
         # Non-callable or sync — pass through
@@ -114,7 +117,11 @@ class TracingProxy:
             first = str(args[0]) if not isinstance(args[0], bytes) else f"<{len(args[0])} bytes>"
             attrs["arg.0"] = first[:_INPUT_TRUNCATE_LEN]
         if kwargs:
-            safe_keys = [k for k in list(kwargs.keys())[:3] if k.lower() not in ("api_key", "secret", "password", "token")]
+            safe_keys = [
+                k
+                for k in list(kwargs.keys())[:3]
+                if k.lower() not in ("api_key", "secret", "password", "token")
+            ]
             if safe_keys:
                 attrs["kwarg_keys"] = ",".join(safe_keys)
 

@@ -50,9 +50,7 @@ class InspectionScheduler:
 
         self._stop_event.clear()
         self._task = asyncio.ensure_future(self._loop())
-        logger.info(
-            f"[inspection:scheduler] Started (interval={self.interval_hours}h)"
-        )
+        logger.info(f"[inspection:scheduler] Started (interval={self.interval_hours}h)")
 
     async def stop(self) -> None:
         """Stop the background inspection loop gracefully.
@@ -68,9 +66,7 @@ class InspectionScheduler:
         try:
             await asyncio.wait_for(self._task, timeout=30.0)
         except TimeoutError:
-            logger.warning(
-                "[inspection:scheduler] Task did not stop within 30s, cancelling"
-            )
+            logger.warning("[inspection:scheduler] Task did not stop within 30s, cancelling")
             self._task.cancel()
         logger.info("[inspection:scheduler] Stopped")
 
@@ -99,12 +95,9 @@ class InspectionScheduler:
                     await refresh_llm_connectivity_cache()
                     last_connectivity_refresh = now
                 except Exception as exc:
-                    logger.warning(
-                        f"[inspection:scheduler] Connectivity refresh failed: {exc}"
-                    )
+                    logger.warning(f"[inspection:scheduler] Connectivity refresh failed: {exc}")
 
             try:
-
                 report = await run_full_inspection(self.runtime)
                 await store_report(report, self.runtime.report_store)
 
@@ -112,9 +105,7 @@ class InspectionScheduler:
                     await send_alert(report)
 
             except Exception as exc:
-                logger.error(
-                    f"[inspection:scheduler] Inspection loop crashed: {exc}"
-                )
+                logger.error(f"[inspection:scheduler] Inspection loop crashed: {exc}")
 
             # Sleep until next interval, but check stop_event periodically
             # so stop() does not need to wait the full interval.

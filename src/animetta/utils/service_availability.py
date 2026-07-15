@@ -32,6 +32,7 @@ def _has_mcp_package() -> bool:
     """Check if the Python MCP package is installed."""
     try:
         import mcp  # noqa: F401
+
         return True
     except ImportError:
         return False

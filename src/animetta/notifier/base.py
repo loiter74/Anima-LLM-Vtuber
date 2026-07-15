@@ -47,10 +47,12 @@ def register_notifier(name: str):
         class DiscordNotifier(NotifierBase):
             ...
     """
+
     def decorator(cls: type[NotifierBase]) -> type[NotifierBase]:
         cls.name = name
         _NOTIFIER_REGISTRY[name] = cls
         return cls
+
     return decorator
 
 

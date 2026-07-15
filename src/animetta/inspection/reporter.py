@@ -19,13 +19,15 @@ async def store_report(
     report_store: ObservationReportStore,
 ) -> None:
     """Persist a report through the injected canonical report port."""
-    await report_store.store_inspection_report({
-        "run_id": report.run_id,
-        "started_at": report.started_at,
-        "finished_at": report.finished_at,
-        "overall_ok": report.overall_ok,
-        "checks": {name: check.model_dump() for name, check in report.checks.items()},
-    })
+    await report_store.store_inspection_report(
+        {
+            "run_id": report.run_id,
+            "started_at": report.started_at,
+            "finished_at": report.finished_at,
+            "overall_ok": report.overall_ok,
+            "checks": {name: check.model_dump() for name, check in report.checks.items()},
+        }
+    )
     logger.info(f"[inspection:reporter] Report stored: {report.summary}")
 
 
@@ -54,8 +56,7 @@ async def send_alert(report: InspectionReport) -> None:
     message = (
         f"Inspection {report.run_id[:8]} FAILED\n"
         f"Started: {report.started_at}\n"
-        f"Failed checks:\n"
-        + "\n".join(failed_details)
+        f"Failed checks:\n" + "\n".join(failed_details)
     )
 
     # Synthetic Alertmanager v4 webhook payload
@@ -76,7 +77,6 @@ async def send_alert(report: InspectionReport) -> None:
     }
 
     try:
-
         notifier = NotifierManager()
         if not notifier._enabled:
             logger.debug(

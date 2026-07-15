@@ -9,4 +9,5 @@ from .base import ASRBaseConfig
 @ProviderRegistry.register_config("asr", "mock")
 class MockASRConfig(ASRBaseConfig):
     """Mock ASR configuration - for testing"""
+
     type: Literal["mock"] = "mock"

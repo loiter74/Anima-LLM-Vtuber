@@ -43,14 +43,14 @@ class DurationBasedStrategy(ITimelineStrategy):
 
     # Default emotion duration weights (multiplier relative to other emotions)
     DEFAULT_DURATION_WEIGHTS = {
-        "happy": 1.0,        # Standard duration
-        "sad": 1.5,          # Sad emotions last longer
-        "angry": 1.2,        # Anger lasts slightly longer
-        "surprised": 0.8,    # Surprise is shorter
-        "thinking": 1.3,     # Thinking takes time
-        "neutral": 1.0,      # Neutral standard duration
-        "listening": 1.0,    # Listening state
-        "speaking": 1.0,     # Speaking state
+        "happy": 1.0,  # Standard duration
+        "sad": 1.5,  # Sad emotions last longer
+        "angry": 1.2,  # Anger lasts slightly longer
+        "surprised": 0.8,  # Surprise is shorter
+        "thinking": 1.3,  # Thinking takes time
+        "neutral": 1.0,  # Neutral standard duration
+        "listening": 1.0,  # Listening state
+        "speaking": 1.0,  # Speaking state
     }
 
     def __init__(
@@ -59,7 +59,7 @@ class DurationBasedStrategy(ITimelineStrategy):
         duration_weights: dict[str, float] | None = None,
         min_emotion_duration: float = 0.5,
         max_emotion_duration: float = 5.0,
-        enable_smoothing: bool = True
+        enable_smoothing: bool = True,
     ):
         """
         Initialize the strategy
@@ -83,7 +83,7 @@ class DurationBasedStrategy(ITimelineStrategy):
         text: str,
         audio_duration: float,
         config: TimelineConfig = None,
-        **_kwargs
+        **_kwargs,
     ) -> list[TimelineSegment]:
         """
         Calculate the emotion timeline
@@ -111,17 +111,10 @@ class DurationBasedStrategy(ITimelineStrategy):
             # Case 1: No emotions
             if not emotions:
                 logger.debug(f"[{self.name}] No emotions, using default emotion")
-                return self._create_default_segment(
-                    timeline_config.default_emotion,
-                    audio_duration
-                )
+                return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
             # Case 2: Allocate time based on weights
-            segments = self._calculate_weighted_segments(
-                emotions,
-                audio_duration,
-                timeline_config
-            )
+            segments = self._calculate_weighted_segments(emotions, audio_duration, timeline_config)
 
             # Optional: Merge adjacent same emotions
             if self._enable_smoothing:
@@ -129,16 +122,11 @@ class DurationBasedStrategy(ITimelineStrategy):
 
             # Ensure full coverage
             segments = self.ensure_full_coverage(
-                segments,
-                audio_duration,
-                timeline_config.default_emotion
+                segments, audio_duration, timeline_config.default_emotion
             )
 
             # Apply minimum duration filter
-            segments = self._filter_short_segments(
-                segments,
-                timeline_config.min_segment_duration
-            )
+            segments = self._filter_short_segments(segments, timeline_config.min_segment_duration)
 
             logger.debug(
                 f"[{self.name}] Calculated {len(segments)} timeline segments, "
@@ -149,16 +137,10 @@ class DurationBasedStrategy(ITimelineStrategy):
 
         except Exception as e:
             logger.error(f"[{self.name}] Failed to calculate timeline: {e}")
-            return self._create_default_segment(
-                timeline_config.default_emotion,
-                audio_duration
-            )
+            return self._create_default_segment(timeline_config.default_emotion, audio_duration)
 
     def _calculate_weighted_segments(
-        self,
-        emotions: list[str],
-        audio_duration: float,
-        config: TimelineConfig
+        self, emotions: list[str], audio_duration: float, config: TimelineConfig
     ) -> list[TimelineSegment]:
         """
         Calculate time allocation based on weights
@@ -205,12 +187,11 @@ class DurationBasedStrategy(ITimelineStrategy):
             if i == len(emotions) - 1:
                 end_time = audio_duration
 
-            segments.append(TimelineSegment(
-                emotion=emotion,
-                start_time=start_time,
-                end_time=end_time,
-                intensity=1.0
-            ))
+            segments.append(
+                TimelineSegment(
+                    emotion=emotion, start_time=start_time, end_time=end_time, intensity=1.0
+                )
+            )
 
             current_time = end_time
 
@@ -221,9 +202,7 @@ class DurationBasedStrategy(ITimelineStrategy):
         return segments
 
     def _filter_short_segments(
-        self,
-        segments: list[TimelineSegment],
-        min_duration: float
+        self, segments: list[TimelineSegment], min_duration: float
     ) -> list[TimelineSegment]:
         """
         Filter out segments that are too short
@@ -252,11 +231,7 @@ class DurationBasedStrategy(ITimelineStrategy):
 
         return filtered
 
-    def _create_default_segment(
-        self,
-        emotion: str,
-        duration: float
-    ) -> list[TimelineSegment]:
+    def _create_default_segment(self, emotion: str, duration: float) -> list[TimelineSegment]:
         """
         Create a default timeline segment
 
@@ -267,26 +242,14 @@ class DurationBasedStrategy(ITimelineStrategy):
         Returns:
             List[TimelineSegment]: List containing a single segment
         """
-        return [
-            TimelineSegment(
-                emotion=emotion,
-                start_time=0.0,
-                end_time=duration,
-                intensity=1.0
-            )
-        ]
+        return [TimelineSegment(emotion=emotion, start_time=0.0, end_time=duration, intensity=1.0)]
 
     @property
     def name(self) -> str:
         """Strategy name"""
         return "duration_based"
 
-    def validate_input(
-        self,
-        emotions: list[str],
-        text: str,
-        audio_duration: float
-    ) -> bool:
+    def validate_input(self, emotions: list[str], text: str, audio_duration: float) -> bool:
         """
         Validate input parameters
 
@@ -349,12 +312,7 @@ class DurationBasedStrategy(ITimelineStrategy):
             Dict: Statistics
         """
         if not segments:
-            return {
-                "count": 0,
-                "total_duration": 0.0,
-                "emotions": [],
-                "average_duration": 0.0
-            }
+            return {"count": 0, "total_duration": 0.0, "emotions": [], "average_duration": 0.0}
 
         emotion_counts: dict[str, int] = {}
         emotion_durations: dict[str, float] = {}
@@ -371,5 +329,5 @@ class DurationBasedStrategy(ITimelineStrategy):
             "emotion_durations": emotion_durations,
             "average_duration": sum(seg.duration for seg in segments) / len(segments),
             "min_duration": min(seg.duration for seg in segments),
-            "max_duration": max(seg.duration for seg in segments)
+            "max_duration": max(seg.duration for seg in segments),
         }

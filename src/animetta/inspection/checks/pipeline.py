@@ -57,16 +57,20 @@ STANDARD_TEXT_WORKFLOW = (
 PROBE_INPUT_EVENT = EVENTS["chat"]["text"]["name"]
 
 # Required catalog-backed events for a filtered inspection probe.
-EXPECTED_EVENTS: frozenset[str] = frozenset({
-    EVENTS["system"]["connection_established"]["name"],
-})
+EXPECTED_EVENTS: frozenset[str] = frozenset(
+    {
+        EVENTS["system"]["connection_established"]["name"],
+    }
+)
 
 # If any of these arrive for an inspection probe, the probe leaked into output.
-PROHIBITED_PROBE_EVENTS: frozenset[str] = frozenset({
-    EVENTS["chat"]["sentence"]["name"],
-    EVENTS["chat"]["expression"]["name"],
-    EVENTS["chat"]["audio_with_expression"]["name"],
-})
+PROHIBITED_PROBE_EVENTS: frozenset[str] = frozenset(
+    {
+        EVENTS["chat"]["sentence"]["name"],
+        EVENTS["chat"]["expression"]["name"],
+        EVENTS["chat"]["audio_with_expression"]["name"],
+    }
+)
 
 
 def _duration_ms_since(start_time: float) -> float:
@@ -120,11 +124,14 @@ async def check_conversation_pipeline() -> CheckResult:
         # LLM dispatch (see core/message_filter.py). The textual
         # ``[inspection]`` prefix is a redundant backstop in case older code is
         # in play.
-        await sio.emit(PROBE_INPUT_EVENT, {
-            "text": "[inspection] ping",
-            "mode": "text",
-            "is_inspection": True,
-        })
+        await sio.emit(
+            PROBE_INPUT_EVENT,
+            {
+                "text": "[inspection] ping",
+                "mode": "text",
+                "is_inspection": True,
+            },
+        )
         logger.info("[inspection:pipeline] Sent test message, collecting events...")
 
         # ── Wait for pipeline to process ──────────────────────────
@@ -214,17 +221,26 @@ async def check_golden_conversation_pipeline(
             client.connect(BACKEND_URL, transports=["websocket"]), CONNECTION_TIMEOUT
         )
         probe_task = str(uuid4())
-        await client.emit(PROBE_INPUT_EVENT, {
-            "text": "[inspection] ping", "message_id": str(uuid4()),
-            "conversation_id": conversation_id, "task_id": probe_task,
-            "turn_id": probe_task, "source": "text", "is_inspection": True,
-            "is_acceptance": False,
-        })
+        await client.emit(
+            PROBE_INPUT_EVENT,
+            {
+                "text": "[inspection] ping",
+                "message_id": str(uuid4()),
+                "conversation_id": conversation_id,
+                "task_id": probe_task,
+                "turn_id": probe_task,
+                "source": "text",
+                "is_inspection": True,
+                "is_acceptance": False,
+            },
+        )
         await asyncio.sleep(COLLECTION_DURATION)
         if probe_leaks:
             return CheckResult.failed(
-                name="pipeline/conversation", duration_ms=_duration_ms_since(started),
-                error="inspection probe leaked", leaked=probe_leaks,
+                name="pipeline/conversation",
+                duration_ms=_duration_ms_since(started),
+                error="inspection probe leaked",
+                leaked=probe_leaks,
             )
         if runtime is not None and await runtime.observation_query.trace_detail(probe_task):
             return CheckResult.failed(
@@ -235,28 +251,43 @@ async def check_golden_conversation_pipeline(
         phase = "real"
         task_id = str(uuid4())
         identity = {
-            "message_id": str(uuid4()), "conversation_id": conversation_id,
-            "task_id": task_id, "turn_id": task_id,
+            "message_id": str(uuid4()),
+            "conversation_id": conversation_id,
+            "task_id": task_id,
+            "turn_id": task_id,
         }
-        await client.emit(PROBE_INPUT_EVENT, {
-            **identity, "text": "请用一句话介绍你自己。", "source": "text",
-            "is_inspection": False, "is_acceptance": True,
-        })
+        await client.emit(
+            PROBE_INPUT_EVENT,
+            {
+                **identity,
+                "text": "请用一句话介绍你自己。",
+                "source": "text",
+                "is_inspection": False,
+                "is_acceptance": True,
+            },
+        )
         await asyncio.wait_for(terminal.wait(), timeout=60.0)
         required = {
-            EVENTS["chat"]["sentence"]["name"], EVENTS["chat"]["expression"]["name"],
-            EVENTS["chat"]["live2d_action"]["name"], EVENTS["chat"]["control"]["name"],
+            EVENTS["chat"]["sentence"]["name"],
+            EVENTS["chat"]["expression"]["name"],
+            EVENTS["chat"]["live2d_action"]["name"],
+            EVENTS["chat"]["control"]["name"],
         }
         names = {event for event, _ in real_events}
-        mismatched = [event for event, payload in real_events if event in required and any(
-            payload.get(key) != value for key, value in identity.items()
-        )]
+        mismatched = [
+            event
+            for event, payload in real_events
+            if event in required
+            and any(payload.get(key) != value for key, value in identity.items())
+        ]
         missing = required - names
         if missing or mismatched:
             return CheckResult.failed(
-                name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+                name="pipeline/conversation",
+                duration_ms=_duration_ms_since(started),
                 error="real golden conversation contract failed",
-                missing=sorted(missing), mismatched=mismatched,
+                missing=sorted(missing),
+                mismatched=mismatched,
             )
         validation: CheckResult | None = None
         if runtime is not None:
@@ -270,9 +301,7 @@ async def check_golden_conversation_pipeline(
                 task_id=task_id,
                 client_events=real_events,
                 expected_workflow=(
-                    GOLDEN_TEXT_WORKFLOW
-                    if profile == "golden"
-                    else STANDARD_TEXT_WORKFLOW
+                    GOLDEN_TEXT_WORKFLOW if profile == "golden" else STANDARD_TEXT_WORKFLOW
                 ),
                 expected_llm_calls=2 if profile == "golden" else None,
                 metrics_before=metrics_before,
@@ -280,11 +309,13 @@ async def check_golden_conversation_pipeline(
             if not validation.ok:
                 return validation
         result_detail = dict(validation.detail) if validation is not None else {}
-        result_detail.update({
-            "probe_contained": True,
-            "task_id": result_detail.get("task_id", task_id),
-            "received": sorted(names),
-        })
+        result_detail.update(
+            {
+                "probe_contained": True,
+                "task_id": result_detail.get("task_id", task_id),
+                "received": sorted(names),
+            }
+        )
         return CheckResult.passed(
             name=(validation.name if validation is not None else "pipeline/conversation"),
             duration_ms=_duration_ms_since(started),
@@ -292,7 +323,8 @@ async def check_golden_conversation_pipeline(
         )
     except Exception as exc:
         return CheckResult.failed(
-            name="pipeline/conversation", duration_ms=_duration_ms_since(started),
+            name="pipeline/conversation",
+            duration_ms=_duration_ms_since(started),
             error=f"golden pipeline failure: {type(exc).__name__}",
         )
     finally:
@@ -321,13 +353,10 @@ async def validate_observed_turn(
         )
     operations = list(detail.get("operations", []))
     workflow = tuple(
-        operation.get("name")
-        for operation in operations
-        if operation.get("layer") == "workflow"
+        operation.get("name") for operation in operations if operation.get("layer") == "workflow"
     )
     llm_calls = sum(
-        operation.get("layer") == "service"
-        and str(operation.get("name", "")).startswith("llm.")
+        operation.get("layer") == "service" and str(operation.get("name", "")).startswith("llm.")
         for operation in operations
     )
     mock_llm_calls = sum(
@@ -339,8 +368,7 @@ async def validate_observed_turn(
     memory_writes = [
         operation.get("name")
         for operation in operations
-        if operation.get("layer") == "memory"
-        and not operation.get("critical_path", True)
+        if operation.get("layer") == "memory" and not operation.get("critical_path", True)
     ]
     ledger_events = {
         event.get("name")
@@ -349,23 +377,17 @@ async def validate_observed_turn(
     }
     visible_events = {event for event, _payload in client_events}
     missing_delivery_evidence = visible_events - ledger_events
-    tts_operations = [
-        operation for operation in operations if operation.get("name") == "tts"
-    ]
+    tts_operations = [operation for operation in operations if operation.get("name") == "tts"]
     tts_service_operations = [
         operation
         for operation in operations
-        if operation.get("layer") == "service"
-        and str(operation.get("name", "")).startswith("tts.")
+        if operation.get("layer") == "service" and str(operation.get("name", "")).startswith("tts.")
     ]
     readiness = runtime.readiness_snapshot()
-    readiness_payload = (
-        readiness.to_dict() if hasattr(readiness, "to_dict") else dict(readiness)
-    )
+    readiness_payload = readiness.to_dict() if hasattr(readiness, "to_dict") else dict(readiness)
     tts_runtime = readiness_payload.get("components", {}).get("tts", {})
     real_tts_service_succeeded = any(
-        operation.get("status") == "success"
-        and operation.get("provider") not in {None, "", "mock"}
+        operation.get("status") == "success" and operation.get("provider") not in {None, "", "mock"}
         for operation in tts_service_operations
     )
     runtime_tts_is_real = tts_runtime.get("provider") not in {None, "", "mock"}

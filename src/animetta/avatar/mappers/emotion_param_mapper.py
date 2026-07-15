@@ -30,7 +30,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         # Body: slightly forward
         "ParamBodyAngleX": 0.05,
     },
-
     "sad": {
         # Mouth: slightly open, corners down
         "ParamMouthOpenY": 0.2,
@@ -45,7 +44,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleX": 0.15,
         "ParamAngleY": 0.0,
     },
-
     "angry": {
         # Mouth: tight or slightly open
         "ParamMouthOpenY": 0.3,
@@ -61,7 +59,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleY": 0.15,
         "ParamAngleZ": 0.1,
     },
-
     "surprised": {
         # Mouth: open
         "ParamMouthOpenY": 0.7,
@@ -76,7 +73,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleX": -0.15,
         "ParamAngleY": 0.0,
     },
-
     "neutral": {
         # Default state
         "ParamMouthOpenY": 0.0,
@@ -88,7 +84,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleY": 0.0,
         "ParamAngleZ": 0.0,
     },
-
     "thinking": {
         # Mouth: slightly open
         "ParamMouthOpenY": 0.15,
@@ -104,7 +99,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleY": -0.1,
         "ParamAngleZ": 0.15,
     },
-
     "confused": {
         # Mouth: crooked
         "ParamMouthOpenY": 0.2,
@@ -118,7 +112,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         # Head: tilted
         "ParamAngleZ": 0.2,
     },
-
     "love": {
         # Mouth: gentle smile
         "ParamMouthOpenY": 0.4,
@@ -133,7 +126,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         # Head: slightly tilted
         "ParamAngleY": -0.1,
     },
-
     "shy": {
         # Mouth: pursed
         "ParamMouthOpenY": 0.1,
@@ -149,7 +141,6 @@ DEFAULT_EMOTION_MAPPINGS = {
         "ParamAngleX": 0.2,
         "ParamAngleY": 0.15,
     },
-
     "excited": {
         # Mouth: laughing
         "ParamMouthOpenY": 0.8,
@@ -187,9 +178,7 @@ class EmotionParamMapper(IEmotionParamMapper):
     """
 
     def __init__(
-        self,
-        mappings: dict[str, dict[str, float]] | None = None,
-        default_duration: float = 0.3
+        self, mappings: dict[str, dict[str, float]] | None = None, default_duration: float = 0.3
     ):
         """
         Initialize the mapper
@@ -202,10 +191,7 @@ class EmotionParamMapper(IEmotionParamMapper):
         self.default_duration = default_duration
 
     def map_emotion(
-        self,
-        emotion: str,
-        intensity: float = 1.0,
-        context: dict[str, Any] | None = None
+        self, emotion: str, intensity: float = 1.0, context: dict[str, Any] | None = None
     ) -> ExpressionFrame:
         """
         Map an emotion to Live2D parameters
@@ -235,22 +221,14 @@ class EmotionParamMapper(IEmotionParamMapper):
             # Add random variance (avoid mechanical feel)
             value = self._add_variance(value, intensity)
 
-            parameters.append(ParameterState(
-                name=param_name,
-                value=value,
-                duration=self.default_duration
-            ))
+            parameters.append(
+                ParameterState(name=param_name, value=value, duration=self.default_duration)
+            )
 
-        return ExpressionFrame(
-            parameters=parameters,
-            intensity=intensity,
-            timestamp=0.0
-        )
+        return ExpressionFrame(parameters=parameters, intensity=intensity, timestamp=0.0)
 
     def map_emotions_timeline(
-        self,
-        emotions: list[tuple[str, float, float, float]],
-        duration: float
+        self, emotions: list[tuple[str, float, float, float]], duration: float
     ) -> list[ExpressionFrame]:
         """
         Map an emotion timeline to a sequence of expression frames
@@ -311,11 +289,7 @@ class EmotionParamMapper(IEmotionParamMapper):
         """Get supported emotions list"""
         return list(self.mappings.keys())
 
-    def add_emotion_mapping(
-        self,
-        emotion: str,
-        param_mappings: dict[str, float]
-    ):
+    def add_emotion_mapping(self, emotion: str, param_mappings: dict[str, float]):
         """
         Add or update emotion mapping
 
@@ -341,9 +315,11 @@ class EmotionParamMapper(IEmotionParamMapper):
             logger.error(f"[EmotionParamMapper] Config file not found: {yaml_path}")
             return
 
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
-        if 'emotions' in config:
-            self.mappings.update(config['emotions'])
-            logger.info(f"[EmotionParamMapper] Loaded {len(config['emotions'])} emotion mappings from {yaml_path}")
+        if "emotions" in config:
+            self.mappings.update(config["emotions"])
+            logger.info(
+                f"[EmotionParamMapper] Loaded {len(config['emotions'])} emotion mappings from {yaml_path}"
+            )
