@@ -349,15 +349,14 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
     assert str(UUID(next(iter(conversation_ids)))) == next(iter(conversation_ids))
     assert any("down --remove-orphans" in command for command in flattened)
     assert any("docker-build" in command and "--no-cache" in command for command in flattened)
-    assert not any("docker-build" in command and "--compose-file" in command for command in flattened)
+    assert not any(
+        "docker-build" in command and "--compose-file" in command for command in flattened
+    )
     assert any(
         "docker-compose.qwen.yml up -d --no-build --force-recreate qwen-tts" in command
         for command in flattened
     )
-    assert any(
-        "docker-compose.yml up -d --no-build animetta" in command
-        for command in flattened
-    )
+    assert any("docker-compose.yml up -d --no-build animetta" in command for command in flattened)
     assert any("stop qwen-tts" in command for command in flattened)
     assert any("start qwen-tts" in command for command in flattened)
     assert all(

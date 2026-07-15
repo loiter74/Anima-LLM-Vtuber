@@ -39,6 +39,8 @@ _FORBIDDEN_LOG_PATTERN = re.compile(
     r"Traceback|(?:^|[|\s])(?:ERROR|CRITICAL|FATAL)(?:[|\s:]|$)",
     re.MULTILINE,
 )
+
+
 class ReleaseGateError(RuntimeError):
     """Release evidence is incomplete or unsafe."""
 
@@ -452,9 +454,7 @@ def run_release_gate(
     initial_smoke = _run_alice_smoke(compose_file)
 
     qwen_persistence_before = _container_metadata(qwen_compose_file, "qwen-tts")
-    preload_events_before = _preload_event_count(
-        _qwen_logs(qwen_compose_file, started_at)
-    )
+    preload_events_before = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
     noop_up_seconds: list[float] = []
     for _ in range(2):
         noop_started = time.perf_counter()
@@ -502,9 +502,7 @@ def run_release_gate(
 
     persistence_smoke = _run_alice_smoke(compose_file)
     qwen_persistence_after = _container_metadata(qwen_compose_file, "qwen-tts")
-    preload_events_after = _preload_event_count(
-        _qwen_logs(qwen_compose_file, started_at)
-    )
+    preload_events_after = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
     if qwen_persistence_after != qwen_persistence_before:
         raise ReleaseGateError("Animetta lifecycle recreated or restarted persistent Qwen")
     if preload_events_after != preload_events_before:
