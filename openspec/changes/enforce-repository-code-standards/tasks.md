@@ -60,10 +60,10 @@
 
 ## 7. Concurrent Qwen integration
 
-- [ ] 7.1 Fetch the latest Qwen external-service branch state and identify overlapping quality, Docker, release-gate, and source-scope changes
-- [ ] 7.2 Merge or rebase the Qwen branch into the code-standard branch, preserving its topology decisions and resolving quality-catalog conflicts explicitly
-- [ ] 7.3 Apply Python, frontend, operational-source, and configuration gates to every newly integrated Qwen file
-- [ ] 7.4 Run Qwen contract tests, release-runtime tests, Docker plan tests, and affected verification on the integrated tree
+- [x] 7.1 Fetch the latest Qwen external-service branch state and identify overlapping quality, Docker, release-gate, and source-scope changes
+- [x] 7.2 Merge or rebase the Qwen branch into the code-standard branch, preserving its topology decisions and resolving quality-catalog conflicts explicitly
+- [x] 7.3 Apply Python, frontend, operational-source, and configuration gates to every newly integrated Qwen file
+- [x] 7.4 Run Qwen contract tests, release-runtime tests, Docker plan tests, and affected verification on the integrated tree
 
 ## 8. Final verification and acceptance
 
