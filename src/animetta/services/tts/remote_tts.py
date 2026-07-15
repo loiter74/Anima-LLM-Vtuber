@@ -309,16 +309,8 @@ class RemoteTTS(TTSInterface):
         if status == 429:
             return "busy"
         if status >= 500:
-            return (
-                supplied
-                if supplied in cls._UPSTREAM_ERROR_CATEGORIES
-                else "upstream_failure"
-            )
-        return (
-            supplied
-            if supplied in cls._CLIENT_ERROR_CATEGORIES
-            else "request_rejected"
-        )
+            return supplied if supplied in cls._UPSTREAM_ERROR_CATEGORIES else "upstream_failure"
+        return supplied if supplied in cls._CLIENT_ERROR_CATEGORIES else "request_rejected"
 
     @classmethod
     def _validate_readiness_contract(cls, payload: dict[str, Any]) -> None:

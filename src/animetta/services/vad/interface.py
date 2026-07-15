@@ -13,9 +13,10 @@ import numpy as np
 
 class VADState(Enum):
     """VAD state enumeration"""
-    IDLE = 1       # Idle state, waiting for speech
-    ACTIVE = 2     # Speech detected
-    INACTIVE = 3   # Speech ended (silence state)
+
+    IDLE = 1  # Idle state, waiting for speech
+    ACTIVE = 2  # Speech detected
+    INACTIVE = 3  # Speech ended (silence state)
 
 
 class VADResult:

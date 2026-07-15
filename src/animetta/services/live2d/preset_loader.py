@@ -19,6 +19,7 @@ from .action_queue import ActionFactory, ActionMessage
 @dataclass
 class EmotePreset:
     """Emotion preset"""
+
     name: str
     intensity: str  # low, medium, high
     expression: str
@@ -28,6 +29,7 @@ class EmotePreset:
 @dataclass
 class GesturePreset:
     """Gesture preset"""
+
     name: str
     expression: str | None
     motion_group: str | None
@@ -37,6 +39,7 @@ class GesturePreset:
 @dataclass
 class ReactPreset:
     """Reaction preset"""
+
     name: str
     actions: list[dict[str, Any]]
 
@@ -71,7 +74,7 @@ class PresetLoader:
             return
 
         try:
-            with open(self.config_path, encoding='utf-8') as f:
+            with open(self.config_path, encoding="utf-8") as f:
                 self.presets = yaml.safe_load(f)
             logger.info(f"[PresetLoader] Preset loaded successfully: {self.config_path}")
         except Exception as e:
@@ -88,13 +91,13 @@ class PresetLoader:
         Returns:
             Preset data
         """
-        emote_presets = self.presets.get('emote', {})
+        emote_presets = self.presets.get("emote", {})
         emotion_data = emote_presets.get(emotion, {})
         intensity_data = emotion_data.get(intensity)
 
         if not intensity_data:
             # Try using medium as default
-            intensity_data = emotion_data.get('medium')
+            intensity_data = emotion_data.get("medium")
 
         return intensity_data
 
@@ -108,7 +111,7 @@ class PresetLoader:
         Returns:
             Preset data
         """
-        gesture_presets = self.presets.get('gesture', {})
+        gesture_presets = self.presets.get("gesture", {})
         return gesture_presets.get(gesture_name)
 
     def get_react(self, react_name: str) -> list[dict] | None:
@@ -121,7 +124,7 @@ class PresetLoader:
         Returns:
             Action list
         """
-        react_presets = self.presets.get('react', {})
+        react_presets = self.presets.get("react", {})
         return react_presets.get(react_name)
 
     def create_emote_action(self, emotion: str, intensity: str = "medium") -> ActionMessage | None:
@@ -143,30 +146,23 @@ class PresetLoader:
         actions = []
 
         # Expression
-        expression = preset.get('expression')
+        expression = preset.get("expression")
         if expression:
-            actions.append({
-                "type": "expression",
-                "name": expression
-            })
+            actions.append({"type": "expression", "name": expression})
 
         # Parameters
-        params = preset.get('params', [])
+        params = preset.get("params", [])
         for param in params:
-            actions.append({
-                "type": "param",
-                "name": param.get('name'),
-                "value": param.get('value')
-            })
+            actions.append(
+                {"type": "param", "name": param.get("name"), "value": param.get("value")}
+            )
 
         # If there are multiple actions, wrap as a sequence
         if len(actions) > 1:
             return ActionFactory.sequence(actions, 0.5)
         elif actions:
             return ActionMessage(
-                action_id=f"emote_{emotion}_{intensity}",
-                action=actions[0],
-                duration_sec=0.3
+                action_id=f"emote_{emotion}_{intensity}", action=actions[0], duration_sec=0.3
             )
 
         return None
@@ -188,29 +184,22 @@ class PresetLoader:
         actions = []
 
         # Expression
-        expression = preset.get('expression')
+        expression = preset.get("expression")
         if expression:
-            actions.append({
-                "type": "expression",
-                "name": expression
-            })
+            actions.append({"type": "expression", "name": expression})
 
         # Motion
-        motion = preset.get('motion')
+        motion = preset.get("motion")
         if motion:
-            actions.append({
-                "type": "motion",
-                "group": motion.get('group'),
-                "index": motion.get('index')
-            })
+            actions.append(
+                {"type": "motion", "group": motion.get("group"), "index": motion.get("index")}
+            )
 
         if len(actions) > 1:
             return ActionFactory.sequence(actions, 1.0)
         elif actions:
             return ActionMessage(
-                action_id=f"gesture_{gesture_name}",
-                action=actions[0],
-                duration_sec=0.8
+                action_id=f"gesture_{gesture_name}", action=actions[0], duration_sec=0.8
             )
 
         return None
@@ -232,31 +221,28 @@ class PresetLoader:
         # Calculate total duration
         total_duration = 0
         for action in preset:
-            if action.get('type') == 'wait':
-                total_duration += action.get('ms', 0) / 1000
+            if action.get("type") == "wait":
+                total_duration += action.get("ms", 0) / 1000
             else:
                 total_duration += 0.3  # Default action duration
 
         return ActionMessage(
             action_id=f"react_{react_name}",
-            action={
-                "type": "sequence",
-                "actions": preset
-            },
-            duration_sec=total_duration
+            action={"type": "sequence", "actions": preset},
+            duration_sec=total_duration,
         )
 
     def list_emotes(self) -> list[str]:
         """List all available emotions"""
-        return list(self.presets.get('emote', {}).keys())
+        return list(self.presets.get("emote", {}).keys())
 
     def list_gestures(self) -> list[str]:
         """List all available gestures"""
-        return list(self.presets.get('gesture', {}).keys())
+        return list(self.presets.get("gesture", {}).keys())
 
     def list_reacts(self) -> list[str]:
         """List all available reactions"""
-        return list(self.presets.get('react', {}).keys())
+        return list(self.presets.get("react", {}).keys())
 
 
 # Global instance

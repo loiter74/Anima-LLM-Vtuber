@@ -104,7 +104,7 @@ class MockVAD(VADInterface):
                         audio_data=b"",
                         is_speech_start=True,
                         is_speech_end=False,
-                        state=VADState.ACTIVE
+                        state=VADState.ACTIVE,
                     )
             else:
                 self.speech_frames = 0
@@ -132,14 +132,11 @@ class MockVAD(VADInterface):
                         audio_data=audio_data,
                         is_speech_start=False,
                         is_speech_end=True,
-                        state=VADState.IDLE
+                        state=VADState.IDLE,
                     )
 
         return VADResult(
-            audio_data=b"",
-            is_speech_start=False,
-            is_speech_end=False,
-            state=self.state
+            audio_data=b"", is_speech_start=False, is_speech_end=False, state=self.state
         )
 
     def reset(self) -> None:

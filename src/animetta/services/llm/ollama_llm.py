@@ -33,7 +33,7 @@ class OllamaLLM(LLMInterface):
         base_url: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize Ollama LLM
@@ -84,7 +84,7 @@ class OllamaLLM(LLMInterface):
             system_prompt=system_prompt,
             base_url=config.base_url,
             temperature=config.temperature,
-            max_tokens=config.max_tokens
+            max_tokens=config.max_tokens,
         )
 
     def _build_messages(self, user_input: str) -> list[dict[str, str]]:
@@ -101,19 +101,13 @@ class OllamaLLM(LLMInterface):
 
         # Add system prompt
         if self.system_prompt:
-            messages.append({
-                "role": "system",
-                "content": self.system_prompt
-            })
+            messages.append({"role": "system", "content": self.system_prompt})
 
         # Add conversation history
         messages.extend(self.history)
 
         # Add current user input
-        messages.append({
-            "role": "user",
-            "content": user_input
-        })
+        messages.append({"role": "user", "content": user_input})
 
         return messages
 
@@ -133,6 +127,7 @@ class OllamaLLM(LLMInterface):
         try:
             # ollama SDK is synchronous, needs to run in thread pool
             import asyncio
+
             loop = asyncio.get_running_loop()
 
             response = await loop.run_in_executor(
@@ -142,9 +137,9 @@ class OllamaLLM(LLMInterface):
                     messages=messages,
                     options={
                         "temperature": kwargs.get("temperature", self.temperature),
-                        "num_predict": kwargs.get("max_tokens", self.max_tokens)
-                    }
-                )
+                        "num_predict": kwargs.get("max_tokens", self.max_tokens),
+                    },
+                ),
             )
 
             assistant_message = response["message"]["content"]
@@ -177,6 +172,7 @@ class OllamaLLM(LLMInterface):
 
         try:
             import asyncio
+
             loop = asyncio.get_running_loop()
 
             # Run sync streaming call in thread pool
@@ -187,8 +183,8 @@ class OllamaLLM(LLMInterface):
                     stream=True,
                     options={
                         "temperature": kwargs.get("temperature", self.temperature),
-                        "num_predict": kwargs.get("max_tokens", self.max_tokens)
-                    }
+                        "num_predict": kwargs.get("max_tokens", self.max_tokens),
+                    },
                 )
 
             stream = await loop.run_in_executor(None, sync_stream)

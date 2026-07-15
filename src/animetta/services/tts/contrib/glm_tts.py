@@ -68,13 +68,12 @@ class GLMTTS(TTSInterface):
         if self._client is None:
             try:
                 from zai import ZhipuAiClient
+
                 self._client = ZhipuAiClient(api_key=self.api_key)
                 logger.info("GLM TTS client initialized successfully")
             except ImportError as e:
                 logger.error("zai-sdk not installed, please run: pip install zai-sdk")
-                raise ImportError(
-                    "zai-sdk 未安装，请运行: pip install zai-sdk"
-                ) from e
+                raise ImportError("zai-sdk 未安装，请运行: pip install zai-sdk") from e
         return self._client
 
     async def synthesize(
@@ -86,7 +85,7 @@ class GLMTTS(TTSInterface):
         volume: float | None = None,
         response_format: str | None = None,
         stream: bool = False,
-        **kwargs
+        **kwargs,
     ) -> bytes | str:
         """
         Synthesize text to speech
@@ -113,18 +112,32 @@ class GLMTTS(TTSInterface):
         actual_volume = volume if volume is not None else self.volume
         actual_format = response_format or self.response_format
 
-        logger.debug(f"GLM TTS synthesizing text: {text[:50]}... (voice={actual_voice}, format={actual_format})")
+        logger.debug(
+            f"GLM TTS synthesizing text: {text[:50]}... (voice={actual_voice}, format={actual_format})"
+        )
 
         try:
             if stream:
                 # Streaming call
                 return await self._synthesize_stream(
-                    client, text, output_path, actual_voice, actual_format, actual_speed, actual_volume
+                    client,
+                    text,
+                    output_path,
+                    actual_voice,
+                    actual_format,
+                    actual_speed,
+                    actual_volume,
                 )
             else:
                 # Non-streaming call
                 return await self._synthesize_sync(
-                    client, text, output_path, actual_voice, actual_format, actual_speed, actual_volume
+                    client,
+                    text,
+                    output_path,
+                    actual_voice,
+                    actual_format,
+                    actual_speed,
+                    actual_volume,
                 )
         except Exception as e:
             logger.error(f"GLM TTS synthesis failed: {e}")
@@ -138,7 +151,7 @@ class GLMTTS(TTSInterface):
         voice: str,
         response_format: str,
         speed: float,
-        volume: float
+        volume: float,
     ) -> bytes | str:
         """Non-streaming synthesis"""
         import asyncio
@@ -153,7 +166,7 @@ class GLMTTS(TTSInterface):
                 voice=voice,
                 response_format=response_format,
                 speed=speed,
-                volume=volume
+                volume=volume,
             )
             return response
 
@@ -169,6 +182,7 @@ class GLMTTS(TTSInterface):
         else:
             # Return byte data
             import io
+
             buffer = io.BytesIO()
             for chunk in response.iter_bytes():
                 buffer.write(chunk)
@@ -184,7 +198,7 @@ class GLMTTS(TTSInterface):
         voice: str,
         response_format: str,
         speed: float,
-        volume: float
+        volume: float,
     ) -> bytes | str:
         """Streaming synthesis"""
         import asyncio
@@ -198,10 +212,10 @@ class GLMTTS(TTSInterface):
                 input=text,
                 voice=voice,
                 stream=True,
-                response_format='pcm',
-                encode_format='base64',
+                response_format="pcm",
+                encode_format="base64",
                 speed=speed,
-                volume=volume
+                volume=volume,
             )
             return response
 
@@ -222,13 +236,13 @@ class GLMTTS(TTSInterface):
                     audio_chunks.append(audio_data)
 
         # Merge all audio data
-        all_audio = b''.join(audio_chunks)
+        all_audio = b"".join(audio_chunks)
 
         if output_path:
             # Save to file
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'wb') as f:
+            with open(output_path, "wb") as f:
                 f.write(all_audio)
             logger.info(f"GLM TTS streaming audio saved to: {output_path}")
             return str(output_path)
@@ -242,7 +256,7 @@ class GLMTTS(TTSInterface):
         voice: str | None = None,
         speed: float | None = None,
         volume: float | None = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Streaming speech synthesis, generator yields audio chunks
@@ -273,10 +287,10 @@ class GLMTTS(TTSInterface):
                 input=text,
                 voice=actual_voice,
                 stream=True,
-                response_format='pcm',
-                encode_format='base64',
+                response_format="pcm",
+                encode_format="base64",
                 speed=actual_speed,
-                volume=actual_volume
+                volume=actual_volume,
             )
             return response
 

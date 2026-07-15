@@ -29,13 +29,14 @@ class MockASR(ASRInterface):
         "推荐一些好看的电影给我。",
         "帮我写一封邮件。",
         "介绍一下你自己。",
-        "今天过得怎么样？"
+        "今天过得怎么样？",
     ]
 
     def __init__(self, mock_response: str = None):
         # If no response specified, pick randomly from the list
         if mock_response is None:
             import random
+
             mock_response = random.choice(self.TEST_PHRASES)
         self.mock_response = mock_response
 
@@ -44,11 +45,7 @@ class MockASR(ASRInterface):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls()
 
-    async def transcribe(
-        self,
-        audio_data: bytes | str | Path,
-        **kwargs
-    ) -> str:
+    async def transcribe(self, audio_data: bytes | str | Path, **kwargs) -> str:
         """Return simulated recognition result"""
         # Simulate processing delay (based on audio length)
         import asyncio
@@ -68,6 +65,7 @@ class MockASR(ASRInterface):
 
         # Add log
         from loguru import logger
+
         logger.info(f"[Mock ASR] Returning simulated recognition result: {response}")
 
         return response

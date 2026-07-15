@@ -29,13 +29,11 @@ class MockVC(VCInterface):
         return cls()
 
     async def convert(
-        self,
-        audio: bytes,
-        output_path: str | Path | None = None,
-        **kwargs
+        self, audio: bytes, output_path: str | Path | None = None, **kwargs
     ) -> bytes | str:
         """Return audio unchanged (identity pass-through)."""
         import asyncio
+
         await asyncio.sleep(0.1)
 
         if output_path:

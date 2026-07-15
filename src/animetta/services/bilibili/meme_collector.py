@@ -80,8 +80,7 @@ class MemeCollector:
     async def collect(self) -> list[MemeCandidate]:
         """Run the full collection pipeline: videos → comments → meme identification."""
         logger.info(
-            "[MemeCollector] Starting collection "
-            "(max_videos=%d, max_comments=%d, timeout=%ds)",
+            "[MemeCollector] Starting collection (max_videos=%d, max_comments=%d, timeout=%ds)",
             self._max_videos,
             self._max_comments_per_video,
             self._request_timeout,
@@ -113,7 +112,10 @@ class MemeCollector:
         logger.info(
             "[MemeCollector] Starting danmaku collection for training "
             "(max_danmaku=%d, length=%d-%d, keywords=%s)",
-            max_danmaku, min_length, max_length, meme_keywords,
+            max_danmaku,
+            min_length,
+            max_length,
+            meme_keywords,
         )
 
         try:
@@ -134,7 +136,10 @@ class MemeCollector:
     # ── Internal collection ─────────────────────────────────────────────
 
     async def _collect_danmaku_impl(
-        self, max_danmaku: int, min_length: int, max_length: int,
+        self,
+        max_danmaku: int,
+        min_length: int,
+        max_length: int,
         meme_keywords: list[str] | None,
     ) -> list[CollectedDanmaku]:
         """Internal danmaku collection implementation."""
@@ -159,7 +164,11 @@ class MemeCollector:
                 all_danmaku.extend(r)
 
             return self._filter_danmaku_for_training(
-                all_danmaku, min_length, max_length, meme_keywords, max_danmaku,
+                all_danmaku,
+                min_length,
+                max_length,
+                meme_keywords,
+                max_danmaku,
             )
         except Exception as e:
             logger.error("[MemeCollector] Danmaku collection failed: %s", e, exc_info=True)
@@ -205,12 +214,15 @@ class MemeCollector:
 
     async def _fetch_trending_videos(self) -> list[CollectedVideo]:
         raw_items = await fetch_trending_videos(
-            max_videos=self._max_videos, search_keyword=self._search_keyword,
+            max_videos=self._max_videos,
+            search_keyword=self._search_keyword,
         )
         videos: list[CollectedVideo] = []
         for item in raw_items[: self._max_videos]:
             try:
-                title = item.get("title", "").replace('<em class="keyword">', "").replace("</em>", "")
+                title = (
+                    item.get("title", "").replace('<em class="keyword">', "").replace("</em>", "")
+                )
                 description = item.get("desc", item.get("description", ""))
                 description = description[:200] if isinstance(description, str) else ""
                 stat = item.get("stat")
@@ -223,9 +235,13 @@ class MemeCollector:
                     danmaku_count = item.get("video_review", 0)
                     reply_count = item.get("review", 0)
                 video = CollectedVideo(
-                    bvid=item.get("bvid", ""), title=title, description=description,
+                    bvid=item.get("bvid", ""),
+                    title=title,
+                    description=description,
                     tags=parse_tags(item.get("tag", "")),
-                    view_count=view_count, danmaku_count=danmaku_count, reply_count=reply_count,
+                    view_count=view_count,
+                    danmaku_count=danmaku_count,
+                    reply_count=reply_count,
                 )
                 if video.bvid:
                     videos.append(video)
@@ -235,13 +251,17 @@ class MemeCollector:
 
     async def _fetch_comments(self, bvid: str) -> list[CollectedComment]:
         raw_comments = await fetch_comments(
-            bvid=bvid, max_count=self._max_comments_per_video,
-            min_likes=self._min_comment_likes, timeout=self._comment_timeout,
+            bvid=bvid,
+            max_count=self._max_comments_per_video,
+            min_likes=self._min_comment_likes,
+            timeout=self._comment_timeout,
         )
         return [
             CollectedComment(
-                content=c.get("content", ""), likes=c.get("likes", 0),
-                replies=c.get("replies", 0), publish_time=c.get("publish_time", ""),
+                content=c.get("content", ""),
+                likes=c.get("likes", 0),
+                replies=c.get("replies", 0),
+                publish_time=c.get("publish_time", ""),
             )
             for c in raw_comments
         ]
@@ -262,7 +282,9 @@ class MemeCollector:
         if self._room_id:
             try:
                 historical = await fetch_live_danmaku(
-                    room_id=self._room_id, limit=100, timeout=self._comment_timeout,
+                    room_id=self._room_id,
+                    limit=100,
+                    timeout=self._comment_timeout,
                 )
                 for text in historical:
                     if text and text not in seen:
@@ -274,22 +296,33 @@ class MemeCollector:
 
     async def _fetch_video_danmaku(self, video: CollectedVideo) -> list[CollectedDanmaku]:
         try:
-            raw = await fetch_video_danmaku(bvid=video.bvid, max_count=100, timeout=self._comment_timeout)
+            raw = await fetch_video_danmaku(
+                bvid=video.bvid, max_count=100, timeout=self._comment_timeout
+            )
             return [
                 CollectedDanmaku(
-                    content=d.get("content", ""), source_video=video.bvid, source_type="video",
-                    likes=d.get("likes", 0), publish_time=d.get("publish_time", ""),
-                    mode=d.get("mode", 1), color=d.get("color", 16777215),
+                    content=d.get("content", ""),
+                    source_video=video.bvid,
+                    source_type="video",
+                    likes=d.get("likes", 0),
+                    publish_time=d.get("publish_time", ""),
+                    mode=d.get("mode", 1),
+                    color=d.get("color", 16777215),
                 )
-                for d in raw if d.get("content")
+                for d in raw
+                if d.get("content")
             ]
         except Exception as e:
             logger.warning("[MemeCollector] Failed to fetch danmaku for %s: %s", video.bvid, e)
             return []
 
     def _filter_danmaku_for_training(
-        self, danmaku_list: list[CollectedDanmaku], min_length: int, max_length: int,
-        meme_keywords: list[str] | None, max_count: int,
+        self,
+        danmaku_list: list[CollectedDanmaku],
+        min_length: int,
+        max_length: int,
+        meme_keywords: list[str] | None,
+        max_count: int,
     ) -> list[CollectedDanmaku]:
         filtered = [d for d in danmaku_list if min_length <= len(d.content) <= max_length]
         if meme_keywords:
@@ -325,7 +358,8 @@ class MemeCollector:
     # ── Meme identification ─────────────────────────────────────────────
 
     async def _identify_meme_candidates(
-        self, videos: list[CollectedVideo],
+        self,
+        videos: list[CollectedVideo],
         comments: dict[str, list[CollectedComment]],
         danmaku_phrases: list[str] | None = None,
     ) -> list[MemeCandidate]:
@@ -339,7 +373,8 @@ class MemeCollector:
         ]
         comment_lines = [
             f"[{bvid}] {c.likes}: {c.content}"
-            for bvid, clist in comments.items() for c in clist[:10]
+            for bvid, clist in comments.items()
+            for c in clist[:10]
         ]
         combined = (
             f"=== 热门视频 ===\n\n{''.join(chr(10) + line for line in video_lines[:20])}\n\n"
@@ -365,15 +400,24 @@ class MemeCollector:
                 result = await self._llm.chat_messages(
                     messages=[
                         {"role": "system", "content": MEME_IDENTIFY_SYSTEM_PROMPT},
-                        {"role": "user", "content": get_meme_identify_user_prompt(
-                            video_data=combined, danmaku_section=danmaku_section,
-                        )},
+                        {
+                            "role": "user",
+                            "content": get_meme_identify_user_prompt(
+                                video_data=combined,
+                                danmaku_section=danmaku_section,
+                            ),
+                        },
                     ],
                     response_format={"type": "json_object"},
                 )
             else:
-                user_text = MEME_IDENTIFY_SYSTEM_PROMPT + "\n\n" + get_meme_identify_user_prompt(
-                    video_data=combined, danmaku_section=danmaku_section,
+                user_text = (
+                    MEME_IDENTIFY_SYSTEM_PROMPT
+                    + "\n\n"
+                    + get_meme_identify_user_prompt(
+                        video_data=combined,
+                        danmaku_section=danmaku_section,
+                    )
                 )
                 result = await self._llm.chat(
                     messages=[{"role": "user", "content": user_text}],
@@ -387,7 +431,8 @@ class MemeCollector:
             return self._heuristic_identify(videos, comments, danmaku_phrases)
 
     def _heuristic_identify(
-        self, videos: list[CollectedVideo],
+        self,
+        videos: list[CollectedVideo],
         comments: dict[str, list[CollectedComment]],
         danmaku_phrases: list[str] | None = None,
     ) -> list[MemeCandidate]:
@@ -403,10 +448,14 @@ class MemeCollector:
         for phrase, count in tag_counts.items():
             if count >= 2 and len(phrase) <= 15 and phrase not in seen:
                 seen.add(phrase)
-                candidates.append(MemeCandidate(
-                    text=phrase, context_hint=f"出现在 {count} 个热门视频标签中",
-                    frequency=count, tags=["bilibili", "trending", "tag"],
-                ))
+                candidates.append(
+                    MemeCandidate(
+                        text=phrase,
+                        context_hint=f"出现在 {count} 个热门视频标签中",
+                        frequency=count,
+                        tags=["bilibili", "trending", "tag"],
+                    )
+                )
 
         title_phrases: Counter[str] = Counter()
         for v in videos:
@@ -416,10 +465,14 @@ class MemeCollector:
         for phrase, count in title_phrases.most_common(10):
             if count >= 2 and phrase not in seen:
                 seen.add(phrase)
-                candidates.append(MemeCandidate(
-                    text=phrase, context_hint=f"出现在 {count} 个视频标题中的热门短语",
-                    frequency=count, tags=["bilibili", "trending", "title"],
-                ))
+                candidates.append(
+                    MemeCandidate(
+                        text=phrase,
+                        context_hint=f"出现在 {count} 个视频标题中的热门短语",
+                        frequency=count,
+                        tags=["bilibili", "trending", "title"],
+                    )
+                )
 
         all_comments_text = [c.content for clist in comments.values() for c in clist[:5]]
         if all_comments_text:
@@ -427,10 +480,14 @@ class MemeCollector:
                 for phrase, count in extract_semantic_phrases(all_comments_text, top_k=10):
                     if count >= 2 and phrase not in seen:
                         seen.add(phrase)
-                        candidates.append(MemeCandidate(
-                            text=phrase, context_hint=f"在热门评论中出现 {count} 次",
-                            frequency=count, tags=["bilibili", "trending", "comment"],
-                        ))
+                        candidates.append(
+                            MemeCandidate(
+                                text=phrase,
+                                context_hint=f"在热门评论中出现 {count} 次",
+                                frequency=count,
+                                tags=["bilibili", "trending", "comment"],
+                            )
+                        )
             except ImportError:
                 pass
 
@@ -439,19 +496,27 @@ class MemeCollector:
                 for phrase, count in extract_semantic_phrases(danmaku_phrases, top_k=20):
                     if phrase not in seen and phrase not in STOPWORDS:
                         seen.add(phrase)
-                        candidates.append(MemeCandidate(
-                            text=phrase, context_hint=f"弹幕高频短语，出现 {count} 次以上",
-                            frequency=count, tags=["bilibili", "danmaku", "hot"],
-                        ))
+                        candidates.append(
+                            MemeCandidate(
+                                text=phrase,
+                                context_hint=f"弹幕高频短语，出现 {count} 次以上",
+                                frequency=count,
+                                tags=["bilibili", "danmaku", "hot"],
+                            )
+                        )
             except ImportError:
                 freq = Counter(danmaku_phrases)
                 for phrase, count in freq.most_common(15):
                     if phrase not in seen and phrase not in STOPWORDS and len(phrase) >= 2:
                         seen.add(phrase)
-                        candidates.append(MemeCandidate(
-                            text=phrase, context_hint=f"弹幕中出现 {count} 次",
-                            frequency=count, tags=["bilibili", "danmaku", "hot"],
-                        ))
+                        candidates.append(
+                            MemeCandidate(
+                                text=phrase,
+                                context_hint=f"弹幕中出现 {count} 次",
+                                frequency=count,
+                                tags=["bilibili", "danmaku", "hot"],
+                            )
+                        )
 
         return candidates[:15]
 
@@ -462,19 +527,27 @@ class MemeCollector:
             for phrase, count in extract_semantic_phrases(danmaku_phrases, top_k=15):
                 if phrase not in seen and phrase not in STOPWORDS and len(phrase) >= 2:
                     seen.add(phrase)
-                    candidates.append(MemeCandidate(
-                        text=phrase, context_hint="弹幕高频短语",
-                        frequency=count, tags=["bilibili", "danmaku", "hot"],
-                    ))
+                    candidates.append(
+                        MemeCandidate(
+                            text=phrase,
+                            context_hint="弹幕高频短语",
+                            frequency=count,
+                            tags=["bilibili", "danmaku", "hot"],
+                        )
+                    )
         except ImportError:
             freq = Counter(danmaku_phrases)
             for phrase, count in freq.most_common(10):
                 if phrase not in seen and phrase not in STOPWORDS and len(phrase) >= 2:
                     seen.add(phrase)
-                    candidates.append(MemeCandidate(
-                        text=phrase, context_hint="弹幕高频短语",
-                        frequency=count, tags=["bilibili", "danmaku", "hot"],
-                    ))
+                    candidates.append(
+                        MemeCandidate(
+                            text=phrase,
+                            context_hint="弹幕高频短语",
+                            frequency=count,
+                            tags=["bilibili", "danmaku", "hot"],
+                        )
+                    )
         return candidates[:10]
 
     @staticmethod

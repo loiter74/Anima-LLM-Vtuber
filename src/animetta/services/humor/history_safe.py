@@ -121,4 +121,3 @@ def replace_last_assistant_history(
         # If the last assistant differs, avoid rewriting older history.
         return False
     return False
-

@@ -47,7 +47,7 @@ def _extract_json_text(raw: str) -> str:
         _, end = decoder.raw_decode(text[start:])
     except json.JSONDecodeError as exc:
         raise HumorParseError(HumorFallbackReason.INVALID_JSON, str(exc)) from exc
-    return text[start:start + end]
+    return text[start : start + end]
 
 
 def parse_humor_result(raw: str, request: HumorRewriteRequest) -> HumorRewriteResult:
@@ -89,4 +89,3 @@ def parse_humor_result(raw: str, request: HumorRewriteRequest) -> HumorRewriteRe
         accepted=False,
         enabled=True,
     )
-

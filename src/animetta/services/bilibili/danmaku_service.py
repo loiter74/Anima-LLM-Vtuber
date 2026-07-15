@@ -227,7 +227,9 @@ class DanmakuService:
         try:
             from bilibili_api import Credential, live
         except ImportError:
-            logger.error("[DanmakuService] bilibili-api-python not installed. Run: pip install bilibili-api-python")
+            logger.error(
+                "[DanmakuService] bilibili-api-python not installed. Run: pip install bilibili-api-python"
+            )
             raise
 
         # Build credential if sessdata is provided
@@ -243,7 +245,7 @@ class DanmakuService:
         )
 
         # Register event handlers
-        @self._monitor.on('DANMU_MSG')
+        @self._monitor.on("DANMU_MSG")
         async def on_danmaku(event):
             try:
                 data_info = event["data"]["info"]
@@ -264,7 +266,7 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing DANMU_MSG: {e}")
 
-        @self._monitor.on('SEND_GIFT')
+        @self._monitor.on("SEND_GIFT")
         async def on_gift(event):
             try:
                 gift_data = event["data"]["data"]
@@ -285,7 +287,7 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SEND_GIFT: {e}")
 
-        @self._monitor.on('SUPER_CHAT_MESSAGE')
+        @self._monitor.on("SUPER_CHAT_MESSAGE")
         async def on_sc(event):
             try:
                 sc_data = event["data"]["data"]
@@ -306,7 +308,7 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SUPER_CHAT: {e}")
 
-        @self._monitor.on('INTERACT_WORD_V2')
+        @self._monitor.on("INTERACT_WORD_V2")
         async def on_interact(event):
             try:
                 data = event["data"]["data"]

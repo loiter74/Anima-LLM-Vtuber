@@ -62,20 +62,31 @@ class DemucsSeparator(BaseSeparator):
         demucs_wrapper = project_root / "scripts" / "demucs_fix.py"
         if demucs_wrapper.exists():
             cmd = [
-                "python", str(demucs_wrapper),
-                "-n", self.model,
-                "--two-stems", "vocals",
-                "-d", "cpu",
-                "-o", str(session_dir),
+                "python",
+                str(demucs_wrapper),
+                "-n",
+                self.model,
+                "--two-stems",
+                "vocals",
+                "-d",
+                "cpu",
+                "-o",
+                str(session_dir),
                 audio_path,
             ]
         else:
             cmd = [
-                "python", "-m", "demucs",
-                "-n", self.model,
-                "--two-stems", "vocals",
-                "-d", "cpu",
-                "-o", str(session_dir),
+                "python",
+                "-m",
+                "demucs",
+                "-n",
+                self.model,
+                "--two-stems",
+                "vocals",
+                "-d",
+                "cpu",
+                "-o",
+                str(session_dir),
                 audio_path,
             ]
 
@@ -89,10 +100,10 @@ class DemucsSeparator(BaseSeparator):
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)
 
             if proc.returncode != 0:
-                err_text = stderr.decode("utf-8", errors="replace")[:500] if stderr else "(no output)"
-                raise RuntimeError(
-                    f"Demucs failed (code {proc.returncode}): {err_text}"
+                err_text = (
+                    stderr.decode("utf-8", errors="replace")[:500] if stderr else "(no output)"
                 )
+                raise RuntimeError(f"Demucs failed (code {proc.returncode}): {err_text}")
 
             # Demucs output: <session_dir>/<model>/<song_name>/vocals.wav + no_vocals.wav
             original_stem = Path(audio_path).stem
@@ -119,7 +130,9 @@ class DemucsSeparator(BaseSeparator):
 class UVRSeparator(BaseSeparator):
     """Separate vocals using audio-separator (UVR models via ONNX)."""
 
-    def __init__(self, model: str = "UVR-MDX-NET-Inst_HQ_3", output_dir: str = "./data/singing/separated"):
+    def __init__(
+        self, model: str = "UVR-MDX-NET-Inst_HQ_3", output_dir: str = "./data/singing/separated"
+    ):
         super().__init__(output_dir)
         self.model = model
 
@@ -142,8 +155,10 @@ class UVRSeparator(BaseSeparator):
             return str(vocals_path), str(backing_path)
 
         import asyncio
+
         def _do_separate():
             from audio_separator.separator import Separator
+
             sep = Separator(output_dir=str(session_dir))
             # Use the specified model, fall back to built-in defaults
             output = sep.separate(audio_path)
@@ -153,8 +168,12 @@ class UVRSeparator(BaseSeparator):
             await asyncio.to_thread(_do_separate)
             # audio-separator outputs (vocals, instrumental)
             # Find the generated files
-            inst_files = list(session_dir.glob("*(Instrumental)*.wav")) + list(session_dir.glob("*(no_vocals)*.wav"))
-            vocal_files = list(session_dir.glob("*(Vocals)*.wav")) + list(session_dir.glob("*(vocals)*.wav"))
+            inst_files = list(session_dir.glob("*(Instrumental)*.wav")) + list(
+                session_dir.glob("*(no_vocals)*.wav")
+            )
+            vocal_files = list(session_dir.glob("*(Vocals)*.wav")) + list(
+                session_dir.glob("*(vocals)*.wav")
+            )
 
             if vocal_files:
                 shutil.copy2(vocal_files[0], vocals_path)

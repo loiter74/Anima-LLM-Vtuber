@@ -56,36 +56,34 @@ class SVCPipeline(SingingService):
             download_root=config.asr.download_root,
         )
         self._svc = SVCBridge(config.gpt_sovits)
-        self._rvc = RVCBridge(
-            rvc_path=config.rvc.rvc_path,
-            python_exe=config.rvc.python_exe,
-            model_name=config.rvc.model_name,
-            index_path=config.rvc.index_path,
-            f0_method=config.rvc.f0_method,
-            f0_up_key=config.rvc.f0_up_key,
-            index_rate=config.rvc.index_rate,
-            filter_radius=config.rvc.filter_radius,
-            rms_mix_rate=config.rvc.rms_mix_rate,
-            protect=config.rvc.protect,
-            manage_server=False,  # User must start Gradio server manually
-        ) if config.rvc.enabled else None
+        self._rvc = (
+            RVCBridge(
+                rvc_path=config.rvc.rvc_path,
+                python_exe=config.rvc.python_exe,
+                model_name=config.rvc.model_name,
+                index_path=config.rvc.index_path,
+                f0_method=config.rvc.f0_method,
+                f0_up_key=config.rvc.f0_up_key,
+                index_rate=config.rvc.index_rate,
+                filter_radius=config.rvc.filter_radius,
+                rms_mix_rate=config.rvc.rms_mix_rate,
+                protect=config.rvc.protect,
+                manage_server=False,  # User must start Gradio server manually
+            )
+            if config.rvc.enabled
+            else None
+        )
         self._mixer = AudioMixer(config.output_dir)
 
-    def set_progress_callback(
-        self, callback: Callable[[PipelineProgress], None]
-    ) -> None:
+    def set_progress_callback(self, callback: Callable[[PipelineProgress], None]) -> None:
         self._on_progress = callback
 
-    def _update_progress(
-        self, stage: PipelineStage, progress: float, message: str = ""
-    ) -> None:
+    def _update_progress(self, stage: PipelineStage, progress: float, message: str = "") -> None:
         self._stage = stage
         self._progress = progress
         self._message = message
         if self._on_progress:
-            self._on_progress(PipelineProgress(
-                stage=stage, progress=progress, message=message
-            ))
+            self._on_progress(PipelineProgress(stage=stage, progress=progress, message=message))
 
     async def process(self, url: str, auto_confirm_lyrics: bool = False) -> SongResult:
         """Execute full pipeline from Bilibili URL.
@@ -112,7 +110,9 @@ class SVCPipeline(SingingService):
             original_output = Path(self.config.output_dir) / f"{safe_name}_original.wav"
             shutil.copy2(audio_path, str(original_output))
 
-            return await self._run_stages(audio_path, video_title=video_title, original_path=str(original_output))
+            return await self._run_stages(
+                audio_path, video_title=video_title, original_path=str(original_output)
+            )
 
         except asyncio.CancelledError:
             logger.info("Pipeline cancelled")
@@ -141,16 +141,16 @@ class SVCPipeline(SingingService):
 
     def _init_session(self, seed: str) -> None:
         # Generate unique but readable session ID: {clean_name}_{short_hash}
-        clean = re.sub(r'[<>:"/\\|?*\s]+', '_', seed)[:40].strip('_') or "session"
-        short_hash = hashlib.md5(
-            f"{seed}{datetime.now().isoformat()}".encode()
-        ).hexdigest()[:6]
+        clean = re.sub(r'[<>:"/\\|?*\s]+', "_", seed)[:40].strip("_") or "session"
+        short_hash = hashlib.md5(f"{seed}{datetime.now().isoformat()}".encode()).hexdigest()[:6]
         session_id = f"{clean}_{short_hash}"
         session_output_dir = Path(self.config.output_dir) / session_id
         session_output_dir.mkdir(parents=True, exist_ok=True)
         self._session_dir = session_output_dir
 
-    async def _run_stages(self, audio_path: str, video_title: str = "", original_path: str = "") -> SongResult:
+    async def _run_stages(
+        self, audio_path: str, video_title: str = "", original_path: str = ""
+    ) -> SongResult:
         """Run stages 2-6 from an audio file."""
         session_dir = self._session_dir
         if session_dir is None:
@@ -202,9 +202,7 @@ class SVCPipeline(SingingService):
             pass
         elif self._auto_confirm:
             self._confirmed_ass = ass_content
-            self._update_progress(
-                PipelineStage.WAITING_LYRICS, 100, "Lyrics auto-confirmed"
-            )
+            self._update_progress(PipelineStage.WAITING_LYRICS, 100, "Lyrics auto-confirmed")
         else:
             self._update_progress(
                 PipelineStage.WAITING_LYRICS, 0, "Awaiting lyrics confirmation..."
@@ -233,7 +231,9 @@ class SVCPipeline(SingingService):
         except (ConnectionError, RuntimeError) as e:
             logger.warning(f"Voice conversion skipped: {e}")
             shutil.copy2(vocals_path, str(converted_path))
-            self._update_progress(PipelineStage.CONVERTING, 100, "Voice conversion skipped — using original vocals")
+            self._update_progress(
+                PipelineStage.CONVERTING, 100, "Voice conversion skipped — using original vocals"
+            )
 
         # Copy converted vocals to outputs for API serving (used for lip sync)
         vocals_output = Path(self.config.output_dir) / f"{session_id}_vocals.wav"
@@ -287,8 +287,11 @@ class SVCPipeline(SingingService):
         )
 
     async def _generate_tts_vocals(
-        self, session_dir: Path, backing_path: str,
-        lyric_lines: list[LyricLine], session_id: str,
+        self,
+        session_dir: Path,
+        backing_path: str,
+        lyric_lines: list[LyricLine],
+        session_id: str,
     ) -> str:
         """Generate TTS-processed vocals using the singing pipeline voice.
 
@@ -314,6 +317,7 @@ class SVCPipeline(SingingService):
         # Call GPT-SoVITS TTS
         try:
             import httpx
+
             base_url = tts_cfg.base_url
             timeout = httpx.Timeout(600.0, connect=10.0)  # up to 10 min for long singing
             async with httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout) as client:
@@ -334,7 +338,9 @@ class SVCPipeline(SingingService):
                 }
                 resp = await client.post("/tts", json=payload)
                 if resp.status_code != 200:
-                    logger.warning(f"TTS generation failed (HTTP {resp.status_code}): {resp.text[:200]}")
+                    logger.warning(
+                        f"TTS generation failed (HTTP {resp.status_code}): {resp.text[:200]}"
+                    )
                     return ""
 
                 # Save TTS vocals

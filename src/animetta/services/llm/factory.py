@@ -66,7 +66,9 @@ class LLMFactory:
         Raises:
             ValueError: If no matching service implementation is found
         """
-        logger.debug(f"create_from_config: config.type={config.type}, config class={type(config).__name__}")
+        logger.debug(
+            f"create_from_config: config.type={config.type}, config class={type(config).__name__}"
+        )
 
         try:
             module_name = {
@@ -101,10 +103,11 @@ class LLMFactory:
 
                 if isinstance(concrete, MockLLM):
                     raise RuntimeError(
-                        "Strict LLM provider creation returned MockLLM "
-                        "for a non-mock config"
+                        "Strict LLM provider creation returned MockLLM for a non-mock config"
                     )
-            logger.info(f"LLM service created successfully: type={config.type}, instance={type(llm).__name__}")
+            logger.info(
+                f"LLM service created successfully: type={config.type}, instance={type(llm).__name__}"
+            )
             return instrument_service(
                 llm,
                 observation_recorder,
@@ -121,12 +124,12 @@ class LLMFactory:
                 raise
             # Catch all exceptions (ValueError, TypeError, ImportError, ConnectionError, etc.)
             logger.error(
-                "Failed to create LLM service: "
-                f"type={config.type}, error={type(e).__name__}"
+                f"Failed to create LLM service: type={config.type}, error={type(e).__name__}"
             )
             # Fall back to Mock implementation
             logger.warning(f"Falling back to MockLLM (original config: {config.type})")
             from .mock_llm import MockLLM
+
             return instrument_service(
                 MockLLM(system_prompt=system_prompt),
                 observation_recorder,
@@ -165,20 +168,20 @@ class LLMFactory:
                 base_url=kwargs.get("base_url"),
                 temperature=kwargs.get("temperature", 0.7),
                 top_p=kwargs.get("top_p", 0.9),
-                max_tokens=kwargs.get("max_tokens", 1000)
+                max_tokens=kwargs.get("max_tokens", 1000),
             ),
             "glm": lambda: GLMLLMConfig(
                 api_key=kwargs.get("api_key"),
                 model=kwargs.get("model", "glm-4-flash"),
                 temperature=kwargs.get("temperature", 0.7),
                 max_tokens=kwargs.get("max_tokens", 4096),
-                enable_thinking=kwargs.get("enable_thinking", False)
+                enable_thinking=kwargs.get("enable_thinking", False),
             ),
             "ollama": lambda: OllamaLLMConfig(
                 model=kwargs.get("model", "llama3"),
                 base_url=kwargs.get("base_url", "http://localhost:11434"),
                 temperature=kwargs.get("temperature", 0.7),
-                max_tokens=kwargs.get("max_tokens", 4096)
+                max_tokens=kwargs.get("max_tokens", 4096),
             ),
             "mock": lambda: MockLLMConfig(),
         }

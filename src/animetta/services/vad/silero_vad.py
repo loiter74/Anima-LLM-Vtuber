@@ -81,6 +81,7 @@ class SileroVAD(VADInterface):
 
         logger.info("Loading Silero-VAD model...")
         import asyncio
+
         loop = asyncio.get_running_loop()
         self.detector.model = await loop.run_in_executor(None, self.detector._load_vad_model)
         logger.info("Silero-VAD model preloaded")
@@ -227,7 +228,9 @@ class SileroStateMachine:
 
         # Diagnostic log: print every 100 chunks (approx 3 seconds)
         if self._chunk_count % 100 == 1:
-            logger.debug(f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, speech={is_speech}")
+            logger.debug(
+                f"[VAD] #{self._chunk_count}: state={self.state.value}, prob={smoothed_prob:.3f}/{self.vad.prob_threshold:.3f}, speech={is_speech}"
+            )
 
         # State machine processing
         if self.state == VADState.IDLE:
@@ -246,7 +249,7 @@ class SileroStateMachine:
                         audio_data=b"",
                         is_speech_start=True,
                         is_speech_end=False,
-                        state=VADState.ACTIVE
+                        state=VADState.ACTIVE,
                     )
             else:
                 self.hit_count = 0
@@ -261,7 +264,9 @@ class SileroStateMachine:
                 self.miss_count += 1
                 # Print miss_count status every 50 chunks
                 if self._chunk_count % 50 == 0 and self.miss_count > 0:
-                    logger.info(f"[VAD] ACTIVE: miss_count={self.miss_count}/{self.vad.required_misses}, prob={smoothed_prob:.3f}")
+                    logger.info(
+                        f"[VAD] ACTIVE: miss_count={self.miss_count}/{self.vad.required_misses}, prob={smoothed_prob:.3f}"
+                    )
                 if self.miss_count >= self.vad.required_misses:
                     # Speech pause detected
                     self.state = VADState.INACTIVE
@@ -275,6 +280,7 @@ class SileroStateMachine:
 
             # Timeout check: force end if INACTIVE exceeds timeout
             import time
+
             if self._inactive_start_time is None:
                 self._inactive_start_time = time.time()
                 logger.debug("[VAD] Entered INACTIVE state, starting timeout timer")
@@ -282,8 +288,13 @@ class SileroStateMachine:
             inactive_duration = time.time() - self._inactive_start_time
 
             # Print status every 0.5 seconds
-            if not hasattr(self, "_last_logged_duration") or inactive_duration - self._last_logged_duration >= 0.5:
-                logger.info(f"[VAD] INACTIVE state has lasted {inactive_duration:.1f}s (timeout threshold: {self._inactive_timeout}s)")
+            if (
+                not hasattr(self, "_last_logged_duration")
+                or inactive_duration - self._last_logged_duration >= 0.5
+            ):
+                logger.info(
+                    f"[VAD] INACTIVE state has lasted {inactive_duration:.1f}s (timeout threshold: {self._inactive_timeout}s)"
+                )
                 self._last_logged_duration = inactive_duration
 
             if inactive_duration > self._inactive_timeout:
@@ -307,7 +318,7 @@ class SileroStateMachine:
                         audio_data=audio_data,
                         is_speech_start=False,
                         is_speech_end=True,
-                        state=VADState.IDLE
+                        state=VADState.IDLE,
                     )
                 else:
                     logger.debug(f"[VAD] Audio too short ({len(audio_data)} bytes), discarding")
@@ -323,16 +334,22 @@ class SileroStateMachine:
                     self.hit_count = 0
                     self.miss_count = 0
                     self._inactive_start_time = None
-                    logger.info(f"[VAD] Speech continued (INACTIVE→ACTIVE), hit_count={self.hit_count}")
+                    logger.info(
+                        f"[VAD] Speech continued (INACTIVE→ACTIVE), hit_count={self.hit_count}"
+                    )
                 # Print status every 100 chunks
                 elif self._chunk_count % 100 == 0:
-                    logger.info(f"[VAD] INACTIVE: hit_count={self.hit_count}/{self.vad.required_hits * 2}, prob={smoothed_prob:.3f}")
+                    logger.info(
+                        f"[VAD] INACTIVE: hit_count={self.hit_count}/{self.vad.required_hits * 2}, prob={smoothed_prob:.3f}"
+                    )
             else:
                 self.hit_count = 0
                 self.miss_count += 1
                 # Print miss_count every 50 chunks
                 if self._chunk_count % 50 == 0 and self.miss_count > 0:
-                    logger.info(f"[VAD] INACTIVE: miss_count={self.miss_count}/8, prob={smoothed_prob:.3f}")
+                    logger.info(
+                        f"[VAD] INACTIVE: miss_count={self.miss_count}/8, prob={smoothed_prob:.3f}"
+                    )
                 # Lowered threshold: 8 times (approx 0.25s) instead of 16
                 if self.miss_count >= 8:
                     # Speech fully ended
@@ -349,12 +366,14 @@ class SileroStateMachine:
 
                     # Check if audio length is sufficient (at least 0.5s, approx 8000 bytes)
                     if len(audio_data) > 8000:
-                        logger.debug(f"[VAD] Speech ended (INACTIVE→IDLE), audio: {len(audio_data)} bytes")
+                        logger.debug(
+                            f"[VAD] Speech ended (INACTIVE→IDLE), audio: {len(audio_data)} bytes"
+                        )
                         return VADResult(
                             audio_data=audio_data,
                             is_speech_start=False,
                             is_speech_end=True,
-                            state=VADState.IDLE
+                            state=VADState.IDLE,
                         )
                     else:
                         logger.debug(f"[VAD] Audio too short ({len(audio_data)} bytes), discarding")

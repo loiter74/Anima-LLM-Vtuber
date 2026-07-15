@@ -86,14 +86,18 @@ class SVCBridge:
                         "prompt_text": self.config.prompt_text,
                     }
                     resp = await self._client.post(
-                        self.config.svc_endpoint, files=files, data=data,
+                        self.config.svc_endpoint,
+                        files=files,
+                        data=data,
                     )
                 if resp.status_code == 200:
                     output_path_obj.write_bytes(resp.content)
                     logger.info(f"SVC complete: {output_path_obj}")
                     return str(output_path_obj)
                 else:
-                    logger.warning(f"SVC endpoint returned HTTP {resp.status_code}, trying fallback")
+                    logger.warning(
+                        f"SVC endpoint returned HTTP {resp.status_code}, trying fallback"
+                    )
             except httpx.HTTPError as e:
                 logger.warning(f"SVC endpoint failed: {e}, trying fallback")
 

@@ -195,10 +195,15 @@ class SimpleVADProcessor:
                     self._silence_transition_count += 1
 
                 silence_duration = current_time - self._silence_start_time
-                speech_duration = current_time - self._speech_start_time if self._speech_start_time else 0
+                speech_duration = (
+                    current_time - self._speech_start_time if self._speech_start_time else 0
+                )
 
                 # Conditions: speech long enough + silence long enough
-                if speech_duration >= self.min_speech_duration and silence_duration >= self.min_silence_duration:
+                if (
+                    speech_duration >= self.min_speech_duration
+                    and silence_duration >= self.min_silence_duration
+                ):
                     # Reset state BEFORE callback to prevent duplicate triggers
                     # (next chunk must not see _is_speech=True while callback is awaited)
                     self._is_speech = False

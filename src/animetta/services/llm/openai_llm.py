@@ -39,7 +39,7 @@ class OpenAILLM(LLMInterface):
         max_tokens: int = 1000,
         extra_body: dict | None = None,
         provider_identity: str = "openai",
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize OpenAI LLM
@@ -69,6 +69,7 @@ class OpenAILLM(LLMInterface):
 
         # Initialize async client for connection stability
         import httpx
+
         http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
             limits=httpx.Limits(
@@ -107,16 +108,16 @@ class OpenAILLM(LLMInterface):
             OpenAILLM instance
         """
         # Extract common fields from config (compatible with OpenAI / DeepSeek and other OpenAI API-compatible services)
-        api_key = getattr(config, 'api_key', '')
-        model = getattr(config, 'model', 'gpt-4o-mini')
-        base_url = getattr(config, 'base_url', None)
-        temperature = getattr(config, 'temperature', 0.7)
-        top_p = getattr(config, 'top_p', 0.9)
-        max_tokens = getattr(config, 'max_tokens', 1000)
+        api_key = getattr(config, "api_key", "")
+        model = getattr(config, "model", "gpt-4o-mini")
+        base_url = getattr(config, "base_url", None)
+        temperature = getattr(config, "temperature", 0.7)
+        top_p = getattr(config, "top_p", 0.9)
+        max_tokens = getattr(config, "max_tokens", 1000)
 
         # Build extra_body from DeepSeek thinking config if present
         extra_body: dict | None = None
-        thinking = getattr(config, 'thinking', None)
+        thinking = getattr(config, "thinking", None)
         if thinking:
             if thinking == "enabled":
                 extra_body = {"thinking": {"type": "enabled"}}
@@ -149,7 +150,9 @@ class OpenAILLM(LLMInterface):
             raise RuntimeError("OpenAI-compatible provider identity mismatch")
         self._provider_identity = provider
 
-    def _build_messages(self, user_input: str, system_prompt: str | None = None) -> list[dict[str, str]]:
+    def _build_messages(
+        self, user_input: str, system_prompt: str | None = None
+    ) -> list[dict[str, str]]:
         """
         Build messages list
 
@@ -165,19 +168,13 @@ class OpenAILLM(LLMInterface):
         # Use the passed-in system_prompt (RAG enhanced), otherwise use the instance default
         effective_prompt = system_prompt if system_prompt is not None else self.system_prompt
         if effective_prompt:
-            messages.append({
-                "role": "system",
-                "content": effective_prompt
-            })
+            messages.append({"role": "system", "content": effective_prompt})
 
         # Add conversation history
         messages.extend(self.history)
 
         # Add current user input
-        messages.append({
-            "role": "user",
-            "content": user_input
-        })
+        messages.append({"role": "user", "content": user_input})
 
         return messages
 
@@ -321,23 +318,17 @@ class OpenAILLM(LLMInterface):
             # Get the last user input
             self.history[-1].get("content", "")
             # Add partial AI response
-            self.history.append({
-                "role": "assistant",
-                "content": heard_response
-            })
+            self.history.append({"role": "assistant", "content": heard_response})
             # Add interruption marker
-            self.history.append({
-                "role": "system",
-                "content": "[user interrupted the conversation]"
-            })
+            self.history.append(
+                {"role": "system", "content": "[user interrupted the conversation]"}
+            )
 
-        logger.info(f"Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}...")
+        logger.info(
+            f"Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}..."
+        )
 
-    def set_memory_from_history(
-        self,
-        conf_uid: str,
-        history_uid: str
-    ) -> None:
+    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """
         Restore conversation memory from history records
 
@@ -347,7 +338,9 @@ class OpenAILLM(LLMInterface):
         """
         # TODO: Implement loading history from persistent storage
         # For now, just log it
-        logger.info(f"Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}")
+        logger.info(
+            f"Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}"
+        )
 
     # ================================================================
     # LangGraph tool calling interface (delegated to OpenAIToolHandler)

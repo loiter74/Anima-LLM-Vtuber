@@ -32,12 +32,13 @@ def _wrap_ssml(text: str, voice: str, rate: str | None = None, pitch: str | None
         return text
 
     # Escape XML special characters
-    text = (text
-        .replace("&", "&amp;")
+    text = (
+        text.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
-        .replace("'", "&apos;"))
+        .replace("'", "&apos;")
+    )
 
     prosody_open = ""
     prosody_close = ""
@@ -47,15 +48,15 @@ def _wrap_ssml(text: str, voice: str, rate: str | None = None, pitch: str | None
             attrs.append(f'rate="{rate}"')
         if pitch:
             attrs.append(f'pitch="{pitch}"')
-        prosody_open = f'<prosody {" ".join(attrs)}>'
+        prosody_open = f"<prosody {' '.join(attrs)}>"
         prosody_close = "</prosody>"
 
     return (
         f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">\n'
         f'  <voice name="{voice}">\n'
-        f'    {prosody_open}{text}{prosody_close}\n'
-        f'  </voice>\n'
-        f'</speak>'
+        f"    {prosody_open}{text}{prosody_close}\n"
+        f"  </voice>\n"
+        f"</speak>"
     )
 
 
@@ -102,11 +103,11 @@ class EdgeTTS(TTSInterface):
     @classmethod
     def from_config(cls, config, **kwargs):
         """Create instance from config, supporting presets like 'neurosama'."""
-        voice = getattr(config, 'voice', 'zh-CN-XiaoxiaoNeural')
-        rate = getattr(config, 'rate', None)
-        pitch = getattr(config, 'pitch', None)
+        voice = getattr(config, "voice", "zh-CN-XiaoxiaoNeural")
+        rate = getattr(config, "rate", None)
+        pitch = getattr(config, "pitch", None)
 
-        preset_name = getattr(config, 'preset', None)
+        preset_name = getattr(config, "preset", None)
         if preset_name == "neurosama":
             voice = NEUROSAMA_PRESET["voice"]
             rate = NEUROSAMA_PRESET["rate"]
@@ -123,19 +124,18 @@ class EdgeTTS(TTSInterface):
         if self._communicate is None:
             try:
                 import edge_tts
+
                 self._communicate = edge_tts.Communicate
                 logger.info("Edge TTS client initialized successfully")
             except ImportError as e:
                 logger.error("edge-tts not installed, please run: pip install edge-tts")
-                raise ImportError("edge-tts is not installed, please run: pip install edge-tts") from e
+                raise ImportError(
+                    "edge-tts is not installed, please run: pip install edge-tts"
+                ) from e
         return self._communicate
 
     async def synthesize(
-        self,
-        text: str,
-        output_path: str | Path | None = None,
-        voice: str | None = None,
-        **kwargs
+        self, text: str, output_path: str | Path | None = None, voice: str | None = None, **kwargs
     ) -> bytes | str:
         """
         Synthesize text to speech.
@@ -163,6 +163,7 @@ class EdgeTTS(TTSInterface):
 
         if output_path is None:
             import io
+
             output_buffer = io.BytesIO()
             output_path_is_temp = True
         else:
@@ -176,9 +177,11 @@ class EdgeTTS(TTSInterface):
                         output_buffer.write(chunk["data"])
 
                 audio_data = output_buffer.getvalue()
-                logger.debug(f"Edge TTS synthesis complete: {len(text)} chars -> {len(audio_data)} bytes")
+                logger.debug(
+                    f"Edge TTS synthesis complete: {len(text)} chars -> {len(audio_data)} bytes"
+                )
 
-                if not kwargs.get('return_bytes', False):
+                if not kwargs.get("return_bytes", False):
                     return write_temp_bytes(audio_data, suffix=".mp3")
                 return audio_data
             else:
@@ -194,7 +197,7 @@ class EdgeTTS(TTSInterface):
             logger.error(f"Edge TTS synthesis failed: {e}")
             raise
         finally:
-            if output_path_is_temp and 'output_buffer' in locals():
+            if output_path_is_temp and "output_buffer" in locals():
                 output_buffer.close()
 
     async def close(self) -> None:

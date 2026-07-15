@@ -16,6 +16,7 @@ import numpy as np
 @dataclass
 class VisemeConfig:
     """Viseme configuration"""
+
     # Band configuration (Hz)
     bands: dict[str, tuple[int, int]] = None
 
@@ -30,22 +31,22 @@ class VisemeConfig:
     def __post_init__(self):
         if self.bands is None:
             self.bands = {
-                'low': (120, 360),      # Low frequency
-                'lowMid': (360, 900),   # Low-mid frequency
-                'mid': (900, 1800),     # Mid frequency
-                'highMid': (1800, 3200), # High-mid frequency
-                'high': (3200, 5200)    # High frequency
+                "low": (120, 360),  # Low frequency
+                "lowMid": (360, 900),  # Low-mid frequency
+                "mid": (900, 1800),  # Mid frequency
+                "highMid": (1800, 3200),  # High-mid frequency
+                "high": (3200, 5200),  # High frequency
             }
 
         if self.weights is None:
             # 5 visemes: a, i, u, e, o
             # Each weight corresponds to a frequency band
             self.weights = {
-                'a': [0.5, 0.3, 0.1, 0.0, 0.0],
-                'i': [0.1, 0.3, 0.4, 0.2, 0.0],
-                'u': [0.2, 0.1, 0.3, 0.3, 0.1],
-                'e': [0.1, 0.2, 0.4, 0.2, 0.1],
-                'o': [0.3, 0.1, 0.2, 0.2, 0.2]
+                "a": [0.5, 0.3, 0.1, 0.0, 0.0],
+                "i": [0.1, 0.3, 0.4, 0.2, 0.0],
+                "u": [0.2, 0.1, 0.3, 0.3, 0.1],
+                "e": [0.1, 0.2, 0.4, 0.2, 0.1],
+                "o": [0.3, 0.1, 0.2, 0.2, 0.2],
             }
 
 
@@ -72,11 +73,7 @@ class VisemeLipSync:
         self.window_size = 1024
 
     def extract_band_energy(
-        self,
-        frequency_buffer: np.ndarray,
-        sample_rate: int,
-        min_freq: int,
-        max_freq: int
+        self, frequency_buffer: np.ndarray, sample_rate: int, min_freq: int, max_freq: int
     ) -> float:
         """
         Extract energy of a specified frequency band
@@ -106,11 +103,7 @@ class VisemeLipSync:
 
         return float(band_energy)
 
-    def extract_viseme_features(
-        self,
-        audio_data: np.ndarray,
-        voice_energy: float
-    ) -> list[float]:
+    def extract_viseme_features(self, audio_data: np.ndarray, voice_energy: float) -> list[float]:
         """
         Extract viseme features
 
@@ -125,7 +118,7 @@ class VisemeLipSync:
         if len(audio_data) < self.window_size:
             # Pad to window size
             padded = np.zeros(self.window_size)
-            padded[:len(audio_data)] = audio_data
+            padded[: len(audio_data)] = audio_data
             audio_data = padded
 
         # Apply window function
@@ -138,14 +131,9 @@ class VisemeLipSync:
 
         # Extract band energies
         features = []
-        for band_name in ['low', 'lowMid', 'mid', 'highMid', 'high']:
+        for band_name in ["low", "lowMid", "mid", "highMid", "high"]:
             min_freq, max_freq = self.config.bands[band_name]
-            energy = self.extract_band_energy(
-                magnitude,
-                self.sample_rate,
-                min_freq,
-                max_freq
-            )
+            energy = self.extract_band_energy(magnitude, self.sample_rate, min_freq, max_freq)
             features.append(energy)
 
         return features
@@ -168,7 +156,7 @@ class VisemeLipSync:
 
         # Calculate weight for each viseme
         weights = []
-        for viseme in ['a', 'i', 'u', 'e', 'o']:
+        for viseme in ["a", "i", "u", "e", "o"]:
             viseme_weight = np.dot(normalized, self.config.weights[viseme])
             weights.append(viseme_weight)
 
@@ -193,11 +181,7 @@ class VisemeLipSync:
         self._current_weights = smoothed
         return smoothed
 
-    def process_audio(
-        self,
-        audio_data: np.ndarray,
-        voice_energy: float = 1.0
-    ) -> dict[str, float]:
+    def process_audio(self, audio_data: np.ndarray, voice_energy: float = 1.0) -> dict[str, float]:
         """
         Process audio and return mouth parameters
 
@@ -220,11 +204,7 @@ class VisemeLipSync:
         # Convert to Live2D parameters
         return self._weights_to_params(smoothed_weights, voice_energy)
 
-    def _weights_to_params(
-        self,
-        weights: np.ndarray,
-        voice_energy: float
-    ) -> dict[str, float]:
+    def _weights_to_params(self, weights: np.ndarray, voice_energy: float) -> dict[str, float]:
         """
         Convert viseme weights to Live2D parameters
 
@@ -244,10 +224,7 @@ class VisemeLipSync:
         mouth_open = (a * 0.8 + o * 0.4 + u * 0.2) * voice_energy
         mouth_form = (i * 0.5 + e * 0.3) * voice_energy
 
-        return {
-            'ParamMouthOpen': mouth_open,
-            'ParamMouthForm': mouth_form
-        }
+        return {"ParamMouthOpen": mouth_open, "ParamMouthForm": mouth_form}
 
     def reset(self):
         """Reset state"""
@@ -278,15 +255,14 @@ class SimpleLipSync:
             Mouth openness (0-1)
         """
         # Calculate RMS
-        rms = np.sqrt(np.mean(audio_data ** 2))
+        rms = np.sqrt(np.mean(audio_data**2))
 
         # Apply sensitivity
         target_value = min(1.0, rms * self.sensitivity)
 
         # Smooth
         self._current_value = (
-            self.smoothing * target_value +
-            (1 - self.smoothing) * self._current_value
+            self.smoothing * target_value + (1 - self.smoothing) * self._current_value
         )
 
         return self._current_value
@@ -298,11 +274,8 @@ class SimpleLipSync:
 
 # ==================== Factory function ====================
 
-def create_lip_sync_engine(
-    mode: str = "viseme",
-    sample_rate: int = 24000,
-    **kwargs
-) -> Any:
+
+def create_lip_sync_engine(mode: str = "viseme", sample_rate: int = 24000, **kwargs) -> Any:
     """
     Create a lip sync engine
 

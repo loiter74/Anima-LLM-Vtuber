@@ -135,7 +135,11 @@ class MimoTTS(TTSInterface):
 
     @staticmethod
     def _resolve_base_url(api_key: str | None, base_url: str) -> str:
-        if api_key and api_key.startswith("tp-") and base_url.rstrip("/") == "https://api.xiaomimimo.com/v1":
+        if (
+            api_key
+            and api_key.startswith("tp-")
+            and base_url.rstrip("/") == "https://api.xiaomimimo.com/v1"
+        ):
             return "https://token-plan-cn.xiaomimimo.com/v1"
         return base_url
 
@@ -168,7 +172,9 @@ class MimoTTS(TTSInterface):
         try:
             audio_base64 = payload["choices"][0]["message"]["audio"]["data"]
         except (KeyError, IndexError, TypeError) as e:
-            raise RuntimeError("MiMo TTS response did not include choices[0].message.audio.data") from e
+            raise RuntimeError(
+                "MiMo TTS response did not include choices[0].message.audio.data"
+            ) from e
 
         try:
             return base64.b64decode(audio_base64, validate=True)

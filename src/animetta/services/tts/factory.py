@@ -94,9 +94,7 @@ class TTSFactory:
         if config is None:
             if strict:
                 raise ValueError(f"Unknown TTS provider: {provider_type}")
-            logger.warning(
-                f"Unknown TTS provider: {provider_type}, using Mock implementation"
-            )
+            logger.warning(f"Unknown TTS provider: {provider_type}, using Mock implementation")
             return instrument_service(
                 MockTTS(), observation_recorder, "tts", provider="mock", model="mock"
             )
@@ -134,8 +132,7 @@ class TTSFactory:
                 and isinstance(_unwrap_tracing_proxy(svc), MockTTS)
             ):
                 raise RuntimeError(
-                    "Strict TTS provider creation returned MockTTS "
-                    "for a non-mock config"
+                    "Strict TTS provider creation returned MockTTS for a non-mock config"
                 )
             return instrument_service(
                 svc,

@@ -114,13 +114,15 @@ class DanmakuBuffer:
             # Also require the phrase is actually still in the buffer
             if count <= 0:
                 continue
-            result.append(DanmakuPhrase(
-                text=phrase,
-                frequency=count,
-                first_seen=self._phrase_first_seen.get(phrase, now),
-                last_seen=last,
-                source_room_id=self._room_id,
-            ))
+            result.append(
+                DanmakuPhrase(
+                    text=phrase,
+                    frequency=count,
+                    first_seen=self._phrase_first_seen.get(phrase, now),
+                    last_seen=last,
+                    source_room_id=self._room_id,
+                )
+            )
 
         result.sort(key=lambda p: p.frequency, reverse=True)
         return result
@@ -178,7 +180,7 @@ class DanmakuBuffer:
         ngram_set = set()
         for n in range(2, min(7, len(chars) + 1)):
             for i in range(len(chars) - n + 1):
-                phrase = "".join(chars[i:i + n])
+                phrase = "".join(chars[i : i + n])
                 # Filter junk: skip if all digits/punctuation/whitespace
                 if not phrase.strip():
                     continue
@@ -199,7 +201,7 @@ class DanmakuBuffer:
         chars = list(text)
         for n in range(2, min(7, len(chars) + 1)):
             for i in range(len(chars) - n + 1):
-                phrase = "".join(chars[i:i + n])
+                phrase = "".join(chars[i : i + n])
                 if phrase in self._phrase_counter:
                     self._phrase_counter[phrase] -= 1
                     if self._phrase_counter[phrase] <= 0:

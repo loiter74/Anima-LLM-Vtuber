@@ -30,14 +30,12 @@ class MockTTS(TTSInterface):
         return cls()
 
     async def synthesize(
-        self,
-        text: str,
-        output_path: str | Path | None = None,
-        **kwargs
+        self, text: str, output_path: str | Path | None = None, **kwargs
     ) -> bytes | str:
         """Return WAV bytes, or write them to output_path when requested."""
         # Simulate processing delay
         import asyncio
+
         await asyncio.sleep(0.1)
 
         audio = self._generate_wav_bytes(text)

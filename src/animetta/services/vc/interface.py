@@ -19,10 +19,7 @@ class VCInterface(ABC):
 
     @abstractmethod
     async def convert(
-        self,
-        audio: bytes,
-        output_path: str | Path | None = None,
-        **kwargs
+        self, audio: bytes, output_path: str | Path | None = None, **kwargs
     ) -> bytes | str:
         """
         Convert voice timbre of input audio.

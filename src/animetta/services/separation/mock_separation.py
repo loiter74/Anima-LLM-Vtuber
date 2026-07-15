@@ -33,10 +33,11 @@ class MockSeparation(SeparationInterface):
         audio: bytes,
         target: str | None = None,
         output_dir: str | Path | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, bytes | str]:
         """Return audio as mock stems."""
         import asyncio
+
         await asyncio.sleep(0.1)
 
         stems = {"vocals": audio, "other": audio}

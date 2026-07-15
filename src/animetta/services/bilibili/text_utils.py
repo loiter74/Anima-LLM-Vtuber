@@ -10,19 +10,56 @@ import re
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-STOPWORDS: frozenset[str] = frozenset({
-    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
-    "一个", "这个", "那个", "什么", "怎么", "如何", "可以", "没有", "还是",
-    "但是", "因为", "所以", "如果", "虽然", "而且", "或者", "不是", "就是",
-    "我们", "你们", "他们", "它们", "自己", "起来", "这些", "那些",
-})
+STOPWORDS: frozenset[str] = frozenset(
+    {
+        "的",
+        "了",
+        "在",
+        "是",
+        "我",
+        "有",
+        "和",
+        "就",
+        "不",
+        "人",
+        "都",
+        "一",
+        "一个",
+        "这个",
+        "那个",
+        "什么",
+        "怎么",
+        "如何",
+        "可以",
+        "没有",
+        "还是",
+        "但是",
+        "因为",
+        "所以",
+        "如果",
+        "虽然",
+        "而且",
+        "或者",
+        "不是",
+        "就是",
+        "我们",
+        "你们",
+        "他们",
+        "它们",
+        "自己",
+        "起来",
+        "这些",
+        "那些",
+    }
+)
 
 TITLE_SEPARATORS: re.Pattern = re.compile(
-    r"[,，、。！？：；""''（）!?:\\;\"'\\(\\)\\s]|·|●|◆|【|】|《|》|—+"
+    r"[,，、。！？：；" "''（）!?:\\;\"'\\(\\)\\s]|·|●|◆|【|】|《|》|—+"
 )
 
 
 # ── Public Functions ─────────────────────────────────────────────────────
+
 
 def parse_tags(tag_str: str) -> list[str]:
     """Parse comma-separated tag string into cleaned individual tags.
@@ -63,7 +100,7 @@ def extract_title_phrases(title: str) -> list[str]:
             # Also extract 2-char sub-phrases for longer segments
             if len(part) > 4:
                 for i in range(len(part) - 1):
-                    sub = part[i:i + 2]
+                    sub = part[i : i + 2]
                     if sub not in STOPWORDS:
                         phrases.append(sub)
 

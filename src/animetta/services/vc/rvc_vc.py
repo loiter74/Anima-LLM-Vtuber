@@ -137,6 +137,7 @@ class RVCVC(VCInterface):
         # Fall back to CPU if CUDA is requested but unavailable
         try:
             import torch
+
             if self.device.startswith("cuda") and not torch.cuda.is_available():
                 logger.warning("CUDA not available, falling back to CPU for RVC")
                 rvc_config.device = "cpu"
@@ -156,8 +157,8 @@ class RVCVC(VCInterface):
                 index_path=self.index_path,
                 index_rate=self.index_rate,
                 n_cpu=1,
-                inp_q=None,    # n_cpu=1 → queues are unused
-                opt_q=None,    # n_cpu=1 → queues are unused
+                inp_q=None,  # n_cpu=1 → queues are unused
+                opt_q=None,  # n_cpu=1 → queues are unused
                 config=rvc_config,
             )
         except Exception as e:
@@ -211,6 +212,7 @@ class RVCVC(VCInterface):
 
         # ── numpy → torch.Tensor (1D float32) ───────────────────────
         import torch
+
         audio_tensor = torch.from_numpy(audio_np.copy()).float()
 
         # ── Blocking RVC inference → asyncio.to_thread() ────────────
@@ -260,6 +262,7 @@ class RVCVC(VCInterface):
             self._ensure_model()
 
             import torch
+
             # 1 second of silence at 16 kHz
             silence = np.zeros(16000, dtype=np.float32)
             silence_tensor = torch.from_numpy(silence).float()
@@ -283,6 +286,7 @@ class RVCVC(VCInterface):
 
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 logger.debug("RVC GPU cache cleared")

@@ -41,7 +41,9 @@ class LLMChatModelAdapter(BaseChatModel):
 
     llm_service: LLMInterface = Field(description="Existing LLM service instance")
     bound_tools: Sequence[BaseTool] = Field(default_factory=list, description="Bound tool list")
-    model_name: str = Field(default="unknown", description="Model name (used for LangSmith/LangFuse tracing)")
+    model_name: str = Field(
+        default="unknown", description="Model name (used for LangSmith/LangFuse tracing)"
+    )
 
     # LangChain required fields
     @property
@@ -68,6 +70,7 @@ class LLMChatModelAdapter(BaseChatModel):
         or run_until_complete with the current loop when called from async context.
         """
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
             # Called from async context — use run_until_complete to avoid
@@ -111,7 +114,11 @@ class LLMChatModelAdapter(BaseChatModel):
         if not user_input:
             logger.warning("[LLM Adapter] No user input found")
             return ChatResult(
-                generations=[ChatGeneration(message=AIMessage(content="Sorry, I didn't receive your message."))]
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(content="Sorry, I didn't receive your message.")
+                    )
+                ]
             )
 
         # Set system prompt

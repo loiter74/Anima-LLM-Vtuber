@@ -85,9 +85,11 @@ class OpenAIStreamHandler:
                     # Fallback: rough estimate (4 chars ≈ 1 token)
                     input_tokens = len(user_input) // 4
                     output_tokens = len(full_response) // 4
+
                 # Use a synthetic response-like object for _record_usage
                 class _StreamUsage:
                     pass
+
                 usage_obj = _StreamUsage()
                 usage_obj.usage = _StreamUsage()
                 usage_obj.usage.prompt_tokens = input_tokens

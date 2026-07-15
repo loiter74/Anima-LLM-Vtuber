@@ -16,10 +16,7 @@ class TTSInterface(ABC):
 
     @abstractmethod
     async def synthesize(
-        self,
-        text: str,
-        output_path: str | Path | None = None,
-        **kwargs
+        self, text: str, output_path: str | Path | None = None, **kwargs
     ) -> bytes | str:
         """
         Synthesize text to speech

@@ -102,9 +102,7 @@ class MemeState:
         self.last_used_turns[style_id] = turn_index
         self.recent_uses.setdefault(style_id, []).append(turn_index)
         cutoff = turn_index - self.window_turns
-        self.recent_uses[style_id] = [
-            turn for turn in self.recent_uses[style_id] if turn >= cutoff
-        ]
+        self.recent_uses[style_id] = [turn for turn in self.recent_uses[style_id] if turn >= cutoff]
 
     def cooldown_reason(self, style: MemeStyle, turn_index: int) -> str | None:
         last_turn = self.last_used_turns.get(style.id)
@@ -115,9 +113,7 @@ class MemeState:
         window_turns = style.window_turns or self.window_turns
         max_per_window = style.max_per_window or self.max_per_window
         cutoff = turn_index - window_turns
-        recent = [
-            turn for turn in self.recent_uses.get(style.id, []) if turn >= cutoff
-        ]
+        recent = [turn for turn in self.recent_uses.get(style.id, []) if turn >= cutoff]
         self.recent_uses[style.id] = recent
         if len(recent) >= max_per_window:
             return "window_cap"
@@ -288,8 +284,7 @@ class ZhouliTool:
 
     def validate_slots(self, slots: dict[str, str]) -> None:
         missing = [
-            name for name in self.style.required_slot_names
-            if not str(slots.get(name, "")).strip()
+            name for name in self.style.required_slot_names if not str(slots.get(name, "")).strip()
         ]
         if missing:
             raise MemeStyleValidationError(
@@ -388,8 +383,7 @@ class ZhouliTool:
             raw = result.get("content", "") if isinstance(result, dict) else str(result)
             data = _parse_json_object(raw)
             slots = {
-                name: str(data.get(name, "")).strip()
-                for name in self.style.required_slot_names
+                name: str(data.get(name, "")).strip() for name in self.style.required_slot_names
             }
             self.validate_slots(slots)
             return slots

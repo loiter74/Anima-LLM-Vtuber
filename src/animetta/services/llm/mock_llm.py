@@ -55,11 +55,7 @@ class MockLLM(LLMInterface):
         logger.info(f"[MockLLM-{instance.instance_id}] Initialization complete")
         return instance
 
-    async def chat(
-        self,
-        user_input: str,
-        **kwargs
-    ) -> str:
+    async def chat(self, user_input: str, **kwargs) -> str:
         """Return a mock response"""
         # Call count
         self.call_count += 1
@@ -72,11 +68,14 @@ class MockLLM(LLMInterface):
 
         logger.info(f"[MockLLM:{call_id}] ═══════════════════════════════════")
         logger.info(f"[MockLLM:{call_id}] 🔵 Starting call (mock mode)")
-        logger.info(f"[MockLLM:{call_id}] Input: {user_input[:100]}{'...' if input_length > 100 else ''} (length: {input_length})")
+        logger.info(
+            f"[MockLLM:{call_id}] Input: {user_input[:100]}{'...' if input_length > 100 else ''} (length: {input_length})"
+        )
         logger.info(f"[MockLLM:{call_id}] History rounds: {history_length // 2}")
 
         # Simulate processing delay
         import asyncio
+
         await asyncio.sleep(0.1)
 
         # Record to history
@@ -99,16 +98,14 @@ class MockLLM(LLMInterface):
 
         logger.info(f"[MockLLM:{call_id}] 🟢 Call successful")
         logger.info(f"[MockLLM:{call_id}] Elapsed: {elapsed_time:.2f}s")
-        logger.info(f"[MockLLM:{call_id}] Output: {response[:100]}{'...' if output_length > 100 else ''} (length: {output_length})")
+        logger.info(
+            f"[MockLLM:{call_id}] Output: {response[:100]}{'...' if output_length > 100 else ''} (length: {output_length})"
+        )
         logger.info(f"[MockLLM:{call_id}] ═══════════════════════════════════")
 
         return response
 
-    async def chat_stream(
-        self,
-        user_input: str,
-        **kwargs
-    ) -> AsyncIterator[str]:
+    async def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         """Stream mock response"""
         # Call count
         self.call_count += 1
@@ -120,7 +117,9 @@ class MockLLM(LLMInterface):
 
         logger.info(f"[MockLLM:{call_id}] ═══════════════════════════════════")
         logger.info(f"[MockLLM:{call_id}] 🔵 Starting streaming call (mock mode)")
-        logger.info(f"[MockLLM:{call_id}] Input: {user_input[:100]}{'...' if input_length > 100 else ''}")
+        logger.info(
+            f"[MockLLM:{call_id}] Input: {user_input[:100]}{'...' if input_length > 100 else ''}"
+        )
 
         response = await self.chat(user_input, **kwargs)
 
@@ -164,20 +163,10 @@ class MockLLM(LLMInterface):
         """
         if heard_response and self.history and self.history[-1].get("role") == "user":
             # Save partial response to history
-            self.history.append({
-                "role": "assistant",
-                "content": heard_response
-            })
-            self.history.append({
-                "role": "system",
-                "content": "[用户打断了对话]"
-            })
+            self.history.append({"role": "assistant", "content": heard_response})
+            self.history.append({"role": "system", "content": "[用户打断了对话]"})
 
-    def set_memory_from_history(
-        self,
-        conf_uid: str,
-        history_uid: str
-    ) -> None:
+    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """
         Restore conversation memory from history records
 
