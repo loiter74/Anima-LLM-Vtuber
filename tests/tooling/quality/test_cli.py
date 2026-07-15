@@ -578,7 +578,15 @@ def test_docker_build_command_executes_only_frozen_selected_service(
     payload = json.loads(capsys.readouterr().out)
 
     assert code == 0
-    assert calls[0][0][-3:] == ["build", "--no-cache", "qwen-tts"]
+    assert calls[0][0] == [
+        "docker",
+        "compose",
+        "-f",
+        str(ROOT / "docker-compose.qwen.yml"),
+        "build",
+        "--no-cache",
+        "qwen-tts",
+    ]
     assert "animetta" not in calls[0][0]
     assert calls[0][1]["QWEN_TTS_BUILD_FINGERPRINT"] == payload["actions"][0]["input_fingerprint"]
     assert decoder_options == [("utf-8", "replace")]

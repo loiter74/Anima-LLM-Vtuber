@@ -171,6 +171,7 @@ class SchedulerPolicy(FrozenModel):
 
 class DockerBuildScope(FrozenModel):
     service: str
+    compose_file: str
     paths: tuple[str, ...] = Field(min_length=1)
     environment_identity_fields: tuple[str, ...] = Field(min_length=1)
 
@@ -187,6 +188,11 @@ class DockerBuildScope(FrozenModel):
         if re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", value) is None:
             raise ValueError("service must use safe kebab-case")
         return value
+
+    @field_validator("compose_file")
+    @classmethod
+    def validate_compose_file(cls, value: str) -> str:
+        return _validate_relative_posix(value)
 
     @field_validator("environment_identity_fields", mode="before")
     @classmethod
@@ -529,6 +535,7 @@ class DominatedGroup(FrozenModel):
 class DockerBuildAction(FrozenModel):
     scope_id: str
     service: str
+    compose_file: str
     input_fingerprint: str
     input_file_count: int = Field(ge=0)
     input_patterns: tuple[str, ...]

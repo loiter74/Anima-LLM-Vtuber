@@ -100,6 +100,7 @@ def collect_service_observations(
     services: Iterable[str],
     *,
     environment_allowlists: Mapping[str, tuple[str, ...]],
+    compose_files: Mapping[str, str],
     command_runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     docker_executable: str = "docker",
 ) -> dict[str, ObservedService]:
@@ -108,8 +109,19 @@ def collect_service_observations(
         allowed_names = environment_allowlists.get(service)
         if not allowed_names:
             raise TopologyCollectionError(f"environment allowlist unavailable: {service}")
+        compose_file = compose_files.get(service)
+        if not compose_file:
+            raise TopologyCollectionError(f"Compose file unavailable: {service}")
         ps = command_runner(
-            [docker_executable, "compose", "ps", "-q", service],
+            [
+                docker_executable,
+                "compose",
+                "-f",
+                compose_file,
+                "ps",
+                "-q",
+                service,
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -157,32 +169,42 @@ def collect_desired_environment_identities(
     services: Iterable[str],
     *,
     environment_allowlists: Mapping[str, tuple[str, ...]],
+    compose_files: Mapping[str, str],
     command_runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     docker_executable: str = "docker",
 ) -> dict[str, str]:
-    completed = command_runner(
-        [docker_executable, "compose", "config", "--format", "json"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    if completed.returncode != 0:
-        raise TopologyCollectionError("current Compose configuration is unavailable")
-    try:
-        payload = json.loads(completed.stdout)
-        configured_services = payload["services"]
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise TopologyCollectionError("current Compose configuration is invalid") from exc
-
     identities: dict[str, str] = {}
     for service in sorted(set(services)):
         allowed_names = environment_allowlists.get(service)
         if not allowed_names:
             raise TopologyCollectionError(f"environment allowlist unavailable: {service}")
+        compose_file = compose_files.get(service)
+        if not compose_file:
+            raise TopologyCollectionError(f"Compose file unavailable: {service}")
+        completed = command_runner(
+            [
+                docker_executable,
+                "compose",
+                "-f",
+                compose_file,
+                "config",
+                "--format",
+                "json",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if completed.returncode != 0:
+            raise TopologyCollectionError(
+                f"current Compose configuration is unavailable: {service}"
+            )
         try:
+            payload = json.loads(completed.stdout)
+            configured_services = payload["services"]
             environment = configured_services[service].get("environment") or {}
-        except (AttributeError, KeyError, TypeError) as exc:
+        except (AttributeError, json.JSONDecodeError, KeyError, TypeError) as exc:
             raise TopologyCollectionError(
                 f"service missing from current Compose configuration: {service}"
             ) from exc

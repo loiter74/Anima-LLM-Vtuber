@@ -1,4 +1,4 @@
-.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint qwen-build qwen-up qwen-deploy qwen-stop qwen-destroy anima-up anima-down
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -75,6 +75,27 @@ health:
 
 # ── Docker targets ───────────────────────────────────────────────────────
 
+qwen-build:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-build
+
+qwen-up:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-up
+
+qwen-deploy:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-deploy
+
+qwen-stop:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-stop
+
+qwen-destroy:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-destroy
+
+anima-up:
+	$(PYTHON) scripts/runtime_lifecycle.py anima-up
+
+anima-down:
+	$(PYTHON) scripts/runtime_lifecycle.py anima-down
+
 docker-health: docker-lint docker-test
 	@echo "Docker health check complete."
 
@@ -86,3 +107,4 @@ docker-test:
 
 docker-typecheck:
 	docker compose exec animetta bash -c "pip install mypy --break-system-packages -q && PYTHONPATH=src mypy src/animetta --ignore-missing-imports"
+

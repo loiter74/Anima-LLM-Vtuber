@@ -142,6 +142,8 @@ def test_quality_workflow_scopes_cache_by_trust_and_keeps_release_cold() -> None
     assert "scripts/release_runtime_gate.py" in release_commands
     assert "playwright install chromium" in release_commands
     assert "docker compose down --remove-orphans" in release_commands
+    assert "docker compose -f docker-compose.qwen.yml logs --no-color" in release_commands
+    assert "docker compose -f docker-compose.qwen.yml down --remove-orphans" in release_commands
     assert set(release_job["env"]) == {
         "DEEPSEEK_API_KEY",
         "MIMO_API_KEY",

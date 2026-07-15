@@ -12,7 +12,8 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # Docker (Recommended)
-docker compose up -d --build
+python scripts/runtime_lifecycle.py qwen-deploy  # one-time / intentional Qwen change
+python scripts/runtime_lifecycle.py anima-up     # routine; preserves Qwen
 
 # Or CPU-only
 docker compose -f docker-compose.cpu.yml up -d --build
@@ -99,8 +100,11 @@ When working with AI agents (ZCode, Claude Code, Cursor, Copilot), read [AGENTS.
 ## Docker Development
 
 ```bash
-# Build and run with GPU
-docker compose up -d --build
+# One-time Qwen deployment
+python scripts/runtime_lifecycle.py qwen-deploy
+
+# Routine build and startup (Qwen remains resident)
+python scripts/runtime_lifecycle.py anima-up
 
 # View logs
 docker compose logs -f animetta
@@ -111,8 +115,14 @@ docker compose exec animetta PYTHONPATH=/app/src python -m pytest tests/ -v
 # Shell access
 docker compose exec animetta bash
 
-# Rebuild after code changes
-docker compose build && docker compose up -d
+# Rebuild Animetta after application code changes
+python scripts/runtime_lifecycle.py anima-up
+
+# Stop Animetta without unloading Qwen
+python scripts/runtime_lifecycle.py anima-down
+
+# Release Qwen GPU memory without deleting its container
+python scripts/runtime_lifecycle.py qwen-stop
 
 # CPU-only mode
 docker compose -f docker-compose.cpu.yml up -d --build

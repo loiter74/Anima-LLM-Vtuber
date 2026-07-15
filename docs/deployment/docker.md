@@ -1,6 +1,8 @@
 # Docker Deployment Guide
 
-Animetta ships as a single Docker container with nginx (static frontend + reverse proxy) and the Python backend.
+Animetta uses two independent Compose projects: the application container (nginx,
+frontend, and Python backend) and a persistent GPU Qwen TTS worker. Routine
+application rebuilds do not rebuild, recreate, or unload Qwen.
 
 ## Prerequisites
 
@@ -30,10 +32,13 @@ git clone https://github.com/loiter74/animetta.git && cd animetta
 cp .env.example .env
 # Edit .env with your API keys. Do not commit real credentials.
 
-# 2. Build and start (GPU)
-docker compose up -d --build
+# 2. Deploy Qwen once (also use after an intentional Qwen image/model change)
+python scripts/runtime_lifecycle.py qwen-deploy
 
-# 3. Open http://localhost
+# 3. Build and start Animetta
+python scripts/runtime_lifecycle.py anima-up
+
+# 4. Open http://localhost
 ```
 
 The container exposes:
@@ -48,11 +53,12 @@ The container exposes:
 | LLM | DeepSeek remote API | DeepSeek remote API |
 | TTS | Isolated Qwen3 Alice GPU service | MiMo remote API |
 | ASR / VAD | MiMo remote API | MiMo remote API |
-| Command | `docker compose up -d` | `docker compose -f docker-compose.cpu.yml up -d` |
+| Command | `python scripts/runtime_lifecycle.py anima-up` (after one `qwen-deploy`) | `docker compose -f docker-compose.cpu.yml up -d` |
 
 ```bash
 # GPU (default)
-docker compose up -d --build
+python scripts/runtime_lifecycle.py qwen-deploy  # first deployment only
+python scripts/runtime_lifecycle.py anima-up
 
 # CPU-only
 docker compose -f docker-compose.cpu.yml up -d --build
@@ -66,7 +72,8 @@ docker compose -f docker-compose.cpu.yml up -d --build
 | `animetta-data` | `/app/data` | Downloaded models, stats |
 | `.env` (Compose interpolation) | not mounted | Supplies only explicitly listed profile secrets/endpoints |
 
-Named volumes persist across container rebuilds. To reset data:
+Named volumes persist across container rebuilds. The `anima-down` lifecycle
+operation does not stop Qwen. To reset application data:
 
 ```bash
 docker compose down -v   # WARNING: deletes all memory and model data
@@ -102,7 +109,7 @@ docker compose logs -f animetta   # Check startup logs
 docker run --rm --gpus all nvidia/cuda:12.8.2-base-ubuntu24.04 nvidia-smi
 
 # Check inside container
-docker compose exec qwen-tts python -c "import torch; print(torch.cuda.is_available())"
+docker compose -f docker-compose.qwen.yml exec qwen-tts python -c "import torch; print(torch.cuda.is_available())"
 ```
 
 ### Health check failing
@@ -117,7 +124,10 @@ curl http://localhost/health
 
 The production worker is intentionally offline and never downloads weights during
 readiness. Set `HF_CACHE_DIR` to a populated Hugging Face cache and
-`ALICE_REF_AUDIO` to the Alice reference WAV, then recreate `qwen-tts`.
+`ALICE_REF_AUDIO` to the Alice reference WAV, then run
+`python scripts/runtime_lifecycle.py qwen-deploy`. The `qwen-up` operation is
+strictly no-build/no-recreate and fails with an
+actionable message when the image, service, model revision, or voice is stale.
 
 ### Frontend not loading
 
@@ -137,8 +147,11 @@ docker compose exec animetta chown -R root:root /app/memory_db /app/data
 ## Building Locally
 
 ```bash
-# Full rebuild (no cache)
-docker compose build --no-cache
+# Rebuild Animetta only (routine)
+docker compose build --no-cache animetta
+
+# Intentionally rebuild and recreate Qwen
+python scripts/runtime_lifecycle.py qwen-deploy
 
 # Rebuild only frontend
 docker build --target frontend-builder -t animetta-frontend .

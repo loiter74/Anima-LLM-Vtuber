@@ -134,11 +134,19 @@ The frontend dev server runs on `http://localhost:3000`; the backend on `http://
 
 ```bash
 # GPU mode (recommended when an NVIDIA GPU is available)
-docker compose up -d --build
+# One-time Qwen deployment, or after changing its image/model contract
+python scripts/runtime_lifecycle.py qwen-deploy
+
+# Routine startup: validates Qwen, then builds/starts only Animetta
+python scripts/runtime_lifecycle.py anima-up
 
 # CPU mode (no GPU)
 docker compose -f docker-compose.cpu.yml up -d --build
 ```
+
+Routine `python scripts/runtime_lifecycle.py anima-down` leaves the Qwen worker and
+its loaded model running. Use the `qwen-stop` operation only when GPU memory must be
+released. Equivalent `make` aliases are available on systems that provide Make.
 
 Once healthy, the frontend is served by nginx on **port 80** and the backend health endpoint is at `http://localhost:12394/health` (also proxied at `http://localhost/health`).
 

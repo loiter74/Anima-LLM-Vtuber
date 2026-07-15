@@ -86,6 +86,7 @@ def plan_docker_actions(
             "schema_version": 1,
             "scope_id": selected.scope_id,
             "service": scope.service,
+            "compose_file": scope.compose_file,
             "file_digest": files.digest,
             "toolchain_identity": toolchain,
         }
@@ -101,6 +102,7 @@ def plan_docker_actions(
             DockerBuildAction(
                 scope_id=selected.scope_id,
                 service=scope.service,
+                compose_file=scope.compose_file,
                 input_fingerprint=fingerprint,
                 input_file_count=files.file_count,
                 input_patterns=scope.paths,
@@ -122,6 +124,7 @@ def fingerprint_docker_scopes(
             "schema_version": 1,
             "scope_id": scope_id,
             "service": scope.service,
+            "compose_file": scope.compose_file,
             "file_digest": files.digest,
             "toolchain_identity": toolchain,
         }

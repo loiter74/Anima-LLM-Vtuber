@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
@@ -19,12 +20,28 @@ from scripts.release_runtime_gate import (
 )
 from scripts.smoke_qwen_alice import build_evidence
 
+ROOT = Path(__file__).resolve().parents[2]
 RESOLVED_IDENTITY = {
     "provider": "qwen3",
     "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
     "voice": "alice",
     "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
 }
+
+
+def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/release_runtime_gate.py", "--help"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "--qwen-compose-file" in completed.stdout
 
 
 def test_release_environment_requires_secrets_and_existing_model_mounts(
@@ -237,8 +254,20 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
             stdout = "stable-qwen-container\n"
         elif "ps" in command and "animetta" in command:
             stdout = "stable-animetta-container\n"
+        elif "inspect" in command:
+            container_id = command[-1]
+            stdout = json.dumps(
+                [
+                    {
+                        "Id": container_id,
+                        "Image": "sha256:qwen-image",
+                        "State": {"StartedAt": "2026-07-16T00:00:00Z"},
+                        "RestartCount": 0,
+                    }
+                ]
+            )
         elif "logs" in command:
-            stdout = "all services ready\nerror_count=0\n"
+            stdout = "Qwen TTS preload started\nall services ready\nerror_count=0\n"
         else:
             stdout = ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
@@ -268,6 +297,11 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
 
     monkeypatch.setattr(gate, "_run", fake_run)
     monkeypatch.setattr(gate, "_wait_json", fake_wait)
+    monkeypatch.setattr(
+        gate,
+        "_preflight_qwen",
+        lambda **_kwargs: {"status": "passed", "identity": {"ready": True, **RESOLVED_IDENTITY}},
+    )
     monkeypatch.setattr(gate, "_frontend_probe", lambda _url: {"status": 200, "bytes": 12})
     monkeypatch.setattr(
         gate,
@@ -292,6 +326,7 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
     evidence = gate.run_release_gate(
         plan=tmp_path / "plan.json",
         compose_file=tmp_path / "docker-compose.yml",
+        qwen_compose_file=tmp_path / "docker-compose.qwen.yml",
         evidence_root=tmp_path / "evidence",
         attempts=2,
         interval_seconds=0,
@@ -300,7 +335,7 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
     flattened = [" ".join(command) for command in commands]
     assert evidence["status"] == "passed"
     assert evidence["same_container_recovery"] is True
-    assert sum("smoke_qwen_alice.py" in command for command in flattened) == 2
+    assert sum("smoke_qwen_alice.py" in command for command in flattened) == 3
     assert sum("probe_release_turn.py" in command for command in flattened) == 2
     probe_commands = [
         command
@@ -314,6 +349,29 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
     assert str(UUID(next(iter(conversation_ids)))) == next(iter(conversation_ids))
     assert any("down --remove-orphans" in command for command in flattened)
     assert any("docker-build" in command and "--no-cache" in command for command in flattened)
-    assert any("up -d --no-build" in command for command in flattened)
+    assert not any("docker-build" in command and "--compose-file" in command for command in flattened)
+    assert any(
+        "docker-compose.qwen.yml up -d --no-build --force-recreate qwen-tts" in command
+        for command in flattened
+    )
+    assert any(
+        "docker-compose.yml up -d --no-build animetta" in command
+        for command in flattened
+    )
     assert any("stop qwen-tts" in command for command in flattened)
     assert any("start qwen-tts" in command for command in flattened)
+    assert all(
+        "docker-compose.qwen.yml" in command
+        for command in flattened
+        if " qwen-tts" in command and (" stop " in command or " start " in command)
+    )
+    assert evidence["qwen_compose_file"].endswith("docker-compose.qwen.yml")
+    assert evidence["main_compose_file"].endswith("docker-compose.yml")
+    assert evidence["persistent_qwen"]["preserved"] is True
+    assert evidence["persistent_qwen"]["before"] == evidence["persistent_qwen"]["after"]
+    assert evidence["persistent_qwen"]["preload_events_before"] == 1
+    assert evidence["persistent_qwen"]["preload_events_after"] == 1
+    assert evidence["persistent_qwen"]["build_actions"] == 0
+    assert len(evidence["persistent_qwen"]["noop_up_seconds"]) == 2
+    assert max(evidence["persistent_qwen"]["noop_up_seconds"]) <= 5
+    assert sum("--no-recreate qwen-tts" in command for command in flattened) == 2

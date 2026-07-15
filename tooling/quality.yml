@@ -87,6 +87,7 @@ docker_watch_paths:
 docker_scopes:
   animetta:
     service: animetta
+    compose_file: docker-compose.yml
     environment_identity_fields:
       - ANIMETTA_PROFILE
       - ANIMETTA_HOST
@@ -98,7 +99,9 @@ docker_scopes:
     paths:
       - Dockerfile
       - .dockerignore
-      - docker-compose*.yml
+      - docker-compose.yml
+      - docker-compose.cpu.yml
+      - docker-compose.core.yml
       - docker/entrypoint.sh
       - docker/nginx.conf
       - requirements-core.txt
@@ -109,6 +112,7 @@ docker_scopes:
       - .env.example
   qwen-tts:
     service: qwen-tts
+    compose_file: docker-compose.qwen.yml
     environment_identity_fields:
       - QWEN_TTS_API_KEY
       - QWEN_TTS_URL
@@ -120,7 +124,7 @@ docker_scopes:
     paths:
       - Dockerfile.qwen-tts
       - .dockerignore
-      - docker-compose*.yml
+      - docker-compose.qwen.yml
       - requirements-qwen-tts.txt
       - src/animetta_qwen_tts/**
       - src/animetta/__init__.py
@@ -694,6 +698,13 @@ components:
       - Dockerfile*
       - docker-compose*.yml
       - docker/**
+      - scripts/qwen_preflight.py
+      - scripts/runtime_lifecycle.py
+      - scripts/release_runtime_gate.py
+      - tests/deployment/**
+      - tests/scripts/test_qwen_preflight.py
+      - tests/scripts/test_runtime_lifecycle.py
+      - tests/scripts/test_release_runtime_gate.py
     direct_groups: [docker-compose-contract]
     impacts: []
     risk: high

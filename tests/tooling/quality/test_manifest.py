@@ -105,11 +105,13 @@ def _catalog_with_acceleration() -> dict:
     data["docker_scopes"] = {
         "animetta": {
             "service": "animetta",
+            "compose_file": "docker-compose.yml",
             "paths": ["Dockerfile", "requirements-core.txt", "src/animetta/**"],
             "environment_identity_fields": ["ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"],
         },
         "qwen-tts": {
             "service": "qwen-tts",
+            "compose_file": "docker-compose.qwen.yml",
             "paths": [
                 "Dockerfile.qwen-tts",
                 "requirements-qwen-tts.txt",
@@ -354,10 +356,19 @@ def test_catalog_accepts_valid_acceleration_metadata() -> None:
     assert catalog.groups["backend-unit"].resource_class.value == "cpu"
     assert catalog.groups["repository-full"].covers == ("backend-unit",)
     assert catalog.docker_scopes["qwen-tts"].service == "qwen-tts"
+    assert catalog.docker_scopes["qwen-tts"].compose_file == "docker-compose.qwen.yml"
     assert catalog.docker_scopes["qwen-tts"].environment_identity_fields == (
         "QWEN_TTS_API_KEY",
         "QWEN_TTS_URL",
     )
+
+
+def test_catalog_rejects_docker_scope_compose_file_outside_repository() -> None:
+    data = _catalog_with_acceleration()
+    data["docker_scopes"]["qwen-tts"]["compose_file"] = "../docker-compose.yml"
+
+    with pytest.raises(ValidationError, match="repository-relative"):
+        Catalog.model_validate(data)
 
 
 def test_catalog_rejects_cacheable_non_hermetic_group() -> None:
