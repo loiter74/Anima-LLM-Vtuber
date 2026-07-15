@@ -313,6 +313,14 @@ def test_repository_catalog_has_dead_code_and_duplication_gates() -> None:
     assert catalog.groups["frontend-duplicates"].include_in_full is True
 
 
+def test_backend_full_bounds_parallel_workers_for_cross_platform_stability() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    args = catalog.groups["backend-full"].args
+
+    worker_flag = args.index("-n")
+    assert args[worker_flag + 1] == "8"
+
+
 def test_repository_catalog_has_operational_source_contract() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
     group = catalog.groups["operational-source-contract"]

@@ -360,7 +360,7 @@ groups:
       - not slow and not integration
       - --tb=short
       - -n
-      - auto
+      - "8"
       - --timeout=30
       - --timeout-method=thread
       - --cov=src/animetta

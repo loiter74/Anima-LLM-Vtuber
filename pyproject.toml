@@ -21,7 +21,7 @@ markers = [
     "production_fault: production-only fault injection and recovery rehearsal",
     "production_soak: ten-minute production acceptance requiring full services",
 ]
-addopts = "-v --tb=short -n auto -m \"not slow and not integration and not real_smoke and not production_fault and not production_soak\" --timeout=30 --timeout-method=thread"
+addopts = "-v --tb=short -n 8 -m \"not slow and not integration and not real_smoke and not production_fault and not production_soak\" --timeout=30 --timeout-method=thread"
 
 [tool.coverage.run]
 source = ["src/animetta"]

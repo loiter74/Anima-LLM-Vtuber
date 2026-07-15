@@ -85,6 +85,12 @@ def test_vulture_audits_every_maintained_non_test_python_root() -> None:
     }
 
 
+def test_pytest_parallelism_is_cross_platform_bounded() -> None:
+    config = _load_config()
+
+    assert "-n 8" in config["tool"]["pytest"]["ini_options"]["addopts"]
+
+
 def test_frontend_package_exposes_fail_closed_lint_and_format_commands() -> None:
     package = _load_frontend_package()
 
