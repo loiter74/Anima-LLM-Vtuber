@@ -438,18 +438,18 @@ async def _store_conversation_to_memory(
                 if active_observation is not None
                 else None
             )
-            accepted = memory_runtime.submit_turn(ConversationTurn(
-                user_input=user_text,
-                agent_response=response_text,
-                emotion_vad=vad,
-                context=context,
-                turn_id=state.get("turn_id") or metadata.get("turn_id"),
-                retention_policy=metadata.get("retention_policy", "standard"),
-                observation_carrier=carrier,
-            ))
-            logger.debug(
-                f"[{session_id}] [OutputNode] Memory submission accepted={accepted}"
+            accepted = memory_runtime.submit_turn(
+                ConversationTurn(
+                    user_input=user_text,
+                    agent_response=response_text,
+                    emotion_vad=vad,
+                    context=context,
+                    turn_id=state.get("turn_id") or metadata.get("turn_id"),
+                    retention_policy=metadata.get("retention_policy", "standard"),
+                    observation_carrier=carrier,
+                )
             )
+            logger.debug(f"[{session_id}] [OutputNode] Memory submission accepted={accepted}")
             return
 
         await memory_system.encode(

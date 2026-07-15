@@ -52,10 +52,9 @@ def set_component_readiness_cache(cache: Any | None) -> None:
     global _component_readiness_cache
     _component_readiness_cache = cache
 
+
 # Dashboard frontend file directory
-STATS_FRONTEND_DIR = str(
-    Path(__file__).parent.parent.parent.parent.parent / "frontend" / "stats"
-)
+STATS_FRONTEND_DIR = str(Path(__file__).parent.parent.parent.parent.parent / "frontend" / "stats")
 
 
 async def stats_overview(request: Request) -> JSONResponse:
@@ -72,9 +71,9 @@ async def stats_nodes(request: Request) -> JSONResponse:
     """GET /api/stats/nodes"""
     try:
         data = await _get_observation_query(request).operation_aggregates()
-        return JSONResponse([
-            OperationAggregateDTO.model_validate(item).public_dict() for item in data
-        ])
+        return JSONResponse(
+            [OperationAggregateDTO.model_validate(item).public_dict() for item in data]
+        )
     except Exception as e:
         logger.error(f"[StatsAPI] nodes failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -86,9 +85,7 @@ async def stats_traces(request: Request) -> JSONResponse:
         limit = int(request.query_params.get("limit", "50"))
         offset = int(request.query_params.get("offset", "0"))
         data = await _get_observation_query(request).recent_traces(limit, offset)
-        return JSONResponse([
-            TraceSummaryDTO.model_validate(item).public_dict() for item in data
-        ])
+        return JSONResponse([TraceSummaryDTO.model_validate(item).public_dict() for item in data])
     except Exception as e:
         logger.error(f"[StatsAPI] traces failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -289,9 +286,7 @@ async def stats_inspection_latest(request: Request) -> JSONResponse:
         reports = await _get_observation_query(request).inspection_reports(1, 0)
         data = reports[0] if reports else None
         if data is None:
-            return JSONResponse(
-                {"error": "No inspection reports yet"}, status_code=404
-            )
+            return JSONResponse({"error": "No inspection reports yet"}, status_code=404)
         return JSONResponse({"api_version": "2", **dict(data)})
     except Exception as e:
         logger.error(f"[StatsAPI] inspection_latest failed: {e}")
@@ -311,7 +306,11 @@ def get_stats_routes():
         Route("/api/stats/traces/{trace_id}/events", stats_trace_events),
         Route("/api/stats/observation-health", stats_observation_health),
         Route("/api/stats/inspection/latest", stats_inspection_latest),
-        Mount("/stats", app=StaticFiles(directory=STATS_FRONTEND_DIR, html=True), name="stats_dashboard"),
+        Mount(
+            "/stats",
+            app=StaticFiles(directory=STATS_FRONTEND_DIR, html=True),
+            name="stats_dashboard",
+        ),
     ]
 
 

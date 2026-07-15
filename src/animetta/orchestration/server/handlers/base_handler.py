@@ -103,9 +103,7 @@ class BaseSocketHandler:
 
         return orchestrator
 
-    async def broadcast_to_desktop_clients(
-        self, client_type: str, event: str, data: dict
-    ) -> None:
+    async def broadcast_to_desktop_clients(self, client_type: str, event: str, data: dict) -> None:
         """Broadcast message to desktop clients of a specified type."""
         sids = self.desktop_manager.get_clients_by_type(client_type)
         for sid in sids:

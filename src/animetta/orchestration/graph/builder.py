@@ -243,7 +243,9 @@ def create_default_graph(
         logger.info("[LangGraph] Memory checkpoint enabled")
 
     if enable_tools and not tools:
-        logger.warning("[LangGraph] Tools enabled but no tool list provided, tool node will not work")
+        logger.warning(
+            "[LangGraph] Tools enabled but no tool list provided, tool node will not work"
+        )
 
     return build_graph(
         checkpointer=checkpointer,

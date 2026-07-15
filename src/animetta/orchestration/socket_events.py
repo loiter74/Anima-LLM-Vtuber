@@ -28,9 +28,7 @@ def _load_event_names() -> dict[str, Any]:
     """Load event name configuration from config/socket-events.json."""
     # Path: orchestration/socket_events.py -> up 4 dirs -> project root
     config_path = (
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "config"
-        / "socket-events.json"
+        Path(__file__).resolve().parent.parent.parent.parent / "config" / "socket-events.json"
     )
     try:
         with open(config_path, encoding="utf-8") as f:
@@ -134,8 +132,7 @@ def _catalog_tree_entries(
             unknown_keys = set(definition) - EVENT_DEFINITION_KEYS
             if unknown_keys:
                 errors.append(
-                    f"{module}.{action} has unknown definition keys: "
-                    f"{sorted(unknown_keys)!r}"
+                    f"{module}.{action} has unknown definition keys: {sorted(unknown_keys)!r}"
                 )
             entries.append((module, action, definition))
     return entries, errors
@@ -193,9 +190,7 @@ def _descriptor_value_errors(
                     errors.append(f"{location} is not a valid UUID")
                 else:
                     if str(parsed).casefold() != value.casefold():
-                        errors.append(
-                            f"{location} is not a canonical hyphenated UUID"
-                        )
+                        errors.append(f"{location} is not a canonical hyphenated UUID")
             if schema.get("non_whitespace") is True and not value.strip():
                 errors.append(f"{location} must contain non-whitespace text")
         enum_values = schema.get("enum")
@@ -234,10 +229,7 @@ def _validate_schema_vocabulary(
         errors: list[str] = []
         unknown_keys = set(schema) - DESCRIPTOR_KEYS
         if unknown_keys:
-            errors.append(
-                f"{location} has unknown descriptor key(s): "
-                f"{sorted(unknown_keys)!r}"
-            )
+            errors.append(f"{location} has unknown descriptor key(s): {sorted(unknown_keys)!r}")
         schema_type = schema.get("type")
         if schema_type not in LEGACY_SCHEMA_TYPES:
             errors.append(f"{location} has invalid schema type {schema_type!r}")
@@ -247,9 +239,7 @@ def _validate_schema_vocabulary(
         if optional is not None:
             expected_required = not optional
             if not isinstance(required, bool) or required is not expected_required:
-                errors.append(
-                    f"{location} required flag must be {expected_required}"
-                )
+                errors.append(f"{location} required flag must be {expected_required}")
         elif "required" in schema and not isinstance(required, bool):
             errors.append(f"{location} required flag must be a boolean")
 
@@ -267,9 +257,7 @@ def _validate_schema_vocabulary(
                 ("max_length", max_length),
             ):
                 if value is not None and (
-                    not isinstance(value, int)
-                    or isinstance(value, bool)
-                    or value < 0
+                    not isinstance(value, int) or isinstance(value, bool) or value < 0
                 ):
                     errors.append(f"{location} {key} must be a non-negative integer")
             if (
@@ -283,21 +271,12 @@ def _validate_schema_vocabulary(
             field_format = schema.get("format")
             if field_format is not None and field_format != "uuid":
                 errors.append(f"{location} has invalid string format {field_format!r}")
-            if field_format == "uuid" and (
-                min_length != 36 or max_length != 36
-            ):
-                errors.append(
-                    f"{location} UUID descriptor must use 36-character bounds"
-                )
+            if field_format == "uuid" and (min_length != 36 or max_length != 36):
+                errors.append(f"{location} UUID descriptor must use 36-character bounds")
             non_whitespace = schema.get("non_whitespace")
             if non_whitespace is not None and not isinstance(non_whitespace, bool):
-                errors.append(
-                    f"{location} non_whitespace flag must be a boolean"
-                )
-        elif any(
-            key in schema
-            for key in ("min_length", "max_length", "format", "non_whitespace")
-        ):
+                errors.append(f"{location} non_whitespace flag must be a boolean")
+        elif any(key in schema for key in ("min_length", "max_length", "format", "non_whitespace")):
             errors.append(f"{location} has string constraints on non-string type")
 
         enum_values = schema.get("enum")
@@ -389,9 +368,7 @@ def _validate_payload_schema(
             continue
         field = raw_field.removesuffix("?")
         if field in normalized:
-            errors.append(
-                f"{owner} has duplicate normalized payload field {field!r}"
-            )
+            errors.append(f"{owner} has duplicate normalized payload field {field!r}")
             continue
         normalized[field] = (raw_field, schema)
         errors.extend(
@@ -429,14 +406,11 @@ def validate_event_catalog(catalog: Any) -> list[str]:
             or canonical_name.count(":") != 1
             or not all(canonical_name.split(":"))
         ):
-            errors.append(
-                f"{owner} has invalid canonical event name: {canonical_name!r}"
-            )
+            errors.append(f"{owner} has invalid canonical event name: {canonical_name!r}")
         else:
             if canonical_name != f"{module}:{action}":
                 errors.append(
-                    f"{owner} canonical event name must equal its catalog key: "
-                    f"{canonical_name!r}"
+                    f"{owner} canonical event name must equal its catalog key: {canonical_name!r}"
                 )
             previous_owner = wire_name_owners.setdefault(canonical_name, owner)
             if previous_owner != owner:
@@ -451,11 +425,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
             aliases = []
         seen_aliases: set[str] = set()
         for alias in aliases:
-            if (
-                not isinstance(alias, str)
-                or not ALIAS_PATTERN.fullmatch(alias)
-                or ":" in alias
-            ):
+            if not isinstance(alias, str) or not ALIAS_PATTERN.fullmatch(alias) or ":" in alias:
                 errors.append(f"{owner} has invalid compatibility alias: {alias!r}")
                 continue
             if alias in seen_aliases:
@@ -464,9 +434,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
             seen_aliases.add(alias)
             previous_owner = wire_name_owners.setdefault(alias, owner)
             if previous_owner != owner:
-                errors.append(
-                    f"duplicate alias {alias!r}: {previous_owner} and {owner}"
-                )
+                errors.append(f"duplicate alias {alias!r}: {previous_owner} and {owner}")
         has_golden_marker = "golden_path" in definition
         golden_path = definition.get("golden_path", False)
         if not isinstance(golden_path, bool):
@@ -486,13 +454,9 @@ def validate_event_catalog(catalog: Any) -> list[str]:
 
         identity_contract = definition.get("identity")
         if identity_contract not in {None, "command", "correlated"}:
-            errors.append(
-                f"{owner} has invalid identity contract: {identity_contract!r}"
-            )
+            errors.append(f"{owner} has invalid identity contract: {identity_contract!r}")
         if identity_contract is not None and not has_golden_marker:
-            errors.append(
-                f"{owner} identity contract requires an explicit golden_path marker"
-            )
+            errors.append(f"{owner} identity contract requires an explicit golden_path marker")
         if golden_path and identity_contract not in {"command", "correlated"}:
             errors.append(f"{owner} golden event requires identity contract")
         if not golden_path and identity_contract in {"command", "correlated"}:
@@ -501,17 +465,13 @@ def validate_event_catalog(catalog: Any) -> list[str]:
             for field in IDENTITY_FIELDS:
                 field_schema = normalized_fields.get(field, ("", None))[1]
                 if _schema_type(field_schema) != "string":
-                    errors.append(
-                        f"{owner} is missing required identity field {field!r}"
-                    )
+                    errors.append(f"{owner} is missing required identity field {field!r}")
 
         if identity_contract == "correlated":
             for field in (*IDENTITY_FIELDS, "turn_id"):
                 field_schema = normalized_fields.get(field, ("", None))[1]
                 if _schema_type(field_schema) != "string":
-                    errors.append(
-                        f"{owner} is missing required identity field {field!r}"
-                    )
+                    errors.append(f"{owner} is missing required identity field {field!r}")
 
         completion = definition.get("completion")
         if completion is not None:
@@ -520,9 +480,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
             else:
                 unknown_keys = set(completion) - {"constants", "context_fields"}
                 if unknown_keys:
-                    errors.append(
-                        f"{owner} completion has unknown keys: {sorted(unknown_keys)!r}"
-                    )
+                    errors.append(f"{owner} completion has unknown keys: {sorted(unknown_keys)!r}")
                 constants = completion.get("constants")
                 context_fields = completion.get("context_fields")
                 if not isinstance(constants, Mapping):
@@ -537,9 +495,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                 seen_context: set[str] = set()
                 for field in context_fields:
                     if field in seen_context:
-                        errors.append(
-                            f"{owner} has duplicate completion context field {field!r}"
-                        )
+                        errors.append(f"{owner} has duplicate completion context field {field!r}")
                     seen_context.add(field)
                     if field not in fields:
                         errors.append(
@@ -547,9 +503,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                         )
                 for field, value in constants.items():
                     if not isinstance(field, str) or field not in fields:
-                        errors.append(
-                            f"{owner} completion constant {field!r} is not in payload"
-                        )
+                        errors.append(f"{owner} completion constant {field!r} is not in payload")
                         continue
                     if field in {*IDENTITY_FIELDS, "turn_id"}:
                         errors.append(
@@ -557,9 +511,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                         )
                     field_schema = normalized_fields.get(field, ("", None))[1]
                     if not _schema_accepts_value(field_schema, value):
-                        errors.append(
-                            f"{owner} completion constant {field!r} has invalid type"
-                        )
+                        errors.append(f"{owner} completion constant {field!r} has invalid type")
                 overlap = set(constants) & set(context_fields)
                 if overlap:
                     errors.append(
@@ -576,13 +528,12 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                         f"{owner} completion context must cover required fields "
                         f"{sorted(expected_context)!r}"
                     )
-                if (
-                    (module, action) == ("chat", "sentence")
-                    and dict(constants) != {"text": "", "is_complete": True}
-                ):
+                if (module, action) == ("chat", "sentence") and dict(constants) != {
+                    "text": "",
+                    "is_complete": True,
+                }:
                     errors.append(
-                        f"{owner} completion constants must declare empty text "
-                        "and is_complete=true"
+                        f"{owner} completion constants must declare empty text and is_complete=true"
                     )
 
         degradation = definition.get("degradation")
@@ -598,10 +549,7 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                 }
                 unknown_keys = set(degradation) - allowed_keys
                 if unknown_keys:
-                    errors.append(
-                        f"{owner} degradation has unknown keys: "
-                        f"{sorted(unknown_keys)!r}"
-                    )
+                    errors.append(f"{owner} degradation has unknown keys: {sorted(unknown_keys)!r}")
                 constants = degradation.get("constants")
                 defaults = degradation.get("defaults")
                 required_fields = degradation.get("required_fields")
@@ -611,28 +559,22 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                     ("defaults", defaults),
                 ):
                     if not isinstance(mapping, Mapping):
-                        errors.append(
-                            f"{owner} degradation {label} must be an object"
-                        )
+                        errors.append(f"{owner} degradation {label} must be an object")
                         continue
                     for field, value in mapping.items():
                         if not isinstance(field, str) or field not in fields:
-                            errors.append(
-                                f"{owner} degradation field {field!r} is not in payload"
-                            )
+                            errors.append(f"{owner} degradation field {field!r} is not in payload")
                             continue
                         field_schema = normalized_fields[field][1]
                         if not _schema_accepts_value(field_schema, value):
                             errors.append(
-                                f"{owner} degradation {label[:-1]} "
-                                f"{field!r} has invalid value"
+                                f"{owner} degradation {label[:-1]} {field!r} has invalid value"
                             )
                 if isinstance(constants, Mapping) and isinstance(defaults, Mapping):
                     overlap = set(constants) & set(defaults)
                     if overlap:
                         errors.append(
-                            f"{owner} degradation constants/defaults overlap: "
-                            f"{sorted(overlap)!r}"
+                            f"{owner} degradation constants/defaults overlap: {sorted(overlap)!r}"
                         )
 
                 for label, field_list in (
@@ -642,19 +584,13 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                     if not isinstance(field_list, list) or not all(
                         isinstance(field, str) for field in field_list
                     ):
-                        errors.append(
-                            f"{owner} degradation {label} must be a string list"
-                        )
+                        errors.append(f"{owner} degradation {label} must be a string list")
                         continue
                     if len(field_list) != len(set(field_list)):
-                        errors.append(
-                            f"{owner} degradation {label} contains duplicates"
-                        )
+                        errors.append(f"{owner} degradation {label} contains duplicates")
                     for field in field_list:
                         if field not in fields:
-                            errors.append(
-                                f"{owner} degradation field {field!r} is not in payload"
-                            )
+                            errors.append(f"{owner} degradation field {field!r} is not in payload")
 
                 if all(
                     isinstance(value, expected_type)
@@ -665,13 +601,9 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                         (context_fields, list),
                     )
                 ):
-                    constructible = (
-                        set(constants) | set(defaults) | set(context_fields)
-                    )
+                    constructible = set(constants) | set(defaults) | set(context_fields)
                     if not set(required_fields).issubset(constructible):
-                        errors.append(
-                            f"{owner} degradation required fields are not constructible"
-                        )
+                        errors.append(f"{owner} degradation required fields are not constructible")
                     base_required = {
                         field
                         for field, (raw_field, _schema) in normalized_fields.items()
@@ -682,12 +614,8 @@ def validate_event_catalog(catalog: Any) -> list[str]:
                             f"{owner} degradation required_fields must cover "
                             "base required payload fields"
                         )
-                    if not (set(constants) | set(defaults)).issubset(
-                        set(required_fields)
-                    ):
-                        errors.append(
-                            f"{owner} degradation constants/defaults must be required"
-                        )
+                    if not (set(constants) | set(defaults)).issubset(set(required_fields)):
+                        errors.append(f"{owner} degradation constants/defaults must be required")
 
     return errors
 
@@ -702,9 +630,7 @@ def event_payload_descriptor(
     try:
         payload = EVENTS[module][action]["payload"]
     except KeyError as exc:
-        raise KeyError(
-            f"Socket.IO event not configured: {module}.{action}"
-        ) from exc
+        raise KeyError(f"Socket.IO event not configured: {module}.{action}") from exc
     if not isinstance(payload, Mapping):
         raise KeyError(f"Socket.IO event has invalid payload: {module}.{action}")
     matches = [
@@ -713,10 +639,7 @@ def event_payload_descriptor(
         if isinstance(raw_field, str) and raw_field.removesuffix("?") == field
     ]
     if len(matches) != 1 or not isinstance(matches[0], Mapping):
-        raise KeyError(
-            f"Socket.IO event field has no rich descriptor: "
-            f"{module}.{action}.{field}"
-        )
+        raise KeyError(f"Socket.IO event field has no rich descriptor: {module}.{action}.{field}")
     return matches[0]
 
 
@@ -822,11 +745,7 @@ def materialize_event_variant(
         schema = payload_schema.get(raw_field)
         if not _schema_accepts_value(schema, value):
             raise ValueError(f"invalid variant field {field!r}")
-    if (
-        "task_id" in result
-        and "turn_id" in result
-        and result["turn_id"] != result["task_id"]
-    ):
+    if "task_id" in result and "turn_id" in result and result["turn_id"] != result["task_id"]:
         raise ValueError("turn_id must equal task_id")
     return result
 
@@ -837,9 +756,7 @@ def event_aliases(module: str, action: str) -> tuple[str, ...]:
     try:
         aliases = EVENTS[module][action].get("aliases", [])
     except KeyError as exc:
-        raise KeyError(
-            f"Socket.IO event not configured: {module}.{action}"
-        ) from exc
+        raise KeyError(f"Socket.IO event not configured: {module}.{action}") from exc
     if not isinstance(aliases, list) or not all(
         isinstance(alias, str) and alias for alias in aliases
     ):
@@ -883,9 +800,7 @@ def event_name(module: str, action: str) -> str:
     try:
         name = EVENTS[module][action]["name"]
     except KeyError as exc:
-        raise KeyError(
-            f"Socket.IO event not configured: {module}.{action}"
-        ) from exc
+        raise KeyError(f"Socket.IO event not configured: {module}.{action}") from exc
 
     if not isinstance(name, str) or not name:
         raise KeyError(f"Socket.IO event has no name: {module}.{action}")

@@ -61,7 +61,11 @@ async def asr_node(
         try:
             sio = config.get("configurable", {}).get("socketio") if config else None
             if sio:
-                await sio.emit(EVENTS["chat"]["transcript"]["name"], {"text": text, "is_final": True}, to=session_id)
+                await sio.emit(
+                    EVENTS["chat"]["transcript"]["name"],
+                    {"text": text, "is_final": True},
+                    to=session_id,
+                )
         except Exception:
             logger.debug(f"[{session_id}] [ASRNode] Failed to emit transcript")
 

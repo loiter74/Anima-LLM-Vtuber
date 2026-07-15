@@ -160,13 +160,9 @@ class RouteHandlers:
 
     # ── Shared utility (backward compat) ─────────────────────────────
 
-    async def broadcast_to_desktop_clients(
-        self, client_type: str, event: str, data: dict
-    ) -> None:
+    async def broadcast_to_desktop_clients(self, client_type: str, event: str, data: dict) -> None:
         """Broadcast to desktop clients — delegates to BaseSocketHandler."""
-        return await self.base.broadcast_to_desktop_clients(
-            client_type, event, data
-        )
+        return await self.base.broadcast_to_desktop_clients(client_type, event, data)
 
     # ── Bilibili service (backward compat — called by WebSocketServer) ─
 

@@ -56,9 +56,7 @@ async def personality_node(
     overlay_parts = []
 
     if personality_mode == "streaming":
-        overlay_parts.append(
-            "当前为直播模式。回复要简短有趣，适合弹幕互动。"
-        )
+        overlay_parts.append("当前为直播模式。回复要简短有趣，适合弹幕互动。")
 
     if personality_mood:
         mood_descriptions = {
@@ -79,7 +77,9 @@ async def personality_node(
     llm = getattr(context, "llm_engine", None)
     base_prompt = getattr(llm, "system_prompt", "") if llm is not None else ""
     system_prompt = "\n\n".join(
-        part for part in (base_prompt, personality_overlay) if isinstance(part, str) and part.strip()
+        part
+        for part in (base_prompt, personality_overlay)
+        if isinstance(part, str) and part.strip()
     )
 
     # Extract character knowledge boundaries and MBTI from persona config
@@ -164,9 +164,7 @@ async def personality_node(
     }
 
 
-def _detect_previous_turn_drift(
-    state: AgentState, config: RunnableConfig | None = None
-) -> str:
+def _detect_previous_turn_drift(state: AgentState, config: RunnableConfig | None = None) -> str:
     """Return CORRECTION_SECTION if the last AIMessage shows assistant drift.
 
     Returns "" when there is no prior turn or no drift detected.

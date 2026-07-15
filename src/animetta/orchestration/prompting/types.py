@@ -9,6 +9,7 @@ from typing import Any
 
 class SectionRole:
     """Semantic role for a prompt section."""
+
     PERSONA = "persona"
     AFFINITY = "affinity"
     RUNTIME_PERSONALITY = "runtime_personality"
@@ -20,6 +21,7 @@ class SectionRole:
 
 class SectionPriority(IntEnum):
     """Rendering priority (lower number = rendered first)."""
+
     PERSONA = 100
     AFFINITY = 150  # After persona identity, before runtime personality overlay
     RUNTIME_PERSONALITY = 200
@@ -32,6 +34,7 @@ class SectionPriority(IntEnum):
 @dataclass
 class PromptSection:
     """A structured prompt section produced by a source."""
+
     name: str
     role: str
     priority: int
@@ -42,6 +45,7 @@ class PromptSection:
 @dataclass
 class PromptContext:
     """All data needed by prompt sources to produce sections."""
+
     session_id: str
     base_system_prompt: str
     personality_overlay: str
@@ -66,6 +70,7 @@ class PromptContext:
 @dataclass
 class CompiledPrompt:
     """Final compiled system prompt with metadata."""
+
     system_prompt: str
     section_names: list[str] = field(default_factory=list)
     section_count: int = 0

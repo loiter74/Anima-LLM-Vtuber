@@ -57,13 +57,16 @@ async def compile(
         except Exception as exc:
             # Source failure: add warning, continue
             from .types import PromptSection, SectionPriority, SectionRole
-            sections.append(PromptSection(
-                name=src.name,
-                role=SectionRole.PERSONA,
-                priority=SectionPriority.PERSONA,
-                content="",
-                metadata={"warnings": [f"Source failed: {exc}"]},
-            ))
+
+            sections.append(
+                PromptSection(
+                    name=src.name,
+                    role=SectionRole.PERSONA,
+                    priority=SectionPriority.PERSONA,
+                    content="",
+                    metadata={"warnings": [f"Source failed: {exc}"]},
+                )
+            )
 
     compiled = assemble(sections)
     compiled.config_version = ctx.config_version

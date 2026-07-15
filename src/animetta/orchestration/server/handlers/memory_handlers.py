@@ -96,10 +96,12 @@ class MemoryHandlers(BaseSocketHandler):
             return _error("INVALID_REQUEST", "query is required")
         try:
             memory = await self._get_memory(sid)
-            return _ok(await memory.search_memories(
-                query,
-                limit=int(data.get("limit") or 50),
-            ))
+            return _ok(
+                await memory.search_memories(
+                    query,
+                    limit=int(data.get("limit") or 50),
+                )
+            )
         except (TypeError, ValueError) as exc:
             return _error("INVALID_REQUEST", str(exc))
         except Exception as exc:
@@ -114,9 +116,7 @@ class MemoryHandlers(BaseSocketHandler):
         )
 
     async def on_forget(self, sid: str, data: dict[str, Any]) -> dict[str, Any]:
-        return await self._mutate(
-            sid, str(data.get("id") or ""), "forget_memory"
-        )
+        return await self._mutate(sid, str(data.get("id") or ""), "forget_memory")
 
     async def on_change(self, sid: str, data: dict[str, Any]) -> dict[str, Any]:
         summary = str(data.get("summary") or "").strip()
@@ -178,9 +178,7 @@ class MemoryHandlers(BaseSocketHandler):
             )
             await memory.run_metabolism_tick()
             revision = await memory.store.get_revision()
-            self._jobs[job_id].update(
-                status="completed", progress=100, revision=revision
-            )
+            self._jobs[job_id].update(status="completed", progress=100, revision=revision)
             await self.sio.emit(
                 EVENTS["memory"]["organize_result"]["name"],
                 {

@@ -63,8 +63,7 @@ class ObservabilityManager:
         """Load configuration file"""
         if config_path is None:
             config_path = (
-                Path(__file__).parent.parent.parent.parent.parent
-                / "config" / "observability.yaml"
+                Path(__file__).parent.parent.parent.parent.parent / "config" / "observability.yaml"
             )
 
         config_path = Path(config_path)
@@ -113,7 +112,9 @@ class ObservabilityManager:
         try:
             from langfuse.langchain import CallbackHandler
         except ImportError:
-            logger.warning("[Observability] langfuse not installed or version too low, run: pip install langfuse>=4.0.0")
+            logger.warning(
+                "[Observability] langfuse not installed or version too low, run: pip install langfuse>=4.0.0"
+            )
             return
 
         # Set environment variables (if YAML config has values, write them for Langfuse SDK to read)
@@ -134,6 +135,7 @@ class ObservabilityManager:
         try:
             # Langfuse v4: Must create Langfuse client first, then create CallbackHandler (without passing public_key)
             from langfuse import Langfuse
+
             self._langfuse_client = Langfuse(
                 public_key=public_key,
                 secret_key=secret_key,

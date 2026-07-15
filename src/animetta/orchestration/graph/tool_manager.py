@@ -46,7 +46,9 @@ class ToolManager:
             self.chat_model = await self._create_chat_model()
             if self.chat_model and self.tools:
                 self.chat_model = self.chat_model.bind_tools(self.tools)
-                logger.info(f"[{self.session_id}] [ToolManager] ChatModel bound to {len(self.tools)} tools")
+                logger.info(
+                    f"[{self.session_id}] [ToolManager] ChatModel bound to {len(self.tools)} tools"
+                )
 
             return True
 

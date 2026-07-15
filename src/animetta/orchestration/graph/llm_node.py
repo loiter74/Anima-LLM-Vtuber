@@ -133,7 +133,11 @@ def _enforce_persona_verbal_tics(response_text: str, system_prompt: str | None) 
         return f"{body}喵{punct}"
 
     rewritten = _SENTENCE_END_RE.sub(_add_nya, response_text)
-    if rewritten == response_text and response_text.strip() and not response_text.rstrip().endswith("喵"):
+    if (
+        rewritten == response_text
+        and response_text.strip()
+        and not response_text.rstrip().endswith("喵")
+    ):
         return f"{response_text.rstrip()}喵"
     return rewritten
 
@@ -171,9 +175,7 @@ def _extract_and_update_affinity(state: dict[str, Any], response_text: str) -> s
     raw_value = int(matches[-1])
     clamped = max(AFFINITY_MIN, min(AFFINITY_MAX, raw_value))
     if clamped != raw_value:
-        logger.debug(
-            f"[affinity] LLM emitted out-of-range value {raw_value}; clamped to {clamped}"
-        )
+        logger.debug(f"[affinity] LLM emitted out-of-range value {raw_value}; clamped to {clamped}")
 
     state["affinity"] = clamped
     metadata = state.setdefault("metadata", {})
@@ -190,9 +192,11 @@ def _extract_and_update_affinity(state: dict[str, Any], response_text: str) -> s
     # Strip ALL affinity markers from the visible text.
     return _AFFINITY_MARKER_RE.sub("", response_text)
 
+
 # ========================================
 # RAG memory retrieval helper functions
 # ========================================
+
 
 def _get_memory_system(config: RunnableConfig | None) -> Any | None:
     """Get memory_system from LangGraph config"""
@@ -357,6 +361,7 @@ def _notify_middleware_after(
     """Non-blocking notification to middleware that LLM call is complete."""
     try:
         import asyncio
+
         middleware = _get_memory_middleware(config)
         if middleware:
             asyncio.ensure_future(
@@ -389,19 +394,34 @@ async def llm_node(
     # Validate input
     if not user_text:
         logger.warning(f"[{session_id}] [LLMNode] No user text, skipping")
-        return {"error": "No user text", "response_text": "", "response_chunks": [], "tool_calls": None}
+        return {
+            "error": "No user text",
+            "response_text": "",
+            "response_chunks": [],
+            "tool_calls": None,
+        }
 
     service_context = _get_service_context(config)
     if not service_context:
         logger.error(f"[{session_id}] [LLMNode] service_context not configured")
         await log_node_error(session_id, "llm_node", "invalid_response", duration_ms=0)
-        return {"error": "service_context not configured", "response_text": "", "response_chunks": [], "tool_calls": None}
+        return {
+            "error": "service_context not configured",
+            "response_text": "",
+            "response_chunks": [],
+            "tool_calls": None,
+        }
 
     llm_engine = service_context.llm_engine
     if not llm_engine:
         logger.error(f"[{session_id}] [LLMNode] LLM engine not initialized")
         await log_node_error(session_id, "llm_node", "invalid_response", duration_ms=0)
-        return {"error": "LLM engine not initialized", "response_text": "", "response_chunks": [], "tool_calls": None}
+        return {
+            "error": "LLM engine not initialized",
+            "response_text": "",
+            "response_chunks": [],
+            "tool_calls": None,
+        }
 
     # RAG: retrieve via LivingMemorySystem V2 recall()
     current_emotion = _get_recall_emotion(state)
@@ -421,7 +441,9 @@ async def llm_node(
         mbti_jp=_meta.get("mbti_jp", 50),
         context=_build_memory_context(state),
     )
-    memory_context, rag_metadata = retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
+    memory_context, rag_metadata = (
+        retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
+    )
     rag_duration = (time_module.perf_counter() - t_rag) * 1000
     log_timing(state, "llm.rag_retrieval", rag_duration, f"query='{user_text[:50]}'")
 
@@ -430,7 +452,9 @@ async def llm_node(
     chat_model = _get_config_value(config, "chat_model", None)
 
     if enable_tools and chat_model:
-        return await _llm_with_tools(session_id, state, service_context, chat_model, config, memory_context)
+        return await _llm_with_tools(
+            session_id, state, service_context, chat_model, config, memory_context
+        )
     else:
         return await _llm_without_tools(session_id, state, service_context, config, memory_context)
 
@@ -452,6 +476,7 @@ async def _llm_with_tools(
 
     # Compile final system prompt via pipeline (replaces manual concatenation)
     from animetta.orchestration.prompting.pipeline import compile as compile_prompt
+
     compiled = await compile_prompt(state, config, memory_context=memory_context)
     enriched_prompt = compiled.system_prompt
 
@@ -464,7 +489,9 @@ async def _llm_with_tools(
 
     bound_tools = getattr(chat_model, "bound_tools", []) or getattr(chat_model, "tools", [])
 
-    history_for_llm = [msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))]
+    history_for_llm = [
+        msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))
+    ]
 
     try:
         t_llm = time_module.perf_counter()
@@ -485,7 +512,9 @@ async def _llm_with_tools(
                     for tc in tool_calls
                 ]
 
-                visible_content = _strip_model_thinking(response.get("content", "") or "Calling tools...")
+                visible_content = _strip_model_thinking(
+                    response.get("content", "") or "Calling tools..."
+                )
                 visible_content = _strip_emotion_tags(visible_content)
                 ai_message = AIMessage(content=visible_content, tool_calls=tool_calls)
 
@@ -506,7 +535,9 @@ async def _llm_with_tools(
                 full_response = _extract_and_update_affinity(state, full_response)
                 original_response = full_response
                 full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
-                response_chunks = [full_response if full_response != original_response else original_response]
+                response_chunks = [
+                    full_response if full_response != original_response else original_response
+                ]
                 # after_llm_call notification (non-blocking)
                 _notify_middleware_after(session_id, user_text, full_response, config)
 
@@ -538,6 +569,7 @@ async def _llm_without_tools(
 
     # Compile final system prompt via pipeline (replaces manual concatenation)
     from animetta.orchestration.prompting.pipeline import compile as compile_prompt
+
     compiled = await compile_prompt(state, config, memory_context=memory_context)
     enriched_prompt = compiled.system_prompt
 
@@ -564,7 +596,9 @@ async def _llm_without_tools(
         async with asyncio.timeout(timeout_seconds):
             async for chunk in llm_engine.chat_stream(user_text, system_prompt=enriched_prompt):
                 if interrupt_handler.is_interrupted(session_id):
-                    logger.warning(f"[{session_id}] [LLMNode] Interrupt detected, stopping generation")
+                    logger.warning(
+                        f"[{session_id}] [LLMNode] Interrupt detected, stopping generation"
+                    )
                     break
                 chunks.append(chunk)
                 full_response += chunk
@@ -572,7 +606,9 @@ async def _llm_without_tools(
                     logger.debug(f"[{session_id}] [LLMNode] Received {len(chunks)} chunks...")
     except TimeoutError:
         llm_duration = (time_module.perf_counter() - t_llm) * 1000
-        logger.warning(f"[{session_id}] [LLMNode] LLM timeout after {timeout_seconds}s, using fallback")
+        logger.warning(
+            f"[{session_id}] [LLMNode] LLM timeout after {timeout_seconds}s, using fallback"
+        )
         await log_node_error(session_id, "llm_node", "timeout", duration_ms=llm_duration)
         full_response = FALLBACK_RESPONSE
         chunks = [FALLBACK_RESPONSE]
@@ -590,8 +626,12 @@ async def _llm_without_tools(
     llm_duration = (time_module.perf_counter() - t_llm) * 1000
 
     logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
-    log_timing(state, "llm.api_call", llm_duration,
-               f"chat_stream | chunks={len(chunks)} | ttfb_first_chunk=<see llm_engine.log>")
+    log_timing(
+        state,
+        "llm.api_call",
+        llm_duration,
+        f"chat_stream | chunks={len(chunks)} | ttfb_first_chunk=<see llm_engine.log>",
+    )
 
     # ── Affinity marker parsing ──
     # Extract [affinity:N] (mutates state + metadata) and strip the marker
@@ -605,9 +645,11 @@ async def _llm_without_tools(
     full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)
     # Also strip any chunks that may contain the marker (defensive — the
     # streaming chunks accumulate the raw marker).
-    chunks = [full_response] if full_response != raw_response or full_response != original_response else [
-        _AFFINITY_MARKER_RE.sub("", c) for c in chunks
-    ]
+    chunks = (
+        [full_response]
+        if full_response != raw_response or full_response != original_response
+        else [_AFFINITY_MARKER_RE.sub("", c) for c in chunks]
+    )
 
     # after_llm_call notification (non-blocking)
     _notify_middleware_after(session_id, user_text, full_response, config)

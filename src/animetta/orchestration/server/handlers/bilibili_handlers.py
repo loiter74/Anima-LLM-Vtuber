@@ -153,9 +153,7 @@ class BilibiliHandlers:
     async def _process_danmaku(self, msg: DanmakuMessage) -> None:
         """Backward-compatible direct processing helper used by focused tests."""
         snapshot = self.session.snapshot()
-        room_id = int(
-            snapshot.get("room_id") or snapshot.get("desired_room_id") or 0
-        )
+        room_id = int(snapshot.get("room_id") or snapshot.get("desired_room_id") or 0)
         await self._broadcast_raw_danmaku(msg, room_id)
         await self._process_ai_reply(msg, room_id)
 
@@ -175,12 +173,8 @@ class BilibiliHandlers:
                 task_id=task_id,
                 turn_id=task_id,
             )
-            delivery = ChatDelivery(
-                self.sio, identity, ChatTransportMode.CANONICAL
-            )
-            orchestrator = await self.admin._get_or_create_orchestrator(
-                "bilibili"
-            )
+            delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
+            orchestrator = await self.admin._get_or_create_orchestrator("bilibili")
             actor_id = normalize_actor_id(msg.user_id, "bilibili")
             stream_id = f"bilibili:{room_id}" if room_id else None
             result = await orchestrator.process_text(
@@ -201,9 +195,7 @@ class BilibiliHandlers:
             reply_text = result.get("response_text", "")
 
             # Broadcast conversation-start
-            await delivery.emit(
-                "chat", "control", {"signal": "conversation-start"}
-            )
+            await delivery.emit("chat", "control", {"signal": "conversation-start"})
 
             # Broadcast text response via sentence events
             if reply_text:
@@ -229,9 +221,7 @@ class BilibiliHandlers:
 
                     async def _translate_danmaku():
                         try:
-                            orchestrator_svc = getattr(
-                                orchestrator, "service_context", None
-                            )
+                            orchestrator_svc = getattr(orchestrator, "service_context", None)
                             llm = (
                                 getattr(orchestrator_svc, "llm_engine", None)
                                 if orchestrator_svc
@@ -248,9 +238,7 @@ class BilibiliHandlers:
                                 translated = await llm.chat(translate_prompt)
                                 if translated and translated.strip():
                                     t = translated.strip()
-                                    t_lang = (
-                                        translation_state.target_language.lower()[:2]
-                                    )
+                                    t_lang = translation_state.target_language.lower()[:2]
                                     await delivery.emit(
                                         "chat",
                                         "subtitle_translation",
@@ -284,9 +272,7 @@ class BilibiliHandlers:
                 await self._broadcast_danmaku_audio(tts_audio, delivery)
 
             # Broadcast conversation-end
-            await delivery.emit(
-                "chat", "control", {"signal": "conversation-end"}
-            )
+            await delivery.emit("chat", "control", {"signal": "conversation-end"})
 
             # Also emit danmaku.ai_reply for the chat message integration
             if reply_text:
@@ -337,9 +323,7 @@ class BilibiliHandlers:
             volumes = []
 
             if isinstance(tts_audio, str) and os.path.exists(tts_audio):
-                raw_bytes = await loop.run_in_executor(
-                    None, partial(_read_file_bytes, tts_audio)
-                )
+                raw_bytes = await loop.run_in_executor(None, partial(_read_file_bytes, tts_audio))
                 ext = os.path.splitext(tts_audio)[1].lower()
                 format = ext.lstrip(".") if ext else "wav"
                 audio_data = base64.b64encode(raw_bytes).decode("utf-8")
@@ -348,9 +332,8 @@ class BilibiliHandlers:
             elif isinstance(tts_audio, bytes):
                 if tts_audio[:4] == b"RIFF":
                     format = "wav"
-                elif (
-                    tts_audio[:3] == b"ID3"
-                    or (tts_audio[0] == 0xFF and (tts_audio[1] & 0xE0) == 0xE0)
+                elif tts_audio[:3] == b"ID3" or (
+                    tts_audio[0] == 0xFF and (tts_audio[1] & 0xE0) == 0xE0
                 ):
                     format = "mp3"
                 elif tts_audio[:4] == b"OggS":

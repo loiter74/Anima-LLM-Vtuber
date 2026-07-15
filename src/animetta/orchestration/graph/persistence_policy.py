@@ -7,18 +7,37 @@ from typing import Literal
 
 PersistenceMode = Literal["off", "read_only", "read_write"]
 PersistenceSink = Literal[
-    "session_window", "stats_metadata", "stats_content", "checkpoint",
-    "long_term_recall", "long_term_write", "compatibility_callback",
+    "session_window",
+    "stats_metadata",
+    "stats_content",
+    "checkpoint",
+    "long_term_recall",
+    "long_term_write",
+    "compatibility_callback",
 ]
 ContentClass = Literal[
-    "selected_final", "outcome_metadata", "query", "probe", "mock",
-    "static_template", "internal_prompt", "reasoner", "translation",
-    "rejected_candidate", "incomplete",
+    "selected_final",
+    "outcome_metadata",
+    "query",
+    "probe",
+    "mock",
+    "static_template",
+    "internal_prompt",
+    "reasoner",
+    "translation",
+    "rejected_candidate",
+    "incomplete",
 ]
 
 _FORBIDDEN = {
-    "probe", "mock", "static_template", "internal_prompt", "reasoner",
-    "translation", "rejected_candidate", "incomplete",
+    "probe",
+    "mock",
+    "static_template",
+    "internal_prompt",
+    "reasoner",
+    "translation",
+    "rejected_candidate",
+    "incomplete",
 }
 
 
@@ -39,9 +58,7 @@ class PersistenceDecision:
 
 def decide_persistence(request: PersistenceRequest) -> PersistenceDecision:
     if request.content_class in _FORBIDDEN:
-        return PersistenceDecision(
-            False, f"content_class_forbidden:{request.content_class}"
-        )
+        return PersistenceDecision(False, f"content_class_forbidden:{request.content_class}")
     if request.sink == "stats_metadata" and request.content_class == "outcome_metadata":
         return PersistenceDecision(True, "metadata_allowlist")
     if request.sink == "session_window":

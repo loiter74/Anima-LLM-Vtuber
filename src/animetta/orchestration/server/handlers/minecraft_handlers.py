@@ -53,6 +53,7 @@ class MinecraftHandlers:
 
         def on_viewer_event(event_type: str, payload) -> None:
             import asyncio
+
             if event_type == "client_viewer_status" and isinstance(payload, dict):
                 data = {
                     "status": payload.get("state", "unknown"),
@@ -93,7 +94,10 @@ class MinecraftHandlers:
             from pathlib import Path
 
             import yaml
-            config_path = Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "tools.yaml"
+
+            config_path = (
+                Path(__file__).parent.parent.parent.parent.parent.parent / "config" / "tools.yaml"
+            )
             mc_cfg_dict: dict = {}
             if config_path.exists():
                 with open(config_path, encoding="utf-8") as f:
@@ -161,7 +165,6 @@ class MinecraftHandlers:
         Terminates the Mineflayer subprocess and cleans up the bridge.
         """
         try:
-
             logger.info("[Minecraft] Frontend requested stop")
 
             # Stop state collector first

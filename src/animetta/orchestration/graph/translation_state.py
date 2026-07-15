@@ -6,7 +6,6 @@ allows real-time updates via socket events.
 """
 
 
-
 class TranslationState:
     """Runtime translation configuration state.
 

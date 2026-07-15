@@ -50,7 +50,9 @@ class LangGraphOrchestrator:
         self.observation_recorder = observation_recorder or NoOpObservationRecorder()
 
         raw_session_id = getattr(service_context, "session_id", None)
-        self.session_id = raw_session_id if isinstance(raw_session_id, str) and raw_session_id else "unknown"
+        self.session_id = (
+            raw_session_id if isinstance(raw_session_id, str) and raw_session_id else "unknown"
+        )
 
         self.graph = None
         self._is_running = False
@@ -79,7 +81,9 @@ class LangGraphOrchestrator:
 
         self._callbacks = obs.callbacks
         if self._callbacks:
-            logger.info(f"[{self.session_id}] [LangGraph] Observability callbacks: {len(self._callbacks)}")
+            logger.info(
+                f"[{self.session_id}] [LangGraph] Observability callbacks: {len(self._callbacks)}"
+            )
 
         logger.info(f"[{self.session_id}] [LangGraph] Orchestrator initialized")
 
@@ -111,7 +115,9 @@ class LangGraphOrchestrator:
             )
 
             self._is_running = True
-            logger.info(f"[{self.session_id}] [LangGraph] State graph started — _is_running={self._is_running}")
+            logger.info(
+                f"[{self.session_id}] [LangGraph] State graph started — _is_running={self._is_running}"
+            )
 
         except Exception as e:
             logger.error(f"[{self.session_id}] [LangGraph] Start failed: {e}")
@@ -128,7 +134,9 @@ class LangGraphOrchestrator:
             logger.info(f"[{self.session_id}] [LangGraph] Tool config added to LangGraph config")
         else:
             self.enable_tools = False
-            logger.warning(f"[{self.session_id}] [LangGraph] Tool loading failed, tool calls disabled")
+            logger.warning(
+                f"[{self.session_id}] [LangGraph] Tool loading failed, tool calls disabled"
+            )
 
     def _is_golden_profile(self) -> bool:
         system = getattr(getattr(self.service_context, "config", None), "system", None)
@@ -207,7 +215,9 @@ class LangGraphOrchestrator:
             return {"error": "Audio already processing"}
 
         self._processing_audio = True
-        logger.info(f"[{self.session_id}] [LangGraph] Processing audio input: {len(audio_data)} bytes")
+        logger.info(
+            f"[{self.session_id}] [LangGraph] Processing audio input: {len(audio_data)} bytes"
+        )
 
         get_interrupt_handler().clear_interrupt(self.session_id)
 
@@ -294,13 +304,17 @@ class LangGraphOrchestrator:
         if callbacks:
             run_config["callbacks"] = callbacks
 
-        logger.info(f"[{self.session_id}] [LangGraph] _run_graph starting — input_type={input_type}, user_text={user_text[:50]}...")
+        logger.info(
+            f"[{self.session_id}] [LangGraph] _run_graph starting — input_type={input_type}, user_text={user_text[:50]}..."
+        )
         t_start = time_module.perf_counter()
 
         try:
             result = await self.graph.ainvoke(initial_state, config=run_config)
             duration_ms = (time_module.perf_counter() - t_start) * 1000
-            logger.info(f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms")
+            logger.info(
+                f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms"
+            )
             await turn.finish(result)
             return result
         except asyncio.CancelledError as exc:
@@ -308,9 +322,12 @@ class LangGraphOrchestrator:
             raise
         except Exception as e:
             duration_ms = (time_module.perf_counter() - t_start) * 1000
-            logger.error(f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}")
+            logger.error(
+                f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}"
+            )
             await turn.fail(e)
             raise
+
     def _conversation_observer(self) -> ConversationObserver:
         config = getattr(self.service_context, "config", None)
         system = getattr(config, "system", None)
@@ -370,13 +387,21 @@ class LangGraphOrchestrator:
                     "name": persona.name,
                     "role": persona.role,
                     "identity": persona.identity,
-                    "personality": persona.personality.dict() if hasattr(persona.personality, "dict") else {},
-                    "behavior": persona.behavior.dict() if hasattr(persona.behavior, "dict") else {},
+                    "personality": persona.personality.dict()
+                    if hasattr(persona.personality, "dict")
+                    else {},
+                    "behavior": persona.behavior.dict()
+                    if hasattr(persona.behavior, "dict")
+                    else {},
                     "speaking_style": persona.speaking_style,
                 }
                 # Include MBTI profile if configured
                 if persona.personality.mbti:
-                    result["mbti"] = persona.personality.mbti.dict() if hasattr(persona.personality.mbti, "dict") else {}
+                    result["mbti"] = (
+                        persona.personality.mbti.dict()
+                        if hasattr(persona.personality.mbti, "dict")
+                        else {}
+                    )
                 return result
         return {}
 

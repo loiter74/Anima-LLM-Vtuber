@@ -24,9 +24,7 @@ if TYPE_CHECKING:
 # ── Marker patterns to strip before translation ──────────────────
 
 # Emotion tags: [happy], [sad], [angry], [surprised], [thinking], [neutral]
-_EMOTION_TAG_RE = re.compile(
-    r"\[(happy|sad|angry|surprised|thinking|neutral)\]", re.IGNORECASE
-)
+_EMOTION_TAG_RE = re.compile(r"\[(happy|sad|angry|surprised|thinking|neutral)\]", re.IGNORECASE)
 
 # Affinity markers: [affinity:75], [affinity: 50]
 _AFFINITY_MARKER_RE = re.compile(r"\[affinity\s*:\s*\d+\]", re.IGNORECASE)
@@ -158,9 +156,9 @@ async def translate_subtitle_text(
             llm_target.clear_history()
             for msg in saved_history:
                 # Re-populate history by re-adding messages
-                if hasattr(llm_target, '_history'):
+                if hasattr(llm_target, "_history"):
                     llm_target._history.append(msg)
-                elif hasattr(llm_target, 'history'):
+                elif hasattr(llm_target, "history"):
                     llm_target.history.append(msg)
             logger.debug("[SubtitleTranslator] History restored after fallback translation")
         except Exception as restore_err:

@@ -146,8 +146,7 @@ class MemeHandlers(BaseSocketHandler):
         limit = int(data.get("limit") or 50)
         payload = {
             "memes": [
-                _meme_to_payload(meme)
-                for meme in self._store.list_pending(source_platform, limit)
+                _meme_to_payload(meme) for meme in self._store.list_pending(source_platform, limit)
             ]
         }
         await self.sio.emit(EVENTS["meme"]["list"]["name"], payload, to=sid)

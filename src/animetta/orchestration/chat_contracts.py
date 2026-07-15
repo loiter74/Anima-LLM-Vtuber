@@ -245,22 +245,12 @@ class TTSDegradationReason(StrEnum):
 class MediaDegradationPayload(ChatIdentity):
     """Typed control payload for one real-provider media degradation."""
 
-    type: str = event_variant_value(
-        "chat", "control", "degradation", "constants", "type"
-    )
-    status: str = event_variant_value(
-        "chat", "control", "degradation", "constants", "status"
-    )
-    component: str = event_variant_value(
-        "chat", "control", "degradation", "constants", "component"
-    )
-    phase: str = event_variant_value(
-        "chat", "control", "degradation", "constants", "phase"
-    )
+    type: str = event_variant_value("chat", "control", "degradation", "constants", "type")
+    status: str = event_variant_value("chat", "control", "degradation", "constants", "status")
+    component: str = event_variant_value("chat", "control", "degradation", "constants", "component")
+    phase: str = event_variant_value("chat", "control", "degradation", "constants", "phase")
     reason: TTSDegradationReason
-    retryable: bool = event_variant_value(
-        "chat", "control", "degradation", "defaults", "retryable"
-    )
+    retryable: bool = event_variant_value("chat", "control", "degradation", "defaults", "retryable")
     text: NoticeText | None = event_field_default("chat", "control", "text")
 
     @field_validator("type", "status", "component", "phase", mode="before")
@@ -279,9 +269,7 @@ class MediaDegradationPayload(ChatIdentity):
             info.field_name,
         )
         if value != expected:
-            raise ValueError(
-                f"{info.field_name} does not match degradation constant"
-            )
+            raise ValueError(f"{info.field_name} does not match degradation constant")
         return value
 
     @field_validator("reason", mode="before")
@@ -408,13 +396,10 @@ def validate_chat_contract_models() -> list[str]:
         for field, expected_type in fields.items():
             descriptor = event_payload_descriptor(module, action, field)
             if descriptor.get("type") != expected_type:
-                errors.append(
-                    f"{model_name} {field} type does not match catalog"
-                )
+                errors.append(f"{model_name} {field} type does not match catalog")
 
     catalog_command_fields = {
-        field.removesuffix("?")
-        for field in EVENTS["chat"]["text"]["payload"]
+        field.removesuffix("?") for field in EVENTS["chat"]["text"]["payload"]
     }
     field_set_contracts = (
         (
@@ -425,10 +410,7 @@ def validate_chat_contract_models() -> list[str]:
         (
             "ChatErrorPayload",
             set(ChatErrorPayload.model_fields),
-            {
-                field.removesuffix("?")
-                for field in EVENTS["system"]["error"]["payload"]
-            },
+            {field.removesuffix("?") for field in EVENTS["system"]["error"]["payload"]},
         ),
         (
             "MediaDegradationPayload",
@@ -443,8 +425,7 @@ def validate_chat_contract_models() -> list[str]:
             missing = sorted(catalog_fields - model_fields)
             extra = sorted(model_fields - catalog_fields)
             errors.append(
-                f"{model_name} field set does not match catalog "
-                f"(missing={missing}, extra={extra})"
+                f"{model_name} field set does not match catalog (missing={missing}, extra={extra})"
             )
 
     for (module, action), expected_identity in _GOLDEN_EVENT_ROLES.items():
@@ -489,9 +470,7 @@ def validate_chat_contract_models() -> list[str]:
             field,
         )
         if model_default != catalog_default:
-            errors.append(
-                f"MediaDegradationPayload {field} default does not match catalog"
-            )
+            errors.append(f"MediaDegradationPayload {field} default does not match catalog")
     retryable_default = MediaDegradationPayload.model_fields["retryable"].default
     catalog_retryable = event_variant_value(
         "chat",
@@ -501,9 +480,7 @@ def validate_chat_contract_models() -> list[str]:
         "retryable",
     )
     if retryable_default != catalog_retryable:
-        errors.append(
-            "MediaDegradationPayload retryable default does not match catalog"
-        )
+        errors.append("MediaDegradationPayload retryable default does not match catalog")
 
     canonical_identity = event_payload_descriptor(
         "chat",
@@ -591,9 +568,7 @@ def normalize_chat_command(
 
     resolution = resolve_socket_event(event)
     if (resolution.module, resolution.action) != ("chat", "text"):
-        raise ValueError(
-            f"Socket.IO event {event!r} does not normalize chat text"
-        )
+        raise ValueError(f"Socket.IO event {event!r} does not normalize chat text")
     if not isinstance(payload, Mapping):
         raise TypeError("chat payload must be a mapping")
 
@@ -605,8 +580,6 @@ def normalize_chat_command(
         _normalize_legacy_identities(data, id_factory=id_factory)
 
     data["transport_mode"] = (
-        ChatTransportMode.LEGACY
-        if resolution.is_legacy
-        else ChatTransportMode.CANONICAL
+        ChatTransportMode.LEGACY if resolution.is_legacy else ChatTransportMode.CANONICAL
     )
     return ChatTurnCommand.model_validate(data)

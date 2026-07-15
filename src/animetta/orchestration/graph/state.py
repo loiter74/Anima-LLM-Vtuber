@@ -75,8 +75,8 @@ class AgentState(TypedDict):
     meme_injected: bool
 
     # Personality
-    personality_mode: str              # 'default' | 'streaming' | 'mood_xxx'
-    personality_mood: str | None    # current mood override
+    personality_mode: str  # 'default' | 'streaming' | 'mood_xxx'
+    personality_mood: str | None  # current mood override
 
     # Affinity — Galgame-style affection counter for the current 旅人.
     # Per-turn overlay: parsed from the LLM's `[affinity:N]` marker on the
@@ -158,7 +158,9 @@ def create_initial_state(
     }
 
 
-def create_user_message(text: str, user_id: str | None = None, user_name: str | None = None) -> HumanMessage:
+def create_user_message(
+    text: str, user_id: str | None = None, user_name: str | None = None
+) -> HumanMessage:
     """Create user message"""
     content = f"[{user_name}]: {text}" if user_name else text
     return HumanMessage(content=content, name=user_id or "user")
@@ -178,12 +180,15 @@ def create_system_message(text: str) -> SystemMessage:
 # Timing helper – appends timing entries to AgentState._timings
 # ---------------------------------------------------------------------------
 
+
 def log_timing(state: AgentState, step: str, duration_ms: float, detail: str = "") -> None:
     """Append a timing entry to the state for performance analysis."""
     timings = state.get("_timings", [])
-    timings.append({
-        "step": step,
-        "duration_ms": round(duration_ms, 2),
-        "detail": detail,
-    })
+    timings.append(
+        {
+            "step": step,
+            "duration_ms": round(duration_ms, 2),
+            "detail": detail,
+        }
+    )
     state["_timings"] = timings

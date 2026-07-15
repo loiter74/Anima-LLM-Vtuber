@@ -48,10 +48,12 @@ class Live2DHandlers:
 
         async def execute_action(action):
             await self.admin.broadcast_to_desktop_clients(
-                "live2d", "live2d:action", {
+                "live2d",
+                "live2d:action",
+                {
                     "action": action.action,
                     "action_id": action.action_id,
-                }
+                },
             )
 
         self.live2d_manager.set_execute_callback(execute_action)
@@ -107,9 +109,7 @@ class Live2DHandlers:
             )
 
         except Exception as e:
-            logger.error(
-                f"[{sid}] Error processing desktop chat message: {e}"
-            )
+            logger.error(f"[{sid}] Error processing desktop chat message: {e}")
             await self.sio.emit(
                 EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )

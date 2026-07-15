@@ -58,16 +58,19 @@ async def tool_node(
             if not tool_fn:
                 error_msg = f"Tool not found: {tool_name}"
                 logger.error(f"[{session_id}] [ToolNode] {error_msg}")
-                tool_messages.append(ToolMessage(content=f"Error: {error_msg}", tool_call_id=tool_id))
+                tool_messages.append(
+                    ToolMessage(content=f"Error: {error_msg}", tool_call_id=tool_id)
+                )
                 tool_results.append({"error": error_msg})
                 continue
 
-            if hasattr(tool_fn, 'ainvoke'):
+            if hasattr(tool_fn, "ainvoke"):
                 result = await tool_fn.ainvoke(tool_args)
-            elif hasattr(tool_fn, '_run'):
+            elif hasattr(tool_fn, "_run"):
                 result = tool_fn._run(**tool_args)
             else:
                 import inspect
+
                 if inspect.iscoroutinefunction(tool_fn):
                     result = await tool_fn(**tool_args)
                 else:

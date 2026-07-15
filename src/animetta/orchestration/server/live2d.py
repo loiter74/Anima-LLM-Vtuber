@@ -51,7 +51,7 @@ class Live2DManager:
         action_data: dict,
         action_id: str = "",
         queue_policy: str = "append",
-        duration: float = 0.5
+        duration: float = 0.5,
     ) -> dict:
         """
         Enqueue an action
@@ -70,7 +70,7 @@ class Live2DManager:
             action_id=action_id,
             action=action_data,
             duration_sec=duration,
-            queue_policy=queue_policy
+            queue_policy=queue_policy,
         )
 
         result = await self.action_queue.enqueue(action)

@@ -71,8 +71,8 @@ class WebSocketServer:
         self._configure_observation_dependencies(config)
 
         self.sio = socketio.AsyncServer(
-            async_mode='asgi',
-            cors_allowed_origins='*',
+            async_mode="asgi",
+            cors_allowed_origins="*",
             cors_credentials=True,
             logger=False,
             engineio_logger=False,
@@ -87,6 +87,7 @@ class WebSocketServer:
 
         # Prometheus /metrics endpoint (optional — graceful fallback if package not installed)
         metrics_route: list = []
+
         async def metrics_endpoint(request):
             del request
             return Response(
@@ -98,6 +99,7 @@ class WebSocketServer:
 
         # Singing media file serving (audio + subtitles)
         import mimetypes
+
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 
         async def serve_singing_audio(request):
@@ -123,7 +125,9 @@ class WebSocketServer:
             output_dir = project_root / "data" / "singing" / "outputs"
             if not output_dir.is_dir():
                 return JSONResponse([])
-            files = sorted(output_dir.glob("*_final.wav"), key=lambda f: f.stat().st_mtime, reverse=True)[:5]
+            files = sorted(
+                output_dir.glob("*_final.wav"), key=lambda f: f.stat().st_mtime, reverse=True
+            )[:5]
             result = []
             for f in files:
                 session_id = f.stem.replace("_final", "")
@@ -131,16 +135,26 @@ class WebSocketServer:
                 vocals = f.with_name(f"{session_id}_vocals.wav")
                 tts = f.with_name(f"{session_id}_tts_final.wav")
                 original = f.with_name(f"{session_id}_original.wav")
-                result.append({
-                    "session_id": session_id,
-                    "audio_url": f"/api/singing/audio/{f.name}",
-                    "vocals_url": f"/api/singing/audio/{vocals.name}" if vocals.is_file() else "",
-                    "original_url": f"/api/singing/audio/{original.name}" if original.is_file() else "",
-                    "subtitle_url": f"/api/singing/subtitle/{subtitle.name}" if subtitle.is_file() else "",
-                    "tts_audio_url": f"/api/singing/audio/{tts.name}" if tts.is_file() else "",
-                    "created_at": datetime.datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
-                    "duration_sec": 0.0,
-                })
+                result.append(
+                    {
+                        "session_id": session_id,
+                        "audio_url": f"/api/singing/audio/{f.name}",
+                        "vocals_url": f"/api/singing/audio/{vocals.name}"
+                        if vocals.is_file()
+                        else "",
+                        "original_url": f"/api/singing/audio/{original.name}"
+                        if original.is_file()
+                        else "",
+                        "subtitle_url": f"/api/singing/subtitle/{subtitle.name}"
+                        if subtitle.is_file()
+                        else "",
+                        "tts_audio_url": f"/api/singing/audio/{tts.name}" if tts.is_file() else "",
+                        "created_at": datetime.datetime.fromtimestamp(
+                            f.stat().st_mtime
+                        ).isoformat(),
+                        "duration_sec": 0.0,
+                    }
+                )
             return JSONResponse(result)
 
         singing_routes = [
@@ -183,7 +197,10 @@ class WebSocketServer:
         frontend_routes = []
         if frontend_dist.is_dir():
             from starlette.staticfiles import StaticFiles
-            frontend_routes = [Mount("/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")]
+
+            frontend_routes = [
+                Mount("/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+            ]
             logger.info(f"[Socket.IO] Frontend static files mounted at /app from {frontend_dist}")
 
         @asynccontextmanager
@@ -198,7 +215,12 @@ class WebSocketServer:
                 await self._cleanup_all_resources()
 
         self.asgi_app = Starlette(
-            routes=stats_routes + metrics_route + singing_routes + config_routes + frontend_routes + [Mount("/", app=sio_app)],
+            routes=stats_routes
+            + metrics_route
+            + singing_routes
+            + config_routes
+            + frontend_routes
+            + [Mount("/", app=sio_app)],
             lifespan=lifespan,
         )
         self.asgi_app.state.observation_query = self.observation_query
@@ -206,17 +228,11 @@ class WebSocketServer:
         set_model_manager(self.model_manager)
         ServicePool.configure_runtime(self.config, self.model_manager)
         set_runtime_readiness_context(self.config, self.frontend_readiness)
-        self.memory_runtime = SharedMemoryRuntime(
-            observation_recorder=self.observation_recorder
-        )
-        self.component_readiness_cache = ComponentReadinessCache(
-            self.inspection_runtime()
-        )
+        self.memory_runtime = SharedMemoryRuntime(observation_recorder=self.observation_recorder)
+        self.component_readiness_cache = ComponentReadinessCache(self.inspection_runtime())
         set_component_readiness_cache(self.component_readiness_cache)
         self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
-            lambda payload: self.sio.emit(
-                EVENTS["memory"]["changed"]["name"], payload
-            )
+            lambda payload: self.sio.emit(EVENTS["memory"]["changed"]["name"], payload)
         )
         self.session_manager = SessionManager(
             model_manager=self.model_manager,
@@ -246,9 +262,7 @@ class WebSocketServer:
             return
 
         if observation.prometheus.enabled:
-            self.observation_mirrors.append(
-                PrometheusMirror(registry=self.metrics_registry)
-            )
+            self.observation_mirrors.append(PrometheusMirror(registry=self.metrics_registry))
         if observation.otlp.enabled:
             endpoint = observation.otlp.endpoint or "http://localhost:4317"
             try:
@@ -309,9 +323,7 @@ class WebSocketServer:
             metrics_snapshot=lambda: generate_latest(self.metrics_registry).decode(),
             observation_write_probe=self._probe_observation_pipeline,
             remote_tts_probe=(
-                self._probe_remote_tts_dependency
-                if self._requires_remote_tts()
-                else None
+                self._probe_remote_tts_dependency if self._requires_remote_tts() else None
             ),
         )
 
@@ -337,9 +349,7 @@ class WebSocketServer:
             raise RuntimeError("observation ledger is unavailable")
         await self.observation_ledger.probe_write()
         mirrors = [
-            mirror
-            for mirror in self.observation_mirrors
-            if isinstance(mirror, PrometheusMirror)
+            mirror for mirror in self.observation_mirrors if isinstance(mirror, PrometheusMirror)
         ]
         if not mirrors:
             raise RuntimeError("prometheus mirror is unavailable")
