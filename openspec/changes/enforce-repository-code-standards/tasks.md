@@ -67,9 +67,9 @@
 
 ## 8. Final verification and acceptance
 
-- [ ] 8.1 Run `make quality-validate` and generate a fresh affected plan proving every changed maintained source is mapped to required gates
-- [ ] 8.2 Run all format, lint, type, dead-code, security, documentation, frontend test/build, and backend full groups with cache disabled
-- [ ] 8.3 Use the QA Playwright skill to create a fresh page/context capture and verify console, page, request, and HTTP errors are absent
-- [ ] 8.4 Use a dedicated sub-agent to execute the CPU Docker startup protocol: clean, build, start, poll `/health`, verify frontend HTTP 200, and inspect logs
-- [ ] 8.5 Audit the current source and evidence against every `repository-code-standards` requirement and close any missing or indirect proof
-- [ ] 8.6 Mark all OpenSpec tasks complete, run strict OpenSpec validation, and prepare the branch for review and archival
+- [x] 8.1 Run `make quality-validate` and generate a fresh affected plan proving every changed maintained source is mapped to required gates
+- [x] 8.2 Run all format, lint, type, dead-code, security, documentation, frontend test/build, and backend full groups with cache disabled
+- [x] 8.3 Use the QA Playwright skill to create a fresh page/context capture and verify console, page, request, and HTTP errors are absent
+- [x] 8.4 Use a dedicated sub-agent to execute the CPU Docker startup protocol: clean, build, start, poll `/health`, verify frontend HTTP 200, and inspect logs
+- [x] 8.5 Audit the current source and evidence against every `repository-code-standards` requirement and close any missing or indirect proof
+- [x] 8.6 Mark all OpenSpec tasks complete, run strict OpenSpec validation, and prepare the branch for review and archival

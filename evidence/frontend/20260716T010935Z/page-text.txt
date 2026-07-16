@@ -1,0 +1,59 @@
+聊天
+Anima.
+Chat
+Memory
+Trace
+Settings
+CONNECTED
+CONTROLS & MEMORY
+A
+Anima
+AI Virtual Companion
+Friendly AI companion who loves to chat about tech, design, and creative projects.
+friendly
+curious
+helpful
+creative
+QUICK CONTROLS
+🔊
+Voice
+70%
+🎤
+Microphone
+🔔
+Notifications
+🧠
+Auto Memory
+SESSION STATS
+⏱️
+Session
+0m 1s
+💬
+Messages
+47
+🧠
+Memory
+128 atoms
+⚡
+Avg Latency
+230ms
+MEMORY TOPICS
+No memory topics yet
+↺ 复位
+缩放 2.59x
+位置 (800, 1300)
+💬 聊天
+📺 直播
+🧠 记忆
+🎭 人格
+🎵 音乐
+⚙️ 设置
+↻
+🧠
+记忆
+Animetta.
+
+和我一起聊会儿天吧
+
+开始对话
+了解更多
