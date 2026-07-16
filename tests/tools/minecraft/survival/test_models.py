@@ -77,7 +77,9 @@ class TestPhaseResult:
 
     def test_record_action_with_detail(self):
         pr = PhaseResult(phase=SurvivalPhase.COBBLESTONE, success=True)
-        pr.record_action("mine", {"block_type": "stone"}, True, "Mined 1 stone", {"position": {"x": 1, "y": 2}})
+        pr.record_action(
+            "mine", {"block_type": "stone"}, True, "Mined 1 stone", {"position": {"x": 1, "y": 2}}
+        )
         assert pr.action_log[0]["detail"] == {"position": {"x": 1, "y": 2}}
 
 
@@ -142,7 +144,9 @@ class TestRunReport:
     def test_summary(self):
         r = RunReport(start_time=100.0, end_time=200.0)
         r.phase_results = [
-            PhaseResult(phase=SurvivalPhase.WOOD, success=True, actions_attempted=1, actions_succeeded=1),
+            PhaseResult(
+                phase=SurvivalPhase.WOOD, success=True, actions_attempted=1, actions_succeeded=1
+            ),
         ]
         r.final_inventory = {"oak_log": 3}
         s = r.summary()

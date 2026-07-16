@@ -21,9 +21,7 @@ class TestBridgeClientViewerEnvExport:
     """Verify bridge.start() passes client_viewer settings to Node environment."""
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_client_viewer_enabled_exports_env(
-        self, mock_is_available, tmp_path
-    ):
+    async def test_client_viewer_enabled_exports_env(self, mock_is_available, tmp_path):
         """When client_viewer.enabled=True, bridge exports MC_CLIENT_VIEWER_* vars."""
         cfg = MinecraftConfig(
             enabled=True,
@@ -58,9 +56,11 @@ class TestBridgeClientViewerEnvExport:
             proc.wait = AsyncMock()
             return proc
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_create), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_create),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             await bridge.start()
 
         assert captured_env.get("MC_CLIENT_VIEWER_ENABLED") == "true"
@@ -71,9 +71,7 @@ class TestBridgeClientViewerEnvExport:
         assert captured_env.get("MC_CLIENT_VIEWER_SPECTATE_TIMEOUT") == "12"
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_client_viewer_disabled_no_env_vars(
-        self, mock_is_available
-    ):
+    async def test_client_viewer_disabled_no_env_vars(self, mock_is_available):
         """When client_viewer.enabled=False, no MC_CLIENT_VIEWER_* vars are set."""
         cfg = MinecraftConfig(
             enabled=True,
@@ -100,9 +98,11 @@ class TestBridgeClientViewerEnvExport:
             proc.wait = AsyncMock()
             return proc
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_create), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_create),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             await bridge.start()
 
         # No MC_CLIENT_VIEWER_* keys should be present
@@ -110,9 +110,7 @@ class TestBridgeClientViewerEnvExport:
         assert "MC_CLIENT_VIEWER_USERNAME" not in captured_env
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
-    async def test_client_viewer_enabled_without_username_exports_empty(
-        self, mock_is_available
-    ):
+    async def test_client_viewer_enabled_without_username_exports_empty(self, mock_is_available):
         """When enabled but username empty, still exports enabled=true with empty username."""
         cfg = MinecraftConfig(
             enabled=True,
@@ -139,9 +137,11 @@ class TestBridgeClientViewerEnvExport:
             proc.wait = AsyncMock()
             return proc
 
-        with patch("os.path.exists", return_value=True), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_create), \
-             patch("asyncio.wait_for", side_effect=_complete_ready_wait):
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_create),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
             await bridge.start()
 
         assert captured_env.get("MC_CLIENT_VIEWER_ENABLED") == "true"

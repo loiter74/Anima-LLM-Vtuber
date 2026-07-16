@@ -33,6 +33,7 @@ from typing import Any
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.qwen3 import Qwen3TTSConfig
 
 from .interface import TTSInterface
 
@@ -52,17 +53,13 @@ def _resolve_cached_model_source(model: str, revision: str | None = None) -> str
         try:
             resolved_snapshots = snapshots_root.resolve()
             snapshot = (resolved_snapshots / revision).resolve()
-            if snapshot.is_relative_to(resolved_snapshots) and (
-                snapshot / "config.json"
-            ).is_file():
+            if snapshot.is_relative_to(resolved_snapshots) and (snapshot / "config.json").is_file():
                 return str(snapshot)
         except (OSError, ValueError) as exc:
             raise FileNotFoundError(
                 "Pinned Qwen model revision is unavailable in the local cache"
             ) from exc
-        raise FileNotFoundError(
-            "Pinned Qwen model revision is unavailable in the local cache"
-        )
+        raise FileNotFoundError("Pinned Qwen model revision is unavailable in the local cache")
 
     refs_main = model_root / "refs" / "main"
     try:
@@ -112,9 +109,7 @@ def _temporary_qwen_loader_patches(qwen_model_class: type[Any]) -> Iterator[None
         try:
             original_auto_processor = vars(qwen_module)["AutoProcessor"]
         except KeyError as exc:
-            raise AttributeError(
-                "Qwen model module does not define AutoProcessor"
-            ) from exc
+            raise AttributeError("Qwen model module does not define AutoProcessor") from exc
 
         facade = _LocalOnlyAutoProcessorFacade(original_auto_processor)
         restore_binding = False
@@ -329,13 +324,13 @@ class Qwen3TTSTTS(TTSInterface):
     def _is_flash_attention_error(error: Exception) -> bool:
         message = str(error).lower()
         return any(
-            marker in message
-            for marker in ("flash_attn", "flashattention", "attn_implementation")
+            marker in message for marker in ("flash_attn", "flashattention", "attn_implementation")
         )
 
     def _get_torch_dtype(self) -> Any:
         """Convert dtype string to torch dtype, with Windows bf16 fallback"""
         import torch
+
         if self.dtype == "bfloat16":
             if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
                 logger.warning("bfloat16 not supported on this GPU, falling back to float16")
@@ -362,9 +357,7 @@ class Qwen3TTSTTS(TTSInterface):
                 import torch
                 from qwen_tts import Qwen3TTSModel
             except ImportError as e:
-                raise ImportError(
-                    "qwen-tts not installed. Run: pip install -U qwen-tts"
-                ) from e
+                raise ImportError("qwen-tts not installed. Run: pip install -U qwen-tts") from e
 
             # Check CUDA availability
             if self.device.startswith("cuda") and not torch.cuda.is_available():
@@ -462,8 +455,12 @@ class Qwen3TTSTTS(TTSInterface):
         if not os.path.exists(self.ref_audio_path):
             raise FileNotFoundError(f"Reference audio not found: {self.ref_audio_path}")
 
+        model = self._model
+        if model is None:
+            raise RuntimeError("Qwen3-TTS model is not loaded")
+
         logger.info("Qwen3-TTS voice clone prompt build started")
-        self._voice_clone_prompt = self._model.create_voice_clone_prompt(
+        self._voice_clone_prompt = model.create_voice_clone_prompt(
             ref_audio=self.ref_audio_path,
             ref_text=self.ref_text,
             x_vector_only_mode=self.x_vector_only,
@@ -529,18 +526,23 @@ class Qwen3TTSTTS(TTSInterface):
 
             def generate_and_encode() -> bytes | str:
                 self._ensure_preloaded_worker()
+                model = self._model
+                if model is None:
+                    raise RuntimeError("Qwen3-TTS model is not loaded")
                 if self.ref_audio_path:
-                    wavs, sr = self._model.generate_voice_clone(
+                    wavs, sr = model.generate_voice_clone(
                         text=text,
                         language=effective_language,
                         voice_clone_prompt=self._voice_clone_prompt,
                         max_new_tokens=kwargs.get("max_new_tokens", self.max_new_tokens),
                         top_p=kwargs.get("top_p", self.top_p),
                         temperature=kwargs.get("temperature", self.temperature),
-                        repetition_penalty=kwargs.get("repetition_penalty", self.repetition_penalty),
+                        repetition_penalty=kwargs.get(
+                            "repetition_penalty", self.repetition_penalty
+                        ),
                     )
                 else:
-                    wavs, sr = self._model.generate_custom_voice(
+                    wavs, sr = model.generate_custom_voice(
                         text=text,
                         language=effective_language,
                         speaker=effective_speaker,

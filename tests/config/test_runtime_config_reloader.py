@@ -152,30 +152,25 @@ def test_reload_allows_lightweight_llm_fields_but_preserves_engine_identity(
     assert next_llm.top_p == 0.77
     assert next_llm.max_tokens == 333
     assert next_llm.model == current.agent.llm_config.model
-    assert reloader.config.providers["llm"].public_identity() == current.providers[
-        "llm"
-    ].public_identity()
+    assert (
+        reloader.config.providers["llm"].public_identity()
+        == current.providers["llm"].public_identity()
+    )
 
 
 @pytest.mark.parametrize(
     ("mutate", "expected_path"),
     [
         (
-            lambda data: data["profiles"]["smoke"]["services"].update(
-                {"tts": "qwen-alice"}
-            ),
+            lambda data: data["profiles"]["smoke"]["services"].update({"tts": "qwen-alice"}),
             "services.tts",
         ),
         (
-            lambda data: data["providers"]["llm"]["deepseek"].update(
-                {"model": "different-model"}
-            ),
+            lambda data: data["providers"]["llm"]["deepseek"].update({"model": "different-model"}),
             "providers.llm.model",
         ),
         (
-            lambda data: data["providers"]["tts"]["mimo-tts"].update(
-                {"voice": "different-voice"}
-            ),
+            lambda data: data["providers"]["tts"]["mimo-tts"].update({"voice": "different-voice"}),
             "providers.tts.voice",
         ),
         (

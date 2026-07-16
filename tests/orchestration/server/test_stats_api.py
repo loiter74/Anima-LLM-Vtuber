@@ -36,52 +36,84 @@ def _build_test_app(store_mock=None):
 def mock_store():
     """Mock ObservationQuery with ledger-shaped responses."""
     store = MagicMock()
-    store.overview = AsyncMock(return_value={
-        "schema_version": 2,
-        "total_requests": 10,
-        "success_count": 8,
-        "degraded_count": 1,
-        "failed_count": 1,
-        "success_rate": 80.0,
-        "avg_duration_ms": 250.0,
-    })
-    store.operation_aggregates = AsyncMock(return_value=[{
-        "layer": "workflow", "name": "llm_node", "operation_count": 50,
-        "success_count": 49, "degraded_count": 0, "failure_count": 1,
-        "avg_duration_ms": 300.0,
-    }])
+    store.overview = AsyncMock(
+        return_value={
+            "schema_version": 2,
+            "total_requests": 10,
+            "success_count": 8,
+            "degraded_count": 1,
+            "failed_count": 1,
+            "success_rate": 80.0,
+            "avg_duration_ms": 250.0,
+        }
+    )
+    store.operation_aggregates = AsyncMock(
+        return_value=[
+            {
+                "layer": "workflow",
+                "name": "llm_node",
+                "operation_count": 50,
+                "success_count": 49,
+                "degraded_count": 0,
+                "failure_count": 1,
+                "avg_duration_ms": 300.0,
+            }
+        ]
+    )
     trace_summary = {
-        "message_id": "message-1", "conversation_id": "conversation-1",
-        "session_id": "desktop", "runtime_profile": "development",
-        "input_type": "text", "privacy_mode": "full", "started_at": 10.0,
-        "finished_at": 10.5, "duration_ms": 500.0, "outcome": "success",
+        "message_id": "message-1",
+        "conversation_id": "conversation-1",
+        "session_id": "desktop",
+        "runtime_profile": "development",
+        "input_type": "text",
+        "privacy_mode": "full",
+        "started_at": 10.0,
+        "finished_at": 10.5,
+        "duration_ms": 500.0,
+        "outcome": "success",
         "error_type": None,
     }
-    store.recent_traces = AsyncMock(return_value=[
-        {"trace_id": "abc", **trace_summary},
-        {"trace_id": "def", **trace_summary},
-    ])
-    store.trace_detail = AsyncMock(return_value={
-        "trace_id": "abc",
-        **trace_summary,
-        "error_summary": None, "user_text": "full user text",
-        "user_character_count": 14, "user_byte_count": 14, "user_digest": "u",
-        "assistant_text": "full assistant text", "assistant_character_count": 19,
-        "assistant_byte_count": 19, "assistant_digest": "a", "attributes": {},
-        "operations": [], "operation_tree": [], "events": [],
-        "post_turn": {"pending": 0, "completed": 0, "failed": 0, "operations": []},
-        "schema_version": 2,
-    })
-    store.inspection_reports = AsyncMock(return_value=[{
-        "run_id": "inspection-1",
-        "started_at": 1000.0,
-        "finished_at": 1001.0,
-        "overall_ok": True,
-        "checks": {
-            "observation_ledger": {"name": "observation_ledger", "ok": True},
-        },
-        "created_at": 1001.5,
-    }])
+    store.recent_traces = AsyncMock(
+        return_value=[
+            {"trace_id": "abc", **trace_summary},
+            {"trace_id": "def", **trace_summary},
+        ]
+    )
+    store.trace_detail = AsyncMock(
+        return_value={
+            "trace_id": "abc",
+            **trace_summary,
+            "error_summary": None,
+            "user_text": "full user text",
+            "user_character_count": 14,
+            "user_byte_count": 14,
+            "user_digest": "u",
+            "assistant_text": "full assistant text",
+            "assistant_character_count": 19,
+            "assistant_byte_count": 19,
+            "assistant_digest": "a",
+            "attributes": {},
+            "operations": [],
+            "operation_tree": [],
+            "events": [],
+            "post_turn": {"pending": 0, "completed": 0, "failed": 0, "operations": []},
+            "schema_version": 2,
+        }
+    )
+    store.inspection_reports = AsyncMock(
+        return_value=[
+            {
+                "run_id": "inspection-1",
+                "started_at": 1000.0,
+                "finished_at": 1001.0,
+                "overall_ok": True,
+                "checks": {
+                    "observation_ledger": {"name": "observation_ledger", "ok": True},
+                },
+                "created_at": 1001.5,
+            }
+        ]
+    )
     return store
 
 
@@ -239,9 +271,7 @@ class TestHealthEndpoint:
     def test_ready_fails_closed_and_redacts_snapshot_errors(self):
         with patch(
             "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
-            side_effect=RuntimeError(
-                "https://user:password@example.invalid?api_key=secret"
-            ),
+            side_effect=RuntimeError("https://user:password@example.invalid?api_key=secret"),
             create=True,
         ):
             app = _build_test_app()
@@ -448,9 +478,7 @@ class TestStatsInspectionLatest:
     def test_inspection_latest_returns_500_on_store_error(self):
         """Store failures are surfaced as HTTP 500."""
         store = MagicMock()
-        store.inspection_reports = AsyncMock(
-            side_effect=RuntimeError("db fail")
-        )
+        store.inspection_reports = AsyncMock(side_effect=RuntimeError("db fail"))
         app = _build_test_app(store)
         with TestClient(app) as c:
             resp = c.get("/api/stats/inspection/latest")

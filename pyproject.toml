@@ -21,7 +21,7 @@ markers = [
     "production_fault: production-only fault injection and recovery rehearsal",
     "production_soak: ten-minute production acceptance requiring full services",
 ]
-addopts = "-v --tb=short -n auto -m \"not slow and not integration and not real_smoke and not production_fault and not production_soak\" --timeout=30 --timeout-method=thread"
+addopts = "-v --tb=short -n 8 -m \"not slow and not integration and not real_smoke and not production_fault and not production_soak\" --timeout=30 --timeout-method=thread"
 
 [tool.coverage.run]
 source = ["src/animetta"]
@@ -36,25 +36,20 @@ target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "SIM"]
+select = ["E", "F", "I", "N", "W", "UP", "SIM", "ANN001", "ANN201"]
 ignore = ["E402", "E501", "UP007"]  # E402: lazy imports intentional, E501: Chinese text, UP007: dynamic Union[tuple()] needed
 
 [tool.ruff.lint.per-file-ignores]
-# F821 (undefined-name) from $$$ placeholder removal — suppressed pending investigation
-"src/animetta/services/**/*.py" = ["F821"]
-"src/animetta/orchestration/**/*.py" = ["F821"]
-"src/animetta/inspection/**/*.py" = ["F821"]
-"src/animetta/notifier/**/*.py" = ["F821"]
-"src/animetta/tracing/**/*.py" = ["F821"]
-"src/animetta/core/socketio_server.py" = ["F821"]
 # Tests legitimately use PascalCase for fixtures/class refs and don't follow strict naming
-"tests/**/*.py" = ["N803", "N806", "N815", "N802", "N805", "N817", "N811"]
+"tests/**/*.py" = ["ANN001", "ANN201", "N803", "N806", "N815", "N802", "N805", "N817", "N811"]
 
 [tool.ruff.format]
+line-ending = "lf"
 quote-style = "double"
 
 [tool.mypy]
 python_version = "3.13"
+explicit_package_bases = true
 strict = false
 warn_unused_configs = true
 ignore_missing_imports = true
@@ -67,19 +62,6 @@ strict_optional = false
 module = "tests.*"
 disallow_untyped_defs = false
 
-# Modules affected by $$$ placeholder removal (same as ruff per-file-ignores for F821)
-# These have known undefined names from a mass-edit event; skip until properly refactored.
-[[tool.mypy.overrides]]
-module = [
-    "animetta.services.*",
-    "animetta.orchestration.*",
-    "animetta.inspection.*",
-    "animetta.notifier.*",
-    "animetta.tracing.*",
-    "animetta.core.socketio_server",
-]
-ignore_errors = true
-
 [tool.vulture]
 min_confidence = 80
-paths = ["src/animetta"]
+paths = ["tooling", "scripts", "evaluations", "src/animetta", "src/animetta_qwen_tts"]

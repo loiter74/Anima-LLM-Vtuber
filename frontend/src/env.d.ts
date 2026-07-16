@@ -6,12 +6,9 @@ declare module '*.vue' {
   export default component
 }
 
-declare module 'pixi-live2d-display' {
-  export const Live2DModel: any
-}
-
 // Global functions exposed by components for cross-component communication
 interface Window {
+  PIXI: typeof import('pixi.js')
   __setAppBg: (url: string) => void
   __live2dResetView: () => void
 }

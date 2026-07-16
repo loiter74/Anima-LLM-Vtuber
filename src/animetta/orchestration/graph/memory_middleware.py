@@ -33,9 +33,7 @@ class MemoryMiddleware:
         self._recall_timeout_ms = max(1, recall_timeout_ms)
         self._max_items = max(1, max_items)
         self._max_prompt_chars = max(1, max_prompt_chars)
-        self._observation_recorder = (
-            observation_recorder or NoOpObservationRecorder()
-        )
+        self._observation_recorder = observation_recorder or NoOpObservationRecorder()
 
     async def recall_structured(
         self,
@@ -54,7 +52,9 @@ class MemoryMiddleware:
         """Return a prompt fragment and deterministic recall diagnostics."""
         del mbti_ei, mbti_sn, mbti_tf, mbti_jp
         if not self._memory_system or self._mode == "off":
-            logger.debug("[MemoryMiddleware] MemorySystem not configured, skipping structured recall")
+            logger.debug(
+                "[MemoryMiddleware] MemorySystem not configured, skipping structured recall"
+            )
             return "", {}
 
         started = time.perf_counter()
@@ -106,24 +106,18 @@ class MemoryMiddleware:
             sections.append("## 相关记忆\n" + "\n".join(lines))
 
         if result.profile:
-            profile_text = "\n".join(
-                f"- {key}: {value}" for key, value in result.profile.items()
-            )
+            profile_text = "\n".join(f"- {key}: {value}" for key, value in result.profile.items())
             sections.append(f"## 用户画像\n{profile_text}")
 
         if result.memes:
             meme_text = "\n".join(
-                f"- {memory.summary or memory.content}"
-                for memory in result.memes[:3]
+                f"- {memory.summary or memory.content}" for memory in result.memes[:3]
             )
             sections.append(f"## 活跃梗\n{meme_text}")
 
         unbounded_prompt = "\n\n".join(sections)
         prompt = unbounded_prompt[: self._max_prompt_chars]
-        truncated = (
-            len(atoms) > len(selected_atoms)
-            or len(unbounded_prompt) > len(prompt)
-        )
+        truncated = len(atoms) > len(selected_atoms) or len(unbounded_prompt) > len(prompt)
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
         metadata = {
             **(result.metadata or {}),

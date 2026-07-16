@@ -1,0 +1,43 @@
+name: animetta-qwen
+
+services:
+  qwen-tts:
+    image: animetta/qwen-tts:local
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen-tts
+      args:
+        QWEN_TTS_BUILD_FINGERPRINT: ${QWEN_TTS_BUILD_FINGERPRINT:-untracked}
+    ports:
+      - "127.0.0.1:8766:8766"
+    environment:
+      - QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}
+      - QWEN_TTS_URL=http://qwen-tts:8766
+      - QWEN_TTS_BIND_HOST=0.0.0.0
+      - QWEN_TTS_BIND_PORT=8766
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HOME=/models/huggingface
+    volumes:
+      - ${HF_CACHE_DIR:?Set HF_CACHE_DIR to the host Hugging Face cache}:/models/huggingface:ro
+      - ${ALICE_REF_AUDIO:?Set ALICE_REF_AUDIO to Alice reference WAV}:/models/alice/alice_ref.wav:ro
+    networks:
+      - inference
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8766/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 360s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  inference:
+    name: animetta-inference

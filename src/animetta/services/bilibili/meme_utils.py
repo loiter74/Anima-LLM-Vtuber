@@ -53,18 +53,20 @@ def build_candidates(
         text = (item.get("text") or "").strip()
         if not text:
             continue
-        candidates.append(MemeCandidate(
-            text=text,
-            context_hint=item.get("context_hint", ""),
-            frequency=item.get("frequency", 1),
-            source_videos=list(source_bvids),
-            tags=item.get("tags", []),
-            format_id=str(item.get("format_id") or ""),
-            format_slots=item.get("format_slots") or {},
-            format_confidence=item.get("format_confidence"),
-            rendered_text=str(item.get("rendered_text") or ""),
-            mode=str(item.get("mode") or ""),
-        ))
+        candidates.append(
+            MemeCandidate(
+                text=text,
+                context_hint=item.get("context_hint", ""),
+                frequency=item.get("frequency", 1),
+                source_videos=list(source_bvids),
+                tags=item.get("tags", []),
+                format_id=str(item.get("format_id") or ""),
+                format_slots=item.get("format_slots") or {},
+                format_confidence=item.get("format_confidence"),
+                rendered_text=str(item.get("rendered_text") or ""),
+                mode=str(item.get("mode") or ""),
+            )
+        )
 
     return candidates
 

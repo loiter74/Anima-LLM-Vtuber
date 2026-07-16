@@ -61,6 +61,7 @@ class AutoConfig:
         """Check GPU availability"""
         try:
             import torch
+
             return torch.cuda.is_available()
         except ImportError:
             return False
@@ -69,6 +70,7 @@ class AutoConfig:
         """Get CUDA version"""
         try:
             import torch
+
             if torch.cuda.is_available():
                 return torch.version.cuda
         except Exception:
@@ -175,11 +177,17 @@ class AutoConfig:
             logger.info("📦 Installing...")
 
             # Install dependencies
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "-r", str(self.project_root / "requirements.txt"),
-                "--quiet"
-            ])
+            subprocess.check_call(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "-r",
+                    str(self.project_root / "requirements.txt"),
+                    "--quiet",
+                ]
+            )
 
             logger.info("✅ Dependencies installed")
 
@@ -206,7 +214,7 @@ class AutoConfig:
         logger.info("")
 
         # 2. GPU detection
-        if self.env_info['gpu_available']:
+        if self.env_info["gpu_available"]:
             logger.info(f"✅ GPU: Available (CUDA {self.env_info['cuda_version']})")
         else:
             logger.warning("⚠️  GPU: Not available (will use CPU, slower)")
@@ -271,7 +279,7 @@ class AutoConfig:
         return success
 
 
-def main():
+def main() -> None:
     """Command line entry point"""
     import argparse
 

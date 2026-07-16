@@ -18,16 +18,13 @@ class ParameterState:
         value: Parameter value (typically range -1 to 1, or 0 to 1)
         duration: Transition duration (seconds)
     """
+
     name: str
     value: float
     duration: float = 0.3
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "value": self.value,
-            "duration": self.duration
-        }
+        return {"name": self.name, "value": self.value, "duration": self.duration}
 
 
 @dataclass
@@ -42,6 +39,7 @@ class ExpressionFrame:
         intensity: Overall intensity (0.0 - 1.0)
         timestamp: Timestamp in seconds
     """
+
     parameters: list[ParameterState]
     intensity: float = 1.0
     timestamp: float = 0.0
@@ -50,7 +48,7 @@ class ExpressionFrame:
         return {
             "parameters": [p.to_dict() for p in self.parameters],
             "intensity": self.intensity,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
 
 
@@ -73,10 +71,7 @@ class IEmotionParamMapper(ABC):
 
     @abstractmethod
     def map_emotion(
-        self,
-        emotion: str,
-        intensity: float = 1.0,
-        context: dict[str, Any] | None = None
+        self, emotion: str, intensity: float = 1.0, context: dict[str, Any] | None = None
     ) -> ExpressionFrame:
         """
         Map an emotion to Live2D parameters
@@ -98,7 +93,7 @@ class IEmotionParamMapper(ABC):
     def map_emotions_timeline(
         self,
         emotions: list[tuple],  # [(emotion, start_time, end_time, intensity), ...]
-        duration: float
+        duration: float,
     ) -> list[ExpressionFrame]:
         """
         Map an emotion timeline to a sequence of expression frames

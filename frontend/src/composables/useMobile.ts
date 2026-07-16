@@ -49,7 +49,9 @@ export function useMobile() {
   onMounted(() => {
     if (!_bound) {
       mobileQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-      tabletQuery = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_BREAKPOINT - 1}px)`)
+      tabletQuery = window.matchMedia(
+        `(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_BREAKPOINT - 1}px)`,
+      )
 
       mobileQuery.addEventListener('change', onMobileChange)
       tabletQuery.addEventListener('change', onTabletChange)

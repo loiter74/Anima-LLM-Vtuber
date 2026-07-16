@@ -147,18 +147,13 @@ def _valid_runtime_engines(*, proxied: bool = False) -> dict[str, object]:
 
 
 @pytest.fixture
-def golden_environment(tmp_path: Path) -> tuple[SimpleNamespace, GoldenPreflightContext, dict[str, Path]]:
+def golden_environment(
+    tmp_path: Path,
+) -> tuple[SimpleNamespace, GoldenPreflightContext, dict[str, Path]]:
     ref_audio = tmp_path / "config" / "personas" / "voices" / "alice_ref.wav"
     _write_wav(ref_audio)
 
-    live2d = (
-        tmp_path
-        / "frontend"
-        / "public"
-        / "live2d"
-        / "haru"
-        / "haru_greeter_t03.model3.json"
-    )
+    live2d = tmp_path / "frontend" / "public" / "live2d" / "haru" / "haru_greeter_t03.model3.json"
     live2d.parent.mkdir(parents=True, exist_ok=True)
     live2d.write_text(
         json.dumps(
@@ -183,13 +178,7 @@ def golden_environment(tmp_path: Path) -> tuple[SimpleNamespace, GoldenPreflight
 
     hf_home = tmp_path / "hf"
     revision = "0123456789abcdef"
-    snapshot = (
-        hf_home
-        / "hub"
-        / "models--Qwen--Qwen3-TTS-12Hz-0.6B-Base"
-        / "snapshots"
-        / revision
-    )
+    snapshot = hf_home / "hub" / "models--Qwen--Qwen3-TTS-12Hz-0.6B-Base" / "snapshots" / revision
     snapshot.mkdir(parents=True)
     _write_complete_qwen_snapshot(snapshot)
     refs_main = snapshot.parent.parent / "refs" / "main"
@@ -954,10 +943,18 @@ def test_live2d_manifest_must_remain_under_public_live2d_root(
 @pytest.mark.parametrize(
     ("mutate", "check_name", "code"),
     [
-        (lambda c: setattr(c.system, "runtime_profile", "development"), "effective_profile", "profile_not_golden"),
+        (
+            lambda c: setattr(c.system, "runtime_profile", "development"),
+            "effective_profile",
+            "profile_not_golden",
+        ),
         (lambda c: setattr(c, "persona", "default"), "persona", "persona_mismatch"),
         (lambda c: setattr(c.services, "agent", "mock"), "llm_provider", "llm_provider_mismatch"),
-        (lambda c: setattr(c.agent.llm_config, "model", "deepseek-v4-pro"), "llm_model", "llm_model_mismatch"),
+        (
+            lambda c: setattr(c.agent.llm_config, "model", "deepseek-v4-pro"),
+            "llm_model",
+            "llm_model_mismatch",
+        ),
         (lambda c: setattr(c.services, "tts", "mock"), "tts_provider", "tts_provider_mismatch"),
         (lambda c: setattr(c.tts, "model", "/snapshot/path"), "tts_model", "tts_model_not_stable"),
     ],

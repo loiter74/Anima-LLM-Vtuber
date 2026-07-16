@@ -64,18 +64,28 @@ async def test_ingestion_filters_deduplicates_and_protects_character_scope() -> 
     await runtime.initialize()
     context = MemoryContext(actor_id="bilibili:42", channel="bilibili")
 
-    assert runtime.submit_turn(ConversationTurn(
-        user_input="probe",
-        agent_response="pong",
-        context=context,
-        is_probe=True,
-    )) is False
-    assert runtime.submit_turn(ConversationTurn(
-        user_input="hello",
-        agent_response="fallback",
-        context=context,
-        is_fallback=True,
-    )) is False
+    assert (
+        runtime.submit_turn(
+            ConversationTurn(
+                user_input="probe",
+                agent_response="pong",
+                context=context,
+                is_probe=True,
+            )
+        )
+        is False
+    )
+    assert (
+        runtime.submit_turn(
+            ConversationTurn(
+                user_input="hello",
+                agent_response="fallback",
+                context=context,
+                is_fallback=True,
+            )
+        )
+        is False
+    )
     turn = ConversationTurn(
         user_input="我喜欢拿铁",
         agent_response="我记住了。",
@@ -146,18 +156,25 @@ async def test_revision_subscribers_receive_successful_ingestion() -> None:
     runtime.subscribe_revision(notifications.append)
     await runtime.initialize()
 
-    assert runtime.submit_turn(ConversationTurn(
-        user_input="hello",
-        agent_response="hi",
-        context=MemoryContext(actor_id="local:owner", channel="local"),
-    )) is True
+    assert (
+        runtime.submit_turn(
+            ConversationTurn(
+                user_input="hello",
+                agent_response="hi",
+                context=MemoryContext(actor_id="local:owner", channel="local"),
+            )
+        )
+        is True
+    )
     await runtime.drain()
 
-    assert notifications == [{
-        "revision": 9,
-        "reason": "ingested",
-        "atom_id": "raw-1",
-    }]
+    assert notifications == [
+        {
+            "revision": 9,
+            "reason": "ingested",
+            "atom_id": "raw-1",
+        }
+    ]
     await runtime.shutdown()
 
 

@@ -64,11 +64,19 @@ async def send_danmaku(text: str, label: str, expect_marker_visible: bool | None
     print(f"\n[{label}]")
     print(f"  旅人 → {text}")
     task_id = str(uuid4())
-    await sio.emit("chat:text", {
-        "text": text, "message_id": str(uuid4()), "conversation_id": str(uuid4()),
-        "task_id": task_id, "turn_id": task_id, "source": "text",
-        "is_inspection": False, "is_acceptance": True,
-    })
+    await sio.emit(
+        "chat:text",
+        {
+            "text": text,
+            "message_id": str(uuid4()),
+            "conversation_id": str(uuid4()),
+            "task_id": task_id,
+            "turn_id": task_id,
+            "source": "text",
+            "is_inspection": False,
+            "is_acceptance": True,
+        },
+    )
     await asyncio.sleep(PER_TURN_WAIT)
     await sio.disconnect()
 
@@ -88,7 +96,9 @@ async def send_danmaku(text: str, label: str, expect_marker_visible: bool | None
         if result["marker_visible"] == expect_marker_visible:
             print(f"  ✅ marker 可见性符合预期（visible={result['marker_visible']}）")
         else:
-            print(f"  ❌ marker 可见性不符：期望 {expect_marker_visible}，实际 {result['marker_visible']}")
+            print(
+                f"  ❌ marker 可见性不符：期望 {expect_marker_visible}，实际 {result['marker_visible']}"
+            )
 
     return result
 
@@ -99,10 +109,12 @@ def check_action_description_violation(reply: str) -> bool:
     if reply.startswith(("（", "(")):
         return True
     # 文中含明显的动作括号
-    return bool(re.search(
-        r"[（(](?:从|抬|低|笑|摇|皱|叹|喝|拿|放|看|眨|伸|缩|转|歪|挑|抿|轻笑|微笑|苦笑|耸肩|点头|摇头|挥|拍|指|扶|靠|坐|站|走|跑)",
-        reply,
-    ))
+    return bool(
+        re.search(
+            r"[（(](?:从|抬|低|笑|摇|皱|叹|喝|拿|放|看|眨|伸|缩|转|歪|挑|抿|轻笑|微笑|苦笑|耸肩|点头|摇头|挥|拍|指|扶|靠|坐|站|走|跑)",
+            reply,
+        )
+    )
 
 
 async def run_socketio_tests() -> dict:
@@ -146,18 +158,28 @@ async def run_socketio_tests() -> dict:
     print("\n[D. inspection 探针（不应触发 LLM）]")
     sio = socketio.AsyncClient()
     got_sentence = False
+
     @sio.on("*")
     async def catch_d(event: str, data: Any) -> None:
         nonlocal got_sentence
         if event in {"chat:reply", "chat:sentence"} and isinstance(data, dict) and data.get("text"):
             got_sentence = True
+
     await sio.connect(SOCKETIO_URL, transports=["websocket"])
     probe_task = str(uuid4())
-    await sio.emit("chat:text", {
-        "text": "[inspection] ping", "message_id": str(uuid4()),
-        "conversation_id": str(uuid4()), "task_id": probe_task, "turn_id": probe_task,
-        "source": "text", "is_inspection": True, "is_acceptance": False,
-    })
+    await sio.emit(
+        "chat:text",
+        {
+            "text": "[inspection] ping",
+            "message_id": str(uuid4()),
+            "conversation_id": str(uuid4()),
+            "task_id": probe_task,
+            "turn_id": probe_task,
+            "source": "text",
+            "is_inspection": True,
+            "is_acceptance": False,
+        },
+    )
     await asyncio.sleep(8)
     await sio.disconnect()
     results["D_inspection"] = {"llm_triggered": got_sentence}
@@ -308,10 +330,16 @@ async def main() -> int:
     c_pass = bool(c.get("reply")) and c.get("violation") is False
     d_pass = d.get("llm_triggered") is False
 
-    print(f"   {'✅' if a_pass else '❌'} A. 普通弹幕 marker 剥除: marker_visible={a.get('marker_visible')}")
-    print(f"   {'✅' if b_pass else '❌'} B. debug 弹幕 marker 隐藏: marker_visible={b.get('marker_visible')}")
+    print(
+        f"   {'✅' if a_pass else '❌'} A. 普通弹幕 marker 剥除: marker_visible={a.get('marker_visible')}"
+    )
+    print(
+        f"   {'✅' if b_pass else '❌'} B. debug 弹幕 marker 隐藏: marker_visible={b.get('marker_visible')}"
+    )
     print(f"   {'✅' if c_pass else '❌'} C. 无意义弹幕无动作描写: violation={c.get('violation')}")
-    print(f"   {'✅' if d_pass else '❌'} D. inspection 探针过滤: llm_triggered={d.get('llm_triggered')}")
+    print(
+        f"   {'✅' if d_pass else '❌'} D. inspection 探针过滤: llm_triggered={d.get('llm_triggered')}"
+    )
 
     all_pass = len(screenshots) >= 3 and all([a_pass, b_pass, c_pass, d_pass])
     print(f"\n{'✅ 全部通过' if all_pass else '❌ 有失败项'}")

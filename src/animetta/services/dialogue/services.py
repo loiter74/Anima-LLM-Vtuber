@@ -30,9 +30,7 @@ class Reasoner:
         self.timeout_seconds = timeout_seconds
 
     async def reason(self, request: ReasonerRequest) -> ReasonerResult:
-        raw = await _isolated_call(
-            self.llm, build_reasoner_messages(request), self.timeout_seconds
-        )
+        raw = await _isolated_call(self.llm, build_reasoner_messages(request), self.timeout_seconds)
         try:
             return parse_reasoner_result(raw)
         except DialogueParseError as exc:
@@ -45,9 +43,7 @@ class AnimaComposer:
         self.timeout_seconds = timeout_seconds
 
     async def compose(self, request: ComposerRequest) -> ComposerResult:
-        raw = await _isolated_call(
-            self.llm, build_composer_messages(request), self.timeout_seconds
-        )
+        raw = await _isolated_call(self.llm, build_composer_messages(request), self.timeout_seconds)
         try:
             return parse_composer_result(raw)
         except DialogueParseError as exc:

@@ -38,9 +38,7 @@ async def humor_validation_node(
         rejection = validate_humor_candidate(candidate, humor_config)
         if rejection:
             candidate.reject(rejection)
-            logger.debug(
-                f"[{session_id}] [HumorValidationNode] Rejected: {rejection}"
-            )
+            logger.debug(f"[{session_id}] [HumorValidationNode] Rejected: {rejection}")
         else:
             candidate.accept()
             final_response = candidate.visible_response

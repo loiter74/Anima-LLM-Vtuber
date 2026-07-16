@@ -10,6 +10,9 @@ import threading
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel
 
 from .aggregate import aggregate_results
 from .benchmark import BenchmarkEvidence, BenchmarkRun, percentile
@@ -48,6 +51,7 @@ from .warm_topology import (
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "tooling" / "quality.yml"
+MINIMUM_PYTHON = (3, 13)
 
 
 def _add_catalog_arguments(parser: argparse.ArgumentParser) -> None:
@@ -158,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _json_text(model) -> str:
+def _json_text(model: BaseModel) -> str:
     return json.dumps(model.model_dump(mode="json"), indent=2, ensure_ascii=True)
 
 
@@ -560,17 +564,36 @@ def _command_docker_build(args: argparse.Namespace) -> int:
     plan = read_plan(args.plan)
     _ensure_manifest_matches(plan, loaded)
     actions = plan.docker_actions
-    argv = ["docker", "compose"]
-    for compose_file in args.compose_file or ():
-        argv.extend(("-f", str(compose_file)))
-    argv.append("build")
-    if args.no_cache:
-        argv.append("--no-cache")
-    argv.extend(action.service for action in actions)
+    commands: list[list[str]] = []
+    if args.compose_file:
+        argv = ["docker", "compose"]
+        for compose_file in args.compose_file:
+            argv.extend(("-f", str(compose_file)))
+        argv.append("build")
+        if args.no_cache:
+            argv.append("--no-cache")
+        argv.extend(action.service for action in actions)
+        commands.append(argv)
+    else:
+        actions_by_compose: dict[str, list[Any]] = {}
+        for action in actions:
+            actions_by_compose.setdefault(action.compose_file, []).append(action)
+        for compose_file, compose_actions in sorted(actions_by_compose.items()):
+            argv = [
+                "docker",
+                "compose",
+                "-f",
+                str((args.repo_root / compose_file).resolve()),
+                "build",
+            ]
+            if args.no_cache:
+                argv.append("--no-cache")
+            argv.extend(action.service for action in compose_actions)
+            commands.append(argv)
     payload = {
         "status": "no-build" if not actions else "pending",
         "actions": [action.model_dump(mode="json") for action in actions],
-        "command": argv,
+        "commands": commands,
         "exit_code": 0,
     }
     if not actions:
@@ -589,34 +612,44 @@ def _command_docker_build(args: argparse.Namespace) -> int:
         if variable is None:
             raise ValueError(f"Docker scope has no build fingerprint variable: {action.scope_id}")
         environment[variable] = action.input_fingerprint
-    completed = subprocess.run(
-        argv,
-        cwd=args.repo_root,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=7200,
+    completed_commands: list[subprocess.CompletedProcess[str]] = []
+    for argv in commands:
+        completed = subprocess.run(
+            argv,
+            cwd=args.repo_root,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=7200,
+        )
+        completed_commands.append(completed)
+        if completed.returncode != 0:
+            break
+    exit_code = next(
+        (completed.returncode for completed in completed_commands if completed.returncode != 0),
+        0,
     )
-    payload["exit_code"] = completed.returncode
-    payload["status"] = "passed" if completed.returncode == 0 else "failed"
+    payload["exit_code"] = exit_code
+    payload["status"] = "passed" if exit_code == 0 else "failed"
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=True))
     else:
         print(
             f"Docker build: {payload['status']} ({', '.join(action.service for action in actions)})"
         )
-        if completed.stdout:
-            print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
-        if completed.stderr:
-            print(
-                completed.stderr,
-                file=sys.stderr,
-                end="" if completed.stderr.endswith("\n") else "\n",
-            )
-    return 0 if completed.returncode == 0 else 1
+        for completed in completed_commands:
+            if completed.stdout:
+                print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
+            if completed.stderr:
+                print(
+                    completed.stderr,
+                    file=sys.stderr,
+                    end="" if completed.stderr.endswith("\n") else "\n",
+                )
+    return 0 if exit_code == 0 else 1
 
 
 def _current_topology_inputs(
@@ -648,6 +681,16 @@ def _environment_allowlists(loaded: LoadedCatalog) -> dict[str, tuple[str, ...]]
     }
 
 
+def _service_compose_files(
+    args: argparse.Namespace,
+    loaded: LoadedCatalog,
+) -> dict[str, str]:
+    return {
+        scope.service: str((args.repo_root / scope.compose_file).resolve())
+        for scope in loaded.catalog.docker_scopes.values()
+    }
+
+
 def _command_warm_preflight(args: argparse.Namespace) -> int:
     loaded = _load_checked_catalog(args)
     plan = _validated_topology_plan(args, loaded)
@@ -656,14 +699,17 @@ def _command_warm_preflight(args: argparse.Namespace) -> int:
         raise ValueError("frozen plan compose identity no longer matches the repository")
     services = tuple(sorted(build_fingerprints))
     allowlists = _environment_allowlists(loaded)
+    compose_files = _service_compose_files(args, loaded)
     try:
         observed = collect_service_observations(
             services,
             environment_allowlists=allowlists,
+            compose_files=compose_files,
         )
         desired_environment = collect_desired_environment_identities(
             services,
             environment_allowlists=allowlists,
+            compose_files=compose_files,
         )
     except TopologyCollectionError:
         observed = {}
@@ -695,13 +741,16 @@ def _command_topology_stamp(args: argparse.Namespace) -> int:
         raise ValueError("frozen plan compose identity no longer matches the repository")
     services = tuple(sorted(build_fingerprints))
     allowlists = _environment_allowlists(loaded)
+    compose_files = _service_compose_files(args, loaded)
     observed = collect_service_observations(
         services,
         environment_allowlists=allowlists,
+        compose_files=compose_files,
     )
     desired_environment = collect_desired_environment_identities(
         services,
         environment_allowlists=allowlists,
+        compose_files=compose_files,
     )
     readiness = probe_runtime_readiness(args.ready_url)
     stamp = create_warm_topology_stamp(
@@ -810,6 +859,13 @@ def _command_benchmark(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if sys.version_info < MINIMUM_PYTHON:
+        actual = ".".join(str(part) for part in sys.version_info[:3])
+        print(
+            f"Python 3.13 or newer is required; current interpreter is {actual}",
+            file=sys.stderr,
+        )
+        return 2
     parser = build_parser()
     args = parser.parse_args(argv)
     commands = {

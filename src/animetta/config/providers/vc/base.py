@@ -14,4 +14,5 @@ class VCBaseConfig(ProviderConfig, DeviceMixin):
     Voice conversion transforms the timbre of an input audio while
     preserving the linguistic content.
     """
+
     is_half: bool = Field(default=True, description="Use FP16 half precision for inference")

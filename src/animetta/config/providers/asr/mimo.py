@@ -17,7 +17,9 @@ class MimoASRConfig(ASRBaseConfig):
     type: Literal["mimo"] = "mimo"
     model: str = Field(default="mimo-v2.5-asr", description="MiMo ASR model")
     base_url: str = Field(default="https://api.xiaomimimo.com/v1", description="MiMo API base URL")
-    language: Literal["auto", "zh", "en"] = Field(default="auto", description="Recognition language")
+    language: Literal["auto", "zh", "en"] = Field(
+        default="auto", description="Recognition language"
+    )
     sample_rate: int = Field(default=16000, ge=8000, description="Raw PCM sample rate")
     input_audio_format: Literal["pcm_s16le", "wav", "mp3"] = Field(
         default="pcm_s16le",

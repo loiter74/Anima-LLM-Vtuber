@@ -1,0 +1,164 @@
+{
+  "capturedAt": "2026-07-16T01:09:35.761Z",
+  "baseUrl": "http://127.0.0.1",
+  "browser": "chromium",
+  "context": {
+    "serviceWorkers": "block",
+    "reducedMotion": "reduce",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    }
+  },
+  "navigation": {
+    "status": 200,
+    "url": "http://127.0.0.1/"
+  },
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "service": "anima",
+      "timestamp": 1784164177.7046323
+    }
+  },
+  "ready": {
+    "status": 200,
+    "body": {
+      "schema_version": 1,
+      "status": "ready",
+      "ready": true,
+      "service": "anima",
+      "profile": "test",
+      "version": 1,
+      "persona": "anima.v0.1",
+      "effective_hash": "e483f74ce9648a86f771fe118d25b6b84208821c2d27ad29b4efefc506895488",
+      "semantic_hash": "ef382b50d458759e7e346b9303dac5d70b7b1bd0085a4269e3cd773d9f1c53b4",
+      "acceptance_eligible": false,
+      "components": {
+        "pool": {
+          "state": "ready",
+          "ready": true,
+          "reason": null
+        },
+        "llm": {
+          "state": "ready",
+          "ready": true,
+          "configured": {
+            "name": "mock",
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "resolved": {
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "reason": null
+        },
+        "asr": {
+          "state": "ready",
+          "ready": true,
+          "configured": {
+            "name": "mock",
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "resolved": {
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "reason": null
+        },
+        "tts": {
+          "state": "ready",
+          "ready": true,
+          "configured": {
+            "name": "mock",
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": "default"
+          },
+          "resolved": {
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": "default"
+          },
+          "reason": null
+        },
+        "vad": {
+          "state": "ready",
+          "ready": true,
+          "configured": {
+            "name": "mock",
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "resolved": {
+            "type": "mock",
+            "provider": "mock",
+            "model": null,
+            "voice": null
+          },
+          "reason": null
+        },
+        "frontend": {
+          "state": "ready",
+          "ready": true,
+          "required": false,
+          "reason": null
+        },
+        "memory_runtime": {
+          "state": "ready",
+          "ready": true,
+          "reason": null,
+          "ingestion_queue": 0,
+          "index_backlog": 0,
+          "ingestion_failed": 0,
+          "required": true
+        },
+        "metrics_projection": {
+          "state": "ready",
+          "ready": true,
+          "reason": null,
+          "has_anima_readiness_probe_total": true,
+          "anima_readiness_probe_total_delta": 2,
+          "required": true
+        },
+        "observation_ledger": {
+          "state": "ready",
+          "ready": true,
+          "reason": null,
+          "queue_depth": 0,
+          "dropped_records": 0,
+          "writer_errors": 0,
+          "schema_version": 2,
+          "write_probe": true,
+          "required": true
+        }
+      },
+      "component_status_age_seconds": 1.831
+    }
+  },
+  "ui": {
+    "titleVisible": true,
+    "startButtonVisible": true,
+    "chatInputVisible": true
+  },
+  "consoleErrors": [],
+  "pageErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "completedAt": "2026-07-16T01:09:37.721Z"
+}

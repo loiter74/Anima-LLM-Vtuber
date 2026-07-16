@@ -179,9 +179,7 @@ async def test_learning_selects_reachable_frontier_node() -> None:
     validation_after = _observation("after-validation", {"oak_log": 2})
     generator = FakeGenerator()
     session, _ = _session(
-        FakeLearningRuntime(
-            [(before, after, True), (validation_before, validation_after, True)]
-        ),
+        FakeLearningRuntime([(before, after, True), (validation_before, validation_after, True)]),
         generator,
     )
 
@@ -251,9 +249,7 @@ async def test_runtime_transport_exception_becomes_bounded_feedback() -> None:
     assert outcome.status == "failed"
     assert outcome.attempts == 4
     assert outcome.feedback[-1].startswith("RUNTIME_ERROR:TimeoutError")
-    assert runtime.cancelled == [
-        call["correlation_id"] for call in runtime.eval_calls
-    ]
+    assert runtime.cancelled == [call["correlation_id"] for call in runtime.eval_calls]
     assert runtime.health_checks == 8
 
 
@@ -397,9 +393,7 @@ async def test_bounded_discovery_executes_authorized_goto_without_unlocking_tech
         context=context,
         graph=graph,
         scheduler=scheduler,
-        policy=VoyagerPolicy(
-            supported_protocol="1.0", allowed_capabilities={"collect", "goto"}
-        ),
+        policy=VoyagerPolicy(supported_protocol="1.0", allowed_capabilities={"collect", "goto"}),
         library=SkillLibrary(),
         code_generator=FakeGenerator(),
         progress=TechProgress(),

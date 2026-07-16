@@ -19,14 +19,26 @@ class TestMetabolismIntegration:
         await system.initialize()
 
         # Create atoms with varying confidence
-        await system.store.create(MemoryAtom(
-            id="high", layer=Layer.RAW, content="important",
-            occurred_at=datetime.now(UTC), confidence=0.9, salience=0.9,
-        ))
-        await system.store.create(MemoryAtom(
-            id="low", layer=Layer.RAW, content="trivial",
-            occurred_at=datetime.now(UTC), confidence=0.1, salience=0.1,
-        ))
+        await system.store.create(
+            MemoryAtom(
+                id="high",
+                layer=Layer.RAW,
+                content="important",
+                occurred_at=datetime.now(UTC),
+                confidence=0.9,
+                salience=0.9,
+            )
+        )
+        await system.store.create(
+            MemoryAtom(
+                id="low",
+                layer=Layer.RAW,
+                content="trivial",
+                occurred_at=datetime.now(UTC),
+                confidence=0.1,
+                salience=0.1,
+            )
+        )
 
         # Run tick
         await system.run_metabolism_tick()
@@ -42,14 +54,26 @@ class TestMetabolismIntegration:
         system = LivingMemorySystem(db_path=":memory:")
         await system.initialize()
 
-        await system.store.create(MemoryAtom(
-            id="public-high", layer=Layer.RAW, content="important",
-            occurred_at=datetime.now(UTC), confidence=0.9, salience=0.9,
-        ))
-        await system.store.create(MemoryAtom(
-            id="public-low", layer=Layer.RAW, content="trivial",
-            occurred_at=datetime.now(UTC), confidence=0.1, salience=0.1,
-        ))
+        await system.store.create(
+            MemoryAtom(
+                id="public-high",
+                layer=Layer.RAW,
+                content="important",
+                occurred_at=datetime.now(UTC),
+                confidence=0.9,
+                salience=0.9,
+            )
+        )
+        await system.store.create(
+            MemoryAtom(
+                id="public-low",
+                layer=Layer.RAW,
+                content="trivial",
+                occurred_at=datetime.now(UTC),
+                confidence=0.1,
+                salience=0.1,
+            )
+        )
 
         await system.run_metabolism_tick()
 
@@ -65,11 +89,16 @@ class TestMetabolismIntegration:
         await system.initialize()
 
         # Create a very low salience atom
-        await system.store.create(MemoryAtom(
-            id="doomed", layer=Layer.RAW, content="very old and trivial",
-            occurred_at=datetime.now(UTC),
-            confidence=0.01, salience=0.01,
-        ))
+        await system.store.create(
+            MemoryAtom(
+                id="doomed",
+                layer=Layer.RAW,
+                content="very old and trivial",
+                occurred_at=datetime.now(UTC),
+                confidence=0.01,
+                salience=0.01,
+            )
+        )
 
         # Run tick with forced low threshold
         count = await system.store.count_active()
@@ -101,13 +130,18 @@ class TestMetabolismIntegration:
 
         # Create 5 RAW atoms (enough to trigger EPISODIC compile)
         import uuid
+
         for i in range(5):
-            await system.store.create(MemoryAtom(
-                id=f"raw-{uuid.uuid4().hex[:8]}",
-                layer=Layer.RAW, content=f"用户第{i}次对话",
-                occurred_at=datetime.now(UTC),
-                confidence=0.7, salience=0.7,
-            ))
+            await system.store.create(
+                MemoryAtom(
+                    id=f"raw-{uuid.uuid4().hex[:8]}",
+                    layer=Layer.RAW,
+                    content=f"用户第{i}次对话",
+                    occurred_at=datetime.now(UTC),
+                    confidence=0.7,
+                    salience=0.7,
+                )
+            )
 
         # Run metabolism tick
         await system.run_metabolism_tick()

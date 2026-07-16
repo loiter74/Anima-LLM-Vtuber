@@ -14,9 +14,12 @@ class SileroVADConfig(VADBaseConfig):
 
     Default values match the canonical runtime manifest declaration.
     """
+
     type: Literal["silero"] = "silero"
     prob_threshold: float = Field(default=0.15, description="Speech probability threshold")
     db_threshold: float = Field(default=-100, description="Decibel threshold")
     required_hits: int = Field(default=6, description="Consecutive hits required to start speech")
-    required_misses: int = Field(default=2, description="Consecutive misses required to stop speech")
+    required_misses: int = Field(
+        default=2, description="Consecutive misses required to stop speech"
+    )
     smoothing_window: int = Field(default=12, description="Smoothing window size")

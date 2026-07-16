@@ -31,6 +31,7 @@ def _import_bilibili_api(*modules: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     try:
         import bilibili_api  # noqa: F401
+
         for name in modules:
             if name not in _LAZY_CACHE:
                 try:
@@ -59,6 +60,7 @@ def _get_bilibili_module(name: str) -> Any:
     """
     try:
         import bilibili_api
+
         return getattr(bilibili_api, name)
     except (ImportError, AttributeError) as e:
         logger.warning("[bilibili.api] Failed to get bilibili_api.%s: %s", name, e)
@@ -86,10 +88,13 @@ async def fetch_live_danmaku(
     """
     try:
         import bilibili_api
+
         live_module = bilibili_api.live
         sync_func = bilibili_api.sync
     except ImportError:
-        logger.warning("[bilibili.api] bilibili-api-python not installed, skipping live danmaku fetch")
+        logger.warning(
+            "[bilibili.api] bilibili-api-python not installed, skipping live danmaku fetch"
+        )
         return []
 
     try:
@@ -97,10 +102,12 @@ async def fetch_live_danmaku(
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
-                lambda: sync_func(live_module.get_danmaku(
-                    room_id=room_id,
-                    page_index=1,
-                )),
+                lambda: sync_func(
+                    live_module.get_danmaku(
+                        room_id=room_id,
+                        page_index=1,
+                    )
+                ),
             ),
             timeout=timeout,
         )
@@ -121,7 +128,9 @@ async def fetch_live_danmaku(
         return texts
 
     except TimeoutError:
-        logger.warning("[bilibili.api] Live danmaku fetch timed out for room %d (%.1fs)", room_id, timeout)
+        logger.warning(
+            "[bilibili.api] Live danmaku fetch timed out for room %d (%.1fs)", room_id, timeout
+        )
         return []
     except Exception as e:
         logger.debug("[bilibili.api] Live danmaku fetch failed for room %d: %s", room_id, e)
@@ -145,6 +154,7 @@ async def fetch_trending_videos(
     """
     try:
         import bilibili_api
+
         hot_module = bilibili_api.hot
         sync_func = bilibili_api.sync
     except ImportError:
@@ -173,10 +183,12 @@ async def fetch_trending_videos(
             search_module = bilibili_api.search
             result = await loop.run_in_executor(
                 None,
-                lambda: sync_func(search_module.search(
-                    keyword=search_keyword,
-                    page=1,
-                )),
+                lambda: sync_func(
+                    search_module.search(
+                        keyword=search_keyword,
+                        page=1,
+                    )
+                ),
             )
             if result and "result" in result:
                 items = result.get("result", [])
@@ -207,6 +219,7 @@ async def fetch_comments(
     """
     try:
         import bilibili_api
+
         comment_module = bilibili_api.comment
         sync_func = bilibili_api.sync
     except ImportError:
@@ -218,12 +231,14 @@ async def fetch_comments(
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
-                lambda: sync_func(comment_module.get_comments(
-                    oid=bvid,
-                    type_=comment_module.CommentResourceType.VIDEO,
-                    order=comment_module.OrderType.LIKE,
-                    page_index=1,
-                )),
+                lambda: sync_func(
+                    comment_module.get_comments(
+                        oid=bvid,
+                        type_=comment_module.CommentResourceType.VIDEO,
+                        order=comment_module.OrderType.LIKE,
+                        page_index=1,
+                    )
+                ),
             ),
             timeout=timeout,
         )
@@ -238,12 +253,14 @@ async def fetch_comments(
                 message = content.get("message", "") if isinstance(content, dict) else str(content)
                 likes = reply.get("like", 0)
                 if likes >= min_likes and message:
-                    comments.append({
-                        "content": message,
-                        "likes": likes,
-                        "replies": reply.get("rcount", 0),
-                        "publish_time": str(reply.get("ctime", "")),
-                    })
+                    comments.append(
+                        {
+                            "content": message,
+                            "likes": likes,
+                            "replies": reply.get("rcount", 0),
+                            "publish_time": str(reply.get("ctime", "")),
+                        }
+                    )
             except Exception:
                 continue
 
@@ -254,6 +271,7 @@ async def fetch_comments(
         return []
     except Exception as e:
         logger.debug("[bilibili.api] Comment fetch failed for %s: %s", bvid, e)
+        return []
 
 
 async def fetch_video_danmaku(
@@ -275,6 +293,7 @@ async def fetch_video_danmaku(
     """
     try:
         import bilibili_api
+
         video_module = bilibili_api.video
         sync_func = bilibili_api.sync
     except ImportError:
@@ -313,12 +332,12 @@ async def fetch_video_danmaku(
         for d in result[:max_count]:
             try:
                 # Handle Danmaku objects from bilibili-api-python
-                if hasattr(d, 'text'):
+                if hasattr(d, "text"):
                     content = d.text
                     likes = 0  # Danmaku objects don't have likes
-                    publish_time = str(d.send_time) if hasattr(d, 'send_time') else ""
-                    mode = d.mode if hasattr(d, 'mode') else 1
-                    color = d.color if hasattr(d, 'color') else 16777215
+                    publish_time = str(d.send_time) if hasattr(d, "send_time") else ""
+                    mode = d.mode if hasattr(d, "mode") else 1
+                    color = d.color if hasattr(d, "color") else 16777215
                 elif isinstance(d, dict):
                     content = d.get("text", d.get("content", d.get("msg", "")))
                     likes = d.get("likes", 0)
@@ -334,20 +353,24 @@ async def fetch_video_danmaku(
                     color = 16777215
 
                 if content:
-                    danmaku_list.append({
-                        "content": str(content)[:200],
-                        "likes": likes,
-                        "publish_time": str(publish_time),
-                        "mode": mode,
-                        "color": color,
-                    })
+                    danmaku_list.append(
+                        {
+                            "content": str(content)[:200],
+                            "likes": likes,
+                            "publish_time": str(publish_time),
+                            "mode": mode,
+                            "color": color,
+                        }
+                    )
             except Exception:
                 continue
 
         return danmaku_list
 
     except TimeoutError:
-        logger.warning("[bilibili.api] Video danmaku fetch timed out for BV %s (%.1fs)", bvid, timeout)
+        logger.warning(
+            "[bilibili.api] Video danmaku fetch timed out for BV %s (%.1fs)", bvid, timeout
+        )
         return []
     except Exception as e:
         logger.debug("[bilibili.api] Video danmaku fetch failed for %s: %s", bvid, e)

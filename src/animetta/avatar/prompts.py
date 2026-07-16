@@ -23,11 +23,7 @@ class EmotionPromptBuilder:
         "thinking": "思考、沉思",
     }
 
-    def __init__(
-        self,
-        emotions: dict[str, str] | None = None,
-        language: str = "zh"
-    ):
+    def __init__(self, emotions: dict[str, str] | None = None, language: str = "zh"):
         """
         Initialize the prompt builder
 
@@ -57,37 +53,41 @@ class EmotionPromptBuilder:
             "",
             "你可以在回复中使用以下表情标签来表达情感：",
             "",
-            "## 可用表情"
+            "## 可用表情",
         ]
 
         # 添加表情列表
         for emotion, description in self.emotions.items():
             lines.append(f"- [{emotion}] - {description}")
 
-        lines.extend([
-            "",
-            "## 使用方法",
-            "在文本中使用表情标签，标签会自动从语音中移除，不影响 TTS 发音。",
-            "",
-            "## 示例"
-        ])
+        lines.extend(
+            [
+                "",
+                "## 使用方法",
+                "在文本中使用表情标签，标签会自动从语音中移除，不影响 TTS 发音。",
+                "",
+                "## 示例",
+            ]
+        )
 
         # 添加示例
         examples = self._get_examples()
         for example in examples:
             lines.append(f'"{example}"')
 
-        lines.extend([
-            "",
-            "## 【重要】强制要求",
-            "**每条回复必须至少包含 1-2 个表情标签！**",
-            "表情标签会自动从语音中移除，不影响 TTS 发音。",
-            "",
-            "## 使用技巧",
-            "1. 根据语境选择合适的表情",
-            "2. 一个回复中可以使用多个表情标签",
-            "3. 表情标签放在对应情感词语之后效果更好"
-        ])
+        lines.extend(
+            [
+                "",
+                "## 【重要】强制要求",
+                "**每条回复必须至少包含 1-2 个表情标签！**",
+                "表情标签会自动从语音中移除，不影响 TTS 发音。",
+                "",
+                "## 使用技巧",
+                "1. 根据语境选择合适的表情",
+                "2. 一个回复中可以使用多个表情标签",
+                "3. 表情标签放在对应情感词语之后效果更好",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -98,32 +98,36 @@ class EmotionPromptBuilder:
             "",
             "You can use the following expression tags to convey emotions in your responses:",
             "",
-            "## Available Expressions"
+            "## Available Expressions",
         ]
 
         for emotion, description in self.emotions.items():
             lines.append(f"- [{emotion}] - {description}")
 
-        lines.extend([
-            "",
-            "## Usage",
-            "Use expression tags in your text. They will be automatically removed from speech synthesis.",
-            "",
-            "## Examples"
-        ])
+        lines.extend(
+            [
+                "",
+                "## Usage",
+                "Use expression tags in your text. They will be automatically removed from speech synthesis.",
+                "",
+                "## Examples",
+            ]
+        )
 
         examples = self._get_examples_en()
         for example in examples:
             lines.append(f'"{example}"')
 
-        lines.extend([
-            "",
-            "## Notes",
-            "1. Don't overuse expression tags, keep it natural",
-            "2. Choose appropriate expressions based on context",
-            "3. You can use multiple expression tags in one response",
-            "4. Expression tags are automatically removed from TTS input"
-        ])
+        lines.extend(
+            [
+                "",
+                "## Notes",
+                "1. Don't overuse expression tags, keep it natural",
+                "2. Choose appropriate expressions based on context",
+                "3. You can use multiple expression tags in one response",
+                "4. Expression tags are automatically removed from TTS input",
+            ]
+        )
 
         return "\n".join(lines)
 

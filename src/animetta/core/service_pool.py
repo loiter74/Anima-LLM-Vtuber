@@ -16,10 +16,17 @@ Usage:
         await ctx.init_memory()
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from animetta.config.manifest import EffectiveConfig
+    from animetta.core.model_loading_manager import ModelLoadingManager
+    from animetta.observability.ports import ObservationRecorder
 
 
 class ServicePool:
@@ -48,7 +55,12 @@ class ServicePool:
     # ── Lifecycle ──────────────────────────────────────────
 
     @classmethod
-    async def init(cls, config, model_manager=None, observation_recorder=None) -> None:
+    async def init(
+        cls,
+        config: EffectiveConfig,
+        model_manager: ModelLoadingManager | None = None,
+        observation_recorder: ObservationRecorder | None = None,
+    ) -> None:
         """Initialize once; concurrent callers await the same lifecycle task."""
         if cls._init_state == "closed" and (
             cls._shutdown_task is None or cls._shutdown_task.done()
@@ -100,9 +112,9 @@ class ServicePool:
     @classmethod
     async def _init_once(
         cls,
-        config,
-        model_manager=None,
-        observation_recorder=None,
+        config: EffectiveConfig,
+        model_manager: ModelLoadingManager | None = None,
+        observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         """Create all shareable engines from *config* and keep them alive.
 
@@ -111,6 +123,7 @@ class ServicePool:
         (VAD, Memory).
         """
         import time as _time
+
         t0 = _time.perf_counter()
         logger.info("[ServicePool] Initializing shared service instances...")
         cls._runtime_config = config
@@ -165,9 +178,7 @@ class ServicePool:
                     await model_manager.warmup()
 
                 try:
-                    cls._llm_connectivity = dict(
-                        await ctx.wait_for_llm_connectivity()
-                    )
+                    cls._llm_connectivity = dict(await ctx.wait_for_llm_connectivity())
                 except Exception:
                     cls._llm_connectivity = {
                         "state": "failed",
@@ -215,13 +226,9 @@ class ServicePool:
 
             elapsed = (_time.perf_counter() - t0) * 1000
             if cls._ready:
-                logger.info(
-                    f"[ServicePool] Ready ({elapsed:.0f}ms) — shared LLM/TTS/ASR"
-                )
+                logger.info(f"[ServicePool] Ready ({elapsed:.0f}ms) — shared LLM/TTS/ASR")
             else:
-                logger.warning(
-                    "[ServicePool] Shared engines initialized but readiness is pending"
-                )
+                logger.warning("[ServicePool] Shared engines initialized but readiness is pending")
         except asyncio.CancelledError:
             logger.warning("[ServicePool] Initialization cancelled")
             await cls._abort_initialization(ctx, "initialization_cancelled")
@@ -322,9 +329,7 @@ class ServicePool:
                     return_exceptions=True,
                 )
 
-            if any(
-                engine is not None for engine in (cls._llm, cls._tts, cls._asr)
-            ):
+            if any(engine is not None for engine in (cls._llm, cls._tts, cls._asr)):
                 logger.info("[ServicePool] Shutting down shared instances...")
 
             context = cls._ctx
@@ -395,9 +400,7 @@ class ServicePool:
         from .readiness import build_runtime_readiness_snapshot
 
         active_config = config if config is not None else cls._runtime_config
-        active_manager = (
-            model_manager if model_manager is not None else cls._model_manager
-        )
+        active_manager = model_manager if model_manager is not None else cls._model_manager
         frontend_status = frontend or {
             "state": "failed",
             "ready": False,
@@ -425,9 +428,7 @@ class ServicePool:
         profile = cls._runtime_profile(cls._runtime_config)
         if profile not in {"smoke", "production", "golden"}:
             return cls._ready or (
-                cls._init_state == "ready"
-                and cls._llm is not None
-                and cls._tts is not None
+                cls._init_state == "ready" and cls._llm is not None and cls._tts is not None
             )
         snapshot = cls.get_readiness_snapshot(
             frontend={"state": "ready", "ready": True, "reason": None},

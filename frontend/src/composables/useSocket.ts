@@ -5,7 +5,7 @@ import { useModelLoadingStore } from '@/stores/modelLoading'
 import { useSingingStore } from '@/stores/singing'
 import type { ModelStatusPayload } from '@/types/model-loading'
 import type { PipelineStage } from '@/types/singing'
-import { Events } from '@/constants/socket-events'
+import { Events, type SingCompletePayload } from '@/constants/socket-events'
 
 let socket: Socket | null = null
 let _initialized = false
@@ -26,7 +26,7 @@ export function useSocket() {
       reconnection: true,
       reconnectionDelay: 3000,
       reconnectionAttempts: Infinity,
-      timeout: 120000
+      timeout: 120000,
     })
 
     socket.on('connect', () => {
@@ -61,10 +61,13 @@ export function useSocket() {
 
     // Register singing event listeners globally (survive tab switches)
     const singStore = useSingingStore()
-    socket.on(Events.SING.PROGRESS, (data: any) => {
-      singStore.setProgress(data.stage, data.progress, data.message || '')
-    })
-    socket.on(Events.SING.COMPLETE, (data: any) => {
+    socket.on(
+      Events.SING.PROGRESS,
+      (data: { stage: PipelineStage; progress: number; message?: string }) => {
+        singStore.setProgress(data.stage, data.progress, data.message || '')
+      },
+    )
+    socket.on(Events.SING.COMPLETE, (data: SingCompletePayload) => {
       singStore.setResult({
         audio_url: data.audio_url,
         subtitle_url: data.subtitle_url || '',
@@ -77,11 +80,11 @@ export function useSocket() {
         volumes: data.volumes || [],
       })
     })
-    socket.on(Events.SING.ERROR, (data: any) => {
+    socket.on(Events.SING.ERROR, (data: { error: string }) => {
       singStore.setError(data.error)
     })
-    socket.on(Events.SING.LYRICS_READY, (data: any) => {
-      singStore.setProgress('waiting_lyrics' as PipelineStage, 0, data.message || 'Lyrics ready')
+    socket.on(Events.SING.LYRICS_READY, (data: { message?: string }) => {
+      singStore.setProgress('waiting_lyrics', 0, data.message || 'Lyrics ready')
     })
 
     _initialized = true

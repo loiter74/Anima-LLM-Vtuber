@@ -50,9 +50,7 @@ def test_incompatible_fixture_is_rejected_by_python_controller_policy() -> None:
     report = policy.validate_manifest(manifest)
 
     assert report.allowed is False
-    assert [violation.code for violation in report.violations] == [
-        "INCOMPATIBLE_PROTOCOL"
-    ]
+    assert [violation.code for violation in report.violations] == ["INCOMPATIBLE_PROTOCOL"]
 
 
 def test_local_fixture_matches_sibling_node_runtime_when_present() -> None:

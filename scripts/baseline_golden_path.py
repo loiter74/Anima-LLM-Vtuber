@@ -118,9 +118,7 @@ def _http_check(
 
 def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
             json.dump(payload, stream, ensure_ascii=False, indent=2, sort_keys=True)
@@ -151,7 +149,7 @@ def run_baseline(
     evidence_path = output_dir / filename
     try:
         preflight = preflight_runner(config_path, project_root)
-        preflight_check = {
+        preflight_check: dict[str, Any] = {
             "ok": preflight.get("ok") is True,
             "code": "ok" if preflight.get("ok") is True else "preflight_failed",
             "payload": preflight,
@@ -167,12 +165,8 @@ def run_baseline(
     checks: dict[str, Any] = {"preflight": preflight_check}
     if not static_only:
         root = base_url.rstrip("/")
-        checks["liveness"] = _http_check(
-            f"{root}/health", timeout, http_get, readiness=False
-        )
-        checks["readiness"] = _http_check(
-            f"{root}/ready", timeout, http_get, readiness=True
-        )
+        checks["liveness"] = _http_check(f"{root}/health", timeout, http_get, readiness=False)
+        checks["readiness"] = _http_check(f"{root}/ready", timeout, http_get, readiness=True)
     report = _sanitize(
         {
             "schema_version": 1,

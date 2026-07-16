@@ -21,12 +21,14 @@ from typing import Any
 from loguru import logger
 from openai import AsyncOpenAI
 
-# 加载 .env（utf-8，避免 Windows GBK 解码中文注释失败）
-for _line in Path(".env").read_text(encoding="utf-8").splitlines():
-    _s = _line.strip()
-    if "=" in _s and not _s.startswith("#"):
-        _k, _v = _s.split("=", 1)
-        os.environ.setdefault(_k, _v.strip().strip('"').strip("'"))
+# 加载可选的 .env（utf-8，避免 Windows GBK 解码中文注释失败）
+_env_path = Path(".env")
+if _env_path.is_file():
+    for _line in _env_path.read_text(encoding="utf-8").splitlines():
+        _s = _line.strip()
+        if "=" in _s and not _s.startswith("#"):
+            _k, _v = _s.split("=", 1)
+            os.environ.setdefault(_k, _v.strip().strip('"').strip("'"))
 
 from animetta.tools.minecraft.autonomous.curriculum import next_task  # noqa: E402
 from animetta.tools.minecraft.core.bridge import MinecraftBridge  # noqa: E402
@@ -79,7 +81,7 @@ class DeepSeekLLM:
         )
         self._model = model
 
-    async def chat(self, messages: list[dict]):
+    async def chat(self, messages: list[dict[str, Any]]) -> Any:
         r = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,  # type: ignore[arg-type]
@@ -165,9 +167,7 @@ async def _maybe_give_materials(task: Any, inv: dict) -> bool:
         if 0 < have < target and have >= threshold:
             need = target - have
             _rcon(f"give AnimettaBot minecraft:{item} {need}")
-            logger.info(
-                f"[evo] 材料补全 {item}: {have}/{target} >= 1/5({threshold}) → give {need}"
-            )
+            logger.info(f"[evo] 材料补全 {item}: {have}/{target} >= 1/5({threshold}) → give {need}")
             await asyncio.sleep(1)
             return True
     return False

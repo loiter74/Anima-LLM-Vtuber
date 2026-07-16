@@ -1,6 +1,5 @@
 """LLM base configuration"""
 
-
 from ...core.base import ProviderConfig
 from ...core.mixins import ApiKeyMixin, ModelMixin, TemperatureMixin
 

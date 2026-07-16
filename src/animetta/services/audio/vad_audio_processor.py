@@ -88,15 +88,21 @@ class VADAudioProcessor(AudioProcessorInterface):
             logger.info(f"[{self.session_id}] [AudioProcessor] Audio chunks: {self._total_chunks}")
 
         # Audio duration progress log: output every 10 seconds
-        if self._is_speaking and self._first_audio_time and self._total_chunks % 333 == 0:  # approx 10 seconds
+        if (
+            self._is_speaking and self._first_audio_time and self._total_chunks % 333 == 0
+        ):  # approx 10 seconds
             audio_duration = time.time() - self._first_audio_time
-            logger.info(f"[{self.session_id}] [AudioProcessor] Audio duration: {audio_duration:.1f}s / {self._max_audio_duration:.1f}s")
+            logger.info(
+                f"[{self.session_id}] [AudioProcessor] Audio duration: {audio_duration:.1f}s / {self._max_audio_duration:.1f}s"
+            )
 
         # If no VAD engine, accumulate directly
         if not self.vad_engine:
             self._audio_buffer.extend(audio_data)
             if self._total_chunks == 1:
-                logger.warning(f"[{self.session_id}] No VAD engine, audio will accumulate until manual end")
+                logger.warning(
+                    f"[{self.session_id}] No VAD engine, audio will accumulate until manual end"
+                )
             return
 
         # VAD detection
@@ -123,7 +129,9 @@ class VADAudioProcessor(AudioProcessorInterface):
             if self._is_speaking and self._first_audio_time:
                 audio_duration = time.time() - self._first_audio_time
                 if audio_duration > self._max_audio_duration:
-                    logger.warning(f"[{self.session_id}] Force timeout ({audio_duration:.1f}s), ending speech")
+                    logger.warning(
+                        f"[{self.session_id}] Force timeout ({audio_duration:.1f}s), ending speech"
+                    )
                     await self._handle_speech_end()
 
         except Exception as e:
@@ -136,7 +144,9 @@ class VADAudioProcessor(AudioProcessorInterface):
             return
 
         audio_duration = len(self._audio_buffer) / self.sample_rate
-        logger.info(f"[{self.session_id}] Audio end: {audio_duration:.2f}s, {len(self._audio_buffer)} samples")
+        logger.info(
+            f"[{self.session_id}] Audio end: {audio_duration:.2f}s, {len(self._audio_buffer)} samples"
+        )
 
         # Trigger speech end
         await self._handle_speech_end()
@@ -197,7 +207,9 @@ class VADAudioProcessor(AudioProcessorInterface):
     def _clear_vad_state(self) -> None:
         """Clear VAD active state"""
         if self._vad_active_start_time is not None:
-            logger.debug(f"[{self.session_id}] Clearing VAD active state after {self._vad_chunk_count} chunks")
+            logger.debug(
+                f"[{self.session_id}] Clearing VAD active state after {self._vad_chunk_count} chunks"
+            )
             self._vad_active_start_time = None
             self._vad_chunk_count = 0
 
@@ -263,5 +275,7 @@ class VADAudioProcessor(AudioProcessorInterface):
             "speech_chunks": self._speech_chunks,
             "buffer_size": len(self._audio_buffer),
             "is_speaking": self._is_speaking,
-            "buffer_duration": len(self._audio_buffer) / self.sample_rate if self._audio_buffer else 0,
+            "buffer_duration": len(self._audio_buffer) / self.sample_rate
+            if self._audio_buffer
+            else 0,
         }

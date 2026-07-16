@@ -639,7 +639,9 @@ async def test_output_write_remains_in_flight_until_close_can_cleanup(
         Path(target).write_bytes(payload)
 
     monkeypatch.setitem(sys.modules, "soundfile", SimpleNamespace(write=write))
-    synthesis_task = asyncio.create_task(provider.synthesize("file output", output_path=output_path))
+    synthesis_task = asyncio.create_task(
+        provider.synthesize("file output", output_path=output_path)
+    )
     close_task: asyncio.Task | None = None
     try:
         await _wait_for_thread_event(output_write_started)

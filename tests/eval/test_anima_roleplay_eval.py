@@ -14,6 +14,7 @@ from animetta.orchestration.prompting.roleplay_guard import detect_drift
 @dataclass
 class DialogueCase:
     """A single evaluation case."""
+
     id: str
     user_input: str
     description: str
@@ -80,6 +81,7 @@ ANIMA_CASES: list[DialogueCase] = [
 @dataclass
 class EvalResult:
     """Result of evaluating a single case."""
+
     case_id: str
     passed: bool
     forbidden_hits: list[str] = field(default_factory=list)

@@ -105,14 +105,29 @@ def mock_tts_config():
     cfg.text_split_method = None
     cfg.sample_steps = None
     cfg.seed = None
-    cfg.model_dump = MagicMock(return_value={
-        "api_key": None, "model": "mock-model", "voice": "default",
-        "base_url": None, "response_format": "wav", "speed": 1.0,
-        "volume": 1.0, "ref_audio_path": None, "prompt_text": None,
-        "prompt_lang": None, "text_lang": None, "top_k": None, "top_p": None,
-        "temperature": None, "media_type": None, "streaming_mode": None,
-        "text_split_method": None, "sample_steps": None, "seed": None,
-    })
+    cfg.model_dump = MagicMock(
+        return_value={
+            "api_key": None,
+            "model": "mock-model",
+            "voice": "default",
+            "base_url": None,
+            "response_format": "wav",
+            "speed": 1.0,
+            "volume": 1.0,
+            "ref_audio_path": None,
+            "prompt_text": None,
+            "prompt_lang": None,
+            "text_lang": None,
+            "top_k": None,
+            "top_p": None,
+            "temperature": None,
+            "media_type": None,
+            "streaming_mode": None,
+            "text_split_method": None,
+            "sample_steps": None,
+            "seed": None,
+        }
+    )
     return cfg
 
 
@@ -170,13 +185,15 @@ def qwen_tts_config():
     cfg = MagicMock()
     cfg.type = "qwen3"
     cfg.model = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-    cfg.model_dump = MagicMock(return_value={
-        "model": cfg.model,
-        "device": "cuda:0",
-        "ref_audio_path": "config/assets/alice.wav",
-        "ref_text": "Alice reference text",
-        "x_vector_only": False,
-    })
+    cfg.model_dump = MagicMock(
+        return_value={
+            "model": cfg.model,
+            "device": "cuda:0",
+            "ref_audio_path": "config/assets/alice.wav",
+            "ref_text": "Alice reference text",
+            "x_vector_only": False,
+        }
+    )
     return cfg
 
 
@@ -296,9 +313,7 @@ class TestServiceContextLoadFromConfig:
         ctx.init_llm.assert_awaited_once_with(
             app_config.agent, app_config.get_persona(), app_config=app_config
         )
-        ctx.init_local_llm.assert_awaited_once_with(
-            app_config.local_llm, app_config=app_config
-        )
+        ctx.init_local_llm.assert_awaited_once_with(app_config.local_llm, app_config=app_config)
         ctx.init_vad.assert_awaited_once_with(app_config.vad)
         ctx.init_audio_processor.assert_awaited_once()
         ctx.init_memory.assert_awaited_once()
@@ -405,7 +420,9 @@ class TestServiceContextLoadCache:
         else:
             tts = None
 
-        with pytest.raises(RuntimeError, match=f"Golden profile requires a real {missing_engine.upper()}"):
+        with pytest.raises(
+            RuntimeError, match=f"Golden profile requires a real {missing_engine.upper()}"
+        ):
             await ctx.load_cache(
                 config=golden_app_config,
                 llm_engine=llm,
@@ -417,9 +434,7 @@ class TestServiceContextLoadCache:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("service_name", ["LLM", "TTS"])
-    async def test_golden_rejects_mock_cached_engine(
-        self, ctx, golden_app_config, service_name
-    ):
+    async def test_golden_rejects_mock_cached_engine(self, ctx, golden_app_config, service_name):
         llm = object.__new__(OpenAILLM)
         llm._provider_identity = "deepseek"
         tts = object.__new__(Qwen3TTSTTS)
@@ -439,9 +454,7 @@ class TestServiceContextLoadCache:
         assert ctx.tts_engine is None
 
     @pytest.mark.asyncio
-    async def test_golden_accepts_real_cached_llm_and_tts_without_asr(
-        self, ctx, golden_app_config
-    ):
+    async def test_golden_accepts_real_cached_llm_and_tts_without_asr(self, ctx, golden_app_config):
         llm = object.__new__(OpenAILLM)
         llm._provider_identity = "deepseek"
         tts = object.__new__(Qwen3TTSTTS)
@@ -534,8 +547,9 @@ class TestServiceContextInitASR:
 
     @pytest.mark.asyncio
     async def test_calls_asr_factory(self, ctx, mock_asr_config, engine_without_preload):
-        with patch("animetta.core.service_context.ASRFactory.create",
-                   return_value=engine_without_preload) as mock_create:
+        with patch(
+            "animetta.core.service_context.ASRFactory.create", return_value=engine_without_preload
+        ) as mock_create:
             await ctx.init_asr(mock_asr_config)
 
         mock_create.assert_called_once()
@@ -562,13 +576,12 @@ class TestServiceContextInitASR:
         mock_mgr = MagicMock()
         ctx.model_manager = mock_mgr
 
-        with patch("animetta.core.service_context.ASRFactory.create",
-                   return_value=engine_with_preload):
+        with patch(
+            "animetta.core.service_context.ASRFactory.create", return_value=engine_with_preload
+        ):
             await ctx.init_asr(mock_asr_config)
 
-        mock_mgr.register.assert_called_once_with(
-            "asr", engine_with_preload.preload, "asr"
-        )
+        mock_mgr.register.assert_called_once_with("asr", engine_with_preload.preload, "asr")
 
     @pytest.mark.asyncio
     async def test_skips_register_without_model_manager(self, ctx, mock_asr_config):
@@ -595,8 +608,9 @@ class TestServiceContextInitTTS:
 
     @pytest.mark.asyncio
     async def test_calls_tts_factory(self, ctx, mock_tts_config, engine_without_preload):
-        with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine_without_preload) as mock_create:
+        with patch(
+            "animetta.core.service_context.TTSFactory.create", return_value=engine_without_preload
+        ) as mock_create:
             await ctx.init_tts(mock_tts_config)
 
         mock_create.assert_called_once()
@@ -618,8 +632,9 @@ class TestServiceContextInitTTS:
     @pytest.mark.asyncio
     async def test_calls_model_dump(self, ctx, mock_tts_config, engine_without_preload):
         """Uses model_dump() when available (Pydantic v2 path)."""
-        with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine_without_preload):
+        with patch(
+            "animetta.core.service_context.TTSFactory.create", return_value=engine_without_preload
+        ):
             await ctx.init_tts(mock_tts_config)
 
         mock_tts_config.model_dump.assert_called_once_with(exclude={"type"})
@@ -636,8 +651,9 @@ class TestServiceContextInitTTS:
         cfg.model = "my-model"
         cfg.voice = "my-voice"
 
-        with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine_without_preload) as mock_create:
+        with patch(
+            "animetta.core.service_context.TTSFactory.create", return_value=engine_without_preload
+        ) as mock_create:
             await ctx.init_tts(cfg)
 
         mock_create.assert_called_once()
@@ -651,13 +667,12 @@ class TestServiceContextInitTTS:
         mock_mgr = MagicMock()
         ctx.model_manager = mock_mgr
 
-        with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine_with_preload):
+        with patch(
+            "animetta.core.service_context.TTSFactory.create", return_value=engine_with_preload
+        ):
             await ctx.init_tts(mock_tts_config)
 
-        mock_mgr.register.assert_called_once_with(
-            "tts", engine_with_preload.preload, "tts"
-        )
+        mock_mgr.register.assert_called_once_with("tts", engine_with_preload.preload, "tts")
 
     @pytest.mark.asyncio
     async def test_golden_passes_strict_mode_to_factory(
@@ -733,9 +748,7 @@ class TestServiceContextInitTTS:
     async def test_development_keeps_cuda_to_cpu_fallback(
         self, ctx, qwen_tts_config, engine_without_preload
     ):
-        ctx.config = SimpleNamespace(
-            system=SimpleNamespace(runtime_profile="development")
-        )
+        ctx.config = SimpleNamespace(system=SimpleNamespace(runtime_profile="development"))
 
         with patch(
             "animetta.core.service_context.TTSFactory.create",
@@ -762,8 +775,9 @@ class TestServiceContextInitLLM:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.LLMFactory.create_from_config",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config", return_value=engine
+        ) as mock_create:
             await ctx.init_llm(mock_agent_config, mock_persona_config)
 
         mock_create.assert_called_once()
@@ -790,8 +804,9 @@ class TestServiceContextInitLLM:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.LLMFactory.create_from_config",
-                   return_value=engine):
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config", return_value=engine
+        ):
             await ctx.init_llm(mock_agent_config, app_config.get_persona(), app_config=app_config)
 
         app_config.get_system_prompt.assert_called_once()
@@ -799,13 +814,16 @@ class TestServiceContextInitLLM:
         assert ctx.llm_engine is engine
 
     @pytest.mark.asyncio
-    async def test_without_app_config_uses_build_system_prompt(self, ctx, mock_agent_config, mock_persona_config):
+    async def test_without_app_config_uses_build_system_prompt(
+        self, ctx, mock_agent_config, mock_persona_config
+    ):
         """Without app_config, _build_system_prompt is used."""
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.LLMFactory.create_from_config",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config", return_value=engine
+        ) as mock_create:
             await ctx.init_llm(mock_agent_config, mock_persona_config)
 
         mock_create.assert_called_once()
@@ -820,13 +838,12 @@ class TestServiceContextInitLLM:
         mock_mgr = MagicMock()
         ctx.model_manager = mock_mgr
 
-        with patch("animetta.core.service_context.LLMFactory.create_from_config",
-                   return_value=engine):
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config", return_value=engine
+        ):
             await ctx.init_llm(mock_agent_config, mock_persona_config)
 
-        mock_mgr.register.assert_called_once_with(
-            "llm", engine.preload, "llm"
-        )
+        mock_mgr.register.assert_called_once_with("llm", engine.preload, "llm")
 
     @pytest.mark.asyncio
     async def test_golden_passes_strict_mode_to_factory(
@@ -942,8 +959,9 @@ class TestServiceContextInitLocalLLM:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.LLMFactory.create_from_config",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.LLMFactory.create_from_config", return_value=engine
+        ) as mock_create:
             await ctx.init_local_llm(llm_config)
 
         mock_create.assert_called_once()
@@ -965,9 +983,7 @@ class TestServiceContextInitLocalLLM:
         assert ctx.local_llm_engine is existing
 
     @pytest.mark.asyncio
-    async def test_golden_rejects_explicit_local_mock_before_factory(
-        self, ctx, golden_app_config
-    ):
+    async def test_golden_rejects_explicit_local_mock_before_factory(self, ctx, golden_app_config):
         llm_config = MagicMock()
         llm_config.type = "mock"
         llm_config.model = "mock-model"
@@ -984,9 +1000,7 @@ class TestServiceContextInitLocalLLM:
         assert ctx.local_llm_engine is None
 
     @pytest.mark.asyncio
-    async def test_golden_rejects_non_mock_local_llm_before_factory(
-        self, ctx, golden_app_config
-    ):
+    async def test_golden_rejects_non_mock_local_llm_before_factory(self, ctx, golden_app_config):
         llm_config = MagicMock()
         llm_config.type = "openai"
         llm_config.model = "auxiliary-model"
@@ -1019,8 +1033,9 @@ class TestServiceContextInitVAD:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.VADFactory.create_from_config",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.VADFactory.create_from_config", return_value=engine
+        ) as mock_create:
             await ctx.init_vad(vad_config)
 
         mock_create.assert_called_once_with(
@@ -1045,8 +1060,10 @@ class TestServiceContextInitVAD:
     @pytest.mark.asyncio
     async def test_failure_graceful(self, ctx):
         """When VAD factory raises, engine is set to None (not crash)."""
-        with patch("animetta.core.service_context.VADFactory.create_from_config",
-                   side_effect=ValueError("no VAD for you")):
+        with patch(
+            "animetta.core.service_context.VADFactory.create_from_config",
+            side_effect=ValueError("no VAD for you"),
+        ):
             await ctx.init_vad(MagicMock())
 
         assert ctx.vad_engine is None
@@ -1063,13 +1080,12 @@ class TestServiceContextInitVAD:
         mock_mgr = MagicMock()
         ctx.model_manager = mock_mgr
 
-        with patch("animetta.core.service_context.VADFactory.create_from_config",
-                   return_value=engine):
+        with patch(
+            "animetta.core.service_context.VADFactory.create_from_config", return_value=engine
+        ):
             await ctx.init_vad(vad_config)
 
-        mock_mgr.register.assert_called_once_with(
-            "vad", engine.preload, "vad"
-        )
+        mock_mgr.register.assert_called_once_with("vad", engine.preload, "vad")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1142,8 +1158,7 @@ class TestServiceContextInitMemory:
         mock_memory_system.initialize = AsyncMock()
         ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write"))
 
-        with patch("animetta.memory.v2.system.LivingMemorySystem",
-                   return_value=mock_memory_system):
+        with patch("animetta.memory.v2.system.LivingMemorySystem", return_value=mock_memory_system):
             await ctx.init_memory()
 
         assert ctx.memory_system is mock_memory_system
@@ -1153,8 +1168,9 @@ class TestServiceContextInitMemory:
     async def test_exception_graceful(self, ctx):
         """When LivingMemorySystem creation raises, engine is set to None."""
         ctx.config = SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write"))
-        with patch("animetta.memory.v2.system.LivingMemorySystem",
-                   side_effect=RuntimeError("corrupt db")):
+        with patch(
+            "animetta.memory.v2.system.LivingMemorySystem", side_effect=RuntimeError("corrupt db")
+        ):
             await ctx.init_memory()
 
         assert ctx.memory_system is None
@@ -1174,9 +1190,12 @@ class TestServiceContextInitEmotionAnalyzer:
         mock_live2d_config = MagicMock()
         mock_live2d_config.enabled = False
 
-        with patch("animetta.core.service_context.get_live2d_config",
-                   return_value=mock_live2d_config), \
-             patch("animetta.core.service_context.EmotionAnalyzerFactory") as mock_factory:
+        with (
+            patch(
+                "animetta.core.service_context.get_live2d_config", return_value=mock_live2d_config
+            ),
+            patch("animetta.core.service_context.EmotionAnalyzerFactory") as mock_factory,
+        ):
             await ctx.init_emotion_analyzer(MagicMock())
 
         mock_factory.create.assert_not_called()
@@ -1191,9 +1210,12 @@ class TestServiceContextInitEmotionAnalyzer:
 
         mock_analyzer = MagicMock()
 
-        with patch("animetta.core.service_context.get_live2d_config",
-                   return_value=mock_live2d_config), \
-             patch("animetta.core.service_context.EmotionAnalyzerFactory") as mock_factory:
+        with (
+            patch(
+                "animetta.core.service_context.get_live2d_config", return_value=mock_live2d_config
+            ),
+            patch("animetta.core.service_context.EmotionAnalyzerFactory") as mock_factory,
+        ):
             mock_factory.create.return_value = mock_analyzer
             await ctx.init_emotion_analyzer(MagicMock())
 
@@ -1206,8 +1228,10 @@ class TestServiceContextInitEmotionAnalyzer:
     @pytest.mark.asyncio
     async def test_exception_graceful(self, ctx):
         """When get_live2d_config raises, engine is set to None."""
-        with patch("animetta.core.service_context.get_live2d_config",
-                   side_effect=FileNotFoundError("no config")):
+        with patch(
+            "animetta.core.service_context.get_live2d_config",
+            side_effect=FileNotFoundError("no config"),
+        ):
             await ctx.init_emotion_analyzer(MagicMock())
 
         assert ctx.emotion_analyzer is None
@@ -1225,8 +1249,9 @@ class TestServiceContextGetLive2dPrompt:
         mock_live2d_config = MagicMock()
         mock_live2d_config.enabled = False
 
-        with patch("animetta.core.service_context.get_live2d_config",
-                   return_value=mock_live2d_config):
+        with patch(
+            "animetta.core.service_context.get_live2d_config", return_value=mock_live2d_config
+        ):
             result = ctx._get_live2d_prompt()
 
         assert result is None
@@ -1239,17 +1264,21 @@ class TestServiceContextGetLive2dPrompt:
         mock_builder = MagicMock()
         mock_builder.build_prompt.return_value = "emotion prompt"
 
-        with patch("animetta.core.service_context.get_live2d_config",
-                   return_value=mock_live2d_config), \
-             patch("animetta.core.service_context.EmotionPromptBuilder") as mock_builder_cls:
+        with (
+            patch(
+                "animetta.core.service_context.get_live2d_config", return_value=mock_live2d_config
+            ),
+            patch("animetta.core.service_context.EmotionPromptBuilder") as mock_builder_cls,
+        ):
             mock_builder_cls.from_config.return_value = mock_builder
             result = ctx._get_live2d_prompt()
 
         assert result == "emotion prompt"
 
     def test_exception_returns_none(self, ctx):
-        with patch("animetta.core.service_context.get_live2d_config",
-                   side_effect=Exception("oops")):
+        with patch(
+            "animetta.core.service_context.get_live2d_config", side_effect=Exception("oops")
+        ):
             result = ctx._get_live2d_prompt()
 
         assert result is None
@@ -1418,6 +1447,7 @@ class TestServiceContextPreloadTokenizers:
     def _orig_import(self):
         """Capture the real __import__ before any patch runs."""
         import builtins
+
         return builtins.__import__
 
     @pytest.mark.asyncio
@@ -1438,6 +1468,7 @@ class TestServiceContextPreloadTokenizers:
     @pytest.mark.asyncio
     async def test_import_error_graceful(self, ctx, _orig_import):
         """When tiktoken is not installed, should not crash."""
+
         def mock_import(name, *args, **kwargs):
             if name == "tiktoken":
                 raise ImportError("no tiktoken")
@@ -1498,8 +1529,9 @@ class TestServiceContextFactoryParameters:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.ASRFactory.create",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.ASRFactory.create", return_value=engine
+        ) as mock_create:
             await ctx.init_asr(cfg)
 
         kwargs = mock_create.call_args.kwargs
@@ -1521,21 +1553,24 @@ class TestServiceContextFactoryParameters:
         """TTS config attributes are forwarded (via model_dump)."""
         cfg = MagicMock()
         cfg.type = "edge_tts"
-        cfg.model_dump = MagicMock(return_value={
-            "api_key": None,
-            "model": "my-model",
-            "voice": "zh-CN-XiaoxiaoNeural",
-            "base_url": None,
-            "response_format": "wav",
-            "speed": 1.2,
-            "volume": 1.0,
-        })
+        cfg.model_dump = MagicMock(
+            return_value={
+                "api_key": None,
+                "model": "my-model",
+                "voice": "zh-CN-XiaoxiaoNeural",
+                "base_url": None,
+                "response_format": "wav",
+                "speed": 1.2,
+                "volume": 1.0,
+            }
+        )
 
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.TTSFactory.create",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.TTSFactory.create", return_value=engine
+        ) as mock_create:
             await ctx.init_tts(cfg)
 
         assert mock_create.call_args.args == ("edge_tts",)
@@ -1552,8 +1587,9 @@ class TestServiceContextFactoryParameters:
         engine = MagicMock()
         engine.close = AsyncMock()
 
-        with patch("animetta.core.service_context.VADFactory.create_from_config",
-                   return_value=engine) as mock_create:
+        with patch(
+            "animetta.core.service_context.VADFactory.create_from_config", return_value=engine
+        ) as mock_create:
             await ctx.init_vad(cfg)
 
         mock_create.assert_called_once_with(

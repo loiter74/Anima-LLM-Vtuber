@@ -19,9 +19,7 @@ class TestCheckResult:
         assert result.error is None
 
     def test_failed_creates_error_result(self):
-        result = CheckResult.failed(
-            "bad_check", duration_ms=0.0, error="timeout", code=500
-        )
+        result = CheckResult.failed("bad_check", duration_ms=0.0, error="timeout", code=500)
         assert result.name == "bad_check"
         assert result.ok is False
         assert result.error == "timeout"

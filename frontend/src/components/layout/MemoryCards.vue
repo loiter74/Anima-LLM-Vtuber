@@ -51,13 +51,37 @@ async function fetchTopics() {
   error.value = null
 
   try {
-    const response = await new Promise<{ pages: Array<{ path: string; title: string; content: string; page_type: string; tags: string[]; updated_at: string }>; error?: string }>((resolve, reject) => {
+    const response = await new Promise<{
+      pages: Array<{
+        path: string
+        title: string
+        content: string
+        page_type: string
+        tags: string[]
+        updated_at: string
+      }>
+      error?: string
+    }>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Request timeout')), 10000)
 
-      socket.emit(Events.MEMORY.LIST_PAGES, { session_id: 'default' }, (res: { pages: Array<{ path: string; title: string; content: string; page_type: string; tags: string[]; updated_at: string }>; error?: string }) => {
-        clearTimeout(timeout)
-        resolve(res)
-      })
+      socket.emit(
+        Events.MEMORY.LIST_PAGES,
+        { session_id: 'default' },
+        (res: {
+          pages: Array<{
+            path: string
+            title: string
+            content: string
+            page_type: string
+            tags: string[]
+            updated_at: string
+          }>
+          error?: string
+        }) => {
+          clearTimeout(timeout)
+          resolve(res)
+        },
+      )
     })
 
     if (response.error) {
@@ -65,7 +89,7 @@ async function fetchTopics() {
       return
     }
 
-    topics.value = (response.pages || []).map(page => ({
+    topics.value = (response.pages || []).map((page) => ({
       id: page.path,
       main: page.title || 'Untitled',
       desc: page.content?.substring(0, 60) || '',
@@ -85,7 +109,7 @@ function handleSend(topic: MemoryTopic) {
 
 /** Remove card with exit animation (local only for now) */
 function handleDelete(id: string) {
-  topics.value = topics.value.filter(t => t.id !== id)
+  topics.value = topics.value.filter((t) => t.id !== id)
 }
 
 /** Map priority to design-system color */
@@ -125,16 +149,9 @@ onMounted(() => {
     <!-- Cards grid -->
     <div v-else class="cards-grid">
       <TransitionGroup name="card">
-        <div
-          v-for="topic in topics"
-          :key="topic.id"
-          class="card"
-        >
+        <div v-for="topic in topics" :key="topic.id" class="card">
           <!-- Priority top bar -->
-          <div
-            class="card-priority-bar"
-            :style="{ background: priorityColor(topic.priority) }"
-          />
+          <div class="card-priority-bar" :style="{ background: priorityColor(topic.priority) }" />
 
           <!-- Content -->
           <div class="card-body">
@@ -150,7 +167,7 @@ onMounted(() => {
               @click.stop="handleSend(topic)"
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
               </svg>
             </button>
             <button
@@ -158,8 +175,15 @@ onMounted(() => {
               title="Remove card"
               @click.stop="handleDelete(topic.id)"
             >
-              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                <path d="M18 6L6 18M6 6l12 12"/>
+              <svg
+                width="8"
+                height="8"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -325,7 +349,7 @@ onMounted(() => {
 
 .card-leave-to {
   opacity: 0;
-  transform: scale(0.90);
+  transform: scale(0.9);
 }
 
 .card-move {

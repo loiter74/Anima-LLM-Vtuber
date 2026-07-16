@@ -12,6 +12,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class RuntimePolicy:
     """Resolved model policy for a single LLM call."""
+
     mode: str
     model: str
     thinking: str  # "enabled" or "disabled"

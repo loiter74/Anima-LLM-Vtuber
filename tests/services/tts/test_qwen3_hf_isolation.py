@@ -88,10 +88,8 @@ def _install_fake_runtime(
             calls.append(dict(kwargs))
             descriptor_observations.append(
                 (
-                    vars(auto_processor)["from_pretrained"]
-                    is original_auto_descriptor,
-                    vars(tokenizer_base)["_patch_mistral_regex"]
-                    is original_tokenizer_descriptor,
+                    vars(auto_processor)["from_pretrained"] is original_auto_descriptor,
+                    vars(tokenizer_base)["_patch_mistral_regex"] is original_tokenizer_descriptor,
                 )
             )
             outcome = remaining_outcomes.pop(0)
@@ -207,26 +205,20 @@ def test_qwen_patch_window_does_not_change_external_transformers_calls(
 
     def call_transformers_directly() -> None:
         try:
-            observations["auto_descriptor"] = vars(runtime.auto_processor)[
-                "from_pretrained"
-            ]
+            observations["auto_descriptor"] = vars(runtime.auto_processor)["from_pretrained"]
             observations["tokenizer_descriptor"] = vars(runtime.tokenizer_base)[
                 "_patch_mistral_regex"
             ]
-            observations["processor_result"] = (
-                runtime.auto_processor.from_pretrained(
-                    "external-processor",
-                    fix_mistral_regex=True,
-                    external_marker="preserved",
-                )
+            observations["processor_result"] = runtime.auto_processor.from_pretrained(
+                "external-processor",
+                fix_mistral_regex=True,
+                external_marker="preserved",
             )
             tokenizer = object()
             observations["tokenizer"] = tokenizer
-            observations["tokenizer_result"] = (
-                runtime.tokenizer_base._patch_mistral_regex(
-                    tokenizer,
-                    external_marker="preserved",
-                )
+            observations["tokenizer_result"] = runtime.tokenizer_base._patch_mistral_regex(
+                tokenizer,
+                external_marker="preserved",
             )
             observations["qwen_binding"] = runtime.qwen_model_module.AutoProcessor
         except BaseException as exc:
@@ -252,10 +244,7 @@ def test_qwen_patch_window_does_not_change_external_transformers_calls(
     assert owner_errors == []
     assert outsider_errors == []
     assert observations["auto_descriptor"] is runtime.original_auto_descriptor
-    assert (
-        observations["tokenizer_descriptor"]
-        is runtime.original_tokenizer_descriptor
-    )
+    assert observations["tokenizer_descriptor"] is runtime.original_tokenizer_descriptor
     _, processor_kwargs = observations["processor_result"]
     assert processor_kwargs == {
         "fix_mistral_regex": True,
@@ -296,13 +285,7 @@ def test_loader_passes_active_local_snapshot_to_qwen(
 ) -> None:
     runtime = _install_fake_runtime(monkeypatch)
     revision = "0123456789abcdef"
-    snapshot = (
-        tmp_path
-        / "hub"
-        / "models--Qwen--Qwen3-TTS-12Hz-0.6B-Base"
-        / "snapshots"
-        / revision
-    )
+    snapshot = tmp_path / "hub" / "models--Qwen--Qwen3-TTS-12Hz-0.6B-Base" / "snapshots" / revision
     snapshot.mkdir(parents=True)
     (snapshot / "config.json").write_text("{}", encoding="utf-8")
     refs = snapshot.parents[1] / "refs"
@@ -462,12 +445,10 @@ def test_qwen_module_facade_overrides_online_processor_request(
     runtime = _install_fake_runtime(monkeypatch)
 
     with _temporary_qwen_loader_patches(runtime.qwen_model_class):
-        _, processor_kwargs = (
-            runtime.qwen_model_module.AutoProcessor.from_pretrained(
-                "nested-processor",
-                fix_mistral_regex=True,
-                local_files_only=False,
-            )
+        _, processor_kwargs = runtime.qwen_model_module.AutoProcessor.from_pretrained(
+            "nested-processor",
+            fix_mistral_regex=True,
+            local_files_only=False,
         )
 
     assert processor_kwargs == {

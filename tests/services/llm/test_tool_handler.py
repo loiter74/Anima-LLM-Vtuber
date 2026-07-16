@@ -63,6 +63,7 @@ class TestOpenAIToolHandler:
 
     def test_convert_tools_prefers_pydantic_v2_model_json_schema(self, handler):
         """_convert_tools_to_openai should avoid deprecated Pydantic V2 .schema()."""
+
         class ArgsSchema:
             @staticmethod
             def model_json_schema():
@@ -173,9 +174,7 @@ class TestOpenAIToolHandler:
         mock_response = MagicMock()
         mock_response.choices = [mock_choice]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         result = await handler.chat_with_tools(
             user_input="Weather in Paris?",
@@ -202,9 +201,7 @@ class TestOpenAIToolHandler:
         mock_response = MagicMock()
         mock_response.choices = [mock_choice]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         result = await handler.chat_with_tools(
             user_input="Weather in Paris?",
@@ -243,9 +240,7 @@ class TestOpenAIToolHandler:
         mock_response = MagicMock()
         mock_response.choices = [mock_choice]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         await handler.chat_with_tools(
             user_input="hi",

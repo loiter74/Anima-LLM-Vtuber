@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/components/live2d/useLive2DModel.ts", "electron/preload.cjs", "scripts/*.mjs"],
+  "project": [
+    "src/**/*.{ts,vue}",
+    "electron/**/*.{cjs,ts}",
+    "scripts/**/*.{mjs,ts}",
+    "*.{ts,mjs,cjs}"
+  ],
+  "ignoreDependencies": ["electron-builder-squirrel-windows"],
+  "ignoreExportsUsedInFile": true
+}

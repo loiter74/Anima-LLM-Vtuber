@@ -6,16 +6,13 @@ import TypingIndicator from './TypingIndicator.vue'
 import SpeakingIndicator from './SpeakingIndicator.vue'
 import { useChat } from '@/composables/useChat'
 import { useChatStore } from '@/stores/chat'
-import { useMobile } from '@/composables/useMobile'
 import { useMemoryStore } from '@/stores/memory'
 
 const { sendText, sendInterrupt, organizeMemory } = useChat()
 const store = useChatStore()
 const memoryStore = useMemoryStore()
-const { isMobile } = useMobile()
-
-const memoryOrganizing = computed(() =>
-  memoryStore.job?.status === 'accepted' || memoryStore.job?.status === 'running',
+const memoryOrganizing = computed(
+  () => memoryStore.job?.status === 'accepted' || memoryStore.job?.status === 'running',
 )
 const memoryProgress = computed(() => memoryStore.job?.text ?? '')
 const memoryProgressPercent = computed(() => memoryStore.job?.progress ?? 0)
@@ -36,9 +33,11 @@ async function handleMemoryOrganize(): Promise<void> {
       <!-- Memory organize -->
       <button
         class="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
-        :class="memoryOrganizing
-          ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
-          : 'bg-c-bg/40 text-c-text-dim hover:bg-c-panel/50'"
+        :class="
+          memoryOrganizing
+            ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
+            : 'bg-c-bg/40 text-c-text-dim hover:bg-c-panel/50'
+        "
         @click="handleMemoryOrganize"
       >
         <span>🧠</span>

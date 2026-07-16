@@ -43,15 +43,11 @@ class TestEmotionNode:
         mock_result.primary = "happy"
         mock_result.confidence = 0.95
 
-        mock_service_context.emotion_analyzer.extract = MagicMock(
-            return_value=mock_result
-        )
+        mock_service_context.emotion_analyzer.extract = MagicMock(return_value=mock_result)
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "I am so happy!"
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await emotion_node(state, config)
         assert result["emotion"] == "happy"
 
@@ -59,14 +55,10 @@ class TestEmotionNode:
     async def test_analyzer_error_returns_default(self, mock_service_context):
         """If the analyzer raises, fall back to neutral."""
 
-        mock_service_context.emotion_analyzer.extract = MagicMock(
-            side_effect=ValueError("fail")
-        )
+        mock_service_context.emotion_analyzer.extract = MagicMock(side_effect=ValueError("fail"))
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "Hello"
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await emotion_node(state, config)
         assert result["emotion"] == "neutral"

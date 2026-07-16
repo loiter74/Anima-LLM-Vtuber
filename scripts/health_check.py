@@ -100,7 +100,7 @@ class PreflightCheck:
         return self.status != HEALTH_FAIL
 
     def to_dict(self) -> dict[str, Any]:
-        payload = {
+        payload: dict[str, Any] = {
             "id": self.id,
             "status": self.status,
             "message": self.message,
@@ -172,19 +172,19 @@ def _python_command() -> tuple[str, ...]:
 
     candidates: list[tuple[str, ...]] = []
     if os.name == "nt":
-        for candidate in (
+        for path_candidate in (
             ROOT / ".venv" / "Scripts" / "python.exe",
             ROOT / "venv" / "Scripts" / "python.exe",
         ):
-            if candidate.exists():
-                candidates.append((str(candidate),))
+            if path_candidate.exists():
+                candidates.append((str(path_candidate),))
         if shutil.which("py"):
             candidates.append(("py", "-3.13"))
 
     candidates.append((sys.executable,))
-    for candidate in candidates:
-        if _python_has_health_dependencies(candidate):
-            return candidate
+    for command_candidate in candidates:
+        if _python_has_health_dependencies(command_candidate):
+            return command_candidate
 
     return (sys.executable,)
 
@@ -334,7 +334,13 @@ def _frontend_audit_validation() -> None:
     print("pnpm audit registry fetch failed; using official npm bulk advisory fallback")
     try:
         advisories = _npm_bulk_advisories_from_lock(FRONTEND / "pnpm-lock.yaml")
-    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, RuntimeError) as exc:
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        json.JSONDecodeError,
+        RuntimeError,
+    ) as exc:
         raise SystemExit(f"{output}\nFallback registry advisory fetch failed: {exc}") from exc
 
     affected = {name: items for name, items in advisories.items() if items}
@@ -364,7 +370,9 @@ def _docker_health_probe() -> None:
     with urllib.request.urlopen("http://localhost/health", timeout=10) as response:
         body = response.read().decode("utf-8", errors="replace")
         if response.status != 200 or '"status":"ok"' not in body.replace(" ", ""):
-            raise SystemExit(f"/health did not return status ok: HTTP {response.status} {body[:300]}")
+            raise SystemExit(
+                f"/health did not return status ok: HTTP {response.status} {body[:300]}"
+            )
     print("docker health endpoint: /health returned HTTP 200 with status ok")
 
 
@@ -449,7 +457,9 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
         Gate(
             "frontend:coverage-script",
             "Frontend coverage script validation",
-            _python("-c", "from scripts.health_check import _frontend_coverage_validation as f; f()"),
+            _python(
+                "-c", "from scripts.health_check import _frontend_coverage_validation as f; f()"
+            ),
             FRONTEND,
             profiles=("full",),
             remediation="Add or repair frontend package.json scripts.test:coverage.",
@@ -457,14 +467,19 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
         Gate(
             "frontend:font-policy",
             "Frontend OS-native font policy",
-            _python("-c", "from scripts.health_check import _frontend_font_policy_validation as f; f()"),
+            _python(
+                "-c", "from scripts.health_check import _frontend_font_policy_validation as f; f()"
+            ),
             profiles=("quick", "full"),
             remediation="Remove Google Fonts and Quicksand references from active frontend files.",
         ),
         Gate(
             "docs:backend-framework",
             "Active docs backend framework wording",
-            _python("-c", "from scripts.health_check import _docs_backend_framework_validation as f; f()"),
+            _python(
+                "-c",
+                "from scripts.health_check import _docs_backend_framework_validation as f; f()",
+            ),
             profiles=("quick", "full"),
             remediation="Update active docs to say Starlette + Socket.IO ASGI, not FastAPI.",
         ),
@@ -615,7 +630,9 @@ def check_pytest_plugins() -> PreflightCheck:
             f"Missing pytest plugin(s): {', '.join(missing)}",
             "Install dev dependencies with: pip install -r requirements-dev.txt",
         )
-    return PreflightCheck("pytest:plugins", HEALTH_PASS, "All configured pytest plugins are installed.")
+    return PreflightCheck(
+        "pytest:plugins", HEALTH_PASS, "All configured pytest plugins are installed."
+    )
 
 
 def check_pnpm_toolchain() -> PreflightCheck:
@@ -714,9 +731,15 @@ def check_registry_reachability() -> PreflightCheck:
 def run_preflight(gates: Sequence[Gate]) -> list[PreflightCheck]:
     gate_ids = {gate.id for gate in gates}
     checks = [check_python_runtime()]
-    if any(gate_id.startswith("backend:pytest") or gate_id in {"backend:tests", "backend:coverage"} for gate_id in gate_ids):
+    if any(
+        gate_id.startswith("backend:pytest") or gate_id in {"backend:tests", "backend:coverage"}
+        for gate_id in gate_ids
+    ):
         checks.append(check_pytest_plugins())
-    if any(gate_id.startswith("frontend:") or gate_id == "dependencies:frontend-audit" for gate_id in gate_ids):
+    if any(
+        gate_id.startswith("frontend:") or gate_id == "dependencies:frontend-audit"
+        for gate_id in gate_ids
+    ):
         checks.append(check_pnpm_toolchain())
     if any(gate_id.startswith("docker:") for gate_id in gate_ids):
         checks.append(check_docker_toolchain())
@@ -741,10 +764,15 @@ def _is_registry_failure(output: str) -> bool:
     )
 
 
-def _classify_gate(gate: Gate, returncode: int, output: str) -> tuple[str, str, tuple[dict[str, str], ...]]:
+def _classify_gate(
+    gate: Gate, returncode: int, output: str
+) -> tuple[str, str, tuple[dict[str, str], ...]]:
     if returncode == 0:
         return HEALTH_PASS, "", ()
-    if gate.id == "dependencies:frontend-audit" and "frontend audit found advisories" in output.lower():
+    if (
+        gate.id == "dependencies:frontend-audit"
+        and "frontend audit found advisories" in output.lower()
+    ):
         return HEALTH_FAIL, gate.remediation, ()
     if gate.id == "dependencies:frontend-audit" and _is_registry_failure(output):
         warning = accepted_warning("dependencies:frontend-audit-registry")
@@ -824,7 +852,9 @@ def overall_status(preflight: Sequence[PreflightCheck], gates: Sequence[GateResu
     return HEALTH_PASS
 
 
-def build_summary(profile: str, preflight: Sequence[PreflightCheck], gates: Sequence[GateResult]) -> dict[str, Any]:
+def build_summary(
+    profile: str, preflight: Sequence[PreflightCheck], gates: Sequence[GateResult]
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

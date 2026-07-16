@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from .models import AggregateSummary, VerificationPlan, VerificationResult
 from .planner import verification_plan_hash
 
 
-def _write_model(model, path: str | Path) -> None:
+def _write_model(model: BaseModel, path: str | Path) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(

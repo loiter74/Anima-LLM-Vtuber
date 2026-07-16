@@ -57,9 +57,7 @@ class TestToolNode:
         mock_tool.ainvoke = AsyncMock(return_value={"result": 42})
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "call_1", "name": "calculator", "args": {"x": 6, "y": 7}}
-        ]
+        state["tool_calls"] = [{"id": "call_1", "name": "calculator", "args": {"x": 6, "y": 7}}]
         config = RunnableConfig(
             configurable={
                 "tools_map": {"calculator": mock_tool},
@@ -84,12 +82,8 @@ class TestToolNode:
         mock_tool.ainvoke = AsyncMock(return_value="ok")
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "call_1", "name": "nonexistent_tool", "args": {}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"calculator": mock_tool}}
-        )
+        state["tool_calls"] = [{"id": "call_1", "name": "nonexistent_tool", "args": {}}]
+        config = RunnableConfig(configurable={"tools_map": {"calculator": mock_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 1
@@ -105,12 +99,8 @@ class TestToolNode:
         failing_tool.ainvoke = AsyncMock(side_effect=ValueError("division by zero"))
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "call_1", "name": "bad_tool", "args": {}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"bad_tool": failing_tool}}
-        )
+        state["tool_calls"] = [{"id": "call_1", "name": "bad_tool", "args": {}}]
+        config = RunnableConfig(configurable={"tools_map": {"bad_tool": failing_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 1
@@ -136,9 +126,7 @@ class TestToolNode:
             {"id": "call_1", "name": "tool_a", "args": {}},
             {"id": "call_2", "name": "tool_b", "args": {"key": "val"}},
         ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"tool_a": tool_a, "tool_b": tool_b}}
-        )
+        config = RunnableConfig(configurable={"tools_map": {"tool_a": tool_a, "tool_b": tool_b}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 2
@@ -156,18 +144,15 @@ class TestToolNode:
 
         class SyncRunTool:
             """A tool-like object that has _run but not ainvoke."""
+
             def _run(self, x):
                 return f"sync_result_{x}"
 
         sync_tool = SyncRunTool()
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "call_1", "name": "sync_tool", "args": {"x": 42}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"sync_tool": sync_tool}}
-        )
+        state["tool_calls"] = [{"id": "call_1", "name": "sync_tool", "args": {"x": 42}}]
+        config = RunnableConfig(configurable={"tools_map": {"sync_tool": sync_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 1
@@ -184,9 +169,7 @@ class TestToolNode:
         state["tool_calls"] = [
             {"id": "call_1", "name": "plain_tool", "args": {"greeting": "Hello"}}
         ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"plain_tool": plain_tool}}
-        )
+        config = RunnableConfig(configurable={"tools_map": {"plain_tool": plain_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 1
@@ -200,12 +183,8 @@ class TestToolNode:
             return f"async: {text}"
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "call_1", "name": "async_fn", "args": {"text": "hello"}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"async_fn": async_plain_tool}}
-        )
+        state["tool_calls"] = [{"id": "call_1", "name": "async_fn", "args": {"text": "hello"}}]
+        config = RunnableConfig(configurable={"tools_map": {"async_fn": async_plain_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 1
@@ -226,9 +205,7 @@ class TestToolNode:
             {"id": "c1", "name": "good", "args": {}},
             {"id": "c2", "name": "bad", "args": {}},
         ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"good": good_tool, "bad": bad_tool}}
-        )
+        config = RunnableConfig(configurable={"tools_map": {"good": good_tool, "bad": bad_tool}})
         result = await tool_node(state, config)
 
         assert len(result["tool_results"]) == 2
@@ -246,12 +223,8 @@ class TestToolNode:
         null_tool.ainvoke = AsyncMock(return_value=None)
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "c1", "name": "null_tool", "args": {}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"null_tool": null_tool}}
-        )
+        state["tool_calls"] = [{"id": "c1", "name": "null_tool", "args": {}}]
+        config = RunnableConfig(configurable={"tools_map": {"null_tool": null_tool}})
         result = await tool_node(state, config)
 
         assert result["tool_results"][0]["result"] is None
@@ -265,12 +238,8 @@ class TestToolNode:
         dict_tool.ainvoke = AsyncMock(return_value={"a": 1, "b": [2, 3]})
 
         state = create_initial_state(session_id="test")
-        state["tool_calls"] = [
-            {"id": "c1", "name": "dict_tool", "args": {}}
-        ]
-        config = RunnableConfig(
-            configurable={"tools_map": {"dict_tool": dict_tool}}
-        )
+        state["tool_calls"] = [{"id": "c1", "name": "dict_tool", "args": {}}]
+        config = RunnableConfig(configurable={"tools_map": {"dict_tool": dict_tool}})
         result = await tool_node(state, config)
 
         assert result["tool_results"][0]["result"] == {"a": 1, "b": [2, 3]}

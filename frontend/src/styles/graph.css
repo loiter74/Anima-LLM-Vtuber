@@ -31,7 +31,9 @@
 /* ── Edge ─────────────────────────────────────────────── */
 
 .graph-edge {
-  transition: opacity 0.2s ease, stroke-width 0.15s ease;
+  transition:
+    opacity 0.2s ease,
+    stroke-width 0.15s ease;
 }
 
 .graph-edge.dimmed {

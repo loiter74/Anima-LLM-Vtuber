@@ -14,6 +14,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.chattts import ChatTTSConfig
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
@@ -72,15 +73,13 @@ class ChatTTSTTS(TTSInterface):
             import torch
         except ImportError as e:
             logger.error("ChatTTS not installed, please run: pip install ChatTTS")
-            raise ImportError(
-                "ChatTTS 未安装，请运行: pip install ChatTTS"
-            ) from e
+            raise ImportError("ChatTTS 未安装，请运行: pip install ChatTTS") from e
 
         logger.info(f"Loading ChatTTS model from {self.model_path} to {self.device}...")
 
         self._chat = ChatTTS.Chat()
         self._chat.load(
-            source='custom',
+            source="custom",
             custom_path=self.model_path,
             device=self.device,
             compile=self.compile,
@@ -89,6 +88,7 @@ class ChatTTSTTS(TTSInterface):
         # Fix speaker voice to ensure consistent output each time
         if self.speaker_seed is not None:
             import torch
+
             torch.manual_seed(self.speaker_seed)
             self._speaker_embedding = self._chat.sample_random_speaker()
             logger.info(f"Speaker voice fixed (seed={self.speaker_seed})")
@@ -104,6 +104,7 @@ class ChatTTSTTS(TTSInterface):
         logger.info(f"Preloading ChatTTS model from {self.model_path}...")
 
         import asyncio
+
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._ensure_loaded)
 
@@ -120,40 +121,40 @@ class ChatTTSTTS(TTSInterface):
         # Remove emoji (fixed regex range error)
         # Note: ranges must be ascending, otherwise all characters will match
         emoji_ranges = [
-            '\U0001F600-\U0001F64F',  # Emoticons
-            '\U0001F300-\U0001F5FF',  # Symbols & Pictographs
-            '\U0001F680-\U0001F6FF',  # Transport & Map
-            '\U0001F1E0-\U0001F1FF',  # Flags (Regional Indicator Symbols)
-            '\U00002702-\U000027B0',  # Dingbats
-            '\U000024C2-\U000025FF',  # Enclosed characters (fixed range)
-            '\U00002300-\U000023FF',  # Miscellaneous Technical
-            '\U00002B50-\U00002BFF',  # Misc Symbols and Arrows
-            '\U0000FE00-\U0000FE0F',  # Variation Selectors
-            '\U0001F900-\U0001F9FF',  # Supplemental Symbols and Pictographs
-            '\U0001FA00-\U0001FA6F',  # Chess Symbols
-            '\U0001FA70-\U0001FAFF',  # Symbols and Pictographs Extended-A
+            "\U0001f600-\U0001f64f",  # Emoticons
+            "\U0001f300-\U0001f5ff",  # Symbols & Pictographs
+            "\U0001f680-\U0001f6ff",  # Transport & Map
+            "\U0001f1e0-\U0001f1ff",  # Flags (Regional Indicator Symbols)
+            "\U00002702-\U000027b0",  # Dingbats
+            "\U000024c2-\U000025ff",  # Enclosed characters (fixed range)
+            "\U00002300-\U000023ff",  # Miscellaneous Technical
+            "\U00002b50-\U00002bff",  # Misc Symbols and Arrows
+            "\U0000fe00-\U0000fe0f",  # Variation Selectors
+            "\U0001f900-\U0001f9ff",  # Supplemental Symbols and Pictographs
+            "\U0001fa00-\U0001fa6f",  # Chess Symbols
+            "\U0001fa70-\U0001faff",  # Symbols and Pictographs Extended-A
         ]
-        emoji_pattern = re.compile('[' + ''.join(emoji_ranges) + ']+', flags=re.UNICODE)
-        text = emoji_pattern.sub('', text)
+        emoji_pattern = re.compile("[" + "".join(emoji_ranges) + "]+", flags=re.UNICODE)
+        text = emoji_pattern.sub("", text)
 
         # Sentence-ending punctuation -> comma
-        for char in ['。', '！', '？', '!', '?', '；', ';']:
-            text = text.replace(char, '，')
+        for char in ["。", "！", "？", "!", "?", "；", ";"]:
+            text = text.replace(char, "，")
 
         # Remove all other punctuation (use character loop to avoid regex encoding issues)
-        punctuation_to_remove = '：:「」『』""''""（）()[]【】《》~——…·•'
+        punctuation_to_remove = '：:「」『』""""（）()[]【】《》~——…·•'
         for char in punctuation_to_remove:
-            text = text.replace(char, '')
+            text = text.replace(char, "")
 
         # Remove extra commas, only trim leading/trailing commas
-        while '，，' in text:
-            text = text.replace('，，', '，')
+        while "，，" in text:
+            text = text.replace("，，", "，")
         # Delete leading/trailing commas (full-width and half-width)
-        text = text.strip('，')
-        text = text.strip(',')
+        text = text.strip("，")
+        text = text.strip(",")
 
         # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         return text
 
@@ -188,30 +189,26 @@ class ChatTTSTTS(TTSInterface):
         block_align = channels * sample_width
 
         header = struct.pack(
-            '<4sI4s4sIHHIIHH4sI',
-            b'RIFF',
+            "<4sI4s4sIHHIIHH4sI",
+            b"RIFF",
             36 + data_size,
-            b'WAVE',
-            b'fmt ',
-            16,               # fmt chunk size
-            1,                # PCM format
+            b"WAVE",
+            b"fmt ",
+            16,  # fmt chunk size
+            1,  # PCM format
             channels,
             self.SAMPLE_RATE,
             byte_rate,
             block_align,
-            sample_width * 8, # bits per sample
-            b'data',
+            sample_width * 8,  # bits per sample
+            b"data",
             data_size,
         )
 
         return header + wav_array.tobytes()
 
     async def synthesize(
-        self,
-        text: str,
-        output_path: str | Path | None = None,
-        voice: str | None = None,
-        **kwargs
+        self, text: str, output_path: str | Path | None = None, voice: str | None = None, **kwargs
     ) -> bytes | str:
         """
         Synthesize text to speech
@@ -228,6 +225,9 @@ class ChatTTSTTS(TTSInterface):
         """
         # Ensure model is loaded
         self._ensure_loaded()
+        chat = self._chat
+        if chat is None:
+            raise RuntimeError("ChatTTS model is not loaded")
 
         # Clean text: full-width punctuation, emoji, etc. that ChatTTS does not support
         cleaned_text = self._clean_text(text)
@@ -244,13 +244,14 @@ class ChatTTSTTS(TTSInterface):
 
             # ChatTTS.infer is synchronous blocking, place in thread pool to avoid blocking event loop
             import asyncio
+
             loop = asyncio.get_event_loop()
             wavs = await loop.run_in_executor(
                 None,
-                lambda: self._chat.infer(
+                lambda: chat.infer(
                     [cleaned_text],
                     params_infer_code=params,
-                )
+                ),
             )
 
             # Check if returned result is valid
@@ -278,16 +279,12 @@ class ChatTTSTTS(TTSInterface):
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_path, "wb") as f:
                     f.write(audio_bytes)
-                logger.debug(
-                    f"ChatTTS synthesis complete: {len(text)} chars -> {output_path}"
-                )
+                logger.debug(f"ChatTTS synthesis complete: {len(text)} chars -> {output_path}")
                 return str(output_path)
             else:
                 # Write to temp file and return path (consistent with EdgeTTS behavior)
                 temp_file = write_temp_bytes(audio_bytes, suffix=".wav")
-                logger.debug(
-                    f"ChatTTS synthesis complete: {len(text)} chars -> {temp_file}"
-                )
+                logger.debug(f"ChatTTS synthesis complete: {len(text)} chars -> {temp_file}")
                 return temp_file
 
         except Exception as e:
@@ -316,6 +313,7 @@ class ChatTTSTTS(TTSInterface):
             # Actively clear CUDA cache
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except Exception:

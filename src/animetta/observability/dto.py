@@ -143,10 +143,7 @@ class HealthDTO(ObservationDTO):
 
     @classmethod
     def from_health(cls, health: ObservationHealth) -> HealthDTO:
-        return cls(**{
-            field: getattr(health, field)
-            for field in cls.model_fields
-        })
+        return cls(**{field: getattr(health, field) for field in cls.model_fields})
 
 
 def versioned_events(events: list[dict[str, Any]]) -> dict[str, Any]:

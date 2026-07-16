@@ -45,62 +45,121 @@ class KeywordAnalyzer(IEmotionAnalyzer):
     DEFAULT_KEYWORDS = {
         "happy": [
             # Basic words
-            "开心", "快乐", "高兴", "喜欢", "爱",
+            "开心",
+            "快乐",
+            "高兴",
+            "喜欢",
+            "爱",
             # Interjections
-            "哈哈", "耶", "太好了", "真棒", "棒",
+            "哈哈",
+            "耶",
+            "太好了",
+            "真棒",
+            "棒",
             # Colloquial
-            "爽", "爽快", "开心", "愉快", "欣喜",
+            "爽",
+            "爽快",
+            "开心",
+            "愉快",
+            "欣喜",
             # Idioms/Advanced
-            "喜出望外", "欣喜若狂", "心花怒放", "兴高采烈"
+            "喜出望外",
+            "欣喜若狂",
+            "心花怒放",
+            "兴高采烈",
         ],
         "sad": [
             # Basic words
-            "难过", "悲伤", "哭", "伤心", "遗憾",
+            "难过",
+            "悲伤",
+            "哭",
+            "伤心",
+            "遗憾",
             # Interjections
-            "呜呜", "痛苦", "失望",
+            "呜呜",
+            "痛苦",
+            "失望",
             # Colloquial
-            "郁闷", "沮丧", "抑郁", "悲伤",
+            "郁闷",
+            "沮丧",
+            "抑郁",
+            "悲伤",
             # Idioms/Advanced
-            "痛不欲生", "心如刀割", "悲痛欲绝"
+            "痛不欲生",
+            "心如刀割",
+            "悲痛欲绝",
         ],
         "angry": [
             # Basic words
-            "生气", "愤怒", "讨厌", "哼",
+            "生气",
+            "愤怒",
+            "讨厌",
+            "哼",
             # Colloquial
-            "气死", "烦人", "可恶", "火大",
+            "气死",
+            "烦人",
+            "可恶",
+            "火大",
             # Interjections
-            "滚", "滚蛋",
+            "滚",
+            "滚蛋",
             # Idioms/Advanced
-            "怒不可遏", "怒发冲冠", "暴跳如雷"
+            "怒不可遏",
+            "怒发冲冠",
+            "暴跳如雷",
         ],
         "surprised": [
             # Basic words
-            "哇", "天啊", "真的吗", "不敢相信",
+            "哇",
+            "天啊",
+            "真的吗",
+            "不敢相信",
             # Colloquial
-            "震惊", "居然", "竟然",
+            "震惊",
+            "居然",
+            "竟然",
             # Interjections
-            "咦", "哎哟",
+            "咦",
+            "哎哟",
             # Idioms/Advanced
-            "大吃一惊", "目瞪口呆", "惊愕"
+            "大吃一惊",
+            "目瞪口呆",
+            "惊愕",
         ],
         "thinking": [
             # Basic words
-            "嗯", "让我想想", "思考", "考虑",
+            "嗯",
+            "让我想想",
+            "思考",
+            "考虑",
             # Colloquial
-            "分析", "研究", "琢磨", "思索",
+            "分析",
+            "研究",
+            "琢磨",
+            "思索",
             # Interjections
-            "嗯嗯", "呃",
+            "嗯嗯",
+            "呃",
             # Advanced
-            "沉思", "斟酌", "考量"
+            "沉思",
+            "斟酌",
+            "考量",
         ],
         "neutral": [
             # Basic words
-            "还好", "一般", "普通",
+            "还好",
+            "一般",
+            "普通",
             # Colloquial
-            "可以", "行", "好的", "OK",
+            "可以",
+            "行",
+            "好的",
+            "OK",
             # Interjections
-            "嗯", "哦", "噢"
-        ]
+            "嗯",
+            "哦",
+            "噢",
+        ],
     }
 
     def __init__(
@@ -173,14 +232,11 @@ class KeywordAnalyzer(IEmotionAnalyzer):
                 "scores": scores,
                 "matched_keywords": scores.get(primary, 0),
                 "confidence_mode": self._confidence_mode,
-                "total_matches": sum(scores.values())
+                "total_matches": sum(scores.values()),
             }
 
             return EmotionData(
-                primary=primary,
-                confidence=confidence,
-                timeline=timeline,
-                metadata=metadata
+                primary=primary, confidence=confidence, timeline=timeline, metadata=metadata
             )
 
         except Exception as e:
@@ -188,11 +244,7 @@ class KeywordAnalyzer(IEmotionAnalyzer):
             # Return default emotion
             return self._get_default_emotion_data(text)
 
-    def _calculate_confidence(
-        self,
-        scores: dict[str, int],
-        text: str
-    ) -> float:
+    def _calculate_confidence(self, scores: dict[str, int], text: str) -> float:
         """
         Calculate confidence
 
@@ -257,11 +309,7 @@ class KeywordAnalyzer(IEmotionAnalyzer):
             primary="neutral",
             confidence=0.0,
             timeline=[],
-            metadata={
-                "source": "keyword",
-                "mode": "default",
-                "text_length": len(text)
-            }
+            metadata={"source": "keyword", "mode": "default", "text_length": len(text)},
         )
 
     @property
@@ -322,7 +370,7 @@ class KeywordAnalyzer(IEmotionAnalyzer):
             "scores": result.metadata.get("scores", {}),
             "total_matches": result.metadata.get("total_matches", 0),
             "matched_keywords": result.metadata.get("matched_keywords", 0),
-            "has_emotions": result.confidence > 0
+            "has_emotions": result.confidence > 0,
         }
 
     def add_keywords(self, emotion: str, keywords: list[str]) -> None:

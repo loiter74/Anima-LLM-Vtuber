@@ -19,6 +19,7 @@ import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.kokoro import KokoroTTSConfig
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ..interface import TTSInterface
@@ -83,7 +84,7 @@ class KokoroTTS(TTSInterface):
         )
 
     @classmethod
-    def from_config(cls, config, **kwargs) -> KokoroTTS:
+    def from_config(cls, config: KokoroTTSConfig, **kwargs) -> KokoroTTS:
         """Create instance from KokoroTTSConfig."""
         return cls(
             voice=getattr(config, "voice", "zf_xiaobei"),
@@ -118,19 +119,14 @@ class KokoroTTS(TTSInterface):
                 device=self.device,
             )
 
-            logger.info(
-                f"[KokoroTTS] Model loaded successfully "
-                f"(device={self.device})"
-            )
+            logger.info(f"[KokoroTTS] Model loaded successfully (device={self.device})")
 
         except ImportError as e:
             logger.error(
-                "[KokoroTTS] Failed to import kokoro. "
-                "Install with: pip install kokoro misaki[zh]"
+                "[KokoroTTS] Failed to import kokoro. Install with: pip install kokoro misaki[zh]"
             )
             raise ImportError(
-                "kokoro package not installed. "
-                "Run: pip install kokoro misaki[zh]"
+                "kokoro package not installed. Run: pip install kokoro misaki[zh]"
             ) from e
 
         except RuntimeError as e:
@@ -158,6 +154,9 @@ class KokoroTTS(TTSInterface):
             Audio bytes (WAV format), or file path string if output_path set
         """
         self._ensure_pipeline()
+        pipeline = self._pipeline
+        if pipeline is None:
+            raise RuntimeError("Kokoro pipeline is not loaded")
 
         actual_voice = voice or self.voice
         actual_speed = speed if speed is not None else self.speed
@@ -173,7 +172,7 @@ class KokoroTTS(TTSInterface):
             # Generate audio via Kokoro pipeline
             # pipeline() is a generator yielding (graphemes, phonemes, audio_tensor)
             audio_chunks: list[torch.Tensor] = []
-            for result in self._pipeline(
+            for result in pipeline(
                 text,
                 voice=actual_voice,
                 speed=actual_speed,
@@ -185,7 +184,9 @@ class KokoroTTS(TTSInterface):
                 raise RuntimeError("Kokoro produced no audio output")
 
             # Concatenate all audio chunks
-            full_audio = torch.cat(audio_chunks, dim=0) if len(audio_chunks) > 1 else audio_chunks[0]
+            full_audio = (
+                torch.cat(audio_chunks, dim=0) if len(audio_chunks) > 1 else audio_chunks[0]
+            )
 
             # Normalize to prevent clipping
             max_val = full_audio.abs().max()
@@ -199,9 +200,7 @@ class KokoroTTS(TTSInterface):
             if self._effect_processor and self._effect_processor.enabled:
                 audio_bytes = await self._effect_processor.process(audio_bytes)
 
-            logger.debug(
-                f"[KokoroTTS] Generated {len(audio_bytes)} bytes of audio"
-            )
+            logger.debug(f"[KokoroTTS] Generated {len(audio_bytes)} bytes of audio")
 
             # Handle output
             if output_path is not None:
@@ -220,7 +219,7 @@ class KokoroTTS(TTSInterface):
             logger.error(f"[KokoroTTS] Synthesis failed: {e}")
             raise
 
-    def _tensor_to_wav_bytes(self, audio_tensor) -> bytes:
+    def _tensor_to_wav_bytes(self, audio_tensor: Any) -> bytes:
         """
         Convert a 1D audio tensor to WAV bytes using Python's built-in wave module.
 
@@ -231,7 +230,6 @@ class KokoroTTS(TTSInterface):
             WAV file bytes at 24000 Hz sample rate
         """
         import wave
-
 
         # Ensure 1D and convert to int16
         if audio_tensor.dim() > 1:

@@ -20,13 +20,15 @@ class PersonaPromptSource:
         warnings = list(ctx.base_system_prompt_warnings)
         if not content:
             warnings.append("No base persona prompt available")
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.PERSONA,
-            priority=SectionPriority.PERSONA,
-            content=content,
-            metadata={"warnings": warnings} if warnings else {},
-        )]
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.PERSONA,
+                priority=SectionPriority.PERSONA,
+                content=content,
+                metadata={"warnings": warnings} if warnings else {},
+            )
+        ]
 
 
 class AffinityPromptSource:
@@ -61,13 +63,15 @@ class AffinityPromptSource:
             f"（N 为 0-100 的整数）。除非旅人消息带``【debug】``，"
             f"否则 marker 不对旅人可见——后台会剥除它。"
         )
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.AFFINITY,
-            priority=SectionPriority.AFFINITY,
-            content=content,
-            metadata={"affinity": affinity, "band": band},
-        )]
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.AFFINITY,
+                priority=SectionPriority.AFFINITY,
+                content=content,
+                metadata={"affinity": affinity, "band": band},
+            )
+        ]
 
 
 def _affinity_band(value: int) -> str:
@@ -116,12 +120,14 @@ class RuntimePersonalityPromptSource:
             parts.append(ctx.personality_overlay)
 
         content = " ".join(parts)
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.RUNTIME_PERSONALITY,
-            priority=SectionPriority.RUNTIME_PERSONALITY,
-            content=content,
-        )]
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.RUNTIME_PERSONALITY,
+                priority=SectionPriority.RUNTIME_PERSONALITY,
+                content=content,
+            )
+        ]
 
 
 class ImprovisedChatPromptSource:
@@ -148,12 +154,14 @@ class ImprovisedChatPromptSource:
             "- 不要复用最近回复的开头、比喻、结尾和固定句式；不要总结规则；"
             "不要把每句话都写成规整的三段式"
         )
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.IMPROVISATION,
-            priority=SectionPriority.IMPROVISATION,
-            content=content,
-        )]
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.IMPROVISATION,
+                priority=SectionPriority.IMPROVISATION,
+                content=content,
+            )
+        ]
 
 
 class MemoryPromptSource:
@@ -168,29 +176,40 @@ class MemoryPromptSource:
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         if not ctx.memory_context:
-            return [PromptSection(
-                name=self.name,
-                role=SectionRole.MEMORY,
-                priority=SectionPriority.MEMORY,
-                content="",
-            )]
+            return [
+                PromptSection(
+                    name=self.name,
+                    role=SectionRole.MEMORY,
+                    priority=SectionPriority.MEMORY,
+                    content="",
+                )
+            ]
 
         content = ctx.memory_context
         warnings = []
 
         # Cap memory in realtime roleplay mode
-        if ctx.personality_mode in ("streaming", "default") and len(content) > self.REALTIME_MAX_CHARS:
-            content = content[:self.REALTIME_MAX_CHARS] + "\n…(记忆已截断)"
-            warnings.append(f"memory truncated from {len(ctx.memory_context)} to {self.REALTIME_MAX_CHARS} chars")
+        if (
+            ctx.personality_mode in ("streaming", "default")
+            and len(content) > self.REALTIME_MAX_CHARS
+        ):
+            content = content[: self.REALTIME_MAX_CHARS] + "\n…(记忆已截断)"
+            warnings.append(
+                f"memory truncated from {len(ctx.memory_context)} to {self.REALTIME_MAX_CHARS} chars"
+            )
 
         atom_count = ctx.memory_metadata.get("atom_count", 0)
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.MEMORY,
-            priority=SectionPriority.MEMORY,
-            content=content,
-            metadata={"atom_count": atom_count, "warnings": warnings} if warnings else {"atom_count": atom_count},
-        )]
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.MEMORY,
+                priority=SectionPriority.MEMORY,
+                content=content,
+                metadata={"atom_count": atom_count, "warnings": warnings}
+                if warnings
+                else {"atom_count": atom_count},
+            )
+        ]
 
 
 class RoleplayGuardPromptSource:
@@ -200,15 +219,19 @@ class RoleplayGuardPromptSource:
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         if not ctx.roleplay_correction:
-            return [PromptSection(
+            return [
+                PromptSection(
+                    name=self.name,
+                    role=SectionRole.CORRECTION,
+                    priority=SectionPriority.CORRECTION,
+                    content="",
+                )
+            ]
+        return [
+            PromptSection(
                 name=self.name,
                 role=SectionRole.CORRECTION,
                 priority=SectionPriority.CORRECTION,
-                content="",
-            )]
-        return [PromptSection(
-            name=self.name,
-            role=SectionRole.CORRECTION,
-            priority=SectionPriority.CORRECTION,
-            content=ctx.roleplay_correction,
-        )]
+                content=ctx.roleplay_correction,
+            )
+        ]

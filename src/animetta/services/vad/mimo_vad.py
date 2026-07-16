@@ -248,7 +248,11 @@ class MimoVAD(VADInterface):
 
     @staticmethod
     def _resolve_base_url(api_key: str | None, base_url: str) -> str:
-        if api_key and api_key.startswith("tp-") and base_url.rstrip("/") == "https://api.xiaomimimo.com/v1":
+        if (
+            api_key
+            and api_key.startswith("tp-")
+            and base_url.rstrip("/") == "https://api.xiaomimimo.com/v1"
+        ):
             return "https://token-plan-cn.xiaomimimo.com/v1"
         return base_url
 

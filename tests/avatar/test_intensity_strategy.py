@@ -12,6 +12,7 @@ import pytest
 # Initialization
 # ============================================================
 
+
 class TestIntensityBasedStrategyInit:
     """Initialization."""
 
@@ -57,15 +58,14 @@ class TestIntensityBasedStrategyInit:
 # Intensity-based weighting
 # ============================================================
 
+
 class TestIntensityBasedStrategyWeights:
     """Intensity-based time and intensity allocation."""
 
     def test_higher_intensity_gets_more_time(self):
         """Higher intensity emotions should get more time (with factor > 0)."""
         strategy = IntensityBasedStrategy(intensity_factor=1.0)  # full intensity influence
-        segments = strategy.calculate(
-            ["happy", "neutral"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "neutral"], "text", audio_duration=10.0)
         # happy (0.8) > neutral (0.3), so happy gets more time
         assert len(segments) == 2
         assert segments[0].duration > segments[1].duration
@@ -73,9 +73,7 @@ class TestIntensityBasedStrategyWeights:
     def test_intensity_factor_zero_equal_time(self):
         """intensity_factor=0 should give equal time regardless of intensity."""
         strategy = IntensityBasedStrategy(intensity_factor=0.0)
-        segments = strategy.calculate(
-            ["happy", "neutral", "angry"], "text", audio_duration=9.0
-        )
+        segments = strategy.calculate(["happy", "neutral", "angry"], "text", audio_duration=9.0)
         # All should have roughly equal time
         assert abs(segments[0].duration - 3.0) < 0.01
         assert abs(segments[1].duration - 3.0) < 0.01
@@ -84,9 +82,7 @@ class TestIntensityBasedStrategyWeights:
     def test_intensity_values_in_segments(self):
         """Each segment should carry its emotion's intensity value."""
         strategy = IntensityBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "angry"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "angry"], "text", audio_duration=10.0)
         # happy intensity = 0.8, angry intensity = 0.9
         assert segments[0].intensity == 0.8
         assert segments[1].intensity == 0.9
@@ -94,9 +90,7 @@ class TestIntensityBasedStrategyWeights:
     def test_last_emotion_extends_to_end(self):
         """Last emotion should always extend to audio_duration end."""
         strategy = IntensityBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "sad"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "sad"], "text", audio_duration=10.0)
         assert segments[-1].end_time == 10.0
 
 
@@ -104,15 +98,14 @@ class TestIntensityBasedStrategyWeights:
 # Low intensity filtering
 # ============================================================
 
+
 class TestIntensityBasedStrategyFiltering:
     """Low intensity emotion filtering."""
 
     def test_below_min_intensity_filtered(self):
         """Emotions below min_intensity should be filtered out."""
         strategy = IntensityBasedStrategy(min_intensity=0.5)
-        segments = strategy.calculate(
-            ["happy", "neutral"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "neutral"], "text", audio_duration=10.0)
         # neutral (0.3) is below 0.5, should be filtered
         assert len(segments) == 1
         assert segments[0].emotion == "happy"
@@ -120,9 +113,7 @@ class TestIntensityBasedStrategyFiltering:
     def test_all_below_min_intensity_returns_default(self):
         """When all emotions are below threshold, return default segment."""
         strategy = IntensityBasedStrategy(min_intensity=0.9)
-        segments = strategy.calculate(
-            ["happy", "neutral"], "text", audio_duration=5.0
-        )
+        segments = strategy.calculate(["happy", "neutral"], "text", audio_duration=5.0)
         assert len(segments) == 1
         assert segments[0].emotion == "neutral"  # default emotion
         assert segments[0].intensity == 0.5  # default intensity
@@ -130,9 +121,7 @@ class TestIntensityBasedStrategyFiltering:
     def test_unknown_emotion_default_intensity(self):
         """Unknown emotion should use default intensity of 0.5."""
         strategy = IntensityBasedStrategy(min_intensity=0.2)
-        segments = strategy.calculate(
-            ["unknown_emotion"], "text", audio_duration=5.0
-        )
+        segments = strategy.calculate(["unknown_emotion"], "text", audio_duration=5.0)
         assert len(segments) == 1
         # 0.5 >= 0.2, so it should pass
         assert segments[0].intensity == 0.5
@@ -141,6 +130,7 @@ class TestIntensityBasedStrategyFiltering:
 # ============================================================
 # No emotions
 # ============================================================
+
 
 class TestIntensityBasedStrategyNoEmotions:
     """Behavior when no emotions provided."""
@@ -164,6 +154,7 @@ class TestIntensityBasedStrategyNoEmotions:
 # ============================================================
 # Intensity management
 # ============================================================
+
 
 class TestIntensityBasedStrategyIntensityManagement:
     """set_emotion_intensity and get_emotion_intensity."""
@@ -197,15 +188,14 @@ class TestIntensityBasedStrategyIntensityManagement:
 # Segment info
 # ============================================================
 
+
 class TestIntensityBasedStrategySegmentInfo:
     """get_segment_info()."""
 
     def test_get_segment_info_with_segments(self):
         """get_segment_info should include intensity stats."""
         strategy = IntensityBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "angry"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "angry"], "text", audio_duration=10.0)
         info = strategy.get_segment_info(segments)
         assert info["count"] == 2
         assert "average_intensity" in info
@@ -223,9 +213,7 @@ class TestIntensityBasedStrategySegmentInfo:
     def test_get_segment_info_emotion_intensities(self):
         """get_segment_info should include per-emotion average intensities."""
         strategy = IntensityBasedStrategy()
-        segments = strategy.calculate(
-            ["happy", "angry"], "text", audio_duration=10.0
-        )
+        segments = strategy.calculate(["happy", "angry"], "text", audio_duration=10.0)
         info = strategy.get_segment_info(segments)
         assert "happy" in info["emotion_intensities"]
         assert "angry" in info["emotion_intensities"]
@@ -236,6 +224,7 @@ class TestIntensityBasedStrategySegmentInfo:
 # ============================================================
 # Properties
 # ============================================================
+
 
 class TestIntensityBasedStrategyProperties:
     """Properties."""

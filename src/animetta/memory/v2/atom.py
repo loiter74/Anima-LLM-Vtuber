@@ -13,7 +13,8 @@ from enum import IntEnum, StrEnum
 
 class Layer(IntEnum):
     """Memory abstraction layers. Higher = more abstract / consolidated."""
-    RAW = 0       # Raw conversation turn
+
+    RAW = 0  # Raw conversation turn
     EPISODIC = 1  # Compiled episode summary
     SEMANTIC = 2  # Digested semantic knowledge
     EMERGENT = 3  # Emergent meme or synthesis
@@ -39,6 +40,7 @@ class MemoryVisibility(StrEnum):
 
 class RelationType:
     """Types of relationships between memory atoms."""
+
     UPDATES = "UPDATES"
     EXTENDS = "EXTENDS"
     DERIVES = "DERIVES"
@@ -50,6 +52,7 @@ class RelationType:
 @dataclass
 class Relation:
     """A directed relationship between two memory atoms."""
+
     source_id: str
     target_id: str
     relation_type: str
@@ -93,9 +96,9 @@ class MemoryAtom:
     last_accessed_at: datetime | None = None
 
     # ── Emotion vector (VAD: Valence / Arousal / Dominance) ──
-    emotion_valence: float = 0.0     # -1.0 (negative) to +1.0 (positive)
-    emotion_arousal: float = 0.0     # 0.0 (calm) to 1.0 (intense)
-    emotion_dominance: float = 0.0   # -1.0 (passive) to +1.0 (dominant)
+    emotion_valence: float = 0.0  # -1.0 (negative) to +1.0 (positive)
+    emotion_arousal: float = 0.0  # 0.0 (calm) to 1.0 (intense)
+    emotion_dominance: float = 0.0  # -1.0 (passive) to +1.0 (dominant)
 
     # ── Knowledge graph ──
     source_ids: list[str] = field(default_factory=list)

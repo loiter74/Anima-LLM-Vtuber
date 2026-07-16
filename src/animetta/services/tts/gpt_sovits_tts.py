@@ -14,6 +14,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.gpt_sovits import GPTSoVITSConfig
 
 from .interface import TTSInterface
 
@@ -95,9 +96,7 @@ class GPTSoVITSTTS(TTSInterface):
             import httpx
         except ImportError as e:
             logger.error("httpx not installed, please run: pip install httpx")
-            raise ImportError(
-                "httpx is not installed, please run: pip install httpx"
-            ) from e
+            raise ImportError("httpx is not installed, please run: pip install httpx") from e
 
         timeout = httpx.Timeout(30.0, connect=10.0)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
@@ -110,7 +109,7 @@ class GPTSoVITSTTS(TTSInterface):
         prompt_text: str | None = None,
         prompt_lang: str | None = None,
         text_lang: str | None = None,
-        **kwargs
+        **kwargs,
     ) -> bytes:
         """
         Send TTS request to GPT-SoVITS API.
@@ -131,6 +130,9 @@ class GPTSoVITSTTS(TTSInterface):
             RuntimeError: If the API returns an error
         """
         self._ensure_client()
+        client = self._client
+        if client is None:
+            raise RuntimeError("GPT-SoVITS client is not initialized")
 
         payload = {
             "text": text,
@@ -153,10 +155,12 @@ class GPTSoVITSTTS(TTSInterface):
         if aux_refs:
             payload["aux_ref_audio_paths"] = aux_refs
 
-        logger.debug(f"GPT-SoVITS payload: text_len={len(payload.get('text',''))}, ref_audio={payload.get('ref_audio_path','')[:60]}, lang={payload.get('text_lang')}")
+        logger.debug(
+            f"GPT-SoVITS payload: text_len={len(payload.get('text', ''))}, ref_audio={payload.get('ref_audio_path', '')[:60]}, lang={payload.get('text_lang')}"
+        )
 
         try:
-            response = await self._client.post("/tts", json=payload)
+            response = await client.post("/tts", json=payload)
         except Exception as e:
             logger.error(f"GPT-SoVITS server not reachable at {self.base_url}: {e}")
             raise ConnectionError(
@@ -194,10 +198,7 @@ class GPTSoVITSTTS(TTSInterface):
             logger.info(f"[GPT-SoVITS] Warmup failed (non-fatal): {e}")
 
     async def synthesize(
-        self,
-        text: str,
-        output_path: str | Path | None = None,
-        **kwargs
+        self, text: str, output_path: str | Path | None = None, **kwargs
     ) -> bytes | str:
         """
         Synthesize text to speech using GPT-SoVITS.
@@ -218,11 +219,23 @@ class GPTSoVITSTTS(TTSInterface):
             import struct
 
             import numpy as np
+
             silence = np.zeros(24000, dtype=np.int16)
             header = struct.pack(
-                '<4sI4s4sIHHIIHH4sI',
-                b'RIFF', 36 + len(silence) * 2, b'WAVE', b'fmt ',
-                16, 1, 1, 24000, 48000, 2, 16, b'data', len(silence) * 2,
+                "<4sI4s4sIHHIIHH4sI",
+                b"RIFF",
+                36 + len(silence) * 2,
+                b"WAVE",
+                b"fmt ",
+                16,
+                1,
+                1,
+                24000,
+                48000,
+                2,
+                16,
+                b"data",
+                len(silence) * 2,
             )
             audio_bytes = header + silence.tobytes()
             if output_path:
@@ -245,7 +258,9 @@ class GPTSoVITSTTS(TTSInterface):
             logger.debug(f"GPT-SoVITS synthesis complete: {len(text)} chars -> {output_path}")
             return str(output_path)
         else:
-            logger.debug(f"GPT-SoVITS synthesis complete: {len(text)} chars -> {len(audio_bytes)} bytes")
+            logger.debug(
+                f"GPT-SoVITS synthesis complete: {len(text)} chars -> {len(audio_bytes)} bytes"
+            )
             return audio_bytes
 
     async def close(self) -> None:

@@ -125,7 +125,9 @@ class CharacterMemoryFilter:
             Filtered and ranked atom list.
         """
         filtered = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=known or [], unknown=unknown or [],
+            atoms,
+            known=known or [],
+            unknown=unknown or [],
         )
         return CharacterMemoryFilter.rank_by_persona(
             filtered,

@@ -5,11 +5,14 @@ GLM ASR implementation - uses Zhipu AI GLM ASR API
 """
 
 import io
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.glm import GLMASRConfig
 
 from .interface import ASRInterface
 
@@ -22,7 +25,10 @@ class GLMASR(ASRInterface):
     """
 
     @staticmethod
-    def _convert_to_supported_audio_bytes(audio_data, sample_rate: int = 16000) -> tuple[bytes, str]:
+    def _convert_to_supported_audio_bytes(
+        audio_data: bytes | list[float] | Any,
+        sample_rate: int = 16000,
+    ) -> tuple[bytes, str]:
         """
         Convert audio data to a format supported by GLM ASR
 
@@ -45,6 +51,7 @@ class GLMASR(ASRInterface):
         # Convert to numpy array
         try:
             import numpy as np
+
             if isinstance(audio_data, list):
                 audio_np = np.array(audio_data, dtype=np.float32)
             else:
@@ -71,7 +78,7 @@ class GLMASR(ASRInterface):
                 data=int16_data.tobytes(),
                 sample_width=2,  # 16-bit
                 frame_rate=sample_rate,
-                channels=1  # Mono
+                channels=1,  # Mono
             )
 
             # Export as MP3
@@ -95,7 +102,7 @@ class GLMASR(ASRInterface):
 
             wav_buffer = io.BytesIO()
 
-            with wave.open(wav_buffer, 'wb') as wav_file:
+            with wave.open(wav_buffer, "wb") as wav_file:
                 wav_file.setnchannels(1)
                 wav_file.setsampwidth(2)
                 wav_file.setframerate(sample_rate)
@@ -124,7 +131,7 @@ class GLMASR(ASRInterface):
         self._client = None
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: GLMASRConfig, **kwargs):
         """Create instance from configuration (supports ProviderRegistry.create_service path)"""
         return cls(
             api_key=config.api_key,
@@ -137,20 +144,16 @@ class GLMASR(ASRInterface):
         if self._client is None:
             try:
                 from zai import ZhipuAiClient
+
                 self._client = ZhipuAiClient(api_key=self.api_key)
                 logger.info("GLM ASR client initialized successfully")
             except ImportError as e:
                 logger.error("zai-sdk not installed, please run: pip install zai-sdk")
-                raise ImportError(
-                    "zai-sdk 未安装，请运行: pip install zai-sdk"
-                ) from e
+                raise ImportError("zai-sdk 未安装，请运行: pip install zai-sdk") from e
         return self._client
 
     async def transcribe(
-        self,
-        audio_data: bytes | str | Path | list,
-        stream: bool | None = None,
-        **kwargs
+        self, audio_data: bytes | str | Path | list, stream: bool | None = None, **kwargs
     ) -> str:
         """
         Transcribe audio data to text
@@ -176,14 +179,16 @@ class GLMASR(ASRInterface):
             audio_bytes, ext = audio_data, "mp3"
         elif isinstance(audio_data, (str, Path)):
             # Read from file
-            with open(str(audio_data), 'rb') as f:
+            with open(str(audio_data), "rb") as f:
                 audio_bytes = f.read()
-            ext = Path(audio_data).suffix.lstrip('.')
+            ext = Path(audio_data).suffix.lstrip(".")
         else:
             # Convert to supported audio format
             audio_bytes, ext = self._convert_to_supported_audio_bytes(audio_data)
 
-        logger.debug(f"GLM ASR processing audio: {len(audio_bytes)} bytes, format: {ext} (stream={use_stream})")
+        logger.debug(
+            f"GLM ASR processing audio: {len(audio_bytes)} bytes, format: {ext} (stream={use_stream})"
+        )
 
         try:
             if use_stream:
@@ -197,7 +202,12 @@ class GLMASR(ASRInterface):
         finally:
             pass  # bytes dont need cleanup
 
-    async def _transcribe_sync(self, client, audio_bytes: bytes, ext: str = "mp3") -> str:
+    async def _transcribe_sync(
+        self,
+        client: Any,
+        audio_bytes: bytes,
+        ext: str = "mp3",
+    ) -> str:
         """Non-streaming recognition"""
         import asyncio
 
@@ -206,29 +216,31 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 
             audio_file = NamedBytesIO(audio_bytes, f"audio.{ext}")
 
-            response = client.audio.transcriptions.create(
-                model=self.model,
-                file=audio_file
-            )
+            response = client.audio.transcriptions.create(model=self.model, file=audio_file)
             return response
 
         response = await loop.run_in_executor(None, _call_api)
 
         # Extract text result
-        if hasattr(response, 'text'):
+        if hasattr(response, "text"):
             return response.text
         elif isinstance(response, dict):
-            return response.get('text', '')
+            return response.get("text", "")
         else:
             return str(response)
 
-    async def _transcribe_stream(self, client, audio_bytes: bytes, ext: str = "mp3") -> str:
+    async def _transcribe_stream(
+        self,
+        client: Any,
+        audio_bytes: bytes,
+        ext: str = "mp3",
+    ) -> str:
         """Streaming recognition"""
         import asyncio
 
@@ -237,16 +249,13 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 
             audio_file = NamedBytesIO(audio_bytes, f"audio.{ext}")
 
-            response = client.audio.transcriptions.create(
-                model=self.model,
-                file=audio_file
-            )
+            response = client.audio.transcriptions.create(model=self.model, file=audio_file)
             return response
 
         response = await loop.run_in_executor(None, _call_api)
@@ -255,36 +264,36 @@ class GLMASR(ASRInterface):
         full_text = []
 
         # Check if it's an iterable streaming response
-        if hasattr(response, '__iter__') and not isinstance(response, (str, bytes, dict)):
+        if hasattr(response, "__iter__") and not isinstance(response, (str, bytes, dict)):
             for chunk in response:
-                if hasattr(chunk, 'text'):
+                if hasattr(chunk, "text"):
                     full_text.append(chunk.text)
                 elif isinstance(chunk, dict):
-                    text = chunk.get('text', '')
+                    text = chunk.get("text", "")
                     if text:
                         full_text.append(text)
-                elif hasattr(chunk, 'choices'):
+                elif hasattr(chunk, "choices"):
                     for choice in chunk.choices:
-                        if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
+                        if hasattr(choice, "delta") and hasattr(choice.delta, "content"):
                             content = choice.delta.content
                             if content:
                                 full_text.append(content)
         else:
             # Non-streaming response, extract text directly
-            if hasattr(response, 'text'):
+            if hasattr(response, "text"):
                 return response.text
             elif isinstance(response, dict):
-                return response.get('text', '')
+                return response.get("text", "")
             else:
                 return str(response)
 
-        return ''.join(full_text)
+        return "".join(full_text)
 
     async def transcribe_stream(
         self,
         audio_data: bytes | str | Path | list,
-        **kwargs
-    ):
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -302,9 +311,9 @@ class GLMASR(ASRInterface):
         if isinstance(audio_data, bytes):
             audio_bytes, ext = audio_data, "mp3"
         elif isinstance(audio_data, (str, Path)):
-            with open(str(audio_data), 'rb') as f:
+            with open(str(audio_data), "rb") as f:
                 audio_bytes = f.read()
-            ext = Path(audio_data).suffix.lstrip('.')
+            ext = Path(audio_data).suffix.lstrip(".")
         else:
             audio_bytes, ext = self._convert_to_supported_audio_bytes(audio_data)
 
@@ -313,29 +322,26 @@ class GLMASR(ASRInterface):
         def _call_api():
             # Create named BytesIO, add name attribute
             class NamedBytesIO(io.BytesIO):
-                def __init__(self, data, name):
+                def __init__(self, data: bytes, name: str) -> None:
                     super().__init__(data)
                     self.name = name
 
             audio_file = NamedBytesIO(audio_bytes, f"audio.{ext}")
 
-            response = client.audio.transcriptions.create(
-                model=self.model,
-                file=audio_file
-            )
+            response = client.audio.transcriptions.create(model=self.model, file=audio_file)
             return response
 
         response = await loop.run_in_executor(None, _call_api)
 
         for chunk in response:
             text = None
-            if hasattr(chunk, 'text'):
+            if hasattr(chunk, "text"):
                 text = chunk.text
             elif isinstance(chunk, dict):
-                text = chunk.get('text', '')
-            elif hasattr(chunk, 'choices'):
+                text = chunk.get("text", "")
+            elif hasattr(chunk, "choices"):
                 for choice in chunk.choices:
-                    if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
+                    if hasattr(choice, "delta") and hasattr(choice.delta, "content"):
                         text = choice.delta.content
 
             if text:

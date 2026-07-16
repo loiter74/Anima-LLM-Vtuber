@@ -22,7 +22,7 @@ class UserSettings:
             return self._create_default()
 
         try:
-            with open(self.config_file, encoding='utf-8') as f:
+            with open(self.config_file, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             logger.warning(f"Failed to load user configuration: {e}")
@@ -30,14 +30,12 @@ class UserSettings:
 
     def _create_default(self) -> dict:
         """Create default configuration"""
-        return {
-            "log_level": "INFO"
-        }
+        return {"log_level": "INFO"}
 
-    def save(self):
+    def save(self) -> None:
         """Save user configuration"""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 yaml.safe_dump(self.settings, f, allow_unicode=True)
         except Exception as e:
             logger.error(f"Failed to save user configuration: {e}")
@@ -45,6 +43,6 @@ class UserSettings:
     def get_log_level(self) -> str:
         return self.settings.get("log_level", "INFO")
 
-    def set_log_level(self, level: str):
+    def set_log_level(self, level: str) -> None:
         self.settings["log_level"] = level
         self.save()

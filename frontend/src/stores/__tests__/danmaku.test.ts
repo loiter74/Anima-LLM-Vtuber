@@ -77,7 +77,15 @@ describe('useDanmakuStore', () => {
   describe('setStatus', () => {
     it('sets connected status', () => {
       const store = useDanmakuStore()
-      store.setStatus(status({ state: 'live', connected: true, room_id: 123, desired_room_id: 123, message: 'Connected to room' }))
+      store.setStatus(
+        status({
+          state: 'live',
+          connected: true,
+          room_id: 123,
+          desired_room_id: 123,
+          message: 'Connected to room',
+        }),
+      )
       expect(store.connected).toBe(true)
       expect(store.statusMessage).toBe('Connected to room')
     })

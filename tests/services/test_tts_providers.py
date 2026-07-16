@@ -299,6 +299,7 @@ class TestChatTTSTTS:
         # Mock ChatTTS.Chat via fake module
         mock_chat = MagicMock()
         import numpy as np
+
         mock_chat.infer.return_value = [np.zeros(24000, dtype=np.float32)]
         sys.modules["ChatTTS"].Chat.return_value = mock_chat
 
@@ -438,9 +439,11 @@ class TestKokoroTTS:
         mock_pipeline = MagicMock()
         # result.audio.cpu() must return a torch.Tensor (torch.cat is used downstream)
         import torch
+
         class FakeAudio:
             def cpu(self):
                 return torch.zeros(24000)
+
         mock_result = MagicMock()
         mock_result.audio = FakeAudio()
         mock_pipeline.return_value = [mock_result]
@@ -581,6 +584,7 @@ class TestQwen3TTSTTS:
     async def test_synthesize_returns_audio_bytes(self):
 
         import numpy as np
+
         mock_model = MagicMock()
         fake_audio = np.zeros(24000, dtype=np.float32)
         mock_model.generate_custom_voice.return_value = ([fake_audio], 24000)
@@ -646,6 +650,7 @@ class TestQwen3TTSTTS:
         import os
 
         import numpy as np
+
         mock_model = MagicMock()
         fake_audio = np.zeros(24000, dtype=np.float32)
         mock_model.generate_voice_clone.return_value = ([fake_audio], 24000)
@@ -688,6 +693,7 @@ class TestQwen3TTSTTS:
         """Without ref_audio_path, uses existing custom voice path."""
 
         import numpy as np
+
         mock_model = MagicMock()
         fake_audio = np.zeros(24000, dtype=np.float32)
         mock_model.generate_custom_voice.return_value = ([fake_audio], 24000)
@@ -769,7 +775,10 @@ class TestTTSFactory:
         """Factory falls back to MockTTS for unknown provider names."""
 
         # When _build_config returns None, MockTTS is returned directly
-        with patch.object(TTSFactory, "_build_config", return_value=None), patch("animetta.services.tts.factory.MockTTS") as MockMockTTS:
+        with (
+            patch.object(TTSFactory, "_build_config", return_value=None),
+            patch("animetta.services.tts.factory.MockTTS") as MockMockTTS,
+        ):
             mock_instance = AsyncMock()
             MockMockTTS.return_value = mock_instance
 

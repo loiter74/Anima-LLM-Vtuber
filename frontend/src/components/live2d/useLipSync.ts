@@ -2,7 +2,7 @@ import { getModel } from './useLive2DModel'
 
 // ===== Mouth Parameter Candidates (Cubism 3/4) =====
 
-export const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
+const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
 
 // ===== LipSync State =====
 
@@ -10,9 +10,7 @@ let mouthValue = 0
 let targetMouth = 0
 let mouthParam: string | null = null
 let lipSyncCancel: (() => void) | null = null
-let _lipSyncRafActive = false  // when true, PIXI ticker lip sync is disabled
-
-export function getIsLipSyncRafActive(): boolean { return _lipSyncRafActive }
+let _lipSyncRafActive = false // when true, PIXI ticker lip sync is disabled
 
 // ===== Mouth Target =====
 
@@ -35,7 +33,10 @@ export function tickLipSync(): void {
   if (!mouthParam) {
     for (const name of MOUTH_PARAMS) {
       const idx = model.internalModel?.coreModel?.getParameterIndex(name)
-      if (idx >= 0) { mouthParam = name; break }
+      if (idx >= 0) {
+        mouthParam = name
+        break
+      }
     }
   }
 
@@ -60,7 +61,7 @@ export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
   let lastIndex = -1
   let hasStarted = false
   let preRollCount = 0
-  let preRollTarget = 3
+  const preRollTarget = 3
   let lipSyncMouth = 0
   let lipSyncTarget = 0
 
@@ -76,7 +77,10 @@ export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
     if (!mouthParam) {
       for (const name of MOUTH_PARAMS) {
         const idx = m?.internalModel?.coreModel?.getParameterIndex(name)
-        if (idx !== undefined && idx >= 0) { mouthParam = name; break }
+        if (idx !== undefined && idx >= 0) {
+          mouthParam = name
+          break
+        }
       }
     }
     if (mouthParam && m?.internalModel?.coreModel) {
@@ -116,7 +120,10 @@ export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
   }
   requestAnimationFrame(tick)
 
-  lipSyncCancel = () => { _lipSyncRafActive = false; setLipSyncParam(0) }
+  lipSyncCancel = () => {
+    _lipSyncRafActive = false
+    setLipSyncParam(0)
+  }
 }
 
 export function stopLipSync(): void {
@@ -126,15 +133,7 @@ export function stopLipSync(): void {
   setMouthTarget(0)
   const model = getModel()
   // Restart idle motion for head sway now that lip sync is done
-  try { model?.motion?.("Idle", 0) } catch {}
-}
-
-// ===== State Reset (for destroy) =====
-
-export function resetLipSyncState(): void {
-  mouthValue = 0
-  targetMouth = 0
-  mouthParam = null
-  lipSyncCancel = null
-  _lipSyncRafActive = false
+  try {
+    model?.motion?.('Idle', 0)
+  } catch {}
 }

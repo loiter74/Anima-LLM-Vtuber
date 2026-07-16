@@ -22,7 +22,7 @@ from animetta.services.tts.audio_validation import is_valid_audio_payload
 class QwenEngine(Protocol):
     async def preload(self) -> None: ...
 
-    async def synthesize(self, text: str, **kwargs: Any) -> bytes | str: ...
+    async def synthesize(self, text: str, **_kwargs: Any) -> bytes | str: ...
 
     async def close(self) -> None: ...
 
@@ -345,9 +345,7 @@ def create_app(
             await active_service.close()
 
     async def health(request: Request) -> JSONResponse:
-        return JSONResponse(
-            {"status": "ok", "service": "qwen-tts", "api_version": "v1"}
-        )
+        return JSONResponse({"status": "ok", "service": "qwen-tts", "api_version": "v1"})
 
     def require_auth(request: Request) -> JSONResponse | None:
         if active_service.authorized(request):

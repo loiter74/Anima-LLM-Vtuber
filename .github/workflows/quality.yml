@@ -453,6 +453,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force artifacts/test-impact/ci/release-runtime | Out-Null
           docker compose logs --no-color 2>&1 | Out-File -Encoding utf8 artifacts/test-impact/ci/release-runtime/workflow-docker.log
+          docker compose -f docker-compose.qwen.yml logs --no-color 2>&1 | Out-File -Encoding utf8 artifacts/test-impact/ci/release-runtime/workflow-qwen-docker.log
 
       - name: Upload release runtime evidence
         if: ${{ always() }}
@@ -465,7 +466,10 @@ jobs:
 
       - name: Stop production stack
         if: ${{ always() }}
-        run: docker compose down --remove-orphans
+        shell: pwsh
+        run: |
+          docker compose down --remove-orphans
+          docker compose -f docker-compose.qwen.yml down --remove-orphans
 
   quality-gate:
     name: quality-gate

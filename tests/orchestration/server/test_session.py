@@ -96,9 +96,7 @@ class TestGetOrCreateContext:
             mock_ctx.init_emotion_analyzer.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_creates_new_context_without_pool(
-        self, session_manager, monkeypatch
-    ):
+    async def test_creates_new_context_without_pool(self, session_manager, monkeypatch):
         """When ServicePool is not available, load_from_config is called."""
         mock_ctx = MagicMock()
         mock_ctx.load_from_config = AsyncMock()
@@ -124,9 +122,7 @@ class TestGetOrCreateContext:
         existing = MagicMock()
         session_manager.contexts["sid1"] = existing
 
-        ctx = await session_manager.get_or_create_context(
-            "sid1", MagicMock(), MagicMock()
-        )
+        ctx = await session_manager.get_or_create_context("sid1", MagicMock(), MagicMock())
 
         assert ctx is existing
 
@@ -148,6 +144,7 @@ class TestGetOrCreateContext:
         mock_ctx_b.init_emotion_analyzer = AsyncMock()
 
         ctx_counter = [0]
+
         def _make_ctx(**kwargs):
             ctx_counter[0] += 1
             return mock_ctx_a if ctx_counter[0] == 1 else mock_ctx_b
@@ -197,7 +194,11 @@ class TestGetOrCreateOrchestrator:
         ctx = MagicMock()
         ctx.emotion_analyzer = MagicMock()
         orch = await session_manager.get_or_create_orchestrator(
-            "sid1", ctx, MagicMock(), MagicMock(), socketio=None,
+            "sid1",
+            ctx,
+            MagicMock(),
+            MagicMock(),
+            socketio=None,
         )
 
         assert orch is mock_orch
@@ -210,7 +211,10 @@ class TestGetOrCreateOrchestrator:
         session_manager.orchestrators["sid1"] = existing
 
         orch = await session_manager.get_or_create_orchestrator(
-            "sid1", MagicMock(), MagicMock(), MagicMock(),
+            "sid1",
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
         )
 
         assert orch is existing
@@ -257,10 +261,16 @@ class TestGetOrCreateOrchestrator:
 
         # Call twice sequentially — second should hit cache
         orch1 = await session_manager.get_or_create_orchestrator(
-            "sid_lock", ctx, MagicMock(), MagicMock(),
+            "sid_lock",
+            ctx,
+            MagicMock(),
+            MagicMock(),
         )
         orch2 = await session_manager.get_or_create_orchestrator(
-            "sid_lock", ctx, MagicMock(), MagicMock(),
+            "sid_lock",
+            ctx,
+            MagicMock(),
+            MagicMock(),
         )
 
         assert orch1 is orch2
@@ -275,9 +285,7 @@ class TestLoadToolsConfig:
     """Tool configuration loading."""
 
     @pytest.mark.asyncio
-    async def test_logging_does_not_leak_tool_config_secret(
-        self, session_manager, monkeypatch
-    ):
+    async def test_logging_does_not_leak_tool_config_secret(self, session_manager, monkeypatch):
         """Tool config diagnostics must not log full config content."""
         info = MagicMock()
         monkeypatch.setattr("animetta.orchestration.server.session.logger.info", info)
@@ -304,10 +312,7 @@ class TestLoadToolsConfig:
             result = await session_manager._load_tools_config()
 
         assert result["enable_tools"] is True
-        logged = "\n".join(
-            str(call.args) + str(call.kwargs)
-            for call in info.call_args_list
-        )
+        logged = "\n".join(str(call.args) + str(call.kwargs) for call in info.call_args_list)
         assert "sk-tools-config-secret" not in logged
 
 

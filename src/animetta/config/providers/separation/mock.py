@@ -9,4 +9,5 @@ from .base import SeparationBaseConfig
 @ProviderRegistry.register_config("separation", "mock")
 class MockSeparationConfig(SeparationBaseConfig):
     """Mock Separation configuration - for testing"""
+
     type: Literal["mock"] = "mock"

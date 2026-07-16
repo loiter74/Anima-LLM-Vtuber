@@ -137,13 +137,22 @@ class TestNotifierManager:
             assert "discord" not in nm._enabled or not nm._enabled
 
     def test_discord_enabled_when_url_set(self):
-        with patch.dict(os.environ, {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"},
+            clear=True,
+        ):
             nm = NotifierManager()
             assert "discord" in nm._enabled
 
     def test_handle_returns_channel_results(self):
-        with patch.dict(os.environ, {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"},
+            clear=True,
+        ):
             import asyncio
+
             nm = NotifierManager()
             with patch.object(DiscordNotifier, "send", new=AsyncMock(return_value=True)):
                 results = asyncio.run(nm.handle(SAMPLE_ALERTMANAGER_PAYLOAD))
@@ -168,7 +177,11 @@ class TestDiscordNotifier:
 
     def test_embed_format(self):
         """Verify Discord embed structure via monkeypatching httpx."""
-        with patch.dict(os.environ, {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"NOTIFIER_DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"},
+            clear=True,
+        ):
             n = DiscordNotifier()
             # Just check it initializes correctly
             assert n.webhook_url == "https://discord.com/api/webhooks/test"
@@ -222,7 +235,14 @@ class TestEmailNotifier:
         """Verify HTML template renders alert data."""
 
         text, html = _render_email(
-            [{"name": "TestAlert", "severity": "critical", "summary": "Test summary", "starts_at": ""}],
+            [
+                {
+                    "name": "TestAlert",
+                    "severity": "critical",
+                    "summary": "Test summary",
+                    "starts_at": "",
+                }
+            ],
             "firing",
         )
 

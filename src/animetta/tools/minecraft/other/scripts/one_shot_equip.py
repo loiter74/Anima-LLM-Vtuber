@@ -28,7 +28,7 @@ EQUIP_CODE = "\n".join(
 )
 
 
-async def main():
+async def main() -> None:
     config = MinecraftConfig(
         enabled=True,
         mode=MinecraftMode.FALLBACK,

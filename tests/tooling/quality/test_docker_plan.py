@@ -33,7 +33,8 @@ def _changes(
         ("src/animetta_qwen_tts/app.py", {"qwen-tts"}),
         ("Dockerfile.qwen-tts", {"qwen-tts"}),
         ("src/animetta/config/loader.py", {"animetta", "qwen-tts"}),
-        ("docker-compose.yml", {"animetta", "qwen-tts"}),
+        ("docker-compose.yml", {"animetta"}),
+        ("docker-compose.qwen.yml", {"qwen-tts"}),
         ("docs/architecture.md", set()),
     ],
 )
@@ -128,10 +129,12 @@ docker_watch_paths: [Dockerfile*, src/a/**, src/b/**]
 docker_scopes:
   a:
     service: a
+    compose_file: docker-compose.a.yml
     environment_identity_fields: [A_PROFILE]
     paths: [Dockerfile.a, src/a/**]
   b:
     service: b
+    compose_file: docker-compose.b.yml
     environment_identity_fields: [B_PROFILE]
     paths: [Dockerfile.b, src/b/**]
 """.strip(),
@@ -186,7 +189,9 @@ def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
         "docker/entrypoint.sh",
         "docker/nginx.conf",
         ".env.example",
-        "docker-compose*.yml",
+        "docker-compose.yml",
+        "docker-compose.cpu.yml",
+        "docker-compose.core.yml",
     }.issubset(animetta)
     assert "docker/**" not in animetta
     assert {
@@ -199,7 +204,7 @@ def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
         "src/animetta/services/tts/interface.py",
         "src/animetta/services/tts/qwen3_tts.py",
         "config/**",
-        "docker-compose*.yml",
+        "docker-compose.qwen.yml",
     }.issubset(qwen)
     assert "src/animetta/services/tts/**" not in qwen
 
@@ -220,10 +225,12 @@ def test_images_publish_plan_build_fingerprints_through_compose_args_and_labels(
     core_dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     qwen_dockerfile = (ROOT / "Dockerfile.qwen-tts").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    qwen_compose = (ROOT / "docker-compose.qwen.yml").read_text(encoding="utf-8")
 
     assert "ARG ANIMETTA_BUILD_FINGERPRINT" in core_dockerfile
     assert 'LABEL org.animetta.build-fingerprint="${ANIMETTA_BUILD_FINGERPRINT}"' in core_dockerfile
     assert "ARG QWEN_TTS_BUILD_FINGERPRINT" in qwen_dockerfile
     assert 'LABEL org.animetta.build-fingerprint="${QWEN_TTS_BUILD_FINGERPRINT}"' in qwen_dockerfile
     assert "ANIMETTA_BUILD_FINGERPRINT" in compose
-    assert "QWEN_TTS_BUILD_FINGERPRINT" in compose
+    assert "QWEN_TTS_BUILD_FINGERPRINT" not in compose
+    assert "QWEN_TTS_BUILD_FINGERPRINT" in qwen_compose

@@ -21,6 +21,7 @@ from pathlib import Path
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.tts.vibe_voice import VibeVoiceTTSConfig
 from animetta.utils.tempfiles import reserve_temp_path
 
 from ..interface import TTSInterface
@@ -89,6 +90,7 @@ class VibeVoiceTTS(TTSInterface):
         if self._client is None:
             try:
                 import httpx
+
                 self._client = httpx.AsyncClient(
                     base_url=self.base_url,
                     timeout=180.0,  # Long text synthesis may take time
@@ -97,9 +99,7 @@ class VibeVoiceTTS(TTSInterface):
                         "Content-Type": "application/json",
                     },
                 )
-                logger.info(
-                    f"VibeVoice HTTP client initialized (base_url={self.base_url})"
-                )
+                logger.info(f"VibeVoice HTTP client initialized (base_url={self.base_url})")
             except ImportError as e:
                 logger.error("httpx not installed, please run: pip install httpx")
                 raise ImportError("httpx not installed，请运行: pip install httpx") from e
@@ -219,8 +219,7 @@ class VibeVoiceTTS(TTSInterface):
             ) from e
         except httpx.HTTPStatusError as e:
             raise RuntimeError(
-                f"VibeVoice service returned error: {e.response.status_code} "
-                f"{e.response.text}"
+                f"VibeVoice service returned error: {e.response.status_code} {e.response.text}"
             ) from e
 
     async def _synthesize_local(
@@ -239,10 +238,14 @@ class VibeVoiceTTS(TTSInterface):
         # Build inference command
         infer_script = self._find_infer_script()
         cmd = [
-            "python", infer_script,
-            "--text", text,
-            "--output", str(out_file),
-            "--device", self.device,
+            "python",
+            infer_script,
+            "--text",
+            text,
+            "--output",
+            str(out_file),
+            "--device",
+            self.device,
         ]
         if self.model_path:
             cmd.extend(["--model", self.model_path])
@@ -268,9 +271,7 @@ class VibeVoiceTTS(TTSInterface):
             if not out_file.exists() or out_file.stat().st_size == 0:
                 raise RuntimeError("VibeVoice local inference did not generate audio file")
 
-            logger.debug(
-                f"VibeVoice local synthesis successful: {out_file.stat().st_size} bytes"
-            )
+            logger.debug(f"VibeVoice local synthesis successful: {out_file.stat().st_size} bytes")
 
             if output_path:
                 return str(out_file)
@@ -324,6 +325,8 @@ class VibeVoiceTTS(TTSInterface):
                 output_path=None,
                 voice=voice or self.voice,
             )
+            if isinstance(audio, str):
+                audio = Path(audio).read_bytes()
             yield audio
             return
 

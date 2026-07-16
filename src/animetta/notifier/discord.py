@@ -7,6 +7,7 @@ and sends via webhook.
 
 import logging
 import os
+from typing import Any
 
 import httpx
 
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 SEVERITY_COLORS = {
     "critical": 0xE74C3C,  # Red
-    "warning": 0xF1C40F,   # Yellow
-    "info": 0x3498DB,      # Blue
+    "warning": 0xF1C40F,  # Yellow
+    "info": 0x3498DB,  # Blue
 }
 RESOLVED_COLOR = 0x2ECC71  # Green
 
@@ -45,18 +46,20 @@ class DiscordNotifier(NotifierBase):
 
             prefix = "✅ [RESOLVED]" if status == "resolved" else "🚨 [FIRING]"
 
-            embeds.append({
-                "title": f"{prefix} {alert['name']}",
-                "description": alert.get("summary", alert.get("description", "")),
-                "color": color,
-                "fields": [
-                    {"name": "Severity", "value": severity, "inline": True},
-                    {"name": "Status", "value": status, "inline": True},
-                ],
-                "timestamp": alert.get("starts_at", ""),
-            })
+            embeds.append(
+                {
+                    "title": f"{prefix} {alert['name']}",
+                    "description": alert.get("summary", alert.get("description", "")),
+                    "color": color,
+                    "fields": [
+                        {"name": "Severity", "value": severity, "inline": True},
+                        {"name": "Status", "value": status, "inline": True},
+                    ],
+                    "timestamp": alert.get("starts_at", ""),
+                }
+            )
 
-        payload = {"embeds": embeds}
+        payload: dict[str, Any] = {"embeds": embeds}
         if len(alerts) == 1:
             payload["content"] = f"**{alerts[0]['name']}** — {alerts[0].get('summary', '')}"
 

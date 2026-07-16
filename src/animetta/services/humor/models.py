@@ -117,4 +117,3 @@ def fallback_result(
         enabled=enabled,
         duration_ms=duration_ms,
     )
-

@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.services.live2d.action_queue import ActionMessage
+
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -46,12 +48,14 @@ class Live2DHandlers:
         broadcast to desktop clients.
         """
 
-        async def execute_action(action):
+        async def execute_action(action: ActionMessage) -> None:
             await self.admin.broadcast_to_desktop_clients(
-                "live2d", "live2d:action", {
+                "live2d",
+                "live2d:action",
+                {
                     "action": action.action,
                     "action_id": action.action_id,
-                }
+                },
             )
 
         self.live2d_manager.set_execute_callback(execute_action)
@@ -107,9 +111,7 @@ class Live2DHandlers:
             )
 
         except Exception as e:
-            logger.error(
-                f"[{sid}] Error processing desktop chat message: {e}"
-            )
+            logger.error(f"[{sid}] Error processing desktop chat message: {e}")
             await self.sio.emit(
                 EVENTS["system"]["error"]["name"], {"type": "error", "message": str(e)}, to=sid
             )

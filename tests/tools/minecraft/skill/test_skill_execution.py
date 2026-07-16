@@ -37,7 +37,9 @@ def _success_bridge(*responses: dict[str, Any]) -> AsyncMock:
     bridge = AsyncMock()
     bridge.send_command = AsyncMock(
         side_effect=[
-            {"status": "success", "result": r} if isinstance(r, dict) else {"status": "success", "result": r}
+            {"status": "success", "result": r}
+            if isinstance(r, dict)
+            else {"status": "success", "result": r}
             for r in responses
         ]
     )
@@ -189,10 +191,12 @@ class TestExecuteSkill:
             SkillStep(name="mine", params={"block_type": "diamond_ore"}),
         ]
         skill = _make_skill(steps=steps)
-        bridge = _bridge_with_sequence([
-            {"status": "success", "result": {}},
-            {"status": "error", "result": "No diamond ore found"},
-        ])
+        bridge = _bridge_with_sequence(
+            [
+                {"status": "success", "result": {}},
+                {"status": "error", "result": "No diamond ore found"},
+            ]
+        )
 
         result = await execute_skill(skill, bridge)
 
@@ -211,10 +215,12 @@ class TestExecuteSkill:
             ),
         ]
         skill = _make_skill(steps=steps)
-        bridge = _bridge_with_sequence([
-            TimeoutError("timed out"),
-            {"status": "success", "result": {}},
-        ])
+        bridge = _bridge_with_sequence(
+            [
+                TimeoutError("timed out"),
+                {"status": "success", "result": {}},
+            ]
+        )
 
         result = await execute_skill(skill, bridge)
 
@@ -232,10 +238,12 @@ class TestExecuteSkill:
             ),
         ]
         skill = _make_skill(steps=steps)
-        bridge = _bridge_with_sequence([
-            TimeoutError("timed out"),
-            TimeoutError("timed out again"),
-        ])
+        bridge = _bridge_with_sequence(
+            [
+                TimeoutError("timed out"),
+                TimeoutError("timed out again"),
+            ]
+        )
 
         result = await execute_skill(skill, bridge)
 
@@ -250,10 +258,12 @@ class TestExecuteSkill:
             SkillStep(name="collect", params={"block_type": "log"}),
         ]
         skill = _make_skill(steps=steps)
-        bridge = _bridge_with_sequence([
-            {"status": "success", "result": {"nearest_tree": (10, 64, 20)}},
-            {"status": "success", "result": {"collected": 1}},
-        ])
+        bridge = _bridge_with_sequence(
+            [
+                {"status": "success", "result": {"nearest_tree": (10, 64, 20)}},
+                {"status": "success", "result": {"collected": 1}},
+            ]
+        )
 
         result = await execute_skill(skill, bridge, context={"health": 10})
 

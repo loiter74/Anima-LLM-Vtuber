@@ -499,7 +499,9 @@ class TestSkillLearningStatsCleanup:
         good.fail_count = 5  # 75%
         await library.save_skill(good)
 
-        borderline = Skill(id="borderline", name="Borderline", description="Borderline", is_learned=True)
+        borderline = Skill(
+            id="borderline", name="Borderline", description="Borderline", is_learned=True
+        )
         borderline.success_count = 3
         borderline.fail_count = 7  # 30% — exactly at threshold, kept
         await library.save_skill(borderline)

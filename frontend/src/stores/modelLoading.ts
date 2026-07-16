@@ -12,7 +12,7 @@ export const useModelLoadingStore = defineStore('modelLoading', () => {
 
   /** Models that haven't reached terminal state */
   const activeLoads = computed(() =>
-    Array.from(models.value.values()).filter(m => m.status === 'loading')
+    Array.from(models.value.values()).filter((m) => m.status === 'loading'),
   )
 
   /** True while warmup is in progress (any model still loading) */
@@ -23,7 +23,7 @@ export const useModelLoadingStore = defineStore('modelLoading', () => {
     const total = models.value.size
     if (total === 0) return 1
     const done = Array.from(models.value.values()).filter(
-      m => m.status === 'loaded' || m.status === 'error'
+      (m) => m.status === 'loaded' || m.status === 'error',
     ).length
     return done / total
   })
@@ -32,7 +32,7 @@ export const useModelLoadingStore = defineStore('modelLoading', () => {
   const summary = computed(() => {
     const loading = activeLoads.value
     if (loading.length === 0) return ''
-    const names = loading.map(m => m.service).join('、')
+    const names = loading.map((m) => m.service).join('、')
     return `正在加载 ${names} ...`
   })
 

@@ -38,9 +38,7 @@ class ChatDelivery:
     sio: Any
     identity: ChatIdentity
     transport_mode: ChatTransportMode
-    recorder: ObservationRecorder = dataclass_field(
-        default_factory=NoOpObservationRecorder
-    )
+    recorder: ObservationRecorder = dataclass_field(default_factory=NoOpObservationRecorder)
 
     def _wire_event(self, module: str, action: str) -> str:
         canonical = event_name(module, action)
@@ -79,8 +77,7 @@ class ChatDelivery:
             "turn_id": self.identity.task_id,
         }
         normalized_schema = {
-            field.removesuffix("?"): (field, descriptor)
-            for field, descriptor in schema.items()
+            field.removesuffix("?"): (field, descriptor) for field, descriptor in schema.items()
         }
         unknown = set(result) - set(normalized_schema)
         if unknown:

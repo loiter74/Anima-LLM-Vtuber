@@ -211,7 +211,7 @@ def test_collector_is_read_only_and_extracts_lifecycle_identity() -> None:
 
     def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
         commands.append(argv)
-        if argv[:4] == ["docker", "compose", "ps", "-q"]:
+        if "ps" in argv and "-q" in argv:
             return subprocess.CompletedProcess(argv, 0, stdout="container-id\n", stderr="")
         inspect = [
             {
@@ -234,42 +234,66 @@ def test_collector_is_read_only_and_extracts_lifecycle_identity() -> None:
     observed = collect_service_observations(
         ("animetta",),
         environment_allowlists={"animetta": ("ANIMETTA_PROFILE",)},
+        compose_files={"animetta": "docker-compose.yml"},
         command_runner=run,
     )
 
     assert observed["animetta"].container_id == "container-id"
     assert observed["animetta"].build_fingerprint == "build-v1"
+    assert commands[0][:5] == [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "ps",
+    ]
     assert all(
         not ({"build", "up", "down", "restart", "start", "stop"} & set(command))
         for command in commands
     )
 
 
-def test_desired_environment_identity_comes_from_current_compose_config() -> None:
-    compose = {
-        "services": {
-            "animetta": {
-                "environment": {
-                    "ANIMETTA_PROFILE": "production",
-                    "DEEPSEEK_API_KEY": "rotated-secret",
-                    "PATH": "irrelevant",
+def test_desired_environment_identity_comes_from_each_scope_compose_config() -> None:
+    compose_by_file = {
+        "docker-compose.yml": {
+            "services": {
+                "animetta": {
+                    "environment": {
+                        "ANIMETTA_PROFILE": "production",
+                        "DEEPSEEK_API_KEY": "rotated-secret",
+                        "PATH": "irrelevant",
+                    }
                 }
-            },
-            "qwen-tts": {
-                "environment": {
-                    "QWEN_TTS_API_KEY": "tts-secret",
-                    "QWEN_TTS_URL": "http://qwen-tts:8766",
+            }
+        },
+        "docker-compose.qwen.yml": {
+            "services": {
+                "qwen-tts": {
+                    "environment": {
+                        "QWEN_TTS_API_KEY": "tts-secret",
+                        "QWEN_TTS_URL": "http://qwen-tts:8766",
+                    }
                 }
-            },
-        }
+            }
+        },
     }
 
     def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(compose), stderr="")
+        compose_file = argv[argv.index("-f") + 1]
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(compose_by_file[compose_file]),
+            stderr="",
+        )
 
     identities = collect_desired_environment_identities(
         ("animetta", "qwen-tts"),
         environment_allowlists=_allowlists(),
+        compose_files={
+            "animetta": "docker-compose.yml",
+            "qwen-tts": "docker-compose.qwen.yml",
+        },
         command_runner=run,
     )
 

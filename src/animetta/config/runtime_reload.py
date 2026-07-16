@@ -18,9 +18,7 @@ from animetta.config.manifest import (
 )
 
 _HOT_LLM_FIELDS = frozenset({"temperature", "top_p", "max_tokens", "thinking"})
-_HOT_RUNTIME_FIELDS = frozenset(
-    {"enable_subtitle_translation", "enable_active_memes"}
-)
+_HOT_RUNTIME_FIELDS = frozenset({"enable_subtitle_translation", "enable_active_memes"})
 
 
 @dataclass

@@ -56,9 +56,7 @@ async def check_metrics_pipeline(
                 return CheckResult.failed(
                     "metrics_pipeline", duration_ms, "; ".join(issues), **detail
                 )
-            return CheckResult.passed(
-                "metrics_pipeline", duration_ms=duration_ms, **detail
-            )
+            return CheckResult.passed("metrics_pipeline", duration_ms=duration_ms, **detail)
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             resp = await client.get(METRICS_ENDPOINT)
             detail["status_code"] = resp.status_code
@@ -79,9 +77,7 @@ async def check_metrics_pipeline(
                     else:
                         detail[f"has_{metric_name}"] = False
                         issues.append(f"metrics_missing_{metric_name}")
-                        logger.warning(
-                            f"[metrics] Missing expected metric: {metric_name}"
-                        )
+                        logger.warning(f"[metrics] Missing expected metric: {metric_name}")
 
     except httpx.ConnectError as e:
         issues.append("metrics_unreachable")
@@ -133,9 +129,7 @@ def _metric_sum(snapshot: str, metric_name: str) -> float:
         if not line.startswith(metric_name):
             continue
         head, separator, value = line.rpartition(" ")
-        if not separator or not (
-            head == metric_name or head.startswith(f"{metric_name}{{")
-        ):
+        if not separator or not (head == metric_name or head.startswith(f"{metric_name}{{")):
             continue
         try:
             total += float(value)

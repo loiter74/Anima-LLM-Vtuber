@@ -38,11 +38,14 @@ def _create_mock_client(
     client.disconnect = AsyncMock()
 
     if wildcard_handler_container is not None:
+
         def _on(event: str):
             def decorator(func):
                 wildcard_handler_container[0] = func
                 return func
+
             return decorator
+
         client.on = _on
     else:
         # Default: on() returns a decorator that returns the function unchanged
@@ -158,15 +161,22 @@ class TestSuccessfulPipeline:
             "components": {"pool": {"ready": True}},
         }
         runtime.observation_query.trace_detail = AsyncMock(return_value=None)
-        validation = AsyncMock(return_value=CheckResult.passed(
-            "pipeline/observed_turn",
-            workflow=[
-                "personality", "llm", "humor_rewrite", "humor_validation",
-                "tts", "emotion", "output",
-            ],
-            tts_evidence=True,
-            metrics_delta={"anima_trace_outcomes_total": 1.0},
-        ))
+        validation = AsyncMock(
+            return_value=CheckResult.passed(
+                "pipeline/observed_turn",
+                workflow=[
+                    "personality",
+                    "llm",
+                    "humor_rewrite",
+                    "humor_validation",
+                    "tts",
+                    "emotion",
+                    "output",
+                ],
+                tts_evidence=True,
+                metrics_delta={"anima_trace_outcomes_total": 1.0},
+            )
+        )
         with (
             patch("animetta.inspection.checks.pipeline.socketio.AsyncClient", return_value=client),
             patch("animetta.inspection.checks.pipeline.asyncio.sleep", AsyncMock()),
@@ -182,8 +192,13 @@ class TestSuccessfulPipeline:
         }
         assert result.detail["probe_contained"] is True
         assert validation.await_args.kwargs["expected_workflow"] == (
-            "personality", "llm", "humor_rewrite", "humor_validation",
-            "tts", "emotion", "output",
+            "personality",
+            "llm",
+            "humor_rewrite",
+            "humor_validation",
+            "tts",
+            "emotion",
+            "output",
         )
         assert validation.await_args.kwargs["expected_llm_calls"] is None
 
@@ -430,9 +445,14 @@ class TestEventNames:
         """EXPECTED_EVENTS must contain catalog-backed probe events."""
         # Must be a frozenset (immutable, hashable)
         assert isinstance(EXPECTED_EVENTS, frozenset)
-        assert frozenset({
-            EVENTS["system"]["connection_established"]["name"],
-        }) == EXPECTED_EVENTS
+        assert (
+            frozenset(
+                {
+                    EVENTS["system"]["connection_established"]["name"],
+                }
+            )
+            == EXPECTED_EVENTS
+        )
 
     def test_probe_input_event_is_from_event_catalog(self):
         """The emitted probe input event must come from the shared catalog."""
@@ -442,11 +462,16 @@ class TestEventNames:
         """Output events are forbidden for the filtered inspection probe."""
 
         assert isinstance(PROHIBITED_PROBE_EVENTS, frozenset)
-        assert frozenset({
-            EVENTS["chat"]["sentence"]["name"],
-            EVENTS["chat"]["expression"]["name"],
-            EVENTS["chat"]["audio_with_expression"]["name"],
-        }) == PROHIBITED_PROBE_EVENTS
+        assert (
+            frozenset(
+                {
+                    EVENTS["chat"]["sentence"]["name"],
+                    EVENTS["chat"]["expression"]["name"],
+                    EVENTS["chat"]["audio_with_expression"]["name"],
+                }
+            )
+            == PROHIBITED_PROBE_EVENTS
+        )
 
 
 class TestCheckResultShape:

@@ -20,7 +20,6 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
 
-
 # ═══════════════════════════════════════════════════════════════
 # Sample YAML data for testing
 # ═══════════════════════════════════════════════════════════════
@@ -67,6 +66,7 @@ _PARSED_LIVE2D_DATA = {
 # Test Live2DModelConfig
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestLive2DModelConfig:
     """Tests for Live2DModelConfig"""
 
@@ -96,6 +96,7 @@ class TestLive2DModelConfig:
 # ═══════════════════════════════════════════════════════════════
 # Test Live2DLipSyncConfig
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestLive2DLipSyncConfig:
     """Tests for Live2DLipSyncConfig"""
@@ -145,6 +146,7 @@ class TestLive2DLipSyncConfig:
 # Test Live2DConfig
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestLive2DConfigDefaults:
     """Tests for Live2DConfig default values"""
 
@@ -170,7 +172,12 @@ class TestLive2DConfigDefaults:
     def test_default_valid_emotions(self):
         config = Live2DConfig()
         assert config.valid_emotions == [
-            "happy", "sad", "angry", "surprised", "neutral", "thinking",
+            "happy",
+            "sad",
+            "angry",
+            "surprised",
+            "neutral",
+            "thinking",
         ]
 
     def test_default_lip_sync(self):
@@ -190,7 +197,9 @@ class TestLive2DConfigEmotionMethods:
     def test_get_emotion_names_returns_keys(self):
         config = Live2DConfig()
         names = config.get_emotion_names()
-        assert sorted(names) == sorted(["happy", "sad", "angry", "surprised", "neutral", "thinking"])
+        assert sorted(names) == sorted(
+            ["happy", "sad", "angry", "surprised", "neutral", "thinking"]
+        )
 
     def test_get_motion_index_returns_correct_value(self):
         config = Live2DConfig()
@@ -248,6 +257,7 @@ class TestLive2DConfigCustomConfig:
 # ═══════════════════════════════════════════════════════════════
 # Test Live2DConfig.from_yaml
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFromYaml:
     """Tests for Live2DConfig.from_yaml"""
@@ -308,6 +318,7 @@ class TestFromYaml:
 # ═══════════════════════════════════════════════════════════════
 # Test get_live2d_config (singleton)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestGetLive2DConfig:
     """Tests for get_live2d_config (singleton)"""

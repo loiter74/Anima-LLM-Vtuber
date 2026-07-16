@@ -93,6 +93,11 @@ async function refreshMemories(): Promise<void> {
   }
 }
 
+function selectScope(scope: string | null): void {
+  store.setScope(scope)
+  void refreshMemories()
+}
+
 async function loadMore(): Promise<void> {
   if (!store.nextCursor) return
   try {
@@ -158,12 +163,16 @@ onMounted(() => {
         <span>记忆浏览</span>
       </span>
       <button
-        class="w-7 h-7 flex items-center justify-center rounded-lg
-               bg-c-bg/40 text-c-text-dim hover:text-c-text hover:bg-c-bg/60 transition-colors"
+        class="w-7 h-7 flex items-center justify-center rounded-lg bg-c-bg/40 text-c-text-dim hover:text-c-text hover:bg-c-bg/60 transition-colors"
         @click="collapsed = !collapsed"
       >
         <svg
-          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
           :class="collapsed ? 'rotate-180' : ''"
           class="transition-transform"
         >
@@ -177,18 +186,22 @@ onMounted(() => {
       <div class="flex border-b border-c-border/20 shrink-0">
         <button
           class="flex-1 py-2 text-10px font-medium transition-colors"
-          :class="viewMode === 'list'
-            ? 'text-c-accent border-b-2 border-c-accent'
-            : 'text-c-text-dim hover:text-c-text'"
+          :class="
+            viewMode === 'list'
+              ? 'text-c-accent border-b-2 border-c-accent'
+              : 'text-c-text-dim hover:text-c-text'
+          "
           @click="switchView('list')"
         >
           📋 列表
         </button>
         <button
           class="flex-1 py-2 text-10px font-medium transition-colors"
-          :class="viewMode === 'graph'
-            ? 'text-c-accent border-b-2 border-c-accent'
-            : 'text-c-text-dim hover:text-c-text'"
+          :class="
+            viewMode === 'graph'
+              ? 'text-c-accent border-b-2 border-c-accent'
+              : 'text-c-text-dim hover:text-c-text'
+          "
           @click="switchView('graph')"
         >
           🗺 图谱
@@ -199,11 +212,13 @@ onMounted(() => {
       <div class="flex items-center gap-2 px-4 py-2 border-b border-c-border/20 text-9px shrink-0">
         <span
           class="px-2 py-1 rounded-full border"
-          :class="store.error
-            ? 'text-c-error border-c-error/30 bg-c-error/10'
-            : store.invalidated
-              ? 'text-c-warning border-c-warning/30 bg-c-warning/10'
-              : 'text-c-success border-c-success/30 bg-c-success/10'"
+          :class="
+            store.error
+              ? 'text-c-error border-c-error/30 bg-c-error/10'
+              : store.invalidated
+                ? 'text-c-warning border-c-warning/30 bg-c-warning/10'
+                : 'text-c-success border-c-success/30 bg-c-success/10'
+          "
         >
           {{ store.error ? store.error.code : store.invalidated ? '有新记忆' : '已同步' }}
         </span>
@@ -215,7 +230,10 @@ onMounted(() => {
           {{ store.job.status }} · {{ store.job.progress }}%
         </span>
         <div class="flex-1" />
-        <button class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200" @click="refreshMemories">
+        <button
+          class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200"
+          @click="refreshMemories"
+        >
           刷新
         </button>
       </div>
@@ -227,9 +245,11 @@ onMounted(() => {
             v-for="opt in typeOptions"
             :key="opt.label"
             class="px-2 py-1 rounded-lg text-10px font-medium transition-all"
-            :class="store.filterType === opt.key
-              ? 'bg-c-accent/20 text-c-accent'
-              : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'"
+            :class="
+              store.filterType === opt.key
+                ? 'bg-c-accent/20 text-c-accent'
+                : 'bg-c-bg/40 text-c-text-dim hover:text-c-text'
+            "
             @click="store.setFilter(opt.key)"
           >
             {{ opt.label }}
@@ -240,10 +260,12 @@ onMounted(() => {
             v-for="opt in scopeOptions"
             :key="opt.label"
             class="px-2 py-1 rounded-lg text-9px font-medium transition-all duration-200"
-            :class="store.filterScope === opt.key
-              ? 'bg-c-blue/20 text-c-blue'
-              : 'bg-c-bg/40 text-c-text-muted hover:text-c-text'"
-            @click="store.setScope(opt.key); refreshMemories()"
+            :class="
+              store.filterScope === opt.key
+                ? 'bg-c-blue/20 text-c-blue'
+                : 'bg-c-bg/40 text-c-text-muted hover:text-c-text'
+            "
+            @click="selectScope(opt.key)"
           >
             {{ opt.label }}
           </button>
@@ -253,12 +275,16 @@ onMounted(() => {
             v-model="store.searchQuery"
             type="text"
             placeholder="搜索页面..."
-            class="w-full pl-7 pr-2 py-1 rounded-lg bg-c-bg/60 border border-c-border/30 text-10px text-c-text
-                   placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50 transition-colors"
+            class="w-full pl-7 pr-2 py-1 rounded-lg bg-c-bg/60 border border-c-border/30 text-10px text-c-text placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50 transition-colors"
           />
           <svg
             class="absolute left-2 top-1/2 -translate-y-1/2 text-c-text-muted"
-            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
@@ -275,7 +301,10 @@ onMounted(() => {
           </div>
 
           <!-- Empty -->
-          <div v-else-if="store.filteredPages.length === 0" class="flex flex-col items-center justify-center py-10 gap-2">
+          <div
+            v-else-if="store.filteredPages.length === 0"
+            class="flex flex-col items-center justify-center py-10 gap-2"
+          >
             <span class="text-lg opacity-40">📖</span>
             <span class="text-10px text-c-text-muted">
               {{ store.searchQuery || store.filterType ? '没有匹配的页面' : '暂无 wiki 页面' }}
@@ -287,40 +316,65 @@ onMounted(() => {
             v-for="page in store.filteredPages"
             :key="page.path"
             class="group rounded-xl px-2.5 py-2 cursor-pointer transition-all"
-            :class="store.selectedPath === page.path
-              ? 'bg-c-accent/10 border border-c-accent/20'
-              : 'bg-c-card/30 hover:bg-c-card/60 border border-transparent'"
+            :class="
+              store.selectedPath === page.path
+                ? 'bg-c-accent/10 border border-c-accent/20'
+                : 'bg-c-card/30 hover:bg-c-card/60 border border-transparent'
+            "
             @click="store.selectPath(page.path)"
           >
             <div class="flex items-start gap-2">
               <div class="flex-1 min-w-0">
-                <p class="text-10px text-c-text font-medium leading-relaxed line-clamp-2 break-words">{{ page.title }}</p>
+                <p
+                  class="text-10px text-c-text font-medium leading-relaxed line-clamp-2 break-words"
+                >
+                  {{ page.title }}
+                </p>
                 <div class="flex items-center gap-2 mt-1">
-                  <span class="text-9px px-1.5 py-0.5 rounded font-medium bg-c-bg/60 text-c-text-dim">
+                  <span
+                    class="text-9px px-1.5 py-0.5 rounded font-medium bg-c-bg/60 text-c-text-dim"
+                  >
                     {{ page.page_type }}
                   </span>
                   <span class="text-9px text-c-text-muted">{{ formatTime(page.updated_at) }}</span>
                   <span class="text-9px text-c-blue">{{ page.scope }}</span>
-                  <span v-if="page.retention_policy === 'pinned'" class="text-9px text-c-warning">PIN</span>
+                  <span v-if="page.retention_policy === 'pinned'" class="text-9px text-c-warning"
+                    >PIN</span
+                  >
                 </div>
               </div>
             </div>
 
             <!-- Expanded content -->
             <Transition name="expand">
-              <div v-if="store.selectedPath === page.path" class="mt-2 border-t border-c-border/20 pt-2">
-                <p class="text-10px text-c-text-dim leading-relaxed whitespace-pre-wrap line-clamp-6">
+              <div
+                v-if="store.selectedPath === page.path"
+                class="mt-2 border-t border-c-border/20 pt-2"
+              >
+                <p
+                  class="text-10px text-c-text-dim leading-relaxed whitespace-pre-wrap line-clamp-6"
+                >
                   {{ page.content }}
                 </p>
                 <div class="mt-2 text-9px text-c-text-muted space-y-1">
-                  <p>来源 {{ page.origin.channel || 'unknown' }} · 置信 {{ Math.round(page.confidence * 100) }}% · 显著 {{ Math.round(page.salience * 100) }}%</p>
+                  <p>
+                    来源 {{ page.origin.channel || 'unknown' }} · 置信
+                    {{ Math.round(page.confidence * 100) }}% · 显著
+                    {{ Math.round(page.salience * 100) }}%
+                  </p>
                   <p v-if="page.subject_ids.length">主体 {{ page.subject_ids.join(', ') }}</p>
                 </div>
                 <div class="flex gap-1 mt-2" @click.stop>
-                  <button class="px-2 py-1 rounded-lg bg-c-warning/10 text-c-warning hover:bg-c-warning/20 duration-200" @click="togglePin(page)">
+                  <button
+                    class="px-2 py-1 rounded-lg bg-c-warning/10 text-c-warning hover:bg-c-warning/20 duration-200"
+                    @click="togglePin(page)"
+                  >
                     {{ page.retention_policy === 'pinned' ? '取消固定' : '固定' }}
                   </button>
-                  <button class="px-2 py-1 rounded-lg bg-c-error/10 text-c-error hover:bg-c-error/20 duration-200" @click="forget(page)">
+                  <button
+                    class="px-2 py-1 rounded-lg bg-c-error/10 text-c-error hover:bg-c-error/20 duration-200"
+                    @click="forget(page)"
+                  >
                     忘记
                   </button>
                 </div>
@@ -331,7 +385,10 @@ onMounted(() => {
                     placeholder="输入更正后的摘要"
                     @keyup.enter="correct(page)"
                   />
-                  <button class="px-2 py-1 rounded-lg bg-c-accent/15 text-c-accent hover:bg-c-accent/25 duration-200" @click="correct(page)">
+                  <button
+                    class="px-2 py-1 rounded-lg bg-c-accent/15 text-c-accent hover:bg-c-accent/25 duration-200"
+                    @click="correct(page)"
+                  >
                     更正
                   </button>
                 </div>
@@ -347,8 +404,7 @@ onMounted(() => {
               v-model="memeText"
               type="text"
               placeholder="添加梗..."
-              class="flex-1 px-2 py-1 rounded-lg bg-c-bg/60 border border-c-border/30 text-10px text-c-text
-                     placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50"
+              class="flex-1 px-2 py-1 rounded-lg bg-c-bg/60 border border-c-border/30 text-10px text-c-text placeholder:text-c-text-muted focus:outline-none focus:border-c-accent/50"
               @keyup.enter="addMeme"
             />
             <button
@@ -365,7 +421,11 @@ onMounted(() => {
         <div class="px-4 py-2 border-t border-c-border/20 shrink-0">
           <div class="flex items-center justify-center gap-2 text-9px text-c-text-muted">
             <span>{{ store.filteredPages.length }} / {{ store.total }} 条记忆</span>
-            <button v-if="store.nextCursor" class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200" @click="loadMore">
+            <button
+              v-if="store.nextCursor"
+              class="px-2 py-1 rounded-lg text-c-accent hover:bg-c-accent/10 duration-200"
+              @click="loadMore"
+            >
               加载更多
             </button>
           </div>
@@ -387,25 +447,34 @@ onMounted(() => {
           <Transition name="slide-up">
             <div
               v-if="selectedNode"
-              class="absolute bottom-0 left-0 right-0 bg-c-surface/95 backdrop-blur-sm border-t border-c-border/30
-                     rounded-t-xl px-4 py-3 max-h-[50%] overflow-y-auto z-10"
+              class="absolute bottom-0 left-0 right-0 bg-c-surface/95 backdrop-blur-sm border-t border-c-border/30 rounded-t-xl px-4 py-3 max-h-[50%] overflow-y-auto z-10"
             >
               <div class="flex items-start justify-between gap-2 mb-2">
-                <h3 class="text-xs font-semibold text-c-text leading-tight flex-1 min-w-0 break-words">
+                <h3
+                  class="text-xs font-semibold text-c-text leading-tight flex-1 min-w-0 break-words"
+                >
                   {{ selectedNode.label }}
                 </h3>
                 <button
-                  class="w-5 h-5 flex items-center justify-center rounded-md
-                         text-c-text-dim hover:text-c-text hover:bg-c-bg/60 transition-colors shrink-0"
+                  class="w-5 h-5 flex items-center justify-center rounded-md text-c-text-dim hover:text-c-text hover:bg-c-bg/60 transition-colors shrink-0"
                   @click="closeNodeDetail"
                 >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <div class="flex items-center gap-1.5 mb-2">
-                <span class="text-9px px-1.5 py-0.5 rounded font-medium bg-c-accent/15 text-c-accent">
+                <span
+                  class="text-9px px-1.5 py-0.5 rounded font-medium bg-c-accent/15 text-c-accent"
+                >
                   {{ selectedNode.category }}
                 </span>
                 <span class="text-9px px-1.5 py-0.5 rounded font-medium bg-c-bg/60 text-c-text-dim">
@@ -417,8 +486,7 @@ onMounted(() => {
               </p>
               <div class="mt-3 flex justify-end">
                 <button
-                  class="px-3 py-1 rounded-lg text-10px font-medium
-                         bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-colors"
+                  class="px-3 py-1 rounded-lg text-10px font-medium bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-colors"
                   @click="sendToChat(selectedNode)"
                 >
                   发送到聊天
@@ -433,9 +501,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
 
 .expand-enter-active,
 .expand-leave-active {

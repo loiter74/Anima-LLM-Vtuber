@@ -21,7 +21,7 @@ async function initializeLive2D(): Promise<void> {
   live2dInitialized.value = true
 
   // Expose resetView globally for SettingsPanel button
-  ;(window as any).__live2dResetView = () => live2d.resetView()
+  window.__live2dResetView = () => live2d.resetView()
 
   // Load default model; user can load others via external API
   try {
@@ -149,11 +149,13 @@ async function toggleLive2D(): Promise<void> {
         class="px-2 py-1 rounded bg-c-bg/50 backdrop-blur-sm text-10px text-c-text-muted hover:text-c-accent hover:bg-c-bg/80 transition-colors pointer-events-auto"
         title="复位位置和缩放"
         aria-label="复位 Live2D 位置和缩放"
-      @click.stop="live2d.resetView()"
+        @click.stop="live2d.resetView()"
       >
         ↺ 复位
       </button>
-      <div class="px-2 py-1 rounded bg-c-bg/50 backdrop-blur-sm text-10px text-c-text-muted pointer-events-none leading-tight">
+      <div
+        class="px-2 py-1 rounded bg-c-bg/50 backdrop-blur-sm text-10px text-c-text-muted pointer-events-none leading-tight"
+      >
         <div>缩放 {{ live2d.modelInfo.value.userScale }}x</div>
         <div>位置 {{ live2d.modelInfo.value.position }}</div>
       </div>
@@ -188,7 +190,12 @@ async function toggleLive2D(): Promise<void> {
 
     <!-- Idle state (no model) -->
     <div
-      v-if="!live2d.isLoaded.value && !live2d.isLoading.value && !live2d.loadError.value && live2dEnabled"
+      v-if="
+        !live2d.isLoaded.value &&
+        !live2d.isLoading.value &&
+        !live2d.loadError.value &&
+        live2dEnabled
+      "
       class="absolute inset-0 flex items-center justify-center pointer-events-none"
     >
       <div class="text-center text-c-text-muted">

@@ -107,7 +107,7 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   function exportDataset() {
     if (!sock) return
     sock.emit(Events.MEME.DATASET, {})
-    sock.once(Events.MEME.DATASET, (data: { memes: any[]; error?: string }) => {
+    sock.once(Events.MEME.DATASET, (data: { memes: unknown[]; error?: string }) => {
       if (data.error) {
         console.warn('[memeReview] Export error:', data.error)
         return
@@ -125,9 +125,24 @@ export const useMemeReviewStore = defineStore('memeReview', () => {
   }
 
   return {
-    memes, currentIndex, loading, feedback, feedbackVisible,
-    goodCount, badCount, datasetReady,
-    currentMeme, total, progress, isDone,
-    fetchMemes, voteGood, voteBad, nextMeme, prevMeme, exportDataset, socket: sock,
+    memes,
+    currentIndex,
+    loading,
+    feedback,
+    feedbackVisible,
+    goodCount,
+    badCount,
+    datasetReady,
+    currentMeme,
+    total,
+    progress,
+    isDone,
+    fetchMemes,
+    voteGood,
+    voteBad,
+    nextMeme,
+    prevMeme,
+    exportDataset,
+    socket: sock,
   }
 })

@@ -21,7 +21,7 @@ class SkillLibrary:
 
     COLLECTION_NAME = "mc_skills"
 
-    def __init__(self, atom_store=None, db_path: str | None = None):
+    def __init__(self, atom_store: object | None = None, db_path: str | None = None) -> None:
         self._store = atom_store
         self._skills: dict[str, Skill] = {}
         self._db: SkillLibraryDB | None = None
@@ -259,9 +259,7 @@ class SkillLibrary:
         candidates.sort(key=lambda s: (-s.success_rate, s.avg_duration))
         return candidates[:limit]
 
-    async def match_trusted_skills(
-        self, context: dict[str, Any], limit: int = 5
-    ) -> list[Skill]:
+    async def match_trusted_skills(self, context: dict[str, Any], limit: int = 5) -> list[Skill]:
         """Return only independently validated skills eligible for live execution."""
         candidates = [
             skill

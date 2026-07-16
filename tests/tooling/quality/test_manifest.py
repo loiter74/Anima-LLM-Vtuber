@@ -105,11 +105,13 @@ def _catalog_with_acceleration() -> dict:
     data["docker_scopes"] = {
         "animetta": {
             "service": "animetta",
+            "compose_file": "docker-compose.yml",
             "paths": ["Dockerfile", "requirements-core.txt", "src/animetta/**"],
             "environment_identity_fields": ["ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"],
         },
         "qwen-tts": {
             "service": "qwen-tts",
+            "compose_file": "docker-compose.qwen.yml",
             "paths": [
                 "Dockerfile.qwen-tts",
                 "requirements-qwen-tts.txt",
@@ -240,6 +242,172 @@ def test_repository_catalog_covers_runtime_environments() -> None:
     }
 
 
+def test_repository_catalog_covers_full_python_standard_scope() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    expected_targets = ("src", "tooling", "scripts", "evaluations", "tests")
+
+    assert catalog.groups["python-format"].runner.value == "ruff-format"
+    assert catalog.groups["python-format"].targets == expected_targets
+    assert catalog.groups["python-format"].include_in_full is True
+    assert catalog.groups["backend-static"].targets == expected_targets
+    assert catalog.groups["backend-support-typecheck"].targets == (
+        "tooling/quality",
+        "scripts",
+        "evaluations",
+    )
+
+    for component_id in {
+        "backend-core",
+        "backend-config",
+        "orchestration-server",
+        "orchestration-graph",
+        "backend-services",
+        "backend-memory",
+        "backend-tools",
+        "backend-observability",
+    }:
+        assert {
+            "python-format",
+            "backend-static",
+            "backend-typecheck",
+        }.issubset(catalog.components[component_id].direct_groups)
+
+    assert {
+        "python-format",
+        "backend-static",
+        "backend-support-typecheck",
+    }.issubset(catalog.components["quality-control-plane"].direct_groups)
+
+
+def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+
+    assert catalog.groups["frontend-lint"].runner.value == "pnpm"
+    assert catalog.groups["frontend-lint"].args == ("lint",)
+    assert catalog.groups["frontend-lint"].include_in_full is True
+    assert catalog.groups["frontend-format"].runner.value == "pnpm"
+    assert catalog.groups["frontend-format"].args == ("format:check",)
+    assert catalog.groups["frontend-format"].include_in_full is True
+
+    gated_paths = {
+        path
+        for component in catalog.components.values()
+        if {"frontend-lint", "frontend-format"}.issubset(component.direct_groups)
+        for path in component.paths
+    }
+    assert {
+        "frontend/src/**",
+        "frontend/electron/**",
+        "frontend/scripts/**",
+    }.issubset(gated_paths)
+
+
+def test_python_source_boundary_rejects_ungated_javascript() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["python-source-boundary"]
+
+    assert component.paths == (
+        "src/**/*.js",
+        "src/**/*.mjs",
+        "src/**/*.cjs",
+        "src/**/*.ts",
+    )
+    assert component.direct_groups == ("operational-source-contract",)
+
+
+def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    expected = {
+        "docker-compose-contract": (
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-cpu-contract": (
+            "compose",
+            "-f",
+            "docker-compose.cpu.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-core-contract": (
+            "compose",
+            "-f",
+            "docker-compose.core.yml",
+            "config",
+            "--quiet",
+        ),
+        "docker-compose-qwen-contract": (
+            "compose",
+            "--env-file",
+            ".env.example",
+            "-f",
+            "docker-compose.qwen.yml",
+            "config",
+            "--quiet",
+        ),
+    }
+
+    for group_id, expected_args in expected.items():
+        group = catalog.groups[group_id]
+        assert group.runner.value == "docker"
+        assert group.args == expected_args
+        assert group.include_in_full is True
+
+    assert set(expected).issubset(catalog.components["docker-infrastructure"].direct_groups)
+
+
+def test_repository_catalog_has_dead_code_and_duplication_gates() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+
+    assert catalog.groups["backend-deadcode"].runner.value == "vulture"
+    assert catalog.groups["backend-deadcode"].include_in_full is True
+    assert catalog.groups["frontend-deadcode"].args == ("deadcode",)
+    assert catalog.groups["frontend-deadcode"].include_in_full is True
+    assert catalog.groups["frontend-duplicates"].args == ("duplicates:check",)
+    assert catalog.groups["frontend-duplicates"].include_in_full is True
+
+
+def test_backend_full_bounds_parallel_workers_for_cross_platform_stability() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    args = catalog.groups["backend-full"].args
+
+    worker_flag = args.index("-n")
+    assert args[worker_flag + 1] == "8"
+
+
+def test_repository_catalog_has_operational_source_contract() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    group = catalog.groups["operational-source-contract"]
+
+    assert group.runner.value == "python"
+    assert group.entrypoint == "scripts/check_source_standards.py"
+    assert group.include_in_full is True
+    assert group.cacheable is True
+
+    operational_paths = {
+        path
+        for component in catalog.components.values()
+        if "operational-source-contract" in component.direct_groups
+        for path in component.paths
+    }
+    assert {
+        "scripts/check_source_standards.py",
+        "Dockerfile*",
+        "**/Dockerfile*",
+        "**/*.sh",
+        "**/*.ps1",
+        "**/*.bat",
+        "**/*.cmd",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.json",
+        "**/*.toml",
+    }.issubset(operational_paths)
+
+
 def test_catalog_accepts_valid_acceleration_metadata() -> None:
     catalog = Catalog.model_validate(_catalog_with_acceleration())
 
@@ -253,10 +421,19 @@ def test_catalog_accepts_valid_acceleration_metadata() -> None:
     assert catalog.groups["backend-unit"].resource_class.value == "cpu"
     assert catalog.groups["repository-full"].covers == ("backend-unit",)
     assert catalog.docker_scopes["qwen-tts"].service == "qwen-tts"
+    assert catalog.docker_scopes["qwen-tts"].compose_file == "docker-compose.qwen.yml"
     assert catalog.docker_scopes["qwen-tts"].environment_identity_fields == (
         "QWEN_TTS_API_KEY",
         "QWEN_TTS_URL",
     )
+
+
+def test_catalog_rejects_docker_scope_compose_file_outside_repository() -> None:
+    data = _catalog_with_acceleration()
+    data["docker_scopes"]["qwen-tts"]["compose_file"] = "../docker-compose.yml"
+
+    with pytest.raises(ValidationError, match="repository-relative"):
+        Catalog.model_validate(data)
 
 
 def test_catalog_rejects_cacheable_non_hermetic_group() -> None:

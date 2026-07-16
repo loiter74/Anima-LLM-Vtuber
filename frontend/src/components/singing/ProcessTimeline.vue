@@ -24,8 +24,12 @@ const steps: TimelineStep[] = [
 ]
 
 const stageOrder: PipelineStage[] = [
-  'downloading', 'separating', 'transcribing',
-  'waiting_lyrics', 'converting', 'mixing',
+  'downloading',
+  'separating',
+  'transcribing',
+  'waiting_lyrics',
+  'converting',
+  'mixing',
 ]
 
 function stepStatus(step: TimelineStep): 'done' | 'active' | 'pending' {
@@ -95,12 +99,10 @@ const overallPct = computed(() => {
           'text-c-text': stepStatus(step) === 'done',
           'text-c-text-dim': stepStatus(step) === 'pending',
         }"
-      >{{ step.label }}</span>
-
-      <span
-        v-if="stepStatus(step) === 'active' && progress > 0"
-        class="text-c-text-dim"
+        >{{ step.label }}</span
       >
+
+      <span v-if="stepStatus(step) === 'active' && progress > 0" class="text-c-text-dim">
         {{ Math.round(progress) }}%
       </span>
     </div>

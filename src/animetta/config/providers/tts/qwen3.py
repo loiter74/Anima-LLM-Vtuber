@@ -19,6 +19,7 @@ class Qwen3TTSConfig(TTSBaseConfig):
     GPU requirements: ~4-6GB VRAM for bfloat16, ~3-4GB for float16.
     Windows CUDA note: bfloat16 may need auto-fallback to float16 on some GPUs.
     """
+
     type: Literal["qwen3"] = "qwen3"
 
     # === Model identifier ===
@@ -53,7 +54,7 @@ class Qwen3TTSConfig(TTSBaseConfig):
     )
     language: str = Field(
         default="Chinese",
-        description='Language: Chinese / English / Japanese / Korean / German / French / Russian / Portuguese / Spanish / Italian',
+        description="Language: Chinese / English / Japanese / Korean / German / French / Russian / Portuguese / Spanish / Italian",
     )
     max_new_tokens: int = Field(
         default=4096,

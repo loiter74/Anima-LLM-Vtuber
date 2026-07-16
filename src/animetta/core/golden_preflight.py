@@ -158,8 +158,7 @@ def _is_sensitive_key(key: object) -> bool:
         or "api_key" in normalized
         or "apikey" in segments
         or any(
-            normalized == part or normalized.endswith(f"_{part}")
-            for part in _SENSITIVE_KEY_PARTS
+            normalized == part or normalized.endswith(f"_{part}") for part in _SENSITIVE_KEY_PARTS
         )
     )
 
@@ -263,12 +262,16 @@ def _reference_audio_evidence(path: Path | None) -> tuple[bool, str, dict[str, A
         return False, "reference_audio_invalid", {"reason": str(exc)}
     if channels <= 0 or sample_rate <= 0 or frame_count <= 0:
         return False, "reference_audio_invalid", {"reason": "WAV contains no playable frames"}
-    return True, "ok", {
-        "size_bytes": size,
-        "channels": channels,
-        "sample_rate": sample_rate,
-        "frame_count": frame_count,
-    }
+    return (
+        True,
+        "ok",
+        {
+            "size_bytes": size,
+            "channels": channels,
+            "sample_rate": sample_rate,
+            "frame_count": frame_count,
+        },
+    )
 
 
 def _json_mapping_is_valid(path: Path, relative_path: str) -> bool:
@@ -356,15 +359,23 @@ def _shard_index_evidence(snapshot: Path) -> tuple[bool, str, dict[str, Any]]:
         except (json.JSONDecodeError, OSError, UnicodeError):
             weight_map = None
         if not isinstance(weight_map, dict) or not weight_map:
-            return False, "model_cache_shard_index_invalid", {
-                "index": index_path.relative_to(snapshot).as_posix(),
-            }
+            return (
+                False,
+                "model_cache_shard_index_invalid",
+                {
+                    "index": index_path.relative_to(snapshot).as_posix(),
+                },
+            )
 
         shard_values = list(weight_map.values())
         if not all(isinstance(value, str) and value for value in shard_values):
-            return False, "model_cache_shard_index_invalid", {
-                "index": index_path.relative_to(snapshot).as_posix(),
-            }
+            return (
+                False,
+                "model_cache_shard_index_invalid",
+                {
+                    "index": index_path.relative_to(snapshot).as_posix(),
+                },
+            )
         shard_names = sorted(set(shard_values))
         missing: list[str] = []
         invalid: list[str] = []
@@ -386,9 +397,13 @@ def _shard_index_evidence(snapshot: Path) -> tuple[bool, str, dict[str, Any]]:
         if missing:
             return False, "model_cache_shard_missing", {"missing_shards": sorted(missing)}
         if invalid:
-            return False, "model_cache_safetensors_invalid", {
-                "invalid": sorted(invalid),
-            }
+            return (
+                False,
+                "model_cache_safetensors_invalid",
+                {
+                    "invalid": sorted(invalid),
+                },
+            )
     return True, "ok", {"shard_indexes": len(indexes)}
 
 
@@ -423,17 +438,25 @@ def _snapshot_evidence(snapshot: Path) -> tuple[bool, str, dict[str, Any]]:
         if not _safetensors_is_valid(snapshot / relative_path)
     ]
     if invalid_safetensors:
-        return False, "model_cache_safetensors_invalid", {
-            "invalid": invalid_safetensors,
-        }
+        return (
+            False,
+            "model_cache_safetensors_invalid",
+            {
+                "invalid": invalid_safetensors,
+            },
+        )
 
     shards_ok, shards_code, shards_detail = _shard_index_evidence(snapshot)
     if not shards_ok:
         return False, shards_code, shards_detail
-    return True, "ok", {
-        "required_files": len(GOLDEN_QWEN_REQUIRED_FILES),
-        **shards_detail,
-    }
+    return (
+        True,
+        "ok",
+        {
+            "required_files": len(GOLDEN_QWEN_REQUIRED_FILES),
+            **shards_detail,
+        },
+    )
 
 
 def _model_cache_evidence(
@@ -468,10 +491,15 @@ def _model_cache_evidence(
         snapshot_exists = False
         snapshot = snapshots_root / revision
     if not snapshot_is_active or not snapshot_exists:
-        return False, "model_cache_active_snapshot_missing", {
-            **base_detail,
-            "revision": revision,
-        }, None
+        return (
+            False,
+            "model_cache_active_snapshot_missing",
+            {
+                **base_detail,
+                "revision": revision,
+            },
+            None,
+        )
 
     valid, code, snapshot_detail = _snapshot_evidence(snapshot)
     detail = {**base_detail, "revision": revision, **snapshot_detail}
@@ -517,9 +545,7 @@ def _resolve_live2d_asset(project_root: Path, model_path: str | None) -> Path | 
     if not model_path:
         return None
     if model_path.startswith("/live2d/"):
-        return _frontend_live2d_asset(
-            project_root, Path(model_path.removeprefix("/live2d/"))
-        )
+        return _frontend_live2d_asset(project_root, Path(model_path.removeprefix("/live2d/")))
     path = Path(model_path)
     if path.is_absolute():
         return path
@@ -544,10 +570,14 @@ def _live2d_asset_evidence(
         except (OSError, ValueError):
             return False, "live2d_model_path_outside_root", base_detail
     if asset is None or not asset.is_file():
-        return False, "live2d_asset_missing", {
-            **base_detail,
-            "readable_nonempty": False,
-        }
+        return (
+            False,
+            "live2d_asset_missing",
+            {
+                **base_detail,
+                "readable_nonempty": False,
+            },
+        )
     try:
         if not asset.name.endswith(".model3.json") or asset.stat().st_size <= 0:
             return False, "live2d_manifest_invalid", base_detail
@@ -579,7 +609,9 @@ def _live2d_asset_evidence(
         reference_path = Path(relative_path)
         try:
             resolved = (base_dir / reference_path).resolve()
-            is_safe_relative = not reference_path.is_absolute() and resolved.is_relative_to(base_dir)
+            is_safe_relative = not reference_path.is_absolute() and resolved.is_relative_to(
+                base_dir
+            )
         except (OSError, ValueError):
             is_safe_relative = False
             resolved = base_dir
@@ -597,32 +629,48 @@ def _live2d_asset_evidence(
         return False, "live2d_reference_invalid", {**base_detail, "invalid": invalid}
     if missing:
         return False, "live2d_reference_missing", {**base_detail, "missing": missing}
-    return True, "ok", {
-        **base_detail,
-        "readable_nonempty": True,
-        "reference_count": len(reference_specs),
-    }
+    return (
+        True,
+        "ok",
+        {
+            **base_detail,
+            "readable_nonempty": True,
+            "reference_count": len(reference_specs),
+        },
+    )
 
 
 def _frontend_dist_evidence(path: Path) -> tuple[bool, str, dict[str, Any]]:
     detail = {"relative_path": "frontend/dist/index.html"}
     try:
         if not path.is_file():
-            return False, "frontend_dist_missing", {
-                **detail,
-                "readable_nonempty": False,
-            }
+            return (
+                False,
+                "frontend_dist_missing",
+                {
+                    **detail,
+                    "readable_nonempty": False,
+                },
+            )
         if path.stat().st_size <= 0:
-            return False, "frontend_dist_missing", {
+            return (
+                False,
+                "frontend_dist_missing",
+                {
+                    **detail,
+                    "readable_nonempty": False,
+                },
+            )
+    except OSError as exc:
+        return (
+            False,
+            "frontend_dist_unreadable",
+            {
                 **detail,
                 "readable_nonempty": False,
-            }
-    except OSError as exc:
-        return False, "frontend_dist_unreadable", {
-            **detail,
-            "readable_nonempty": False,
-            "reason": type(exc).__name__,
-        }
+                "reason": type(exc).__name__,
+            },
+        )
     return True, "ok", {**detail, "readable_nonempty": True}
 
 
@@ -665,11 +713,7 @@ def _runtime_engine_evidence(
 
     missing = [name for name in ("llm", "tts") if engines.get(name) is None]
     if missing:
-        code = (
-            "runtime_engines_missing"
-            if len(missing) == 2
-            else f"runtime_{missing[0]}_missing"
-        )
+        code = "runtime_engines_missing" if len(missing) == 2 else f"runtime_{missing[0]}_missing"
         return False, code, {"missing": missing}
 
     try:
@@ -786,18 +830,20 @@ def _runtime_engine_evidence(
             )
 
     proxied = [
-        name
-        for name, was_proxied in (("llm", llm_proxied), ("tts", tts_proxied))
-        if was_proxied
+        name for name, was_proxied in (("llm", llm_proxied), ("tts", tts_proxied)) if was_proxied
     ]
     if issues:
         code = issues[0]["code"] if len(issues) == 1 else "runtime_engine_identity_mismatch"
         return False, code, {"issues": issues, "proxied": proxied}
-    return True, "ok", {
-        "provided": True,
-        "classes": {"llm": type(llm).__name__, "tts": type(tts).__name__},
-        "proxied": proxied,
-    }
+    return (
+        True,
+        "ok",
+        {
+            "provided": True,
+            "classes": {"llm": type(llm).__name__, "tts": type(tts).__name__},
+            "proxied": proxied,
+        },
+    )
 
 
 def _probe(probe: Callable[..., Mapping[str, Any]], *args: str) -> dict[str, Any]:
@@ -1057,8 +1103,8 @@ def run_golden_preflight(
         frontend_detail,
     )
 
-    runtime_engines_ok, runtime_engines_code, runtime_engines_detail = (
-        _runtime_engine_evidence(config, ctx.runtime_engines, ctx.scope)
+    runtime_engines_ok, runtime_engines_code, runtime_engines_detail = _runtime_engine_evidence(
+        config, ctx.runtime_engines, ctx.scope
     )
     add(
         "runtime_engines",

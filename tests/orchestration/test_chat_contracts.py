@@ -439,10 +439,7 @@ def test_chat_contract_enums_are_strings_for_transport_serialization() -> None:
 
 
 def test_typed_command_fields_remain_aligned_with_catalog_schema() -> None:
-    catalog_fields = {
-        field.removesuffix("?")
-        for field in EVENTS["chat"]["text"]["payload"]
-    }
+    catalog_fields = {field.removesuffix("?") for field in EVENTS["chat"]["text"]["payload"]}
     assert set(ChatTurnCommand.model_fields) == catalog_fields | {
         "turn_id",
         "transport_mode",
@@ -450,9 +447,7 @@ def test_typed_command_fields_remain_aligned_with_catalog_schema() -> None:
 
 
 def test_typed_error_and_degradation_fields_remain_aligned_with_catalog() -> None:
-    error_fields = {
-        field.removesuffix("?") for field in EVENTS["system"]["error"]["payload"]
-    }
+    error_fields = {field.removesuffix("?") for field in EVENTS["system"]["error"]["payload"]}
     assert set(ChatErrorPayload.model_fields) == error_fields
 
     control = EVENTS["chat"]["control"]

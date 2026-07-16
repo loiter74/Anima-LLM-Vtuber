@@ -21,7 +21,7 @@ from typing import Any
 
 # AsyncCallable was added provisionally in Python 3.12 typing but may be absent
 # in some builds. Define an equivalent type alias.
-AsyncCallable = Callable[..., Coroutine[Any, Any, Any]]
+AsyncCallable = Callable[[], Coroutine[Any, Any, Any]]
 
 import contextlib
 
@@ -37,8 +37,9 @@ def _elapsed_since(start: float) -> float:
 @dataclass
 class TaskMetrics:
     """Per-task execution metrics."""
+
     name: str
-    last_run: float | None = None       # timestamp
+    last_run: float | None = None  # timestamp
     last_duration: float | None = None  # seconds
     success_count: int = 0
     failure_count: int = 0
@@ -48,10 +49,11 @@ class TaskMetrics:
 @dataclass
 class ScheduledTask:
     """A registered scheduled task."""
+
     name: str
-    func: AsyncCallable[[], Any]
-    interval: float          # seconds
-    timeout: float           # max execution time
+    func: AsyncCallable
+    interval: float  # seconds
+    timeout: float  # max execution time
     metrics: TaskMetrics = field(default_factory=lambda: TaskMetrics(name=""))
     _task: asyncio.Task | None = None
     _cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
@@ -81,7 +83,7 @@ class AsyncScheduler:
     def add_task(
         self,
         name: str,
-        func: AsyncCallable[[], Any],
+        func: AsyncCallable,
         *,
         interval: float,
         timeout: float = 300,
@@ -172,8 +174,7 @@ class AsyncScheduler:
 
         # Start per-task execution loops concurrently
         task_loops = [
-            asyncio.create_task(self._run_task_loop(task))
-            for task in self._tasks.values()
+            asyncio.create_task(self._run_task_loop(task)) for task in self._tasks.values()
         ]
 
         try:
@@ -193,6 +194,7 @@ class AsyncScheduler:
         # Initial delay: stagger tasks so they don't all fire at once
         # Use hash of task name for deterministic but distributed start times
         import hashlib
+
         delay_hash = int(hashlib.md5(task.name.encode()).hexdigest()[:8], 16)
         initial_delay = (delay_hash % 60) / 60.0 * min(task.interval, 60)
         await asyncio.sleep(initial_delay)

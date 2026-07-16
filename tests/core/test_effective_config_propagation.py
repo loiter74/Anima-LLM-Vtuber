@@ -84,4 +84,3 @@ async def test_run_003_new_session_inherits_config_version_and_hash(
     assert context.config is effective_config
     assert context.runtime_config_version == effective_config.version
     assert context.runtime_config_hash == effective_config.effective_hash
-

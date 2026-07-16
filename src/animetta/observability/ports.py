@@ -113,9 +113,7 @@ class NoOpObservationQuery:
     async def operation_aggregates(self) -> Sequence[Mapping[str, Any]]:
         return []
 
-    async def recent_traces(
-        self, limit: int = 50, offset: int = 0
-    ) -> Sequence[Mapping[str, Any]]:
+    async def recent_traces(self, limit: int = 50, offset: int = 0) -> Sequence[Mapping[str, Any]]:
         del limit, offset
         return []
 

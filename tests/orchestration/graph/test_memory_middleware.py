@@ -55,10 +55,12 @@ class TestMemoryMiddleware:
             connection_id="socket-a",
         )
         memory = MagicMock()
-        memory.recall = AsyncMock(return_value=RecallResult(
-            atoms=[_atom("one", scope="viewer"), _atom("two"), _atom("three")],
-            metadata={"revision": 12},
-        ))
+        memory.recall = AsyncMock(
+            return_value=RecallResult(
+                atoms=[_atom("one", scope="viewer"), _atom("two"), _atom("three")],
+                metadata={"revision": 12},
+            )
+        )
 
         mm = MemoryMiddleware(memory_system=memory, max_items=2, max_prompt_chars=500)
         prompt, metadata = await mm.recall_structured(
@@ -85,11 +87,13 @@ class TestMemoryMiddleware:
     @pytest.mark.asyncio
     async def test_structured_recall_enforces_prompt_character_budget(self):
         memory = MagicMock()
-        memory.recall = AsyncMock(return_value=RecallResult(
-            atoms=[_atom("x" * 200)],
-            profile={"preference": "y" * 200},
-            memes=[_atom("z" * 200, scope="community")],
-        ))
+        memory.recall = AsyncMock(
+            return_value=RecallResult(
+                atoms=[_atom("x" * 200)],
+                profile={"preference": "y" * 200},
+                memes=[_atom("z" * 200, scope="community")],
+            )
+        )
 
         mm = MemoryMiddleware(memory_system=memory, max_prompt_chars=80)
         prompt, metadata = await mm.recall_structured(

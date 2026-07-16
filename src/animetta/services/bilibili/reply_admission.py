@@ -81,10 +81,7 @@ class ReplyAdmissionController:
 
         normalized = " ".join(text.casefold().split())
         duplicate_at = self._duplicate_seen_at.get(normalized)
-        if (
-            duplicate_at is not None
-            and now - duplicate_at < self._config.duplicate_window_seconds
-        ):
+        if duplicate_at is not None and now - duplicate_at < self._config.duplicate_window_seconds:
             return self._reject("duplicate")
 
         user_key = self._user_key(message)
@@ -112,11 +109,7 @@ class ReplyAdmissionController:
         text: str,
     ) -> ReplyPriority | None:
         if message.is_super_chat:
-            return (
-                ReplyPriority.SUPER_CHAT
-                if self._config.reply_to_super_chat
-                else None
-            )
+            return ReplyPriority.SUPER_CHAT if self._config.reply_to_super_chat else None
         if message.is_gift:
             return ReplyPriority.GIFT if self._config.reply_to_gifts else None
         if _QUESTION_PATTERN.search(text):

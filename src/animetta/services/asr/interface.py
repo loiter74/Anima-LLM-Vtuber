@@ -15,11 +15,7 @@ class ASRInterface(ABC):
     """
 
     @abstractmethod
-    async def transcribe(
-        self,
-        audio_data: bytes | str | Path,
-        **kwargs
-    ) -> str:
+    async def transcribe(self, audio_data: bytes | str | Path, **kwargs) -> str:
         """
         Transcribe audio data to text
 

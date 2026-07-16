@@ -4,9 +4,13 @@ All handler logic is extracted into server/handlers/ modules.
 RouteHandlers acts as a facade that delegates to domain-specific handlers.
 """
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+from animetta.config.manifest import EffectiveConfig
+from animetta.config.user import UserSettings
 
 from ..socket_events import event_aliases, event_name
 from .desktop import DesktopClientManager
@@ -94,23 +98,23 @@ class RouteHandlers:
     # ── Backward-compat properties for internal state moved to handlers ─
 
     @property
-    def global_config(self):
+    def global_config(self) -> EffectiveConfig | None:
         """Backward-compat: shared config now lives on BaseSocketHandler."""
         return self.base.global_config
 
     @global_config.setter
-    def global_config(self, value) -> None:
+    def global_config(self, value: EffectiveConfig | None) -> None:
         self.base.global_config = value
         for handler in self._domain_handlers():
             handler.global_config = value
 
     @property
-    def user_settings(self):
+    def user_settings(self) -> UserSettings | None:
         """Backward-compat: shared user settings now live on BaseSocketHandler."""
         return self.base.user_settings
 
     @user_settings.setter
-    def user_settings(self, value) -> None:
+    def user_settings(self, value: UserSettings | None) -> None:
         self.base.user_settings = value
         for handler in self._domain_handlers():
             if hasattr(handler, "user_settings"):
@@ -136,37 +140,33 @@ class RouteHandlers:
         return self.bilibili._bilibili_service
 
     @_bilibili_service.setter
-    def _bilibili_service(self, value):
+    def _bilibili_service(self, value: Any) -> None:
         self.bilibili._bilibili_service = value
 
     @property
-    def _main_loop(self):
+    def _main_loop(self) -> asyncio.AbstractEventLoop | None:
         """Backward-compat: main event loop (now on BilibiliHandlers)."""
         return self.bilibili._main_loop
 
     @_main_loop.setter
-    def _main_loop(self, value):
+    def _main_loop(self, value: asyncio.AbstractEventLoop | None) -> None:
         self.bilibili._main_loop = value
 
     # ── Config setters (backward compat) ──────────────────────────────
 
-    def set_global_config(self, config) -> None:
+    def set_global_config(self, config: EffectiveConfig) -> None:
         """Set global config — delegates to domain handlers."""
         self.global_config = config
 
-    def set_user_settings(self, user_settings) -> None:
+    def set_user_settings(self, user_settings: UserSettings) -> None:
         """Set user settings — delegates to domain handlers."""
         self.user_settings = user_settings
 
     # ── Shared utility (backward compat) ─────────────────────────────
 
-    async def broadcast_to_desktop_clients(
-        self, client_type: str, event: str, data: dict
-    ) -> None:
+    async def broadcast_to_desktop_clients(self, client_type: str, event: str, data: dict) -> None:
         """Broadcast to desktop clients — delegates to BaseSocketHandler."""
-        return await self.base.broadcast_to_desktop_clients(
-            client_type, event, data
-        )
+        return await self.base.broadcast_to_desktop_clients(client_type, event, data)
 
     # ── Bilibili service (backward compat — called by WebSocketServer) ─
 
@@ -305,7 +305,7 @@ class RouteHandlers:
     async def on_get_available_personas(self, sid: str, data: dict) -> dict:
         return await self.persona.on_get_available_personas(sid, data)
 
-    async def on_set_persona(self, sid: str, data: dict) -> None:
+    async def on_set_persona(self, sid: str, data: dict) -> dict[str, object]:
         return await self.persona.on_set_persona(sid, data)
 
     async def on_set_personality_mode(self, sid: str, data: dict) -> None:
@@ -327,7 +327,7 @@ class RouteHandlers:
 
     # ── Memory / Wiki (V2 bridge) ────────────────────────────────────
 
-    async def on_memory_organize(self, sid: str, data: dict) -> None:
+    async def on_memory_organize(self, sid: str, data: dict) -> dict[str, Any]:
         return await self.memory.on_memory_organize(sid, data)
 
     async def on_memory_list(self, sid: str, data: dict) -> dict:

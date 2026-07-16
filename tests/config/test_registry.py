@@ -19,10 +19,10 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
 
-
 # ═══════════════════════════════════════════════════════════════
 # Fixtures
 # ═══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def registry():
@@ -53,26 +53,31 @@ def registry():
 # Mock classes for testing
 # ═══════════════════════════════════════════════════════════════
 
+
 class MockOpenAIConfig(ProviderConfig):
     """Mock OpenAI LLM config for testing"""
+
     type: Literal["openai"] = "openai"
     api_key: str = "test_key"
 
 
 class MockGLMConfig(ProviderConfig):
     """Mock GLM config for testing"""
+
     type: Literal["glm"] = "glm"
     api_key: str = "test_key"
 
 
 class MockWhisperConfig(ProviderConfig):
     """Mock Whisper ASR config for testing"""
+
     type: Literal["whisper"] = "whisper"
     model: str = "base"
 
 
 class MockServiceWithFromConfig:
     """Mock service class that has from_config classmethod"""
+
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
@@ -83,6 +88,7 @@ class MockServiceWithFromConfig:
 
 class MockServiceNoFromConfig:
     """Mock service class that is MISSING from_config"""
+
     pass
 
 
@@ -90,11 +96,13 @@ class MockServiceNoFromConfig:
 # Test cases
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestRegisterConfig:
     """Tests for ProviderRegistry.register_config"""
 
     def test_register_config_stores_with_category_and_type(self, registry):
         """register_config decorator stores class in _configs dict with correct category/type"""
+
         @registry.register_config("llm", "openai")
         class TestConfig(ProviderConfig):
             type: Literal["test"] = "test"
@@ -104,6 +112,7 @@ class TestRegisterConfig:
 
     def test_register_config_multiple_categories(self, registry):
         """register_config works across different categories"""
+
         @registry.register_config("llm", "openai")
         class LLMConfig(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -119,6 +128,7 @@ class TestRegisterConfig:
 
     def test_register_config_returns_the_class(self, registry):
         """register_config decorator returns the same class (does not wrap it)"""
+
         class MyConfig(ProviderConfig):
             type: Literal["my"] = "my"
 
@@ -131,6 +141,7 @@ class TestRegisterAlias:
 
     def test_register_config_stores_in_configs(self, registry):
         """register_config() stores class in _configs dict"""
+
         @registry.register_config("llm", "test_model")
         class TestConfig(ProviderConfig):
             type: Literal["test_model"] = "test_model"
@@ -139,6 +150,7 @@ class TestRegisterAlias:
 
     def test_register_config_multiple_calls_same_dict(self, registry):
         """Multiple register_config calls write to the same dict"""
+
         @registry.register_config("llm", "from_a")
         class A(ProviderConfig):
             type: Literal["a"] = "a"
@@ -156,6 +168,7 @@ class TestRegisterService:
 
     def test_register_service_stores_class(self, registry):
         """register_service stores class in _services dict"""
+
         @registry.register_service("llm", "openai")
         class OpenAIService:
             pass
@@ -165,6 +178,7 @@ class TestRegisterService:
 
     def test_register_service_multiple_categories(self, registry):
         """register_service works across different categories"""
+
         @registry.register_service("llm", "openai")
         class LLMService:
             pass
@@ -178,6 +192,7 @@ class TestRegisterService:
 
     def test_register_service_returns_the_class(self, registry):
         """register_service decorator returns the same class"""
+
         class MyService:
             pass
 
@@ -190,6 +205,7 @@ class TestGetServiceClass:
 
     def test_returns_correct_class(self, registry):
         """get_service_class returns the registered service class"""
+
         @registry.register_service("llm", "openai")
         class OpenAIService:
             pass
@@ -204,6 +220,7 @@ class TestGetServiceClass:
 
     def test_returns_none_for_unknown_type(self, registry):
         """get_service_class returns None for non-existent provider type"""
+
         @registry.register_service("llm", "openai")
         class OpenAIService:
             pass
@@ -252,6 +269,7 @@ class TestListServices:
 
     def test_list_services_returns_registered_names(self, registry):
         """list_services returns names of all registered services"""
+
         @registry.register_service("llm", "svc_a")
         class ServiceA:
             pass
@@ -277,6 +295,7 @@ class TestGet:
 
     def test_returns_config_class(self, registry):
         """get_config returns the registered config class"""
+
         @registry.register_config("llm", "openai")
         class ConfigClass(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -291,6 +310,7 @@ class TestGet:
 
     def test_reads_from_configs(self, registry):
         """get_config reads from _configs dict"""
+
         @registry.register_config("tts", "edge")
         class EdgeConfig(ProviderConfig):
             type: Literal["edge"] = "edge"
@@ -304,6 +324,7 @@ class TestListProviders:
 
     def test_list_configs_returns_names(self, registry):
         """list_configs returns registered config names"""
+
         @registry.register_config("llm", "p1")
         class P1Config(ProviderConfig):
             type: Literal["p1"] = "p1"
@@ -325,6 +346,7 @@ class TestGetAllProviders:
 
     def test_get_all_configs_returns_copy(self, registry):
         """get_all_configs returns all providers as a nested dict"""
+
         @registry.register_config("llm", "openai")
         class OpenAICfg(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -346,6 +368,7 @@ class TestGetAllProviders:
 
     def test_get_all_configs_is_top_level_copy(self, registry):
         """get_all_configs returns a top-level copy (inner dicts are shared references)"""
+
         @registry.register_config("llm", "openai")
         class OpenAICfg(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -422,6 +445,7 @@ class TestClear:
 
     def test_clear_specific_category(self, registry):
         """clear(category) clears only the specified category"""
+
         @registry.register_config("llm", "openai")
         class OpenAICfg(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -437,6 +461,7 @@ class TestClear:
 
     def test_clear_all(self, registry):
         """clear() with no args clears all categories"""
+
         @registry.register_config("llm", "openai")
         class OpenAICfg(ProviderConfig):
             type: Literal["openai"] = "openai"
@@ -459,6 +484,7 @@ class TestClear:
 
     def test_clear_does_not_affect_services(self, registry):
         """clear should only affect provider configs, not service registrations"""
+
         @registry.register_config("llm", "openai")
         class OpenAICfg(ProviderConfig):
             type: Literal["openai"] = "openai"

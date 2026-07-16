@@ -18,9 +18,13 @@ from animetta.tools.minecraft.skill.library import Skill, SkillLibrary, SkillRes
 
 
 def _status_response(
-    x: float = 0, y: float = 64, z: float = 0,
-    health: float = 20.0, food: float = 20.0,
-    time_of_day: str = "day", weather: str = "clear",
+    x: float = 0,
+    y: float = 64,
+    z: float = 0,
+    health: float = 20.0,
+    food: float = 20.0,
+    time_of_day: str = "day",
+    weather: str = "clear",
     inventory: dict | None = None,
     nearby_entities: dict | None = None,
 ) -> dict:
@@ -62,9 +66,7 @@ def _make_skill(skill_id: str = "test_skill", preconditions: list[str] | None = 
 def _make_bridge(status_response: dict | None = None) -> MagicMock:
     """Create a mock bridge with configurable status response."""
     bridge = MagicMock()
-    bridge.send_command = AsyncMock(
-        return_value=status_response or _status_response()
-    )
+    bridge.send_command = AsyncMock(return_value=status_response or _status_response())
     return bridge
 
 
@@ -119,8 +121,11 @@ class TestEvaluateMatchesSkill:
         loop = AutonomousLoop(bridge, rules=_make_rules(), skill_library=lib)
 
         state = WorldState(
-            health=20.0, food=10.0,  # food < 15 → matches survival_food
-            x=0, y=64, z=0,
+            health=20.0,
+            food=10.0,  # food < 15 → matches survival_food
+            x=0,
+            y=64,
+            z=0,
         )
 
         action, params = await loop._evaluate(state)
@@ -142,8 +147,11 @@ class TestEvaluateNoMatchFallsBack:
 
         # High food, high health, day time → should fall through to explore or idle
         state = WorldState(
-            health=20.0, food=20.0,
-            x=0, y=64, z=0,
+            health=20.0,
+            food=20.0,
+            x=0,
+            y=64,
+            z=0,
             time="day",
         )
 
@@ -177,13 +185,15 @@ class TestExecuteSkillAction:
         await loop._execute("execute_skill", {"skill_id": "test_skill"}, state)
 
         lib.execute_skill_by_id.assert_awaited_once_with(
-            "test_skill", bridge, {
+            "test_skill",
+            bridge,
+            {
                 "health": 20.0,
                 "food": 20.0,
                 "is_day": state.is_day,
                 "is_night": state.is_night,
                 "inventory": state.inventory,
-            }
+            },
         )
 
     async def test_execute_skill_failure_logged(self) -> None:

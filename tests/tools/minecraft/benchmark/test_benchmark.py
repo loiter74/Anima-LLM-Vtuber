@@ -26,6 +26,7 @@ from animetta.tools.minecraft.benchmark.main import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def make_bridge() -> MagicMock:
     """Create a mock MinecraftBridge with async send_command."""
     bridge = MagicMock()
@@ -33,8 +34,11 @@ def make_bridge() -> MagicMock:
         return_value={
             "status": "success",
             "result": {
-                "x": 0, "y": 64, "z": 0,
-                "health": 20, "food": 20,
+                "x": 0,
+                "y": 64,
+                "z": 0,
+                "health": 20,
+                "food": 20,
                 "inventory": {},
             },
         }
@@ -61,6 +65,7 @@ def make_skill(skill_id: str = "test_skill", is_learned: bool = False) -> MagicM
 
 
 # ── BenchmarkConfig ───────────────────────────────────────────────────────────
+
 
 class TestBenchmarkConfig:
     """BenchmarkConfig dataclass tests."""
@@ -114,6 +119,7 @@ class TestBenchmarkConfig:
 
 # ── BenchmarkScenario ─────────────────────────────────────────────────────────
 
+
 class TestBenchmarkScenario:
     """BenchmarkScenario dataclass tests."""
 
@@ -155,6 +161,7 @@ class TestBenchmarkScenario:
 
 
 # ── BenchmarkMetrics ──────────────────────────────────────────────────────────
+
 
 class TestBenchmarkMetrics:
     """BenchmarkMetrics dataclass tests."""
@@ -211,6 +218,7 @@ class TestBenchmarkMetrics:
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
+
 
 class TestHelperFunctions:
     """Tests for module-level helper functions."""
@@ -296,6 +304,7 @@ class TestHelperFunctions:
 
 # ── BenchmarkRunner ───────────────────────────────────────────────────────────
 
+
 class TestBenchmarkRunner:
     """BenchmarkRunner initialization and lifecycle tests."""
 
@@ -353,11 +362,12 @@ class TestBenchmarkRunner:
         runner = BenchmarkRunner(bridge=bridge)
 
         fake_skills = [make_skill("skill_1"), make_skill("skill_2")]
-        with patch(
-            "animetta.tools.minecraft.benchmark.runner.AutonomousLoop"
-        ), patch(
-            "animetta.tools.minecraft.skill.predefined.get_predefined_skills",
-            return_value=fake_skills,
+        with (
+            patch("animetta.tools.minecraft.benchmark.runner.AutonomousLoop"),
+            patch(
+                "animetta.tools.minecraft.skill.predefined.get_predefined_skills",
+                return_value=fake_skills,
+            ),
         ):
             await runner.load_predefined_skills()
             assert len(runner._predefined_skills) == 2
@@ -395,8 +405,11 @@ class TestBenchmarkRunnerScenario:
             return_value={
                 "status": "success",
                 "result": {
-                    "x": 10, "y": 64, "z": 20,
-                    "health": 20, "food": 20,
+                    "x": 10,
+                    "y": 64,
+                    "z": 20,
+                    "health": 20,
+                    "food": 20,
                     "inventory": {"cobblestone": 5},
                 },
             }
@@ -547,8 +560,7 @@ class TestBenchmarkRunnerScenario:
 
         # Verify /seed command was sent
         seed_calls = [
-            c for c in bridge.send_command.call_args_list
-            if c.args and c.args[0] == "chat"
+            c for c in bridge.send_command.call_args_list if c.args and c.args[0] == "chat"
         ]
         assert len(seed_calls) >= 1
         assert "/seed 42" in seed_calls[0].args[1]["message"]
@@ -708,9 +720,7 @@ class TestBenchmarkRunnerFullBenchmark:
                 "animetta.tools.minecraft.benchmark.runner.AutonomousLoop",
                 return_value=mock_loop,
             ),
-            patch.object(
-                runner, "load_predefined_skills", new_callable=AsyncMock
-            ) as mock_load,
+            patch.object(runner, "load_predefined_skills", new_callable=AsyncMock) as mock_load,
         ):
             await runner.run_full_benchmark(
                 scenarios=[scenario],

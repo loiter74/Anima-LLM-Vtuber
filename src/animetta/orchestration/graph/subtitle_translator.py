@@ -12,7 +12,7 @@ Design decisions (from design.md):
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
@@ -24,9 +24,7 @@ if TYPE_CHECKING:
 # ── Marker patterns to strip before translation ──────────────────
 
 # Emotion tags: [happy], [sad], [angry], [surprised], [thinking], [neutral]
-_EMOTION_TAG_RE = re.compile(
-    r"\[(happy|sad|angry|surprised|thinking|neutral)\]", re.IGNORECASE
-)
+_EMOTION_TAG_RE = re.compile(r"\[(happy|sad|angry|surprised|thinking|neutral)\]", re.IGNORECASE)
 
 # Affinity markers: [affinity:75], [affinity: 50]
 _AFFINITY_MARKER_RE = re.compile(r"\[affinity\s*:\s*\d+\]", re.IGNORECASE)
@@ -102,10 +100,10 @@ async def translate_subtitle_text(
     # The base LLMInterface.chat_messages() default serializes to string
     # and calls chat(), which mutates history. We detect this by checking
     # if the method is overridden in the concrete class's MRO.
-    llm_target = _unwrap_service_proxy(llm)
+    llm_target = cast(LLMInterface, _unwrap_service_proxy(llm))
+    chat_messages_impl = getattr(type(llm_target), "chat_messages", None)
     has_native_chat_messages = (
-        hasattr(type(llm_target), "chat_messages")
-        and type(llm_target).chat_messages is not LLMInterface.chat_messages
+        chat_messages_impl is not None and chat_messages_impl is not LLMInterface.chat_messages
     )
 
     if has_native_chat_messages:
@@ -158,9 +156,9 @@ async def translate_subtitle_text(
             llm_target.clear_history()
             for msg in saved_history:
                 # Re-populate history by re-adding messages
-                if hasattr(llm_target, '_history'):
+                if hasattr(llm_target, "_history"):
                     llm_target._history.append(msg)
-                elif hasattr(llm_target, 'history'):
+                elif hasattr(llm_target, "history"):
                     llm_target.history.append(msg)
             logger.debug("[SubtitleTranslator] History restored after fallback translation")
         except Exception as restore_err:

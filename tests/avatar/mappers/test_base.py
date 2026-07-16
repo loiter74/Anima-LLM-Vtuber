@@ -14,6 +14,7 @@ from animetta.avatar.mappers.base import ExpressionFrame, IEmotionParamMapper, P
 # ParameterState
 # ============================================================
 
+
 class TestParameterState:
     """ParameterState dataclass."""
 
@@ -58,6 +59,7 @@ class TestParameterState:
 # ============================================================
 # ExpressionFrame
 # ============================================================
+
 
 class TestExpressionFrame:
     """ExpressionFrame dataclass."""
@@ -108,6 +110,7 @@ class TestExpressionFrame:
 # ============================================================
 # IEmotionParamMapper interface
 # ============================================================
+
 
 class TestIEmotionParamMapperInterface:
     """IEmotionParamMapper ABC."""
@@ -174,8 +177,10 @@ def _create_concrete_mapper():
     class ConcreteMapper(IEmotionParamMapper):
         def map_emotion(self, emotion, intensity=1.0, context=None):
             return ExpressionFrame(parameters=[])
+
         def map_emotions_timeline(self, emotions, duration):
             return []
+
         @property
         def name(self):
             return "concrete_test"

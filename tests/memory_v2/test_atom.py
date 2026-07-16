@@ -32,8 +32,12 @@ class TestMemoryAtom:
         occurred = datetime(2026, 5, 30, tzinfo=UTC)
         rewritten = datetime(2026, 5, 31, tzinfo=UTC)
         atom = MemoryAtom(
-            id="a1", layer=Layer.SEMANTIC, content="知识",
-            occurred_at=occurred, rewritten_at=rewritten, version=3,
+            id="a1",
+            layer=Layer.SEMANTIC,
+            content="知识",
+            occurred_at=occurred,
+            rewritten_at=rewritten,
+            version=3,
             version_chain=["v1_id", "v2_id"],
         )
         assert atom.occurred_at != atom.rewritten_at
@@ -42,7 +46,9 @@ class TestMemoryAtom:
 
     def test_emotion_vector_defaults(self):
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="test",
+            id="a1",
+            layer=Layer.RAW,
+            content="test",
             occurred_at=datetime.now(UTC),
         )
         assert atom.emotion_valence == 0.0
@@ -57,7 +63,9 @@ class TestMemoryAtom:
     def test_is_recalled_false_when_not_recalled(self):
         now = datetime.now(UTC)
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="new",
+            id="a1",
+            layer=Layer.RAW,
+            content="new",
             occurred_at=now,
         )
         assert atom.is_recalled is False
@@ -92,15 +100,22 @@ class TestAtomEdgeCases:
         occurred = datetime(2026, 5, 30, tzinfo=UTC)
         rewritten = datetime(2026, 5, 29, tzinfo=UTC)
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="test",
-            occurred_at=occurred, rewritten_at=rewritten,
+            id="a1",
+            layer=Layer.RAW,
+            content="test",
+            occurred_at=occurred,
+            rewritten_at=rewritten,
         )
-        assert atom.rewritten_at == rewritten  # stored as-is (validation is caller's responsibility)
+        assert (
+            atom.rewritten_at == rewritten
+        )  # stored as-is (validation is caller's responsibility)
 
     def test_empty_version_chain(self):
         """New atom has empty version chain."""
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="test",
+            id="a1",
+            layer=Layer.RAW,
+            content="test",
             occurred_at=datetime.now(UTC),
         )
         assert atom.version_chain == []
@@ -109,9 +124,13 @@ class TestAtomEdgeCases:
     def test_emotion_values_in_range(self):
         """VAD values should typically be in [-1, 1] range."""
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="test",
+            id="a1",
+            layer=Layer.RAW,
+            content="test",
             occurred_at=datetime.now(UTC),
-            emotion_valence=0.5, emotion_arousal=0.8, emotion_dominance=0.3,
+            emotion_valence=0.5,
+            emotion_arousal=0.8,
+            emotion_dominance=0.3,
         )
         assert -1.0 <= atom.emotion_valence <= 1.0
         assert 0.0 <= atom.emotion_arousal <= 1.0
@@ -120,14 +139,20 @@ class TestAtomEdgeCases:
     def test_relation_types_complete(self):
         """All 6 relation type constants are distinct strings."""
         types = {
-            RelationType.UPDATES, RelationType.EXTENDS, RelationType.DERIVES,
-            RelationType.EVOKES, RelationType.CONTRADICTS, RelationType.CONSOLIDATED_INTO,
+            RelationType.UPDATES,
+            RelationType.EXTENDS,
+            RelationType.DERIVES,
+            RelationType.EVOKES,
+            RelationType.CONTRADICTS,
+            RelationType.CONSOLIDATED_INTO,
         }
         assert len(types) == 6
 
     def test_recall_age_none_when_not_accessed(self):
         atom = MemoryAtom(
-            id="a1", layer=Layer.RAW, content="test",
+            id="a1",
+            layer=Layer.RAW,
+            content="test",
             occurred_at=datetime.now(UTC),
         )
         assert atom.recall_age_hours is None

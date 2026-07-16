@@ -5,6 +5,7 @@ Uses server/ module components to build the server
 
 import argparse
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 current_dir = Path(__file__).resolve().parent
@@ -28,7 +29,8 @@ from animetta.utils.logger_manager import logger_manager
 # Load environment variables from .env file (must be before other imports)
 try:
     from dotenv import load_dotenv
-    env_path = _PROJECT_ROOT / '.env'
+
+    env_path = _PROJECT_ROOT / ".env"
     if env_path.exists():
         load_dotenv(env_path, override=True)
         logger.info(f"[OK] Environment variables loaded from: {env_path}")
@@ -41,6 +43,9 @@ import asyncio
 import threading
 
 import uvicorn
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response
 
 
 def parse_server_args() -> argparse.Namespace:
@@ -83,9 +88,7 @@ def init_config(config_path: str | None = None) -> EffectiveConfig:
         return global_config
 
     manifest_path = (
-        Path(config_path)
-        if config_path is not None
-        else _PROJECT_ROOT / "config" / "animetta.yaml"
+        Path(config_path) if config_path is not None else _PROJECT_ROOT / "config" / "animetta.yaml"
     )
     global_config = load_effective_config(manifest_path)
 
@@ -93,7 +96,7 @@ def init_config(config_path: str | None = None) -> EffectiveConfig:
     return global_config
 
 
-def run_server():
+def run_server() -> None:
     """Run the server using uvicorn (ASGI mode)"""
     import atexit
 
@@ -124,7 +127,9 @@ def run_server():
     logger.info("Socket.IO async_mode: asgi (uvicorn)")
     logger.info("=" * 50)
     logger.info(f"Visit http://{global_config.system.host}:{global_config.system.port} to test")
-    logger.info(f"WebSocket URL: ws://{global_config.system.host}:{global_config.system.port}/socket.io/")
+    logger.info(
+        f"WebSocket URL: ws://{global_config.system.host}:{global_config.system.port}/socket.io/"
+    )
 
     # Run uvicorn server - use factory function to ensure proper initialization
     uvicorn.run(
@@ -132,13 +137,13 @@ def run_server():
         host=global_config.system.host,
         port=global_config.system.port,
         log_level="info",
-        factory=True
+        factory=True,
     )
 
 
 # Create ASGI application (for uvicorn import)
-_server: WebSocketServer = None
-asgi_app = None
+_server: WebSocketServer | None = None
+asgi_app: Starlette | None = None
 
 # ── Duplicate-init guards ─────────────────────────────────────────────
 # threading.Event survives module re-import (uvicorn reload/fork) where
@@ -148,11 +153,13 @@ _INIT_DONE = threading.Event()
 _INIT_TASKS: list[asyncio.Task] = []
 
 
-def get_asgi_app():
+def get_asgi_app() -> Starlette:
     """Get ASGI application (lazy initialization)"""
     global _server, asgi_app, global_config, user_settings
 
     if _INIT_DONE.is_set():
+        if asgi_app is None:
+            raise RuntimeError("ASGI initialization flag set without an application")
         return asgi_app
 
     if asgi_app is None:
@@ -209,7 +216,6 @@ def get_asgi_app():
 
         # ── Start daily inspection scheduler ────────────────────────
         try:
-
             _inspection_scheduler = InspectionScheduler(
                 runtime=_server.inspection_runtime(), interval_hours=24
             )
@@ -221,17 +227,17 @@ def get_asgi_app():
             )
             logger.info("[Inspection] Daily inspection scheduler registered")
         except Exception as e:
-            logger.warning(
-                f"[Inspection] Failed to start inspection scheduler (non-fatal): {e}"
-            )
+            logger.warning(f"[Inspection] Failed to start inspection scheduler (non-fatal): {e}")
 
         asgi_app = _server.get_app()
         _INIT_DONE.set()
 
+    if asgi_app is None:
+        raise RuntimeError("ASGI application initialization failed")
     return _wrap_with_frontend_serving(asgi_app)
 
 
-def _wrap_with_frontend_serving(app):
+def _wrap_with_frontend_serving(app: Starlette) -> Starlette:
     """Wrap ASGI app with frontend static file serving.
 
     Serves frontend/dist as static files for SPA deployment.
@@ -267,7 +273,11 @@ def _wrap_with_frontend_serving(app):
         - All other paths: served index.html (SPA fallback)
         """
 
-        async def dispatch(self, request, call_next):
+        async def dispatch(
+            self,
+            request: Request,
+            call_next: Callable[[Request], Awaitable[Response]],
+        ) -> Response:
             path = request.url.path
 
             # API and WebSocket routes — pass through to backend
@@ -319,10 +329,9 @@ def _setup_checkpointer() -> None:
         logger.info(f"[Checkpoint] Redis checkpointer active: {redis_url}")
     except Exception as e:
         logger.warning(
-            f"[Checkpoint] Redis unavailable ({e}), "
-            f"falling back to in-memory MemorySaver"
+            f"[Checkpoint] Redis unavailable ({e}), falling back to in-memory MemorySaver"
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_server()

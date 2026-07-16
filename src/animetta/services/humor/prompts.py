@@ -48,4 +48,3 @@ def build_humor_messages(
             "content": json.dumps(payload, ensure_ascii=False, indent=2),
         },
     ]
-

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Ref, ref } from 'vue'
+import { ref } from 'vue'
 import { useScrollTrigger } from '@/composables/useScrollTrigger'
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   gap: 16,
-  scrollReveal: true
+  scrollReveal: true,
 })
 
 const gridRef = ref<HTMLElement | null>(null)
@@ -19,7 +19,7 @@ const gridRef = ref<HTMLElement | null>(null)
 // Scroll reveal for the entire grid
 if (props.scrollReveal) {
   useScrollTrigger(gridRef, {
-    start: 'top 90%'
+    start: 'top 90%',
   })
 }
 </script>

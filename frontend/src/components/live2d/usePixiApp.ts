@@ -1,22 +1,20 @@
 import { type Ref } from 'vue'
+import type { Application } from 'pixi.js'
 
 // ===== PIXI Application State =====
 
-let app: any = null
+let app: Application | null = null
 let container: HTMLElement | null = null
 let lastCanvasW = 0
 let lastCanvasH = 0
 
-export function getApp(): any { return app }
-export function getContainer(): HTMLElement | null { return container }
-export function getLastCanvasW(): number { return lastCanvasW }
-export function getLastCanvasH(): number { return lastCanvasH }
+export function getApp(): Application | null {
+  return app
+}
 
 // ===== PIXI Application Initialization =====
 
-export async function initPixiApp(
-  canvasRef: Ref<HTMLCanvasElement | null>
-): Promise<void> {
+export async function initPixiApp(canvasRef: Ref<HTMLCanvasElement | null>): Promise<void> {
   console.log('[PixiApp] initPixiApp called, canvasRef.value:', canvasRef.value)
   if (!canvasRef.value) {
     console.error('[PixiApp] Canvas ref is null, cannot initialize')
@@ -28,7 +26,7 @@ export async function initPixiApp(
   const PIXI = await import('pixi.js')
 
   // Required: pixi-live2d-display references window.PIXI.Ticker internally
-  ;(window as any).PIXI = PIXI
+  window.PIXI = PIXI
 
   app = new PIXI.Application({
     view: canvasRef.value,
@@ -39,7 +37,7 @@ export async function initPixiApp(
     resolution: window.devicePixelRatio || 1,
     antialias: true,
     backgroundAlpha: 0,
-    preserveDrawingBuffer: true
+    preserveDrawingBuffer: true,
   })
 
   lastCanvasW = app.screen.width

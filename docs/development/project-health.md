@@ -69,7 +69,7 @@ Benchmarks perform one priming run followed by five warm runs. Acceptance target
 
 ## Docker Verification
 
-The main agent must not start backend services directly. Use the project Docker startup protocol in a sub-agent: `docker compose down`, build, `docker compose up -d`, curl-poll `/health`, curl-poll `/`, then scan logs for Traceback or ERROR-level failures. After the service is ready, run:
+The main agent must not start backend services directly. Use the project Docker startup protocol in a sub-agent. Deploy Qwen explicitly with `python scripts/runtime_lifecycle.py qwen-deploy` only for its first deployment or an intentional image/model change. Routine verification runs the `qwen-up`, `anima-down`, and `anima-up` operations through that cross-platform Python entrypoint (Make aliases are optional), curl-polls `/health` and `/`, then scans both Compose projects for Traceback or ERROR-level failures. After the service is ready, run:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/health_check.py --profile docker

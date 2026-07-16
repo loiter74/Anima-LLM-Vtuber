@@ -77,7 +77,10 @@ class TestLoggerManagerInstantiation:
     """LoggerManager __init__ behavior."""
 
     def test_init_sets_up_handler(self):
-        with patch("animetta.utils.logger_manager.logger.remove") as mock_remove, patch("animetta.utils.logger_manager.logger.add") as mock_add:
+        with (
+            patch("animetta.utils.logger_manager.logger.remove") as mock_remove,
+            patch("animetta.utils.logger_manager.logger.add") as mock_add,
+        ):
             mock_add.return_value = 123
             mgr = LoggerManager()
             mock_remove.assert_called_once()

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
 
@@ -23,16 +23,26 @@ export const usePersonalityStore = defineStore('personality', () => {
     const socket = getSocket()
     if (!socket) return
 
-    socket.on(Events.PERSONA.UPDATED, (data: { persona_name: string; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
-      currentPersona.value = data.persona_name
-      if (data.mbti) {
-        mbtiType.value = data.mbti.type
-        mbtiDimensions.value = data.mbti.dimensions
-      } else {
-        mbtiType.value = null
-        mbtiDimensions.value = null
-      }
-    })
+    socket.on(
+      Events.PERSONA.UPDATED,
+      (data: {
+        persona_name: string
+        mbti?: {
+          type: string
+          dimensions: { ei: number; sn: number; tf: number; jp: number }
+          description: string
+        }
+      }) => {
+        currentPersona.value = data.persona_name
+        if (data.mbti) {
+          mbtiType.value = data.mbti.type
+          mbtiDimensions.value = data.mbti.dimensions
+        } else {
+          mbtiType.value = null
+          mbtiDimensions.value = null
+        }
+      },
+    )
   }
 
   function cleanupListeners(): void {
@@ -45,15 +55,27 @@ export const usePersonalityStore = defineStore('personality', () => {
     const socket = getSocket()
     if (!socket) return
 
-    socket.emit(Events.PERSONA.LIST, {}, (response: { personas: string[]; current_persona?: string | null; mbti?: { type: string; dimensions: { ei: number; sn: number; tf: number; jp: number }; description: string } }) => {
-      availablePersonas.value = response.personas ?? []
-      currentPersona.value = response.current_persona ?? availablePersonas.value[0] ?? null
-      // Also update MBTI data from initial fetch
-      if (response.mbti) {
-        mbtiType.value = response.mbti.type
-        mbtiDimensions.value = response.mbti.dimensions
-      }
-    })
+    socket.emit(
+      Events.PERSONA.LIST,
+      {},
+      (response: {
+        personas: string[]
+        current_persona?: string | null
+        mbti?: {
+          type: string
+          dimensions: { ei: number; sn: number; tf: number; jp: number }
+          description: string
+        }
+      }) => {
+        availablePersonas.value = response.personas ?? []
+        currentPersona.value = response.current_persona ?? availablePersonas.value[0] ?? null
+        // Also update MBTI data from initial fetch
+        if (response.mbti) {
+          mbtiType.value = response.mbti.type
+          mbtiDimensions.value = response.mbti.dimensions
+        }
+      },
+    )
   }
 
   async function setPersona(name: string): Promise<void> {
@@ -141,7 +163,9 @@ export const usePersonalityStore = defineStore('personality', () => {
     mbtiType.value = type
   }
 
-  function setMbtiDimensions(dimensions: { ei: number; sn: number; tf: number; jp: number } | null): void {
+  function setMbtiDimensions(
+    dimensions: { ei: number; sn: number; tf: number; jp: number } | null,
+  ): void {
     mbtiDimensions.value = dimensions
   }
 

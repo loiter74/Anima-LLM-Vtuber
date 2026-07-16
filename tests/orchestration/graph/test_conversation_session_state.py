@@ -15,11 +15,17 @@ def test_session_window_keeps_last_six_completed_pairs() -> None:
 def test_commit_is_idempotent_and_updates_bounded_state() -> None:
     session = ConversationSessionState()
     assert session.commit(
-        task_id="task", user_text="u", final_response="a", mood="bright",
+        task_id="task",
+        user_text="u",
+        final_response="a",
+        mood="bright",
         affinity_delta=2,
     )
     assert not session.commit(
-        task_id="task", user_text="u", final_response="duplicate", mood="tired",
+        task_id="task",
+        user_text="u",
+        final_response="duplicate",
+        mood="tired",
         affinity_delta=2,
     )
     assert session.completed_window == (("u", "a"),)
@@ -30,9 +36,7 @@ def test_commit_is_idempotent_and_updates_bounded_state() -> None:
 
 def test_state_values_are_clamped_and_reset() -> None:
     session = ConversationSessionState(affinity=99, fatigue=98)
-    session.commit(
-        task_id="task", user_text="u", final_response="a", affinity_delta=2
-    )
+    session.commit(task_id="task", user_text="u", final_response="a", affinity_delta=2)
     assert session.affinity == 100
     assert session.fatigue == 100
     session.reset()

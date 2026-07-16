@@ -13,12 +13,14 @@ from animetta.observability.domain import EventDirection, ObservationEvent
 
 LOGGER = logger.bind(name="NodeError")
 
-VALID_ERROR_TYPES: frozenset[str] = frozenset({
-    "timeout",
-    "rate_limit",
-    "network_error",
-    "invalid_response",
-})
+VALID_ERROR_TYPES: frozenset[str] = frozenset(
+    {
+        "timeout",
+        "rate_limit",
+        "network_error",
+        "invalid_response",
+    }
+)
 
 
 async def log_node_error(
@@ -30,10 +32,7 @@ async def log_node_error(
 ) -> None:
     """Log and append one sanitized event under the active node context."""
     if error_type not in VALID_ERROR_TYPES:
-        LOGGER.debug(
-            f"[{session_id}] Unknown error_type '{error_type}', "
-            f"mapping to 'unknown'"
-        )
+        LOGGER.debug(f"[{session_id}] Unknown error_type '{error_type}', mapping to 'unknown'")
         error_type = "unknown"
 
     LOGGER.warning(

@@ -10,11 +10,13 @@ Uses locally fine-tuned models for inference
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 import torch
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm.local_lora_llm import LocalLoraLLMConfig
 
 from .interface import LLMInterface
 
@@ -33,7 +35,7 @@ class LocalLoraLLM(LLMInterface):
         lora_path: str = "models/lora/neuro-vtuber-v1",
         device: str = "cuda",
         system_prompt: str = "",
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize the local LoRA model
@@ -50,8 +52,9 @@ class LocalLoraLLM(LLMInterface):
         self.device = self._resolve_device(device)  # Auto-degradation
         self.system_prompt = system_prompt
 
-        self.model = None
-        self.tokenizer = None
+        # Transformers and PEFT expose version-dependent runtime protocols.
+        self.model: Any = None
+        self.tokenizer: Any = None
         self._loaded = False
 
         # Conversation history
@@ -64,8 +67,12 @@ class LocalLoraLLM(LLMInterface):
         logger.info(f"[LocalLoraLLM] Actual device: {self.device}")
 
         if self.device != self.requested_device:
-            logger.warning(f"[LocalLoraLLM] ⚠️ Device auto-downgraded: {self.requested_device} → {self.device}")
-            logger.warning("[LocalLoraLLM] ⚠️ Performance will be affected, please check CUDA installation")
+            logger.warning(
+                f"[LocalLoraLLM] ⚠️ Device auto-downgraded: {self.requested_device} → {self.device}"
+            )
+            logger.warning(
+                "[LocalLoraLLM] ⚠️ Performance will be affected, please check CUDA installation"
+            )
 
         # Preload model (avoid timeout on first call)
         logger.info("[LocalLoraLLM] 🔄 Starting model preload...")
@@ -97,7 +104,12 @@ class LocalLoraLLM(LLMInterface):
         return "cpu"
 
     @classmethod
-    def from_config(cls, config, system_prompt: str = "", **kwargs):
+    def from_config(
+        cls,
+        config: LocalLoraLLMConfig,
+        system_prompt: str = "",
+        **kwargs,
+    ):
         """
         Create an instance from configuration
 
@@ -113,10 +125,10 @@ class LocalLoraLLM(LLMInterface):
             base_model_name=config.base_model_name,
             lora_path=config.lora_path,
             device=config.device,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
         )
 
-    def load_model(self):
+    def load_model(self) -> None:
         """Load the model"""
         if self._loaded:
             return
@@ -131,16 +143,14 @@ class LocalLoraLLM(LLMInterface):
 
             # Check if it is a local path (Windows drive letter or absolute path)
             is_local_path = (
-                os.path.isabs(self.base_model_name) or
-                (len(self.base_model_name) > 2 and self.base_model_name[1] == ':') or
-                self.base_model_name.startswith('/')
+                os.path.isabs(self.base_model_name)
+                or (len(self.base_model_name) > 2 and self.base_model_name[1] == ":")
+                or self.base_model_name.startswith("/")
             )
 
             # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.base_model_name,
-                trust_remote_code=True,
-                local_files_only=is_local_path
+                self.base_model_name, trust_remote_code=True, local_files_only=is_local_path
             )
 
             if self.tokenizer.pad_token is None:
@@ -162,17 +172,13 @@ class LocalLoraLLM(LLMInterface):
                 device_map=device_map,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,  # Reduce CPU memory usage
-                local_files_only=is_local_path
+                local_files_only=is_local_path,
             )
 
             # Load LoRA adapter
             logger.info(f"[LocalLoraLLM] Loading LoRA adapter: {self.lora_path}")
 
-            self.model = PeftModel.from_pretrained(
-                base_model,
-                self.lora_path,
-                is_trainable=False
-            )
+            self.model = PeftModel.from_pretrained(base_model, self.lora_path, is_trainable=False)
 
             self.model.eval()
             self._loaded = True
@@ -181,8 +187,12 @@ class LocalLoraLLM(LLMInterface):
 
             # Performance tips
             if self.device == "cpu":
-                logger.warning("[LocalLoraLLM] ⚠️ Using CPU for inference, performance will be slower")
-                logger.warning("[LocalLoraLLM] 💡 Consider installing CUDA-enabled PyTorch for better performance")
+                logger.warning(
+                    "[LocalLoraLLM] ⚠️ Using CPU for inference, performance will be slower"
+                )
+                logger.warning(
+                    "[LocalLoraLLM] 💡 Consider installing CUDA-enabled PyTorch for better performance"
+                )
 
         except Exception as e:
             logger.error(f"[LocalLoraLLM] ❌ Model loading failed: {e}")
@@ -192,7 +202,7 @@ class LocalLoraLLM(LLMInterface):
             logger.error("[LocalLoraLLM]    3. Are transformers and peft installed")
             raise
 
-    async def chat_stream(self, text: str) -> AsyncIterator[str]:
+    async def chat_stream(self, user_input: str, **kwargs: Any) -> AsyncIterator[str]:
         """
         Streaming conversation
 
@@ -207,15 +217,13 @@ class LocalLoraLLM(LLMInterface):
             self.load_model()
 
         # Build prompt
-        prompt = self._format_prompt(text)
+        del kwargs
+        prompt = self._format_prompt(user_input)
 
         # Tokenize
-        inputs = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=256
-        ).to(self.device)
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=256).to(
+            self.device
+        )
 
         # Generation parameters
         generation_kwargs = {
@@ -224,7 +232,7 @@ class LocalLoraLLM(LLMInterface):
             "top_p": 0.9,
             "do_sample": True,
             "pad_token_id": self.tokenizer.pad_token_id,
-            "eos_token_id": self.tokenizer.eos_token_id
+            "eos_token_id": self.tokenizer.eos_token_id,
         }
 
         # Streaming generation
@@ -232,9 +240,7 @@ class LocalLoraLLM(LLMInterface):
             from transformers import TextIteratorStreamer
 
             streamer = TextIteratorStreamer(
-                self.tokenizer,
-                skip_prompt=True,
-                skip_special_tokens=True
+                self.tokenizer, skip_prompt=True, skip_special_tokens=True
             )
 
             generation_kwargs["streamer"] = streamer
@@ -272,19 +278,17 @@ class LocalLoraLLM(LLMInterface):
         # Use Qwen Chat template format
         messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": text}
+            {"role": "user", "content": text},
         ]
 
         # Use tokenizer's chat template
         prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
+            messages, tokenize=False, add_generation_prompt=True
         )
 
         return prompt
 
-    async def chat(self, text: str) -> str:
+    async def chat(self, user_input: str, **kwargs: Any) -> str:
         """
         Non-streaming conversation (async)
 
@@ -299,7 +303,8 @@ class LocalLoraLLM(LLMInterface):
             self.load_model()
 
         # Build prompt
-        prompt = self._format_prompt(text)
+        del kwargs
+        prompt = self._format_prompt(user_input)
 
         logger.info("[LocalLoraLLM] Starting response generation...")
         logger.debug(f"[LocalLoraLLM] Input prompt length: {len(prompt)} chars")
@@ -309,10 +314,7 @@ class LocalLoraLLM(LLMInterface):
         def generate_sync():
             # Tokenize
             inputs = self.tokenizer(
-                prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=256
+                prompt, return_tensors="pt", truncation=True, max_length=256
             ).to(self.device)
 
             # Generate
@@ -324,13 +326,12 @@ class LocalLoraLLM(LLMInterface):
                     top_p=0.9,
                     do_sample=True,
                     pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
+                    eos_token_id=self.tokenizer.eos_token_id,
                 )
 
             # Decode
             response = self.tokenizer.decode(
-                outputs[0][inputs['input_ids'].shape[1]:],
-                skip_special_tokens=True
+                outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
 
             return response
@@ -366,9 +367,11 @@ class LocalLoraLLM(LLMInterface):
 
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """Restore conversation memory from history (not yet implemented)"""
-        logger.debug(f"[LocalLoraLLM] Restoring memory from history: conf_uid={conf_uid}, history_uid={history_uid}")
+        logger.debug(
+            f"[LocalLoraLLM] Restoring memory from history: conf_uid={conf_uid}, history_uid={history_uid}"
+        )
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the model and release resources"""
         if self.model is not None:
             del self.model

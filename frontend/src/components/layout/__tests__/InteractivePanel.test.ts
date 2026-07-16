@@ -51,15 +51,19 @@ describe('InteractivePanel', () => {
 
   it('shows reload success state without changing tabs', async () => {
     mockIsMobile.value = false
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
         ok: true,
-        version: 4,
-        persona: 'anima.v0.1',
-        refreshed: ['persona', 'llm'],
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            version: 4,
+            persona: 'anima.v0.1',
+            refreshed: ['persona', 'llm'],
+          }),
       }),
-    }))
+    )
 
     const wrapper = mount(InteractivePanel, {
       props: { live2dPopout: false },

@@ -152,7 +152,9 @@ def manifest_secrets(isolated_manifest_env: pytest.MonkeyPatch) -> pytest.Monkey
 
 
 @pytest.fixture
-def fake_http_transport() -> Callable[[Callable[[httpx.Request], httpx.Response]], httpx.MockTransport]:
+def fake_http_transport() -> Callable[
+    [Callable[[httpx.Request], httpx.Response]], httpx.MockTransport
+]:
     return httpx.MockTransport
 
 

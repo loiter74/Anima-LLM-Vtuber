@@ -13,8 +13,6 @@ export function useVoice() {
   let scriptProcessor: ScriptProcessorNode | null = null
   let gainNode: GainNode | null = null
   let resampleBuffer: number[] = []
-  let chunkCount = 0
-
   const TARGET_SAMPLE_RATE = 16000
   const CHUNK_SIZE = 512 // 32ms at 16kHz (Silero VAD minimum is 512 samples)
 
@@ -25,8 +23,8 @@ export function useVoice() {
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
-        }
+          autoGainControl: true,
+        },
       })
 
       const track = stream.getAudioTracks()[0]
@@ -64,7 +62,6 @@ export function useVoice() {
         const socket = getSocket()
         while (resampleBuffer.length >= CHUNK_SIZE) {
           const chunk = resampleBuffer.splice(0, CHUNK_SIZE)
-          chunkCount++
           if (socket?.connected) {
             socket.emit(Events.CHAT.AUDIO, { audio: chunk })
           }
@@ -76,8 +73,8 @@ export function useVoice() {
       scriptProcessor.connect(audioContext.destination)
 
       isRecording.value = true
-    } catch (err: any) {
-      error.value = err.message
+    } catch (err: unknown) {
+      error.value = err instanceof Error ? err.message : 'Microphone initialization failed'
       isRecording.value = false
     }
   }
@@ -107,7 +104,11 @@ export function useVoice() {
   }
 
   function toggle(): void {
-    isRecording.value ? stop() : start()
+    if (isRecording.value) {
+      void stop()
+    } else {
+      void start()
+    }
   }
 
   onUnmounted(() => {

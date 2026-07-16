@@ -1,6 +1,5 @@
 """ASR base configuration"""
 
-
 from pydantic import Field
 
 from ...core.base import ProviderConfig
@@ -13,4 +12,5 @@ class ASRBaseConfig(ProviderConfig, ApiKeyMixin, ModelMixin):
 
     All ASR provider configurations should inherit from this class
     """
+
     language: str = Field(default="zh", description="Recognition language")

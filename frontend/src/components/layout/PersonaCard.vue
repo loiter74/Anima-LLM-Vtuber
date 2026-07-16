@@ -11,7 +11,8 @@ const personaName = computed(() => {
 const personaTraits = ['friendly', 'curious', 'helpful', 'creative']
 
 // Description for the persona (hardcoded for now, can be fetched from config later)
-const personaDesc = 'Friendly AI companion who loves to chat about tech, design, and creative projects.'
+const personaDesc =
+  'Friendly AI companion who loves to chat about tech, design, and creative projects.'
 </script>
 
 <template>
@@ -27,11 +28,7 @@ const personaDesc = 'Friendly AI companion who loves to chat about tech, design,
       </div>
     </div>
     <div class="persona-traits">
-      <span
-        v-for="trait in personaTraits.slice(0, 5)"
-        :key="trait"
-        class="trait-tag"
-      >
+      <span v-for="trait in personaTraits.slice(0, 5)" :key="trait" class="trait-tag">
         {{ trait }}
       </span>
     </div>

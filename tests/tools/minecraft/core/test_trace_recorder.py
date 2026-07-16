@@ -18,7 +18,9 @@ from animetta.tools.minecraft.other.trace_recorder import (
 
 
 def _make_state(
-    x: float = 0, y: float = 64, z: float = 0,
+    x: float = 0,
+    y: float = 64,
+    z: float = 0,
     inventory: dict[str, int] | None = None,
 ) -> dict:
     """Build a minimal state snapshot."""
@@ -76,8 +78,12 @@ class TestActionTrace:
 
     def test_to_dict_with_error(self):
         trace = ActionTrace(
-            action="mine", params={}, result=None,
-            duration=0.5, state_before={}, state_after={},
+            action="mine",
+            params={},
+            result=None,
+            duration=0.5,
+            state_before={},
+            state_after={},
             error="Timeout after 60s",
         )
         d = trace.to_dict()
@@ -112,13 +118,24 @@ class TestTaskTrace:
 
     def test_to_dict_includes_nested_steps(self):
         step = ActionTrace(
-            action="goto", params={"x": 5}, result="ok",
-            duration=1.0, state_before={}, state_after={},
+            action="goto",
+            params={"x": 5},
+            result="ok",
+            duration=1.0,
+            state_before={},
+            state_after={},
         )
         trace = TaskTrace(
-            id="x", goal="test", steps=[step], final_result="ok",
-            total_duration=1.0, items_gained={}, items_lost={},
-            distance_traveled=0.0, start_position={}, end_position={},
+            id="x",
+            goal="test",
+            steps=[step],
+            final_result="ok",
+            total_duration=1.0,
+            items_gained={},
+            items_lost={},
+            distance_traveled=0.0,
+            start_position={},
+            end_position={},
         )
         d = trace.to_dict()
         assert len(d["steps"]) == 1
@@ -241,9 +258,16 @@ class TestTraceRecorderSaveTrace:
         p = tmp_path / "traces.jsonl"
         recorder = TraceRecorder(trace_path=p)
         trace = TaskTrace(
-            id="test1", goal="test", steps=[], final_result="ok",
-            total_duration=1.0, items_gained={}, items_lost={},
-            distance_traveled=0.0, start_position={}, end_position={},
+            id="test1",
+            goal="test",
+            steps=[],
+            final_result="ok",
+            total_duration=1.0,
+            items_gained={},
+            items_lost={},
+            distance_traveled=0.0,
+            start_position={},
+            end_position={},
             timestamp="2026-01-01T00:00:00",
         )
         await recorder.save_trace(trace)
@@ -253,10 +277,17 @@ class TestTraceRecorderSaveTrace:
         p = tmp_path / "traces.jsonl"
         recorder = TraceRecorder(trace_path=p)
         trace = TaskTrace(
-            id="test2", goal="collect wood", steps=[], final_result="success",
-            total_duration=5.0, items_gained={"oak_log": 10}, items_lost={},
-            distance_traveled=12.5, start_position={"x": 0, "y": 64, "z": 0},
-            end_position={"x": 10, "y": 64, "z": 5}, timestamp="2026-01-01T00:00:00",
+            id="test2",
+            goal="collect wood",
+            steps=[],
+            final_result="success",
+            total_duration=5.0,
+            items_gained={"oak_log": 10},
+            items_lost={},
+            distance_traveled=12.5,
+            start_position={"x": 0, "y": 64, "z": 0},
+            end_position={"x": 10, "y": 64, "z": 5},
+            timestamp="2026-01-01T00:00:00",
         )
         await recorder.save_trace(trace)
         content = p.read_text(encoding="utf-8").strip()
@@ -270,9 +301,16 @@ class TestTraceRecorderSaveTrace:
         recorder = TraceRecorder(trace_path=p)
         for i in range(3):
             trace = TaskTrace(
-                id=f"t{i}", goal=f"task {i}", steps=[], final_result="ok",
-                total_duration=1.0, items_gained={}, items_lost={},
-                distance_traveled=0.0, start_position={}, end_position={},
+                id=f"t{i}",
+                goal=f"task {i}",
+                steps=[],
+                final_result="ok",
+                total_duration=1.0,
+                items_gained={},
+                items_lost={},
+                distance_traveled=0.0,
+                start_position={},
+                end_position={},
             )
             await recorder.save_trace(trace)
         lines = p.read_text(encoding="utf-8").strip().split("\n")

@@ -36,7 +36,7 @@ interface WikiPage {
     source_id: string
     target_id: string
     relation_type: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }>
 }
 
@@ -71,14 +71,17 @@ const dragOffset = ref({ x: 0, y: 0 })
 
 // Tooltip state
 const tooltip = ref<{ show: boolean; x: number; y: number; text: string }>({
-  show: false, x: 0, y: 0, text: '',
+  show: false,
+  x: 0,
+  y: 0,
+  text: '',
 })
 
 // ── Computed ─────────────────────────────────────────────
 
 /** Unique categories from current nodes */
 const categories = computed(() => {
-  const cats = new Set(graphNodes.value.map(n => n.category))
+  const cats = new Set(graphNodes.value.map((n) => n.category))
   return Array.from(cats).sort()
 })
 
@@ -88,8 +91,8 @@ const searchMatchIds = computed(() => {
   const q = searchQuery.value.toLowerCase()
   return new Set(
     graphNodes.value
-      .filter(n => n.label.toLowerCase().includes(q) || n.category.toLowerCase().includes(q))
-      .map(n => n.id),
+      .filter((n) => n.label.toLowerCase().includes(q) || n.category.toLowerCase().includes(q))
+      .map((n) => n.id),
   )
 })
 
@@ -130,8 +133,8 @@ function isEdgeDimmed(edge: MemoryEdge): boolean {
   if (!hasFilter.value) return false
   const srcId = edgeNodeId(edge.source)
   const tgtId = edgeNodeId(edge.target)
-  const srcNode = graphNodes.value.find(n => n.id === srcId)
-  const tgtNode = graphNodes.value.find(n => n.id === tgtId)
+  const srcNode = graphNodes.value.find((n) => n.id === srcId)
+  const tgtNode = graphNodes.value.find((n) => n.id === tgtId)
   if (srcNode && isNodeDimmed(srcNode)) return true
   if (tgtNode && isNodeDimmed(tgtNode)) return true
   return false
@@ -202,7 +205,10 @@ function handleSvgMouseDown(event: MouseEvent) {
   if (target.closest('.graph-node')) return
 
   isPanning.value = true
-  panStart.value = { x: event.clientX - zoomTransform.value.x, y: event.clientY - zoomTransform.value.y }
+  panStart.value = {
+    x: event.clientX - zoomTransform.value.x,
+    y: event.clientY - zoomTransform.value.y,
+  }
 }
 
 function handleMouseMove(event: MouseEvent) {
@@ -287,12 +293,18 @@ function initSimulation() {
   simulation.value?.stop()
 
   const sim = forceSimulation<MemoryNode>(graphNodes.value)
-    .force('link', forceLink<MemoryNode, SimulationLinkDatum<MemoryNode>>(graphEdges.value)
-      .id(d => d.id)
-      .distance(120))
+    .force(
+      'link',
+      forceLink<MemoryNode, SimulationLinkDatum<MemoryNode>>(graphEdges.value)
+        .id((d) => d.id)
+        .distance(120),
+    )
     .force('charge', forceManyBody<MemoryNode>().strength(-300))
     .force('center', forceCenter<MemoryNode>(width / 2, height / 2))
-    .force('collide', forceCollide<MemoryNode>().radius(d => 8 + d.importance * 24 + 4))
+    .force(
+      'collide',
+      forceCollide<MemoryNode>().radius((d) => 8 + d.importance * 24 + 4),
+    )
     .alphaDecay(0.02)
     .on('tick', () => {
       // Trigger Vue reactivity by creating new array reference
@@ -328,15 +340,19 @@ onBeforeUnmount(() => {
 })
 
 // Re-run simulation when pages data changes
-watch(() => props.pages, (newPages) => {
-  if (newPages.length > 0) {
-    initSimulation()
-  } else {
-    stopSimulation()
-    graphNodes.value = []
-    graphEdges.value = []
-  }
-}, { deep: true })
+watch(
+  () => props.pages,
+  (newPages) => {
+    if (newPages.length > 0) {
+      initSimulation()
+    } else {
+      stopSimulation()
+      graphNodes.value = []
+      graphEdges.value = []
+    }
+  },
+  { deep: true },
+)
 </script>
 
 <template>

@@ -2,7 +2,11 @@ import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Events, type BilibiliCommandAck, type BilibiliStatusPayload } from '@/constants/socket-events'
+import {
+  Events,
+  type BilibiliCommandAck,
+  type BilibiliStatusPayload,
+} from '@/constants/socket-events'
 import { useDanmaku } from '@/composables/useDanmaku'
 import { useDanmakuStore } from '@/stores/danmaku'
 import { useChatStore } from '@/stores/chat'
@@ -31,12 +35,14 @@ function status(state: BilibiliStatusPayload['state']): BilibiliStatusPayload {
 
 function mountComposable(options?: { canControl?: boolean }) {
   let result!: ReturnType<typeof useDanmaku>
-  const wrapper = mount(defineComponent({
-    setup() {
-      result = useDanmaku(options)
-      return () => h('div')
-    },
-  }))
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        result = useDanmaku(options)
+        return () => h('div')
+      },
+    }),
+  )
   return { result, wrapper }
 }
 
@@ -73,7 +79,7 @@ describe('useDanmaku', () => {
 
   it('cleans up only the listener functions it registered', () => {
     const { wrapper } = mountComposable()
-    const registrations = new Map(socket.on.mock.calls.map(call => [call[0], call[1]]))
+    const registrations = new Map(socket.on.mock.calls.map((call) => [call[0], call[1]]))
 
     wrapper.unmount()
 
@@ -95,7 +101,7 @@ describe('useDanmaku', () => {
     mountComposable()
     const store = useDanmakuStore()
     const listener = socket.on.mock.calls.find(
-      call => call[0] === Events.BILIBILI.DANMAKU_STATUS,
+      (call) => call[0] === Events.BILIBILI.DANMAKU_STATUS,
     )?.[1]
 
     listener(status('reconnecting'))
@@ -136,7 +142,7 @@ describe('useDanmaku', () => {
     const chatStore = useChatStore()
     const createMessage = vi.spyOn(chatStore, 'createMessage')
     const listener = socket.on.mock.calls.find(
-      call => call[0] === Events.BILIBILI.DANMAKU_AI_REPLY,
+      (call) => call[0] === Events.BILIBILI.DANMAKU_AI_REPLY,
     )?.[1]
 
     listener({

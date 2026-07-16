@@ -16,9 +16,7 @@ from animetta.observability.errors import ErrorType, classify_error, normalize_e
         (RuntimeError("unexpected"), ErrorType.UNKNOWN),
     ],
 )
-def test_classify_error_uses_bounded_categories(
-    error: BaseException, expected: ErrorType
-) -> None:
+def test_classify_error_uses_bounded_categories(error: BaseException, expected: ErrorType) -> None:
     assert classify_error(error) is expected
 
 

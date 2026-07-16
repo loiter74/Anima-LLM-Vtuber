@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,13 @@ import pytest
 
 import scripts.health_check as health_check
 from scripts.health_check import _python_command, build_gates, redact_output
+
+
+@pytest.fixture(autouse=True)
+def _clear_python_dependency_probe_cache() -> Iterator[None]:
+    health_check._python_has_health_dependencies.cache_clear()
+    yield
+    health_check._python_has_health_dependencies.cache_clear()
 
 
 def test_requirements_entrypoint_includes_core_and_dev() -> None:
@@ -216,7 +224,9 @@ def test_pytest_plugin_preflight_reports_missing_plugins(monkeypatch) -> None:
 
 
 def test_frontend_audit_registry_failure_is_degraded() -> None:
-    gate = next(gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit")
+    gate = next(
+        gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit"
+    )
 
     status, remediation, warnings = health_check._classify_gate(
         gate,
@@ -230,7 +240,9 @@ def test_frontend_audit_registry_failure_is_degraded() -> None:
 
 
 def test_frontend_audit_gate_uses_python_validator() -> None:
-    gate = next(gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit")
+    gate = next(
+        gate for gate in build_gates(profile=None) if gate.id == "dependencies:frontend-audit"
+    )
 
     assert "_frontend_audit_validation" in " ".join(gate.command)
 
@@ -283,7 +295,9 @@ packages:
             return b"{}"
 
     monkeypatch.setattr(health_check.subprocess, "run", fake_run)
-    monkeypatch.setattr(health_check.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+    monkeypatch.setattr(
+        health_check.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse()
+    )
 
     health_check._frontend_audit_validation()
 
@@ -312,8 +326,7 @@ def test_summary_contains_contract_fields(tmp_path: Path) -> None:
     saved = json.loads(output.read_text(encoding="utf-8"))
     assert saved["python_policy"] == {"canonical": "3.13"}
     assert all(
-        warning["id"] != "python:runtime-degraded"
-        for warning in saved["accepted_warning_ledger"]
+        warning["id"] != "python:runtime-degraded" for warning in saved["accepted_warning_ledger"]
     )
     assert "health_statuses" in saved
     assert "gates" in saved

@@ -192,7 +192,9 @@ def test_code_generator_uses_reasoning_content_when_content_empty():
 
     class _Resp:
         content = ""
-        reasoning_content = "Plan done.\nawait collect('gold_ore', 4);\nawait craft('golden_boots', 1);"
+        reasoning_content = (
+            "Plan done.\nawait collect('gold_ore', 4);\nawait craft('golden_boots', 1);"
+        )
 
     class MockLLM:
         async def chat(self, messages):

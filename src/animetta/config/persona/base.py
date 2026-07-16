@@ -32,6 +32,7 @@ def list_available_personas(
         return ["default"]
     return personas
 
+
 # ── Context-safety / anti-leak section ───────────────────────────────
 # Appended to every persona's system prompt as the final block. Stops the
 # "历史串台虫" / prompt-injection class of attacks where a user feeds the
@@ -62,7 +63,9 @@ class MBTIDimensions(BaseConfig):
     - J/P: 0=extreme perceiving ← → 100=extreme judging
     """
 
-    ei: int = Field(default=50, ge=0, le=100, description="E/I: Introversion(0) ↔ Extraversion(100)")
+    ei: int = Field(
+        default=50, ge=0, le=100, description="E/I: Introversion(0) ↔ Extraversion(100)"
+    )
     sn: int = Field(default=50, ge=0, le=100, description="S/N: Sensing(0) ↔ Intuition(100)")
     tf: int = Field(default=50, ge=0, le=100, description="T/F: Feeling(0) ↔ Thinking(100)")
     jp: int = Field(default=50, ge=0, le=100, description="J/P: Perceiving(0) ↔ Judging(100)")
@@ -76,10 +79,10 @@ class MBTIDimensions(BaseConfig):
     def to_mbti_type(self) -> str:
         """Map dimension scores to a 4-letter MBTI type label."""
         return (
-            ("E" if self.ei > 50 else "I") +
-            ("N" if self.sn > 50 else "S") +
-            ("T" if self.tf > 50 else "F") +
-            ("J" if self.jp > 50 else "P")
+            ("E" if self.ei > 50 else "I")
+            + ("N" if self.sn > 50 else "S")
+            + ("T" if self.tf > 50 else "F")
+            + ("J" if self.jp > 50 else "P")
         )
 
     def describe_dimension(self, name: str) -> str:
@@ -101,36 +104,42 @@ class MBTIDimensions(BaseConfig):
 
 class MBTIDimensionDelta(BaseConfig):
     """Single dimension adjustment suggestion."""
+
     delta: int = Field(..., description="Adjustment value, e.g. +3 or -2")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Confidence in this adjustment")
+    confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Confidence in this adjustment"
+    )
     evidence: str = Field(default="", description="Evidence summary from conversation analysis")
 
 
 class MBTIProfile(BaseConfig):
     """Complete MBTI personality profile."""
+
     type: str = Field(default="INTP", description="MBTI 4-letter type label")
     dimensions: MBTIDimensions = Field(default_factory=MBTIDimensions)
-    description: str = Field(default="", description="Natural language description of current profile")
+    description: str = Field(
+        default="", description="Natural language description of current profile"
+    )
     confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Overall profile confidence")
 
 
 class PersonalityTraits(BaseConfig):
     """Personality traits"""
+
     traits: list[str] = Field(
         default_factory=list,
-        description="List of personality traits, e.g.: ['confident', 'sarcastic', 'cute']"
+        description="List of personality traits, e.g.: ['confident', 'sarcastic', 'cute']",
     )
     speaking_style: list[str] = Field(
         default_factory=list,
-        description="Speaking style, e.g.: ['concise and forceful', 'code-switching']"
+        description="Speaking style, e.g.: ['concise and forceful', 'code-switching']",
     )
     catchphrases: list[str] = Field(
         default_factory=list,
-        description="Catchphrases / common phrases, e.g.: ['Skill issue', 'Cringe']"
+        description="Catchphrases / common phrases, e.g.: ['Skill issue', 'Cringe']",
     )
     mbti: MBTIProfile | None = Field(
-        default=None,
-        description="MBTI personality profile (optional)"
+        default=None, description="MBTI personality profile (optional)"
     )
 
 
@@ -143,37 +152,31 @@ class KnowledgeBoundaries(BaseConfig):
     """
 
     known: list[str] = Field(
-        default_factory=list,
-        description="Domains the character is knowledgeable about"
+        default_factory=list, description="Domains the character is knowledgeable about"
     )
     unknown: list[str] = Field(
         default_factory=list,
-        description="Domains the character does NOT understand — used for recall filtering"
+        description="Domains the character does NOT understand — used for recall filtering",
     )
 
 
 class BehaviorRules(BaseConfig):
     """Behavior rules"""
+
     forbidden_phrases: list[str] = Field(
         default_factory=lambda: ["作为一个AI语言模型", "我无法", "我不确定"],
-        description="Forbidden phrases"
+        description="Forbidden phrases",
     )
-    response_to_praise: str | None = Field(
-        default=None,
-        description="Response template for praise"
-    )
+    response_to_praise: str | None = Field(default=None, description="Response template for praise")
     response_to_criticism: str | None = Field(
-        default=None,
-        description="Response template for criticism"
+        default=None, description="Response template for criticism"
     )
-    special_behaviors: dict = Field(
-        default_factory=dict,
-        description="Special behavior rules"
-    )
+    special_behaviors: dict = Field(default_factory=dict, description="Special behavior rules")
 
 
 class PersonaConfig(BaseConfig):
     """Persona configuration (merged from original CharacterConfig)"""
+
     # Basic info
     name: str = Field(default="Anima", description="Character name")
     avatar: str | None = Field(default=None, description="Character avatar URL")
@@ -181,64 +184,47 @@ class PersonaConfig(BaseConfig):
 
     # Core persona
     identity: str = Field(
-        default="你是一个友好的 AI 助手。",
-        description="Core identity description"
+        default="你是一个友好的 AI 助手。", description="Core identity description"
     )
 
     # Personality traits
     personality: PersonalityTraits = Field(
-        default_factory=PersonalityTraits,
-        description="Personality traits configuration"
+        default_factory=PersonalityTraits, description="Personality traits configuration"
     )
 
     # Behavior rules
     behavior: BehaviorRules = Field(
-        default_factory=BehaviorRules,
-        description="Behavior rules configuration"
+        default_factory=BehaviorRules, description="Behavior rules configuration"
     )
 
     # Speaking style
-    speaking_style: str = Field(
-        default="",
-        description="Speaking style description"
-    )
+    speaking_style: str = Field(default="", description="Speaking style description")
 
     # Example conversations
     examples: list[dict] = Field(
-        default_factory=list,
-        description="Example conversations [{'user': '...', 'ai': '...'}]"
+        default_factory=list, description="Example conversations [{'user': '...', 'ai': '...'}]"
     )
 
     # Emoji settings
     emoji_style: str = Field(
-        default="",
-        description="Emoji usage style, e.g.: 'Each reply includes 1-2 emojis'"
+        default="", description="Emoji usage style, e.g.: 'Each reply includes 1-2 emojis'"
     )
-    common_emojis: list[str] = Field(
-        default_factory=list,
-        description="Commonly used emoji list"
-    )
+    common_emojis: list[str] = Field(default_factory=list, description="Commonly used emoji list")
 
     # Other settings
-    language_mix: bool = Field(
-        default=False,
-        description="Whether to mix Chinese and English"
-    )
+    language_mix: bool = Field(default=False, description="Whether to mix Chinese and English")
     slang_words: list[str] = Field(
-        default_factory=list,
-        description="Internet slang / colloquialisms list"
+        default_factory=list, description="Internet slang / colloquialisms list"
     )
 
     # Live2D expression prompt (optional)
     live2d_prompt: str | None = Field(
-        default=None,
-        description="Live2D expression usage prompt (if enabled)"
+        default=None, description="Live2D expression usage prompt (if enabled)"
     )
 
     # Knowledge boundaries
     knowledge_boundaries: KnowledgeBoundaries | None = Field(
-        default=None,
-        description="Character knowledge boundaries (known/unknown domains)"
+        default=None, description="Character knowledge boundaries (known/unknown domains)"
     )
 
     def build_system_prompt(self, live2d_prompt: str | None = None) -> str:
@@ -285,16 +271,16 @@ class PersonaConfig(BaseConfig):
             mbti_lines.append(f"你的 MBTI 类型是 {mbti.type}，维度倾向如下：")
             # E/I
             ei_desc = dims.describe_dimension("ei")
-            mbti_lines.append(f"- E/I 内向({100-dims.ei}%) ↔ 外向({dims.ei}%)：{ei_desc}")
+            mbti_lines.append(f"- E/I 内向({100 - dims.ei}%) ↔ 外向({dims.ei}%)：{ei_desc}")
             # S/N
             sn_desc = dims.describe_dimension("sn")
-            mbti_lines.append(f"- S/N 实感({100-dims.sn}%) ↔ 直觉({dims.sn}%)：{sn_desc}")
+            mbti_lines.append(f"- S/N 实感({100 - dims.sn}%) ↔ 直觉({dims.sn}%)：{sn_desc}")
             # T/F
             tf_desc = dims.describe_dimension("tf")
-            mbti_lines.append(f"- T/F 共情({100-dims.tf}%) ↔ 理性({dims.tf}%)：{tf_desc}")
+            mbti_lines.append(f"- T/F 共情({100 - dims.tf}%) ↔ 理性({dims.tf}%)：{tf_desc}")
             # J/P
             jp_desc = dims.describe_dimension("jp")
-            mbti_lines.append(f"- J/P 随性({100-dims.jp}%) ↔ 计划({dims.jp}%)：{jp_desc}")
+            mbti_lines.append(f"- J/P 随性({100 - dims.jp}%) ↔ 计划({dims.jp}%)：{jp_desc}")
             if mbti.description:
                 mbti_lines.append(f"\n{mbti.description}")
             parts.append("\n".join(mbti_lines))
@@ -339,7 +325,9 @@ class PersonaConfig(BaseConfig):
                 parts.append(f"\n你熟悉的领域：{'、'.join(kb.known)}")
             if kb.unknown:
                 parts.append(f"\n你**不了解**的领域：{'、'.join(kb.unknown)}")
-                parts.append("\n如果对话涉及你不了解的领域，请诚实说'不太明白'或'没听过这个'，**绝对不要编造答案**。")
+                parts.append(
+                    "\n如果对话涉及你不了解的领域，请诚实说'不太明白'或'没听过这个'，**绝对不要编造答案**。"
+                )
 
         # 8. Example conversations
         if self.examples:
@@ -369,7 +357,7 @@ class PersonaConfig(BaseConfig):
         if not yaml_path.exists():
             raise FileNotFoundError(f"Persona configuration file not found: {yaml_path}")
 
-        with open(yaml_path, encoding='utf-8') as f:
+        with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return cls(**data)

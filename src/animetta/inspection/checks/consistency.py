@@ -19,9 +19,7 @@ async def observation_ledger_responds(runtime: InspectionRuntime | None = None) 
         return False
 
 
-async def has_trace_in_last(
-    minutes: int, runtime: InspectionRuntime | None = None
-) -> bool:
+async def has_trace_in_last(minutes: int, runtime: InspectionRuntime | None = None) -> bool:
     del minutes
     if runtime is None:
         return False
@@ -52,9 +50,7 @@ async def check_data_consistency(
 ) -> CheckResult:
     started = time.perf_counter()
     if runtime is None:
-        return CheckResult.failed(
-            "data_consistency", error="inspection runtime not configured"
-        )
+        return CheckResult.failed("data_consistency", error="inspection runtime not configured")
     ledger_ok, recent_trace, memory_ok = (
         await observation_ledger_responds(runtime),
         await has_trace_in_last(60, runtime),
@@ -67,9 +63,7 @@ async def check_data_consistency(
     }
     duration_ms = (time.perf_counter() - started) * 1000
     if ledger_ok and memory_ok:
-        return CheckResult.passed(
-            "data_consistency", duration_ms=duration_ms, **detail
-        )
+        return CheckResult.passed("data_consistency", duration_ms=duration_ms, **detail)
     return CheckResult.failed(
         "data_consistency",
         duration_ms=duration_ms,

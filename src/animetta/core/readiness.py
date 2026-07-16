@@ -69,10 +69,7 @@ class RuntimeReadinessSnapshot:
             "effective_hash": self.effective_hash,
             "semantic_hash": self.semantic_hash,
             "acceptance_eligible": self.acceptance_eligible,
-            "components": {
-                name: dict(component)
-                for name, component in self.components.items()
-            },
+            "components": {name: dict(component) for name, component in self.components.items()},
         }
 
 
@@ -113,9 +110,7 @@ def build_runtime_readiness_snapshot(
 ) -> RuntimeReadinessSnapshot:
     """Build a readiness snapshot without performing I/O."""
     profile = _runtime_profile(config)
-    if profile in {"test", "smoke", "production"} and hasattr(
-        config, "effective_hash"
-    ):
+    if profile in {"test", "smoke", "production"} and hasattr(config, "effective_hash"):
         return _effective_config_snapshot(
             config=config,
             pool_config=pool_config,
@@ -159,9 +154,7 @@ def build_runtime_readiness_snapshot(
     pool_ready = llm_component["ready"] and tts_component["ready"]
     if init_state == "failed":
         safe_init_reason = (
-            init_reason
-            if init_reason in _SAFE_INIT_REASONS
-            else "initialization_failed"
+            init_reason if init_reason in _SAFE_INIT_REASONS else "initialization_failed"
         )
         pool_component = {
             "state": "failed",
@@ -319,11 +312,7 @@ def resolve_service_identity(
         getattr(target, "provider", None),
     )
     actual_type = next(
-        (
-            hint
-            for hint in provider_hints
-            if isinstance(hint, str) and hint in registered_types
-        ),
+        (hint for hint in provider_hints if isinstance(hint, str) and hint in registered_types),
         registered_types[0] if len(registered_types) == 1 else None,
     )
     if actual_type is None:
@@ -398,21 +387,16 @@ def _effective_config_snapshot(
         frontend,
         required=profile in {"smoke", "production"},
     )
-    stale = (
-        pool_config is not None
-        and (
-            getattr(pool_config, "version", None) != config.version
-            or getattr(pool_config, "effective_hash", None) != config.effective_hash
-        )
+    stale = pool_config is not None and (
+        getattr(pool_config, "version", None) != config.version
+        or getattr(pool_config, "effective_hash", None) != config.effective_hash
     )
     if pool_config is None:
         pool_reason = "pool_unavailable"
     elif stale:
         pool_reason = "stale_config_snapshot"
     elif init_state == "failed":
-        pool_reason = (
-            init_reason if init_reason in _SAFE_INIT_REASONS else "initialization_failed"
-        )
+        pool_reason = init_reason if init_reason in _SAFE_INIT_REASONS else "initialization_failed"
     elif init_state != "ready":
         pool_reason = None
     else:
@@ -436,11 +420,12 @@ def _effective_config_snapshot(
             "voice": supplied.get("voice") if isinstance(supplied, dict) else None,
         }
         identity_ready = supplied is not None and all(
-            configured[field] == resolved[field]
-            for field in ("type", "provider", "model", "voice")
+            configured[field] == resolved[field] for field in ("type", "provider", "model", "voice")
         )
-        reason = None if identity_ready else (
-            "identity_unavailable" if supplied is None else "identity_mismatch"
+        reason = (
+            None
+            if identity_ready
+            else ("identity_unavailable" if supplied is None else "identity_mismatch")
         )
         component_ready = pool_ready and identity_ready
         if category == "llm" and profile in {"smoke", "production"}:
@@ -451,7 +436,9 @@ def _effective_config_snapshot(
             )
             component_ready = component_ready and connectivity_ready
             if identity_ready and not connectivity_ready:
-                supplied_reason = connectivity.get("reason") if isinstance(connectivity, dict) else None
+                supplied_reason = (
+                    connectivity.get("reason") if isinstance(connectivity, dict) else None
+                )
                 reason = (
                     supplied_reason
                     if supplied_reason in _SAFE_CONNECTIVITY_REASONS
@@ -483,7 +470,11 @@ def _effective_config_snapshot(
 
 
 def _safe_lifecycle_state(value: Any) -> str:
-    return value if value in {"pending", "loading", "ready", "failed", "closing", "closed"} else "failed"
+    return (
+        value
+        if value in {"pending", "loading", "ready", "failed", "closing", "closed"}
+        else "failed"
+    )
 
 
 def _frontend_component(frontend: Any, *, required: bool) -> dict[str, Any]:
@@ -630,10 +621,7 @@ def _golden_tts_component(
         return {**base, "reason": "configuration_unavailable"}
     if not config_ok or not engine_ok:
         return {**base, "reason": "alice_icl_contract"}
-    if (
-        configured_path != engine_path
-        or configured.ref_text != target.ref_text
-    ):
+    if configured_path != engine_path or configured.ref_text != target.ref_text:
         return {**base, "reason": "alice_asset_mismatch"}
 
     manager_state = _model_state(model_manager, "tts")

@@ -40,7 +40,7 @@ def test_core_requirements_exclude_local_model_runtimes() -> None:
 
 
 def test_core_server_imports_when_local_model_packages_are_unavailable() -> None:
-    script = r'''
+    script = r"""
 import builtins
 import sys
 
@@ -63,7 +63,7 @@ import animetta.core.service_pool
 loaded = set(sys.modules)
 assert not any(name == item or name.startswith(item + ".") for item in blocked for name in loaded)
 print("core-import-ok")
-'''
+"""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src")
     result = subprocess.run(

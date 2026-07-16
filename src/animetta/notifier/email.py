@@ -54,9 +54,7 @@ class EmailNotifier(NotifierBase):
         self.smtp_password = os.getenv("NOTIFIER_SMTP_PASSWORD", "")
         self.from_addr = os.getenv("NOTIFIER_EMAIL_FROM", "alerts@anima.local")
         self.to_addrs = [
-            addr.strip()
-            for addr in os.getenv("NOTIFIER_EMAIL_TO", "").split(",")
-            if addr.strip()
+            addr.strip() for addr in os.getenv("NOTIFIER_EMAIL_TO", "").split(",") if addr.strip()
         ]
 
     async def send(self, alerts: list[dict], status: str) -> bool:

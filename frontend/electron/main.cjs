@@ -7,7 +7,7 @@ app.disableHardwareAcceleration()
 let mainWindow = null
 
 function createWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const { width } = screen.getPrimaryDisplay().workAreaSize
 
   // Default window size (9:16 aspect ratio, half size for screen fit)
   const windowWidth = 540

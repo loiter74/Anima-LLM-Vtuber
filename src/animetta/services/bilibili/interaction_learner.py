@@ -22,6 +22,7 @@ from .models import DanmakuMessage, LivestreamStrategy
 
 class PageType(Enum):
     """Wiki page type classification."""
+
     CONCEPT = "concept"
     ENTITY = "entity"
     SOURCE = "source"
@@ -31,6 +32,7 @@ class PageType(Enum):
 @dataclass
 class WikiPage:
     """A page in the wiki knowledge base."""
+
     title: str = ""
     page_type: PageType = PageType.CONCEPT
     path: str = ""
@@ -39,6 +41,7 @@ class WikiPage:
     links: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +127,9 @@ class InteractionLearner:
             List of generated LivestreamStrategy.
         """
         logger.info(
-            "[InteractionLearner] Starting interaction learning "
-            "(rooms=%s, min_samples=%d)",
-            self._room_ids, self._min_samples,
+            "[InteractionLearner] Starting interaction learning (rooms=%s, min_samples=%d)",
+            self._room_ids,
+            self._min_samples,
         )
 
         if not self._room_ids:
@@ -142,18 +145,22 @@ class InteractionLearner:
                     all_samples[room_id] = samples
                     logger.info(
                         "[InteractionLearner] Room %d: collected %d samples",
-                        room_id, len(samples),
+                        room_id,
+                        len(samples),
                     )
                 else:
                     logger.info(
-                        "[InteractionLearner] Room %d: insufficient samples "
-                        "(%d < %d), skipping",
-                        room_id, len(samples), self._min_samples,
+                        "[InteractionLearner] Room %d: insufficient samples (%d < %d), skipping",
+                        room_id,
+                        len(samples),
+                        self._min_samples,
                     )
                 await asyncio.sleep(self._request_delay)
             except Exception as e:
                 logger.warning(
-                    "[InteractionLearner] Failed for room %d: %s", room_id, e,
+                    "[InteractionLearner] Failed for room %d: %s",
+                    room_id,
+                    e,
                 )
 
         if not all_samples:
@@ -190,6 +197,7 @@ class InteractionLearner:
             return []
 
         from collections import Counter
+
         all_texts: list[str] = []
 
         for room_id in self._room_ids:
@@ -202,7 +210,8 @@ class InteractionLearner:
             except Exception as e:
                 logger.warning(
                     "[InteractionLearner] Failed to collect danmaku for room %d: %s",
-                    room_id, e,
+                    room_id,
+                    e,
                 )
 
         if not all_texts:
@@ -214,8 +223,7 @@ class InteractionLearner:
             counter[text] += 1
 
         # Filter by min_freq and return top phrases
-        hot = [text for text, count in counter.most_common(max_phrases * 2)
-               if count >= min_freq]
+        hot = [text for text, count in counter.most_common(max_phrases * 2) if count >= min_freq]
         return hot[:max_phrases]
 
     # ── Danmaku collection ──────────────────────────────────────────────
@@ -233,7 +241,9 @@ class InteractionLearner:
         elapsed = asyncio.get_event_loop().time() - start_time
         logger.debug(
             "[InteractionLearner] Room %d: %d samples in %.1fs",
-            room_id, len(samples), elapsed,
+            room_id,
+            len(samples),
+            elapsed,
         )
         return samples
 
@@ -266,9 +276,12 @@ class InteractionLearner:
             result = await self._llm.chat_messages(
                 messages=[
                     {"role": "system", "content": INTERACTION_ANALYSIS_SYSTEM_PROMPT},
-                    {"role": "user", "content": INTERACTION_ANALYSIS_USER_PROMPT.format(
-                        room_data=combined,
-                    )},
+                    {
+                        "role": "user",
+                        "content": INTERACTION_ANALYSIS_USER_PROMPT.format(
+                            room_data=combined,
+                        ),
+                    },
                 ],
                 response_format={"type": "json_object"},
             )
@@ -279,19 +292,22 @@ class InteractionLearner:
             strategies_raw = parsed.get("strategies", [])
             strategies: list[LivestreamStrategy] = []
             for s in strategies_raw:
-                strategies.append(LivestreamStrategy(
-                    trigger_condition=s.get("trigger_condition", ""),
-                    suggested_behavior=s.get("suggested_behavior", ""),
-                    expected_effect=s.get("expected_effect", ""),
-                    priority=s.get("priority", "medium"),
-                ))
+                strategies.append(
+                    LivestreamStrategy(
+                        trigger_condition=s.get("trigger_condition", ""),
+                        suggested_behavior=s.get("suggested_behavior", ""),
+                        expected_effect=s.get("expected_effect", ""),
+                        priority=s.get("priority", "medium"),
+                    )
+                )
 
             # Also extract patterns for logging
             patterns_raw = parsed.get("patterns", [])
             for p in patterns_raw:
                 logger.info(
                     "[InteractionLearner] Pattern: %s (confidence=%.2f)",
-                    p.get("name", "unknown"), p.get("confidence", 0.5),
+                    p.get("name", "unknown"),
+                    p.get("confidence", 0.5),
                 )
 
             summary = parsed.get("summary", "")
@@ -336,7 +352,12 @@ class InteractionLearner:
                 page_type=PageType.CONCEPT,
                 path=f"concepts/livestream-strategy-{datetime.now().strftime('%Y%m%d')}.md",
                 content=content,
-                tags=["livestream", "optimization", "bilibili", datetime.now().strftime("%Y-%m-%d")],
+                tags=[
+                    "livestream",
+                    "optimization",
+                    "bilibili",
+                    datetime.now().strftime("%Y-%m-%d"),
+                ],
                 links=[],
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
@@ -344,11 +365,13 @@ class InteractionLearner:
             self._wiki.write_page(page)
             logger.info(
                 "[InteractionLearner] Stored %d strategies to Wiki: %s",
-                len(strategies), page.path,
+                len(strategies),
+                page.path,
             )
         except Exception as e:
             logger.warning(
-                "[InteractionLearner] Failed to store strategies: %s", e,
+                "[InteractionLearner] Failed to store strategies: %s",
+                e,
             )
 
     # ── Helpers ─────────────────────────────────────────────────────────

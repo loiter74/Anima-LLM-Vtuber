@@ -116,28 +116,31 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 
 | 步骤 | 操作 | 判定标准 |
 |------|------|----------|
-| **1. 清理容器** | `docker compose down` 停止并移除旧容器 | 容器已清理 |
-| **2. 构建镜像** | `docker compose build` 或 `docker compose -f docker-compose.cpu.yml build`（CPU 模式） | 构建成功无报错 |
-| **3. 启动服务** | `docker compose up -d` 或 `docker compose -f docker-compose.cpu.yml up -d`（CPU 模式） | 容器启动成功 |
+| **1. Qwen 预检** | 日常运行 `python scripts/runtime_lifecycle.py qwen-up`；仅首次部署或 Qwen 镜像/模型契约变化时运行 `qwen-deploy` 操作 | `/health`、鉴权 `/ready` 与精确模型身份通过；日常操作不 build/recreate |
+| **2. 清理 Animetta** | 运行 `python scripts/runtime_lifecycle.py anima-down` | Animetta 已清理，Qwen 容器仍运行且 ID/启动时间不变 |
+| **3. 构建并启动 Animetta** | 运行 `python scripts/runtime_lifecycle.py anima-up`；CPU 模式仍使用 `docker compose -f docker-compose.cpu.yml up -d --build` | 仅应用镜像构建成功，容器启动成功 |
 | **4. 轮询健康** | `curl -s http://localhost/health` 每 5 秒一次，最多 24 次（120 秒） | HTTP 200 + 响应体含 `"status":"ok"` |
 | **5. 验证前端** | `curl -s http://localhost` 每 5 秒一次，最多 12 次（60 秒） | HTTP 200 |
-| **6. 报告成功** | 子 agent 输出 `[OK] Docker container healthy, frontend accessible on port 80` | 服务完全就绪 |
+| **6. 检查双项目日志** | 分别检查默认项目与 `docker-compose.qwen.yml` | 均无 Traceback 或 ERROR 级别日志 |
+| **7. 报告成功** | 子 agent 输出 `[OK] Qwen persistent, Docker container healthy, frontend accessible on port 80` | 服务完全就绪 |
 
 **关键约束**：
 - 每步失败即停，不得跳过轮询直接假设成功
 - 启动后 **必须用 curl 轮询健康检查**，不能只检查容器状态（服务可能还没就绪）
 - 前端通过 nginx 反向代理在 80 端口提供服务
-- 日志中不允许出现任何 Traceback 或 ERROR 级别日志（使用 `docker compose logs` 检查）
+- 日志中不允许出现任何 Traceback 或 ERROR 级别日志（使用 `docker compose logs` 与 `docker compose -f docker-compose.qwen.yml logs` 检查）
 - 代码变更后 **必须完整走一遍 Docker 启动协议**，确保服务可用
+- 日常协议禁止隐式构建、重建或销毁 Qwen；`anima-down` 操作必须保留 Qwen 常驻
 
 **Docker 模式选择**：
-- **GPU 模式**（默认）：`docker compose up -d --build` — 需要 NVIDIA GPU + nvidia-container-toolkit
+- **GPU 模式**（默认）：首次运行 Python 生命周期入口的 `qwen-deploy`，日常运行 `anima-up` — 需要 NVIDIA GPU + nvidia-container-toolkit
 - **CPU 模式**：`docker compose -f docker-compose.cpu.yml up -d --build` — 无 GPU 环境
 
 **常用 Docker 命令**：
 ```bash
 # 查看日志
 docker compose logs -f animetta
+docker compose -f docker-compose.qwen.yml logs -f qwen-tts
 
 # 进入容器
 docker compose exec animetta bash
@@ -146,7 +149,8 @@ docker compose exec animetta bash
 docker compose restart animetta
 
 # 停止服务
-docker compose down
+python scripts/runtime_lifecycle.py anima-down  # 保留 Qwen 常驻
+python scripts/runtime_lifecycle.py qwen-stop   # 仅需释放 GPU 显存时
 ```
 
 ## ANTI-PATTERNS (THIS PROJECT)
@@ -173,9 +177,10 @@ docker compose down
 
 ```bash
 # Docker (recommended)
-docker compose up -d --build              # GPU mode
+python scripts/runtime_lifecycle.py qwen-deploy  # GPU Qwen: first deploy / intentional upgrade
+python scripts/runtime_lifecycle.py anima-up     # GPU routine start; preserves Qwen
 docker compose -f docker-compose.cpu.yml up -d --build  # CPU mode
-docker compose down                       # Stop
+python scripts/runtime_lifecycle.py anima-down   # Stop app, preserve Qwen
 docker compose logs -f animetta           # Logs
 
 # Backend only (local)
@@ -322,7 +327,7 @@ When the user says "add a `<NewSomething>` component":
    `colors_and_type.css` AND `frontend/uno.config.ts → theme.colors`. Document
    the role in the appropriate spec file.
 5. 启动测试步骤时，要使用qa skill，并使用playwright技能进行页面捕获，在测试前不可以使用上一次playwright的结果，必须重新获取测试数据
-6. 启动服务需要单开子agent 使用 Docker 启动协议（docker compose up -d --build），保证无任何报错信息出现在日志中
+6. 启动服务需要单开子agent 使用上文持久 Qwen Docker 协议；日常只构建/启动 Animetta，并保证两个 Compose 项目日志都无报错
 7. 要及时定期检查子agent是否卡住，如果卡住要自行解决。
 
 

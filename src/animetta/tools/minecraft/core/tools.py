@@ -5,22 +5,34 @@ Each tool maps to a Mineflayer bot action and is registered as a LangChain @tool
 The bridge (MinecraftBridge) manages the Node.js subprocess lifecycle.
 """
 
+from __future__ import annotations
+
 import asyncio  # noqa: F401  (patch anchor: tests/tools/minecraft/core/test_bridge.py)
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import tool
 from loguru import logger
+
+if TYPE_CHECKING:
+    from ..skill.catalog import SkillLibrary
+    from ..voyager.contracts import VoyagerSessionContext
+    from ..voyager.controller import VoyagerController
+    from ..voyager.learning import LearningSession
+    from ..voyager.live import FallbackSession, LiveSession
+    from ..voyager.repository import VoyagerRepository
+    from .bridge import MinecraftBridge
+    from .state_collector import StateCollector
 
 # Global bridge instance (initialized by init_bridge)
 _bridge = None
 _voyager_controller = None
 _voyager_library = None
 # Global state collector (set by MinecraftHandlers after start)
-_state_collector = None
+_state_collector: StateCollector | None = None
 
 
-def init_bridge(config: dict | None = None):
+def init_bridge(config: dict | None = None) -> None:
     """Initialize the Minecraft bridge (called from load_tools_from_config)
 
     Args:
@@ -62,7 +74,7 @@ def init_bridge(config: dict | None = None):
     logger.info("[MinecraftTools] Bridge created (not started yet)")
 
 
-async def cleanup_bridge():
+async def cleanup_bridge() -> None:
     """Cleanup bridge resources (called from ToolManager.cleanup)"""
     global _bridge, _voyager_controller, _voyager_library
     if _voyager_controller is not None:
@@ -81,12 +93,12 @@ async def cleanup_bridge():
 
 
 async def configure_voyager_controller(
-    bridge: Any,
+    bridge: MinecraftBridge,
     *,
     llm_service: Any,
-    library: Any = None,
-    repository: Any = None,
-):
+    library: SkillLibrary | None = None,
+    repository: VoyagerRepository | None = None,
+) -> VoyagerController:
     """Compose the sole Voyager controller around a running game-bot runtime."""
     global _voyager_controller, _voyager_library
 
@@ -145,10 +157,10 @@ async def configure_voyager_controller(
         report = await SurvivalIronRunner(bridge, skill_library=skill_library).run()
         return report.summary()
 
-    def fallback_factory(context):
+    def fallback_factory(context: VoyagerSessionContext) -> FallbackSession:
         return FallbackSession(context=context, runner=run_fallback)
 
-    def learning_factory(context):
+    def learning_factory(context: VoyagerSessionContext) -> LearningSession:
         return LearningSession(
             context=context,
             graph=graph,
@@ -159,7 +171,7 @@ async def configure_voyager_controller(
             progress=TechProgress(),
         )
 
-    def live_factory(context):
+    def live_factory(context: VoyagerSessionContext) -> LiveSession:
         return LiveSession(
             context=context,
             library=skill_library,
@@ -224,7 +236,7 @@ async def _send(action: str, params: dict | None = None, timeout: float = 60.0) 
             if action == "mine_block":
                 target = params.get("block_type", "")
             elif action == "goto":
-                target = f"({params.get('x',0)},{params.get('y',0)},{params.get('z',0)})"
+                target = f"({params.get('x', 0)},{params.get('y', 0)},{params.get('z', 0)})"
             elif action == "craft_item":
                 target = params.get("item_name", "")
             elif action == "chop_tree":

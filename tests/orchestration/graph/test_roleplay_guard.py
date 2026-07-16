@@ -18,14 +18,17 @@ from animetta.orchestration.prompting.roleplay_guard import (
 # ── Drift detection ──────────────────────────────────────────
 
 
-@pytest.mark.parametrize("phrase", [
-    "作为 AI，我认为这个问题很好。",
-    "我理解你的意思，但是...",
-    "以下是几点建议：第一...",
-    "总结一下，你的情况是...",
-    "希望这能帮助你解决问题。",
-    "作为助手，我建议你...",
-])
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "作为 AI，我认为这个问题很好。",
+        "我理解你的意思，但是...",
+        "以下是几点建议：第一...",
+        "总结一下，你的情况是...",
+        "希望这能帮助你解决问题。",
+        "作为助手，我建议你...",
+    ],
+)
 def test_forbidden_phrases_trigger_drift(phrase):
     assert has_drift(phrase) is True
     assert len(detect_drift(phrase)) >= 1
@@ -133,7 +136,7 @@ class TestPersonalityNodeDriftWiring:
         state = {
             "messages": [
                 AIMessage(content="作为 AI，我曾经这样说过。"),  # old drift
-                AIMessage(content="……少管闲事。"),              # recent, clean
+                AIMessage(content="……少管闲事。"),  # recent, clean
             ]
         }
         assert _detect_previous_turn_drift(state) == ""
@@ -195,9 +198,7 @@ class TestPersonalityNodeDriftWiring:
 
 def test_drift_detection_reads_latest_committed_session_response() -> None:
     session = ConversationSessionState()
-    session.commit(
-        task_id="task", user_text="你好", final_response="作为 AI，我可以帮助你。"
-    )
+    session.commit(task_id="task", user_text="你好", final_response="作为 AI，我可以帮助你。")
     config = {"configurable": {"conversation_session": session}}
     result = _detect_previous_turn_drift({"messages": [], "metadata": {}}, config)
     assert result == CORRECTION_SECTION

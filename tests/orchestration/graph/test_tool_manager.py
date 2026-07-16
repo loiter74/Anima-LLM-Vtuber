@@ -33,7 +33,9 @@ class TestToolManager:
 
         with (
             patch("animetta.orchestration.graph.tool_manager.load_tools_from_config") as mock_load,
-            patch.object(tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)),
+            patch.object(
+                tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)
+            ),
         ):
             mock_load.return_value = (mock_tools, mock_tools_map)
 
@@ -59,7 +61,9 @@ class TestToolManager:
 
         with (
             patch("animetta.orchestration.graph.tool_manager.load_tools_from_config") as mock_load,
-            patch.object(tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)),
+            patch.object(
+                tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)
+            ),
             patch("animetta.orchestration.graph.tool_manager.MCPManager") as mock_mcp_cls,
         ):
             mock_load.return_value = (mock_tools, mock_tools_map)
@@ -67,10 +71,12 @@ class TestToolManager:
             mock_mcp_instance.load = AsyncMock(return_value=[mock_mcp_tool])
             mock_mcp_cls.return_value = mock_mcp_instance
 
-            result = await tool_manager.load_tools({
-                "builtin": "tools",
-                "mcp_servers": [{"name": "server1"}],
-            })
+            result = await tool_manager.load_tools(
+                {
+                    "builtin": "tools",
+                    "mcp_servers": [{"name": "server1"}],
+                }
+            )
 
         assert result is True
         assert len(tool_manager.tools) == 2  # builtin + mcp
@@ -85,7 +91,9 @@ class TestToolManager:
 
         with (
             patch("animetta.orchestration.graph.tool_manager.load_tools_from_config") as mock_load,
-            patch.object(tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)),
+            patch.object(
+                tool_manager, "_create_chat_model", AsyncMock(return_value=mock_chat_model)
+            ),
         ):
             mock_load.return_value = ([], {})
 

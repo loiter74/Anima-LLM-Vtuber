@@ -27,23 +27,31 @@ onMounted(() => {
     tl.from(titleRef.value, {
       opacity: 0,
       y: 40,
-      duration: 0.8
+      duration: 0.8,
     })
 
     // Subtitle entrance
-    tl.from(subtitleRef.value, {
-      opacity: 0,
-      y: 20,
-      duration: 0.6
-    }, '-=0.4')
+    tl.from(
+      subtitleRef.value,
+      {
+        opacity: 0,
+        y: 20,
+        duration: 0.6,
+      },
+      '-=0.4',
+    )
 
     // CTA buttons stagger
-    tl.from(ctaRef.value?.children || [], {
-      opacity: 0,
-      y: 20,
-      duration: 0.5,
-      stagger: 0.15
-    }, '-=0.3')
+    tl.from(
+      ctaRef.value?.children || [],
+      {
+        opacity: 0,
+        y: 20,
+        duration: 0.5,
+        stagger: 0.15,
+      },
+      '-=0.3',
+    )
   })
 
   // Parallax scroll effect
@@ -70,11 +78,16 @@ function handleStartChat() {
        state), so it must fit a narrow column — not the full viewport. The
        earlier h-screen + text-7xl layout overflowed the panel. We now use
        h-full + smaller type + column-stacked CTAs that fit the 340px width. -->
-  <div ref="heroRef" class="relative h-full min-h-[480px] w-full overflow-hidden flex flex-col items-center justify-center px-4 py-8 text-center select-none">
+  <div
+    ref="heroRef"
+    class="relative h-full min-h-[480px] w-full overflow-hidden flex flex-col items-center justify-center px-4 py-8 text-center select-none"
+  >
     <!-- Soft radial wash so the title pops over whatever shows through the
          translucent panel. No background image here — the global preset
          already shows through the panel's blur. -->
-    <div class="absolute inset-0 bg-gradient-radial from-transparent via-black/20 to-black/50 pointer-events-none" />
+    <div
+      class="absolute inset-0 bg-gradient-radial from-transparent via-black/20 to-black/50 pointer-events-none"
+    />
 
     <!-- Scene Effects (particles) -->
     <SceneEffects class="absolute inset-0 z-10 pointer-events-none" />
@@ -91,10 +104,7 @@ function handleStartChat() {
       </h1>
 
       <!-- Subtitle -->
-      <p
-        ref="subtitleRef"
-        class="text-sm sm:text-base text-white/80 max-w-xs mb-6 leading-relaxed"
-      >
+      <p ref="subtitleRef" class="text-sm sm:text-base text-white/80 max-w-xs mb-6 leading-relaxed">
         和我一起聊会儿天吧
       </p>
 
@@ -118,6 +128,11 @@ function handleStartChat() {
 
 <style scoped>
 .bg-gradient-radial {
-  background: radial-gradient(ellipse at center, var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to));
+  background: radial-gradient(
+    ellipse at center,
+    var(--tw-gradient-from),
+    var(--tw-gradient-via),
+    var(--tw-gradient-to)
+  );
 }
 </style>

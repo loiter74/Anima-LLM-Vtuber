@@ -60,7 +60,11 @@ class ConfigHandlers(BaseSocketHandler):
 
         except Exception as e:
             logger.error(f"[{sid}] Error switching config: {e}")
-            await self.sio.emit(EVENTS["system"]["error"]["name"], {"type": EVENTS["system"]["error"]["name"], "message": str(e)}, to=sid)
+            await self.sio.emit(
+                EVENTS["system"]["error"]["name"],
+                {"type": EVENTS["system"]["error"]["name"], "message": str(e)},
+                to=sid,
+            )
 
     async def on_set_log_level(self, sid: str, data: dict) -> None:
         """Set backend log level."""
@@ -145,14 +149,10 @@ class ConfigHandlers(BaseSocketHandler):
         target_language = data.get("target_language")
         if "enabled" in data:
             translation_state.enabled = bool(data["enabled"])
-            logger.info(
-                f"[{sid}] Translation enabled updated to: {translation_state.enabled}"
-            )
+            logger.info(f"[{sid}] Translation enabled updated to: {translation_state.enabled}")
         if target_language:
             translation_state.target_language = target_language
-            logger.info(
-                f"[{sid}] Translation target language updated to: {target_language}"
-            )
+            logger.info(f"[{sid}] Translation target language updated to: {target_language}")
         await self.sio.emit(
             EVENTS["translation"]["status"]["name"],
             {

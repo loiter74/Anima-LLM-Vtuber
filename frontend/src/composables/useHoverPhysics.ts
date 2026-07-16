@@ -28,10 +28,7 @@ function isTouchDevice(): boolean {
  * On touch devices, falls back to CSS transitions.
  * Use with overflow-hidden containers to prevent layout shift.
  */
-export function useHoverPhysics(
-  element: Ref<HTMLElement | null>,
-  options: HoverOptions = {}
-) {
+export function useHoverPhysics(element: Ref<HTMLElement | null>, options: HoverOptions = {}) {
   const { scale = 1.05, duration = 0.7, ease = 'power2.out' } = options
   const isHovered = ref(false)
   const useCssFallback = isTouchDevice()
@@ -41,7 +38,7 @@ export function useHoverPhysics(
     if (!useCssFallback) return {}
     return {
       transition: `transform ${duration}s ${ease}`,
-      transform: isHovered.value ? `scale(${scale})` : 'scale(1)'
+      transform: isHovered.value ? `scale(${scale})` : 'scale(1)',
     }
   })
 
@@ -59,7 +56,7 @@ export function useHoverPhysics(
       scale,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 
@@ -77,55 +74,9 @@ export function useHoverPhysics(
       scale: 1,
       duration,
       ease,
-      overwrite: true
+      overwrite: true,
     })
   }
 
   return { isHovered, onEnter, onLeave, cssStyle, useCssFallback }
-}
-
-/**
- * Magnetic hover effect - element follows cursor slightly.
- * Disabled on touch devices.
- */
-export function useMagneticHover(
-  element: Ref<HTMLElement | null>,
-  options: HoverOptions & { strength?: number } = {}
-) {
-  const { strength = 0.3, duration = 0.5, ease = 'power2.out' } = options
-  const isHovered = ref(false)
-  const isTouch = isTouchDevice()
-
-  function onMove(e: MouseEvent) {
-    if (!element.value || isTouch) return
-    const rect = element.value.getBoundingClientRect()
-    const x = e.clientX - rect.left - rect.width / 2
-    const y = e.clientY - rect.top - rect.height / 2
-
-    gsap.to(element.value, {
-      x: x * strength,
-      y: y * strength,
-      duration,
-      ease,
-      overwrite: true
-    })
-  }
-
-  function onEnter() {
-    isHovered.value = true
-  }
-
-  function onLeave() {
-    isHovered.value = false
-    if (!element.value || isTouch) return
-    gsap.to(element.value, {
-      x: 0,
-      y: 0,
-      duration,
-      ease,
-      overwrite: true
-    })
-  }
-
-  return { isHovered, onEnter, onLeave, onMove, isTouch }
 }

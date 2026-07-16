@@ -148,9 +148,7 @@ class EffectResponse:
             "response_plan": self.response_plan.to_dict(),
             "effects": effect_payloads,
             "effect_events": [
-                event
-                for effect in effect_payloads
-                for event in effect.get("events", [])
+                event for effect in effect_payloads for event in effect.get("events", [])
             ],
         }
 
@@ -240,9 +238,7 @@ class EffectPlanner:
             main_text=main_text,
             scene=scene,
             user_mood=mood,
-            reply_goal=(
-                "respond_with_optional_effects" if effects else "respond_normally"
-            ),
+            reply_goal=("respond_with_optional_effects" if effects else "respond_normally"),
             effects=effects,
             forbidden=forbidden,
         )

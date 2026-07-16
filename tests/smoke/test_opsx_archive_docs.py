@@ -15,7 +15,7 @@ def test_opsx_archive_docs_finalize_git_to_remote_and_main() -> None:
     required_phrases = [
         "**Finalize Git state**",
         "git add",
-        "git commit -m \"archive: <change-name>\"",
+        'git commit -m "archive: <change-name>"',
         "git push -u origin",
         "git checkout main",
         "git pull --ff-only origin main",
@@ -29,4 +29,6 @@ def test_opsx_archive_docs_finalize_git_to_remote_and_main() -> None:
     for path in ARCHIVE_DOCS:
         text = path.read_text(encoding="utf-8")
         missing = [phrase for phrase in required_phrases if phrase not in text]
-        assert not missing, f"{path.relative_to(ROOT)} missing archive Git finalization phrases: {missing}"
+        assert not missing, (
+            f"{path.relative_to(ROOT)} missing archive Git finalization phrases: {missing}"
+        )

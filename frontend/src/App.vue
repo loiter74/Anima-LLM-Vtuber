@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useSocket } from '@/composables/useSocket'
-import { useMobile } from '@/composables/useMobile'
 
-const router = useRouter()
-useSocket()  // Initialize Socket.IO connection
-const { isMobile } = useMobile()
+useSocket() // Initialize Socket.IO connection
 
 const STORAGE_KEY = 'animetta_background'
 const bgSrc = ref('')
@@ -17,7 +13,7 @@ const bgStyle = computed(() => {
     backgroundImage: 'url("' + bgSrc.value.replace(/"/g, '%22') + '")',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    backgroundRepeat: 'no-repeat'
+    backgroundRepeat: 'no-repeat',
   }
 })
 
@@ -26,7 +22,7 @@ onMounted(() => {
   if (saved) bgSrc.value = saved
 })
 
-;(window as any).__setAppBg = (url: string) => {
+window.__setAppBg = (url: string) => {
   bgSrc.value = url
 }
 </script>

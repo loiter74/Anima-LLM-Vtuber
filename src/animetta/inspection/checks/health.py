@@ -60,11 +60,7 @@ async def check_all_components(
         _check_service_pool(runtime),
         _check_memory_runtime(runtime),
         _check_metrics_projection(runtime),
-        *(
-            (_check_remote_tts(runtime),)
-            if runtime.remote_tts_probe is not None
-            else ()
-        ),
+        *((_check_remote_tts(runtime),) if runtime.remote_tts_probe is not None else ()),
     )
     return {result.name: result for result in results}
 
@@ -159,9 +155,7 @@ async def _check_metrics_projection(runtime: InspectionRuntime) -> CheckResult:
             )
         detail = {
             "has_anima_readiness_probe_total": "anima_readiness_probe_total" in before,
-            "anima_readiness_probe_total_delta": delta[
-                "anima_readiness_probe_total"
-            ],
+            "anima_readiness_probe_total_delta": delta["anima_readiness_probe_total"],
         }
         return _result(
             "metrics_projection",

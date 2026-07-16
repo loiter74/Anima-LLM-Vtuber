@@ -16,20 +16,20 @@ import type { SimulationNodeDatum } from 'd3-force'
 export interface MemoryNode extends SimulationNodeDatum {
   id: string
   label: string
-  category: string       // derived from page_type
-  importance: number     // 0-1, determines node radius (8-32px)
-  content: string        // full page content for detail panel
+  category: string // derived from page_type
+  importance: number // 0-1, determines node radius (8-32px)
+  content: string // full page content for detail panel
   metadata: Record<string, unknown>
 }
 
 // ── Graph edge ─────────────────────────────────────────────────────────
 
 export interface MemoryEdge {
-  source: string         // node id
-  target: string         // node id
-  type: string           // relation_type from backend
-  weight: number         // 0-1, determines stroke width
-  label: string          // human-readable relation description
+  source: string // node id
+  target: string // node id
+  type: string // relation_type from backend
+  weight: number // 0-1, determines stroke width
+  label: string // human-readable relation description
 }
 
 // ── Combined graph data ────────────────────────────────────────────────
@@ -76,9 +76,9 @@ interface RawRelation {
 // Maps backend layer → page_type → graph category
 
 const PAGE_TYPE_TO_CATEGORY: Record<string, string> = {
-  source: 'other',       // RAW layer
-  entity: 'fact',        // EPISODIC layer
-  concept: 'interest',   // SEMANTIC layer
+  source: 'other', // RAW layer
+  entity: 'fact', // EPISODIC layer
+  concept: 'interest', // SEMANTIC layer
   synthesis: 'relation', // EMERGENT layer
 }
 
@@ -222,7 +222,7 @@ export function parseNodes(pages: RawPage[]): MemoryNode[] {
  */
 export function parseEdges(pages: RawPage[]): MemoryEdge[] {
   const seen = new Map<string, MemoryEdge>()
-  const visibleIds = new Set(pages.map(page => page.id ?? page.path))
+  const visibleIds = new Set(pages.map((page) => page.id ?? page.path))
 
   for (const page of pages) {
     const relations: RawRelation[] = page.relations ?? []

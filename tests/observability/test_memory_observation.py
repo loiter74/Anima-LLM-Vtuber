@@ -102,9 +102,7 @@ async def test_background_turn_preserves_carrier_and_noncritical_stages() -> Non
 async def test_memory_recall_is_child_of_active_workflow_operation() -> None:
     recorder = Recorder()
     memory = SimpleNamespace(
-        recall=AsyncMock(
-            return_value=SimpleNamespace(atoms=[], profile={}, memes=[], metadata={})
-        )
+        recall=AsyncMock(return_value=SimpleNamespace(atoms=[], profile={}, memes=[], metadata={}))
     )
     middleware = MemoryMiddleware(memory, observation_recorder=recorder)
 

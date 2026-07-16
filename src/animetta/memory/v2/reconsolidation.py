@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Try importing openai; fall back gracefully
 try:
     from openai import AsyncOpenAI
+
     _HAS_OPENAI = True
 except ImportError:
     _HAS_OPENAI = False
@@ -25,8 +26,9 @@ except ImportError:
 @dataclass
 class ReconsolidationOutput:
     """Result of a reconsolidation LLM call."""
-    summary: str              # Rewritten memory summary
-    confidence_delta: float   # Change to confidence (-0.1 to +0.1)
+
+    summary: str  # Rewritten memory summary
+    confidence_delta: float  # Change to confidence (-0.1 to +0.1)
     emotion_shift: tuple[float, float, float]  # VAD shift (valence, arousal, dominance)
 
 

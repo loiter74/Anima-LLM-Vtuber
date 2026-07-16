@@ -70,7 +70,8 @@ class TestBilibiliDanmakuDataclasses:
     def test_danmaku_reply_creation(self):
 
         reply = DanmakuReply(
-            danmaku_text="hello", reply_text="hi there",
+            danmaku_text="hello",
+            reply_text="hi there",
             user_name="user1",
         )
         assert reply.danmaku_text == "hello"
@@ -80,8 +81,10 @@ class TestBilibiliDanmakuDataclasses:
     def test_danmaku_reply_to_dict(self):
 
         reply = DanmakuReply(
-            danmaku_text="hello", reply_text="hi",
-            user_name="user1", character_name="Anima",
+            danmaku_text="hello",
+            reply_text="hi",
+            user_name="user1",
+            character_name="Anima",
         )
         d = reply.to_dict()
         assert d["character_name"] == "Anima"
@@ -236,11 +239,14 @@ class TestBilibiliDanmakuService:
         async def connect_once_then_stop():
             service._running = False
 
-        with patch.object(
-            service,
-            "_connect_and_listen",
-            AsyncMock(side_effect=connect_once_then_stop),
-        ), patch("asyncio.sleep", AsyncMock()):
+        with (
+            patch.object(
+                service,
+                "_connect_and_listen",
+                AsyncMock(side_effect=connect_once_then_stop),
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+        ):
             await service._run()
 
         assert service._reconnect_delay == 1.0
@@ -251,7 +257,11 @@ class TestBilibiliDanmakuService:
         service._running = True
         service.max_retries = 1
 
-        with patch.object(service, "_connect_and_listen", side_effect=ConnectionError("fail")), patch.object(service, "_notify_status") as mock_notify, patch("asyncio.sleep", AsyncMock()):
+        with (
+            patch.object(service, "_connect_and_listen", side_effect=ConnectionError("fail")),
+            patch.object(service, "_notify_status") as mock_notify,
+            patch("asyncio.sleep", AsyncMock()),
+        ):
             await service._run()
 
         # Should have notified about max retries
@@ -262,11 +272,14 @@ class TestBilibiliDanmakuService:
         service._running = True
         service.max_retries = 5
 
-        with patch.object(
-            service,
-            "_connect_and_listen",
-            AsyncMock(side_effect=ImportError("credential=secret")),
-        ) as connect, patch.object(service, "_notify_status") as notify:
+        with (
+            patch.object(
+                service,
+                "_connect_and_listen",
+                AsyncMock(side_effect=ImportError("credential=secret")),
+            ) as connect,
+            patch.object(service, "_notify_status") as notify,
+        ):
             await service._run()
 
         connect.assert_awaited_once()
@@ -285,11 +298,14 @@ class TestBilibiliDanmakuService:
     async def test_terminal_connection_errors_do_not_retry(self, service, error, status):
         service._running = True
 
-        with patch.object(
-            service,
-            "_connect_and_listen",
-            AsyncMock(side_effect=error),
-        ) as connect, patch.object(service, "_notify_status") as notify:
+        with (
+            patch.object(
+                service,
+                "_connect_and_listen",
+                AsyncMock(side_effect=error),
+            ) as connect,
+            patch.object(service, "_notify_status") as notify,
+        ):
             await service._run()
 
         connect.assert_awaited_once()

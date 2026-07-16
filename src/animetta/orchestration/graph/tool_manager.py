@@ -46,7 +46,9 @@ class ToolManager:
             self.chat_model = await self._create_chat_model()
             if self.chat_model and self.tools:
                 self.chat_model = self.chat_model.bind_tools(self.tools)
-                logger.info(f"[{self.session_id}] [ToolManager] ChatModel bound to {len(self.tools)} tools")
+                logger.info(
+                    f"[{self.session_id}] [ToolManager] ChatModel bound to {len(self.tools)} tools"
+                )
 
             return True
 
@@ -79,7 +81,7 @@ class ToolManager:
     def is_loaded(self) -> bool:
         return len(self.tools) > 0 and self.chat_model is not None
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources"""
         if self._mcp_manager:
             await self._mcp_manager.close_all()

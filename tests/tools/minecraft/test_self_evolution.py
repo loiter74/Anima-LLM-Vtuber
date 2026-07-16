@@ -34,9 +34,7 @@ async def test_give_branch_disabled_by_default(monkeypatch):
     monkeypatch.setattr(asyncio, "sleep", _nosleep)
 
     # inv 攒到 3/10 ≥ 1/5(2)，原逻辑会 give；但开关关闭 → 不应 give
-    fired = await self_evolution._maybe_give_materials(
-        _task(["has_oak_log >= 10"]), {"oak_log": 3}
-    )
+    fired = await self_evolution._maybe_give_materials(_task(["has_oak_log >= 10"]), {"oak_log": 3})
 
     assert fired is False
     assert calls == []  # 零 _rcon give 调用
@@ -49,9 +47,7 @@ async def test_give_branch_enabled_when_flag_on(monkeypatch):
     monkeypatch.setattr(self_evolution, "_rcon", lambda cmd: calls.append(cmd))
     monkeypatch.setattr(asyncio, "sleep", _nosleep)
 
-    fired = await self_evolution._maybe_give_materials(
-        _task(["has_oak_log >= 10"]), {"oak_log": 3}
-    )
+    fired = await self_evolution._maybe_give_materials(_task(["has_oak_log >= 10"]), {"oak_log": 3})
 
     assert fired is True
     assert calls == ["give AnimettaBot minecraft:oak_log 7"]
@@ -116,9 +112,7 @@ def test_deepseek_llm_defaults_to_v4_pro(monkeypatch):
     llm = self_evolution.DeepSeekLLM()
 
     assert llm._model == "deepseek-v4-pro"
-    assert calls == [
-        {"base_url": "https://api.deepseek.com/v1", "api_key": "test-key"}
-    ]
+    assert calls == [{"base_url": "https://api.deepseek.com/v1", "api_key": "test-key"}]
 
 
 def test_gold_goal_reached_by_any_equipment_piece():

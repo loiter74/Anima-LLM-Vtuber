@@ -499,7 +499,9 @@ def test_manifest_requires_exact_profile_set(
     manifest_secrets: pytest.MonkeyPatch,
 ) -> None:
     data = deepcopy(manifest_data)
-    data["profiles"] = {name: data["profiles"].get(name, data["profiles"]["test"]) for name in profiles}
+    data["profiles"] = {
+        name: data["profiles"].get(name, data["profiles"]["test"]) for name in profiles
+    }
 
     with pytest.raises(ManifestValidationError, match="profiles must be exactly"):
         load_effective_config(write_manifest(data), profile="test")

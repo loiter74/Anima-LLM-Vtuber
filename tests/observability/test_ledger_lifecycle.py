@@ -105,9 +105,7 @@ async def test_noncritical_memory_operation_can_append_after_trace_finalization(
     await ledger.start_trace(_trace())
     await ledger.finish_trace("task-1", TraceOutcome.SUCCESS, finished_at=time.time())
 
-    await ledger.start_operation(
-        _operation("memory.ingest", critical_path=False)
-    )
+    await ledger.start_operation(_operation("memory.ingest", critical_path=False))
     await ledger.finish_operation(
         OperationFinished("memory.ingest", OperationStatus.SUCCESS, time.time())
     )

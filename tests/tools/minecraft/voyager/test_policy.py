@@ -41,8 +41,7 @@ def _manifest(*capabilities: tuple[str, CapabilityRisk], protocol: str = "1.0"):
         protocol_version=protocol,
         runtime_id="runtime-1",
         capabilities=[
-            GameBotCapability(name=name, risk=risk, parameters={})
-            for name, risk in capabilities
+            GameBotCapability(name=name, risk=risk, parameters={}) for name, risk in capabilities
         ],
     )
 
@@ -61,9 +60,7 @@ def test_known_survival_manifest_is_accepted() -> None:
 
 
 def test_unknown_manifest_capability_fails_closed() -> None:
-    report = _policy().validate_manifest(
-        _manifest(("fly", CapabilityRisk.SURVIVAL_SAFE))
-    )
+    report = _policy().validate_manifest(_manifest(("fly", CapabilityRisk.SURVIVAL_SAFE)))
 
     assert report.allowed is False
     assert {violation.code for violation in report.violations} == {"UNKNOWN_CAPABILITY"}

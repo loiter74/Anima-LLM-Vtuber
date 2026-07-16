@@ -33,7 +33,7 @@ class EnhancedPersonaBuilder:
         if not self.persona_path.exists():
             raise FileNotFoundError(f"Persona file not found: {self.persona_path}")
 
-        with open(self.persona_path, encoding='utf-8') as f:
+        with open(self.persona_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return data
@@ -190,7 +190,7 @@ class EnhancedPersonaBuilder:
                 for response in rules["responses"]:
                     parts.append(f'  "{response}"')
             if "expressions" in rules:
-                parts.append(f'表情标签：[{", ".join(rules["expressions"])}]')
+                parts.append(f"表情标签：[{', '.join(rules['expressions'])}]")
 
         return "\n".join(parts)
 
@@ -203,8 +203,12 @@ class EnhancedPersonaBuilder:
 
         parts = ["## 当前情绪状态"]
         mood_names = {
-            "happy": "愉快", "sad": "低落", "angry": "不悦",
-            "surprised": "惊讶", "thinking": "思考中", "neutral": "平静",
+            "happy": "愉快",
+            "sad": "低落",
+            "angry": "不悦",
+            "surprised": "惊讶",
+            "thinking": "思考中",
+            "neutral": "平静",
         }
         name = mood_names.get(mood, mood)
         parts.append(f"当前情绪：{name}")
@@ -437,7 +441,9 @@ class EnhancedPersonaBuilder:
         return "\n".join(parts)
 
     @classmethod
-    def from_yaml(cls, persona_name: str, personas_dir: str | None = None) -> "EnhancedPersonaBuilder":
+    def from_yaml(
+        cls, persona_name: str, personas_dir: str | None = None
+    ) -> "EnhancedPersonaBuilder":
         """
         Create builder from persona name
 
@@ -460,9 +466,7 @@ class EnhancedPersonaBuilder:
 
 
 def create_enhanced_system_prompt(
-    persona_name: str,
-    user_context: dict | None = None,
-    personas_dir: str | None = None
+    persona_name: str, user_context: dict | None = None, personas_dir: str | None = None
 ) -> str:
     """
     Convenience function: create an enhanced system prompt

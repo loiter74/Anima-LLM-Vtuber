@@ -69,7 +69,9 @@ class EmotionAnalyzerFactory:
             >>> EmotionAnalyzerFactory.register("my_analyzer", MyAnalyzer)
         """
         if name in cls._analyzers:
-            logger.warning(f"[EmotionAnalyzerFactory] Analyzer '{name}' already exists, will be overwritten")
+            logger.warning(
+                f"[EmotionAnalyzerFactory] Analyzer '{name}' already exists, will be overwritten"
+            )
 
         # Validate the class implements the interface
         if not issubclass(analyzer_class, IEmotionAnalyzer):
@@ -78,7 +80,9 @@ class EmotionAnalyzerFactory:
             )
 
         cls._analyzers[name] = analyzer_class
-        logger.info(f"[EmotionAnalyzerFactory] Registered analyzer: {name} ({analyzer_class.__name__})")
+        logger.info(
+            f"[EmotionAnalyzerFactory] Registered analyzer: {name} ({analyzer_class.__name__})"
+        )
 
     @classmethod
     def create(cls, name: str, config: dict[str, Any] | None = None) -> IEmotionAnalyzer:
@@ -105,10 +109,7 @@ class EmotionAnalyzerFactory:
 
         if not analyzer_class:
             available = ", ".join(cls._analyzers.keys())
-            raise ValueError(
-                f"Unknown analyzer: '{name}'. "
-                f"Available analyzers: {available}"
-            )
+            raise ValueError(f"Unknown analyzer: '{name}'. Available analyzers: {available}")
 
         # Create instance (pass configuration parameters)
         config = config or {}
@@ -194,7 +195,9 @@ class TimelineStrategyFactory:
             >>> TimelineStrategyFactory.register("my_strategy", MyStrategy)
         """
         if name in cls._strategies:
-            logger.warning(f"[TimelineStrategyFactory] Strategy '{name}' already exists, will be overwritten")
+            logger.warning(
+                f"[TimelineStrategyFactory] Strategy '{name}' already exists, will be overwritten"
+            )
 
         # Validate the class implements the interface
         if not issubclass(strategy_class, ITimelineStrategy):
@@ -203,7 +206,9 @@ class TimelineStrategyFactory:
             )
 
         cls._strategies[name] = strategy_class
-        logger.info(f"[TimelineStrategyFactory] Registered strategy: {name} ({strategy_class.__name__})")
+        logger.info(
+            f"[TimelineStrategyFactory] Registered strategy: {name} ({strategy_class.__name__})"
+        )
 
     @classmethod
     def create(cls, name: str, config: dict[str, Any] | None = None) -> ITimelineStrategy:
@@ -230,10 +235,7 @@ class TimelineStrategyFactory:
 
         if not strategy_class:
             available = ", ".join(cls._strategies.keys())
-            raise ValueError(
-                f"Unknown strategy: '{name}'. "
-                f"Available strategies: {available}"
-            )
+            raise ValueError(f"Unknown strategy: '{name}'. Available strategies: {available}")
 
         # Create instance (pass configuration parameters)
         config = config or {}
@@ -270,10 +272,7 @@ class TimelineStrategyFactory:
 
 
 # Convenience functions
-def create_emotion_analyzer(
-    name: str,
-    config: dict[str, Any] | None = None
-) -> IEmotionAnalyzer:
+def create_emotion_analyzer(name: str, config: dict[str, Any] | None = None) -> IEmotionAnalyzer:
     """
     Convenience function to create an emotion analyzer
 
@@ -287,10 +286,7 @@ def create_emotion_analyzer(
     return EmotionAnalyzerFactory.create(name, config)
 
 
-def create_timeline_strategy(
-    name: str,
-    config: dict[str, Any] | None = None
-) -> ITimelineStrategy:
+def create_timeline_strategy(name: str, config: dict[str, Any] | None = None) -> ITimelineStrategy:
     """
     Convenience function to create a timeline strategy
 

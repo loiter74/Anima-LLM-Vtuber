@@ -24,7 +24,9 @@ class FakeTransport:
     async def stop(self) -> None:
         self.stopped = True
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         self.commands.append((action, params, timeout))
         return {"status": "success", "result": "fake"}
 

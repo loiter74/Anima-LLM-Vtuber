@@ -120,7 +120,6 @@ class MemePool:
         return meme
 
 
-
 # ── LLM Prompt for cognitive analysis ─────────────────────────────────
 
 COGNITIVE_ANALYSIS_SYSTEM_PROMPT = """你是一个认知科学和网络文化分析专家。分析网络梗（meme）的认知机制和使用特征。
@@ -229,7 +228,7 @@ class MemeCognitiveAnalyzer:
         )
 
         try:
-            if hasattr(self._llm, 'chat_messages'):
+            if hasattr(self._llm, "chat_messages"):
                 result = await self._llm.chat_messages(
                     messages=[
                         {"role": "system", "content": system_content},
@@ -237,7 +236,7 @@ class MemeCognitiveAnalyzer:
                     ],
                     response_format={"type": "json_object"},
                 )
-            elif hasattr(self._llm, 'chat'):
+            elif hasattr(self._llm, "chat"):
                 logger.debug("[MemeCognitiveAnalyzer] Using chat() fallback for LLM call")
                 combined = system_content + "\n\n" + user_content
                 result = await self._llm.chat(
@@ -245,9 +244,7 @@ class MemeCognitiveAnalyzer:
                     response_format={"type": "json_object"},
                 )
             else:
-                logger.warning(
-                    "[MemeCognitiveAnalyzer] LLM has neither chat_messages nor chat()"
-                )
+                logger.warning("[MemeCognitiveAnalyzer] LLM has neither chat_messages nor chat()")
                 return self._basic_analysis(
                     text,
                     context_hint,
@@ -293,7 +290,9 @@ class MemeCognitiveAnalyzer:
             )
             logger.info(
                 "[MemeCognitiveAnalyzer] Analyzed '%s': mechanism=%s, fit=%.2f",
-                text[:30], analysis.humor_mechanism, analysis.persona_fit_score,
+                text[:30],
+                analysis.humor_mechanism,
+                analysis.persona_fit_score,
             )
             return analysis
 
@@ -358,7 +357,8 @@ class MemeCognitiveAnalyzer:
         if analysis.persona_fit_score < self._min_persona_fit_score:
             logger.info(
                 "[MemeCognitiveAnalyzer] Meme rejected (low persona fit %.2f): '%s'",
-                analysis.persona_fit_score, text[:30],
+                analysis.persona_fit_score,
+                text[:30],
             )
             return None
 
@@ -390,7 +390,8 @@ class MemeCognitiveAnalyzer:
                 self._meme_pool.store.update(meme)
                 logger.info(
                     "[MemeCognitiveAnalyzer] Ingested meme '%s' with fit=%.2f",
-                    meme.id, analysis.persona_fit_score,
+                    meme.id,
+                    analysis.persona_fit_score,
                 )
                 return meme
 

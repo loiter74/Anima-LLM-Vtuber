@@ -39,7 +39,7 @@ export function useDanmaku(options: UseDanmakuOptions = {}) {
       return Promise.resolve(localRejection('socket_unavailable', 'Socket unavailable'))
     }
     store.setConnecting(true)
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       let settled = false
       const finish = (ack: BilibiliCommandAck): void => {
         if (settled) return

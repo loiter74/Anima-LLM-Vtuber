@@ -62,9 +62,9 @@ class TestMatchSkills:
         assert "s2" not in ids
 
     async def test_match_skills_sorted_by_success_rate(self) -> None:
-        s1 = _skill("s1", success_count=10, fail_count=10)   # 0.5
-        s2 = _skill("s2", success_count=20, fail_count=0)    # 1.0
-        s3 = _skill("s3", success_count=1, fail_count=9)     # 0.1
+        s1 = _skill("s1", success_count=10, fail_count=10)  # 0.5
+        s2 = _skill("s2", success_count=20, fail_count=0)  # 1.0
+        s3 = _skill("s3", success_count=1, fail_count=9)  # 0.1
 
         lib = await _populate(s1, s2, s3)
         matched = await lib.match_skills({})
@@ -241,9 +241,9 @@ class TestCleanup:
 
     async def test_cleanup_removes_low_quality(self) -> None:
         """Skills with success_rate < 0.3 AND >= 10 executions AND is_learned are removed."""
-        bad = _skill("bad", success_count=2, fail_count=8)   # 0.2 rate, 10 total → removed
+        bad = _skill("bad", success_count=2, fail_count=8)  # 0.2 rate, 10 total → removed
         bad.is_learned = True  # Only learned skills are removed
-        good = _skill("good", success_count=8, fail_count=2) # 0.8 rate, 10 total → kept
+        good = _skill("good", success_count=8, fail_count=2)  # 0.8 rate, 10 total → kept
         good.is_learned = True
 
         lib = await _populate(bad, good)

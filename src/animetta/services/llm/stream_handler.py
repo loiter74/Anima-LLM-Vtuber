@@ -10,7 +10,8 @@ core LLM implementation.
 import contextlib
 import time as time_module
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
@@ -52,7 +53,8 @@ class OpenAIStreamHandler:
         t_start = time_module.perf_counter()
 
         try:
-            response = await self.llm.client.chat.completions.create(
+            create_completion = cast(Any, self.llm.client.chat.completions.create)
+            response = await create_completion(
                 model=kwargs.get("model", self.llm.model),
                 messages=messages,
                 temperature=kwargs.get("temperature", self.llm.temperature),
@@ -85,13 +87,14 @@ class OpenAIStreamHandler:
                     # Fallback: rough estimate (4 chars ≈ 1 token)
                     input_tokens = len(user_input) // 4
                     output_tokens = len(full_response) // 4
-                # Use a synthetic response-like object for _record_usage
-                class _StreamUsage:
-                    pass
-                usage_obj = _StreamUsage()
-                usage_obj.usage = _StreamUsage()
-                usage_obj.usage.prompt_tokens = input_tokens
-                usage_obj.usage.completion_tokens = output_tokens
+
+                # Use a synthetic response-like object for _record_usage.
+                usage_obj = SimpleNamespace(
+                    usage=SimpleNamespace(
+                        prompt_tokens=input_tokens,
+                        completion_tokens=output_tokens,
+                    )
+                )
                 self.llm._record_usage(usage_obj, duration_s)
             except Exception:
                 pass

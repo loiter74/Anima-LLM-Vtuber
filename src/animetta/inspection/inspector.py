@@ -43,7 +43,6 @@ async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
 
     # ── 1. Component health checks ──────────────────────────────
     try:
-
         results = await check_all_components(runtime)
         checks.update(results)
     except Exception as exc:
@@ -55,7 +54,6 @@ async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
 
     # ── 2. Pipeline smoke test ──────────────────────────────────
     try:
-
         result = await check_golden_conversation_pipeline(runtime=runtime)
         checks[result.name] = result
     except Exception as exc:
@@ -67,7 +65,6 @@ async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
 
     # ── 3. Data consistency checks ──────────────────────────────
     try:
-
         result = await check_data_consistency(runtime)
         checks[result.name] = result
     except Exception as exc:
@@ -79,7 +76,6 @@ async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
 
     # ── 4. Metrics pipeline checks ──────────────────────────────
     try:
-
         result = await check_metrics_pipeline(runtime=runtime)
         checks[result.name] = result
     except Exception as exc:
@@ -99,9 +95,7 @@ async def run_full_inspection(runtime: InspectionRuntime) -> InspectionReport:
         checks=checks,
     )
 
-    logger.info(
-        f"[inspection] Inspection {report.run_id[:8]} complete in {duration_sec:.1f}s"
-    )
+    logger.info(f"[inspection] Inspection {report.run_id[:8]} complete in {duration_sec:.1f}s")
     logger.info(f"[inspection] {report.summary}")
 
     return report

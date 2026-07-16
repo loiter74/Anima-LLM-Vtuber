@@ -15,6 +15,7 @@ class GPTSoVITSConfig(TTSBaseConfig):
     Connects to a locally running GPT-SoVITS api_v2.py server via REST API.
     Supports few-shot voice cloning with reference audio and configurable inference parameters.
     """
+
     type: Literal["gpt_sovits"] = "gpt_sovits"
 
     # === Server connection ===
@@ -68,7 +69,7 @@ class GPTSoVITSConfig(TTSBaseConfig):
     )
     media_type: str = Field(
         default="wav",
-        description='Audio output format: wav / ogg / aac / raw',
+        description="Audio output format: wav / ogg / aac / raw",
     )
     streaming_mode: bool = Field(
         default=False,

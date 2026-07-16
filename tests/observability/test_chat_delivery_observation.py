@@ -43,9 +43,7 @@ async def test_emit_records_delivered_egress_without_payload_content() -> None:
     identity = _identity()
     recorder = Recorder()
     sio = AsyncMock()
-    delivery = ChatDelivery(
-        sio, identity, ChatTransportMode.CANONICAL, recorder=recorder
-    )
+    delivery = ChatDelivery(sio, identity, ChatTransportMode.CANONICAL, recorder=recorder)
 
     with observation_context(_context(identity)):
         await delivery.emit(
@@ -70,9 +68,7 @@ async def test_emit_failure_records_failed_phase_and_reraises() -> None:
     recorder = Recorder()
     sio = AsyncMock()
     sio.emit.side_effect = ConnectionError("network down")
-    delivery = ChatDelivery(
-        sio, identity, ChatTransportMode.CANONICAL, recorder=recorder
-    )
+    delivery = ChatDelivery(sio, identity, ChatTransportMode.CANONICAL, recorder=recorder)
 
     with observation_context(_context(identity)), pytest.raises(ConnectionError):
         await delivery.emit(

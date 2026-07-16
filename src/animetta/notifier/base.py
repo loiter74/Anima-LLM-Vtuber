@@ -9,6 +9,7 @@ Usage:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import ClassVar
 
 _NOTIFIER_REGISTRY: dict[str, type["NotifierBase"]] = {}
@@ -38,7 +39,9 @@ class NotifierBase(ABC):
         ...
 
 
-def register_notifier(name: str):
+def register_notifier(
+    name: str,
+) -> Callable[[type[NotifierBase]], type[NotifierBase]]:
     """Decorator: register a NotifierBase subclass under *name*.
 
     Usage::
@@ -47,10 +50,12 @@ def register_notifier(name: str):
         class DiscordNotifier(NotifierBase):
             ...
     """
+
     def decorator(cls: type[NotifierBase]) -> type[NotifierBase]:
         cls.name = name
         _NOTIFIER_REGISTRY[name] = cls
         return cls
+
     return decorator
 
 

@@ -60,6 +60,9 @@ def test_quality_workflow_maps_events_to_tiers_and_group_id_matrices() -> None:
         commands = "\n".join(step.get("run", "") for step in job["steps"] if isinstance(step, dict))
         assert "tooling.quality run-group" in commands
         assert "matrix.group" in commands
+        assert "ruff check" not in commands
+        assert "eslint" not in commands
+        assert "prettier" not in commands
 
     for job_id in ("python", "node", "service"):
         assert workflow["jobs"][job_id]["continue-on-error"] == "true"
@@ -139,6 +142,8 @@ def test_quality_workflow_scopes_cache_by_trust_and_keeps_release_cold() -> None
     assert "scripts/release_runtime_gate.py" in release_commands
     assert "playwright install chromium" in release_commands
     assert "docker compose down --remove-orphans" in release_commands
+    assert "docker compose -f docker-compose.qwen.yml logs --no-color" in release_commands
+    assert "docker compose -f docker-compose.qwen.yml down --remove-orphans" in release_commands
     assert set(release_job["env"]) == {
         "DEEPSEEK_API_KEY",
         "MIMO_API_KEY",

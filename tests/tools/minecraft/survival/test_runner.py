@@ -25,7 +25,9 @@ class MockBridge:
         self._sequence_responses[action] = responses
         self._sequence_indices[action] = 0
 
-    async def send_command(self, action: str, params: dict | None = None, timeout: float = 60.0) -> dict:
+    async def send_command(
+        self, action: str, params: dict | None = None, timeout: float = 60.0
+    ) -> dict:
         self._call_log.append((action, params))
 
         # Check for sequence responses first
@@ -105,7 +107,9 @@ class TestSurvivalIronRunnerHappyPath:
         bridge = MockBridge()
         bridge.set_response("collect", {"status": "success", "result": "Collected 3 oak_log"})
         bridge.set_response("craft", {"status": "success", "result": "Crafted 1 crafting_table"})
-        bridge.set_response("smelt", {"status": "success", "result": "Smelting 3 raw_iron with coal"})
+        bridge.set_response(
+            "smelt", {"status": "success", "result": "Smelting 3 raw_iron with coal"}
+        )
         bridge.set_response("status", _default_status_response())
 
         runner = SurvivalIronRunner(bridge)
@@ -121,10 +125,13 @@ class TestSurvivalIronRunnerFailures:
         bridge = MockBridge()
 
         # First collect fails, second succeeds
-        bridge.set_sequence("collect", [
-            {"status": "error", "result": "No more oak_log nearby, collected 0"},
-            {"status": "success", "result": "Collected 3 oak_log"},
-        ])
+        bridge.set_sequence(
+            "collect",
+            [
+                {"status": "error", "result": "No more oak_log nearby, collected 0"},
+                {"status": "success", "result": "Collected 3 oak_log"},
+            ],
+        )
         bridge.set_response("craft", {"status": "success", "result": "Crafted"})
         bridge.set_response("smelt", {"status": "success", "result": "Smelting"})
         bridge.set_response("status", _default_status_response())
@@ -191,15 +198,18 @@ class TestSurvivalIronRunnerSummary:
         bridge.set_response("collect", {"status": "success", "result": "ok"})
         bridge.set_response("craft", {"status": "success", "result": "ok"})
         bridge.set_response("smelt", {"status": "success", "result": "ok"})
-        bridge.set_response("status", {
-            "status": "success",
-            "result": {
-                "inventory": {"iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1},
-                "health": 20.0,
-                "food": 18.0,
-                "nearby_entities": {},
+        bridge.set_response(
+            "status",
+            {
+                "status": "success",
+                "result": {
+                    "inventory": {"iron_pickaxe": 1, "iron_sword": 1, "iron_chestplate": 1},
+                    "health": 20.0,
+                    "food": 18.0,
+                    "nearby_entities": {},
+                },
             },
-        })
+        )
 
         runner = SurvivalIronRunner(bridge)
         report = asyncio.new_event_loop().run_until_complete(runner.run())

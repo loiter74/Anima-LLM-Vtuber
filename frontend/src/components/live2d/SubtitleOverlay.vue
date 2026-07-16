@@ -3,43 +3,35 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useSubtitle } from '@/composables/useSubtitle'
 import { useSubtitleStore } from '@/stores/subtitle'
 
-const {
-  store,
-  text,
-  translation,
-  visible,
-  isStreaming,
-} = useSubtitle()
+const { store, text, translation, visible, isStreaming } = useSubtitle()
 
 const subStore = useSubtitleStore()
 
-const showOriginal = computed(() =>
-  store.displayMode === 'original' || store.displayMode === 'bilingual'
+const showOriginal = computed(
+  () => store.displayMode === 'original' || store.displayMode === 'bilingual',
 )
 
-const showTranslation = computed(() =>
-  (store.displayMode === 'translated' || store.displayMode === 'bilingual')
-  && translation.value
+const showTranslation = computed(
+  () =>
+    (store.displayMode === 'translated' || store.displayMode === 'bilingual') && translation.value,
 )
 
 // ===== Responsive container tracking (ResizeObserver) =====
 const containerWidth = ref(0)
 const containerHeight = ref(0)
-const panelWidth = ref(0)  // InteractivePanel rendered width, 0 if hidden/collapsed
+const panelWidth = ref(0) // InteractivePanel rendered width, 0 if hidden/collapsed
 const panelRef = ref<HTMLDivElement | null>(null)
 let containerObserver: ResizeObserver | null = null
 let panelObserver: ResizeObserver | null = null
 
-/** Half the panel width — fallback used when panel not yet measured.
- *  Set to 0 to default-center in the full container; drag to customize position. */
-const PANEL_HALF_FALLBACK = 0
-
 // ===== Position calculation (ratio-based) =====
 
-const hasCustomPosition = computed(() =>
-  store.posX != null && store.posY != null
-  && typeof store.posX === 'number'
-  && typeof store.posY === 'number'
+const hasCustomPosition = computed(
+  () =>
+    store.posX != null &&
+    store.posY != null &&
+    typeof store.posX === 'number' &&
+    typeof store.posY === 'number',
 )
 
 /** Clamp ratio to keep panel mostly visible */
@@ -112,7 +104,7 @@ function onDragMove(e: MouseEvent): void {
 
   // Convert pixel delta to ratio delta
   const ratioDx = dx / containerWidth.value
-  const ratioDy = -dy / containerHeight.value  // inverted: bottom Y
+  const ratioDy = -dy / containerHeight.value // inverted: bottom Y
 
   let newXRatio = dragOriginRatioX.value + ratioDx
   let newYRatio = dragOriginRatioY.value + ratioDy
@@ -200,12 +192,8 @@ onUnmounted(() => {
     >
       <div
         ref="panelRef"
-        class="bg-c-bg/70 backdrop-blur-[20px] border border-c-border rounded-xl
-               px-6 py-[14px] max-w-[560px] flex flex-col items-center gap-1.5 select-none"
-        :class="[
-          isDragging ? 'cursor-grabbing' : 'cursor-grab',
-          'pointer-events-auto'
-        ]"
+        class="bg-c-bg/70 backdrop-blur-[20px] border border-c-border rounded-xl px-6 py-[14px] max-w-[560px] flex flex-col items-center gap-1.5 select-none"
+        :class="[isDragging ? 'cursor-grabbing' : 'cursor-grab', 'pointer-events-auto']"
         @mousedown.prevent="onDragStart"
       >
         <!-- Drag handle (decorative dots + visual indicator) -->
@@ -217,10 +205,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Original text -->
-        <p
-          v-if="showOriginal"
-          class="text-lg font-medium text-c-text text-center leading-snug"
-        >
+        <p v-if="showOriginal" class="text-lg font-medium text-c-text text-center leading-snug">
           {{ text }}
           <span
             v-if="isStreaming"
@@ -229,10 +214,7 @@ onUnmounted(() => {
         </p>
 
         <!-- Translation text -->
-        <p
-          v-if="showTranslation"
-          class="text-xs text-c-accent text-center leading-snug"
-        >
+        <p v-if="showTranslation" class="text-xs text-c-accent text-center leading-snug">
           {{ translation }}
         </p>
       </div>

@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from animetta.tools.gamebot.contracts import CapabilityManifest, GameBotObservation
 from animetta.tools.minecraft.core.bridge import MinecraftBridge
 from animetta.tools.minecraft.core.config import MinecraftConfig
 from animetta.tools.minecraft.skill.catalog import SkillLibrary
@@ -31,6 +32,7 @@ from animetta.tools.minecraft.voyager.repository import InMemoryVoyagerRepositor
 from animetta.tools.minecraft.voyager.tech_graph import (
     FrontierScheduler,
     TechGraph,
+    TechNode,
     TechProgress,
     build_survival_tech_graph,
 )
@@ -86,9 +88,7 @@ class StrategyGenerator:
             "await craft('wooden_sword', 1); "
             "await mine_shaft(50, 1);"
         ),
-        "stone_pickaxe": (
-            "await craft('stick', 2); await craft('stone_pickaxe', 1);"
-        ),
+        "stone_pickaxe": ("await craft('stick', 2); await craft('stone_pickaxe', 1);"),
         "furnace": "await craft('furnace', 1);",
         "iron_ingot": (
             "await collect('oak_log', 3); await craft('oak_planks', 3); "
@@ -100,12 +100,16 @@ class StrategyGenerator:
             "await collect('coal', 1); "
             "await smelt('raw_iron', 'coal', 1);"
         ),
-        "iron_pickaxe": (
-            "await craft('stick', 2); await craft('iron_pickaxe', 1);"
-        ),
+        "iron_pickaxe": ("await craft('stick', 2); await craft('iron_pickaxe', 1);"),
     }
 
-    async def generate(self, *, node, observation=None, **_: Any) -> str:
+    async def generate(
+        self,
+        *,
+        node: TechNode,
+        observation: GameBotObservation | None = None,
+        **_: Any,
+    ) -> str:
         inventory = getattr(observation, "inventory", {}) or {}
         if (
             node.id == "cobblestone"
@@ -119,15 +123,13 @@ class StrategyGenerator:
             if missing_iron:
                 actions.append(f"await collect('raw_iron', {missing_iron});")
                 actions.append("await collect('coal', 1);")
-                actions.append(
-                    f"await smelt('raw_iron', 'coal', {missing_iron});"
-                )
+                actions.append(f"await smelt('raw_iron', 'coal', {missing_iron});")
             if inventory.get("stick", 0) < 2:
                 actions.append("await craft('stick', 1);")
             actions.append("await craft('iron_pickaxe', 1);")
             return " ".join(actions)
         if node.id == "stone_pickaxe":
-            actions: list[str] = []
+            stone_actions: list[str] = []
             missing_cobblestone = max(0, 3 - inventory.get("cobblestone", 0))
             recovered_tools = False
             if missing_cobblestone:
@@ -136,7 +138,7 @@ class StrategyGenerator:
                     for name in ("wooden_pickaxe", "stone_pickaxe", "iron_pickaxe")
                 )
                 if not has_pickaxe:
-                    actions.extend(
+                    stone_actions.extend(
                         [
                             "await collect('oak_log', 3);",
                             "await craft('oak_planks', 3);",
@@ -147,11 +149,11 @@ class StrategyGenerator:
                         ]
                     )
                     recovered_tools = True
-                actions.append(f"await mine_shaft(50, {missing_cobblestone});")
+                stone_actions.append(f"await mine_shaft(50, {missing_cobblestone});")
             if inventory.get("stick", 0) < 2 and not recovered_tools:
-                actions.append("await craft('stick', 1);")
-            actions.append("await craft('stone_pickaxe', 1);")
-            return " ".join(actions)
+                stone_actions.append("await craft('stick', 1);")
+            stone_actions.append("await craft('stone_pickaxe', 1);")
+            return " ".join(stone_actions)
         if node.id == "furnace":
             missing_cobblestone = max(0, 8 - inventory.get("cobblestone", 0))
             if missing_cobblestone:
@@ -160,19 +162,19 @@ class StrategyGenerator:
                     "await craft('furnace', 1);"
                 )
         if node.id == "iron_ingot" and inventory.get("iron_ingot", 0) >= 1:
-            actions: list[str] = []
+            ingot_refresh_actions: list[str] = []
             if inventory.get("raw_iron", 0) < 1:
-                actions.append("await collect('raw_iron', 1);")
+                ingot_refresh_actions.append("await collect('raw_iron', 1);")
             elif inventory.get("coal", 0) < 1:
-                actions.append("await collect('coal', 1);")
+                ingot_refresh_actions.append("await collect('coal', 1);")
             else:
-                actions.append("await collect('cobblestone', 1);")
+                ingot_refresh_actions.append("await collect('cobblestone', 1);")
             if inventory.get("coal", 0) < 1:
-                actions.append("await collect('coal', 1);")
-            actions.append("await smelt('raw_iron', 'coal', 1);")
-            return " ".join(actions)
+                ingot_refresh_actions.append("await collect('coal', 1);")
+            ingot_refresh_actions.append("await smelt('raw_iron', 'coal', 1);")
+            return " ".join(ingot_refresh_actions)
         if node.id == "iron_ingot" and inventory.get("stone_pickaxe", 0) >= 1:
-            actions: list[str] = []
+            ingot_progress_actions: list[str] = []
             needs_sword = not any(
                 inventory.get(name, 0) >= 1
                 for name in ("wooden_sword", "stone_sword", "iron_sword")
@@ -180,12 +182,12 @@ class StrategyGenerator:
             support_target = 6 if needs_sword else 4
             missing_support = max(0, support_target - inventory.get("cobblestone", 0))
             if missing_support:
-                actions.append(f"await collect('cobblestone', {missing_support});")
+                ingot_progress_actions.append(f"await collect('cobblestone', {missing_support});")
             if needs_sword:
                 if inventory.get("stick", 0) < 1:
-                    actions.append("await craft('stick', 1);")
-                actions.append("await craft('stone_sword', 1);")
-            actions.extend(
+                    ingot_progress_actions.append("await craft('stick', 1);")
+                ingot_progress_actions.append("await craft('stone_sword', 1);")
+            ingot_progress_actions.extend(
                 [
                     "await mine_shaft(55);",
                     "await collect('raw_iron', 1);",
@@ -193,10 +195,8 @@ class StrategyGenerator:
                     "await smelt('raw_iron', 'coal', 1);",
                 ]
             )
-            return " ".join(actions)
-        if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get(
-            "stick", 0
-        ) >= 2:
+            return " ".join(ingot_progress_actions)
+        if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get("stick", 0) >= 2:
             return f"await craft('{node.id}', 1);"
         return self.STRATEGIES[node.id]
 
@@ -327,8 +327,7 @@ async def reset_player_before_measurement() -> list[dict[str, str]]:
         region_index = progression_runs * FIXTURE_REGION_ATTEMPTS + region_attempt + 1
         search_x, search_z = fixture_search_origin(region_index)
         locate_command = (
-            f"execute positioned {search_x} 100 {search_z} "
-            f"run locate biome {FIXTURE_BIOME}"
+            f"execute positioned {search_x} 100 {search_z} run locate biome {FIXTURE_BIOME}"
         )
         locate_output = await asyncio.to_thread(rcon, locate_command)
         audit.append({"command": locate_command, "output": locate_output})
@@ -379,7 +378,7 @@ def build_config() -> MinecraftConfig:
     )
 
 
-def policy_for(manifest) -> VoyagerPolicy:
+def policy_for(manifest: CapabilityManifest) -> VoyagerPolicy:
     return VoyagerPolicy(
         supported_protocol="1.0",
         allowed_capabilities={capability.name for capability in manifest.capabilities},
@@ -440,9 +439,7 @@ async def negative_runtime_audit(
             },
             timeout=10.0,
         )
-        attempts.append(
-            {"kind": "capability", "capability": capability, "response": result}
-        )
+        attempts.append({"kind": "capability", "capability": capability, "response": result})
 
     chat = await bridge.send_command(
         "execute_action",
@@ -488,7 +485,7 @@ async def single_action_audit(runtime: MinecraftGameBotAdapter) -> dict[str, Any
 
 async def run_progression(
     runtime: MinecraftGameBotAdapter,
-    manifest,
+    manifest: CapabilityManifest,
 ) -> tuple[dict[str, Any], InMemoryVoyagerRepository, str, TechProgress]:
     node_ids = [
         "wood_collection",
@@ -509,9 +506,7 @@ async def run_progression(
         mode=VoyagerMode.LEARN,
         runtime=runtime,
         manifest=manifest,
-        authorized_capabilities=frozenset(
-            capability.name for capability in manifest.capabilities
-        ),
+        authorized_capabilities=frozenset(capability.name for capability in manifest.capabilities),
         repository=repository,
     )
     library = SkillLibrary()
@@ -576,8 +571,7 @@ async def advance_progression(
             return outcomes, False
         outcomes.append(outcome.model_dump(mode="json"))
         if outcome.status in {"candidate", "trusted"} and (
-            outcome.node_id not in targets
-            or outcome.node_id not in session.progress.unlocked_nodes
+            outcome.node_id not in targets or outcome.node_id not in session.progress.unlocked_nodes
         ):
             return outcomes, False
     return outcomes, targets.issubset(session.progress.unlocked_nodes)
@@ -681,14 +675,10 @@ async def main(mode: str) -> None:
             )
 
         if mode in {"progression", "all"}:
-            progression, repository, session_id, progress = await run_progression(
-                runtime, manifest
-            )
+            progression, repository, session_id, progress = await run_progression(runtime, manifest)
             artifact["progression"] = progression
             if not progression["completed"]:
-                raise AssertionError(
-                    f"progression stopped: {progression['outcomes'][-1]}"
-                )
+                raise AssertionError(f"progression stopped: {progression['outcomes'][-1]}")
             if mode in {"recovery", "all"}:
                 artifact["recovery"] = await recovery_audit(
                     bridge,

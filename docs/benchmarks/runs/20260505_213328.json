@@ -2,10 +2,10 @@
   "timestamp": "20260505_213328",
   "mode": "auto",
   "prompts": [
-    "你好，请介绍一下你自己",
-    "今天天气怎么样？",
-    "讲个笑话",
-    "1+1等于几？"
+    "浣犲ソ锛岃浠嬬粛涓�涓嬩綘鑷繁",
+    "浠婂ぉ澶╂皵鎬庝箞鏍凤紵",
+    "璁蹭釜绗戣瘽",
+    "1+1绛変簬鍑狅紵"
   ],
   "latencies": [
     {
@@ -25,14 +25,14 @@
       "total_duration_ms": 222.43689999959315,
       "status": "success",
       "input_type": "text",
-      "user_text": "1+1等于几？",
+      "user_text": "1+1绛変簬鍑狅紵",
       "created_at": "2026-05-05 13:33:21"
     },
     {
       "total_duration_ms": 4.099400000995956,
       "status": "success",
       "input_type": "text",
-      "user_text": "讲个笑话",
+      "user_text": "璁蹭釜绗戣瘽",
       "created_at": "2026-05-05 13:33:16"
     }
   ],

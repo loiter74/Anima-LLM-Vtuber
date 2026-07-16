@@ -17,7 +17,10 @@ class ApiKeyMixin:
 
     Composed into: LLMBaseConfig, ASRBaseConfig, TTSBaseConfig
     """
-    api_key: str | None = Field(default=None, description="API Key for cloud provider authentication")
+
+    api_key: str | None = Field(
+        default=None, description="API Key for cloud provider authentication"
+    )
 
 
 class ModelMixin:
@@ -25,6 +28,7 @@ class ModelMixin:
 
     Composed into: LLMBaseConfig, ASRBaseConfig, TTSBaseConfig
     """
+
     model: str = Field(default="", description="Model identifier (provider-specific)")
     base_url: str | None = Field(default=None, description="Override API base URL")
 
@@ -35,6 +39,7 @@ class DeviceMixin:
     Composed into: VCBaseConfig, SeparationBaseConfig.
     Also used by individual provider implementations (chattts, kokoro, vibe_voice, funasr, etc.).
     """
+
     device: str = Field(default="cuda:0", description="Device for inference (cuda:0 / cpu / auto)")
 
 
@@ -43,6 +48,9 @@ class TemperatureMixin:
 
     Composed into: LLMBaseConfig
     """
-    temperature: float = Field(default=0.7, ge=0, le=2, description="Generation temperature (higher = more creative)")
+
+    temperature: float = Field(
+        default=0.7, ge=0, le=2, description="Generation temperature (higher = more creative)"
+    )
     top_p: float = Field(default=0.9, ge=0, le=1, description="Nucleus sampling parameter")
     max_tokens: int = Field(default=4096, ge=1, description="Maximum generated tokens")

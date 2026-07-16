@@ -119,9 +119,7 @@ class BoundedReplyQueue:
         """Discard queued candidates not owned by ``generation_id``."""
         async with self._condition:
             retained = [
-                entry
-                for entry in self._entries
-                if entry.candidate.generation_id == generation_id
+                entry for entry in self._entries if entry.candidate.generation_id == generation_id
             ]
             removed = len(self._entries) - len(retained)
             self._entries = retained
@@ -167,10 +165,7 @@ class ReplyWorker:
             if candidate.generation_id != self._generation_id:
                 self._metrics.dropped["stale_generation"] += 1
                 continue
-            if (
-                self._clock() - candidate.message.timestamp
-                > self._max_message_age_seconds
-            ):
+            if self._clock() - candidate.message.timestamp > self._max_message_age_seconds:
                 self._metrics.dropped["expired"] += 1
                 continue
 

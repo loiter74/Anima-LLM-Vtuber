@@ -37,6 +37,10 @@ def classify_error(error: BaseException) -> ErrorType:
         return ErrorType.RATE_LIMIT
     if "service unavailable" in message or "not initialized" in message:
         return ErrorType.SERVICE_UNAVAILABLE
-    if isinstance(error, ValueError) or "invalid response" in message or "empty response" in message:
+    if (
+        isinstance(error, ValueError)
+        or "invalid response" in message
+        or "empty response" in message
+    ):
         return ErrorType.INVALID_RESPONSE
     return ErrorType.UNKNOWN

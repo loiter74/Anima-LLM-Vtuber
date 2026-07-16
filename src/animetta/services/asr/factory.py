@@ -35,9 +35,6 @@ _AVAILABLE_ASR_PROVIDERS = (
 class ASRFactory:
     """ASR service factory class"""
 
-    # Maps provider name → config class instantiation (kwargs-based)
-    _CONFIG_MAP = {}
-
     @staticmethod
     def create(
         provider: str,

@@ -77,9 +77,7 @@ async def test_purify_demotes_fake_keeps_real_skips_dead(monkeypatch):
 
     monkeypatch.setattr(purify, "verify", fake_verify)
 
-    report = await purify.purify_validated_skills(
-        bridge, lib, get_state_fn=_get_state_fn
-    )
+    report = await purify.purify_validated_skills(bridge, lib, get_state_fn=_get_state_fn)
 
     # 计数
     assert report["total"] == 3
@@ -152,5 +150,6 @@ async def test_purify_forces_give_off(monkeypatch):
     await purify.purify_validated_skills(bridge, lib, get_state_fn=_get_state_fn)
 
     import os
+
     assert os.environ.get("MC_EVO_ALLOW_GIVE") == "0"
     assert self_evolution.MC_EVO_ALLOW_GIVE is False

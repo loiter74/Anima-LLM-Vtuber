@@ -66,14 +66,15 @@ class TestExtractSemanticPhrases:
         texts = ["测试文本", "测试文本"]
         # Patch to simulate missing jieba
         import builtins
+
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
-            if name == 'jieba':
+            if name == "jieba":
                 raise ImportError("No module named 'jieba'")
             return original_import(name, *args, **kwargs)
 
-        with patch('builtins.__import__', side_effect=mock_import):
+        with patch("builtins.__import__", side_effect=mock_import):
             phrases = Collector._extract_semantic_phrases(texts, top_k=10)
 
         # Should still return results via fallback

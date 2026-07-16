@@ -11,8 +11,14 @@ export const useSingingStore = defineStore('singing', () => {
   const error = ref('')
 
   const isProcessing = computed(() =>
-    ['downloading', 'separating', 'transcribing',
-     'waiting_lyrics', 'converting', 'mixing'].includes(status.value)
+    [
+      'downloading',
+      'separating',
+      'transcribing',
+      'waiting_lyrics',
+      'converting',
+      'mixing',
+    ].includes(status.value),
   )
 
   const isPlaying = ref(false)
@@ -57,9 +63,22 @@ export const useSingingStore = defineStore('singing', () => {
   }
 
   return {
-    url, status, progress, message, result, error,
-    isProcessing, isPlaying, currentTime, currentLyricIndex,
-    playingUrl, audioElement,
-    setPlaying, setProgress, setResult, setError, reset,
+    url,
+    status,
+    progress,
+    message,
+    result,
+    error,
+    isProcessing,
+    isPlaying,
+    currentTime,
+    currentLyricIndex,
+    playingUrl,
+    audioElement,
+    setPlaying,
+    setProgress,
+    setResult,
+    setError,
+    reset,
   }
 })

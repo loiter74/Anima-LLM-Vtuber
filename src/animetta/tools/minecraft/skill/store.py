@@ -184,7 +184,5 @@ class SkillLibraryDB:
             is_learned=bool(row["is_learned"]),
             validated=bool(row["validated"]),
             trust_stage=SkillTrustStage(row["trust_stage"] or "candidate"),
-            provenance=SkillProvenance.from_dict(
-                json.loads(row["provenance_json"] or "{}")
-            ),
+            provenance=SkillProvenance.from_dict(json.loads(row["provenance_json"] or "{}")),
         )

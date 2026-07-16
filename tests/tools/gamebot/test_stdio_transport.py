@@ -43,10 +43,12 @@ async def test_send_command_writes_json_line_with_ms_timeout(fake_process) -> No
 
     # Make stdout return a matching response
     response_line = _make_response_line(1, "success", {"ok": True})
-    fake_process.stdout.readline = AsyncMock(side_effect=[
-        response_line.encode(),
-        b"",  # EOF to stop reader
-    ])
+    fake_process.stdout.readline = AsyncMock(
+        side_effect=[
+            response_line.encode(),
+            b"",  # EOF to stop reader
+        ]
+    )
 
     with patch("asyncio.create_subprocess_exec", return_value=fake_process):
         await transport.start(login_timeout=0.1)
@@ -129,10 +131,12 @@ async def test_idless_event_triggers_callback(fake_process) -> None:
 
     event_line = _make_response_line(None, "event", {"type": "login", "username": "Bot"})
 
-    fake_process.stdout.readline = AsyncMock(side_effect=[
-        event_line.encode(),
-        b"",
-    ])
+    fake_process.stdout.readline = AsyncMock(
+        side_effect=[
+            event_line.encode(),
+            b"",
+        ]
+    )
 
     with patch("asyncio.create_subprocess_exec", return_value=fake_process):
         transport.on_event(lambda evt: events_received.append(evt))
@@ -153,11 +157,13 @@ async def test_malformed_json_does_not_crash(fake_process) -> None:
     transport = StdioGameBotTransport(argv=["node", "index.js"], cwd="/fake")
 
     fake_process.stdin.write = MagicMock()
-    fake_process.stdout.readline = AsyncMock(side_effect=[
-        b"this is not json\n",
-        _make_response_line(1, "success", "ok").encode(),
-        b"",
-    ])
+    fake_process.stdout.readline = AsyncMock(
+        side_effect=[
+            b"this is not json\n",
+            _make_response_line(1, "success", "ok").encode(),
+            b"",
+        ]
+    )
 
     with patch("asyncio.create_subprocess_exec", return_value=fake_process):
         await transport.start(login_timeout=0.1)

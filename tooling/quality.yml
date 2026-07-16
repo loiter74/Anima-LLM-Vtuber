@@ -15,10 +15,19 @@ input_sets:
     paths:
       - src/**/*.py
       - config/**/*.yaml
+  python-maintained-source:
+    paths:
+      - src/**/*.py
+      - tooling/**/*.py
+      - scripts/**/*.py
+      - evaluations/**/*.py
+      - tests/**/*.py
   frontend-toolchain:
     paths:
       - frontend/package.json
       - frontend/pnpm-lock.yaml
+      - frontend/pnpm-workspace.yaml
+      - frontend/knip.json
       - frontend/vite.config.ts
       - frontend/vitest.config.ts
       - frontend/tsconfig*.json
@@ -27,6 +36,23 @@ input_sets:
     paths:
       - frontend/src/**
       - frontend/public/**
+      - frontend/electron/**
+      - frontend/scripts/**
+      - frontend/*.mjs
+      - frontend/*.ts
+  operational-source:
+    paths:
+      - scripts/check_source_standards.py
+      - Dockerfile*
+      - "**/Dockerfile*"
+      - "**/*.sh"
+      - "**/*.ps1"
+      - "**/*.bat"
+      - "**/*.cmd"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.json"
+      - "**/*.toml"
   documentation-source:
     paths:
       - README.md
@@ -61,6 +87,7 @@ docker_watch_paths:
 docker_scopes:
   animetta:
     service: animetta
+    compose_file: docker-compose.yml
     environment_identity_fields:
       - ANIMETTA_PROFILE
       - ANIMETTA_HOST
@@ -72,7 +99,9 @@ docker_scopes:
     paths:
       - Dockerfile
       - .dockerignore
-      - docker-compose*.yml
+      - docker-compose.yml
+      - docker-compose.cpu.yml
+      - docker-compose.core.yml
       - docker/entrypoint.sh
       - docker/nginx.conf
       - requirements-core.txt
@@ -83,6 +112,7 @@ docker_scopes:
       - .env.example
   qwen-tts:
     service: qwen-tts
+    compose_file: docker-compose.qwen.yml
     environment_identity_fields:
       - QWEN_TTS_API_KEY
       - QWEN_TTS_URL
@@ -94,7 +124,7 @@ docker_scopes:
     paths:
       - Dockerfile.qwen-tts
       - .dockerignore
-      - docker-compose*.yml
+      - docker-compose.qwen.yml
       - requirements-qwen-tts.txt
       - src/animetta_qwen_tts/**
       - src/animetta/__init__.py
@@ -107,17 +137,30 @@ docker_scopes:
       - config/**
 
 groups:
-  backend-static:
-    domain: backend
+  python-format:
+    domain: repository
     kind: lint
-    runner: ruff
-    targets: [src, tooling, tests]
+    runner: ruff-format
+    targets: [src, tooling, scripts, evaluations, tests]
+    args: [--check]
     timeout_seconds: 180
     include_in_full: true
     cacheable: true
     resource_class: light
     resource_weight: 1
-    input_sets: [python-toolchain]
+    input_sets: [python-toolchain, python-maintained-source]
+
+  backend-static:
+    domain: backend
+    kind: lint
+    runner: ruff
+    targets: [src, tooling, scripts, evaluations, tests]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source]
 
   backend-typecheck:
     domain: backend
@@ -132,18 +175,18 @@ groups:
     resource_weight: 3
     input_sets: [python-toolchain]
 
-  backend-tooling-typecheck:
+  backend-support-typecheck:
     domain: repository
     kind: typecheck
     runner: mypy
-    targets: [tooling/quality]
+    targets: [tooling/quality, scripts, evaluations]
     args: [--ignore-missing-imports]
     timeout_seconds: 180
     include_in_full: true
     cacheable: true
     resource_class: light
     resource_weight: 1
-    input_sets: [python-toolchain]
+    input_sets: [python-toolchain, python-maintained-source]
 
   backend-tooling-quality:
     domain: repository
@@ -152,6 +195,7 @@ groups:
     targets: [tests/tooling/quality]
     args: [-q, -o, addopts=]
     timeout_seconds: 180
+    include_in_full: true
     cacheable: true
     resource_class: cpu
     resource_weight: 2
@@ -316,7 +360,7 @@ groups:
       - not slow and not integration
       - --tb=short
       - -n
-      - auto
+      - "8"
       - --timeout=30
       - --timeout-method=thread
       - --cov=src/animetta
@@ -340,6 +384,19 @@ groups:
       - backend-tools-unit
       - backend-observability-unit
 
+  backend-deadcode:
+    domain: repository
+    kind: lint
+    runner: vulture
+    targets: [tooling, scripts, evaluations, src/animetta, src/animetta_qwen_tts]
+    args: [--min-confidence, "80"]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source]
+
   frontend-tests:
     domain: frontend
     kind: unit
@@ -351,6 +408,58 @@ groups:
     cacheable: true
     resource_class: cpu
     resource_weight: 2
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-lint:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [lint]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-format:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [format:check]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-deadcode:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [deadcode]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [frontend-toolchain, frontend-runtime]
+
+  frontend-duplicates:
+    domain: frontend
+    kind: lint
+    runner: pnpm
+    cwd: frontend
+    args: [duplicates:check]
+    timeout_seconds: 300
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
     input_sets: [frontend-toolchain, frontend-runtime]
 
   frontend-typecheck:
@@ -401,7 +510,7 @@ groups:
     kind: smoke
     runner: docker
     isolation: hermetic
-    args: [compose, config, --quiet]
+    args: [compose, -f, docker-compose.yml, config, --quiet]
     capabilities: [docker]
     timeout_seconds: 180
     include_in_full: true
@@ -409,7 +518,77 @@ groups:
     resource_class: exclusive
     resource_weight: 8
 
+  docker-compose-cpu-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args: [compose, -f, docker-compose.cpu.yml, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  docker-compose-core-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args: [compose, -f, docker-compose.core.yml, config, --quiet]
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  docker-compose-qwen-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args:
+      - compose
+      - --env-file
+      - .env.example
+      - -f
+      - docker-compose.qwen.yml
+      - config
+      - --quiet
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  operational-source-contract:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/check_source_standards.py
+    args: [--check]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [operational-source]
+
 components:
+  python-source-boundary:
+    domain: repository
+    paths:
+      - src/**/*.js
+      - src/**/*.mjs
+      - src/**/*.cjs
+      - src/**/*.ts
+    direct_groups: [operational-source-contract]
+    impacts: []
+    risk: high
+
   quality-control-plane:
     domain: repository
     paths:
@@ -417,14 +596,25 @@ components:
       - tests/tooling/**
       - scripts/health_check.py
       - tests/smoke/test_health_check.py
-    direct_groups: [backend-tooling-quality, backend-tooling-typecheck, backend-static]
+    direct_groups:
+      - backend-tooling-quality
+      - backend-support-typecheck
+      - backend-static
+      - python-format
+      - backend-deadcode
     impacts: []
     risk: high
 
   backend-core:
     domain: backend
     paths: [src/animetta/core/**]
-    direct_groups: [backend-core-unit, backend-route-smoke]
+    direct_groups:
+      - backend-core-unit
+      - backend-route-smoke
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-server, orchestration-graph]
     risk: high
 
@@ -433,21 +623,38 @@ components:
     paths:
       - src/animetta/config/**
       - config/**
-    direct_groups: [backend-config-unit, backend-core-unit]
+    direct_groups:
+      - backend-config-unit
+      - backend-core-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [backend-core]
     risk: high
 
   orchestration-server:
     domain: backend
     paths: [src/animetta/orchestration/server/**]
-    direct_groups: [backend-server-unit, backend-route-smoke]
+    direct_groups:
+      - backend-server-unit
+      - backend-route-smoke
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   orchestration-graph:
     domain: backend
     paths: [src/animetta/orchestration/graph/**]
-    direct_groups: [backend-graph-unit]
+    direct_groups:
+      - backend-graph-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: []
     risk: normal
 
@@ -456,21 +663,36 @@ components:
     paths:
       - src/animetta/services/**
       - src/animetta_qwen_tts/**
-    direct_groups: [backend-services-unit]
+    direct_groups:
+      - backend-services-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   backend-memory:
     domain: backend
     paths: [src/animetta/memory/**]
-    direct_groups: [backend-memory-unit]
+    direct_groups:
+      - backend-memory-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-graph]
     risk: normal
 
   backend-tools:
     domain: backend
     paths: [src/animetta/tools/**]
-    direct_groups: [backend-tools-unit]
+    direct_groups:
+      - backend-tools-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [orchestration-server]
     risk: normal
 
@@ -480,14 +702,30 @@ components:
       - src/animetta/observability/**
       - src/animetta/tracing/**
       - src/animetta/inspection/**
-    direct_groups: [backend-observability-unit]
+    direct_groups:
+      - backend-observability-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
     impacts: [backend-core]
     risk: normal
 
   frontend-source:
     domain: frontend
-    paths: [frontend/src/**]
-    direct_groups: [frontend-tests, frontend-typecheck]
+    paths:
+      - frontend/src/**
+      - frontend/electron/**
+      - frontend/scripts/**
+      - frontend/*.mjs
+      - frontend/*.ts
+    direct_groups:
+      - frontend-tests
+      - frontend-typecheck
+      - frontend-lint
+      - frontend-format
+      - frontend-deadcode
+      - frontend-duplicates
     impacts: [frontend-build-control]
     risk: normal
 
@@ -496,10 +734,18 @@ components:
     paths:
       - frontend/package.json
       - frontend/pnpm-lock.yaml
+      - frontend/pnpm-workspace.yaml
+      - frontend/knip.json
       - frontend/vite.config.ts
       - frontend/vitest.config.ts
       - frontend/uno.config.ts
-    direct_groups: [frontend-typecheck, frontend-build]
+    direct_groups:
+      - frontend-typecheck
+      - frontend-build
+      - frontend-lint
+      - frontend-format
+      - frontend-deadcode
+      - frontend-duplicates
     impacts: []
     risk: high
 
@@ -509,9 +755,38 @@ components:
       - Dockerfile*
       - docker-compose*.yml
       - docker/**
-    direct_groups: [docker-compose-contract]
+      - scripts/qwen_preflight.py
+      - scripts/runtime_lifecycle.py
+      - scripts/release_runtime_gate.py
+      - tests/deployment/**
+      - tests/scripts/test_qwen_preflight.py
+      - tests/scripts/test_runtime_lifecycle.py
+      - tests/scripts/test_release_runtime_gate.py
+    direct_groups:
+      - docker-compose-contract
+      - docker-compose-cpu-contract
+      - docker-compose-core-contract
+      - docker-compose-qwen-contract
     impacts: []
     risk: high
+
+  operational-source-standards:
+    domain: repository
+    paths:
+      - scripts/check_source_standards.py
+      - Dockerfile*
+      - "**/Dockerfile*"
+      - "**/*.sh"
+      - "**/*.ps1"
+      - "**/*.bat"
+      - "**/*.cmd"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.json"
+      - "**/*.toml"
+    direct_groups: [operational-source-contract]
+    impacts: []
+    risk: normal
 
   repository-governance:
     domain: repository
@@ -549,22 +824,41 @@ components:
 
 fallbacks:
   backend:
+    - backend-deadcode
+    - python-format
     - backend-static
     - backend-typecheck
     - backend-route-smoke
     - backend-events-contract
     - backend-full
-  frontend: [frontend-tests, frontend-typecheck, frontend-build]
+  frontend:
+    - frontend-deadcode
+    - frontend-duplicates
+    - frontend-lint
+    - frontend-format
+    - frontend-tests
+    - frontend-typecheck
+    - frontend-build
   repository:
+    - backend-deadcode
+    - python-format
     - backend-static
     - backend-typecheck
-    - backend-tooling-typecheck
+    - backend-support-typecheck
     - backend-route-smoke
     - backend-events-contract
     - docs-contract
     - security-secrets
     - backend-full
     - frontend-tests
+    - frontend-lint
+    - frontend-format
+    - frontend-deadcode
+    - frontend-duplicates
     - frontend-typecheck
     - frontend-build
     - docker-compose-contract
+    - docker-compose-cpu-contract
+    - docker-compose-core-contract
+    - docker-compose-qwen-contract
+    - operational-source-contract

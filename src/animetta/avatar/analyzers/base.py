@@ -39,6 +39,7 @@ class EmotionData:
             'metadata': {'source': 'llm_tag'}
         }
     """
+
     primary: str
     confidence: float
     timeline: list[dict[str, Any]] = field(default_factory=list)
@@ -55,14 +56,16 @@ class EmotionData:
             "primary": self.primary,
             "confidence": self.confidence,
             "timeline": self.timeline,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     def __repr__(self) -> str:
         """String representation"""
-        return (f"EmotionData(primary={self.primary}, "
-                f"confidence={self.confidence:.2f}, "
-                f"timeline_items={len(self.timeline)})")
+        return (
+            f"EmotionData(primary={self.primary}, "
+            f"confidence={self.confidence:.2f}, "
+            f"timeline_items={len(self.timeline)})"
+        )
 
 
 class IEmotionAnalyzer(ABC):

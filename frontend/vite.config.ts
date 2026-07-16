@@ -35,20 +35,24 @@ export default defineConfig(({ mode }) => {
         input: {
           app: resolve(__dirname, 'index.html'),
           live: resolve(__dirname, 'live.html'),
-        }
-      }
+        },
+      },
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src')
-      }
+        '@': resolve(__dirname, 'src'),
+      },
     },
     optimizeDeps: {
-      include: ['pixi.js', 'pixi-live2d-display', '@pixi/utils', '@pixi/math', '@pixi/core', '@pixi/display']
+      include: [
+        'pixi.js',
+        'pixi-live2d-display',
+        '@pixi/utils',
+        '@pixi/math',
+        '@pixi/core',
+        '@pixi/display',
+      ],
     },
-    plugins: [
-      vue(),
-      unocss()
-    ]
+    plugins: [vue(), unocss()],
   }
 })

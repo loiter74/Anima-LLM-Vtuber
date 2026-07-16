@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # Bug 1: VAD 服务注册
 # ============================================================
 
+
 class TestVADServicesRegistered:
     """验证 VAD silero + mock 注册成功"""
 
@@ -43,6 +44,7 @@ class TestVADServicesRegistered:
 # ============================================================
 # Bug 2: VAD 工厂降级
 # ============================================================
+
 
 class TestVADFactoryFallback:
     """验证 VAD 创建失败降级到 MockVAD"""
@@ -64,6 +66,7 @@ class TestVADFactoryFallback:
 # Bug 3: LLM 工厂降级
 # ============================================================
 
+
 class TestLLMFactoryFallback:
     """验证 LLM 创建失败降级到 MockLLM"""
 
@@ -82,6 +85,7 @@ class TestLLMFactoryFallback:
 # ============================================================
 # Bug 4-6: output_node 事件推送
 # ============================================================
+
 
 class TestOutputNodeExpression:
     """验证 output_node 发送 expression 事件"""
@@ -106,10 +110,11 @@ class TestOutputNodeExpression:
 
         # 验证 expression 事件被发送
         expression_calls = [
-            c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "chat:expression"
+            c for c in mock_sio.emit.call_args_list if c.args[0] == "chat:expression"
         ]
-        assert len(expression_calls) == 1, f"expression 事件未发送, calls: {mock_sio.emit.call_args_list}"
+        assert len(expression_calls) == 1, (
+            f"expression 事件未发送, calls: {mock_sio.emit.call_args_list}"
+        )
         payload = expression_calls[0].args[1]
         assert payload["emotion"] == "happy"
 
@@ -140,14 +145,13 @@ class TestOutputNodeVolumes:
         # mock AudioAnalyzer 因为假文件不是真正的 WAV
         with patch(
             "animetta.orchestration.graph.output_node._compute_volumes",
-            return_value=[0.1, 0.5, 0.3]
+            return_value=[0.1, 0.5, 0.3],
         ):
             await output_node(state, config)
 
         # 验证 audio_with_expression 包含 volumes
         audio_calls = [
-            c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "chat:audio_with_expression"
+            c for c in mock_sio.emit.call_args_list if c.args[0] == "chat:audio_with_expression"
         ]
         assert len(audio_calls) == 1, "audio_with_expression 事件未发送"
         payload = audio_calls[0].args[1]
@@ -176,10 +180,7 @@ class TestOutputNodeControlSignals:
 
         await output_node(state, config)
 
-        control_calls = [
-            c for c in mock_sio.emit.call_args_list
-            if c.args[0] == "chat:control"
-        ]
+        control_calls = [c for c in mock_sio.emit.call_args_list if c.args[0] == "chat:control"]
 
         signals = [c.args[1]["signal"] for c in control_calls]
         assert "conversation-start" in signals, f"缺少 conversation-start, signals: {signals}"

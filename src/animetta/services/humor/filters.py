@@ -92,4 +92,3 @@ def validate_humor_candidate(
         return HumorFallbackReason.STYLE_NOT_ALLOWED
 
     return None
-

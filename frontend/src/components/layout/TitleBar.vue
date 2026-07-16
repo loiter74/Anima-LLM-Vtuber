@@ -10,14 +10,14 @@ const statusColors: Record<string, string> = {
   connected: 'bg-c-success shadow-[0_0_8px_rgba(74,222,128,0.6)]',
   disconnected: 'bg-c-error',
   connecting: 'bg-c-warning animate-pulse',
-  error: 'bg-c-error'
+  error: 'bg-c-error',
 }
 
 const statusLabels: Record<string, string> = {
   connected: 'CONNECTED',
   disconnected: 'DISCONNECTED',
   connecting: 'CONNECTING',
-  error: 'CONNECTION ERROR'
+  error: 'CONNECTION ERROR',
 }
 
 const navItems = [
@@ -29,18 +29,20 @@ const navItems = [
 
 type PanelTab = 'memory' | 'settings'
 
-function goTo(item: typeof navItems[number]) {
+function goTo(item: (typeof navItems)[number]) {
   if ('panelTab' in item) {
     router.push(item.path)
-    window.dispatchEvent(new CustomEvent<PanelTab>('animetta:panel-tab', {
-      detail: item.panelTab,
-    }))
+    window.dispatchEvent(
+      new CustomEvent<PanelTab>('animetta:panel-tab', {
+        detail: item.panelTab,
+      }),
+    )
     return
   }
   router.push(item.path)
 }
 
-function isActive(item: typeof navItems[number]) {
+function isActive(item: (typeof navItems)[number]) {
   return 'routeName' in item && route.name === item.routeName
 }
 </script>
@@ -89,7 +91,7 @@ function isActive(item: typeof navItems[number]) {
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--s-4);
-  background: rgba(26, 16, 40, 0.80);
+  background: rgba(26, 16, 40, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--c-border);

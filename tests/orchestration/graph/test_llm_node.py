@@ -416,8 +416,7 @@ class TestLLMNodeWithoutTools:
                 "旅人，我记得，上一句你是在试探我的记忆力。",
             ),
             (
-                "用户说哈哈。作为AI VTuber，我应该接住轻松氛围。"
-                "先用调侃的方式回应，再自然收住。",
+                "用户说哈哈。作为AI VTuber，我应该接住轻松氛围。先用调侃的方式回应，再自然收住。",
                 "确实，这声哈哈把酒馆的夜班灯都笑亮了。",
             ),
             (
@@ -426,8 +425,7 @@ class TestLLMNodeWithoutTools:
                 "今晚菜单有糖醋排骨、麻婆豆腐，还有一份刚从数据流里捞出来的夜宵。",
             ),
             (
-                "用户要求讲个段子。作为AI，我应该输出短笑话。"
-                "注意不要解释笑点，只给角色内回应。",
+                "用户要求讲个段子。作为AI，我应该输出短笑话。注意不要解释笑点，只给角色内回应。",
                 "讲真，召唤者X说要给我涨工资，我醒来发现只是系统更新提示。",
             ),
             (
@@ -436,38 +434,31 @@ class TestLLMNodeWithoutTools:
                 "刚才那个梗的重点是，AI 做梦都逃不过加班。",
             ),
             (
-                "用户发了弹幕梗牛牛牛。作为AI，我知道这是夸赞。"
-                "我应该先接住弹幕，再给一句轻吐槽。",
+                "用户发了弹幕梗牛牛牛。作为AI，我知道这是夸赞。我应该先接住弹幕，再给一句轻吐槽。",
                 "别慌，这么多牛再刷下去，酒馆后厨都要改牧场了。",
             ),
             (
-                "用户说想吃饭。作为Anima，我需要回应吃饭需求。"
-                "保持深夜赛博酒馆语气，不要跳出角色。",
+                "用户说想吃饭。作为Anima，我需要回应吃饭需求。保持深夜赛博酒馆语气，不要跳出角色。",
                 "菜单这种东西当然有，只是本店目前主要供应想象力和热水。",
             ),
             (
-                "用户测试记忆。作为AI，我知道这是连续对话检查。"
-                "我需要承认上下文，同时保持角色感。",
+                "用户测试记忆。作为AI，我知道这是连续对话检查。我需要承认上下文，同时保持角色感。",
                 "如果要我记，我会说你刚才已经把酒馆菜单和冷笑话都翻过一遍了。",
             ),
             (
-                "用户问我是不是还在线。作为AI，我应该确认状态。"
-                "用简短、轻松、角色内的方式回应。",
+                "用户问我是不是还在线。作为AI，我应该确认状态。用简短、轻松、角色内的方式回应。",
                 "那当然，我只是把存在感调成了省电模式。",
             ),
             (
-                "用户表示疑惑。作为Anima，我需要安抚并解释。"
-                "这类问题适合轻微自嘲，不要写分析过程。",
+                "用户表示疑惑。作为Anima，我需要安抚并解释。这类问题适合轻微自嘲，不要写分析过程。",
                 "这个嘛，大概是酒馆 Wi-Fi 把我的吐槽包拆成了两半。",
             ),
             (
-                "用户让继续聊天。作为AI VTuber，我应该保持互动。"
-                "这是普通闲聊，不需要调用工具。",
+                "用户让继续聊天。作为AI VTuber，我应该保持互动。这是普通闲聊，不需要调用工具。",
                 "行，夜还长，杯子也没空，继续坐着聊。",
             ),
             (
-                "用户问现在轮到谁说话。作为Anima，我需要接话。"
-                "保持自然，不要解释对话系统。",
+                "用户问现在轮到谁说话。作为Anima，我需要接话。保持自然，不要解释对话系统。",
                 "轮到我把话接住，然后假装这一切都很从容。",
             ),
             (
@@ -480,7 +471,9 @@ class TestLLMNodeWithoutTools:
         config = _make_config(service_context=mock_service_context)
         for index, (reasoning_prefix, visible_reply) in enumerate(samples, start=1):
 
-            async def _chat_stream(user_text, system_prompt="", prefix=reasoning_prefix, reply=visible_reply):
+            async def _chat_stream(
+                user_text, system_prompt="", prefix=reasoning_prefix, reply=visible_reply
+            ):
                 yield prefix
                 yield f"{reply}[neutral]"
 
@@ -686,6 +679,32 @@ class TestLLMNodeWithTools:
         assert result["tool_calls"] is None
         assert result["response_text"] == "Fallback response"
         assert "messages" not in result
+
+    @pytest.mark.asyncio
+    async def test_invalid_tool_response_falls_back_to_streaming(self, mock_service_context):
+        """A provider protocol violation must not leak a ``None`` node result."""
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = [MagicMock(name="web_search")]
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(return_value="invalid")
+
+        async def _chat_stream(user_text, system_prompt=""):
+            yield "Fallback response"
+
+        mock_service_context.llm_engine.chat_stream = _chat_stream
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="What is the weather?",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "Fallback response"
+        assert result["tool_calls"] is None
 
 
 class TestLLMNodeHumorAgent:

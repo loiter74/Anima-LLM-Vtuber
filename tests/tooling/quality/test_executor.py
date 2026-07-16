@@ -114,6 +114,87 @@ def test_python_tool_runners_use_the_canonical_interpreter() -> None:
     assert mypy_argv[:3] == [sys.executable, "-m", "mypy"]
 
 
+def test_code_standard_groups_use_canonical_local_commands() -> None:
+    loaded = _repository_catalog()
+
+    format_argv = build_argv(
+        loaded.catalog.groups["python-format"],
+        python_executable=sys.executable,
+    )
+    frontend_lint_argv = build_argv(
+        loaded.catalog.groups["frontend-lint"],
+        pnpm_executable="pnpm",
+    )
+    frontend_format_argv = build_argv(
+        loaded.catalog.groups["frontend-format"],
+        pnpm_executable="pnpm",
+    )
+    operational_argv = build_argv(
+        loaded.catalog.groups["operational-source-contract"],
+        python_executable=sys.executable,
+    )
+    deadcode_argv = build_argv(
+        loaded.catalog.groups["backend-deadcode"],
+        python_executable=sys.executable,
+    )
+
+    assert format_argv == [
+        sys.executable,
+        "-m",
+        "ruff",
+        "format",
+        "--check",
+        "src",
+        "tooling",
+        "scripts",
+        "evaluations",
+        "tests",
+    ]
+    assert frontend_lint_argv == ["pnpm", "lint"]
+    assert frontend_format_argv == ["pnpm", "format:check"]
+    assert operational_argv == [
+        sys.executable,
+        "scripts/check_source_standards.py",
+        "--check",
+    ]
+    assert deadcode_argv == [
+        sys.executable,
+        "-m",
+        "vulture",
+        "tooling",
+        "scripts",
+        "evaluations",
+        "src/animetta",
+        "src/animetta_qwen_tts",
+        "--min-confidence",
+        "80",
+    ]
+
+
+def test_required_frontend_lint_fails_closed_when_pnpm_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded = _repository_catalog()
+
+    monkeypatch.setattr("tooling.quality.executor.shutil.which", lambda _: None)
+
+    def missing_pnpm(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError("pnpm is unavailable")
+
+    monkeypatch.setattr("tooling.quality.executor.subprocess.Popen", missing_pnpm)
+    result = run_group(
+        loaded,
+        "frontend-lint",
+        plan_hash="a" * 64,
+        repo_root=ROOT,
+        available_capabilities=frozenset(),
+    )
+
+    assert result.status is ResultStatus.FAILED
+    assert result.failure_kind == "launch"
+    assert "pnpm is unavailable" in result.remediation
+
+
 def test_build_argv_uses_catalogued_playwright_smoke_entrypoint() -> None:
     loaded = _repository_catalog()
     group = loaded.catalog.groups["frontend-playwright-smoke"]
@@ -129,7 +210,8 @@ def test_docker_contract_validates_quietly_without_serializing_compose_secrets()
 
     argv = build_argv(loaded.catalog.groups["docker-compose-contract"])
 
-    assert argv[-3:] == ["compose", "config", "--quiet"]
+    assert argv[-2:] == ["config", "--quiet"]
+    assert "--format" not in argv
 
 
 def test_run_group_blocks_when_required_capability_is_missing() -> None:
@@ -156,7 +238,14 @@ def test_docker_contract_validates_quietly_without_rendering_environment() -> No
         docker_executable="docker",
     )
 
-    assert argv == ["docker", "compose", "config", "--quiet"]
+    assert argv == [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "config",
+        "--quiet",
+    ]
 
 
 def test_run_group_executes_real_python_process_and_writes_result(tmp_path: Path) -> None:

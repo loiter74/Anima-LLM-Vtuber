@@ -22,6 +22,12 @@ from uuid import uuid4
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.qwen_preflight import load_expected_settings as load_qwen_expected_settings
+from scripts.qwen_preflight import run_preflight as run_qwen_preflight
+
 REQUIRED_ENVIRONMENT = (
     "ALICE_REF_AUDIO",
     "DEEPSEEK_API_KEY",
@@ -311,6 +317,50 @@ def _container_id(compose_file: Path, service: str) -> str:
     return container_id
 
 
+def _container_metadata(compose_file: Path, service: str) -> dict[str, Any]:
+    container_id = _container_id(compose_file, service)
+    completed = _run(["docker", "inspect", container_id])
+    try:
+        current = json.loads(completed.stdout)[0]
+        state = current["State"]
+        return {
+            "container_id": str(current.get("Id", container_id)),
+            "image_id": str(current["Image"]),
+            "started_at": str(state["StartedAt"]),
+            "restart_count": int(current.get("RestartCount", 0)),
+        }
+    except (json.JSONDecodeError, IndexError, KeyError, TypeError, ValueError) as exc:
+        raise ReleaseGateError(f"Invalid Docker metadata for {service}") from exc
+
+
+def _qwen_logs(qwen_compose_file: Path, started_at: datetime) -> str:
+    return _run(
+        _compose(
+            qwen_compose_file,
+            "logs",
+            "--no-color",
+            "--since",
+            started_at.isoformat(),
+            "qwen-tts",
+        )
+    ).stdout
+
+
+def _preload_event_count(logs: str) -> int:
+    return logs.count("Qwen3-TTS model load started")
+
+
+def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]:
+    api_key, expected_identity = load_qwen_expected_settings()
+    return run_qwen_preflight(
+        base_url="http://127.0.0.1:8766",
+        api_key=api_key,
+        expected_identity=expected_identity,
+        attempts=attempts,
+        interval_seconds=interval_seconds,
+    )
+
+
 def _run_playwright(evidence_dir: Path) -> dict[str, Any]:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     pnpm = shutil.which("pnpm")
@@ -342,6 +392,7 @@ def run_release_gate(
     *,
     plan: Path,
     compose_file: Path,
+    qwen_compose_file: Path,
     evidence_root: Path,
     attempts: int,
     interval_seconds: float,
@@ -352,6 +403,7 @@ def run_release_gate(
     evidence_root.mkdir(parents=True, exist_ok=True)
 
     _run(_compose(compose_file, "down", "--remove-orphans"))
+    _run(_compose(qwen_compose_file, "down", "--remove-orphans"))
     build = _run(
         [
             sys.executable,
@@ -360,8 +412,6 @@ def run_release_gate(
             "docker-build",
             "--plan",
             str(plan),
-            "--compose-file",
-            str(compose_file),
             "--no-cache",
             "--json",
         ]
@@ -370,7 +420,21 @@ def run_release_gate(
     if build_evidence.get("status") != "passed" or len(build_evidence.get("actions", ())) != 2:
         raise ReleaseGateError("Release gate must cold-build both Docker image scopes")
 
-    _run(_compose(compose_file, "up", "-d", "--no-build"))
+    _run(
+        _compose(
+            qwen_compose_file,
+            "up",
+            "-d",
+            "--no-build",
+            "--force-recreate",
+            "qwen-tts",
+        )
+    )
+    qwen_initial_ready = _preflight_qwen(
+        attempts=attempts,
+        interval_seconds=interval_seconds,
+    )
+    _run(_compose(compose_file, "up", "-d", "--no-build", "animetta"))
     health = _wait_json(
         "http://localhost/health",
         lambda payload: payload.get("status") == "ok",
@@ -389,10 +453,75 @@ def run_release_gate(
     frontend_before = _frontend_probe("http://localhost/")
     initial_smoke = _run_alice_smoke(compose_file)
 
+    qwen_persistence_before = _container_metadata(qwen_compose_file, "qwen-tts")
+    preload_events_before = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
+    noop_up_seconds: list[float] = []
+    for _ in range(2):
+        noop_started = time.perf_counter()
+        _run(
+            _compose(
+                qwen_compose_file,
+                "up",
+                "-d",
+                "--no-build",
+                "--no-recreate",
+                "qwen-tts",
+            )
+        )
+        noop_duration = time.perf_counter() - noop_started
+        noop_up_seconds.append(noop_duration)
+        if noop_duration > 5:
+            raise ReleaseGateError(
+                f"No-op Qwen startup exceeded five-second budget: {noop_duration:.3f}s"
+            )
+        _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
+
+    for cycle in range(1, 3):
+        _run(_compose(compose_file, "down", "--remove-orphans"))
+        _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
+        _run(_compose(compose_file, "up", "-d", "--no-build", "animetta"))
+        _wait_json(
+            "http://localhost/health",
+            lambda payload: payload.get("status") == "ok",
+            attempts=attempts,
+            interval_seconds=interval_seconds,
+            description=f"Animetta health after persistence cycle {cycle}",
+        )
+        cycle_ready = _wait_json(
+            "http://localhost/ready",
+            _ready,
+            attempts=attempts,
+            interval_seconds=interval_seconds,
+            description=f"production readiness after persistence cycle {cycle}",
+        )
+        validate_production_readiness(cycle_ready)
+        if _container_metadata(qwen_compose_file, "qwen-tts") != qwen_persistence_before:
+            raise ReleaseGateError(
+                f"Animetta lifecycle cycle {cycle} mutated the persistent Qwen container"
+            )
+
+    persistence_smoke = _run_alice_smoke(compose_file)
+    qwen_persistence_after = _container_metadata(qwen_compose_file, "qwen-tts")
+    preload_events_after = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
+    if qwen_persistence_after != qwen_persistence_before:
+        raise ReleaseGateError("Animetta lifecycle recreated or restarted persistent Qwen")
+    if preload_events_after != preload_events_before:
+        raise ReleaseGateError("Animetta lifecycle caused an extra Qwen model preload")
+    persistent_qwen = {
+        "preserved": True,
+        "before": qwen_persistence_before,
+        "after": qwen_persistence_after,
+        "preload_events_before": preload_events_before,
+        "preload_events_after": preload_events_after,
+        "build_actions": 0,
+        "noop_up_seconds": noop_up_seconds,
+        "animetta_lifecycle_cycles": 2,
+    }
+
     conversation_id = str(uuid4())
     animetta_container_before = _container_id(compose_file, "animetta")
-    qwen_container_before = _container_id(compose_file, "qwen-tts")
-    _run(_compose(compose_file, "stop", "qwen-tts"))
+    qwen_container_before = _container_id(qwen_compose_file, "qwen-tts")
+    _run(_compose(qwen_compose_file, "stop", "qwen-tts"))
     outage = _wait_json(
         "http://localhost/ready",
         lambda payload: not _ready(payload),
@@ -406,7 +535,11 @@ def run_release_gate(
         conversation_id=conversation_id,
         text="这一轮用于验证音频降级，但必须保留文字和 Live2D。",
     )
-    _run(_compose(compose_file, "start", "qwen-tts"))
+    _run(_compose(qwen_compose_file, "start", "qwen-tts"))
+    qwen_recovered_ready = _preflight_qwen(
+        attempts=attempts,
+        interval_seconds=interval_seconds,
+    )
     recovered_ready = _wait_json(
         "http://localhost/ready",
         _ready,
@@ -416,7 +549,7 @@ def run_release_gate(
     )
     validate_production_readiness(recovered_ready)
     animetta_container_after = _container_id(compose_file, "animetta")
-    qwen_container_after = _container_id(compose_file, "qwen-tts")
+    qwen_container_after = _container_id(qwen_compose_file, "qwen-tts")
     if animetta_container_before != animetta_container_after:
         raise ReleaseGateError("Qwen recovery did not preserve the Animetta container")
     if qwen_container_before != qwen_container_after:
@@ -431,11 +564,22 @@ def run_release_gate(
     frontend_after = _frontend_probe("http://localhost/")
     playwright = _run_playwright(evidence_root / "playwright")
 
-    logs = _run(
+    animetta_logs = _run(
         _compose(compose_file, "logs", "--no-color", "--since", started_at.isoformat())
     ).stdout
-    (evidence_root / "docker.log").write_text(logs, encoding="utf-8")
-    assert_clean_logs(logs)
+    qwen_logs = _run(
+        _compose(
+            qwen_compose_file,
+            "logs",
+            "--no-color",
+            "--since",
+            started_at.isoformat(),
+        )
+    ).stdout
+    (evidence_root / "animetta-docker.log").write_text(animetta_logs, encoding="utf-8")
+    (evidence_root / "qwen-docker.log").write_text(qwen_logs, encoding="utf-8")
+    assert_clean_logs(animetta_logs)
+    assert_clean_logs(qwen_logs)
 
     return {
         "schema_version": 1,
@@ -443,18 +587,24 @@ def run_release_gate(
         "started_at": started_at.isoformat(),
         "finished_at": datetime.now(UTC).isoformat(),
         "plan": str(plan),
+        "main_compose_file": str(compose_file),
+        "qwen_compose_file": str(qwen_compose_file),
         "environment_fields": environment_fields,
         "build": build_evidence,
+        "qwen_initial_ready": qwen_initial_ready,
         "health": health,
         "initial_ready": initial_ready,
         "frontend_before": frontend_before,
         "initial_alice_smoke": initial_smoke,
+        "persistence_alice_smoke": persistence_smoke,
+        "persistent_qwen": persistent_qwen,
         "conversation_id": conversation_id,
         "animetta_container_before": animetta_container_before,
         "animetta_container_after": animetta_container_after,
         "outage": outage,
         "outage_turn": outage_turn,
         "recovered_ready": recovered_ready,
+        "qwen_recovered_ready": qwen_recovered_ready,
         "qwen_container_before": qwen_container_before,
         "qwen_container_after": qwen_container_after,
         "same_container_recovery": True,
@@ -471,6 +621,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--compose-file", type=Path, default=ROOT / "docker-compose.yml")
     parser.add_argument(
+        "--qwen-compose-file",
+        type=Path,
+        default=ROOT / "docker-compose.qwen.yml",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / "artifacts" / "test-impact" / "release-runtime" / "evidence.json",
@@ -484,6 +639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence = run_release_gate(
             plan=args.plan.resolve(),
             compose_file=args.compose_file.resolve(),
+            qwen_compose_file=args.qwen_compose_file.resolve(),
             evidence_root=args.output.parent.resolve(),
             attempts=args.attempts,
             interval_seconds=args.interval_seconds,

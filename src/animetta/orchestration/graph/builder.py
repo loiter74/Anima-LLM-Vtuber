@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from loguru import logger
 
 from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
@@ -33,6 +34,7 @@ from .state import AgentState
 # When set, create_default_graph() uses this instead of constructing a new
 # MemorySaver.  Enables Redis session sharing via --redis-url CLI flag.
 _external_checkpointer: Any | None = None
+CompiledAgentGraph = CompiledStateGraph[AgentState, None, AgentState, AgentState]
 
 
 def set_external_checkpointer(checkpointer: Any) -> None:
@@ -74,7 +76,7 @@ def build_graph(
     tools_map: dict[str, Any] | None = None,
     golden_profile: bool = False,
     observation_recorder: ObservationRecorder | None = None,
-) -> StateGraph:
+) -> CompiledAgentGraph:
     """
     Build the LangGraph state graph
 
@@ -216,7 +218,7 @@ def create_default_graph(
     tools_map: dict[str, Any] | None = None,
     golden_profile: bool = False,
     observation_recorder: ObservationRecorder | None = None,
-) -> StateGraph:
+) -> CompiledAgentGraph:
     """
     Create a state graph with default configuration
 
@@ -243,7 +245,9 @@ def create_default_graph(
         logger.info("[LangGraph] Memory checkpoint enabled")
 
     if enable_tools and not tools:
-        logger.warning("[LangGraph] Tools enabled but no tool list provided, tool node will not work")
+        logger.warning(
+            "[LangGraph] Tools enabled but no tool list provided, tool node will not work"
+        )
 
     return build_graph(
         checkpointer=checkpointer,
@@ -255,7 +259,7 @@ def create_default_graph(
     )
 
 
-def visualize_graph(graph: StateGraph, output_path: str = "graph.png") -> None:
+def visualize_graph(graph: CompiledAgentGraph, output_path: str = "graph.png") -> None:
     """Visualize the state graph (requires graphviz)"""
     try:
         img_data = graph.get_graph().draw_mermaid_png()
@@ -271,7 +275,7 @@ def visualize_graph(graph: StateGraph, output_path: str = "graph.png") -> None:
         logger.error(f"[LangGraph] Visualization failed: {e}")
 
 
-def print_graph_structure(graph: StateGraph) -> None:
+def print_graph_structure(graph: CompiledAgentGraph) -> None:
     """Print graph structure (for debugging)"""
     logger.info("[LangGraph] Graph structure:")
-    logger.info(str(graph.get_graph().print_ascii()))
+    graph.get_graph().print_ascii()

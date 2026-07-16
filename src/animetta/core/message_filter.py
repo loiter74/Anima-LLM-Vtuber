@@ -30,13 +30,15 @@ _PROBE_PREFIXES: tuple[str, ...] = (
 
 # Bare tokens that, on their own, are clearly health checks rather than
 # conversational turns. Compared case-insensitively against the stripped text.
-_PROBE_TOKENS: frozenset[str] = frozenset({
-    "ping",
-    "pong",
-    "healthcheck",
-    "health-check",
-    "heartbeat",
-})
+_PROBE_TOKENS: frozenset[str] = frozenset(
+    {
+        "ping",
+        "pong",
+        "healthcheck",
+        "health-check",
+        "heartbeat",
+    }
+)
 
 # Substrings that signal prompt-injection / context-bleed attempts. These are
 # NOT used to skip the LLM (we still want Anima to respond in character), but

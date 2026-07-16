@@ -16,12 +16,24 @@ def _make_sample_presets() -> dict:
     return {
         "emote": {
             "happy": {
-                "low": {"expression": "smile", "params": [{"name": "ParamMouthOpen", "value": 0.3}]},
-                "medium": {"expression": "smile", "params": [{"name": "ParamMouthOpen", "value": 0.5}]},
-                "high": {"expression": "big_smile", "params": [{"name": "ParamMouthOpen", "value": 0.8}]},
+                "low": {
+                    "expression": "smile",
+                    "params": [{"name": "ParamMouthOpen", "value": 0.3}],
+                },
+                "medium": {
+                    "expression": "smile",
+                    "params": [{"name": "ParamMouthOpen", "value": 0.5}],
+                },
+                "high": {
+                    "expression": "big_smile",
+                    "params": [{"name": "ParamMouthOpen", "value": 0.8}],
+                },
             },
             "sad": {
-                "medium": {"expression": "frown", "params": [{"name": "ParamMouthOpen", "value": 0.1}]},
+                "medium": {
+                    "expression": "frown",
+                    "params": [{"name": "ParamMouthOpen", "value": 0.1}],
+                },
             },
         },
         "gesture": {
@@ -54,7 +66,9 @@ class TestPresetLoaderLoading:
     def test_load_valid_yaml(self):
 
         sample = _make_sample_presets()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -72,7 +86,9 @@ class TestPresetLoaderLoading:
 
     def test_load_invalid_yaml(self):
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", encoding="utf-8", delete=False
+        ) as f:
             f.write("::: invalid yaml :::")
             path = f.name
 
@@ -90,7 +106,9 @@ class TestPresetLoaderQueries:
     def loader(self):
 
         sample = _make_sample_presets()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -155,7 +173,9 @@ class TestPresetLoaderCreateActions:
     def loader(self):
 
         sample = _make_sample_presets()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(sample, f)
             path = f.name
 
@@ -185,7 +205,9 @@ class TestPresetLoaderCreateActions:
                 },
             },
         }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", encoding="utf-8", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", encoding="utf-8", delete=False
+        ) as f:
             yaml.dump(presets, f)
             path = f.name
         try:

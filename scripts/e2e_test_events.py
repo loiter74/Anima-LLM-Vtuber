@@ -11,41 +11,63 @@ Tests:
 
 import sys
 import time
+from collections.abc import Callable
+from typing import Any
+
 import socketio
 
 BASE_URL = "http://localhost:12394"
 TIMEOUT = 60  # seconds
 
 sio = socketio.Client()
-results = {}
-events_received = []
+results: dict[str, bool] = {}
+events_received: list[dict[str, Any]] = []
 
 
-def on_connect():
+def on_connect() -> None:
     print(f"  [CONNECTED] sid={sio.sid}")
 
 
-def on_disconnect():
+def on_disconnect() -> None:
     print("  [DISCONNECTED]")
 
 
 # Register broad listeners for all events
-def make_catcher(event_name):
-    def handler(data):
+def make_catcher(event_name: str) -> Callable[[Any], None]:
+    def handler(data: Any) -> None:
         events_received.append({"event": event_name, "data": data, "time": time.time()})
+
     return handler
 
 
 # Known events from socket-events.json
 KNOWN_EVENTS = [
-    "chat:sentence", "chat:control", "chat:expression", "chat:transcript",
-    "chat:audio_with_expression", "chat:live2d_action", "chat:subtitle_translation",
-    "system:connection_established", "system:model_status", "system:error",
-    "config:data", "config:heartbeat_ack",
-    "sing:progress", "sing:complete", "sing:error", "sing:lyrics_ready", "sing:subtitle_line",
-    "persona:list", "persona:set", "persona:updated", "persona:personality_updated",
-    "memory:list_pages", "memory:organize_progress", "memory:organize_result",
-    "bilibili:danmaku", "bilibili:danmaku_status",
+    "chat:sentence",
+    "chat:control",
+    "chat:expression",
+    "chat:transcript",
+    "chat:audio_with_expression",
+    "chat:live2d_action",
+    "chat:subtitle_translation",
+    "system:connection_established",
+    "system:model_status",
+    "system:error",
+    "config:data",
+    "config:heartbeat_ack",
+    "sing:progress",
+    "sing:complete",
+    "sing:error",
+    "sing:lyrics_ready",
+    "sing:subtitle_line",
+    "persona:list",
+    "persona:set",
+    "persona:updated",
+    "persona:personality_updated",
+    "memory:list_pages",
+    "memory:organize_progress",
+    "memory:organize_result",
+    "bilibili:danmaku",
+    "bilibili:danmaku_status",
     "minecraft:status",
 ]
 
@@ -53,7 +75,7 @@ for evt in KNOWN_EVENTS:
     sio.on(evt, make_catcher(evt))
 
 
-def wait_for_event(event_name, timeout=TIMEOUT):
+def wait_for_event(event_name: str, timeout: float = TIMEOUT) -> dict[str, Any] | None:
     """Wait for a specific event to appear in events_received."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -64,7 +86,10 @@ def wait_for_event(event_name, timeout=TIMEOUT):
     return None
 
 
-def wait_for_any_event(event_names, timeout=TIMEOUT):
+def wait_for_any_event(
+    event_names: set[str] | list[str] | tuple[str, ...],
+    timeout: float = TIMEOUT,
+) -> dict[str, Any] | None:
     """Wait for any of the specified events."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -75,11 +100,11 @@ def wait_for_any_event(event_names, timeout=TIMEOUT):
     return None
 
 
-def clear_events():
+def clear_events() -> None:
     events_received.clear()
 
 
-def test_dialogue_flow():
+def test_dialogue_flow() -> bool:
     """Task 4.4: Send text -> receive sentence + control events."""
     print("\n[4.4] Testing dialogue flow...")
     clear_events()
@@ -103,7 +128,7 @@ def test_dialogue_flow():
     return True
 
 
-def test_voice_flow():
+def test_voice_flow() -> bool:
     """Task 4.5: Verify ASR transcript events are registered."""
     print("\n[4.5] Testing voice flow (event registration)...")
     clear_events()
@@ -122,7 +147,7 @@ def test_voice_flow():
         return False
 
 
-def test_singing_flow():
+def test_singing_flow() -> bool:
     """Task 4.6: Test sing events - send cancel to verify event routing."""
     print("\n[4.6] Testing singing flow (cancel)...")
     clear_events()
@@ -139,7 +164,7 @@ def test_singing_flow():
         return False
 
 
-def test_persona_switching():
+def test_persona_switching() -> bool:
     """Task 4.7: List personas, switch persona."""
     print("\n[4.7] Testing persona switching...")
     clear_events()
@@ -177,7 +202,7 @@ def test_persona_switching():
         return True  # Event was accepted, routing works
 
 
-def test_memory():
+def test_memory() -> bool:
     """Task 4.8: Test memory list_pages."""
     print("\n[4.8] Testing memory flow...")
     clear_events()
@@ -197,7 +222,7 @@ def test_memory():
         return True
 
 
-def main():
+def main() -> int:
     print("=" * 60)
     print("E2E Tests for unify-socket-events")
     print("=" * 60)
@@ -213,7 +238,7 @@ def main():
     # Wait for connection-established event
     conn = wait_for_event("system:connection_established", timeout=10)
     if conn:
-        print(f"  [OK] system:connection_established received")
+        print("  [OK] system:connection_established received")
 
     # Run tests
     test_results = {

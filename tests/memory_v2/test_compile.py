@@ -30,20 +30,26 @@ class TestCompileEngine:
     def test_compile_insufficient_atoms(self):
         """Less than 2 atoms → no compilation."""
         engine = CompileEngine()
-        result = asyncio_run(engine.compile_layer(
-            [make_atom(Layer.RAW, "one conversation")],
-            Layer.EPISODIC,
-        ))
+        result = asyncio_run(
+            engine.compile_layer(
+                [make_atom(Layer.RAW, "one conversation")],
+                Layer.EPISODIC,
+            )
+        )
         assert result is None
 
     def test_compile_wrong_layer_direction(self):
         """Cannot compile upward — source must be lower layer."""
         engine = CompileEngine()
-        result = asyncio_run(engine.compile_layer(
-            [make_atom(Layer.SEMANTIC, "knowledge", 48),
-             make_atom(Layer.SEMANTIC, "more knowledge", 72)],
-            Layer.EPISODIC,  # EPISODIC < SEMANTIC — wrong direction
-        ))
+        result = asyncio_run(
+            engine.compile_layer(
+                [
+                    make_atom(Layer.SEMANTIC, "knowledge", 48),
+                    make_atom(Layer.SEMANTIC, "more knowledge", 72),
+                ],
+                Layer.EPISODIC,  # EPISODIC < SEMANTIC — wrong direction
+            )
+        )
         assert result is None
 
     def test_compile_rule_based_fallback(self):
@@ -106,39 +112,35 @@ class TestEligibility:
         atoms = [
             make_atom(Layer.EPISODIC, "episode", 48),
         ]
-        eligible = CompileEngine.get_eligible_atoms(
-            atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW]
-        )
+        eligible = CompileEngine.get_eligible_atoms(atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW])
         assert len(eligible) == 0
 
     def test_eligible_excludes_too_new(self):
         atoms = [
             make_atom(Layer.RAW, "fresh", 0.1),  # only 6 minutes old
         ]
-        eligible = CompileEngine.get_eligible_atoms(
-            atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW]
-        )
+        eligible = CompileEngine.get_eligible_atoms(atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW])
         assert len(eligible) == 0
 
     def test_eligible_includes_old_enough(self):
         atoms = [
             make_atom(Layer.RAW, "old enough", 3.0),  # 3 hours
         ]
-        eligible = CompileEngine.get_eligible_atoms(
-            atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW]
-        )
+        eligible = CompileEngine.get_eligible_atoms(atoms, Layer.RAW, COMPILE_TRIGGERS[Layer.RAW])
         assert len(eligible) == 1
 
     def test_eligible_excludes_already_compiled(self):
         from animetta.memory.v2.atom import Relation
+
         atom = make_atom(Layer.RAW, "already compiled", 3)
-        atom.relations.append(Relation(
-            source_id=atom.id, target_id="other",
-            relation_type=RelationType.DERIVES,
-        ))
-        eligible = CompileEngine.get_eligible_atoms(
-            [atom], Layer.RAW, COMPILE_TRIGGERS[Layer.RAW]
+        atom.relations.append(
+            Relation(
+                source_id=atom.id,
+                target_id="other",
+                relation_type=RelationType.DERIVES,
+            )
         )
+        eligible = CompileEngine.get_eligible_atoms([atom], Layer.RAW, COMPILE_TRIGGERS[Layer.RAW])
         assert len(eligible) == 0
 
 
@@ -160,22 +162,23 @@ class TestCompileTriggers:
 
 def asyncio_run(coro):
     import asyncio
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
     # Already in event loop — create new one in thread
     import concurrent.futures
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(asyncio.run, coro)
         return future.result()
 
+
 class TestCompileEdgeCases:
     def test_compile_single_atom_returns_none(self):
         engine = CompileEngine()
-        result = asyncio_run(engine.compile_layer(
-            [make_atom(Layer.RAW, "single")], Layer.EPISODIC
-        ))
+        result = asyncio_run(engine.compile_layer([make_atom(Layer.RAW, "single")], Layer.EPISODIC))
         assert result is None
 
     def test_compile_preserves_derives_relations(self):

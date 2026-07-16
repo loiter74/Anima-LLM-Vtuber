@@ -36,14 +36,18 @@ MESSAGES_EN = [
 
 def parse_args():
     p = argparse.ArgumentParser(description="Animetta conversation smoke test")
-    p.add_argument("--url", default="http://localhost:80",
-                   help="Backend URL (default: http://localhost:80)")
-    p.add_argument("--rounds", type=int, default=3,
-                   help="Number of conversation rounds (default: 3)")
-    p.add_argument("--timeout", type=int, default=60,
-                   help="Timeout per round in seconds (default: 60)")
-    p.add_argument("--lang", choices=["zh", "en"], default="en",
-                   help="Message language (default: en)")
+    p.add_argument(
+        "--url", default="http://localhost:80", help="Backend URL (default: http://localhost:80)"
+    )
+    p.add_argument(
+        "--rounds", type=int, default=3, help="Number of conversation rounds (default: 3)"
+    )
+    p.add_argument(
+        "--timeout", type=int, default=60, help="Timeout per round in seconds (default: 60)"
+    )
+    p.add_argument(
+        "--lang", choices=["zh", "en"], default="en", help="Message language (default: en)"
+    )
     return p.parse_args()
 
 
@@ -94,8 +98,7 @@ async def main():
         stats["expressions"] += 1
 
     try:
-        await sio.connect(args.url, socketio_path="/socket.io/",
-                         transports=["websocket"])
+        await sio.connect(args.url, socketio_path="/socket.io/", transports=["websocket"])
     except Exception as e:
         print(f"[FATAL] {e}")
         sys.exit(1)
@@ -119,9 +122,11 @@ async def main():
     elapsed = time.time() - t0
 
     ok = stats["connected"] and stats["sentences"] > 0
-    print(f"\n{'─'*50}")
-    print(f"sentences={stats['sentences']} audio={stats['audio']} "
-          f"expr={stats['expressions']} time={elapsed:.1f}s")
+    print(f"\n{'─' * 50}")
+    print(
+        f"sentences={stats['sentences']} audio={stats['audio']} "
+        f"expr={stats['expressions']} time={elapsed:.1f}s"
+    )
     print(f"RESULT: {'PASS' if ok else 'FAIL'}")
     sys.exit(0 if ok else 1)
 

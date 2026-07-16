@@ -13,7 +13,7 @@ from animetta.tools.minecraft.core.bridge import MinecraftBridge
 from animetta.tools.minecraft.core.config import MinecraftBotConfig, MinecraftConfig
 
 
-def rcon_cmd(cmd):
+def rcon_cmd(cmd: str) -> str:
     """Execute RCON command via docker exec."""
     result = subprocess.run(
         ["docker", "exec", "animetta-mc", "bash", "-c", f"rcon-cli '{cmd}'"],
@@ -27,7 +27,7 @@ def rcon_cmd(cmd):
 BOT_USERNAME = "AnimaBot"
 
 
-async def main():
+async def main() -> bool:
     config = MinecraftConfig(
         bot=MinecraftBotConfig(
             host="localhost",

@@ -4,16 +4,32 @@ Manages client session lifecycle and resources
 Uses LangGraph orchestrator
 """
 
+from __future__ import annotations
+
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from animetta.config.manifest import EffectiveConfig
 from animetta.core.service_pool import ServicePool
 
 from ...core.service_context import ServiceContext
+
+if TYPE_CHECKING:
+    from socketio import AsyncServer
+
+    from animetta.config.live2d import Live2DConfig
+    from animetta.core.model_loading_manager import ModelLoadingManager
+    from animetta.core.shared_memory_runtime import SharedMemoryRuntime
+    from animetta.observability.ports import ObservationRecorder
+    from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
+
+    from ..graph.orchestrator import LangGraphOrchestrator
+
+SendCallback = Callable[[dict[str, Any] | str], Awaitable[None]]
 
 
 class SessionManager:
@@ -28,10 +44,10 @@ class SessionManager:
 
     def __init__(
         self,
-        model_manager=None,
-        memory_runtime=None,
-        observation_recorder=None,
-    ):
+        model_manager: ModelLoadingManager | None = None,
+        memory_runtime: SharedMemoryRuntime | None = None,
+        observation_recorder: ObservationRecorder | None = None,
+    ) -> None:
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
         self.contexts: dict[str, ServiceContext] = {}
@@ -55,8 +71,8 @@ class SessionManager:
     async def get_or_create_context(
         self,
         sid: str,
-        config,
-        websocket_send: Callable
+        config: EffectiveConfig,
+        websocket_send: SendCallback,
     ) -> ServiceContext:
         """
         Get or create the ServiceContext for a given session
@@ -119,10 +135,10 @@ class SessionManager:
         self,
         sid: str,
         ctx: ServiceContext,
-        websocket_send: Callable,
-        live2d_config,
-        socketio=None,
-    ):
+        websocket_send: SendCallback,
+        live2d_config: Live2DConfig,
+        socketio: AsyncServer | None = None,
+    ) -> LangGraphOrchestrator:
         """
         Get or create the LangGraph orchestrator for a given session
 
@@ -164,7 +180,7 @@ class SessionManager:
                 session_id=sid,
                 service_context=ctx,
                 socketio=socketio,  # Socket.IO instance for sending messages
-                emotion_analyzer=ctx.emotion_analyzer if hasattr(ctx, 'emotion_analyzer') else None,
+                emotion_analyzer=ctx.emotion_analyzer if hasattr(ctx, "emotion_analyzer") else None,
                 enable_tools=enable_tools,
                 enable_memory=True,
                 tools_config=tools_config.get("config", tools_config),
@@ -181,24 +197,25 @@ class SessionManager:
         """Load tools configuration"""
         try:
             import yaml
+
             # Fix path: from src/anima/orchestration/server/session.py to project root config/tools.yaml
             # __file__ = .../src/anima/orchestration/server/session.py
             # Need: .../config/tools.yaml
             # So need to go up 5 levels to project root (orchestration/server -> orchestration -> anima -> src -> project_root)
-            config_path = Path(__file__).parent.parent.parent.parent.parent / "config" / "tools.yaml"
+            config_path = (
+                Path(__file__).parent.parent.parent.parent.parent / "config" / "tools.yaml"
+            )
 
             logger.info(f"[_load_tools_config] Config file path: {config_path}")
             logger.info(f"[_load_tools_config] File exists: {config_path.exists()}")
 
             if config_path.exists():
-                with open(config_path, encoding='utf-8') as f:
+                with open(config_path, encoding="utf-8") as f:
                     tools_config = yaml.safe_load(f)
 
                     # Verbose debug logging
                     top_level_keys = (
-                        list(tools_config.keys())
-                        if isinstance(tools_config, dict)
-                        else []
+                        list(tools_config.keys()) if isinstance(tools_config, dict) else []
                     )
                     logger.info(
                         "[_load_tools_config] Raw YAML parse result type: {}",
@@ -224,13 +241,17 @@ class SessionManager:
                         type(enable_tools),
                     )
 
-                    logger.info(f"[_load_tools_config] Tool calls {'enabled' if enable_tools else 'disabled'}")
+                    logger.info(
+                        f"[_load_tools_config] Tool calls {'enabled' if enable_tools else 'disabled'}"
+                    )
 
                     result = {
                         "enable_tools": enable_tools,
                         "config": tools_config,
                     }
-                    logger.info(f"[_load_tools_config] Returning enable_tools: {result['enable_tools']}")
+                    logger.info(
+                        f"[_load_tools_config] Returning enable_tools: {result['enable_tools']}"
+                    )
                     return result
             else:
                 logger.info(f"Tools config file does not exist: {config_path}")
@@ -258,14 +279,14 @@ class SessionManager:
         # Stop orchestrator
         if sid in self.orchestrators:
             orchestrator = self.orchestrators[sid]
-            if hasattr(orchestrator, 'stop'):
+            if hasattr(orchestrator, "stop"):
                 await orchestrator.stop()
             del self.orchestrators[sid]
 
         # Clean up audio processor
         if sid in self.audio_processors:
             processor = self.audio_processors[sid]
-            if hasattr(processor, 'reset'):
+            if hasattr(processor, "reset"):
                 processor.reset()
             del self.audio_processors[sid]
 
@@ -283,7 +304,7 @@ class SessionManager:
         # Stop all orchestrators
         for sid, orchestrator in list(self.orchestrators.items()):
             try:
-                if hasattr(orchestrator, 'stop'):
+                if hasattr(orchestrator, "stop"):
                     await orchestrator.stop()
                 logger.debug(f"[{sid}] Orchestrator stopped")
             except Exception as e:
@@ -300,7 +321,7 @@ class SessionManager:
         # Clean up all audio processors
         for sid, processor in list(self.audio_processors.items()):
             try:
-                if hasattr(processor, 'reset'):
+                if hasattr(processor, "reset"):
                     processor.reset()
                 logger.debug(f"[{sid}] AudioProcessor reset")
             except Exception as e:
@@ -311,7 +332,6 @@ class SessionManager:
 
         logger.info("All sessions cleaned up")
 
-
     def get_audio_processor(self, sid: str) -> Any | None:
         """Get session audio processor"""
         return self.audio_processors.get(sid)
@@ -320,7 +340,7 @@ class SessionManager:
         self,
         sid: str,
         ctx: ServiceContext,
-    ):
+    ) -> SimpleVADProcessor:
         """
         Get or create an audio processor
 
@@ -334,13 +354,16 @@ class SessionManager:
         if sid not in self.audio_processors:
             from ...services.audio.simple_vad_processor import SimpleVADProcessor
 
-            async def on_speech_end(audio_data):
+            async def on_speech_end(audio_data: list[float]) -> None:
                 # When speech ends, call orchestrator to process audio
                 orchestrator = self.get_orchestrator(sid)
                 if orchestrator:
                     import numpy as np
+
                     # Convert to bytes
-                    audio_bytes = (np.array(audio_data, dtype=np.float32) * 32768).astype(np.int16).tobytes()
+                    audio_bytes = (
+                        (np.array(audio_data, dtype=np.float32) * 32768).astype(np.int16).tobytes()
+                    )
                     await orchestrator.process_audio(audio_bytes)
 
             processor = SimpleVADProcessor(
@@ -353,7 +376,6 @@ class SessionManager:
             logger.info(f"[{sid}] AudioProcessor created")
 
         return self.audio_processors[sid]
-
 
     @property
     def session_count(self) -> int:

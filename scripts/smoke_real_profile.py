@@ -139,9 +139,7 @@ def _exercise_vad(vad: MimoVAD, audio: bytes) -> dict[str, Any]:
 
 async def run(base_url: str, config_path: Path) -> dict[str, Any]:
     started = time.perf_counter()
-    readiness = validate_readiness_payload(
-        await _get_json(f"{base_url.rstrip('/')}/ready")
-    )
+    readiness = validate_readiness_payload(await _get_json(f"{base_url.rstrip('/')}/ready"))
     config = load_effective_config(config_path, profile="smoke")
     if readiness["semantic_hash"] != config.semantic_hash:
         raise SmokeGateError("semantic_hash_mismatch")
@@ -218,9 +216,7 @@ def _write_evidence(directory: Path, payload: dict[str, Any]) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     destination = directory / f"real-smoke-{stamp}.json"
     temporary = destination.with_suffix(".json.tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(destination)
     return destination
 
@@ -242,6 +238,7 @@ def main() -> int:
         },
     }
     try:
+
         async def execute() -> dict[str, Any]:
             async with asyncio.timeout(args.timeout):
                 return await run(args.url, args.config)

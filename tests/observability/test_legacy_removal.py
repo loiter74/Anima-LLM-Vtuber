@@ -32,8 +32,7 @@ def test_runtime_has_one_canonical_trace_writer() -> None:
 
 def test_inspection_has_no_private_database_or_parallel_chroma_probe() -> None:
     inspection = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (SRC / "inspection").rglob("*.py")
+        path.read_text(encoding="utf-8") for path in (SRC / "inspection").rglob("*.py")
     )
     assert "._db" not in inspection
     assert "PersistentClient" not in inspection
@@ -58,9 +57,9 @@ def test_business_modules_have_no_direct_prometheus_updates() -> None:
 
 
 def test_dashboard_has_no_fixed_legacy_node_topology() -> None:
-    dashboard = (
-        ROOT / "frontend" / "src" / "views" / "DashboardPage.vue"
-    ).read_text(encoding="utf-8")
+    dashboard = (ROOT / "frontend" / "src" / "views" / "DashboardPage.vue").read_text(
+        encoding="utf-8"
+    )
     assert "const topology =" not in dashboard
     assert "conversation_turn" not in dashboard
     assert ".spans" not in dashboard

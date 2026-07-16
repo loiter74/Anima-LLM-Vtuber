@@ -15,6 +15,7 @@ import pytest
 # EmotionPromptBuilder
 # ============================================================
 
+
 class TestEmotionPromptBuilderInit:
     """Initialization."""
 

@@ -340,39 +340,37 @@ def test_catalog_validator_accepts_the_checked_in_registry() -> None:
             "invalid compatibility alias",
         ),
         (
-            lambda catalog: catalog["chat"]["text"].update(
-                aliases=["text_input", "text_input"]
-            ),
+            lambda catalog: catalog["chat"]["text"].update(aliases=["text_input", "text_input"]),
             "duplicate alias",
         ),
         (
-            lambda catalog: catalog["chat"]["sentence"]["completion"][
-                "constants"
-            ].update(undeclared=True),
+            lambda catalog: catalog["chat"]["sentence"]["completion"]["constants"].update(
+                undeclared=True
+            ),
             "completion constant",
         ),
         (
-            lambda catalog: catalog["chat"]["sentence"]["completion"][
-                "constants"
-            ].update(is_complete="true"),
+            lambda catalog: catalog["chat"]["sentence"]["completion"]["constants"].update(
+                is_complete="true"
+            ),
             "completion constant",
         ),
         (
-            lambda catalog: catalog["chat"]["sentence"]["completion"][
-                "context_fields"
-            ].remove("task_id"),
+            lambda catalog: catalog["chat"]["sentence"]["completion"]["context_fields"].remove(
+                "task_id"
+            ),
             "completion context",
         ),
         (
-            lambda catalog: catalog["chat"]["sentence"]["completion"][
-                "context_fields"
-            ].append("task_id"),
+            lambda catalog: catalog["chat"]["sentence"]["completion"]["context_fields"].append(
+                "task_id"
+            ),
             "duplicate completion context",
         ),
         (
-            lambda catalog: catalog["chat"]["sentence"]["completion"][
-                "context_fields"
-            ].append("unknown"),
+            lambda catalog: catalog["chat"]["sentence"]["completion"]["context_fields"].append(
+                "unknown"
+            ),
             "completion context field",
         ),
         (
@@ -380,9 +378,7 @@ def test_catalog_validator_accepts_the_checked_in_registry() -> None:
                 catalog["chat"]["sentence"]["completion"]["constants"].update(
                     message_id="fixed-id"
                 ),
-                catalog["chat"]["sentence"]["completion"]["context_fields"].remove(
-                    "message_id"
-                ),
+                catalog["chat"]["sentence"]["completion"]["context_fields"].remove("message_id"),
             ),
             "completion constant",
         ),
@@ -415,21 +411,15 @@ def test_catalog_validator_accepts_the_checked_in_registry() -> None:
             "event definition",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"].update(
-                {"task_id?": "string"}
-            ),
+            lambda catalog: catalog["chat"]["text"]["payload"].update({"task_id?": "string"}),
             "duplicate normalized payload field",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"].update(
-                {"bad?name": "string"}
-            ),
+            lambda catalog: catalog["chat"]["text"]["payload"].update({"bad?name": "string"}),
             "invalid payload field",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"].update(
-                {"bad_type?": "mystery"}
-            ),
+            lambda catalog: catalog["chat"]["text"]["payload"].update({"bad_type?": "mystery"}),
             "invalid schema type",
         ),
         (
@@ -497,9 +487,7 @@ def test_catalog_validator_accepts_the_checked_in_registry() -> None:
             "enum values must be unique",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"].update(
-                text="string"
-            ),
+            lambda catalog: catalog["chat"]["text"]["payload"].update(text="string"),
             "golden payload field",
         ),
         (
@@ -515,39 +503,33 @@ def test_catalog_validator_accepts_the_checked_in_registry() -> None:
             "strict=true",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"].update(
-                text={"nested": "string"}
-            ),
+            lambda catalog: catalog["chat"]["text"]["payload"].update(text={"nested": "string"}),
             "golden payload field",
         ),
         (
-            lambda catalog: catalog["chat"]["text"]["payload"][
-                "message_id"
-            ].update(max_length=40),
+            lambda catalog: catalog["chat"]["text"]["payload"]["message_id"].update(max_length=40),
             "UUID descriptor",
         ),
         (
-            lambda catalog: catalog["chat"]["control"]["degradation"][
-                "context_fields"
-            ].append("reason"),
+            lambda catalog: catalog["chat"]["control"]["degradation"]["context_fields"].append(
+                "reason"
+            ),
             "context_fields contains duplicates",
         ),
         (
-            lambda catalog: catalog["chat"]["control"]["degradation"][
-                "required_fields"
-            ].remove("message_id"),
+            lambda catalog: catalog["chat"]["control"]["degradation"]["required_fields"].remove(
+                "message_id"
+            ),
             "cover base required",
         ),
         (
-            lambda catalog: catalog["chat"]["control"]["degradation"][
-                "constants"
-            ].update(component=1),
+            lambda catalog: catalog["chat"]["control"]["degradation"]["constants"].update(
+                component=1
+            ),
             "degradation constant",
         ),
         (
-            lambda catalog: catalog["chat"]["control"]["degradation"].update(
-                unknown=True
-            ),
+            lambda catalog: catalog["chat"]["control"]["degradation"].update(unknown=True),
             "degradation has unknown keys",
         ),
         (

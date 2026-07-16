@@ -12,18 +12,20 @@ from animetta.tools.minecraft.autonomous.loop import AutonomousLoop, CooldownTra
 @pytest.fixture
 def mock_bridge():
     bridge = AsyncMock()
-    bridge.send_command = AsyncMock(return_value={
-        "status": "success",
-        "result": {
-            "position": {"x": 100.0, "y": 65.0, "z": 200.0},
-            "health": 20.0,
-            "food": 18.0,
-            "inventory": {},
-            "nearby_entities": {},
-            "time": "day",
-            "weather": "clear"
+    bridge.send_command = AsyncMock(
+        return_value={
+            "status": "success",
+            "result": {
+                "position": {"x": 100.0, "y": 65.0, "z": 200.0},
+                "health": 20.0,
+                "food": 18.0,
+                "inventory": {},
+                "nearby_entities": {},
+                "time": "day",
+                "weather": "clear",
+            },
         }
-    })
+    )
     return bridge
 
 

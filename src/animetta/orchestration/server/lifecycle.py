@@ -8,6 +8,7 @@ import contextlib
 import signal
 import sys
 from collections.abc import Callable
+from types import FrameType
 
 from loguru import logger
 
@@ -42,18 +43,18 @@ class LifecycleManager:
         signal.signal(signal.SIGTERM, self._signal_handler)
 
         # Windows-specific signals
-        if hasattr(signal, 'CTRL_BREAK_EVENT'):
+        if hasattr(signal, "CTRL_BREAK_EVENT"):
             with contextlib.suppress(ValueError, OSError):
                 signal.signal(signal.CTRL_BREAK_EVENT, self._signal_handler)
 
-        if hasattr(signal, 'CTRL_C_EVENT'):
+        if hasattr(signal, "CTRL_C_EVENT"):
             with contextlib.suppress(ValueError, OSError):
                 signal.signal(signal.CTRL_C_EVENT, self._signal_handler)
 
         self._signal_handlers_set = True
         logger.debug("Signal handlers set up")
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
         """Signal handler"""
         # Prevent duplicate processing
         if self._shutting_down:
@@ -69,7 +70,9 @@ class LifecycleManager:
             try:
                 # For async callbacks, we can only do our best in a sync context
                 if asyncio.iscoroutinefunction(callback):
-                    logger.warning("Async cleanup callback cannot be executed in signal handler, skipping")
+                    logger.warning(
+                        "Async cleanup callback cannot be executed in signal handler, skipping"
+                    )
                 else:
                     callback()
             except Exception as e:

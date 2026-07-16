@@ -135,8 +135,6 @@ async def test_compilation_never_combines_different_viewer_subjects(memory_syste
     assert compiled[0].visibility is MemoryVisibility.PRIVATE
     assert compiled[0].subject_ids in (["bilibili:42"], ["bilibili:99"])
     source_subjects = {
-        tuple(atom.subject_ids)
-        for atom in atoms
-        if atom.id in compiled[0].source_ids
+        tuple(atom.subject_ids) for atom in atoms if atom.id in compiled[0].source_ids
     }
     assert len(source_subjects) == 1

@@ -14,10 +14,10 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
 
-
 # ═══════════════════════════════════════════════════════════════
 # Test UserSettings
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestUserSettingsInit:
     """Tests for UserSettings.__init__"""
@@ -132,9 +132,7 @@ class TestUserSettingsSave:
 
         settings.save()
 
-        mock_file.assert_called_once_with(
-            settings.config_file, 'w', encoding='utf-8'
-        )
+        mock_file.assert_called_once_with(settings.config_file, "w", encoding="utf-8")
         mock_safe_dump.assert_called_once_with(
             {"log_level": "WARN"}, mock_file(), allow_unicode=True
         )

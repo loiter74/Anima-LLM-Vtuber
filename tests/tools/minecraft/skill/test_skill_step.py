@@ -1,6 +1,5 @@
 """Unit tests for SkillStep dataclass."""
 
-
 from animetta.tools.minecraft.skill.library import SkillStep
 
 

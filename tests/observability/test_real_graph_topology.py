@@ -92,8 +92,6 @@ async def test_committed_operations_equal_nodes_actually_run(
         detail = await ledger.trace_detail("task-1")
         assert detail is not None
         assert [operation["name"] for operation in detail["operations"]] == expected
-        assert {operation["trace_id"] for operation in detail["operations"]} == {
-            "task-1"
-        }
+        assert {operation["trace_id"] for operation in detail["operations"]} == {"task-1"}
     finally:
         await ledger.close()

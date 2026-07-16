@@ -15,6 +15,7 @@ class DanmakuMessage:
     is_gift / is_super_chat default to False for plain text danmaku.
     meta holds event-specific data (gift_name, price, etc.).
     """
+
     text: str
     user_name: str = ""
     user_id: int = 0
@@ -30,6 +31,7 @@ class DanmakuMessage:
 @dataclass
 class DanmakuReply:
     """AI reply to a danmaku message."""
+
     danmaku_text: str
     reply_text: str
     user_name: str
@@ -43,16 +45,18 @@ class DanmakuReply:
 @dataclass
 class DanmakuPhrase:
     """A high-frequency phrase extracted from recent danmaku."""
+
     text: str
     frequency: int
     first_seen: float  # Unix timestamp
-    last_seen: float   # Unix timestamp
+    last_seen: float  # Unix timestamp
     source_room_id: int = 0
 
 
 @dataclass
 class CollectedVideo:
     """Raw video data collected from B站."""
+
     bvid: str
     title: str
     description: str = ""
@@ -76,6 +80,7 @@ class CollectedVideo:
 @dataclass
 class CollectedComment:
     """Raw comment data collected from B站."""
+
     content: str
     likes: int = 0
     replies: int = 0
@@ -93,6 +98,7 @@ class CollectedComment:
 @dataclass
 class CollectedDanmaku:
     """Raw danmaku (弹幕) data collected from B站 videos."""
+
     content: str
     source_video: str = ""  # BV ID
     source_type: str = "video"  # video, live, comment
@@ -126,6 +132,7 @@ class MemeCandidate:
     Renamed from MemeCandidateRaw — "Raw" is redundant since all candidates
     start as raw before cognitive analysis.
     """
+
     text: str
     context_hint: str = ""
     frequency: int = 1
@@ -155,6 +162,7 @@ class MemeCandidate:
 @dataclass
 class InteractionPattern:
     """Analyzed interaction pattern from livestream danmaku."""
+
     name: str
     description: str
     applicable_scenarios: list[str] = field(default_factory=list)
@@ -172,6 +180,7 @@ class InteractionPattern:
 @dataclass
 class LivestreamStrategy:
     """Actionable livestream optimization strategy."""
+
     trigger_condition: str
     suggested_behavior: str
     expected_effect: str

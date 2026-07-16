@@ -208,9 +208,7 @@ class GladosEffectProcessor:
 
             test_effects = [["gain", "0"]]
             test_tensor = torch.zeros(1, 2400)
-            torchaudio.sox_effects.apply_effects_tensor(
-                test_tensor, 24000, test_effects
-            )
+            torchaudio.sox_effects.apply_effects_tensor(test_tensor, 24000, test_effects)
             self._sox_available = True
             self._using_cli = False
             logger.info("[GladosEffect] Backend: torchaudio.sox_effects")
@@ -240,11 +238,10 @@ class GladosEffectProcessor:
         effects_args = _build_effects_cli_args(self.params)
 
         # Write input to temp WAV file
-        with tempfile.NamedTemporaryFile(
-            suffix=".wav", delete=False
-        ) as tmp_in, tempfile.NamedTemporaryFile(
-            suffix=".wav", delete=False
-        ) as tmp_out:
+        with (
+            tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_in,
+            tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out,
+        ):
             tmp_in_path = tmp_in.name
             tmp_out_path = tmp_out.name
             tmp_in.write(audio_bytes)
@@ -266,8 +263,7 @@ class GladosEffectProcessor:
 
             if result.returncode != 0:
                 logger.error(
-                    f"[GladosEffect] SoX CLI failed (rc={result.returncode}): "
-                    f"{result.stderr[:200]}"
+                    f"[GladosEffect] SoX CLI failed (rc={result.returncode}): {result.stderr[:200]}"
                 )
                 return audio_bytes
 
@@ -276,14 +272,10 @@ class GladosEffectProcessor:
                 processed = f.read()
 
             if len(processed) < 100:
-                logger.warning(
-                    "[GladosEffect] SoX output too small, returning raw"
-                )
+                logger.warning("[GladosEffect] SoX output too small, returning raw")
                 return audio_bytes
 
-            logger.debug(
-                f"[GladosEffect] CLI: {len(audio_bytes)} -> {len(processed)} bytes"
-            )
+            logger.debug(f"[GladosEffect] CLI: {len(audio_bytes)} -> {len(processed)} bytes")
             return processed
 
         except subprocess.TimeoutExpired:
@@ -334,9 +326,7 @@ class GladosEffectProcessor:
             logger.error(f"[GladosEffect] torchaudio processing failed: {e}")
             return audio_bytes
 
-    async def process(
-        self, audio_bytes: bytes, sample_rate: int = KOKORO_SAMPLE_RATE
-    ) -> bytes:
+    async def process(self, audio_bytes: bytes, sample_rate: int = KOKORO_SAMPLE_RATE) -> bytes:
         """
         Apply GLaDOS effects to audio bytes.
 
@@ -360,8 +350,7 @@ class GladosEffectProcessor:
         # Guard: skip very short audio (likely empty or noise)
         if len(audio_bytes) < 4096:
             logger.warning(
-                f"[GladosEffect] Audio too short ({len(audio_bytes)} bytes), "
-                "skipping effects"
+                f"[GladosEffect] Audio too short ({len(audio_bytes)} bytes), skipping effects"
             )
             return audio_bytes
 

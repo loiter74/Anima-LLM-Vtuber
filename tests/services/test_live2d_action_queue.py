@@ -121,8 +121,12 @@ class TestLive2DActionQueueEnqueue:
         callback = AsyncMock()
         q.set_execute_callback(callback)
 
-        await q.enqueue(ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append"))
-        await q.enqueue(ActionMessage("b", {"type": "test"}, duration_sec=0.001, queue_policy="append"))
+        await q.enqueue(
+            ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append")
+        )
+        await q.enqueue(
+            ActionMessage("b", {"type": "test"}, duration_sec=0.001, queue_policy="append")
+        )
 
         await asyncio.sleep(0.2)
         assert callback.call_count == 2
@@ -133,7 +137,9 @@ class TestLive2DActionQueueEnqueue:
         q = Live2DActionQueue()
         q.set_execute_callback(AsyncMock())
 
-        await q.enqueue(ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append"))
+        await q.enqueue(
+            ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append")
+        )
         await asyncio.sleep(0.1)
         # After processing, is_processing should be False
         assert q.is_processing is False
@@ -144,7 +150,9 @@ class TestLive2DActionQueueEnqueue:
         q = Live2DActionQueue()
         q.set_execute_callback(AsyncMock())
 
-        await q.enqueue(ActionMessage("a", {"type": "test"}, duration_sec=1.0, queue_policy="append"))
+        await q.enqueue(
+            ActionMessage("a", {"type": "test"}, duration_sec=1.0, queue_policy="append")
+        )
         await q.stop()
         assert q.is_processing is False
         assert q.queue_size == 0
@@ -155,6 +163,8 @@ class TestLive2DActionQueueEnqueue:
 
         q = Live2DActionQueue()
         # Enqueue and stop - should not raise
-        await q.enqueue(ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append"))
+        await q.enqueue(
+            ActionMessage("a", {"type": "test"}, duration_sec=0.001, queue_policy="append")
+        )
         await q.stop()
         assert q.is_processing is False

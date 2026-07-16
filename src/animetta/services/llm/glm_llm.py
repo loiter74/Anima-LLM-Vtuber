@@ -14,6 +14,7 @@ from loguru import logger
 from zhipuai import ZhipuAI
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.llm.glm import GLMLLMConfig
 
 from .glm_message_converter import GLMMessageConverter, GLMToolConverter
 from .interface import LLMInterface
@@ -49,18 +50,23 @@ class GLMLLM(LLMInterface):
 
     async def chat_stream(
         self,
-        prompt: str,
+        user_input: str,
         system_prompt: str | None = None,
         tools: list[Any] | None = None,
+        **kwargs: Any,
     ) -> AsyncIterator[str]:
+        del kwargs
         await self._ensure_client()
 
-        messages = self._build_messages(prompt, system_prompt, include_history=True)
+        messages = self._build_messages(user_input, system_prompt, include_history=True)
         glm_tools = self._convert_tools_if_needed(tools)
 
-        logger.debug(f"[GLM] Sending message, history count: {len(self._conversation_history)}, tools count: {len(glm_tools) if glm_tools else 0}")
+        logger.debug(
+            f"[GLM] Sending message, history count: {len(self._conversation_history)}, tools count: {len(glm_tools) if glm_tools else 0}"
+        )
 
         try:
+
             def _create_stream():
                 return self.client.chat.completions.create(
                     model=self.config.model,
@@ -79,7 +85,7 @@ class GLMLLM(LLMInterface):
                     full_response += content
                     yield content
 
-            self._update_history(prompt, full_response)
+            self._update_history(user_input, full_response)
 
         except Exception as e:
             logger.error(f"[GLM] Chat failed: {e}")
@@ -90,13 +96,16 @@ class GLMLLM(LLMInterface):
         user_input: str,
         system_prompt: str | None = None,
         tools: list[Any] | None = None,
+        **kwargs: Any,
     ) -> str:
+        del kwargs
         await self._ensure_client()
 
         messages = self._build_messages(user_input, system_prompt, include_history=True)
         glm_tools = self._convert_tools_if_needed(tools)
 
         try:
+
             def _create_completion():
                 return self.client.chat.completions.create(
                     model=self.config.model,
@@ -129,14 +138,19 @@ class GLMLLM(LLMInterface):
         """Conversation with tool calls (LangGraph specific)"""
         await self._ensure_client()
 
-        logger.debug(f"[GLM] chat_with_tools called: tools={len(tools)}, user_input={user_input[:50]}")
+        logger.debug(
+            f"[GLM] chat_with_tools called: tools={len(tools)}, user_input={user_input[:50]}"
+        )
 
         glm_tools = GLMToolConverter.convert_tools(tools)
         messages = self._build_langchain_messages(langchain_history, system_prompt, user_input)
 
-        logger.debug(f"[GLM] Sending message (tool mode), tools: {len(glm_tools)}, history: {len(messages)}")
+        logger.debug(
+            f"[GLM] Sending message (tool mode), tools: {len(glm_tools)}, history: {len(messages)}"
+        )
 
         try:
+
             def _create_completion():
                 return self.client.chat.completions.create(
                     model=self.config.model,
@@ -185,10 +199,7 @@ class GLMLLM(LLMInterface):
         }
 
     def _build_messages(
-        self,
-        prompt: str,
-        system_prompt: str | None,
-        include_history: bool = True
+        self, prompt: str, system_prompt: str | None, include_history: bool = True
     ) -> list[dict[str, Any]]:
         """Build messages list"""
         messages = []
@@ -204,10 +215,7 @@ class GLMLLM(LLMInterface):
         return messages
 
     def _build_langchain_messages(
-        self,
-        langchain_history: list[Any],
-        system_prompt: str | None,
-        user_input: str
+        self, langchain_history: list[Any], system_prompt: str | None, user_input: str
     ) -> list[dict[str, Any]]:
         """Build GLM messages from LangChain history"""
         messages = []
@@ -218,7 +226,9 @@ class GLMLLM(LLMInterface):
         for msg in langchain_history:
             glm_msg = GLMMessageConverter.convert_to_glm(msg)
             messages.append(glm_msg)
-            logger.debug(f"[GLM] Converted history message: {type(msg).__name__} -> {glm_msg.get('role')}")
+            logger.debug(
+                f"[GLM] Converted history message: {type(msg).__name__} -> {glm_msg.get('role')}"
+            )
 
         messages.append({"role": "user", "content": user_input})
         return messages
@@ -239,11 +249,11 @@ class GLMLLM(LLMInterface):
 
     def _extract_chunk_content(self, chunk: Any) -> str:
         """Extract content from a streaming response chunk"""
-        if hasattr(chunk, 'choices') and chunk.choices:
+        if hasattr(chunk, "choices") and chunk.choices:
             delta = chunk.choices[0].delta
-            if hasattr(delta, 'content') and delta.content:
+            if hasattr(delta, "content") and delta.content:
                 return delta.content
-        elif hasattr(chunk, 'content') and chunk.content:
+        elif hasattr(chunk, "content") and chunk.content:
             return chunk.content
         return ""
 
@@ -257,12 +267,14 @@ class GLMLLM(LLMInterface):
         if self._call_count % 100 == 0 and len(self._conversation_history) > 100:
             self._conversation_history = self._conversation_history[-50:]
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         self._conversation_history = []
         logger.debug("[GLM] Conversation history cleared")
 
     def set_system_prompt(self, prompt: str) -> None:
-        self._conversation_history = [msg for msg in self._conversation_history if msg.get("role") != "system"]
+        self._conversation_history = [
+            msg for msg in self._conversation_history if msg.get("role") != "system"
+        ]
         if prompt:
             self._conversation_history.insert(0, {"role": "system", "content": prompt})
         logger.debug(f"[GLM] System prompt updated: {prompt[:50]}...")
@@ -271,24 +283,32 @@ class GLMLLM(LLMInterface):
         return self._conversation_history.copy()
 
     def handle_interrupt(self, heard_response: str = "") -> None:
-        if heard_response and self._conversation_history and self._conversation_history[-1].get("role") == "user":
+        if (
+            heard_response
+            and self._conversation_history
+            and self._conversation_history[-1].get("role") == "user"
+        ):
             self._conversation_history.append({"role": "assistant", "content": heard_response})
             self._conversation_history.append({"role": "system", "content": "[用户打断了对话]"})
-        logger.info(f"[GLM] Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}...")
+        logger.info(
+            f"[GLM] Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}..."
+        )
 
     @property
     def max_tokens(self) -> int | None:
         return self.config.max_tokens
 
-    def set_max_tokens(self, max_tokens: int):
+    def set_max_tokens(self, max_tokens: int) -> None:
         self.config.max_tokens = max_tokens
 
     def supports_tool_calls(self) -> bool:
         return self.config.model.startswith("glm-4")
 
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
-        logger.info(f"[GLM] Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}")
+        logger.info(
+            f"[GLM] Attempting to restore memory from history: conf_uid={conf_uid}, history_uid={history_uid}"
+        )
 
-    async def close(self):
+    async def close(self) -> None:
         self.client = None
         logger.info("[GLM] Connection closed")

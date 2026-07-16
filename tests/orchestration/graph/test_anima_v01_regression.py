@@ -23,7 +23,9 @@ def test_correction_references_anima():
 def test_correction_no_old_character():
     """CORRECTION_SECTION must not contain old character markers."""
     for marker in OLD_MARKERS:
-        assert marker not in CORRECTION_SECTION, f"Old marker '{marker}' found in CORRECTION_SECTION"
+        assert marker not in CORRECTION_SECTION, (
+            f"Old marker '{marker}' found in CORRECTION_SECTION"
+        )
 
 
 # ── Eval fixtures regression ─────────────────────────────────
@@ -32,7 +34,9 @@ def test_correction_no_old_character():
 def test_eval_fixtures_no_old_character():
     """No Anima eval case should reference old character markers."""
     for case in ANIMA_CASES:
-        all_text = case.user_input + case.description + " ".join(case.prefer_markers + case.reject_markers)
+        all_text = (
+            case.user_input + case.description + " ".join(case.prefer_markers + case.reject_markers)
+        )
         for marker in OLD_MARKERS:
             assert marker not in all_text, f"Old marker '{marker}' found in case '{case.id}'"
 
@@ -43,4 +47,9 @@ def test_identity_case_prefers_anima_markers():
     assert case is not None
     all_prefer = " ".join(case.prefer_markers)
     # Must have Anima-related markers
-    assert "Anima" in all_prefer or "赛博" in all_prefer or "旅人" in all_prefer or "召唤者" in all_prefer
+    assert (
+        "Anima" in all_prefer
+        or "赛博" in all_prefer
+        or "旅人" in all_prefer
+        or "召唤者" in all_prefer
+    )

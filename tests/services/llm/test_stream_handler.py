@@ -49,10 +49,10 @@ class TestOpenAIStreamHandler:
         mock_response = AsyncMock()
         mock_response.__aiter__.return_value = [mock_chunk_1, mock_chunk_2]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
+        mock_openai_llm._build_messages = MagicMock(
+            return_value=[{"role": "user", "content": "hi"}]
         )
-        mock_openai_llm._build_messages = MagicMock(return_value=[{"role": "user", "content": "hi"}])
 
         chunks = []
         async for chunk in handler.stream("hi"):
@@ -72,9 +72,7 @@ class TestOpenAIStreamHandler:
         mock_response = AsyncMock()
         mock_response.__aiter__.return_value = [mock_chunk]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_openai_llm._build_messages = MagicMock(return_value=[])
 
         chunks = []
@@ -100,16 +98,12 @@ class TestOpenAIStreamHandler:
         """Stream should pass system_prompt kwarg through to _build_messages."""
         mock_response = AsyncMock()
         mock_response.__aiter__.return_value = []
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         async for _ in handler.stream("hi", system_prompt="You are a cat."):
             pass
 
-        mock_openai_llm._build_messages.assert_called_with(
-            "hi", system_prompt="You are a cat."
-        )
+        mock_openai_llm._build_messages.assert_called_with("hi", system_prompt="You are a cat.")
 
     async def test_stream_records_usage(self, handler, mock_openai_llm):
         """Stream should record usage metrics after completion."""
@@ -121,9 +115,7 @@ class TestOpenAIStreamHandler:
         mock_response = AsyncMock()
         mock_response.__aiter__.return_value = [mock_chunk]
 
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_openai_llm._build_messages = MagicMock(return_value=[])
 
         async for _ in handler.stream("hello world"):
@@ -135,9 +127,7 @@ class TestOpenAIStreamHandler:
         """Stream calls should pass top_p to keep streamed chat sampling lively."""
         mock_response = AsyncMock()
         mock_response.__aiter__.return_value = []
-        mock_openai_llm.client.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
         mock_openai_llm._build_messages = MagicMock(return_value=[])
 
         async for _ in handler.stream("hi"):

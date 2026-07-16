@@ -2,10 +2,10 @@
   "timestamp": "20260505_212749",
   "mode": "auto",
   "prompts": [
-    "ÄãºÃ£¬Çë½éÉÜÒ»ÏÂÄã×Ô¼º",
-    "½ñÌìÌìÆøÔõÃ´Ñù£¿",
-    "½²¸öÐ¦»°",
-    "1+1µÈÓÚ¼¸£¿"
+    "ä½ å¥½ï¼Œè¯·ä»‹ç»ä¸€ä¸‹ä½ è‡ªå·±",
+    "ä»Šå¤©å¤©æ°”æ€Žä¹ˆæ ·ï¼Ÿ",
+    "è®²ä¸ªç¬‘è¯",
+    "1+1ç­‰äºŽå‡ ï¼Ÿ"
   ],
   "latencies": [],
   "traces": [
@@ -13,56 +13,56 @@
       "total_duration_ms": 7.345300000451971,
       "status": "error",
       "input_type": "text",
-      "user_text": "1+1µÈÓÚ¼¸£¿",
+      "user_text": "1+1ç­‰äºŽå‡ ï¼Ÿ",
       "created_at": "2026-05-05 13:25:48"
     },
     {
       "total_duration_ms": 4.517900000791997,
       "status": "error",
       "input_type": "text",
-      "user_text": "½²¸öÐ¦»°",
+      "user_text": "è®²ä¸ªç¬‘è¯",
       "created_at": "2026-05-05 13:23:48"
     },
     {
       "total_duration_ms": 4.647199999453733,
       "status": "error",
       "input_type": "text",
-      "user_text": "½ñÌìÌìÆøÔõÃ´Ñù£¿",
+      "user_text": "ä»Šå¤©å¤©æ°”æ€Žä¹ˆæ ·ï¼Ÿ",
       "created_at": "2026-05-05 13:21:48"
     },
     {
       "total_duration_ms": 7.61899999997695,
       "status": "error",
       "input_type": "text",
-      "user_text": "ÄãºÃ£¬Çë½éÉÜÒ»ÏÂÄã×Ô¼º",
+      "user_text": "ä½ å¥½ï¼Œè¯·ä»‹ç»ä¸€ä¸‹ä½ è‡ªå·±",
       "created_at": "2026-05-05 13:19:59"
     },
     {
       "total_duration_ms": 4.666699998779222,
       "status": "error",
       "input_type": "text",
-      "user_text": "1+1µÈÓÚ¼¸£¿",
+      "user_text": "1+1ç­‰äºŽå‡ ï¼Ÿ",
       "created_at": "2026-05-05 13:17:57"
     },
     {
       "total_duration_ms": 5.36140000258456,
       "status": "error",
       "input_type": "text",
-      "user_text": "½²¸öÐ¦»°",
+      "user_text": "è®²ä¸ªç¬‘è¯",
       "created_at": "2026-05-05 13:16:57"
     },
     {
       "total_duration_ms": 5.1000000021304,
       "status": "error",
       "input_type": "text",
-      "user_text": "½ñÌìÌìÆøÔõÃ´Ñù£¿",
+      "user_text": "ä»Šå¤©å¤©æ°”æ€Žä¹ˆæ ·ï¼Ÿ",
       "created_at": "2026-05-05 13:15:57"
     },
     {
       "total_duration_ms": 7.609799999045208,
       "status": "error",
       "input_type": "text",
-      "user_text": "ÄãºÃ£¬Çë½éÉÜÒ»ÏÂÄã×Ô¼º",
+      "user_text": "ä½ å¥½ï¼Œè¯·ä»‹ç»ä¸€ä¸‹ä½ è‡ªå·±",
       "created_at": "2026-05-05 13:15:18"
     }
   ],

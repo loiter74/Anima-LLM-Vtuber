@@ -13,6 +13,7 @@ from .base import EmotionData, IEmotionAnalyzer
 
 class EmotionTag:
     """Emotion tag (standalone implementation)"""
+
     def __init__(self, emotion: str, position: int, duration: float = 0.0):
         self.emotion = emotion
         self.position = position
@@ -21,7 +22,7 @@ class EmotionTag:
     def __repr__(self) -> str:
         return f"EmotionTag({self.emotion}, pos={self.position})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, EmotionTag):
             return False
         return self.emotion == other.emotion and self.position == other.position
@@ -29,6 +30,7 @@ class EmotionTag:
 
 class EmotionExtractionResult:
     """Emotion extraction result (standalone implementation)"""
+
     def __init__(self, cleaned_text: str, emotions: list[EmotionTag], has_emotions: bool):
         self.cleaned_text = cleaned_text
         self.emotions = emotions
@@ -67,13 +69,9 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
     """
 
     # Regex pattern for emotion tags
-    EMOTION_PATTERN = re.compile(r'\[([a-zA-Z_]+)\]')
+    EMOTION_PATTERN = re.compile(r"\[([a-zA-Z_]+)\]")
 
-    def __init__(
-        self,
-        valid_emotions: list[str] | None = None,
-        confidence_mode: str = "binary"
-    ):
+    def __init__(self, valid_emotions: list[str] | None = None, confidence_mode: str = "binary"):
         """
         Initialize the analyzer
 
@@ -107,11 +105,7 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
             EmotionExtractionResult: Cleaned text and extracted emotion tags
         """
         if not text:
-            return EmotionExtractionResult(
-                cleaned_text="",
-                emotions=[],
-                has_emotions=False
-            )
+            return EmotionExtractionResult(cleaned_text="", emotions=[], has_emotions=False)
 
         emotions = []
         segments_to_remove = []
@@ -135,9 +129,7 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
         logger.debug(f"[StandaloneLLMTagAnalyzer] Extracted {len(emotions)} emotions: {emotions}")
 
         return EmotionExtractionResult(
-            cleaned_text=cleaned_text,
-            emotions=emotions,
-            has_emotions=len(emotions) > 0
+            cleaned_text=cleaned_text, emotions=emotions, has_emotions=len(emotions) > 0
         )
 
     def extract(self, text: str, context: dict[str, Any] | None = None) -> EmotionData:
@@ -179,14 +171,11 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
                 "emotion_counts": emotion_counts,
                 "confidence_mode": self._confidence_mode,
                 "cleaned_text": result.cleaned_text,  # Contains cleaned text
-                "has_emotions": result.has_emotions
+                "has_emotions": result.has_emotions,
             }
 
             return EmotionData(
-                primary=primary,
-                confidence=confidence,
-                timeline=timeline,
-                metadata=metadata
+                primary=primary, confidence=confidence, timeline=timeline, metadata=metadata
             )
 
         except Exception as e:
@@ -237,11 +226,13 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
         """Build timeline data"""
         timeline = []
         for emotion_tag in result.emotions:
-            timeline.append({
-                "emotion": emotion_tag.emotion,
-                "position": emotion_tag.position,
-                "char_position": emotion_tag.position
-            })
+            timeline.append(
+                {
+                    "emotion": emotion_tag.emotion,
+                    "position": emotion_tag.position,
+                    "char_position": emotion_tag.position,
+                }
+            )
         return timeline
 
     def _extract_primary(self, result: EmotionExtractionResult) -> str:
@@ -270,8 +261,8 @@ class StandaloneLLMTagAnalyzer(IEmotionAnalyzer):
                 "mode": "default",
                 "text_length": len(text),
                 "cleaned_text": text,
-                "has_emotions": False
-            }
+                "has_emotions": False,
+            },
         )
 
     @property

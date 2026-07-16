@@ -25,6 +25,7 @@ def _get_manager() -> NotifierManager:
     global _manager
     if _manager is None:
         import contextlib
+
         # Import plugins so they self-register
         with contextlib.suppress(ImportError):
             import animetta.notifier.discord  # noqa: F401

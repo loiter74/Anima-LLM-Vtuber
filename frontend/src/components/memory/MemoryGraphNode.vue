@@ -63,17 +63,10 @@ function handleMouseDown(event: MouseEvent) {
     />
 
     <!-- Main circle -->
-    <circle
-      :r="radius"
-      :fill="fillColor"
-      opacity="0.85"
-    />
+    <circle :r="radius" :fill="fillColor" opacity="0.85" />
 
     <!-- Label below circle -->
-    <text
-      class="graph-node-label"
-      :y="radius + 14"
-    >
+    <text class="graph-node-label" :y="radius + 14">
       {{ truncatedLabel }}
     </text>
   </g>

@@ -29,9 +29,7 @@ class MemorySearch:
                 atom.emotion_arousal,
                 atom.emotion_dominance,
             )
-            congruence = EmotionalField.emotion_congruence(
-                current_emotion, mem_emotion
-            )
+            congruence = EmotionalField.emotion_congruence(current_emotion, mem_emotion)
             scored.append((atom, congruence))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [atom for atom, _ in scored]
@@ -46,8 +44,4 @@ class MemorySearch:
 
         55% vector similarity + 25% keyword match + 20% emotion congruence.
         """
-        return (
-            0.55 * vector_score
-            + 0.25 * keyword_score
-            + 0.20 * emotion_congruence
-        )
+        return 0.55 * vector_score + 0.25 * keyword_score + 0.20 * emotion_congruence

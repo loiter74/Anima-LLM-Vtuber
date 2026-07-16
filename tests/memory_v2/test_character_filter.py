@@ -37,7 +37,9 @@ class TestFilterByBoundaries:
     def test_no_unknown_no_filtering(self):
         atoms = [_make_atom("微波炉的使用方法"), _make_atom("山里的生活")]
         result = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=[], unknown=[],
+            atoms,
+            known=[],
+            unknown=[],
         )
         assert len(result) == 2
 
@@ -47,7 +49,9 @@ class TestFilterByBoundaries:
             _make_atom("山里的生活很安静"),
         ]
         result = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=[], unknown=["微波炉", "现代家电"],
+            atoms,
+            known=[],
+            unknown=["微波炉", "现代家电"],
         )
         assert len(result) == 1
         assert "山里的生活" in result[0].content
@@ -55,7 +59,9 @@ class TestFilterByBoundaries:
     def test_case_insensitive_matching(self):
         atoms = [_make_atom("MICROWAVE instructions")]
         result = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=[], unknown=["microwave"],
+            atoms,
+            known=[],
+            unknown=["microwave"],
         )
         assert len(result) == 0
 
@@ -64,18 +70,22 @@ class TestFilterByBoundaries:
             _make_atom("普通对话内容", summary="关于微波炉的讨论总结"),
         ]
         result = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=[], unknown=["微波炉"],
+            atoms,
+            known=[],
+            unknown=["微波炉"],
         )
         assert len(result) == 0
 
     def test_multiple_unknown_domains(self):
         atoms = [
             _make_atom("现代家电的微波炉使用说明"),  # matches "现代家电"
-            _make_atom("魔法的基本理论介绍"),        # matches "魔法"
-            _make_atom("今天的晚饭很好吃"),           # no match
+            _make_atom("魔法的基本理论介绍"),  # matches "魔法"
+            _make_atom("今天的晚饭很好吃"),  # no match
         ]
         result = CharacterMemoryFilter.filter_by_boundaries(
-            atoms, known=[], unknown=["现代家电", "魔法"],
+            atoms,
+            known=[],
+            unknown=["现代家电", "魔法"],
         )
         assert len(result) == 1
         assert "晚饭" in result[0].content
@@ -101,7 +111,10 @@ class TestRankByPersona:
 
         result = CharacterMemoryFilter.rank_by_persona(
             atoms,
-            mbti_ei=18, mbti_sn=28, mbti_tf=38, mbti_jp=62,  # ISFJ
+            mbti_ei=18,
+            mbti_sn=28,
+            mbti_tf=38,
+            mbti_jp=62,  # ISFJ
         )
         # Emotional should be ranked first
         assert result[0].content == "emotional"
@@ -114,7 +127,10 @@ class TestRankByPersona:
 
         result = CharacterMemoryFilter.rank_by_persona(
             atoms,
-            mbti_ei=20, mbti_sn=65, mbti_tf=80, mbti_jp=73,  # INTJ
+            mbti_ei=20,
+            mbti_sn=65,
+            mbti_tf=80,
+            mbti_jp=73,  # INTJ
         )
         # Factual/calm should rank higher for thinking type
         assert result[0].content == "factual"
@@ -146,7 +162,10 @@ class TestApply:
             atoms,
             known=[],
             unknown=["微波炉"],
-            mbti_ei=18, mbti_sn=28, mbti_tf=38, mbti_jp=62,  # ISFJ
+            mbti_ei=18,
+            mbti_sn=28,
+            mbti_tf=38,
+            mbti_jp=62,  # ISFJ
         )
         # "微波炉" should be filtered out
         assert len(result) == 2

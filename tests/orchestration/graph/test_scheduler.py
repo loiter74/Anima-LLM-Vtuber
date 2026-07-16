@@ -76,6 +76,7 @@ class TestScheduledTask:
 
     def test_creation(self):
         """A ScheduledTask stores all fields."""
+
         async def dummy():
             pass
 
@@ -111,6 +112,7 @@ class TestTaskRegistration:
 
     def test_add_task_stores_it(self, scheduler):
         """After add_task, the task is in _tasks."""
+
         async def dummy():
             pass
 
@@ -120,6 +122,7 @@ class TestTaskRegistration:
 
     def test_add_task_warns_on_duplicate(self, scheduler):
         """Adding a task with an existing name logs a warning."""
+
         async def dummy():
             pass
 
@@ -131,6 +134,7 @@ class TestTaskRegistration:
 
     def test_remove_task_removes_it(self, scheduler):
         """Removing a task clears it from _tasks."""
+
         async def dummy():
             pass
 
@@ -148,6 +152,7 @@ class TestTaskRegistration:
     @pytest.mark.asyncio
     async def test_remove_task_cancels_running(self, scheduler):
         """Removing a task that is running cancels its asyncio.Task."""
+
         async def never_ending():
             await asyncio.Event().wait()
 
@@ -162,6 +167,7 @@ class TestTaskRegistration:
 
     def test_add_task_default_timeout(self, scheduler):
         """Default timeout is 300 seconds."""
+
         async def dummy():
             pass
 
@@ -225,6 +231,7 @@ class TestLifecycle:
     @pytest.mark.asyncio
     async def test_stop_graceful_shutdown(self, scheduler):
         """Stop cancels tasks and main loop cleanly."""
+
         async def quick():
             pass
 
@@ -324,6 +331,7 @@ class TestTimeout:
     @pytest.mark.asyncio
     async def test_task_times_out(self, scheduler):
         """A task that exceeds timeout is cancelled and failure tracked."""
+
         async def slow():
             await asyncio.sleep(999)  # longer than timeout
 
@@ -372,8 +380,12 @@ class TestMetrics:
 
     def test_get_metrics_after_adding_tasks(self, scheduler):
         """Tasks appear in metrics list."""
-        async def a(): pass
-        async def b(): pass
+
+        async def a():
+            pass
+
+        async def b():
+            pass
 
         scheduler.add_task("a", a, interval=10.0)
         scheduler.add_task("b", b, interval=20.0)
@@ -384,7 +396,10 @@ class TestMetrics:
 
     def test_get_task_metrics_exists(self, scheduler):
         """Looking up a known task returns its metrics."""
-        async def dummy(): pass
+
+        async def dummy():
+            pass
+
         scheduler.add_task("known", dummy, interval=10.0)
 
         m = scheduler.get_task_metrics("known")
@@ -424,6 +439,7 @@ class TestExecuteWithTimeout:
     @pytest.mark.asyncio
     async def test_timeout_increments_failure(self, scheduler):
         """Timed-out execution increments failure_count."""
+
         async def never():
             await asyncio.sleep(999)
 
@@ -443,6 +459,7 @@ class TestExecuteWithTimeout:
     @pytest.mark.asyncio
     async def test_cancelled_error_raised(self, scheduler):
         """CancelledError is re-raised (not counted as failure)."""
+
         async def cancelling():
             raise asyncio.CancelledError()
 
@@ -459,6 +476,7 @@ class TestExecuteWithTimeout:
     @pytest.mark.asyncio
     async def test_execution_time_measured(self, scheduler):
         """last_duration roughly matches actual execution time."""
+
         async def slow_enough():
             await asyncio.sleep(0.05)
 

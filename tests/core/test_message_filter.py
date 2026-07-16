@@ -22,34 +22,43 @@ from animetta.core.message_filter import (
 class TestShouldSkipLlmTextual:
     """Text-only detection of probe-shaped messages."""
 
-    @pytest.mark.parametrize("text", [
-        "[inspection] ping",
-        "[inspection]healthcheck",
-        "[health] ok",
-        "[probe] 1+1",
-        "[system] reload",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "[inspection] ping",
+            "[inspection]healthcheck",
+            "[health] ok",
+            "[probe] 1+1",
+            "[system] reload",
+        ],
+    )
     def test_probe_prefixes_skip(self, text: str):
         assert should_skip_llm(text) is True
 
-    @pytest.mark.parametrize("text", [
-        "ping",
-        "PING",
-        "  Ping  ",
-        "pong",
-        "healthcheck",
-        "health-check",
-        "heartbeat",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "ping",
+            "PING",
+            "  Ping  ",
+            "pong",
+            "healthcheck",
+            "health-check",
+            "heartbeat",
+        ],
+    )
     def test_probe_tokens_skip(self, text: str):
         assert should_skip_llm(text) is True
 
-    @pytest.mark.parametrize("text", [
-        "",
-        "   ",
-        "\n\t",
-        None,  # type: ignore[arg-type] — defensive: empty/None treated as skip
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "",
+            "   ",
+            "\n\t",
+            None,  # type: ignore[arg-type] — defensive: empty/None treated as skip
+        ],
+    )
     def test_empty_or_whitespace_skips(self, text):
         # None would never be passed by callers (they extract data["text"]),
         # but the function should not crash on falsy input.
@@ -62,15 +71,18 @@ class TestShouldSkipLlmTextual:
 class TestShouldSkipLlmRealChat:
     """Genuine user messages must NOT be skipped."""
 
-    @pytest.mark.parametrize("text", [
-        "主播好",
-        "ping 我一下呗",         # contains "ping" as substring, not bare
-        "主播你又卡了",
-        "讲个笑话",
-        "pingpong 是不是运动",    # not exactly "ping" or "pong"
-        "请问 healthcheck 怎么用", # contains the word but not bare
-        "我刚才发了一条 ping 你看到了吗",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "主播好",
+            "ping 我一下呗",  # contains "ping" as substring, not bare
+            "主播你又卡了",
+            "讲个笑话",
+            "pingpong 是不是运动",  # not exactly "ping" or "pong"
+            "请问 healthcheck 怎么用",  # contains the word but not bare
+            "我刚才发了一条 ping 你看到了吗",
+        ],
+    )
     def test_real_chat_not_skipped(self, text: str):
         assert should_skip_llm(text) is False
 
@@ -81,23 +93,29 @@ class TestShouldSkipLlmRealChat:
 class TestIsInspectionProbe:
     """Payload-level detection via explicit markers."""
 
-    @pytest.mark.parametrize("data", [
-        {"text": "anything", "is_inspection": True},
-        {"text": "x", "is_probe": True},
-        {"text": "hello", "mode": "inspection"},
-        {"is_inspection": True},  # even without text
-    ])
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"text": "anything", "is_inspection": True},
+            {"text": "x", "is_probe": True},
+            {"text": "hello", "mode": "inspection"},
+            {"is_inspection": True},  # even without text
+        ],
+    )
     def test_flagged_payloads_detected(self, data: dict):
         assert is_inspection_probe(data) is True
 
-    @pytest.mark.parametrize("data", [
-        {"text": "主播好"},
-        {"text": "[inspection] ping"},            # text probe, but no flag
-        {"text": "x", "is_inspection": False},    # explicit False
-        {"text": "x", "is_inspection": "true"},   # truthy string, not boolean True
-        {"text": "x", "mode": "text"},
-        {},                                       # empty payload
-    ])
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"text": "主播好"},
+            {"text": "[inspection] ping"},  # text probe, but no flag
+            {"text": "x", "is_inspection": False},  # explicit False
+            {"text": "x", "is_inspection": "true"},  # truthy string, not boolean True
+            {"text": "x", "mode": "text"},
+            {},  # empty payload
+        ],
+    )
     def test_unflagged_payloads_pass(self, data: dict):
         assert is_inspection_probe(data) is False
 

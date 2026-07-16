@@ -12,15 +12,23 @@ from .core.base import BaseConfig
 
 class Live2DModelConfig(BaseModel):
     """Live2D model configuration"""
-    path: str = Field(default="/live2d/haru/haru_greeter_t03.model3.json", description="Model file path")
+
+    path: str = Field(
+        default="/live2d/haru/haru_greeter_t03.model3.json", description="Model file path"
+    )
     scale: float = Field(default=0.5, description="Model scale ratio")
-    position: dict[str, float] = Field(default_factory=lambda: {"x": 0.0, "y": 0.0}, description="Model position (x, y)")
+    position: dict[str, float] = Field(
+        default_factory=lambda: {"x": 0.0, "y": 0.0}, description="Model position (x, y)"
+    )
 
 
 class Live2DLipSyncConfig(BaseModel):
     """Live2D lip sync configuration"""
+
     enabled: bool = Field(default=True, description="Whether to enable lip sync")
-    sensitivity: float = Field(default=1.0, ge=0.0, le=2.0, description="Mouth movement sensitivity")
+    sensitivity: float = Field(
+        default=1.0, ge=0.0, le=2.0, description="Mouth movement sensitivity"
+    )
     smoothing: float = Field(default=0.5, ge=0.0, le=1.0, description="Smoothing factor")
 
 
@@ -30,11 +38,14 @@ class Live2DConfig(BaseConfig):
 
     Emotion-based Live2D expression control
     """
+
     # Whether to enable Live2D
     enabled: bool = Field(default=True, description="Whether to enable Live2D")
 
     # Model configuration
-    model: Live2DModelConfig = Field(default_factory=Live2DModelConfig, description="Live2D model configuration")
+    model: Live2DModelConfig = Field(
+        default_factory=Live2DModelConfig, description="Live2D model configuration"
+    )
 
     # Emotion mapping: emotion name → Live2D motion index
     # Example: {"happy": 3, "sad": 1, "angry": 2}
@@ -47,22 +58,24 @@ class Live2DConfig(BaseConfig):
             "neutral": 0,
             "thinking": 5,
         },
-        description="Mapping from emotion name to Live2D motion index"
+        description="Mapping from emotion name to Live2D motion index",
     )
 
     # Valid emotion list (for prompts)
     valid_emotions: list[str] = Field(
         default_factory=lambda: ["happy", "sad", "angry", "surprised", "neutral", "thinking"],
-        description="List of valid emotions"
+        description="List of valid emotions",
     )
 
     # Lip sync configuration
-    lip_sync: Live2DLipSyncConfig = Field(default_factory=Live2DLipSyncConfig, description="Lip sync configuration")
+    lip_sync: Live2DLipSyncConfig = Field(
+        default_factory=Live2DLipSyncConfig, description="Lip sync configuration"
+    )
 
     # Prompt template path
     prompt_template_path: str = Field(
         default="config/prompts/live2d_expression.txt",
-        description="Expression usage guide prompt template path"
+        description="Expression usage guide prompt template path",
     )
 
     @classmethod
@@ -77,12 +90,13 @@ class Live2DConfig(BaseConfig):
             Live2DConfig instance
         """
         import yaml
+
         config_path = Path(path)
         if not config_path.exists():
             logger.warning(f"Live2D config file not found: {config_path}, using default config")
             return cls()
 
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 
         return cls(**data)
@@ -137,7 +151,7 @@ def get_live2d_config() -> Live2DConfig:
     return _live2d_config
 
 
-def reset_live2d_config():
+def reset_live2d_config() -> None:
     """Reset global Live2D configuration (for testing)"""
     global _live2d_config
     _live2d_config = None

@@ -16,19 +16,21 @@ class AudioMixer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    async def mix(
-        self, vocals_path: str, backing_path: str, output_name: str = "final.wav"
-    ) -> str:
+    async def mix(self, vocals_path: str, backing_path: str, output_name: str = "final.wav") -> str:
         """Mix vocals and backing track using ffmpeg."""
         output_path = self.output_dir / output_name
         logger.info(f"Mixing vocals + backing → {output_path}")
 
         cmd = [
             "ffmpeg",
-            "-i", vocals_path,
-            "-i", backing_path,
-            "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2",
-            "-ac", "2",
+            "-i",
+            vocals_path,
+            "-i",
+            backing_path,
+            "-filter_complex",
+            "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2",
+            "-ac",
+            "2",
             "-y",
             str(output_path),
         ]
@@ -50,9 +52,13 @@ class AudioMixer:
     async def _get_duration(self, audio_path: str) -> float:
         """Get audio duration in seconds using ffprobe."""
         cmd = [
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             audio_path,
         ]
         try:

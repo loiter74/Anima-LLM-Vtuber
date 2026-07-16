@@ -11,6 +11,7 @@ from .base import LLMBaseConfig
 @ProviderRegistry.register_config("llm", "openai")
 class OpenAILLMConfig(LLMBaseConfig):
     """OpenAI LLM configuration"""
+
     type: Literal["openai"] = "openai"
     model: str = Field(default="gpt-4o-mini", description="Model name")
     base_url: str | None = Field(default=None, description="API Base URL")

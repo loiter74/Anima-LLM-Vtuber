@@ -87,9 +87,7 @@ class FakeRuntime:
             after_observation_hash="after",
             outcome=ActionOutcome.SUCCESS if self.succeeds else ActionOutcome.ERROR,
             error=(
-                None
-                if self.succeeds
-                else ActionError(code="RESOURCE_NOT_FOUND", message="no tree")
+                None if self.succeeds else ActionError(code="RESOURCE_NOT_FOUND", message="no tree")
             ),
         )
         return SkillExecutionResult(receipts=[receipt])
@@ -156,7 +154,9 @@ async def test_no_trusted_skill_uses_evidence_isolated_fallback() -> None:
     assert result["outcome"] == "fallback"
     assert result["evidence_eligible"] is False
     assert result["reason"] == "no_trusted_skill"
-    assert fallback.calls[0][2] not in result["fallback_task_id"] or result["fallback_task_id"].startswith("fallback-")
+    assert fallback.calls[0][2] not in result["fallback_task_id"] or result[
+        "fallback_task_id"
+    ].startswith("fallback-")
 
 
 async def test_live_failure_demotes_after_consecutive_threshold_and_falls_back() -> None:

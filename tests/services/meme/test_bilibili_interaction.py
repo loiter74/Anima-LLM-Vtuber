@@ -123,9 +123,7 @@ class TestBilibiliInteractionLearner:
         )
 
         with patch.object(learner, "_collect_danmaku") as mock_collect:
-            mock_collect.return_value = [
-                DanmakuMessage(text=f"sample{i}") for i in range(10)
-            ]
+            mock_collect.return_value = [DanmakuMessage(text=f"sample{i}") for i in range(10)]
             result = await learner.learn_patterns()
             assert len(result) == 1
             assert result[0].trigger_condition == "弹幕多"
@@ -186,7 +184,8 @@ class TestBilibiliInteractionLearner:
         """Without LLM client, analysis returns empty list."""
 
         learner = InteractionLearner(
-            llm_client=None, wiki_manager=mock_wiki,
+            llm_client=None,
+            wiki_manager=mock_wiki,
         )
         result = await learner._analyze_patterns({123: []})
         assert result == []
@@ -227,8 +226,10 @@ class TestBilibiliInteractionLearner:
         learner = InteractionLearner(llm_client=mock_llm, wiki_manager=None)
         strategies = [
             LivestreamStrategy(
-                trigger_condition="测试", suggested_behavior="行为",
-                expected_effect="效果", priority="low",
+                trigger_condition="测试",
+                suggested_behavior="行为",
+                expected_effect="效果",
+                priority="low",
             ),
         ]
         await learner._store_strategies(strategies)  # no crash
@@ -238,12 +239,15 @@ class TestBilibiliInteractionLearner:
         """Store calls wiki.write_page with a WikiPage."""
 
         learner = InteractionLearner(
-            llm_client=mock_llm, wiki_manager=mock_wiki,
+            llm_client=mock_llm,
+            wiki_manager=mock_wiki,
         )
         strategies = [
             LivestreamStrategy(
-                trigger_condition="冷场", suggested_behavior="互动",
-                expected_effect="回暖", priority="high",
+                trigger_condition="冷场",
+                suggested_behavior="互动",
+                expected_effect="回暖",
+                priority="high",
             ),
         ]
         await learner._store_strategies(strategies)
@@ -255,12 +259,15 @@ class TestBilibiliInteractionLearner:
 
         mock_wiki.write_page.side_effect = Exception("write failed")
         learner = InteractionLearner(
-            llm_client=mock_llm, wiki_manager=mock_wiki,
+            llm_client=mock_llm,
+            wiki_manager=mock_wiki,
         )
         strategies = [
             LivestreamStrategy(
-                trigger_condition="X", suggested_behavior="Y",
-                expected_effect="Z", priority="low",
+                trigger_condition="X",
+                suggested_behavior="Y",
+                expected_effect="Z",
+                priority="low",
             ),
         ]
         await learner._store_strategies(strategies)  # should not raise
@@ -273,7 +280,7 @@ class TestBilibiliInteractionLearner:
 
     def test_parse_json_with_fence(self):
 
-        assert InteractionLearner._parse_json("```json\n{\"a\": 1}\n```") == {"a": 1}
+        assert InteractionLearner._parse_json('```json\n{"a": 1}\n```') == {"a": 1}
 
     def test_parse_json_invalid(self):
 

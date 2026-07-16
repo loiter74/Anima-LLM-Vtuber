@@ -7,10 +7,15 @@ Extracted from silero_vad.py to separate model/detection concerns from
 audio processing + state machine logic.
 """
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from loguru import logger
 
 from .interface import VADResult, VADState
+
+if TYPE_CHECKING:
+    from .silero_vad import SileroVAD
 
 
 class SileroDetector:
@@ -44,6 +49,7 @@ class SileroDetector:
         """Load Silero VAD model"""
         try:
             from silero_vad import load_silero_vad
+
             logger.info("Loading Silero-VAD model...")
             model = load_silero_vad()
             logger.info("Silero-VAD model loaded successfully")
@@ -78,7 +84,11 @@ class SileroDetector:
             result = result.item()
         return float(result)
 
-    def detect(self, audio_data: list | np.ndarray, vad_instance) -> VADResult:
+    def detect(
+        self,
+        audio_data: list | np.ndarray,
+        vad_instance: SileroVAD,
+    ) -> VADResult:
         """
         Detect voice activity in audio data.
 
@@ -124,8 +134,12 @@ class SileroDetector:
             norm_min = float(np.min(audio_np)) if len(audio_np) > 0 else 0
             norm_max = float(np.max(audio_np)) if len(audio_np) > 0 else 0
             norm_rms = float(np.sqrt(np.mean(audio_np**2))) if len(audio_np) > 0 else 0
-            logger.info(f"[VAD] 📊 Normalized signal range: [{norm_min:.4f}, {norm_max:.4f}], RMS: {norm_rms:.4f}")
-            logger.info(f"[VAD] 💡 Tip: Silero VAD works well when RMS > 0.01, current RMS: {norm_rms:.4f}")
+            logger.info(
+                f"[VAD] 📊 Normalized signal range: [{norm_min:.4f}, {norm_max:.4f}], RMS: {norm_rms:.4f}"
+            )
+            logger.info(
+                f"[VAD] 💡 Tip: Silero VAD works well when RMS > 0.01, current RMS: {norm_rms:.4f}"
+            )
             self._vad_normalized_logged = True
 
         # Critical fix: record all events, return the last important event
@@ -135,13 +149,13 @@ class SileroDetector:
 
         # Chunk processing
         for i in range(0, len(audio_np), self.window_size_samples):
-            chunk_np = audio_np[i: i + self.window_size_samples]
+            chunk_np = audio_np[i : i + self.window_size_samples]
 
             # Fix: do not skip incomplete chunks, process them too
             if len(chunk_np) < self.window_size_samples:
                 # Last chunk may be incomplete, pad with zeros
                 padded_chunk = np.zeros(self.window_size_samples, dtype=np.float32)
-                padded_chunk[:len(chunk_np)] = chunk_np
+                padded_chunk[: len(chunk_np)] = chunk_np
                 chunk_np = padded_chunk
 
             # Calculate speech probability
@@ -160,7 +174,9 @@ class SileroDetector:
         # Return highest priority event: speech_end > speech_start > normal state
         if speech_end_event is not None:
             # Only log at DEBUG level to avoid flooding
-            logger.debug(f"[VAD] Speech ended, audio length: {len(speech_end_event.audio_data)} bytes")
+            logger.debug(
+                f"[VAD] Speech ended, audio length: {len(speech_end_event.audio_data)} bytes"
+            )
             return speech_end_event
         elif speech_start_event is not None:
             return speech_start_event
@@ -170,9 +186,9 @@ class SileroDetector:
             audio_data=b"",
             is_speech_start=False,
             is_speech_end=False,
-            state=vad_instance.state_machine.state
+            state=vad_instance.state_machine.state,
         )
 
-    def get_current_state(self, vad_instance) -> VADState:
+    def get_current_state(self, vad_instance: SileroVAD) -> VADState:
         """Get current VAD state from the state machine."""
         return vad_instance.state_machine.state

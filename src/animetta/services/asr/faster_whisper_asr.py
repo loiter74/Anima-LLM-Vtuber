@@ -17,12 +17,14 @@ Supports Chinese models:
 - distil-medium.en: English only
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.faster_whisper import FasterWhisperASRConfig
 
 from .interface import ASRInterface
 
@@ -107,9 +109,7 @@ class FasterWhisperASR(ASRInterface):
 
             except ImportError:
                 logger.error("faster-whisper not installed, please run: pip install faster-whisper")
-                raise ImportError(
-                    "faster-whisper 未安装，请运行: pip install faster-whisper"
-                )
+                raise ImportError("faster-whisper 未安装，请运行: pip install faster-whisper")
             except Exception as e:
                 logger.error(f"Failed to load Faster-Whisper model: {e}")
                 raise
@@ -126,16 +126,13 @@ class FasterWhisperASR(ASRInterface):
 
         # Run model loading in thread pool (CPU-intensive operation)
         import asyncio
+
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._get_model)
 
         logger.info("Faster-Whisper model preloaded successfully")
 
-    async def transcribe(
-        self,
-        audio_data: bytes | str | Path | list | np.ndarray,
-        **kwargs
-    ) -> str:
+    async def transcribe(self, audio_data: bytes | str | Path | list | np.ndarray, **kwargs) -> str:
         """
         Transcribe audio data to text
 
@@ -177,11 +174,7 @@ class FasterWhisperASR(ASRInterface):
 
         # Run transcription in thread pool (CPU-intensive operation)
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            self._transcribe_sync,
-            audio_np
-        )
+        result = await loop.run_in_executor(None, self._transcribe_sync, audio_np)
 
         logger.info(f"Faster-Whisper ASR recognition result: {result}")
         return result
@@ -201,12 +194,16 @@ class FasterWhisperASR(ASRInterface):
 
         # Add VAD parameters
         if self.vad_filter:
-            parameters.update({
-                "vad_parameters": {
-                    "min_silence_duration_ms": self.vad_parameters.get("min_silence_duration_ms", 500),
-                    "speech_pad_ms": self.vad_parameters.get("speech_pad_ms", 30),
+            parameters.update(
+                {
+                    "vad_parameters": {
+                        "min_silence_duration_ms": self.vad_parameters.get(
+                            "min_silence_duration_ms", 500
+                        ),
+                        "speech_pad_ms": self.vad_parameters.get("speech_pad_ms", 30),
+                    }
                 }
-            })
+            )
 
         # Log language configuration
         logger.debug(f"Faster-Whisper config - language={self.language}, parameters={parameters}")
@@ -215,7 +212,9 @@ class FasterWhisperASR(ASRInterface):
         segments, info = model.transcribe(audio_np, **parameters)
 
         # Log detected language info
-        logger.info(f"Faster-Whisper detection info: language='{info.language}', language_probability={info.language_probability:.2f}")
+        logger.info(
+            f"Faster-Whisper detection info: language='{info.language}', language_probability={info.language_probability:.2f}"
+        )
 
         # Extract text
         text_parts = [segment.text for segment in segments]
@@ -228,7 +227,8 @@ class FasterWhisperASR(ASRInterface):
         # Convert Traditional Chinese to Simplified Chinese
         try:
             from opencc import OpenCC
-            converter = OpenCC('t2s')  # Traditional → Simplified
+
+            converter = OpenCC("t2s")  # Traditional → Simplified
             text = converter.convert(text)
         except ImportError:
             pass  # opencc not installed, skip conversion
@@ -252,7 +252,9 @@ class FasterWhisperASR(ASRInterface):
 
             # Convert to mono
             if audio_segment.channels > 1:
-                samples = samples.reshape((-1, audio_segment.channels)).mean(axis=1)
+                samples = (
+                    samples.reshape((-1, audio_segment.channels)).mean(axis=1).astype(np.float32)
+                )
 
             # Resample to 16kHz (if needed)
             if audio_segment.frame_rate != 16000:
@@ -260,10 +262,8 @@ class FasterWhisperASR(ASRInterface):
                 ratio = 16000 / audio_segment.frame_rate
                 target_length = int(len(samples) * ratio)
                 samples = np.interp(
-                    np.linspace(0, len(samples), target_length),
-                    np.arange(len(samples)),
-                    samples
-                )
+                    np.linspace(0, len(samples), target_length), np.arange(len(samples)), samples
+                ).astype(np.float32)
 
             logger.debug(f"Loaded audio file: {file_path}, samples: {len(samples)}")
             return samples
@@ -273,7 +273,7 @@ class FasterWhisperASR(ASRInterface):
             # Fallback to wave module
             import wave
 
-            with wave.open(file_path, 'rb') as wf:
+            with wave.open(file_path, "rb") as wf:
                 sample_rate = wf.getframerate()
                 frames = wf.readframes(wf.getnframes())
                 audio_data = np.frombuffer(frames, dtype=np.int16)
@@ -288,8 +288,8 @@ class FasterWhisperASR(ASRInterface):
                     samples = np.interp(
                         np.linspace(0, len(samples), target_length),
                         np.arange(len(samples)),
-                        samples
-                    )
+                        samples,
+                    ).astype(np.float32)
 
                 return samples
 
@@ -302,8 +302,8 @@ class FasterWhisperASR(ASRInterface):
     async def transcribe_stream(
         self,
         audio_data: bytes | str | Path | list | np.ndarray,
-        **kwargs
-    ):
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -318,7 +318,8 @@ class FasterWhisperASR(ASRInterface):
 
         # Split by sentences and return
         import re
-        sentences = re.split(r'[。！？.!?]', result)
+
+        sentences = re.split(r"[。！？.!?]", result)
 
         for sentence in sentences:
             sentence = sentence.strip()
@@ -331,7 +332,7 @@ class FasterWhisperASR(ASRInterface):
         logger.debug("Faster-Whisper ASR resources released")
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: FasterWhisperASRConfig, **kwargs):
         """Create instance from configuration"""
         return cls(
             model=getattr(config, "model", "distil-large-v3"),

@@ -13,6 +13,7 @@ import pytest
 # Initialization
 # ============================================================
 
+
 class TestKeywordAnalyzerInit:
     """Initialization."""
 
@@ -46,6 +47,7 @@ class TestKeywordAnalyzerInit:
 # ============================================================
 # Emotion extraction
 # ============================================================
+
 
 class TestKeywordAnalyzerExtract:
     """extract() — emotion detection from text."""
@@ -116,6 +118,7 @@ class TestKeywordAnalyzerExtract:
 # Confidence modes
 # ============================================================
 
+
 class TestKeywordAnalyzerConfidenceModes:
     """Different confidence calculation modes."""
 
@@ -167,6 +170,7 @@ class TestKeywordAnalyzerConfidenceModes:
 # Convenience methods
 # ============================================================
 
+
 class TestKeywordAnalyzerConvenience:
     """extract_emotion_tags and get_emotion_summary."""
 
@@ -209,6 +213,7 @@ class TestKeywordAnalyzerConvenience:
 # Keyword management
 # ============================================================
 
+
 class TestKeywordAnalyzerKeywordManagement:
     """add_keywords and remove_keywords."""
 
@@ -246,6 +251,7 @@ class TestKeywordAnalyzerKeywordManagement:
 # ============================================================
 # Properties
 # ============================================================
+
 
 class TestKeywordAnalyzerProperties:
     """Properties and metadata."""

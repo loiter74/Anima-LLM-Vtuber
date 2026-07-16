@@ -26,30 +26,35 @@ watch(() => store.lastMessage?.text, scrollToBottom)
 </script>
 
 <template>
-	  <div
-	    ref="listRef"
-	    data-testid="message-list"
-	    class="message-list-stable overflow-y-auto px-5 py-4"
-	    :class="$attrs.class"
-	    @scroll="handleScroll"
-	  >
+  <div
+    ref="listRef"
+    data-testid="message-list"
+    class="message-list-stable overflow-y-auto px-5 py-4"
+    :class="$attrs.class"
+    @scroll="handleScroll"
+  >
     <!-- Welcome screen (empty state) -->
     <WelcomeScreen v-if="store.messages.length === 0" />
 
     <!-- Messages -->
-    <MessageBubble
-      v-for="msg in store.messages"
-      :key="msg.id"
-      :message="msg"
-    />
+    <MessageBubble v-for="msg in store.messages" :key="msg.id" :message="msg" />
   </div>
 </template>
 
 <style scoped>
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
 
 .message-list-stable {
   overflow-anchor: none;

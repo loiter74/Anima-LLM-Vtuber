@@ -16,8 +16,8 @@ Usage:
     # 仅部署已有模型
     python -m scripts.train.cli --character shige_utage --deploy-only
 """
+
 import argparse
-import os
 import subprocess
 import sys
 import time
@@ -41,10 +41,10 @@ def load_config() -> dict:
 
 def run_step(step_name: str, cmd: list[str], cwd: str = NOW_DIR) -> None:
     """Run a CLI step with logging."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  [{step_name}]")
     print(f"  {' '.join(cmd)}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     t0 = time.time()
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     elapsed = time.time() - t0
@@ -64,15 +64,16 @@ def run_step(step_name: str, cmd: list[str], cwd: str = NOW_DIR) -> None:
 # ── Steps ────────────────────────────────────────────────────────
 
 
-def step_preprocess_data():
+def step_preprocess_data() -> None:
     """Run data prep: slice → normalize → pitch augment → split."""
     run_step("Prepare Data", [PYTHON, str(SCRIPT_DIR / "prepare_data.py")], cwd=str(SCRIPT_DIR))
 
 
-def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str):
+def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str) -> None:
     """Step 1: RVC audio preprocessing (resample + slice)."""
     cmd = [
-        PYTHON, "infer/modules/train/preprocess.py",
+        PYTHON,
+        "infer/modules/train/preprocess.py",
         dataset_dir,
         sr,
         "4",  # n_p (CPU cores for preprocessing)
@@ -82,10 +83,11 @@ def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str):
     run_step("RVC: Audio Preprocessing", cmd)
 
 
-def step_rvc_extract_f0(exp_dir: str, f0_method: str):
+def step_rvc_extract_f0(exp_dir: str, f0_method: str) -> None:
     """Step 2: Extract F0 using rmvpe."""
     cmd = [
-        PYTHON, "infer/modules/train/extract/extract_f0_rmvpe.py",
+        PYTHON,
+        "infer/modules/train/extract/extract_f0_rmvpe.py",
         "4",  # n_p
         "0",  # gpu
         "1",  # f0_flag
@@ -95,12 +97,12 @@ def step_rvc_extract_f0(exp_dir: str, f0_method: str):
     run_step("RVC: F0 Extraction (rmvpe)", cmd)
 
 
-def step_rvc_extract_features(exp_dir: str, version: str):
+def step_rvc_extract_features(exp_dir: str, version: str) -> None:
     """Step 3: Extract HuBERT/ContentVec features."""
-    ckpt = "assets/hubert/hubert_base.pt"
     if version == "v2":
         cmd = [
-            PYTHON, "infer/modules/train/extract_feature_print.py",
+            PYTHON,
+            "infer/modules/train/extract_feature_print.py",
             "4",  # n_p
             "0",  # gpu
             f"{RVC_ROOT}/logs/{exp_dir}",
@@ -108,7 +110,8 @@ def step_rvc_extract_features(exp_dir: str, version: str):
         ]
     else:
         cmd = [
-            PYTHON, "infer/modules/train/extract_feature_print.py",
+            PYTHON,
+            "infer/modules/train/extract_feature_print.py",
             "4",  # n_p
             "0",  # gpu
             f"{RVC_ROOT}/logs/{exp_dir}",
@@ -128,21 +131,33 @@ def step_rvc_train(
     pretrained_g: str = "",
     pretrained_d: str = "",
     gpu: str = "0",
-):
+) -> None:
     """Step 4: Train the RVC model."""
     cmd = [
-        PYTHON, "infer/modules/train/train.py",
-        "-e", exp_dir,
-        "-sr", sr,
-        "-f0", str(f0),
-        "-bs", str(batch_size),
-        "-g", gpu,
-        "-te", str(total_epoch),
-        "-se", str(save_epoch),
-        "-l", "1",       # save latest
-        "-c", "0",       # cache in GPU
-        "-sw", "1",      # save every weight
-        "-v", version,
+        PYTHON,
+        "infer/modules/train/train.py",
+        "-e",
+        exp_dir,
+        "-sr",
+        sr,
+        "-f0",
+        str(f0),
+        "-bs",
+        str(batch_size),
+        "-g",
+        gpu,
+        "-te",
+        str(total_epoch),
+        "-se",
+        str(save_epoch),
+        "-l",
+        "1",  # save latest
+        "-c",
+        "0",  # cache in GPU
+        "-sw",
+        "1",  # save every weight
+        "-v",
+        version,
     ]
     if pretrained_g:
         cmd.extend(["-pg", pretrained_g])
@@ -151,17 +166,20 @@ def step_rvc_train(
     run_step("RVC: Model Training", cmd)
 
 
-def step_rvc_build_index(exp_dir: str, version: str):
+def step_rvc_build_index(exp_dir: str, version: str) -> None:
     """Step 5: Build FAISS feature index."""
     cmd = [
-        PYTHON, "tools/infer/train-index-v2.py",
-        "-e", exp_dir,
-        "-v", version,
+        PYTHON,
+        "tools/infer/train-index-v2.py",
+        "-e",
+        exp_dir,
+        "-v",
+        version,
     ]
     run_step("RVC: Build FAISS Index", cmd)
 
 
-def step_deploy(character_name: str):
+def step_deploy() -> None:
     """Step 6: Deploy model to Anima."""
     run_step(
         "Deploy to Anima",
@@ -173,7 +191,7 @@ def step_deploy(character_name: str):
 # ── CLI ──────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Anima Train — 一键训练 RVC v2 歌声模型",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -185,32 +203,53 @@ Examples:
   python -m scripts.train.cli --character shige_utage --deploy-only
         """,
     )
-    parser.add_argument("--character", "-c", default=None,
-                        help="Character name (from config.yaml). Default: from config")
-    parser.add_argument("--data", "-d", default=None,
-                        help="Path to training data directory. Default: data/training/ready")
-    parser.add_argument("--epochs", "-e", type=int, default=None,
-                        help="Training epochs (default: from config: 300)")
-    parser.add_argument("--batch-size", "-b", type=int, default=None,
-                        help="Batch size (default: from config: 16)")
-    parser.add_argument("--sr", default=None,
-                        help="Sample rate (default: from config: 48000)")
-    parser.add_argument("--gpu", default="0",
-                        help="GPU ID (default: 0)")
-    parser.add_argument("--f0-method", default="rmvpe",
-                        help="F0 extraction method (default: rmvpe)")
-    parser.add_argument("--pretrained-g", default=None,
-                        help="Pretrained generator path (default: auto from sr+version)")
-    parser.add_argument("--pretrained-d", default=None,
-                        help="Pretrained discriminator path (default: auto from sr+version)")
-    parser.add_argument("--skip-prep", action="store_true",
-                        help="Skip data preparation (use existing processed data)")
-    parser.add_argument("--preprocess-only", action="store_true",
-                        help="Only run RVC preprocessing + feature extraction, no training")
-    parser.add_argument("--deploy-only", action="store_true",
-                        help="Only deploy existing model (no training)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print commands without executing")
+    parser.add_argument(
+        "--character",
+        "-c",
+        default=None,
+        help="Character name (from config.yaml). Default: from config",
+    )
+    parser.add_argument(
+        "--data",
+        "-d",
+        default=None,
+        help="Path to training data directory. Default: data/training/ready",
+    )
+    parser.add_argument(
+        "--epochs", "-e", type=int, default=None, help="Training epochs (default: from config: 300)"
+    )
+    parser.add_argument(
+        "--batch-size", "-b", type=int, default=None, help="Batch size (default: from config: 16)"
+    )
+    parser.add_argument("--sr", default=None, help="Sample rate (default: from config: 48000)")
+    parser.add_argument("--gpu", default="0", help="GPU ID (default: 0)")
+    parser.add_argument(
+        "--f0-method", default="rmvpe", help="F0 extraction method (default: rmvpe)"
+    )
+    parser.add_argument(
+        "--pretrained-g",
+        default=None,
+        help="Pretrained generator path (default: auto from sr+version)",
+    )
+    parser.add_argument(
+        "--pretrained-d",
+        default=None,
+        help="Pretrained discriminator path (default: auto from sr+version)",
+    )
+    parser.add_argument(
+        "--skip-prep",
+        action="store_true",
+        help="Skip data preparation (use existing processed data)",
+    )
+    parser.add_argument(
+        "--preprocess-only",
+        action="store_true",
+        help="Only run RVC preprocessing + feature extraction, no training",
+    )
+    parser.add_argument(
+        "--deploy-only", action="store_true", help="Only deploy existing model (no training)"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
 
     args = parser.parse_args()
     config = load_config()
@@ -222,13 +261,19 @@ Examples:
     total_epoch = args.epochs or config["rvc"]["epochs"]
     batch_size = args.batch_size or config["rvc"]["batch_size"]
     f0 = 1  # Always enable F0 for singing
-    dataset_dir = args.data or str(
-        Path(config["data"]["processed_dir"]).parent / "ready"
-    )
+    dataset_dir = args.data or str(Path(config["data"]["processed_dir"]).parent / "ready")
 
     # Auto-detect pretrained paths
-    pg = args.pretrained_g or f"assets/pretrained_v2/f0G{sr}.pth" if version == "v2" else f"assets/pretrained/f0G{sr}.pth"
-    pd = args.pretrained_d or f"assets/pretrained_v2/f0D{sr}.pth" if version == "v2" else f"assets/pretrained/f0D{sr}.pth"
+    pg = (
+        args.pretrained_g or f"assets/pretrained_v2/f0G{sr}.pth"
+        if version == "v2"
+        else f"assets/pretrained/f0G{sr}.pth"
+    )
+    pd = (
+        args.pretrained_d or f"assets/pretrained_v2/f0D{sr}.pth"
+        if version == "v2"
+        else f"assets/pretrained/f0D{sr}.pth"
+    )
 
     # Verify paths
     if not args.deploy_only:
@@ -236,22 +281,22 @@ Examples:
         pd_path = RVC_ROOT / pd
         if not pg_path.exists():
             print(f"[WARN] Pretrained G not found: {pg_path}")
-            print(f"       Download from: https://huggingface.co/lj1995/VoiceConversionWebUI")
+            print("       Download from: https://huggingface.co/lj1995/VoiceConversionWebUI")
             pg = ""
         if not pd_path.exists():
             print(f"[WARN] Pretrained D not found: {pd_path}")
             pd = ""
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print(f"  Anima Train — {char_name}")
     print(f"  SR: {sr}  |  Version: {version}  |  Epochs: {total_epoch}  |  Batch: {batch_size}")
     print(f"  Data: {dataset_dir}")
-    print(f"{'#'*60}\n")
+    print(f"{'#' * 60}\n")
 
     # ── Execute ──
 
     if args.deploy_only:
-        step_deploy(char_name)
+        step_deploy()
         return
 
     if args.dry_run:
@@ -296,14 +341,14 @@ Examples:
     step_rvc_build_index(char_name, version)
 
     # Step G: Deploy to Anima
-    step_deploy(char_name)
+    step_deploy()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  [DONE] Training complete for {char_name}!")
     print(f"  Model: {RVC_ROOT}/weights/{char_name}.pth")
     print(f"  Index: {RVC_ROOT}/logs/{char_name}.index")
-    print(f"  Anima config: config/singing.yaml")
-    print(f"{'='*60}\n")
+    print("  Anima config: config/singing.yaml")
+    print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":

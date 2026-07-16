@@ -149,6 +149,39 @@ async def test_session_status_sink_broadcasts_full_snapshot(handler_harness) -> 
 
 
 @pytest.mark.asyncio
+async def test_broadcast_danmaku_audio_reads_file_payload(
+    handler_harness,
+    tmp_path,
+) -> None:
+    handler, _, _ = handler_harness
+    delivery = MagicMock()
+    delivery.emit = AsyncMock()
+    audio_path = tmp_path / "reply.wav"
+    audio_path.write_bytes(b"RIFF-invalid-test-audio")
+
+    await handler._broadcast_danmaku_audio(str(audio_path), delivery)
+
+    delivery.emit.assert_awaited_once()
+    event = delivery.emit.await_args
+    assert event.args[:2] == ("chat", "audio_with_expression")
+    assert event.args[2]["format"] == "wav"
+
+
+@pytest.mark.asyncio
+async def test_broadcast_danmaku_audio_accepts_bytes_payload(handler_harness) -> None:
+    handler, _, _ = handler_harness
+    delivery = MagicMock()
+    delivery.emit = AsyncMock()
+
+    await handler._broadcast_danmaku_audio(b"RIFF-invalid-test-audio", delivery)
+
+    delivery.emit.assert_awaited_once()
+    event = delivery.emit.await_args
+    assert event.args[:2] == ("chat", "audio_with_expression")
+    assert event.args[2]["format"] == "wav"
+
+
+@pytest.mark.asyncio
 async def test_real_session_integration_hot_switches_and_rejects_stale_raw() -> None:
     sio = MagicMock()
     sio.emit = AsyncMock()

@@ -1,7 +1,7 @@
 """Thin LangGraph nodes for the isolated two-pass golden dialogue."""
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -38,12 +38,10 @@ def _memory_mode(config: RunnableConfig | None) -> PersistenceMode:
     context = _configurable(config).get("service_context")
     system = getattr(getattr(context, "config", None), "system", None)
     mode = getattr(system, "long_term_memory_mode", "off")
-    return mode if mode in {"off", "read_only", "read_write"} else "off"
+    return cast(PersistenceMode, mode) if mode in {"off", "read_only", "read_write"} else "off"
 
 
-async def reasoner_node(
-    state: AgentState, config: RunnableConfig | None = None
-) -> dict[str, Any]:
+async def reasoner_node(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
     metadata = state.get("metadata", {})
     if metadata.get("is_inspection") or metadata.get("is_probe"):
         return {"turn_scratch": {}, "metadata": {**metadata, "dialogue_status": "filtered_probe"}}
@@ -62,14 +60,20 @@ async def reasoner_node(
         return {
             "turn_scratch": {},
             "error": "reasoner_failed",
-            "metadata": {**metadata, "dialogue_status": "reasoner_failed", "reasoner_error": exc.code},
+            "metadata": {
+                **metadata,
+                "dialogue_status": "reasoner_failed",
+                "reasoner_error": exc.code,
+            },
         }
     log_timing(state, "reasoner.api_call", (time.perf_counter() - started) * 1000)
     provider = type(_llm(config)).__name__
     return {
         "turn_scratch": {"reasoner": result},
         "metadata": {
-            **metadata, "dialogue_status": "reasoner_ready", "reasoner_provider": provider,
+            **metadata,
+            "dialogue_status": "reasoner_ready",
+            "reasoner_provider": provider,
         },
     }
 
@@ -101,7 +105,8 @@ async def anima_composer_node(
     return {
         "turn_scratch": scratch,
         "metadata": {
-            **state.get("metadata", {}), "composer_provider": type(_llm(config)).__name__,
+            **state.get("metadata", {}),
+            "composer_provider": type(_llm(config)).__name__,
         },
     }
 
@@ -151,13 +156,15 @@ async def conversation_finalizer_node(
         and not metadata.get("is_probe")
         and metadata.get("dialogue_status") in {"composer", "composer_fallback"}
     )
-    policy = decide_persistence(PersistenceRequest(
-        mode=_memory_mode(config),
-        sink="session_window",
-        content_class="selected_final" if eligible else "incomplete",
-        completed=eligible,
-        real_provider=eligible,
-    ))
+    policy = decide_persistence(
+        PersistenceRequest(
+            mode=_memory_mode(config),
+            sink="session_window",
+            content_class="selected_final" if eligible else "incomplete",
+            completed=eligible,
+            real_provider=eligible,
+        )
+    )
     committed = False
     if policy.allowed:
         composer = scratch.get("composer")
@@ -166,9 +173,7 @@ async def conversation_finalizer_node(
             user_text=state.get("user_text", ""),
             final_response=response,
             mood=composer.mood if isinstance(composer, ComposerResult) else None,
-            affinity_delta=(
-                composer.affinity_delta if isinstance(composer, ComposerResult) else 0
-            ),
+            affinity_delta=(composer.affinity_delta if isinstance(composer, ComposerResult) else 0),
         )
     if committed:
         await _persist_selected_final(state, config)
@@ -178,16 +183,16 @@ async def conversation_finalizer_node(
     }
 
 
-async def _persist_selected_final(
-    state: AgentState, config: RunnableConfig | None
-) -> None:
-    decision = decide_persistence(PersistenceRequest(
-        mode=_memory_mode(config),
-        sink="long_term_write",
-        content_class="selected_final",
-        completed=True,
-        real_provider=True,
-    ))
+async def _persist_selected_final(state: AgentState, config: RunnableConfig | None) -> None:
+    decision = decide_persistence(
+        PersistenceRequest(
+            mode=_memory_mode(config),
+            sink="long_term_write",
+            content_class="selected_final",
+            completed=True,
+            real_provider=True,
+        )
+    )
     if not decision.allowed:
         return
     context = _configurable(config).get("service_context")

@@ -1,11 +1,17 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useMemoryStore } from '@/stores/memory'
-import type { LlmChunk, Transcript } from '@/types/chat'
+import type { Transcript } from '@/types/chat'
 import { getSocket } from './useSocket'
 import { Events } from '@/constants/socket-events'
 import { sendCanonicalChatText } from './chatTransport'
-import type { AudioWithExpressionEvent, ChatControlEvent, ChatErrorEvent, ChatIdentity, SentenceEvent } from '@/types/socket-events'
+import type {
+  AudioWithExpressionEvent,
+  ChatControlEvent,
+  ChatErrorEvent,
+  ChatIdentity,
+  SentenceEvent,
+} from '@/types/socket-events'
 
 export function useChat() {
   const store = useChatStore()
@@ -30,10 +36,18 @@ export function useChat() {
     }
 
     // Listen for conversation end
-    _onControl = (data: ChatControlEvent) => { store.handleControl(data) }
-    _onError = (data: ChatErrorEvent) => { store.handleError(data) }
-    _onMedia = (data: AudioWithExpressionEvent) => { store.handleMediaReady(data) }
-    _onStopAudio = (data: ChatIdentity) => { store.handleStopAudio(data) }
+    _onControl = (data: ChatControlEvent) => {
+      store.handleControl(data)
+    }
+    _onError = (data: ChatErrorEvent) => {
+      store.handleError(data)
+    }
+    _onMedia = (data: AudioWithExpressionEvent) => {
+      store.handleMediaReady(data)
+    }
+    _onStopAudio = (data: ChatIdentity) => {
+      store.handleStopAudio(data)
+    }
 
     // Listen for transcript (ASR result)
     _onTranscript = (data: Transcript) => {
@@ -89,6 +103,6 @@ export function useChat() {
     store,
     sendText,
     sendInterrupt,
-    organizeMemory
+    organizeMemory,
   }
 }

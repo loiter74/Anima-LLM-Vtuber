@@ -1,10 +1,5 @@
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 
-export interface ConnectionStatusPayload {
-  status: ConnectionStatus
-  message?: string
-}
-
 export interface ChatIdentity {
   message_id: string
   conversation_id: string
@@ -52,12 +47,29 @@ export interface ChatControlEvent extends ChatIdentity {
   status?: 'degraded'
 }
 
+export interface ParameterTimelineParameter {
+  name: string
+  value: number
+  duration: number
+}
+
+export interface ParameterTimelineFrame {
+  timestamp: number
+  parameters: ParameterTimelineParameter[]
+}
+
+export interface ParameterTimeline {
+  frames: ParameterTimelineFrame[]
+  total_duration?: number
+}
+
 export interface AudioWithExpressionEvent extends ChatIdentity {
   audio_data: string
   format: string
   volumes?: number[]
   use_parameter_mapping?: boolean
-  expressions?: { frames?: unknown[] }
+  expressions?: ParameterTimeline
+  return_to_idle?: boolean
 }
 
 export interface ChatErrorEvent extends ChatIdentity {
@@ -67,23 +79,4 @@ export interface ChatErrorEvent extends ChatIdentity {
   phase: string
   retryable: boolean
   terminal: boolean
-}
-
-/** Payload for `translation.configure` client-to-server event */
-export interface TranslationConfigurePayload {
-  target_language: string
-}
-
-/** Payload for `minecraft.status` server-to-client event */
-export interface MinecraftStatusPayload {
-  connected: boolean
-  username?: string
-  error?: string
-}
-
-/** Payload for `minecraft:viewer_status` server-to-client event */
-export interface MinecraftViewerStatusPayload {
-  status: 'waiting' | 'joined' | 'left' | 'error'
-  username?: string
-  error?: string
 }

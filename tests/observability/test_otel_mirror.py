@@ -118,9 +118,7 @@ async def test_otel_exporter_failure_updates_health_without_raising() -> None:
         10.0,
     )
     await mirror.publish(started)
-    await mirror.publish(
-        TraceFinished(started.trace_id, TraceOutcome.SUCCESS, finished_at=11.0)
-    )
+    await mirror.publish(TraceFinished(started.trace_id, TraceOutcome.SUCCESS, finished_at=11.0))
 
     health = await mirror.health()
     assert health.degraded is True

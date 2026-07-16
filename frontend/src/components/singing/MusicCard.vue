@@ -21,7 +21,7 @@ function handleTimeupdate(time: number) {
   store.currentTime = time
   if (store.result?.lyrics) {
     const idx = store.result.lyrics.findIndex(
-      l => time * 1000 >= l.start_ms && time * 1000 <= l.end_ms
+      (l) => time * 1000 >= l.start_ms && time * 1000 <= l.end_ms,
     )
     store.currentLyricIndex = idx
   }
@@ -105,14 +105,11 @@ function playRecent(item: RecentItem) {
       <input
         v-model="inputUrl"
         placeholder="📎 贴上 B站 视频链接..."
-        class="flex-1 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30
-               text-sm text-c-text placeholder-c-text-dim/50 outline-none
-               focus:border-c-accent/50 transition-all"
+        class="flex-1 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-sm text-c-text placeholder-c-text-dim/50 outline-none focus:border-c-accent/50 transition-all"
         @keyup.enter="startProcess"
       />
       <button
-        class="px-4 py-2 rounded-lg bg-c-accent/20 text-c-accent text-sm
-               font-medium hover:bg-c-accent/30 transition-all whitespace-nowrap"
+        class="px-4 py-2 rounded-lg bg-c-accent/20 text-c-accent text-sm font-medium hover:bg-c-accent/30 transition-all whitespace-nowrap"
         @click="startProcess"
       >
         开始制作
@@ -128,8 +125,7 @@ function playRecent(item: RecentItem) {
         class="flex items-center gap-2 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs hover:bg-c-bg/60 transition-colors"
       >
         <button
-          class="w-7 h-7 flex items-center justify-center rounded-full
-                 bg-c-accent/20 text-c-accent hover:bg-c-accent/40 transition-all shrink-0"
+          class="w-7 h-7 flex items-center justify-center rounded-full bg-c-accent/20 text-c-accent hover:bg-c-accent/40 transition-all shrink-0"
           @click="playRecent(item)"
           :title="'Play ' + item.session_id"
         >
@@ -176,7 +172,7 @@ function playRecent(item: RecentItem) {
     <div
       v-if="store.status === 'waiting_lyrics'"
       class="px-3 py-2 rounded-lg bg-c-gold/10 border border-c-gold/30 text-xs"
-      style="color: #f0c060;"
+      style="color: #f0c060"
     >
       歌词已生成，请在 <strong>Aegisub</strong> 中审核时间轴后确认。
     </div>
@@ -184,8 +180,7 @@ function playRecent(item: RecentItem) {
     <!-- Cancel button during processing -->
     <button
       v-if="store.isProcessing"
-      class="self-start px-3 py-1.5 rounded-lg bg-c-error/10 text-c-error
-             text-xs hover:bg-c-error/20 transition-all"
+      class="self-start px-3 py-1.5 rounded-lg bg-c-error/10 text-c-error text-xs hover:bg-c-error/20 transition-all"
       @click="cancel"
     >
       取消
@@ -194,12 +189,17 @@ function playRecent(item: RecentItem) {
     <!-- Result: playback controls -->
     <div v-if="store.result" class="flex flex-col gap-3">
       <button
-        class="self-start flex items-center gap-1 px-2 py-1 rounded-lg
-               bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim
-               hover:text-c-accent hover:border-c-accent/30 transition-all"
+        class="self-start flex items-center gap-1 px-2 py-1 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
         @click="store.reset()"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
         返回列表
@@ -213,7 +213,11 @@ function playRecent(item: RecentItem) {
         @audio-ready="handleAudioReady"
         @ended="handleAudioEnded"
       />
-      <WaveformDisplay ref="waveformRef" :is-playing="store.isPlaying" :vocals-url="store.result?.vocals_url" />
+      <WaveformDisplay
+        ref="waveformRef"
+        :is-playing="store.isPlaying"
+        :vocals-url="store.result?.vocals_url"
+      />
 
       <!-- Output file links -->
       <div class="flex flex-col gap-2 mt-1">
@@ -224,9 +228,7 @@ function playRecent(item: RecentItem) {
             v-if="store.result.audio_url"
             :href="store.result.audio_url"
             target="_blank"
-            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg
-                   bg-c-accent/10 border border-c-accent/30 text-xs text-c-accent
-                   hover:bg-c-accent/20 transition-all"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-accent/10 border border-c-accent/30 text-xs text-c-accent hover:bg-c-accent/20 transition-all"
           >
             🎵 RVC混音 (播放)
           </a>
@@ -235,9 +237,7 @@ function playRecent(item: RecentItem) {
             v-if="store.result.vocals_url"
             :href="store.result.vocals_url"
             target="_blank"
-            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg
-                   bg-c-bg/40 border border-c-border/30 text-xs text-c-text
-                   hover:text-c-accent hover:border-c-accent/30 transition-all"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text hover:text-c-accent hover:border-c-accent/30 transition-all"
           >
             🎤 纯人声 (口型)
           </a>
@@ -246,9 +246,7 @@ function playRecent(item: RecentItem) {
             v-if="store.result.original_url"
             :href="store.result.original_url"
             target="_blank"
-            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg
-                   bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim
-                   hover:text-c-text hover:border-c-border/60 transition-all"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-text hover:border-c-border/60 transition-all"
           >
             📻 原始音频
           </a>
@@ -257,9 +255,7 @@ function playRecent(item: RecentItem) {
             v-if="store.result.tts_audio_url"
             :href="store.result.tts_audio_url"
             target="_blank"
-            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg
-                   bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim
-                   hover:text-c-accent hover:border-c-accent/30 transition-all"
+            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
           >
             🤖 TTS语音
           </a>
@@ -271,9 +267,7 @@ function playRecent(item: RecentItem) {
         v-if="store.result.subtitle_url"
         :href="store.result.subtitle_url"
         download
-        class="inline-flex items-center gap-2 px-3 py-2 rounded-lg
-               bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim
-               hover:text-c-accent hover:border-c-accent/30 transition-all"
+        class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
       >
         📝 下载字幕文件 (.ass)
       </a>

@@ -7,7 +7,7 @@ Steps:
 3. Update config/singing.yaml with new model name and params
 4. Print deployment summary
 """
-import shutil
+
 from pathlib import Path
 
 import yaml
@@ -20,7 +20,7 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def main():
+def main() -> None:
     config = load_config()
     char_name = config["character"]["name"]
     rvc_path = Path(config["anima"]["rvc_path"])

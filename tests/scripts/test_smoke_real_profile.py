@@ -52,9 +52,7 @@ def test_e2e_s004_accepts_distinct_matching_real_provider_rows() -> None:
     [
         lambda payload: payload.update(ready=False),
         lambda payload: payload.update(profile="test"),
-        lambda payload: payload["components"]["tts"]["resolved"].update(
-            voice="other"
-        ),
+        lambda payload: payload["components"]["tts"]["resolved"].update(voice="other"),
         lambda payload: payload["components"]["asr"]["resolved"].update(
             type="mock", provider="mock", model="mock"
         ),

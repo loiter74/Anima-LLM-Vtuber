@@ -14,6 +14,16 @@ from tooling.quality.models import AggregateStatus, AggregateSummary
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_quality_cli_rejects_python_older_than_313(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(quality_cli.sys, "version_info", (3, 11, 15))
+
+    assert main(["validate"]) == 2
+    assert "Python 3.13 or newer is required" in capsys.readouterr().err
+
+
 def test_machine_json_is_ascii_safe_for_windows_console_encodings() -> None:
     class Payload(BaseModel):
         output: str
@@ -578,7 +588,15 @@ def test_docker_build_command_executes_only_frozen_selected_service(
     payload = json.loads(capsys.readouterr().out)
 
     assert code == 0
-    assert calls[0][0][-3:] == ["build", "--no-cache", "qwen-tts"]
+    assert calls[0][0] == [
+        "docker",
+        "compose",
+        "-f",
+        str(ROOT / "docker-compose.qwen.yml"),
+        "build",
+        "--no-cache",
+        "qwen-tts",
+    ]
     assert "animetta" not in calls[0][0]
     assert calls[0][1]["QWEN_TTS_BUILD_FINGERPRINT"] == payload["actions"][0]["input_fingerprint"]
     assert decoder_options == [("utf-8", "replace")]
@@ -703,6 +721,13 @@ def test_makefile_exposes_stable_quality_entrypoints() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "quality-validate:" in makefile
+    assert "format-check:" in makefile
+    assert "frontend-lint:" in makefile
+    assert "frontend-format-check:" in makefile
+    assert "ruff check src/ tooling/ scripts/ evaluations/ tests/" in makefile
+    assert "ruff format --check src/ tooling/ scripts/ evaluations/ tests/" in makefile
+    assert "pnpm --dir frontend lint" in makefile
+    assert "pnpm --dir frontend format:check" in makefile
     assert "test-quick:" in makefile
     assert "test-affected:" in makefile
     assert "test-full:" in makefile

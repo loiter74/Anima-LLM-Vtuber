@@ -200,9 +200,7 @@ class TurnObservation:
                 attributes=self.policy.filter_attributes(
                     {
                         "outcome": outcome.value,
-                        "degradation_reason": _metadata_value(
-                            final_state, "degradation_reason"
-                        ),
+                        "degradation_reason": _metadata_value(final_state, "degradation_reason"),
                     }
                 ),
             )

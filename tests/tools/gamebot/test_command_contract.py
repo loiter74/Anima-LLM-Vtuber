@@ -33,7 +33,9 @@ def test_command_request_with_params() -> None:
 
 
 def test_command_request_serializes_to_json_line() -> None:
-    req = GameBotCommandRequest(id=1, action="mine", params={"block_type": "stone", "count": 3}, timeout_ms=60000)
+    req = GameBotCommandRequest(
+        id=1, action="mine", params={"block_type": "stone", "count": 3}, timeout_ms=60000
+    )
     data = req.model_dump()
     assert data["id"] == 1
     assert data["action"] == "mine"
@@ -74,7 +76,9 @@ def test_command_response_error() -> None:
 
 
 def test_command_response_event() -> None:
-    resp = GameBotCommandResponse(id=None, status="event", result={"type": "login", "username": "Bot"})
+    resp = GameBotCommandResponse(
+        id=None, status="event", result={"type": "login", "username": "Bot"}
+    )
     assert resp.id is None
     assert resp.status == "event"
 

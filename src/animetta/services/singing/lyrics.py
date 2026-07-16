@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -32,6 +33,7 @@ class LyricsGenerator:
         """Lazy-load whisper model (kept as instance attr to prevent GC segfault)."""
         if self._model is None:
             import faster_whisper
+
             self._model = faster_whisper.WhisperModel(
                 self.model_size,
                 download_root=self.download_root,
@@ -75,7 +77,7 @@ Style: Default,Microsoft YaHei,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    def _segments_to_ass(self, segments) -> list[str]:
+    def _segments_to_ass(self, segments: list[Any]) -> list[str]:
         lines = []
         for seg in segments:
             start = self._sec_to_ass_time(seg.start)
@@ -103,11 +105,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     start_str = parts[1].strip()
                     end_str = parts[2].strip()
                     text = parts[9].strip()
-                    lines.append(LyricLine(
-                        text=text,
-                        start_ms=self._ass_time_to_ms(start_str),
-                        end_ms=self._ass_time_to_ms(end_str),
-                    ))
+                    lines.append(
+                        LyricLine(
+                            text=text,
+                            start_ms=self._ass_time_to_ms(start_str),
+                            end_ms=self._ass_time_to_ms(end_str),
+                        )
+                    )
         return lines
 
     @staticmethod
@@ -139,4 +143,5 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if self._model is not None:
             self._model = None
         import gc
+
         gc.collect()

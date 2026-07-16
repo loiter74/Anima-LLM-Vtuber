@@ -120,11 +120,13 @@ class TestBilibiliMemeCollector:
 
     def test_parse_tags_empty(self):
         from animetta.services.bilibili.text_utils import parse_tags
+
         assert parse_tags("") == []
         assert parse_tags(None) == []
 
     def test_parse_tags_comma_separated(self):
         from animetta.services.bilibili.text_utils import parse_tags
+
         result = parse_tags("搞笑, 梗, vtuber")
         assert result == ["搞笑", "梗", "vtuber"]
 
@@ -205,17 +207,19 @@ class TestBilibiliMemeCollector:
 
     def test_build_candidates_preserves_style_metadata(self):
         videos = [CollectedVideo(bvid="BV1xx", title="Test")]
-        parsed = [{
-            "text": "吾闻先王设职...",
-            "context_hint": "不想上班时",
-            "frequency": 3,
-            "tags": ["周礼体"],
-            "format_id": "zhouli",
-            "format_slots": {"modern_event": "今天不想上班"},
-            "format_confidence": 0.88,
-            "rendered_text": "吾闻先王设职，此岂不合乎周礼？",
-            "mode": "quip",
-        }]
+        parsed = [
+            {
+                "text": "吾闻先王设职...",
+                "context_hint": "不想上班时",
+                "frequency": 3,
+                "tags": ["周礼体"],
+                "format_id": "zhouli",
+                "format_slots": {"modern_event": "今天不想上班"},
+                "format_confidence": 0.88,
+                "rendered_text": "吾闻先王设职，此岂不合乎周礼？",
+                "mode": "quip",
+            }
+        ]
 
         candidates = MemeCollector._build_candidates(parsed, videos)
 
@@ -248,7 +252,7 @@ class TestBilibiliMemeCollector:
 
     def test_parse_llm_json_with_fence(self):
 
-        raw = "```json\n[{\"text\": \"梗1\"}]\n```"
+        raw = '```json\n[{"text": "梗1"}]\n```'
         result = MemeCollector._parse_llm_json(raw)
         assert len(result) == 1
 

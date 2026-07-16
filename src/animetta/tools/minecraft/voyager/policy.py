@@ -48,9 +48,7 @@ _FORBIDDEN_TOKENS: tuple[str, ...] = (
     "rcon",
     "reset_world",
 )
-_FORBIDDEN_PATTERN = re.compile(
-    "|".join(rf"\b{re.escape(token)}\b" for token in _FORBIDDEN_TOKENS)
-)
+_FORBIDDEN_PATTERN = re.compile("|".join(rf"\b{re.escape(token)}\b" for token in _FORBIDDEN_TOKENS))
 _CALL_PATTERN = re.compile(r"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\(")
 _LANGUAGE_CALLS = frozenset(
     {
@@ -140,9 +138,7 @@ class VoyagerPolicy:
         for name in requested:
             capability = manifest_by_name.get(name)
             if capability is None:
-                violations.append(
-                    PolicyViolation(code="CAPABILITY_NOT_AUTHORIZED", subject=name)
-                )
+                violations.append(PolicyViolation(code="CAPABILITY_NOT_AUTHORIZED", subject=name))
             elif capability.risk is not CapabilityRisk.SURVIVAL_SAFE:
                 violations.append(
                     PolicyViolation(code="CAPABILITY_NOT_SURVIVAL_SAFE", subject=name)
@@ -169,9 +165,7 @@ class VoyagerPolicy:
                 )
             )
 
-        referenced = {
-            name for name in _CALL_PATTERN.findall(code) if name not in _LANGUAGE_CALLS
-        }
+        referenced = {name for name in _CALL_PATTERN.findall(code) if name not in _LANGUAGE_CALLS}
         authorization = self.authorize_capabilities(sorted(referenced), manifest)
         violations.extend(authorization.violations)
 

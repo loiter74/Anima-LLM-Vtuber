@@ -15,13 +15,7 @@ const isAutoMemoryOn = ref(false)
     <div class="volume-row">
       <span class="control-icon">🔊</span>
       <span class="control-label">Voice</span>
-      <input
-        type="range"
-        class="volume-slider"
-        min="0"
-        max="100"
-        v-model="volume"
-      >
+      <input type="range" class="volume-slider" min="0" max="100" v-model="volume" />
       <span class="volume-value">{{ volume }}%</span>
     </div>
 
@@ -29,11 +23,7 @@ const isAutoMemoryOn = ref(false)
     <div class="control-row">
       <span class="control-icon">🎤</span>
       <span class="control-label">Microphone</span>
-      <div
-        class="toggle-switch"
-        :class="{ active: isMicOn }"
-        @click="isMicOn = !isMicOn"
-      ></div>
+      <div class="toggle-switch" :class="{ active: isMicOn }" @click="isMicOn = !isMicOn"></div>
     </div>
 
     <!-- Notifications Toggle -->

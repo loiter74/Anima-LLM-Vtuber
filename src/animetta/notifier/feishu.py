@@ -41,7 +41,9 @@ def _generate_sign(secret: str) -> tuple[str, str]:
 def _build_card(alert: dict, status: str) -> dict:
     """Build a Feishu interactive card for a single alert."""
     severity = alert.get("severity", "warning")
-    template = RESOLVED_TEMPLATE if status == "resolved" else SEVERITY_TEMPLATES.get(severity, "yellow")
+    template = (
+        RESOLVED_TEMPLATE if status == "resolved" else SEVERITY_TEMPLATES.get(severity, "yellow")
+    )
     prefix = "✅ [RESOLVED]" if status == "resolved" else "🚨 [FIRING]"
 
     description = alert.get("summary", alert.get("description", ""))
@@ -70,7 +72,12 @@ def _build_card(alert: dict, status: str) -> dict:
                 {"tag": "hr"},
                 {
                     "tag": "note",
-                    "elements": [{"tag": "plain_text", "content": f"Starts at: {alert.get('starts_at', 'N/A')}"}],
+                    "elements": [
+                        {
+                            "tag": "plain_text",
+                            "content": f"Starts at: {alert.get('starts_at', 'N/A')}",
+                        }
+                    ],
                 },
             ],
         },

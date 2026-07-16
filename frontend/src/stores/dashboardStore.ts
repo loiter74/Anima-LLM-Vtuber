@@ -175,8 +175,20 @@ export const useDashboardStore = defineStore('dashboard', () => {
   }
 
   return {
-    overview, nodeStats, traces, traceDetails, loading, detailLoading, error,
-    avgLatency, totalSessions, errorRate,
-    fetchAll, fetchOverview, fetchNodeStats, fetchTraces, fetchTraceDetail,
+    overview,
+    nodeStats,
+    traces,
+    traceDetails,
+    loading,
+    detailLoading,
+    error,
+    avgLatency,
+    totalSessions,
+    errorRate,
+    fetchAll,
+    fetchOverview,
+    fetchNodeStats,
+    fetchTraces,
+    fetchTraceDetail,
   }
 })

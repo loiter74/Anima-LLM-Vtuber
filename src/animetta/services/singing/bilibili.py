@@ -21,13 +21,13 @@ class BilibiliDownloader:
     @staticmethod
     def extract_bv_id(url: str) -> str:
         """Extract Bilibili BV number from URL."""
-        m = re.search(r'BV[a-zA-Z0-9]{10}', url)
+        m = re.search(r"BV[a-zA-Z0-9]{10}", url)
         return m.group(0) if m else ""
 
     @staticmethod
     def extract_au_id(url: str) -> str:
         """Extract Bilibili audio AU number from URL."""
-        m = re.search(r'/au(\d+)', url)
+        m = re.search(r"/au(\d+)", url)
         return m.group(1) if m else ""
 
     async def fetch_lyrics_lrc(self, url: str) -> str | None:
@@ -48,7 +48,11 @@ class BilibiliDownloader:
         if bv_id:
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "yt-dlp", "--print", "%(id)s", "--print", "%(extractor)s",
+                    "yt-dlp",
+                    "--print",
+                    "%(id)s",
+                    "--print",
+                    "%(extractor)s",
                     url,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -72,21 +76,29 @@ class BilibiliDownloader:
     async def _fetch_lyrics_by_sid(self, sid: str) -> str | None:
         """Fetch LRC lyrics from B站 audio API by song ID."""
         import httpx
+
         api_url = f"https://www.bilibili.com/audio/music-service-c/web/song/lyric?sid={sid}"
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
-                resp = await client.get(api_url, headers={
-                    "Referer": "https://www.bilibili.com/",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                })
+                resp = await client.get(
+                    api_url,
+                    headers={
+                        "Referer": "https://www.bilibili.com/",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    },
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("code") == 0 and data.get("data"):
                         lrc = data["data"].get("lyric", "")
                         if lrc and lrc.strip():
-                            logger.info(f"Fetched LRC lyrics from B站 API (sid={sid}): {len(lrc)} chars")
+                            logger.info(
+                                f"Fetched LRC lyrics from B站 API (sid={sid}): {len(lrc)} chars"
+                            )
                             return lrc
-                logger.debug(f"B站 lyrics API returned empty or error (sid={sid}, code={resp.status_code})")
+                logger.debug(
+                    f"B站 lyrics API returned empty or error (sid={sid}, code={resp.status_code})"
+                )
         except Exception as e:
             logger.debug(f"Failed to fetch B站 lyrics for sid={sid}: {e}")
         return None
@@ -95,7 +107,9 @@ class BilibiliDownloader:
         """Get video title from Bilibili URL via yt-dlp."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "yt-dlp", "--get-title", url,
+                "yt-dlp",
+                "--get-title",
+                url,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -108,7 +122,7 @@ class BilibiliDownloader:
 
     def _sanitize_filename(self, name: str) -> str:
         """Sanitize string for use as filename."""
-        return re.sub(r'[<>:"/\\|?*\n\r\t]', '_', name)[:60].strip()
+        return re.sub(r'[<>:"/\\|?*\n\r\t]', "_", name)[:60].strip()
 
     async def download(self, url: str) -> tuple[str, str, str]:
         """Download audio track from Bilibili URL.
@@ -141,9 +155,12 @@ class BilibiliDownloader:
         cmd = [
             "yt-dlp",
             "--extract-audio",
-            "--audio-format", "wav",
-            "--audio-quality", "0",
-            "-o", str(output_path.with_suffix("")),
+            "--audio-format",
+            "wav",
+            "--audio-quality",
+            "0",
+            "-o",
+            str(output_path.with_suffix("")),
             url,
         ]
 
@@ -156,10 +173,10 @@ class BilibiliDownloader:
             stdout, stderr = await proc.communicate()
 
             if proc.returncode != 0:
-                err_text = stderr.decode("utf-8", errors="replace")[:500] if stderr else "(no output)"
-                raise RuntimeError(
-                    f"yt-dlp failed (code {proc.returncode}): {err_text}"
+                err_text = (
+                    stderr.decode("utf-8", errors="replace")[:500] if stderr else "(no output)"
                 )
+                raise RuntimeError(f"yt-dlp failed (code {proc.returncode}): {err_text}")
 
             actual_path = output_path.with_suffix(".wav")
             if not actual_path.exists():
@@ -178,9 +195,7 @@ class BilibiliDownloader:
             return str(actual_path), title, bv_id
 
         except FileNotFoundError:
-            raise RuntimeError(
-                "yt-dlp not found. Install with: pip install yt-dlp"
-            ) from None
+            raise RuntimeError("yt-dlp not found. Install with: pip install yt-dlp") from None
 
     async def close(self) -> None:
         pass

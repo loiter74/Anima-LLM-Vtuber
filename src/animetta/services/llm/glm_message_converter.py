@@ -54,10 +54,9 @@ class GLMMessageConverter:
     def _convert_ai(msg: AIMessage) -> dict[str, Any]:
         glm_msg = {"role": "assistant", "content": msg.content or ""}
 
-        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
             glm_msg["tool_calls"] = [
-                GLMMessageConverter._convert_tool_call(tc)
-                for tc in msg.tool_calls
+                GLMMessageConverter._convert_tool_call(tc) for tc in msg.tool_calls
             ]
 
         return glm_msg
@@ -70,11 +69,13 @@ class GLMMessageConverter:
             tc_name = tc.get("name", "")
             tc_args = tc.get("args", {})
         else:
-            tc_id = getattr(tc, 'id', '')
-            tc_name = getattr(tc, 'name', '')
-            tc_args = getattr(tc, 'args', {})
+            tc_id = getattr(tc, "id", "")
+            tc_name = getattr(tc, "name", "")
+            tc_args = getattr(tc, "args", {})
 
-        arguments_str = tc_args if isinstance(tc_args, str) else json.dumps(tc_args, ensure_ascii=False)
+        arguments_str = (
+            tc_args if isinstance(tc_args, str) else json.dumps(tc_args, ensure_ascii=False)
+        )
 
         return {
             "id": tc_id,
@@ -82,7 +83,7 @@ class GLMMessageConverter:
             "function": {
                 "name": tc_name,
                 "arguments": arguments_str,
-            }
+            },
         }
 
     @staticmethod
@@ -95,7 +96,7 @@ class GLMMessageConverter:
 
     @staticmethod
     def _convert_fallback(msg: Any) -> dict[str, Any]:
-        content = str(msg.content) if hasattr(msg, 'content') else str(msg)
+        content = str(msg.content) if hasattr(msg, "content") else str(msg)
         return {"role": "user", "content": content}
 
 
@@ -118,14 +119,16 @@ class GLMToolConverter:
         for tool in tool_list:
             parameters = GLMToolConverter._get_tool_parameters(tool)
 
-            glm_tools.append({
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": parameters,
+            glm_tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": parameters,
+                    },
                 }
-            })
+            )
 
         return glm_tools
 
@@ -154,17 +157,19 @@ class GLMToolConverter:
         content = message.content or ""
         tool_calls = []
 
-        if hasattr(message, 'tool_calls') and message.tool_calls:
+        if hasattr(message, "tool_calls") and message.tool_calls:
             for tc in message.tool_calls:
                 args = tc.function.arguments
                 if isinstance(args, str):
                     args = json.loads(args)
 
-                tool_calls.append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "args": args,
-                })
+                tool_calls.append(
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "args": args,
+                    }
+                )
 
         return {
             "content": content or "正在调用工具...",

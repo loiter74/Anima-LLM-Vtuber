@@ -18,10 +18,13 @@ import io
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import soundfile as sf
 from loguru import logger
+
+from animetta.config.providers.vc.rvc import RVCConfig
 
 from .interface import VCInterface
 
@@ -76,7 +79,7 @@ class RVCVC(VCInterface):
         self.f0_max = f0_max
         self.sample_rate = sample_rate
 
-        self._rvc: object | None = None
+        self._rvc: Any | None = None
         self._model_loaded: bool = False
 
     # ------------------------------------------------------------------
@@ -137,6 +140,7 @@ class RVCVC(VCInterface):
         # Fall back to CPU if CUDA is requested but unavailable
         try:
             import torch
+
             if self.device.startswith("cuda") and not torch.cuda.is_available():
                 logger.warning("CUDA not available, falling back to CPU for RVC")
                 rvc_config.device = "cpu"
@@ -156,8 +160,8 @@ class RVCVC(VCInterface):
                 index_path=self.index_path,
                 index_rate=self.index_rate,
                 n_cpu=1,
-                inp_q=None,    # n_cpu=1 → queues are unused
-                opt_q=None,    # n_cpu=1 → queues are unused
+                inp_q=None,  # n_cpu=1 → queues are unused
+                opt_q=None,  # n_cpu=1 → queues are unused
                 config=rvc_config,
             )
         except Exception as e:
@@ -211,12 +215,16 @@ class RVCVC(VCInterface):
 
         # ── numpy → torch.Tensor (1D float32) ───────────────────────
         import torch
+
         audio_tensor = torch.from_numpy(audio_np.copy()).float()
 
         # ── Blocking RVC inference → asyncio.to_thread() ────────────
         try:
+            rvc = self._rvc
+            if rvc is None:
+                raise RuntimeError("RVC model is not loaded")
             result_np = await asyncio.to_thread(
-                self._rvc.infer,
+                rvc.infer,
                 input_wav=audio_tensor,
                 block_frame_16k=400,
                 skip_head=0,
@@ -260,12 +268,16 @@ class RVCVC(VCInterface):
             self._ensure_model()
 
             import torch
+
             # 1 second of silence at 16 kHz
             silence = np.zeros(16000, dtype=np.float32)
             silence_tensor = torch.from_numpy(silence).float()
+            rvc = self._rvc
+            if rvc is None:
+                raise RuntimeError("RVC model is not loaded")
 
             await asyncio.to_thread(
-                self._rvc.infer,
+                rvc.infer,
                 input_wav=silence_tensor,
                 block_frame_16k=400,
                 skip_head=0,
@@ -283,6 +295,7 @@ class RVCVC(VCInterface):
 
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 logger.debug("RVC GPU cache cleared")

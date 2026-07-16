@@ -131,6 +131,7 @@ async def test_config_version_metadata_flows_into_compiled_prompt():
 @pytest.mark.asyncio
 async def test_active_service_context_config_overrides_state_prompt():
     """Runtime service context config is the source of truth for persona prompt."""
+
     class RuntimeConfig:
         def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
             return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
@@ -171,6 +172,7 @@ async def test_state_prompt_is_fallback_without_service_context_config():
 @pytest.mark.asyncio
 async def test_live2d_prompt_is_included_from_runtime_config(monkeypatch: pytest.MonkeyPatch):
     """Base persona prompt includes the generated Live2D expression guide."""
+
     class RuntimeConfig:
         def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
             return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
@@ -213,6 +215,7 @@ async def test_live2d_prompt_is_included_from_runtime_config(monkeypatch: pytest
 @pytest.mark.asyncio
 async def test_live2d_prompt_failure_keeps_prompt_and_warns(monkeypatch: pytest.MonkeyPatch):
     """Live2D prompt errors do not block persona prompt compilation."""
+
     class RuntimeConfig:
         def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
             return f"CONFIG-PROMPT::{live2d_prompt or 'NO-LIVE2D'}"
@@ -251,6 +254,7 @@ async def test_live2d_prompt_failure_keeps_prompt_and_warns(monkeypatch: pytest.
 @pytest.mark.asyncio
 async def test_service_context_runtime_config_version_flows_into_compiled_prompt():
     """Runtime config version falls back to active service context metadata."""
+
     class RuntimeConfig:
         def get_system_prompt(self, live2d_prompt: str | None = None) -> str:
             return "CONFIG-PROMPT"
@@ -339,7 +343,13 @@ async def test_affinity_section_ordering():
 async def test_affinity_band_text_changes_with_value():
     """Different affinity values produce different band labels in the prompt."""
     bands = {}
-    for value, expected_substring in [(15, "警惕疏离"), (45, "礼貌"), (62, "略熟"), (78, "亲近"), (92, "宠溺")]:
+    for value, expected_substring in [
+        (15, "警惕疏离"),
+        (45, "礼貌"),
+        (62, "略熟"),
+        (78, "亲近"),
+        (92, "宠溺"),
+    ]:
         state = {
             "session_id": "test",
             "system_prompt": "Base.",
@@ -392,9 +402,7 @@ async def test_improvisation_ordered_before_memory():
         "system_prompt": "[PERSONA]",
         "metadata": {},
     }
-    result = await compile_prompt(
-        state, memory_context="## 相关记忆\n用户喜欢猫"
-    )
+    result = await compile_prompt(state, memory_context="## 相关记忆\n用户喜欢猫")
     improv_pos = result.system_prompt.index("即兴闲聊模式")
     memory_pos = result.system_prompt.index("相关记忆")
     assert improv_pos < memory_pos, (

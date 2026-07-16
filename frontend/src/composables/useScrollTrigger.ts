@@ -19,64 +19,43 @@ interface ScrollTriggerOptions extends ScrollTrigger.Vars {
  */
 export function useScrollTrigger(
   trigger: Ref<HTMLElement | null>,
-  options: ScrollTriggerOptions = {}
+  options: ScrollTriggerOptions = {},
 ) {
   const { from = {}, to = {}, ...scrollOptions } = options
 
   const { ctx, prefersReducedMotion } = useGsap((gsap) => {
-    watch(trigger, (el) => {
-      if (!el) return
+    watch(
+      trigger,
+      (el) => {
+        if (!el) return
 
-      // Default animation: fade in + slide up
-      gsap.fromTo(el,
-        {
-          opacity: 0,
-          y: 30,
-          ...from
-        },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.6,
-          ease: 'power2.out',
-          scrollTrigger: {
-            trigger: el,
-            start: 'top 80%',
-            end: 'bottom 20%',
-            toggleActions: 'play none none reverse',
-            ...scrollOptions
+        // Default animation: fade in + slide up
+        gsap.fromTo(
+          el,
+          {
+            opacity: 0,
+            y: 30,
+            ...from,
           },
-          ...to
-        }
-      )
-    }, { immediate: true })
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.6,
+            ease: 'power2.out',
+            scrollTrigger: {
+              trigger: el,
+              start: 'top 80%',
+              end: 'bottom 20%',
+              toggleActions: 'play none none reverse',
+              ...scrollOptions,
+            },
+            ...to,
+          },
+        )
+      },
+      { immediate: true },
+    )
   })
 
   return { ctx, prefersReducedMotion }
-}
-
-/**
- * Scrub animation - progress tied to scroll position.
- */
-export function useScrollScrub(
-  trigger: Ref<HTMLElement | null>,
-  options: ScrollTriggerOptions = {}
-) {
-  return useScrollTrigger(trigger, {
-    scrub: true,
-    ...options
-  })
-}
-
-/**
- * Pin section - element stays fixed while scroll continues.
- */
-export function useScrollPin(
-  trigger: Ref<HTMLElement | null>,
-  options: ScrollTriggerOptions = {}
-) {
-  return useScrollTrigger(trigger, {
-    pin: true,
-    ...options
-  })
 }

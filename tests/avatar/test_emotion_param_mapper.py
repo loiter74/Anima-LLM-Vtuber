@@ -16,6 +16,7 @@ from unittest.mock import patch
 # Initialization
 # ============================================================
 
+
 class TestEmotionParamMapperInit:
     """Initialization."""
 
@@ -41,6 +42,7 @@ class TestEmotionParamMapperInit:
 # ============================================================
 # map_emotion
 # ============================================================
+
 
 class TestEmotionParamMapperMapEmotion:
     """map_emotion() — single emotion to parameters."""
@@ -86,6 +88,7 @@ class TestEmotionParamMapperMapEmotion:
     def test_neutral_all_zero(self):
         """Neutral should have mostly zero/default values."""
         import random
+
         mapper = EmotionParamMapper()
         # Use a fixed seed for deterministic test
         random.seed(42)
@@ -134,6 +137,7 @@ class TestEmotionParamMapperMapEmotion:
     def test_unknown_emotion_falls_back_to_neutral(self):
         """Unknown emotion should map to neutral and log a warning."""
         import random
+
         random.seed(42)
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("nonexistent_emotion")
@@ -171,6 +175,7 @@ class TestEmotionParamMapperMapEmotion:
 # ============================================================
 # Intensity scaling
 # ============================================================
+
 
 class TestEmotionParamMapperIntensity:
     """Intensity scaling behavior."""
@@ -221,6 +226,7 @@ class TestEmotionParamMapperIntensity:
 # Random variance
 # ============================================================
 
+
 class TestEmotionParamMapperVariance:
     """Random variance behavior."""
 
@@ -254,6 +260,7 @@ class TestEmotionParamMapperVariance:
 # Timeline mapping
 # ============================================================
 
+
 class TestEmotionParamMapperTimeline:
     """map_emotions_timeline()."""
 
@@ -284,6 +291,7 @@ class TestEmotionParamMapperTimeline:
 # ============================================================
 # Utility methods
 # ============================================================
+
 
 class TestEmotionParamMapperUtility:
     """add_emotion_mapping and properties."""

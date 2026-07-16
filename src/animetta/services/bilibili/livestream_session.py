@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 
@@ -263,7 +263,10 @@ class LivestreamSession:
             return
 
         def create_task() -> None:
-            task = asyncio.create_task(coroutine_factory())
+            async def invoke_callback() -> None:
+                await coroutine_factory()
+
+            task: asyncio.Task[None] = asyncio.create_task(invoke_callback())
             self._callback_tasks.add(task)
             task.add_done_callback(self._callback_done)
 
@@ -382,7 +385,8 @@ class LivestreamSession:
             )
 
     def _transition(self, **changes: object) -> None:
-        self._snapshot = replace(
+        replace_snapshot = cast(Any, replace)
+        self._snapshot = replace_snapshot(
             self._snapshot,
             **changes,
             updated_at=self._clock(),

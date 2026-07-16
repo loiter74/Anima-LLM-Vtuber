@@ -9,6 +9,7 @@ VAD Factory - Create VAD instances based on configuration
 
 from loguru import logger
 
+from animetta.config.providers.vad import VADBaseConfig
 from animetta.observability.service_proxy import instrument_service
 
 from .interface import VADInterface
@@ -19,7 +20,12 @@ class VADFactory:
     """VAD Service Factory"""
 
     @staticmethod
-    def create_from_config(config, *, strict: bool = False, **kwargs) -> VADInterface:
+    def create_from_config(
+        config: VADBaseConfig,
+        *,
+        strict: bool = False,
+        **kwargs,
+    ) -> VADInterface:
         """
         Create VAD instance from config object (using ProviderRegistry)
 
@@ -50,12 +56,14 @@ class VADFactory:
         except Exception as e:
             if strict:
                 raise
-            logger.error(f"Failed to create VAD service (type={config.type}): {type(e).__name__}: {e}")
+            logger.error(
+                f"Failed to create VAD service (type={config.type}): {type(e).__name__}: {e}"
+            )
             # Degrade to Mock implementation
             logger.warning(f"Degraded to using MockVAD (original config: {config.type})")
             return instrument_service(
                 MockVAD(
-                    sample_rate=getattr(config, 'sample_rate', 16000),
+                    sample_rate=getattr(config, "sample_rate", 16000),
                     db_threshold=-30.0,
                     min_speech_duration=5,
                     min_silence_duration=15,
@@ -85,6 +93,7 @@ class VADFactory:
         if normalized_provider == "silero":
             try:
                 from .silero_vad import SileroVAD
+
                 return SileroVAD(
                     sample_rate=kwargs.get("sample_rate", 16000),
                     prob_threshold=kwargs.get("prob_threshold", 0.15),
@@ -99,6 +108,7 @@ class VADFactory:
                 logger.warning(f"silero-vad is not installed, falling back to Mock VAD: {e}")
                 logger.info("Tip: Run 'pip install silero-vad' to install silero-vad")
                 from .mock_vad import MockVAD
+
                 return MockVAD(
                     sample_rate=kwargs.get("sample_rate", 16000),
                     db_threshold=kwargs.get("db_threshold", -30.0),
@@ -110,12 +120,14 @@ class VADFactory:
                     raise
                 logger.error(f"Failed to initialize Silero VAD, falling back to Mock VAD: {e}")
                 from .mock_vad import MockVAD
+
                 return MockVAD(
                     sample_rate=kwargs.get("sample_rate", 16000),
                 )
         elif normalized_provider in {"mimo", "mimo-vad"}:
             try:
                 from .mimo_vad import MimoVAD
+
                 return MimoVAD(
                     api_key=kwargs.get("api_key"),
                     model=kwargs.get("model", "mimo-v2.5-asr"),
@@ -135,9 +147,11 @@ class VADFactory:
                     raise
                 logger.error(f"Failed to initialize MiMo VAD, falling back to Mock VAD: {e}")
                 from .mock_vad import MockVAD
+
                 return MockVAD(sample_rate=kwargs.get("sample_rate", 16000))
         elif normalized_provider == "mock":
             from .mock_vad import MockVAD
+
             return MockVAD(
                 sample_rate=kwargs.get("sample_rate", 16000),
                 db_threshold=kwargs.get("db_threshold", -30.0),
@@ -149,6 +163,7 @@ class VADFactory:
                 raise ValueError(f"Unknown VAD provider: {provider}")
             logger.warning(f"Unknown VAD provider: {provider}, using Mock implementation")
             from .mock_vad import MockVAD
+
             return MockVAD()
 
     @staticmethod

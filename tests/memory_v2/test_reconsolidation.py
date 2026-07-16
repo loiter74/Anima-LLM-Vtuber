@@ -30,10 +30,17 @@ class TestReconsolidationClient:
     def test_reconsolidate_returns_none_when_unavailable(self):
         client = ReconsolidationClient()
         import asyncio
-        result = asyncio.run(client.reconsolidate(
-            content="test", version=1, rewritten_at="2026-01-01",
-            valence=0.5, arousal=0.3, dominance=0.1,
-        ))
+
+        result = asyncio.run(
+            client.reconsolidate(
+                content="test",
+                version=1,
+                rewritten_at="2026-01-01",
+                valence=0.5,
+                arousal=0.3,
+                dominance=0.1,
+            )
+        )
         assert result is None
 
     def test_singleton_set_get(self):
@@ -52,10 +59,14 @@ class TestReconsolidationIntegration:
         await system.initialize()
 
         atom = MemoryAtom(
-            id="r1", layer=Layer.RAW, content="用户喜欢咖啡",
+            id="r1",
+            layer=Layer.RAW,
+            content="用户喜欢咖啡",
             occurred_at=datetime.now(UTC),
             confidence=0.7,
-            emotion_valence=0.5, emotion_arousal=0.3, emotion_dominance=0.1,
+            emotion_valence=0.5,
+            emotion_arousal=0.3,
+            emotion_dominance=0.1,
         )
 
         # Reconsolidate without LLM client
@@ -99,6 +110,7 @@ class TestReconsolidationIntegration:
 
         # Wait a moment for async reconsolidation
         import asyncio
+
         await asyncio.sleep(0.1)
 
         # Re-fetch the atom — version may have incremented
@@ -109,12 +121,14 @@ class TestReconsolidationIntegration:
 
         await system.shutdown()
 
+
 class TestReconsolidationEdgeCases:
     async def test_metadata_fallback_without_llm(self):
         system = LivingMemorySystem(db_path=":memory:")
         await system.initialize()
-        atom = MemoryAtom(id="r2", layer=Layer.RAW, content="test",
-                          occurred_at=datetime.now(UTC), confidence=0.7)
+        atom = MemoryAtom(
+            id="r2", layer=Layer.RAW, content="test", occurred_at=datetime.now(UTC), confidence=0.7
+        )
         # Reconsolidate without LLM — should use metadata fallback
         await system._reconsolidate_atom(atom, VAD_MAP["happy"], "query")
         assert atom.version >= 2  # Metadata fallback still increments version

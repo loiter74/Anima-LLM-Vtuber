@@ -294,9 +294,7 @@ def test_golden_snapshot_requires_factory_bound_deepseek_identity(
 
 @pytest.mark.parametrize("state", ["pending", "loading"])
 def test_golden_snapshot_preserves_pending_connectivity_state(state: str) -> None:
-    config, manager = _seed_pool(
-        connectivity={"state": state, "ready": False, "reason": None}
-    )
+    config, manager = _seed_pool(connectivity={"state": state, "ready": False, "reason": None})
 
     payload = _snapshot(config=config, manager=manager)
 
@@ -396,9 +394,7 @@ def test_golden_snapshot_accepts_normalized_equivalent_alice_path() -> None:
     tts = _AliceQwen()
     tts.ref_audio_path = "config/personas/voices/alice_ref.wav"
     config, manager = _seed_pool(tts=tts)
-    config.tts.ref_audio_path = (
-        "config/personas/voices/../voices/alice_ref.wav"
-    )
+    config.tts.ref_audio_path = "config/personas/voices/../voices/alice_ref.wav"
 
     payload = _snapshot(config=config, manager=manager)
 
@@ -439,9 +435,7 @@ def test_golden_snapshot_is_pending_before_pool_initialization() -> None:
 def test_golden_snapshot_sanitizes_arbitrary_initialization_error() -> None:
     config, manager = _seed_pool()
     ServicePool._init_state = "failed"
-    ServicePool._init_error = (
-        "https://user:password@example.invalid?api_key=super-secret"
-    )
+    ServicePool._init_error = "https://user:password@example.invalid?api_key=super-secret"
 
     payload = _snapshot(config=config, manager=manager)
 
@@ -476,12 +470,18 @@ def test_development_snapshot_exposes_instrumented_provider_identity() -> None:
     config.services.agent = "deepseek"
     config.services.tts = "mimo"
     llm = InstrumentedServiceProxy(
-        _DeepSeek(), MagicMock(), "llm",
-        provider="deepseek", model="deepseek-v4-flash",
+        _DeepSeek(),
+        MagicMock(),
+        "llm",
+        provider="deepseek",
+        model="deepseek-v4-flash",
     )
     tts = InstrumentedServiceProxy(
-        MockTTS(), MagicMock(), "tts",
-        provider="mimo", model="mimo-v2.5-tts",
+        MockTTS(),
+        MagicMock(),
+        "tts",
+        provider="mimo",
+        model="mimo-v2.5-tts",
     )
     manager = _manager("unloaded")
     _seed_pool(config=config, llm=llm, tts=tts, manager=manager)
@@ -567,9 +567,7 @@ async def test_golden_connectivity_rejects_missing_endpoint_without_probe() -> N
 async def test_golden_connectivity_rejects_catalog_without_configured_model() -> None:
     llm = _DeepSeek()
     list_models = AsyncMock(
-        return_value=SimpleNamespace(
-            data=[SimpleNamespace(id="deepseek-other-model")]
-        )
+        return_value=SimpleNamespace(data=[SimpleNamespace(id="deepseek-other-model")])
     )
     llm.client = SimpleNamespace(models=SimpleNamespace(list=list_models))
     context = ServiceContext()
@@ -587,9 +585,7 @@ async def test_golden_connectivity_rejects_catalog_without_configured_model() ->
         "reason": "model_unavailable",
     }
     assert "deepseek-other-model" not in json.dumps(result)
-    assert "deepseek-other-model" not in json.dumps(
-        context.llm_connectivity_status
-    )
+    assert "deepseek-other-model" not in json.dumps(context.llm_connectivity_status)
 
 
 async def test_golden_connectivity_accepts_nested_proxy_and_target_model() -> None:
@@ -767,9 +763,7 @@ async def test_repeated_init_does_not_replace_initialized_but_unready_golden_poo
         await ServicePool.init(config, model_manager=manager)
 
     context_class.assert_called_once_with(model_manager=manager)
-    context.load_from_config.assert_awaited_once_with(
-        config, initialize_memory=False
-    )
+    context.load_from_config.assert_awaited_once_with(config, initialize_memory=False)
     assert ServicePool._llm is first_llm
     assert ServicePool.is_ready() is False
 
@@ -787,9 +781,7 @@ async def test_concurrent_pool_init_shares_one_initialization_task() -> None:
     context.emotion_analyzer = None
     context.audio_processor = None
 
-    async def load_from_config(
-        _config: object, *, initialize_memory: bool
-    ) -> None:
+    async def load_from_config(_config: object, *, initialize_memory: bool) -> None:
         assert initialize_memory is False
         entered.set()
         await release.wait()
@@ -813,9 +805,7 @@ async def test_concurrent_pool_init_shares_one_initialization_task() -> None:
         await asyncio.gather(first, second)
 
     context_class.assert_called_once_with(model_manager=None)
-    context.load_from_config.assert_awaited_once_with(
-        config, initialize_memory=False
-    )
+    context.load_from_config.assert_awaited_once_with(config, initialize_memory=False)
 
 
 @pytest.mark.parametrize("stage", ["load", "warmup", "connectivity"])
@@ -866,9 +856,7 @@ async def test_cancelled_golden_init_cleans_every_partial_stage(stage: str) -> N
         "animetta.core.service_context.ServiceContext",
         return_value=context,
     ):
-        init_task = asyncio.create_task(
-            ServicePool.init(config, model_manager=manager)
-        )
+        init_task = asyncio.create_task(ServicePool.init(config, model_manager=manager))
         await entered.wait()
         init_task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -911,9 +899,7 @@ async def test_shutdown_waits_for_inflight_init_before_final_cleanup() -> None:
         "reason": None,
     }
 
-    async def cancellation_resistant_load(
-        _config: object, *, initialize_memory: bool
-    ) -> None:
+    async def cancellation_resistant_load(_config: object, *, initialize_memory: bool) -> None:
         assert initialize_memory is False
         entered.set()
         try:
@@ -1067,9 +1053,7 @@ async def test_shutdown_gate_prevents_cancellation_resistant_init_ready_writebac
         "reason": None,
     }
 
-    async def cancellation_resistant_load(
-        _config: object, *, initialize_memory: bool
-    ) -> None:
+    async def cancellation_resistant_load(_config: object, *, initialize_memory: bool) -> None:
         assert initialize_memory is False
         entered.set()
         try:

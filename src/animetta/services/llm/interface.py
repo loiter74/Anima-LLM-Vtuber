@@ -16,11 +16,7 @@ class LLMInterface(ABC):
     """
 
     @abstractmethod
-    async def chat(
-        self,
-        user_input: str,
-        **kwargs
-    ) -> str:
+    async def chat(self, user_input: str, **kwargs) -> str:
         """
         Chat with the LLM
 
@@ -33,11 +29,7 @@ class LLMInterface(ABC):
         """
         pass
 
-    async def chat_messages(
-        self,
-        messages: list[dict],
-        **kwargs
-    ) -> str:
+    async def chat_messages(self, messages: list[dict], **kwargs) -> str:
         """
         Chat using messages-based protocol (OpenAI API style).
 
@@ -55,11 +47,7 @@ class LLMInterface(ABC):
         return await self.chat(prompt, **kwargs)
 
     @abstractmethod
-    async def chat_stream(
-        self,
-        user_input: str,
-        **kwargs
-    ) -> AsyncIterator[str]:
+    def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         """
         Streaming chat
 
@@ -70,7 +58,7 @@ class LLMInterface(ABC):
         Yields:
             str: Text chunk of the LLM response
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def set_system_prompt(self, prompt: str) -> None:
@@ -113,11 +101,7 @@ class LLMInterface(ABC):
         pass
 
     @abstractmethod
-    def set_memory_from_history(
-        self,
-        conf_uid: str,
-        history_uid: str
-    ) -> None:
+    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """
         Restore conversation memory from history records
 

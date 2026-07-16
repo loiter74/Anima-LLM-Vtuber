@@ -8,6 +8,7 @@ Manages the action queue for Live2D models, based on open-yachiyo implementation
 import asyncio
 import contextlib
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -17,25 +18,28 @@ from loguru import logger
 
 class OverflowPolicy(Enum):
     """Queue overflow policy"""
+
     DROP_OLDEST = "drop_oldest"  # Drop the oldest
     DROP_NEWEST = "drop_newest"  # Drop the newest
-    REJECT = "reject"             # Reject new actions
+    REJECT = "reject"  # Reject new actions
 
 
 class QueuePolicy(Enum):
     """Action queue policy"""
-    APPEND = "append"       # Append to the end of the queue
-    REPLACE = "replace"     # Clear the queue and execute the new action
-    INTERRUPT = "interrupt" # Immediately interrupt the current action and execute the new action
+
+    APPEND = "append"  # Append to the end of the queue
+    REPLACE = "replace"  # Clear the queue and execute the new action
+    INTERRUPT = "interrupt"  # Immediately interrupt the current action and execute the new action
 
 
 @dataclass
 class ActionMessage:
     """Action message"""
+
     action_id: str
     action: dict
     duration_sec: float = 0.5
-    queue_policy: str = "append"
+    queue_policy: QueuePolicy | str = QueuePolicy.APPEND
 
     def __post_init__(self):
         if isinstance(self.queue_policy, str):
@@ -71,7 +75,7 @@ class Live2DActionMutex:
             self._is_executing = True
             return True
 
-    async def release(self):
+    async def release(self) -> None:
         """Release the mutex lock"""
         async with self._lock:
             self._is_executing = False
@@ -93,7 +97,7 @@ class Live2DActionQueue:
         self,
         max_size: int = 120,
         overflow_policy: OverflowPolicy = OverflowPolicy.DROP_OLDEST,
-        mutex: Live2DActionMutex | None = None
+        mutex: Live2DActionMutex | None = None,
     ):
         self.max_size = max_size
         self.overflow_policy = overflow_policy
@@ -105,12 +109,15 @@ class Live2DActionQueue:
         self._current_action: ActionMessage | None = None
 
         # Action execution callback
-        self._execute_callback: callable | None = None
+        self._execute_callback: Callable[[ActionMessage], Awaitable[None]] | None = None
 
         # Task tracking (for cleanup)
-        self._process_task: asyncio.Task | None = None
+        self._process_task: asyncio.Task[None] | None = None
 
-    def set_execute_callback(self, callback: callable):
+    def set_execute_callback(
+        self,
+        callback: Callable[[ActionMessage], Awaitable[None]],
+    ) -> None:
         """Set action execution callback"""
         self._execute_callback = callback
 
@@ -153,7 +160,9 @@ class Live2DActionQueue:
 
         # Enqueue
         self.queue.append(action)
-        logger.debug(f"[ActionQueue] Action enqueued: {action.action_id}, queue length: {len(self.queue)}")
+        logger.debug(
+            f"[ActionQueue] Action enqueued: {action.action_id}, queue length: {len(self.queue)}"
+        )
 
         # Start processing
         if not self._is_processing:
@@ -188,12 +197,16 @@ class Live2DActionQueue:
                 # Wait for mutex lock
                 acquired = await self.mutex.acquire()
                 if not acquired:
-                    logger.warning(f"[ActionQueue] Cannot acquire mutex, skipping action: {action.action_id}")
+                    logger.warning(
+                        f"[ActionQueue] Cannot acquire mutex, skipping action: {action.action_id}"
+                    )
                     continue
 
                 try:
                     # Execute action
-                    logger.info(f"[ActionQueue] Executing action: {action.action_id}, type: {action.action.get('type')}")
+                    logger.info(
+                        f"[ActionQueue] Executing action: {action.action_id}, type: {action.action.get('type')}"
+                    )
                     await self._execute_action(action)
 
                     # Wait for action completion
@@ -212,7 +225,9 @@ class Live2DActionQueue:
         if self._execute_callback:
             await self._execute_callback(action)
         else:
-            logger.warning(f"[ActionQueue] No execute callback set, action not executed: {action.action_id}")
+            logger.warning(
+                f"[ActionQueue] No execute callback set, action not executed: {action.action_id}"
+            )
 
     def _handle_task_exception(self, task: asyncio.Task):
         """Handle task exceptions (prevent task leaks)"""
@@ -226,7 +241,7 @@ class Live2DActionQueue:
         except Exception as e:
             logger.error(f"[ActionQueue] Error handling task exception: {e}", exc_info=e)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop queue processing and clean up resources"""
         # Cancel the running task
         if self._process_task and not self._process_task.done():
@@ -240,7 +255,7 @@ class Live2DActionQueue:
         self._current_action = None
         logger.debug("[ActionQueue] Queue stopped")
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the queue"""
         self.queue.clear()
         logger.debug("[ActionQueue] Queue cleared")
@@ -263,6 +278,7 @@ class Live2DActionQueue:
 
 # ==================== Action Factory ====================
 
+
 class ActionFactory:
     """Action message factory"""
 
@@ -271,29 +287,19 @@ class ActionFactory:
         """Create an expression action"""
         return ActionMessage(
             action_id=f"expr_{expression_name}_{intensity}_{time.time()}",
-            action={
-                "type": "expression",
-                "name": expression_name,
-                "intensity": intensity
-            },
-            duration_sec=0.3
+            action={"type": "expression", "name": expression_name, "intensity": intensity},
+            duration_sec=0.3,
         )
 
     @staticmethod
     def motion(group: str, index: int, expression: str = None) -> ActionMessage:
         """Create a motion action"""
-        action_data = {
-            "type": "motion",
-            "group": group,
-            "index": index
-        }
+        action_data = {"type": "motion", "group": group, "index": index}
         if expression:
             action_data["expression"] = expression
 
         return ActionMessage(
-            action_id=f"motion_{group}_{index}_{time.time()}",
-            action=action_data,
-            duration_sec=1.0
+            action_id=f"motion_{group}_{index}_{time.time()}", action=action_data, duration_sec=1.0
         )
 
     @staticmethod
@@ -301,12 +307,8 @@ class ActionFactory:
         """Create a parameter action"""
         return ActionMessage(
             action_id=f"param_{param_name}_{value}_{time.time()}",
-            action={
-                "type": "param",
-                "name": param_name,
-                "value": value
-            },
-            duration_sec=0.1
+            action={"type": "param", "name": param_name, "value": value},
+            duration_sec=0.1,
         )
 
     @staticmethod
@@ -314,9 +316,6 @@ class ActionFactory:
         """Create a sequence action"""
         return ActionMessage(
             action_id=f"seq_{time.time()}",
-            action={
-                "type": "sequence",
-                "actions": actions
-            },
-            duration_sec=total_duration
+            action={"type": "sequence", "actions": actions},
+            duration_sec=total_duration,
         )

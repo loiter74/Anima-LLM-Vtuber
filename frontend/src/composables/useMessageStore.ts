@@ -43,7 +43,9 @@ export function useMessageStore() {
   const isReady = ref(false)
 
   openMessageDB()
-    .then(() => { isReady.value = true })
+    .then(() => {
+      isReady.value = true
+    })
     .catch(() => {})
 
   async function saveMessages(messages: ChatMessage[]): Promise<void> {

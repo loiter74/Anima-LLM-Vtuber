@@ -12,6 +12,7 @@ from loguru import logger
 
 try:
     from pydub import AudioSegment
+
     PYDUB_AVAILABLE = True
 except ImportError:
     PYDUB_AVAILABLE = False
@@ -88,7 +89,7 @@ def _decode_wav_samples(audio_path: str) -> _PcmAudioSegment:
         raise ValueError(f"Unsupported WAV sample width: {sample_width}")
 
     for i in range(0, len(values), channels):
-        frame = values[i:i + channels]
+        frame = values[i : i + channels]
         if frame:
             samples.append(sum(frame) / len(frame))
     return _PcmAudioSegment(tuple(samples), frame_rate)
@@ -178,7 +179,7 @@ class AudioAnalyzer:
 
             logger.debug(
                 f"[AudioAnalyzer] Calculated {len(volumes)} volume samples "
-                f"({duration_ms/1000:.2f}s audio, {self.sample_rate} Hz, gain={gain})"
+                f"({duration_ms / 1000:.2f}s audio, {self.sample_rate} Hz, gain={gain})"
             )
 
             return volumes
@@ -232,7 +233,9 @@ class AudioAnalyzer:
 
 
 # Convenience function
-def compute_volume_envelope(audio_path: str, sample_rate: int = 50, gain: float = 1.8) -> list[float]:
+def compute_volume_envelope(
+    audio_path: str, sample_rate: int = 50, gain: float = 1.8
+) -> list[float]:
     """
     Convenience function: calculate audio volume envelope
 
@@ -263,7 +266,7 @@ def trim_leading_silence(
         audio = AudioSegment.from_file(audio_path).set_channels(1)
         trim_ms = 0
         for start_ms in range(0, min(max_scan_ms, len(audio)), 10):
-            segment = audio[start_ms:start_ms + 10]
+            segment = audio[start_ms : start_ms + 10]
             if segment.max / 32768.0 > threshold:
                 trim_ms = start_ms
                 break
@@ -281,7 +284,7 @@ def trim_leading_silence(
     audio = _decode_wav_samples(audio_path)
     trim_ms = 0
     for start_ms in range(0, min(max_scan_ms, len(audio)), 10):
-        segment = audio[start_ms:start_ms + 10]
+        segment = audio[start_ms : start_ms + 10]
         if segment.max / 32768.0 > threshold:
             trim_ms = start_ms
             break

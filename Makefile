@@ -1,4 +1,4 @@
-.PHONY: lint typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint qwen-build qwen-up qwen-deploy qwen-stop qwen-destroy anima-up anima-down
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -8,16 +8,25 @@ QUALITY_RELEASE_EVIDENCE ?= artifacts/test-impact/release-runtime/evidence.json
 # ── Local targets ────────────────────────────────────────────────────────
 
 lint:
-	PYTHONPATH=src ruff check src/ tests/
+	PYTHONPATH=src ruff check src/ tooling/ scripts/ evaluations/ tests/
 
 format:
-	PYTHONPATH=src ruff format src/ tests/
+	PYTHONPATH=src ruff format src/ tooling/ scripts/ evaluations/ tests/
+
+format-check:
+	PYTHONPATH=src ruff format --check src/ tooling/ scripts/ evaluations/ tests/
+
+frontend-lint:
+	pnpm --dir frontend lint
+
+frontend-format-check:
+	pnpm --dir frontend format:check
 
 typecheck:
 	PYTHONPATH=src mypy src/animetta --ignore-missing-imports
 
 deadcode:
-	PYTHONPATH=src vulture src/animetta/core src/animetta/config src/animetta/memory src/animetta/avatar src/animetta/utils src/animetta/notifier src/animetta/inspection --min-confidence 80
+	PYTHONPATH=src $(PYTHON) -m vulture
 
 test:
 	PYTHONPATH=src python -m pytest tests/ -x -q
@@ -66,6 +75,27 @@ health:
 
 # ── Docker targets ───────────────────────────────────────────────────────
 
+qwen-build:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-build
+
+qwen-up:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-up
+
+qwen-deploy:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-deploy
+
+qwen-stop:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-stop
+
+qwen-destroy:
+	$(PYTHON) scripts/runtime_lifecycle.py qwen-destroy
+
+anima-up:
+	$(PYTHON) scripts/runtime_lifecycle.py anima-up
+
+anima-down:
+	$(PYTHON) scripts/runtime_lifecycle.py anima-down
+
 docker-health: docker-lint docker-test
 	@echo "Docker health check complete."
 
@@ -77,3 +107,4 @@ docker-test:
 
 docker-typecheck:
 	docker compose exec animetta bash -c "pip install mypy --break-system-packages -q && PYTHONPATH=src mypy src/animetta --ignore-missing-imports"
+

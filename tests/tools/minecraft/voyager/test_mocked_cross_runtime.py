@@ -48,8 +48,7 @@ class FakeNodeBridge:
             observation_id=f"observation-{self.sequence}",
             correlation_id=correlation_id,
             runtime_id="node-runtime-1",
-            captured_at=datetime(2026, 7, 12, tzinfo=UTC)
-            + timedelta(seconds=self.sequence),
+            captured_at=datetime(2026, 7, 12, tzinfo=UTC) + timedelta(seconds=self.sequence),
             inventory=dict(self.inventory),
             equipment={},
             environment={"dimension": "overworld"},
@@ -72,9 +71,7 @@ class FakeNodeBridge:
             return {"status": "success", "result": manifest.model_dump(mode="json")}
 
         if action == "observe":
-            observation = self.pending_observation or self._observation(
-                params["correlation_id"]
-            )
+            observation = self.pending_observation or self._observation(params["correlation_id"])
             self.pending_observation = None
             self.last_observation = observation
             return {
@@ -85,12 +82,12 @@ class FakeNodeBridge:
         if action == "eval_skill":
             assert self.last_observation is not None
             self.inventory["oak_log"] = self.inventory.get("oak_log", 0) + 1
-            after = self._observation(f'{params["correlation_id"]}:after')
+            after = self._observation(f"{params['correlation_id']}:after")
             receipt = ActionReceipt(
                 receipt_id=f"receipt-{self.sequence}",
                 session_id=params["session_id"],
                 task_id=params["task_id"],
-                correlation_id=f'{params["correlation_id"]}:1:collect',
+                correlation_id=f"{params['correlation_id']}:1:collect",
                 runtime_id="node-runtime-1",
                 capability="collect",
                 params={"block_type": "oak_log", "count": 1},

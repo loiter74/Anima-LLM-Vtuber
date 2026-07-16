@@ -19,10 +19,14 @@ import asyncio
 import contextlib
 import threading
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from .models import DanmakuMessage
+
+if TYPE_CHECKING:
+    from .danmaku_buffer import DanmakuBuffer
 
 _AUTH_ERROR_CODES = {-101, -102, -111, -352}
 _ROOM_ERROR_CODES = {-400, -404}
@@ -82,10 +86,10 @@ class DanmakuService:
         self._on_status_change: Callable[[bool, str], None] | None = None
 
         # bilibili-api client (created inside the thread)
-        self._monitor = None
+        self._monitor: Any | None = None
 
         # DanmakuBuffer for meme collection pipeline
-        self._danmaku_buffer = None
+        self._danmaku_buffer: DanmakuBuffer | None = None
 
         # Connection state
         self._connected = False
@@ -103,7 +107,7 @@ class DanmakuService:
         """Register callback for connection status changes."""
         self._on_status_change = callback
 
-    def set_buffer(self, buffer) -> None:
+    def set_buffer(self, buffer: DanmakuBuffer) -> None:
         """Attach a DanmakuBuffer to receive copies of all incoming danmaku.
 
         The buffer receives the same danmaku messages forwarded to the
@@ -227,7 +231,9 @@ class DanmakuService:
         try:
             from bilibili_api import Credential, live
         except ImportError:
-            logger.error("[DanmakuService] bilibili-api-python not installed. Run: pip install bilibili-api-python")
+            logger.error(
+                "[DanmakuService] bilibili-api-python not installed. Run: pip install bilibili-api-python"
+            )
             raise
 
         # Build credential if sessdata is provided
@@ -236,15 +242,16 @@ class DanmakuService:
             credential = Credential(sessdata=self.sessdata)
 
         # Create LiveDanmaku monitor
-        self._monitor = live.LiveDanmaku(
+        monitor = live.LiveDanmaku(
             room_display_id=self.room_id,
             credential=credential,
             max_retry=3,
         )
+        self._monitor = monitor
 
         # Register event handlers
-        @self._monitor.on('DANMU_MSG')
-        async def on_danmaku(event):
+        @monitor.on("DANMU_MSG")
+        async def on_danmaku(event: dict[str, Any]) -> None:
             try:
                 data_info = event["data"]["info"]
                 content = data_info[1]  # danmaku text
@@ -264,8 +271,8 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing DANMU_MSG: {e}")
 
-        @self._monitor.on('SEND_GIFT')
-        async def on_gift(event):
+        @monitor.on("SEND_GIFT")
+        async def on_gift(event: dict[str, Any]) -> None:
             try:
                 gift_data = event["data"]["data"]
                 user_name = gift_data.get("uname", "未知")
@@ -285,8 +292,8 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SEND_GIFT: {e}")
 
-        @self._monitor.on('SUPER_CHAT_MESSAGE')
-        async def on_sc(event):
+        @monitor.on("SUPER_CHAT_MESSAGE")
+        async def on_sc(event: dict[str, Any]) -> None:
             try:
                 sc_data = event["data"]["data"]
                 user_name = sc_data.get("user_info", {}).get("uname", "未知")
@@ -306,8 +313,8 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SUPER_CHAT: {e}")
 
-        @self._monitor.on('INTERACT_WORD_V2')
-        async def on_interact(event):
+        @monitor.on("INTERACT_WORD_V2")
+        async def on_interact(event: dict[str, Any]) -> None:
             try:
                 data = event["data"]["data"]
                 decoded = data.get("pb_decoded", {})
@@ -324,8 +331,8 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing INTERACT_WORD: {e}")
 
-        @self._monitor.on("VERIFICATION_SUCCESSFUL")
-        async def on_verified(_event):
+        @monitor.on("VERIFICATION_SUCCESSFUL")
+        async def on_verified(_event: dict[str, Any]) -> None:
             self._connected = True
             self._notify_status(True, "Connected")
             logger.info("[DanmakuService] Connected to room {}", self.room_id)
@@ -335,7 +342,7 @@ class DanmakuService:
 
         try:
             # This blocks until disconnected
-            await self._monitor.connect()
+            await monitor.connect()
         finally:
             self._connected = False
             self._notify_status(False, "Disconnected")
@@ -347,7 +354,7 @@ class DanmakuService:
 
             # Clean up monitor
             with contextlib.suppress(Exception):
-                await self._monitor.disconnect()
+                await monitor.disconnect()
             self._monitor = None
 
     # ========================================

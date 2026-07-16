@@ -40,8 +40,16 @@ def test_pipeline_stage_enum():
     from animetta.services.singing import PipelineStage
 
     stages = {s.value for s in PipelineStage}
-    expected = {"idle", "downloading", "separating", "transcribing",
-                "waiting_lyrics", "converting", "mixing", "done"}
+    expected = {
+        "idle",
+        "downloading",
+        "separating",
+        "transcribing",
+        "waiting_lyrics",
+        "converting",
+        "mixing",
+        "done",
+    }
     assert stages == expected
 
 
@@ -71,15 +79,16 @@ def test_song_result_creation():
     assert len(result.lyrics) == 1
     assert result.video_title == "Test Song"
     assert result.subtitle_path == ""  # default
-    assert result.volumes == []       # default
+    assert result.volumes == []  # default
 
 
 def test_pipeline_progress_creation():
     """PipelineProgress should track stage + percentage."""
     from animetta.services.singing import PipelineProgress, PipelineStage
 
-    p = PipelineProgress(stage=PipelineStage.DOWNLOADING, progress=45.0,
-                         message="Fetching audio...")
+    p = PipelineProgress(
+        stage=PipelineStage.DOWNLOADING, progress=45.0, message="Fetching audio..."
+    )
     assert p.stage == PipelineStage.DOWNLOADING
     assert p.progress == 45.0
     assert p.message == "Fetching audio..."

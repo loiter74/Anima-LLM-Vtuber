@@ -29,30 +29,32 @@ def _runtime(
     llm_calls: int,
 ) -> InspectionRuntime:
     query = MagicMock()
-    query.trace_detail = AsyncMock(return_value={
-        "trace_id": task_id,
-        "outcome": "success",
-        "operations": [
-            *[_operation(name) for name in workflow],
-            *[
-                {**_operation("llm.chat", layer="service"), "provider": "deepseek"}
-                for _ in range(llm_calls)
+    query.trace_detail = AsyncMock(
+        return_value={
+            "trace_id": task_id,
+            "outcome": "success",
+            "operations": [
+                *[_operation(name) for name in workflow],
+                *[
+                    {**_operation("llm.chat", layer="service"), "provider": "deepseek"}
+                    for _ in range(llm_calls)
+                ],
             ],
-        ],
-        "events": [{
-            "name": "chat:sentence",
-            "direction": "egress",
-            "phase": "delivered",
-        }],
-    })
+            "events": [
+                {
+                    "name": "chat:sentence",
+                    "direction": "egress",
+                    "phase": "delivered",
+                }
+            ],
+        }
+    )
     return InspectionRuntime(
         observation_query=query,
         report_store=MagicMock(),
         memory_runtime=MagicMock(),
         readiness_snapshot=lambda: {
-            "components": {
-                "tts": {"provider": "qwen3", "ready": True, "state": "ready"}
-            }
+            "components": {"tts": {"provider": "qwen3", "ready": True, "state": "ready"}}
         },
         metrics_snapshot=lambda: (
             'anima_trace_outcomes_total{outcome="success"} 2\n'
@@ -67,25 +69,43 @@ def _runtime(
         (
             "golden-task",
             (
-                "conversation_start", "personality", "reasoner", "anima_composer",
-                "response_guard", "reply_output", "tts", "emotion",
-                "performance_output", "conversation_finalizer",
+                "conversation_start",
+                "personality",
+                "reasoner",
+                "anima_composer",
+                "response_guard",
+                "reply_output",
+                "tts",
+                "emotion",
+                "performance_output",
+                "conversation_finalizer",
             ),
             2,
         ),
         (
             "standard-task",
             (
-                "personality", "llm", "humor_rewrite", "humor_validation",
-                "tts", "emotion", "output",
+                "personality",
+                "llm",
+                "humor_rewrite",
+                "humor_validation",
+                "tts",
+                "emotion",
+                "output",
             ),
             1,
         ),
         (
             "voice-task",
             (
-                "asr", "personality", "llm", "humor_rewrite", "humor_validation",
-                "tts", "emotion", "output",
+                "asr",
+                "personality",
+                "llm",
+                "humor_rewrite",
+                "humor_validation",
+                "tts",
+                "emotion",
+                "output",
             ),
             1,
         ),
@@ -119,9 +139,7 @@ async def test_observed_turn_rejects_memory_write_and_missing_delivery_evidence(
     workflow = ("personality", "llm", "tts", "output")
     runtime = _runtime("task-1", workflow, llm_calls=1)
     detail = await runtime.observation_query.trace_detail("task-1")
-    detail["operations"].append(
-        _operation("memory.ingest", layer="memory", critical_path=False)
-    )
+    detail["operations"].append(_operation("memory.ingest", layer="memory", critical_path=False))
     detail["events"] = []
 
     result = await validate_observed_turn(
@@ -138,16 +156,23 @@ async def test_observed_turn_rejects_memory_write_and_missing_delivery_evidence(
 
 async def test_successful_real_tts_service_is_evidence_without_golden_readiness() -> None:
     workflow = (
-        "personality", "llm", "humor_rewrite", "humor_validation",
-        "tts", "emotion", "output",
+        "personality",
+        "llm",
+        "humor_rewrite",
+        "humor_validation",
+        "tts",
+        "emotion",
+        "output",
     )
     runtime = _runtime("standard-task", workflow, llm_calls=1)
     detail = await runtime.observation_query.trace_detail("standard-task")
-    detail["operations"].append({
-        **_operation("tts.synthesize", layer="service"),
-        "provider": "mimo",
-        "model": "mimo-v2.5-tts",
-    })
+    detail["operations"].append(
+        {
+            **_operation("tts.synthesize", layer="service"),
+            "provider": "mimo",
+            "model": "mimo-v2.5-tts",
+        }
+    )
     runtime = InspectionRuntime(
         observation_query=runtime.observation_query,
         report_store=runtime.report_store,

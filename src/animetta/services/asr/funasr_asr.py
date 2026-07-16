@@ -16,12 +16,15 @@ Common models:
 - paraformer-en: English speech recognition
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
 from animetta.config.core.registry import ProviderRegistry
+from animetta.config.providers.asr.funasr import FunASRConfig
 
 from .interface import ASRInterface
 
@@ -123,20 +126,14 @@ class FunASRASR(ASRInterface):
 
             except ImportError:
                 logger.error("funasr not installed, please run: pip install funasr modelscope")
-                raise ImportError(
-                    "funasr 未安装，请运行: pip install funasr modelscope"
-                )
+                raise ImportError("funasr 未安装，请运行: pip install funasr modelscope")
             except Exception as e:
                 logger.error(f"Failed to load FunASR model: {e}")
                 raise
 
         return self._model
 
-    async def transcribe(
-        self,
-        audio_data: bytes | str | Path | list | np.ndarray,
-        **kwargs
-    ) -> str:
+    async def transcribe(self, audio_data: bytes | str | Path | list | np.ndarray, **kwargs) -> str:
         """
         Transcribe audio data to text
 
@@ -172,11 +169,7 @@ class FunASRASR(ASRInterface):
 
         # Run transcription in thread pool (CPU/GPU-intensive operation)
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            self._transcribe_sync,
-            audio_path
-        )
+        result = await loop.run_in_executor(None, self._transcribe_sync, audio_path)
 
         logger.info(f"FunASR recognition result: {result}")
         return result
@@ -222,7 +215,7 @@ class FunASRASR(ASRInterface):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
             tmp_path = tmp_file.name
 
-        with wave.open(tmp_path, 'wb') as wf:
+        with wave.open(tmp_path, "wb") as wf:
             wf.setnchannels(1)  # Mono
             wf.setsampwidth(2)  # 16-bit
             wf.setframerate(16000)  # 16kHz
@@ -237,7 +230,7 @@ class FunASRASR(ASRInterface):
 
         # Try to detect format
         suffix = ".wav"
-        if audio_bytes[:3] == b'ID3' or audio_bytes[:2] == b'\xff\xfb':
+        if audio_bytes[:3] == b"ID3" or audio_bytes[:2] == b"\xff\xfb":
             suffix = ".mp3"
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
@@ -248,8 +241,8 @@ class FunASRASR(ASRInterface):
     async def transcribe_stream(
         self,
         audio_data: bytes | str | Path | list | np.ndarray,
-        **kwargs
-    ):
+        **kwargs,
+    ) -> AsyncGenerator[str]:
         """
         Stream recognition of audio, generator returns text chunks
 
@@ -264,7 +257,8 @@ class FunASRASR(ASRInterface):
 
         # Split by sentences and return
         import re
-        sentences = re.split(r'[。！？.!?]', result)
+
+        sentences = re.split(r"[。！？.!?]", result)
 
         for sentence in sentences:
             sentence = sentence.strip()
@@ -277,14 +271,19 @@ class FunASRASR(ASRInterface):
         logger.debug("FunASR ASR resources released")
 
     @classmethod
-    def _get(cls, config, key, default):
+    def _get(
+        cls,
+        config: FunASRConfig | dict[str, Any],
+        key: str,
+        default: Any,
+    ) -> Any:
         """Get value from config object or dict."""
         if isinstance(config, dict):
             return config.get(key, default)
         return getattr(config, key, default)
 
     @classmethod
-    def from_config(cls, config, **kwargs):
+    def from_config(cls, config: FunASRConfig | dict[str, Any], **kwargs):
         """Create instance from configuration"""
         return cls(
             model=cls._get(config, "model", "paraformer-zh"),

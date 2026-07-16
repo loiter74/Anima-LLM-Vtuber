@@ -14,19 +14,19 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
 # ── Matplotlib (non-interactive backend) ──────────────────────────────
 try:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     _HAS_MPL = True
 except ImportError:
     _HAS_MPL = False
@@ -34,7 +34,8 @@ except ImportError:
 
 # ── Jinja2 ─────────────────────────────────────────────────────────────
 try:
-    import jinja2
+    from jinja2 import Template as Jinja2Template
+
     _HAS_JINJA2 = True
 except ImportError:
     _HAS_JINJA2 = False
@@ -44,6 +45,7 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def get_git_commit() -> str:
     """Get current git commit (short hash), or 'unknown'."""
@@ -65,6 +67,7 @@ def _ensure_dir(path: Path) -> Path:
 # A. JSON detailed results
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def save_json_results(data: dict[str, Any], output_dir: Path) -> Path:
     """Save full per-query results as results.json."""
     _ensure_dir(output_dir)
@@ -78,6 +81,7 @@ def save_json_results(data: dict[str, Any], output_dir: Path) -> Path:
 # ═══════════════════════════════════════════════════════════════════════
 # B. JSON summary
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def save_json_summary(data: dict[str, Any], output_dir: Path) -> Path:
     """Save compact summary as summary.json."""
@@ -213,12 +217,12 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
             {"level": d, "count": difficulty_count[d], "avg_recall": sum(vals) / len(vals)}
             for d, vals in difficulty_recall.items()
         ],
-        key=lambda x: x["level"],
+        key=lambda x: str(x["level"]),
     )
 
     ctx = {
         "config_name": config.get("name", "unknown"),
-        "timestamp": data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+        "timestamp": data.get("timestamp", datetime.now(UTC).isoformat()),
         "git_commit": data.get("git_commit", ""),
         "config": config,
         "summary": summary,
@@ -227,7 +231,6 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
         "difficulty_breakdown": difficulty_breakdown,
     }
 
-    from jinja2 import Template as Jinja2Template
     template = Jinja2Template(_MD_TEMPLATE)
     report = template.render(**ctx)
 
@@ -241,6 +244,7 @@ def save_markdown_report(data: dict[str, Any], output_dir: Path) -> Path:
 # ═══════════════════════════════════════════════════════════════════════
 # D. Charts (matplotlib)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def save_charts(
     all_results: list[dict[str, Any]],
@@ -352,6 +356,7 @@ def _save_latency_distribution(
 # E. Convenience — generate all outputs
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def generate_all(data: dict[str, Any], output_dir: str | Path) -> dict[str, Path]:
     """Generate all outputs for a single result: JSON, summary, markdown, charts.
 
@@ -378,6 +383,7 @@ def generate_all(data: dict[str, Any], output_dir: str | Path) -> dict[str, Path
 # CLI (standalone — for regenerating reports from saved results.json)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _cli() -> None:
     import argparse
 
@@ -385,11 +391,13 @@ def _cli() -> None:
         description="RAG Evaluation Reporter — generate reports from results.json",
     )
     parser.add_argument(
-        "--results", required=True,
+        "--results",
+        required=True,
         help="Path to results.json (from runner output)",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output directory (default: same as results.json parent)",
     )
     args = parser.parse_args()
@@ -399,7 +407,7 @@ def _cli() -> None:
         logger.error("Results file not found: %s", results_path)
         return
 
-    with open(results_path, "r", encoding="utf-8") as f:
+    with open(results_path, encoding="utf-8") as f:
         data = json.load(f)
 
     out_dir = Path(args.output) if args.output else results_path.parent

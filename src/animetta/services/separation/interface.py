@@ -22,7 +22,7 @@ class SeparationInterface(ABC):
         audio: bytes,
         target: str | None = None,
         output_dir: str | Path | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, bytes | str]:
         """
         Separate audio mixture into constituent stems.

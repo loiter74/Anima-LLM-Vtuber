@@ -31,33 +31,37 @@ export interface LiveControllerOptions {
 function isDanmakuItem(value: unknown): value is DanmakuItem {
   if (!value || typeof value !== 'object') return false
   const item = value as Record<string, unknown>
-  return typeof item.text === 'string'
-    && typeof item.user_name === 'string'
-    && typeof item.user_id === 'number'
-    && typeof item.timestamp === 'number'
+  return (
+    typeof item.text === 'string' &&
+    typeof item.user_name === 'string' &&
+    typeof item.user_id === 'number' &&
+    typeof item.timestamp === 'number'
+  )
 }
 
 function isStatus(value: unknown): value is BilibiliStatusPayload {
   if (!value || typeof value !== 'object') return false
   const status = value as Record<string, unknown>
-  return typeof status.state === 'string'
-    && typeof status.connected === 'boolean'
-    && typeof status.generation_id === 'number'
+  return (
+    typeof status.state === 'string' &&
+    typeof status.connected === 'boolean' &&
+    typeof status.generation_id === 'number'
+  )
 }
 
 function backgroundFrom(search: URLSearchParams): BackgroundConfig {
   const requestedFile = search.get('bg')
-  const file = requestedFile && !requestedFile.includes('/') && !requestedFile.includes('\\')
-    ? requestedFile
-    : null
+  const file =
+    requestedFile && !requestedFile.includes('/') && !requestedFile.includes('\\')
+      ? requestedFile
+      : null
   const requestedOpacity = Number(search.get('bgOpacity') ?? '0.9')
   const opacity = Number.isFinite(requestedOpacity)
     ? Math.min(1, Math.max(0, requestedOpacity))
     : 0.9
   const requestedPosition = search.get('bgPosition')
-  const position = requestedPosition === 'top' || requestedPosition === 'bottom'
-    ? requestedPosition
-    : 'center'
+  const position =
+    requestedPosition === 'top' || requestedPosition === 'bottom' ? requestedPosition : 'center'
   return { file, opacity, position }
 }
 

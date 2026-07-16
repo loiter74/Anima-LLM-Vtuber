@@ -62,9 +62,7 @@ def __getattr__(name: str) -> Any:
     try:
         value = getattr(import_module(module_name, __name__), attribute)
     except ModuleNotFoundError as exc:
-        if name not in _OPTIONAL_EXPORTS or (
-            exc.name and exc.name.startswith("animetta.")
-        ):
+        if name not in _OPTIONAL_EXPORTS or (exc.name and exc.name.startswith("animetta.")):
             raise
         return None
     globals()[name] = value

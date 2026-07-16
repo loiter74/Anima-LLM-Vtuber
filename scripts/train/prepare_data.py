@@ -8,6 +8,7 @@ Usage:
     python scripts/train/prepare_data.py
     python scripts/train/prepare_data.py --raw-dir ./my_audio --output ./my_dataset
 """
+
 import random
 import shutil
 from pathlib import Path
@@ -30,7 +31,12 @@ def load_config() -> dict:
 # ── Step 1: Slice ────────────────────────────────────────────────
 
 
-def _detect_silence(audio, sr, threshold_db, min_silence_s):
+def _detect_silence(
+    audio: np.ndarray,
+    sr: int,
+    threshold_db: float,
+    min_silence_s: float,
+) -> list[tuple[int, int]]:
     """Find silent regions. Returns list of (start_sample, end_sample)."""
     fl = int(sr * 0.05)
     hl = fl // 2
@@ -80,7 +86,7 @@ def _slice(input_path: Path, output_dir: Path, cfg: dict) -> list[Path]:
             if dur > max_dur:
                 mid = len(seg) // 2
                 for pi, sp in enumerate([0, mid]):
-                    part = seg[sp:sp + mid]
+                    part = seg[sp : sp + mid]
                     if len(part) / sr >= min_dur:
                         out = output_dir / f"{input_path.stem}_seg{idx}_p{pi}.wav"
                         sf.write(str(out), part, sr)
@@ -162,7 +168,7 @@ def _augment(input_dir: Path, output_dir: Path, cfg: dict) -> list[Path]:
 # ── Main ─────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> None:
     config = load_config()
     raw_dir = Path(config["data"]["raw_dir"])
     processed_dir = Path(config["data"]["processed_dir"])
@@ -179,9 +185,7 @@ def main():
 
     # Find input audio
     audio_files = (
-        list(raw_dir.rglob("*.wav")) +
-        list(raw_dir.rglob("*.flac")) +
-        list(raw_dir.rglob("*.mp3"))
+        list(raw_dir.rglob("*.wav")) + list(raw_dir.rglob("*.flac")) + list(raw_dir.rglob("*.mp3"))
     )
     if not audio_files:
         logger.warning(f"No audio files in {raw_dir}")
@@ -199,14 +203,16 @@ def main():
         except Exception as e:
             logger.error(f"  ✗ {fpath.name}: {e}")
 
-    total_dur = sum(
-        float(librosa.get_duration(path=str(p))) for p in all_sliced
-    ) if all_sliced else 0
+    total_dur = (
+        sum(float(librosa.get_duration(path=str(p))) for p in all_sliced) if all_sliced else 0
+    )
     logger.info(f"✅ Slice+Normalize: {len(all_sliced)} clips, {total_dur:.0f}s")
 
     # Step 3: Pitch Augmentation
     augmented = _augment(processed_dir, augmented_dir, aug_cfg)
-    logger.info(f"✅ Pitch Augment: {len(augmented)} clips (+{len(augmented)-len(all_sliced)} shifted)")
+    logger.info(
+        f"✅ Pitch Augment: {len(augmented)} clips (+{len(augmented) - len(all_sliced)} shifted)"
+    )
 
     # Step 4: Train/Val Split
     source = augmented_dir if augmented else processed_dir

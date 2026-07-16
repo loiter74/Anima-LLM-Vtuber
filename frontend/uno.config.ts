@@ -3,15 +3,13 @@ import { defineConfig, presetUno, presetIcons, transformerDirectives } from 'uno
 export default defineConfig({
   presets: [
     presetUno({
-      dark: 'class'
+      dark: 'class',
     }),
     presetIcons({
-      scale: 1.2
-    })
+      scale: 1.2,
+    }),
   ],
-  transformers: [
-    transformerDirectives()
-  ],
+  transformers: [transformerDirectives()],
   theme: {
     // Responsive breakpoints — aligned with useMobile composable
     // sm:640 md:768 lg:1024 xl:1280 2xl:1536 (UnoCSS defaults, explicit for clarity)
@@ -52,15 +50,17 @@ export default defineConfig({
     },
     fontFamily: {
       sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans SC", "Microsoft YaHei", sans-serif',
-    }
+    },
   },
   shortcuts: {
     // Glassmorphism 面板 — rounded-2xl (16px) for AIRI-inspired softness
-    'glass': 'bg-c-surface/70 backdrop-blur-xl border border-c-border rounded-2xl',
+    glass: 'bg-c-surface/70 backdrop-blur-xl border border-c-border rounded-2xl',
     'glass-strong': 'bg-c-surface/85 backdrop-blur-2xl border border-c-border rounded-2xl',
     // 按钮
-    'btn-accent': 'bg-c-accent hover:bg-c-accent-hover text-white rounded-xl px-4 py-2 transition-all duration-200 active:scale-95',
-    'btn-ghost': 'bg-transparent hover:bg-c-accent-soft text-c-text-dim hover:text-c-accent rounded-xl px-3 py-2 transition-all duration-200',
+    'btn-accent':
+      'bg-c-accent hover:bg-c-accent-hover text-white rounded-xl px-4 py-2 transition-all duration-200 active:scale-95',
+    'btn-ghost':
+      'bg-transparent hover:bg-c-accent-soft text-c-text-dim hover:text-c-accent rounded-xl px-3 py-2 transition-all duration-200',
     // 渐变
     'gradient-accent': 'bg-gradient-to-br from-c-accent to-c-accent-hover',
     'gradient-accent-soft': 'bg-gradient-to-br from-c-accent/20 to-c-blue/20',
@@ -73,5 +73,5 @@ export default defineConfig({
     'touch-manipulation': '[touch-action:manipulation]',
     'safe-bottom': 'pb-[env(safe-area-inset-bottom)]',
     'safe-top': 'pt-[env(safe-area-inset-top)]',
-  }
+  },
 })

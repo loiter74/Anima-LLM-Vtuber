@@ -158,12 +158,14 @@ async def test_index_outbox_retries_and_reports_degraded_health(tmp_path) -> Non
     store = AtomStore(db_path=str(tmp_path / "retry.sqlite"), enable_chroma=False)
     await store.initialize()
     try:
-        await store.create(MemoryAtom(
-            id="retry-1",
-            layer=Layer.RAW,
-            content="retry vector indexing",
-            occurred_at=datetime.now(UTC),
-        ))
+        await store.create(
+            MemoryAtom(
+                id="retry-1",
+                layer=Layer.RAW,
+                content="retry vector indexing",
+                occurred_at=datetime.now(UTC),
+            )
+        )
         store._chroma_collection = _FailingCollection()
 
         first = await store.process_index_outbox()
@@ -191,12 +193,14 @@ async def test_rebuild_indexes_restores_fts_and_completes_outbox(tmp_path) -> No
     store = AtomStore(db_path=str(tmp_path / "rebuild.sqlite"), enable_chroma=False)
     await store.initialize()
     try:
-        await store.create(MemoryAtom(
-            id="rebuild-1",
-            layer=Layer.SEMANTIC,
-            content="jasmine tea preference",
-            occurred_at=datetime.now(UTC),
-        ))
+        await store.create(
+            MemoryAtom(
+                id="rebuild-1",
+                layer=Layer.SEMANTIC,
+                content="jasmine tea preference",
+                occurred_at=datetime.now(UTC),
+            )
+        )
         assert store._conn is not None
         store._conn.execute("DELETE FROM memory_fts")
         store._conn.commit()

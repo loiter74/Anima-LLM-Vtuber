@@ -7,7 +7,7 @@ import json
 from .models import ComposerRequest, ReasonerRequest
 
 _REASONER_SCHEMA = (
-    'Return only strict JSON with exactly these string fields: '
+    "Return only strict JSON with exactly these string fields: "
     '{"normal_response":"usable direct answer","stance":"position or attitude",'
     '"humor":"optional direction","worldview":"optional Anima-world mapping"}. '
     "All four keys are required. Do not use markdown fences or runtime markers."
@@ -25,7 +25,8 @@ def _window_payload(window: tuple[tuple[str, str], ...]) -> list[list[str]]:
 
 def build_reasoner_messages(request: ReasonerRequest) -> list[dict[str, str]]:
     system = "\n\n".join(
-        part for part in (request.persona_prompt, request.roleplay_correction, _REASONER_SCHEMA)
+        part
+        for part in (request.persona_prompt, request.roleplay_correction, _REASONER_SCHEMA)
         if part
     )
     payload = {
@@ -40,7 +41,8 @@ def build_reasoner_messages(request: ReasonerRequest) -> list[dict[str, str]]:
 
 def build_composer_messages(request: ComposerRequest) -> list[dict[str, str]]:
     system = "\n\n".join(
-        part for part in (request.persona_prompt, request.roleplay_correction, _COMPOSER_SCHEMA)
+        part
+        for part in (request.persona_prompt, request.roleplay_correction, _COMPOSER_SCHEMA)
         if part
     )
     payload = {

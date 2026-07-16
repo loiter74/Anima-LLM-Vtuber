@@ -9,4 +9,5 @@ from .base import LLMBaseConfig
 @ProviderRegistry.register_config("llm", "mock")
 class MockLLMConfig(LLMBaseConfig):
     """Mock LLM configuration - for testing"""
+
     type: Literal["mock"] = "mock"

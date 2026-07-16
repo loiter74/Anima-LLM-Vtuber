@@ -49,9 +49,7 @@ class MCPClient:
                     args=self._config.get("args", []),
                     env=self._config.get("env"),
                 )
-                read, write = await self._exit_stack.enter_async_context(
-                    stdio_client(params)
-                )
+                read, write = await self._exit_stack.enter_async_context(stdio_client(params))
 
             elif self.transport == "sse":
                 read, write = await self._exit_stack.enter_async_context(
@@ -73,9 +71,7 @@ class MCPClient:
                 logger.error(f"[MCP:{self.name}] Unsupported transport mode: {self.transport}")
                 return False
 
-            self.session = await self._exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
+            self.session = await self._exit_stack.enter_async_context(ClientSession(read, write))
             await self.session.initialize()
             logger.info(f"[MCP:{self.name}] Connected ({self.transport})")
             return True
@@ -85,7 +81,7 @@ class MCPClient:
             await self.disconnect()
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect"""
         if self._exit_stack:
             with contextlib.suppress(RuntimeError):
@@ -122,8 +118,12 @@ class MCPClient:
 def _parse_type(type_name: str) -> type:
     """JSON Schema type -> Python type"""
     return {
-        "string": str, "integer": int, "number": float,
-        "boolean": bool, "array": list, "object": dict,
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+        "array": list,
+        "object": dict,
     }.get(type_name, str)
 
 
@@ -147,8 +147,7 @@ def mcp_tool_to_langchain(client: MCPClient, tool_info: Any) -> Any:
         if result and hasattr(result, "content"):
             if isinstance(result.content, list):
                 return "\n".join(
-                    item.text if hasattr(item, "text") else str(item)
-                    for item in result.content
+                    item.text if hasattr(item, "text") else str(item) for item in result.content
                 )
             return str(result.content)
         return str(result) if result else "No result"
@@ -169,9 +168,7 @@ class MCPManager:
         self.clients: list[MCPClient] = []
         self.tools: list[Any] = []
 
-    def _build_docker_command(
-        self, sandbox: dict[str, Any], args: list[str]
-    ) -> tuple:
+    def _build_docker_command(self, sandbox: dict[str, Any], args: list[str]) -> tuple:
         """
         Build Docker sandbox startup command
 
@@ -202,21 +199,31 @@ class MCPManager:
         cpus = sandbox.get("cpus", "0.5")
 
         docker_args = [
-            "run", "--rm", "-i",
+            "run",
+            "--rm",
+            "-i",
             # Network: fully disabled
-            "--network", "none",
+            "--network",
+            "none",
             # Permissions: minimal
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
             # Filesystem: read-only root
             "--read-only",
-            "--tmpfs", "/tmp:noexec,nosuid,size=64m",
+            "--tmpfs",
+            "/tmp:noexec,nosuid,size=64m",
             # Resource limits
-            "--memory", memory,
-            "--cpus", cpus,
-            "--pids-limit", "64",
+            "--memory",
+            memory,
+            "--cpus",
+            cpus,
+            "--pids-limit",
+            "64",
             # Cleanup timeout
-            "--stop-timeout", "5",
+            "--stop-timeout",
+            "5",
         ]
 
         # Parse and resolve volume mount paths
@@ -291,7 +298,7 @@ class MCPManager:
         logger.info(f"[MCP] Loaded {len(self.tools)} tools from {len(self.clients)} servers")
         return self.tools
 
-    async def close_all(self):
+    async def close_all(self) -> None:
         """Close all connections"""
         for client in self.clients:
             await client.disconnect()

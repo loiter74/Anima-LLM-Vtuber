@@ -16,7 +16,7 @@ from .sources import (
     RoleplayGuardPromptSource,
     RuntimePersonalityPromptSource,
 )
-from .types import CompiledPrompt
+from .types import CompiledPrompt, PromptSection, PromptSource
 
 
 async def compile(
@@ -41,7 +41,7 @@ async def compile(
     """
     ctx = build_context(state, config, memory_context, memory_metadata)
 
-    sources = [
+    sources: list[PromptSource] = [
         PersonaPromptSource(),
         AffinityPromptSource(),
         RuntimePersonalityPromptSource(),
@@ -50,20 +50,23 @@ async def compile(
         MemoryPromptSource(),
     ]
 
-    sections = []
+    sections: list[PromptSection] = []
     for src in sources:
         try:
             sections.extend(src.sections(ctx))
         except Exception as exc:
             # Source failure: add warning, continue
-            from .types import PromptSection, SectionPriority, SectionRole
-            sections.append(PromptSection(
-                name=src.name,
-                role=SectionRole.PERSONA,
-                priority=SectionPriority.PERSONA,
-                content="",
-                metadata={"warnings": [f"Source failed: {exc}"]},
-            ))
+            from .types import SectionPriority, SectionRole
+
+            sections.append(
+                PromptSection(
+                    name=src.name,
+                    role=SectionRole.PERSONA,
+                    priority=SectionPriority.PERSONA,
+                    content="",
+                    metadata={"warnings": [f"Source failed: {exc}"]},
+                )
+            )
 
     compiled = assemble(sections)
     compiled.config_version = ctx.config_version

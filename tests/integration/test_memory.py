@@ -38,8 +38,7 @@ class TestMemorySystem:
 
         errs = events.get("system:error", [])
         has_sentence = any(
-            isinstance(d, dict) and d.get("text")
-            for d in events.get("chat:sentence", [])
+            isinstance(d, dict) and d.get("text") for d in events.get("chat:sentence", [])
         )
         print(f"encode_ok={has_sentence} errors={errs}")
         assert "system:connection_established" in events, "connect"
@@ -68,9 +67,7 @@ class TestMemorySystem:
         await sio.disconnect()
 
         sentences = [
-            d.get("text", "")
-            for d in events.get("chat:sentence", [])
-            if isinstance(d, dict)
+            d.get("text", "") for d in events.get("chat:sentence", []) if isinstance(d, dict)
         ]
         full = " ".join(sentences)
         errs = events.get("system:error", [])

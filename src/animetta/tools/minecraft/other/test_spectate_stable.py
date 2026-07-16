@@ -18,7 +18,7 @@ from animetta.tools.minecraft.core.config import (
 )
 
 
-async def main():
+async def main() -> None:
     config = MinecraftConfig(
         enabled=True,
         mode=MinecraftMode.FALLBACK,

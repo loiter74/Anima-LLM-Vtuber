@@ -148,15 +148,12 @@ class ModelLoadingManager:
         success / error independently.
         """
         async with self._warmup_lock:
-            logger.info(
-                f"Starting warmup for {len(self._slots)} registered model(s)"
-            )
+            logger.info(f"Starting warmup for {len(self._slots)} registered model(s)")
 
             pending = [
                 (name, loader_fn)
                 for name, loader_fn in self._loaders.items()
-                if self._slots[name].state
-                not in {ModelLoadState.LOADED, ModelLoadState.ERROR}
+                if self._slots[name].state not in {ModelLoadState.LOADED, ModelLoadState.ERROR}
             ]
             if pending:
                 results = await asyncio.gather(
@@ -264,10 +261,7 @@ class ModelLoadingManager:
             logger.warning("wait_all timed out")
             return False
 
-        return all(
-            slot.state == ModelLoadState.LOADED
-            for slot in self._slots.values()
-        )
+        return all(slot.state == ModelLoadState.LOADED for slot in self._slots.values())
 
     # ------------------------------------------------------------------
     # Helpers
@@ -293,7 +287,9 @@ class ModelLoadingManager:
             payload["error"] = error
 
         try:
-            asyncio.ensure_future(self._socketio.emit(EVENTS["system"]["model_status"]["name"], payload))
+            asyncio.ensure_future(
+                self._socketio.emit(EVENTS["system"]["model_status"]["name"], payload)
+            )
         except Exception as exc:
             # Socket.IO failures should never crash the loader.
             logger.debug(f"Failed to emit model_status for '{name}': {exc}")

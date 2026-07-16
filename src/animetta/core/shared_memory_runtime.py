@@ -64,9 +64,7 @@ class SharedMemoryRuntime:
         observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         self.db_path = str(db_path)
-        self._system_factory = system_factory or (
-            lambda: LivingMemorySystem(db_path=self.db_path)
-        )
+        self._system_factory = system_factory or (lambda: LivingMemorySystem(db_path=self.db_path))
         self.worker_interval = worker_interval
         self.system: Any | None = None
         self._initialize_lock = asyncio.Lock()
@@ -77,9 +75,7 @@ class SharedMemoryRuntime:
             maxsize=max(1, ingestion_queue_size)
         )
         self._index_carriers: asyncio.Queue[ObservationCarrier] = asyncio.Queue()
-        self.observation_recorder = (
-            observation_recorder or NoOpObservationRecorder()
-        )
+        self.observation_recorder = observation_recorder or NoOpObservationRecorder()
         self._dedup: OrderedDict[str, None] = OrderedDict()
         self._dedup_window = max(1, dedup_window)
         self._revision_subscribers: list[Callable[[dict[str, object]], Any]] = []
@@ -148,9 +144,7 @@ class SharedMemoryRuntime:
                     if carrier is not None:
                         self._index_carriers.task_done()
             try:
-                await asyncio.wait_for(
-                    self._stopping.wait(), timeout=self.worker_interval
-                )
+                await asyncio.wait_for(self._stopping.wait(), timeout=self.worker_interval)
             except TimeoutError:
                 continue
 
@@ -212,20 +206,20 @@ class SharedMemoryRuntime:
             attributes={"event_name": "memory.turn_queue", "phase": phase},
         )
         try:
-            asyncio.get_running_loop().create_task(
-                self.observation_recorder.record_event(event)
-            )
+            asyncio.get_running_loop().create_task(self.observation_recorder.record_event(event))
         except RuntimeError:
             return
 
     @staticmethod
     def _fingerprint(turn: ConversationTurn) -> str:
-        normalized = "|".join((
-            turn.context.actor_id or "anonymous",
-            turn.context.conversation_id or "",
-            " ".join(turn.user_input.casefold().split()),
-            " ".join(turn.agent_response.casefold().split()),
-        ))
+        normalized = "|".join(
+            (
+                turn.context.actor_id or "anonymous",
+                turn.context.conversation_id or "",
+                " ".join(turn.user_input.casefold().split()),
+                " ".join(turn.agent_response.casefold().split()),
+            )
+        )
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     async def _ingestion_worker(self) -> None:
@@ -333,9 +327,7 @@ class SharedMemoryRuntime:
             else MemoryScope.COMMUNITY
         )
         visibility = (
-            MemoryVisibility.PRIVATE
-            if scope is MemoryScope.VIEWER
-            else MemoryVisibility.INTERNAL
+            MemoryVisibility.PRIVATE if scope is MemoryScope.VIEWER else MemoryVisibility.INTERNAL
         )
         return scope, visibility
 
@@ -387,16 +379,12 @@ class SharedMemoryRuntime:
         return {
             "ready": True,
             "degraded": bool(
-                index_health["degraded"]
-                or self._last_ingestion_error
-                or self._last_index_error
+                index_health["degraded"] or self._last_ingestion_error or self._last_index_error
             ),
             "revision": await store.get_revision(),
             "index_backlog": await store.get_index_backlog(),
             "last_error": (
-                self._last_ingestion_error
-                or self._last_index_error
-                or index_health["last_error"]
+                self._last_ingestion_error or self._last_index_error or index_health["last_error"]
             ),
             "ingestion_queue": self._ingestion_queue.qsize(),
             "ingestion_rejected": self._ingestion_rejected,

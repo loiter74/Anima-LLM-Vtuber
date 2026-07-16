@@ -44,23 +44,38 @@ function operation(
 
 function detail(traceId: string, golden: boolean) {
   const names = golden
-    ? ['conversation_start', 'personality', 'reasoner', 'anima_composer', 'response_guard', 'reply_output', 'tts', 'emotion', 'performance_output', 'conversation_finalizer']
+    ? [
+        'conversation_start',
+        'personality',
+        'reasoner',
+        'anima_composer',
+        'response_guard',
+        'reply_output',
+        'tts',
+        'emotion',
+        'performance_output',
+        'conversation_finalizer',
+      ]
     : ['personality', 'llm', 'humor_rewrite', 'humor_validation', 'tts', 'emotion', 'output']
-  const operations = names.map((name, index) => operation(
-    `${traceId}-${name}`,
-    name,
-    golden && index === 4 ? 'degraded' : 'success',
-    name === (golden ? 'reasoner' : 'llm')
-      ? [{
-          ...operation(`${traceId}-service`, 'llm.chat'),
-          trace_id: traceId,
-          parent_operation_id: `${traceId}-${name}`,
-          layer: 'service',
-          provider: 'openai',
-          model: 'gpt-test',
-        }]
-      : [],
-  ))
+  const operations = names.map((name, index) =>
+    operation(
+      `${traceId}-${name}`,
+      name,
+      golden && index === 4 ? 'degraded' : 'success',
+      name === (golden ? 'reasoner' : 'llm')
+        ? [
+            {
+              ...operation(`${traceId}-service`, 'llm.chat'),
+              trace_id: traceId,
+              parent_operation_id: `${traceId}-${name}`,
+              layer: 'service',
+              provider: 'openai',
+              model: 'gpt-test',
+            },
+          ]
+        : [],
+    ),
+  )
   return {
     ...baseTrace,
     trace_id: traceId,
@@ -74,18 +89,20 @@ function detail(traceId: string, golden: boolean) {
     attributes: {},
     operations,
     operation_tree: operations,
-    events: [{
-      event_id: `${traceId}-delivery`,
-      trace_id: traceId,
-      operation_id: `${traceId}-performance_output`,
-      direction: 'egress',
-      name: 'chat:text',
-      phase: 'delivered',
-      occurred_at: 1_784_000_002,
-      payload_size: 12,
-      identity_valid: true,
-      attributes: {},
-    }],
+    events: [
+      {
+        event_id: `${traceId}-delivery`,
+        trace_id: traceId,
+        operation_id: `${traceId}-performance_output`,
+        direction: 'egress',
+        name: 'chat:text',
+        phase: 'delivered',
+        occurred_at: 1_784_000_002,
+        payload_size: 12,
+        identity_valid: true,
+        attributes: {},
+      },
+    ],
     post_turn: {
       pending: golden ? 1 : 0,
       completed: golden ? 2 : 0,
@@ -97,26 +114,51 @@ function detail(traceId: string, golden: boolean) {
 }
 
 function mockStatsFetch() {
-  vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
-    const url = String(input)
-    if (url.includes('/api/stats/traces/golden-task/tree')) {
-      return Promise.resolve({ json: () => Promise.resolve(detail('golden-task', true)) })
-    }
-    if (url.includes('/api/stats/traces/standard-task/tree')) {
-      return Promise.resolve({ json: () => Promise.resolve(detail('standard-task', false)) })
-    }
-    if (url.includes('/api/stats/overview')) {
-      return Promise.resolve({ json: () => Promise.resolve({
-        api_version: '2', total_requests: 2, success_count: 1, degraded_count: 1,
-        failed_count: 0, success_rate: 50, avg_duration_ms: 1800,
-      }) })
-    }
-    if (url.includes('/api/stats/nodes')) return Promise.resolve({ json: () => Promise.resolve([]) })
-    return Promise.resolve({ json: () => Promise.resolve([
-      { ...baseTrace, trace_id: 'golden-task', runtime_profile: 'golden', outcome: 'degraded' },
-      { ...baseTrace, trace_id: 'standard-task', runtime_profile: 'development', outcome: 'success' },
-    ]) })
-  }))
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/api/stats/traces/golden-task/tree')) {
+        return Promise.resolve({ json: () => Promise.resolve(detail('golden-task', true)) })
+      }
+      if (url.includes('/api/stats/traces/standard-task/tree')) {
+        return Promise.resolve({ json: () => Promise.resolve(detail('standard-task', false)) })
+      }
+      if (url.includes('/api/stats/overview')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              api_version: '2',
+              total_requests: 2,
+              success_count: 1,
+              degraded_count: 1,
+              failed_count: 0,
+              success_rate: 50,
+              avg_duration_ms: 1800,
+            }),
+        })
+      }
+      if (url.includes('/api/stats/nodes'))
+        return Promise.resolve({ json: () => Promise.resolve([]) })
+      return Promise.resolve({
+        json: () =>
+          Promise.resolve([
+            {
+              ...baseTrace,
+              trace_id: 'golden-task',
+              runtime_profile: 'golden',
+              outcome: 'degraded',
+            },
+            {
+              ...baseTrace,
+              trace_id: 'standard-task',
+              runtime_profile: 'development',
+              outcome: 'success',
+            },
+          ]),
+      })
+    }),
+  )
 }
 
 async function flushPromises() {

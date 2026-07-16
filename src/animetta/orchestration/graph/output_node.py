@@ -4,7 +4,7 @@ import asyncio
 import base64
 import os
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -194,9 +194,9 @@ async def output_node(
     tts_audio = state.get("tts_audio")
     if tts_audio:
         try:
-            audio_data = None
+            audio_data: str | None = None
             format = "wav"  # default to WAV for byte-returning TTS providers
-            volumes = []
+            volumes: list[float] = []
 
             if isinstance(tts_audio, str) and os.path.exists(tts_audio):
                 # ── Trim leading silence first, then parallel read + volumes ──
@@ -230,7 +230,7 @@ async def output_node(
                 volumes = _compute_volumes(tmp_audio)
 
             if audio_data:
-                payload = {"audio_data": audio_data, "format": format}
+                payload: dict[str, Any] = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
                 await delivery.emit("chat", "audio_with_expression", payload, to=to)
@@ -370,8 +370,10 @@ async def _store_conversation_to_memory(
 
         system = getattr(getattr(service_context, "config", None), "system", None)
         configured_mode = getattr(system, "long_term_memory_mode", "off")
-        mode: PersistenceMode = (
-            configured_mode if configured_mode in {"off", "read_only", "read_write"} else "off"
+        mode = (
+            cast(PersistenceMode, configured_mode)
+            if configured_mode in {"off", "read_only", "read_write"}
+            else "off"
         )
         status = state.get("metadata", {}).get("dialogue_status")
         decision = decide_persistence(
@@ -438,18 +440,18 @@ async def _store_conversation_to_memory(
                 if active_observation is not None
                 else None
             )
-            accepted = memory_runtime.submit_turn(ConversationTurn(
-                user_input=user_text,
-                agent_response=response_text,
-                emotion_vad=vad,
-                context=context,
-                turn_id=state.get("turn_id") or metadata.get("turn_id"),
-                retention_policy=metadata.get("retention_policy", "standard"),
-                observation_carrier=carrier,
-            ))
-            logger.debug(
-                f"[{session_id}] [OutputNode] Memory submission accepted={accepted}"
+            accepted = memory_runtime.submit_turn(
+                ConversationTurn(
+                    user_input=user_text,
+                    agent_response=response_text,
+                    emotion_vad=vad,
+                    context=context,
+                    turn_id=state.get("turn_id") or metadata.get("turn_id"),
+                    retention_policy=metadata.get("retention_policy", "standard"),
+                    observation_carrier=carrier,
+                )
             )
+            logger.debug(f"[{session_id}] [OutputNode] Memory submission accepted={accepted}")
             return
 
         await memory_system.encode(

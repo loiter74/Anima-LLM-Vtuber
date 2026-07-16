@@ -31,11 +31,13 @@ class CaptureRecorder(NoOpObservationRecorder):
 def mock_graph():
     """Return a compiled mock graph with ainvoke."""
     graph = AsyncMock()
-    graph.ainvoke = AsyncMock(return_value={
-        "response_text": "mock reply",
-        "response_chunks": ["mock reply"],
-        "emotion": "neutral",
-    })
+    graph.ainvoke = AsyncMock(
+        return_value={
+            "response_text": "mock reply",
+            "response_chunks": ["mock reply"],
+            "emotion": "neutral",
+        }
+    )
     return graph
 
 

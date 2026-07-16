@@ -28,7 +28,9 @@ class GameBotClient:
     async def stop(self) -> None:
         await self._transport.stop()
 
-    async def send_command(self, action: str, params: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
+    async def send_command(
+        self, action: str, params: dict[str, Any], timeout: float = 60.0
+    ) -> dict[str, Any]:
         return await self._transport.send_command(action, params, timeout=timeout)
 
     async def get_status(self) -> dict[str, Any]:

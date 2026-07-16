@@ -24,15 +24,24 @@ class TestAutoConfig:
     # ── _detect_platform ─────────────────────────────────────────────
 
     def test_detect_platform_windows(self, auto_config):
-        with patch("platform.system", return_value="Windows"), patch.dict(os.environ, {}, clear=True):
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.dict(os.environ, {}, clear=True),
+        ):
             assert auto_config._detect_platform() == "windows"
 
     def test_detect_platform_wsl(self, auto_config):
-        with patch("platform.system", return_value="Windows"), patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}, clear=True):
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}, clear=True),
+        ):
             assert auto_config._detect_platform() == "wsl"
 
     def test_detect_platform_linux(self, auto_config):
-        with patch("platform.system", return_value="Linux"), patch("pathlib.Path.exists", return_value=False):
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("pathlib.Path.exists", return_value=False),
+        ):
             assert auto_config._detect_platform() == "linux"
 
     def test_detect_platform_macos(self, auto_config):
@@ -77,14 +86,21 @@ class TestAutoConfig:
     @pytest.mark.xfail(reason="patch.object on dict.__getitem__ is not supported", strict=False)
     def test_get_data_dir_windows_default(self, auto_config):
         """Windows fallback: E:/anima_data or home/anima_data."""
-        with patch("platform.system", return_value="Windows"), patch.object(auto_config.env_info, "__getitem__", return_value="windows"), patch("pathlib.Path.exists", return_value=False):
+        with (
+            patch("platform.system", return_value="Windows"),
+            patch.object(auto_config.env_info, "__getitem__", return_value="windows"),
+            patch("pathlib.Path.exists", return_value=False),
+        ):
             result = auto_config.get_data_dir()
             assert "anima_data" in str(result)
 
     @pytest.mark.xfail(reason="patch.object on dict.__getitem__ is not supported", strict=False)
     def test_get_data_dir_windows_e_drive(self, auto_config):
         """On Windows, E:/anima_data takes priority if it exists."""
-        with patch.object(auto_config.env_info, "__getitem__", return_value="windows"), patch("pathlib.Path.exists", return_value=True):
+        with (
+            patch.object(auto_config.env_info, "__getitem__", return_value="windows"),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
             result = auto_config.get_data_dir()
             assert "E:" in str(result) or "anima_data" in str(result)
 
@@ -97,7 +113,9 @@ class TestAutoConfig:
 
     # ── check_dependencies ───────────────────────────────────────────
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Linux-specific test (shutil.which path format)")
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Linux-specific test (shutil.which path format)"
+    )
     def test_check_dependencies_all_installed(self, auto_config):
         """Returns {"python": True, "pip": True, "git": True} when all found."""
         with (
@@ -109,11 +127,14 @@ class TestAutoConfig:
 
     def test_diagnose_missing_deps(self, auto_config):
         """Missing dependencies should make diagnose return False."""
-        with patch.multiple(
-            auto_config,
-            get_data_dir=MagicMock(return_value=Path("/tmp")),
-            check_dependencies=MagicMock(return_value=(False, ["fastapi"])),
-        ), patch("pathlib.Path.exists", return_value=True):
+        with (
+            patch.multiple(
+                auto_config,
+                get_data_dir=MagicMock(return_value=Path("/tmp")),
+                check_dependencies=MagicMock(return_value=(False, ["fastapi"])),
+            ),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
             result = auto_config.diagnose()
             assert result is False
 
@@ -171,6 +192,9 @@ class TestAutoConfig:
 
     def test_auto_install_failure(self, auto_config):
         """If pip install fails, returns False."""
-        with patch.object(auto_config, "check_dependencies", return_value=(False, ["missing"])), patch("subprocess.check_call", side_effect=Exception("pip error")):
+        with (
+            patch.object(auto_config, "check_dependencies", return_value=(False, ["missing"])),
+            patch("subprocess.check_call", side_effect=Exception("pip error")),
+        ):
             result = auto_config.auto_install_dependencies()
             assert result is False

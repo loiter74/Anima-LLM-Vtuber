@@ -9,12 +9,6 @@ export type PipelineStage =
   | 'done'
   | 'error'
 
-export interface PipelineProgress {
-  stage: PipelineStage
-  progress: number
-  message: string
-}
-
 export interface LyricLine {
   text: string
   translation: string
@@ -32,13 +26,4 @@ export interface SongResult {
   duration: number
   lyrics: LyricLine[]
   volumes?: number[]
-}
-
-export interface SongState {
-  url: string
-  status: PipelineStage
-  progress: number
-  message: string
-  result: SongResult | null
-  error: string
 }

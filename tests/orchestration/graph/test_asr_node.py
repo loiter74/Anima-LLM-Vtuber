@@ -20,9 +20,7 @@ class TestAsrNode:
             session_id="test",
             raw_audio=b"fake_audio_bytes",
         )
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
 
         result = await asr_node(state, config)
 
@@ -30,9 +28,7 @@ class TestAsrNode:
         assert len(result["messages"]) == 1
         assert result["messages"][0].content == "mock transcription text"
         assert result["messages"][0].name == "user"
-        mock_service_context.asr_engine.transcribe.assert_awaited_once_with(
-            b"fake_audio_bytes"
-        )
+        mock_service_context.asr_engine.transcribe.assert_awaited_once_with(b"fake_audio_bytes")
 
     @pytest.mark.asyncio
     async def test_missing_audio_returns_error(self):
@@ -80,9 +76,7 @@ class TestAsrNode:
             session_id="test",
             raw_audio=b"fake_audio_bytes",
         )
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await asr_node(state, config)
 
         assert result["error"] == "ASR engine not initialized"
@@ -95,6 +89,7 @@ class TestAsrNode:
         mock_service_context.asr_engine.transcribe = pytest.fail
         # use AsyncMock that raises
         import unittest.mock
+
         mock_service_context.asr_engine.transcribe = unittest.mock.AsyncMock(
             side_effect=RuntimeError("connection refused")
         )
@@ -103,9 +98,7 @@ class TestAsrNode:
             session_id="test",
             raw_audio=b"fake_audio",
         )
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await asr_node(state, config)
 
         assert "connection refused" in result.get("error", "")
@@ -121,9 +114,7 @@ class TestAsrNode:
             user_name="Alice",
             user_id="user_1",
         )
-        config = RunnableConfig(
-            configurable={"service_context": mock_service_context}
-        )
+        config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await asr_node(state, config)
 
         assert result["user_text"] == "mock transcription text"

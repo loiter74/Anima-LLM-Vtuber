@@ -24,6 +24,7 @@ def reset_service_pool():
     variables are returned to their initial ``None`` / ``False``
     state so no test can accidentally leak state to the next one.
     """
+
     def reset() -> None:
         ServicePool._llm = None
         ServicePool._tts = None
@@ -93,9 +94,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_creates_service_context(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_creates_service_context(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """init() creates a ServiceContext and calls load_from_config."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -107,9 +106,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_extracts_shared_engines(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_extracts_shared_engines(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """After init, _llm / _tts / _asr point to the engines from ServiceContext."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -122,9 +119,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_sets_ready_flag(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_sets_ready_flag(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """After successful init, _ready is True."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -135,9 +130,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_sets_session_id(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_sets_session_id(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """The ServiceContext gets session_id == '__pool__'."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -148,9 +141,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_forwards_model_manager(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_forwards_model_manager(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """model_manager is passed through to ServiceContext."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -162,9 +153,7 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_keeps_ctx_alive(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_keeps_ctx_alive(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """_ctx is stored on the class so shared engines stay in memory."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
         MockServiceContext.return_value = mock_ctx
@@ -328,15 +317,11 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_closes_vad_engine(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_closes_vad_engine(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """VAD (per-session) engine is closed during init."""
         mock_vad = MagicMock()
         mock_vad.close = AsyncMock()
-        mock_ctx = _mock_context_base(
-            mock_llm, mock_tts, mock_asr, vad_engine=mock_vad
-        )
+        mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr, vad_engine=mock_vad)
         MockServiceContext.return_value = mock_ctx
 
         await ServicePool.init(MagicMock())
@@ -345,15 +330,11 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_closes_memory_system(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_closes_memory_system(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """Memory system (per-session) is shut down during init."""
         mock_memory = MagicMock()
         mock_memory.shutdown = AsyncMock()
-        mock_ctx = _mock_context_base(
-            mock_llm, mock_tts, mock_asr, memory_system=mock_memory
-        )
+        mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr, memory_system=mock_memory)
         MockServiceContext.return_value = mock_ctx
 
         await ServicePool.init(MagicMock())
@@ -362,13 +343,9 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_clears_emotion_analyzer(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_clears_emotion_analyzer(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """Emotion analyzer reference is set to None after extraction."""
-        mock_ctx = _mock_context_base(
-            mock_llm, mock_tts, mock_asr, emotion_analyzer=MagicMock()
-        )
+        mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr, emotion_analyzer=MagicMock())
         MockServiceContext.return_value = mock_ctx
 
         await ServicePool.init(MagicMock())
@@ -377,13 +354,9 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
-    async def test_clears_audio_processor(
-        self, MockServiceContext, mock_llm, mock_tts, mock_asr
-    ):
+    async def test_clears_audio_processor(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """Audio processor reference is set to None after extraction."""
-        mock_ctx = _mock_context_base(
-            mock_llm, mock_tts, mock_asr, audio_processor=MagicMock()
-        )
+        mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr, audio_processor=MagicMock())
         MockServiceContext.return_value = mock_ctx
 
         await ServicePool.init(MagicMock())
