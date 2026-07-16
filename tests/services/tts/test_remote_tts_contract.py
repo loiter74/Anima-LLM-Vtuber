@@ -67,9 +67,10 @@ def remote_config(**overrides: Any) -> RemoteTTSConfig:
             "dtype": "bfloat16",
             "language": "Chinese",
             "use_flash_attn": False,
-            "max_new_tokens": 48,
-            "temperature": 0.6,
-            "top_p": 0.8,
+            "max_new_tokens": 512,
+            "warmup_max_new_tokens": 48,
+            "temperature": 0.9,
+            "top_p": 1.0,
             "repetition_penalty": 1.05,
             "ref_audio_path": "/models/alice/alice_ref.wav",
             "ref_text": "Alice reference text",
@@ -80,15 +81,20 @@ def remote_config(**overrides: Any) -> RemoteTTSConfig:
     return RemoteTTSConfig.model_validate(values)
 
 
-def test_worker_default_codec_budget_is_bounded_for_interactive_use() -> None:
+def test_worker_separates_production_and_warmup_codec_budgets() -> None:
     worker = remote_config().worker
     assert worker is not None
     values = worker.model_dump()
     values.pop("max_new_tokens")
+    values.pop("warmup_max_new_tokens")
 
-    assert RemoteTTSWorkerConfig.model_validate(values).max_new_tokens == 48
+    defaults = RemoteTTSWorkerConfig.model_validate(values)
+    assert defaults.max_new_tokens == 512
+    assert defaults.warmup_max_new_tokens == 48
     with pytest.raises(ValidationError, match="max_new_tokens"):
-        RemoteTTSWorkerConfig.model_validate({**values, "max_new_tokens": 65})
+        RemoteTTSWorkerConfig.model_validate({**values, "max_new_tokens": 513})
+    with pytest.raises(ValidationError, match="warmup_max_new_tokens"):
+        RemoteTTSWorkerConfig.model_validate({**values, "warmup_max_new_tokens": 65})
 
 
 def client_for(handler: Any) -> httpx.AsyncClient:

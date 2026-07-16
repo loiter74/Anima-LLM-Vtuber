@@ -3,9 +3,13 @@ import { mount } from '@vue/test-utils'
 import InputBar from '@/components/chat/InputBar.vue'
 
 const mockIsMobile = vi.hoisted(() => ({ value: false, __v_isRef: true }))
+const mockUnlockAudioPlayback = vi.hoisted(() => vi.fn())
 
 vi.mock('@/composables/useMobile', () => ({
   useMobile: () => ({ isMobile: mockIsMobile }),
+}))
+vi.mock('@/components/live2d/useAudioPlayback', () => ({
+  unlockAudioPlayback: mockUnlockAudioPlayback,
 }))
 
 function createWrapper(sendText: (text: string) => void = vi.fn()) {
@@ -23,6 +27,7 @@ function createWrapper(sendText: (text: string) => void = vi.fn()) {
 describe('InputBar', () => {
   beforeEach(() => {
     mockIsMobile.value = false
+    mockUnlockAudioPlayback.mockClear()
   })
 
   it('renders textarea and send button', () => {
@@ -62,6 +67,15 @@ describe('InputBar', () => {
     await textarea.setValue('Enter send')
     await textarea.trigger('keydown', { key: 'Enter', shiftKey: false })
     expect(sendText).toHaveBeenCalledWith('Enter send')
+  })
+
+  it('unlocks delayed audio playback from the send gesture', async () => {
+    const wrapper = createWrapper()
+    const textarea = wrapper.find('textarea')
+
+    await textarea.trigger('keydown', { key: 'Enter', shiftKey: false })
+
+    expect(mockUnlockAudioPlayback).toHaveBeenCalledOnce()
   })
 
   it('does not send on Shift+Enter', async () => {

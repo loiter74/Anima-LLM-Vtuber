@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -109,3 +110,18 @@ def test_missing_api_key_fails_before_any_request() -> None:
     assert called is False
     assert exc_info.value.category == "configuration"
     assert "QWEN_TTS_API_KEY" in str(exc_info.value)
+
+
+def test_expected_settings_resolve_when_host_worker_url_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QWEN_TTS_API_KEY", "secret")
+    monkeypatch.delenv("QWEN_TTS_URL", raising=False)
+
+    api_key, identity = preflight.load_expected_settings(
+        fallback_base_url="http://127.0.0.1:8766",
+    )
+
+    assert api_key == "secret"
+    assert identity == EXPECTED_IDENTITY
+    assert "QWEN_TTS_URL" not in os.environ

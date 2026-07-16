@@ -138,14 +138,28 @@ def run_preflight(
     )
 
 
-def load_expected_settings() -> tuple[str, dict[str, str]]:
+def load_expected_settings(
+    *,
+    fallback_base_url: str = DEFAULT_BASE_URL,
+) -> tuple[str, dict[str, str]]:
     src = str(ROOT / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
     from animetta.config.manifest import load_remote_tts_worker_config
     from animetta.config.providers.tts.remote import RemoteTTSConfig
 
-    remote = load_remote_tts_worker_config()
+    configured_worker_url = os.environ.get("QWEN_TTS_URL")
+    use_fallback = not configured_worker_url or not configured_worker_url.strip()
+    if use_fallback:
+        os.environ["QWEN_TTS_URL"] = fallback_base_url
+    try:
+        remote = load_remote_tts_worker_config()
+    finally:
+        if use_fallback:
+            if configured_worker_url is None:
+                os.environ.pop("QWEN_TTS_URL", None)
+            else:
+                os.environ["QWEN_TTS_URL"] = configured_worker_url
     if not isinstance(remote, RemoteTTSConfig) or remote.worker is None:
         raise QwenPreflightError(
             "configuration",
@@ -177,7 +191,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     load_dotenv(ROOT / ".env", override=False)
     try:
-        api_key, expected_identity = load_expected_settings()
+        api_key, expected_identity = load_expected_settings(
+            fallback_base_url=args.base_url,
+        )
         evidence = run_preflight(
             base_url=args.base_url,
             api_key=api_key,

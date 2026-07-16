@@ -65,6 +65,7 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 ## CONVENTIONS
 
 - **Python 3.13+** — `X | None` not `Optional[X]`
+- **Windows interpreter hard rule** — all tests, quality gates, scripts, and local backend commands MUST use `py -3.13` (never bare `python`). Before verification, confirm `py -3.13 -c "import sys; assert sys.version_info >= (3, 13)"`; stop immediately if Python 3.13+ is unavailable. Python 3.11 misparses the project's PEP 695 syntax and produces invalid test failures.
 - **Pydantic V2** — `model_config = ConfigDict(...)` not `class Config:`
 - **Async-first** — all I/O is async
 - **Type hints required** on all public functions

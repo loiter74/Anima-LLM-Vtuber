@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import VoiceButton from './VoiceButton.vue'
+import { unlockAudioPlayback } from '@/components/live2d/useAudioPlayback'
 import { useMobile } from '@/composables/useMobile'
+import VoiceButton from './VoiceButton.vue'
 
 const { sendText } = defineProps<{ sendText: (text: string) => void }>()
 const { isMobile } = useMobile()
@@ -42,6 +43,8 @@ function sendMessage(): void {
         ? 'mobile-input-bar gap-3 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'
         : 'gap-2.5 pl-5 pr-4 py-4'
     "
+    @pointerdown.capture="unlockAudioPlayback"
+    @keydown.capture="unlockAudioPlayback"
   >
     <textarea
       ref="textareaRef"

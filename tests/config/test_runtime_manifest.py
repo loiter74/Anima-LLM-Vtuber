@@ -18,6 +18,7 @@ from animetta.config.manifest import (
     ManifestValidationError,
     ProfileSelectionError,
     ProviderPolicyError,
+    RuntimeSettings,
     _freeze_json,
     _hashable_value,
     _resolve_environment_value,
@@ -34,6 +35,12 @@ from animetta.config.runtime_reload import RuntimeConfigReloader
 
 pytestmark = pytest.mark.config_unit
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_runtime_settings_allow_full_remote_tts_generation_window() -> None:
+    settings = RuntimeSettings(tts_timeout_seconds=120.0)
+
+    assert settings.tts_timeout_seconds == 120.0
 
 
 def test_application_snapshot_json_is_validated_and_canonicalized() -> None:

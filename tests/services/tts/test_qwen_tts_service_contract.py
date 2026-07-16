@@ -8,9 +8,11 @@ from typing import Any
 import httpx
 import pytest
 
+from animetta.config.providers.tts.remote import RemoteTTSConfig
 from animetta_qwen_tts.app import (
     QwenServiceSettings,
     QwenTTSService,
+    _default_service,
     create_app,
 )
 
@@ -82,6 +84,59 @@ class FakeQwenEngine:
 
     async def close(self) -> None:
         self.closed = True
+
+
+def test_default_service_keeps_warmup_budget_out_of_interactive_synthesis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    remote = RemoteTTSConfig.model_validate(
+        {
+            "type": "remote",
+            "api_key": "worker-secret",
+            "base_url": "http://qwen-tts:8766",
+            "provider": "qwen3",
+            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+            "voice": "alice",
+            "response_format": "wav",
+            "timeout_seconds": 120.0,
+            "worker": {
+                "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+                "device": "cuda",
+                "dtype": "bfloat16",
+                "language": "Chinese",
+                "use_flash_attn": False,
+                "max_new_tokens": 512,
+                "warmup_max_new_tokens": 48,
+                "temperature": 0.9,
+                "top_p": 1.0,
+                "repetition_penalty": 1.05,
+                "ref_audio_path": "/models/alice/alice_ref.wav",
+                "ref_text": "Alice reference text",
+                "x_vector_only": False,
+            },
+        }
+    )
+    engine_kwargs: dict[str, Any] = {}
+
+    class CapturingEngine(FakeQwenEngine):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__()
+            engine_kwargs.update(kwargs)
+
+    monkeypatch.setattr(
+        "animetta.config.manifest.load_remote_tts_worker_config",
+        lambda: remote,
+    )
+    monkeypatch.setattr(
+        "animetta.services.tts.qwen3_tts.Qwen3TTSTTS",
+        CapturingEngine,
+    )
+
+    service = _default_service()
+
+    assert engine_kwargs["max_new_tokens"] == 512
+    assert service.settings.max_new_tokens == 512
+    assert service.settings.warmup_max_new_tokens == 48
 
 
 def settings(**overrides: Any) -> QwenServiceSettings:
@@ -291,6 +346,35 @@ async def test_interactive_synthesis_forwards_bounded_codec_token_budget() -> No
             "max_new_tokens": 48,
         }
     ]
+
+
+async def test_interactive_synthesis_scales_and_caps_codec_budget_by_text() -> None:
+    engine = FakeQwenEngine()
+    app, service = app_for(
+        engine,
+        service_settings=settings(max_new_tokens=512),
+    )
+    await service.preload()
+
+    for text in (
+        "你好，我是爱丽丝。",
+        "今天我们讨论一个完全不同的技术主题，并确认语音不会在四秒时被截断。",
+        "长" * 200,
+    ):
+        response = await request(
+            app,
+            "POST",
+            "/v1/audio/speech",
+            headers=auth_headers(),
+            json=speech_payload(input=text),
+        )
+        assert response.status_code == 200
+
+    short_budget, sentence_budget, capped_budget = [
+        call["max_new_tokens"] for call in engine.synthesize_calls
+    ]
+    assert 48 <= short_budget < sentence_budget < 512
+    assert capped_budget == 512
 
 
 @pytest.mark.parametrize(

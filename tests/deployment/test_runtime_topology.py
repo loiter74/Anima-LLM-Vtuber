@@ -91,8 +91,6 @@ def test_production_compose_owns_only_animetta_and_joins_external_inference_netw
         "name": "animetta-inference",
     }
     assert app["healthcheck"]["start_period"] == "360s"
-
-
 def test_qwen_compose_owns_persistent_single_model_gpu_worker() -> None:
     compose = _compose("docker-compose.qwen.yml")
     assert compose["name"] == "animetta-qwen"
@@ -112,11 +110,18 @@ def test_qwen_compose_owns_persistent_single_model_gpu_worker() -> None:
     assert "${ALICE_REF_AUDIO:?" in "\n".join(qwen["volumes"])
 
 
-def test_production_qwen_codec_budget_is_bounded_for_interactive_latency() -> None:
+def test_production_qwen_uses_distinct_generation_and_warmup_budgets() -> None:
     manifest = yaml.safe_load(_text("config/animetta.yaml"))
-    budget = manifest["providers"]["tts"]["qwen-alice"]["worker"]["max_new_tokens"]
+    qwen = manifest["providers"]["tts"]["qwen-alice"]
+    worker = qwen["worker"]
+    production = manifest["profiles"]["production"]
 
-    assert budget == 48
+    assert worker["max_new_tokens"] == 512
+    assert worker["warmup_max_new_tokens"] == 48
+    assert worker["temperature"] == 0.9
+    assert worker["top_p"] == 1.0
+    assert qwen["timeout_seconds"] == 120.0
+    assert production["runtime"]["tts_timeout_seconds"] == 120.0
 
 
 def test_cpu_and_core_compose_choose_only_supported_profiles() -> None:

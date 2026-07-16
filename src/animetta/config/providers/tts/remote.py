@@ -16,9 +16,10 @@ class RemoteTTSWorkerConfig(BaseModel):
     dtype: str = "bfloat16"
     language: str = "Chinese"
     use_flash_attn: bool = False
-    max_new_tokens: int = Field(default=48, ge=1, le=64)
-    temperature: float = Field(default=0.6, ge=0)
-    top_p: float = Field(default=0.8, ge=0, le=1)
+    max_new_tokens: int = Field(default=512, ge=1, le=512)
+    warmup_max_new_tokens: int = Field(default=48, ge=1, le=64)
+    temperature: float = Field(default=0.9, ge=0)
+    top_p: float = Field(default=1.0, ge=0, le=1)
     repetition_penalty: float = Field(default=1.05, gt=0)
     ref_audio_path: str = Field(min_length=1)
     ref_text: str = Field(min_length=1)

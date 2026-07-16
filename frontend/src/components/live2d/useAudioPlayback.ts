@@ -4,8 +4,13 @@ import { setExpression } from './useLive2DModel'
 
 // ===== Audio State =====
 
+const SILENT_AUDIO_DATA_URL =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA'
+
 let currentAudio: HTMLAudioElement | null = null
 let currentBlobUrl: string | null = null
+let audioUnlocked = false
+let unlockPending = false
 
 // ===== Audio Playback =====
 
@@ -13,12 +18,48 @@ function cleanup(): void {
   if (currentAudio) {
     currentAudio.pause()
     currentAudio.onended = null
-    currentAudio = null
+    currentAudio.removeAttribute('src')
+    currentAudio.load()
   }
   if (currentBlobUrl) {
     URL.revokeObjectURL(currentBlobUrl)
     currentBlobUrl = null
   }
+}
+
+function getAudioElement(): HTMLAudioElement {
+  if (!currentAudio) currentAudio = new Audio()
+  return currentAudio
+}
+
+/**
+ * Prime the persistent chat audio element while a trusted user gesture is
+ * active. TTS arrives asynchronously, after the browser's transient autoplay
+ * permission has expired, so the later response must reuse this element.
+ */
+export function unlockAudioPlayback(): void {
+  if (audioUnlocked || unlockPending || currentBlobUrl) return
+
+  const audio = getAudioElement()
+  audio.src = SILENT_AUDIO_DATA_URL
+  unlockPending = true
+
+  audio
+    .play()
+    .then(() => {
+      audioUnlocked = true
+      if (!currentBlobUrl && audio.src === SILENT_AUDIO_DATA_URL) {
+        audio.pause()
+        audio.removeAttribute('src')
+        audio.load()
+      }
+    })
+    .catch((error: unknown) => {
+      console.warn('[audio] Unable to unlock chat audio playback', error)
+    })
+    .finally(() => {
+      unlockPending = false
+    })
 }
 
 export interface AudioPlaybackPayload {
@@ -40,8 +81,8 @@ export function playAudio(data: AudioPlaybackPayload): void {
   const blob = new Blob([buffer], { type: `audio/${data.format || 'mp3'}` })
   const url = URL.createObjectURL(blob)
   currentBlobUrl = url
-  const audio = new Audio(url)
-  currentAudio = audio
+  const audio = getAudioElement()
+  audio.src = url
 
   if (data.volumes?.length) startLipSync(audio, data.volumes)
 
@@ -51,7 +92,10 @@ export function playAudio(data: AudioPlaybackPayload): void {
     cleanup()
   }
 
-  audio.play().catch(() => cleanup())
+  audio.play().catch((error: unknown) => {
+    console.warn('[audio] Chat audio playback failed', error)
+    cleanup()
+  })
 }
 
 export function stopAudio(): void {

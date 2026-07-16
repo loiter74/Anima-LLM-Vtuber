@@ -184,7 +184,7 @@ class RuntimeSettings(StrictFrozenModel):
     enable_tools: bool = True
     enable_subtitle_translation: bool = True
     enable_active_memes: bool = True
-    tts_timeout_seconds: float = Field(default=20.0, ge=1.0, le=60.0)
+    tts_timeout_seconds: float = Field(default=20.0, ge=1.0, le=300.0)
 
 
 class ProfileManifest(StrictFrozenModel):

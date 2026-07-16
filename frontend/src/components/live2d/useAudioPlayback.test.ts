@@ -1,0 +1,61 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const startLipSync = vi.hoisted(() => vi.fn())
+const stopLipSync = vi.hoisted(() => vi.fn())
+const setExpression = vi.hoisted(() => vi.fn())
+
+vi.mock('./useLipSync', () => ({ startLipSync, stopLipSync }))
+vi.mock('./useLive2DModel', () => ({ setExpression }))
+
+class MockAudio {
+  static instances: MockAudio[] = []
+
+  currentTime = 0
+  onended: (() => void) | null = null
+  src = ''
+  pause = vi.fn()
+  load = vi.fn()
+  play = vi.fn(() => Promise.resolve())
+
+  constructor(src = '') {
+    this.src = src
+    MockAudio.instances.push(this)
+  }
+
+  removeAttribute(name: string): void {
+    if (name === 'src') this.src = ''
+  }
+}
+
+describe('useAudioPlayback', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    MockAudio.instances = []
+    vi.stubGlobal('Audio', MockAudio)
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:qwen-audio'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    })
+  })
+
+  it('primes and reuses one audio element for delayed chat playback', async () => {
+    const { playAudio, unlockAudioPlayback } = await import('./useAudioPlayback')
+
+    unlockAudioPlayback()
+    expect(MockAudio.instances).toHaveLength(1)
+    expect(MockAudio.instances[0].play).toHaveBeenCalledTimes(1)
+
+    await Promise.resolve()
+    await Promise.resolve()
+    playAudio({ audio_data: btoa('real qwen wav'), format: 'wav' })
+
+    expect(MockAudio.instances).toHaveLength(1)
+    expect(MockAudio.instances[0].src).toBe('blob:qwen-audio')
+    expect(MockAudio.instances[0].play).toHaveBeenCalledTimes(2)
+  })
+})

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,20 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from animetta.services.tts.audio_validation import is_valid_audio_payload
+
+_CJK_CHARACTER = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
+_NON_CJK_WORD = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*", re.UNICODE)
+_SPEECH_PAUSE = re.compile(r"[,，.。!?！？;；:：…]")
+
+
+def _interactive_codec_token_budget(text: str, ceiling: int) -> int:
+    """Estimate a bounded 12 Hz codec budget from multilingual text length."""
+    cjk_characters = len(_CJK_CHARACTER.findall(text))
+    non_cjk_text = _CJK_CHARACTER.sub(" ", text)
+    words = len(_NON_CJK_WORD.findall(non_cjk_text))
+    pauses = len(_SPEECH_PAUSE.findall(text))
+    estimated = 24 + (cjk_characters * 5) + (words * 6) + (pauses * 4)
+    return min(ceiling, max(48, estimated))
 
 
 class QwenEngine(Protocol):
@@ -176,11 +191,20 @@ class QwenTTSService:
             )
 
         deferred_release = False
+        token_budget = _interactive_codec_token_budget(
+            text,
+            self.settings.max_new_tokens,
+        )
+        logger.debug(
+            "Qwen TTS generation budget: text_length={}, max_new_tokens={}",
+            len(text),
+            token_budget,
+        )
         synthesis_task = asyncio.create_task(
             self.engine.synthesize(
                 text,
                 language=self.settings.language,
-                max_new_tokens=self.settings.max_new_tokens,
+                max_new_tokens=token_budget,
             )
         )
         try:
@@ -321,7 +345,7 @@ def _default_service() -> QwenTTSService:
             response_format=remote.response_format,
             synthesis_timeout_seconds=remote.timeout_seconds,
             max_new_tokens=worker.max_new_tokens,
-            warmup_max_new_tokens=worker.max_new_tokens,
+            warmup_max_new_tokens=worker.warmup_max_new_tokens,
         ),
         engine,
     )
