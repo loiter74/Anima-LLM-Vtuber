@@ -1,16 +1,23 @@
 """TTS node - text to speech"""
 
 import asyncio
+import base64
 import re
 import time
+from contextlib import suppress
 from typing import Any
+from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.core.readiness import resolve_service_identity, unwrap_tracing_proxy
+from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
+from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.services.tts.emotion_instructions import build_emotion_instruction
 from animetta.services.tts.remote_tts import RemoteTTSError
 
+from .interrupt_handler import get_interrupt_handler
 from .media_status import MediaStatus
 from .node_error import log_node_error
 from .state import AgentState, log_timing
@@ -33,6 +40,7 @@ _EMOJI_RE = re.compile(
     "\U0000200d"  # Zero-width joiner
     "]"
 )
+_INTERRUPT_CLEANUP_GRACE_SECONDS = 0.2
 
 
 def _clean_text_for_tts(text: str) -> str:
@@ -77,6 +85,324 @@ def _resolve_provider_identity(
         return "unknown", None, False
     class_name = type(target).__name__
     return class_name, None, True
+
+
+def _stream_delivery(
+    state: AgentState,
+    config: RunnableConfig | None,
+) -> tuple[ChatDelivery | None, str]:
+    configurable = config.get("configurable", {}) if config else {}
+    sio = configurable.get("socketio")
+    if sio is None:
+        return None, ""
+    identity = ChatIdentity(
+        message_id=state["message_id"],
+        conversation_id=state["conversation_id"],
+        task_id=state["task_id"],
+        turn_id=state["turn_id"],
+    )
+    mode = ChatTransportMode(
+        state.get("metadata", {}).get("transport_mode", ChatTransportMode.CANONICAL.value)
+    )
+    recorder = configurable.get("observation_recorder")
+    delivery = (
+        ChatDelivery(sio, identity, mode, recorder=recorder)
+        if recorder is not None
+        else ChatDelivery(sio, identity, mode)
+    )
+    return delivery, state.get("channel_id") or state["session_id"]
+
+
+async def _emit_stream_end(
+    delivery: ChatDelivery,
+    *,
+    to: str,
+    stream_id: str,
+    final_sequence: int,
+    status: str,
+    reason: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "stream_id": stream_id,
+        "final_sequence": final_sequence,
+        "status": status,
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    await delivery.emit("chat", "audio_stream_end", payload, to=to)
+
+
+class _UserInterruptedError(Exception):
+    """Internal control flow for a prompt user interruption."""
+
+
+def _consume_background_task(task: asyncio.Task[Any]) -> None:
+    """Consume a detached cleanup result so it cannot warn at shutdown."""
+    with suppress(BaseException):
+        task.result()
+
+
+async def _settle_cancelled_task(task: asyncio.Task[Any]) -> None:
+    """Cancel provider I/O without allowing cleanup to hold the turn lock."""
+    if task.done():
+        _consume_background_task(task)
+        return
+    task.cancel()
+    done, _ = await asyncio.wait({task}, timeout=_INTERRUPT_CLEANUP_GRACE_SECONDS)
+    if task in done:
+        _consume_background_task(task)
+    else:
+        task.add_done_callback(_consume_background_task)
+
+
+async def _close_async_stream(
+    stream: Any | None,
+    *,
+    timeout_seconds: float | None = None,
+) -> None:
+    """Finalize a provider iterator before retrying or returning."""
+    if stream is None:
+        return
+    close = getattr(stream, "aclose", None)
+    if close is None:
+        return
+
+    async def _run_close() -> None:
+        await close()
+
+    if timeout_seconds is None:
+        try:
+            await _run_close()
+        except (Exception, asyncio.CancelledError):
+            logger.debug("[TTSNode] Provider stream cleanup was unavailable")
+        return
+
+    task = asyncio.create_task(_run_close())
+    done, _ = await asyncio.wait({task}, timeout=timeout_seconds)
+    if task in done:
+        _consume_background_task(task)
+    else:
+        task.add_done_callback(_consume_background_task)
+
+
+async def _next_chunk_or_interrupt(
+    stream: Any,
+    interrupt_signal: asyncio.Event,
+    *,
+    timeout_seconds: float,
+) -> bytes:
+    """Wait for the next provider chunk while remaining promptly interruptible."""
+    if interrupt_signal.is_set():
+        raise _UserInterruptedError
+
+    async def _read_next() -> bytes:
+        return await anext(stream)
+
+    next_task = asyncio.create_task(_read_next())
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_seconds
+    try:
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError("TTS stream idle timeout")
+            done, _ = await asyncio.wait(
+                {next_task},
+                timeout=min(remaining, 0.05),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if interrupt_signal.is_set():
+                raise _UserInterruptedError
+            if done:
+                return next_task.result()
+    finally:
+        pending = [next_task] if not next_task.done() else []
+        if pending:
+            await _settle_cancelled_task(next_task)
+
+
+async def _synthesize_streaming(
+    *,
+    state: AgentState,
+    config: RunnableConfig | None,
+    tts_engine: Any,
+    clean_text: str,
+    emotion: str,
+    instruction: str,
+    timeout_seconds: float,
+    provider: str,
+    started: float,
+) -> dict[str, Any]:
+    delivery, to = _stream_delivery(state, config)
+    if delivery is None:
+        raise RuntimeError("Socket.IO is required for progressive TTS")
+
+    stream_id = str(uuid4())
+    sequence = -1
+    stream_started = False
+    synthesis_kwargs = {"emotion": emotion, "instruction": instruction}
+    interrupt_signal = get_interrupt_handler().get_signal(state["session_id"])
+
+    for attempt in range(2):
+        stream: Any | None = None
+        try:
+            stream = aiter(
+                tts_engine.synthesize_stream(
+                    clean_text,
+                    **synthesis_kwargs,
+                )
+            )
+            while True:
+                try:
+                    chunk = await _next_chunk_or_interrupt(
+                        stream,
+                        interrupt_signal,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except StopAsyncIteration:
+                    break
+                if not isinstance(chunk, bytes) or not chunk or len(chunk) % 2:
+                    raise RuntimeError("TTS stream returned invalid PCM")
+                if not stream_started:
+                    await delivery.emit(
+                        "chat",
+                        "audio_stream_start",
+                        {
+                            "stream_id": stream_id,
+                            "format": "pcm_s16le",
+                            "sample_rate": int(getattr(tts_engine, "sample_rate", 24000)),
+                            "channels": 1,
+                            "emotion": emotion,
+                        },
+                        to=to,
+                    )
+                    stream_started = True
+                sequence += 1
+                await delivery.emit(
+                    "chat",
+                    "audio_stream_chunk",
+                    {
+                        "stream_id": stream_id,
+                        "sequence": sequence,
+                        "audio_data": base64.b64encode(chunk).decode("ascii"),
+                    },
+                    to=to,
+                )
+            if interrupt_signal.is_set():
+                raise _UserInterruptedError
+            if sequence < 0:
+                raise RuntimeError("TTS stream completed without audio")
+        except _UserInterruptedError:
+            await _close_async_stream(
+                stream,
+                timeout_seconds=_INTERRUPT_CLEANUP_GRACE_SECONDS,
+            )
+            if stream_started:
+                try:
+                    await _emit_stream_end(
+                        delivery,
+                        to=to,
+                        stream_id=stream_id,
+                        final_sequence=sequence,
+                        status="cancelled",
+                        reason="cancelled",
+                    )
+                except Exception:
+                    logger.warning(
+                        "[{}] [TTSNode] Failed to emit interrupted terminal stream event",
+                        state.get("session_id", "unknown"),
+                    )
+            log_timing(
+                state,
+                "tts.synthesize",
+                (time.perf_counter() - started) * 1000,
+                "skipped:interrupted",
+            )
+            return {
+                "tts_audio": None,
+                "media_status": MediaStatus("skipped", "interrupted", provider, False),
+                "metadata": {
+                    **state.get("metadata", {}),
+                    "tts_provider": provider,
+                    "media_status": "skipped",
+                    "interruption_reason": "interrupted",
+                    "audio_streamed": stream_started,
+                    **({"audio_stream_id": stream_id} if stream_started else {}),
+                },
+            }
+        except asyncio.CancelledError:
+            await _close_async_stream(
+                stream,
+                timeout_seconds=_INTERRUPT_CLEANUP_GRACE_SECONDS,
+            )
+            if stream_started:
+                try:
+                    await _emit_stream_end(
+                        delivery,
+                        to=to,
+                        stream_id=stream_id,
+                        final_sequence=sequence,
+                        status="cancelled",
+                        reason="cancelled",
+                    )
+                except Exception:
+                    logger.warning(
+                        "[{}] [TTSNode] Failed to emit cancelled terminal stream event",
+                        state.get("session_id", "unknown"),
+                    )
+            raise
+        except Exception as exc:
+            await _close_async_stream(stream)
+            if not stream_started and attempt == 0:
+                logger.warning(
+                    "[{}] [TTSNode] Streaming TTS failed before first chunk; retrying same voice",
+                    state.get("session_id", "unknown"),
+                )
+                continue
+            if stream_started:
+                try:
+                    await _emit_stream_end(
+                        delivery,
+                        to=to,
+                        stream_id=stream_id,
+                        final_sequence=sequence,
+                        status="failed",
+                        reason="timeout" if isinstance(exc, TimeoutError) else "provider_error",
+                    )
+                except Exception:
+                    logger.warning(
+                        "[{}] [TTSNode] Failed to emit terminal stream event",
+                        state.get("session_id", "unknown"),
+                    )
+            raise
+        else:
+            await _close_async_stream(stream)
+            await _emit_stream_end(
+                delivery,
+                to=to,
+                stream_id=stream_id,
+                final_sequence=sequence,
+                status="completed",
+            )
+            log_timing(
+                state,
+                "tts.synthesize",
+                (time.perf_counter() - started) * 1000,
+                "ready:streamed",
+            )
+            return {
+                "tts_audio": None,
+                "media_status": MediaStatus("ready", provider=provider),
+                "metadata": {
+                    **state.get("metadata", {}),
+                    "tts_provider": provider,
+                    "media_status": "ready",
+                    "audio_streamed": True,
+                    "audio_stream_id": stream_id,
+                },
+            }
+
+    raise AssertionError("stream retry loop must return or raise")
 
 
 async def tts_node(
@@ -143,6 +469,13 @@ async def tts_node(
 
     # Strip emoji and emotion tags before TTS so the voice doesn't read them aloud
     clean_text = _clean_text_for_tts(response_text)
+    emotion = str(state.get("emotion") or "neutral")
+    synthesis_kwargs: dict[str, Any] = {}
+    if getattr(tts_engine, "supports_emotion_instructions", False) is True:
+        synthesis_kwargs = {
+            "emotion": emotion,
+            "instruction": build_emotion_instruction(emotion),
+        }
     logger.debug(
         f"[{session_id}] [TTSNode] Text length: {len(response_text)} chars → {len(clean_text)} chars (cleaned)"
     )
@@ -152,7 +485,21 @@ async def tts_node(
         timeout_seconds = (
             float(getattr(system, "golden_tts_timeout_seconds", 20.0)) if golden else 300.0
         )
-        audio = await asyncio.wait_for(tts_engine.synthesize(clean_text), timeout=timeout_seconds)
+        if getattr(tts_engine, "supports_streaming", False) is True:
+            return await _synthesize_streaming(
+                state=state,
+                config=config,
+                tts_engine=tts_engine,
+                clean_text=clean_text,
+                emotion=emotion,
+                instruction=build_emotion_instruction(emotion),
+                timeout_seconds=timeout_seconds,
+                provider=provider,
+                started=started,
+            )
+        audio = await asyncio.wait_for(
+            tts_engine.synthesize(clean_text, **synthesis_kwargs), timeout=timeout_seconds
+        )
     except TimeoutError:
         log_timing(
             state, "tts.synthesize", (time.perf_counter() - started) * 1000, "degraded:timeout"

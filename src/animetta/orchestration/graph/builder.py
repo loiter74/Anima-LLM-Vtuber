@@ -99,9 +99,9 @@ def build_graph(
                                        |
                             [humor_validation_node]
                                        |
-                                  [tts_node]
+                                [emotion_node]
                                        |
-                                  [emotion_node]
+                                   [tts_node]
                                        |
                                   [output_node]
                                        |
@@ -139,9 +139,9 @@ def build_graph(
         graph.add_edge("reasoner", "anima_composer")
         graph.add_edge("anima_composer", "response_guard")
         graph.add_edge("response_guard", "reply_output")
-        graph.add_edge("reply_output", "tts")
-        graph.add_edge("tts", "emotion")
-        graph.add_edge("emotion", "performance_output")
+        graph.add_edge("reply_output", "emotion")
+        graph.add_edge("emotion", "tts")
+        graph.add_edge("tts", "performance_output")
         graph.add_edge("performance_output", "conversation_finalizer")
         graph.add_edge("conversation_finalizer", END)
         logger.info("[LangGraph] Golden two-pass graph built")
@@ -199,9 +199,9 @@ def build_graph(
 
     graph.add_edge("humor_rewrite", "humor_validation")
     graph.add_edge("humor_validation", "reply_output")
-    graph.add_edge("reply_output", "tts")
-    graph.add_edge("tts", "emotion")
-    graph.add_edge("emotion", "output")
+    graph.add_edge("reply_output", "emotion")
+    graph.add_edge("emotion", "tts")
+    graph.add_edge("tts", "output")
     graph.add_edge("output", END)
 
     logger.info("[LangGraph] State graph built")

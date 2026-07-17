@@ -166,6 +166,7 @@ class TestDefaultModelConfig:
         assert config["ANIMETTA_PROFILE"] == "test"
         assert config["ANIMETTA_HOST"] == "127.0.0.1"
         assert config["ANIMETTA_PORT"] == "12394"
+        assert config["DASHSCOPE_API_KEY"] == ""
         assert "ANIMETTA_BASE_MODEL_PATH" not in config
         assert "ANIMETTA_LORA_PATH" not in config
 

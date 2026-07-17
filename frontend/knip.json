@@ -1,6 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/components/live2d/useLive2DModel.ts", "electron/preload.cjs", "scripts/*.mjs"],
+  "entry": [
+    "src/components/live2d/useLive2DModel.ts",
+    "electron/preload.cjs",
+    "scripts/*.mjs",
+    "streaming-tts-smoke.mjs"
+  ],
   "project": [
     "src/**/*.{ts,vue}",
     "electron/**/*.{cjs,ts}",

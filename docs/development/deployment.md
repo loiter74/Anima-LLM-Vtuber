@@ -15,7 +15,9 @@ flyctl auth login
 # 2. Set secrets (API keys)
 flyctl secrets set DEEPSEEK_API_KEY=your_key_here
 flyctl secrets set MIMO_API_KEY=your_key_here
-flyctl secrets set QWEN_TTS_API_KEY=your_internal_auth_token
+flyctl secrets set DASHSCOPE_API_KEY=your_beijing_model_studio_key
+# Optional manual local-Qwen rollback only:
+# flyctl secrets set QWEN_TTS_API_KEY=your_internal_auth_token
 
 # 3. Launch
 flyctl launch --ha=false

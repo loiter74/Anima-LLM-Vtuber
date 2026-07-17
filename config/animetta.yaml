@@ -56,6 +56,17 @@ providers:
     mock:
       type: mock
       voice: default
+    dashscope-seren:
+      type: dashscope
+      api_key: ${DASHSCOPE_API_KEY}
+      model: qwen3-tts-instruct-flash-realtime
+      voice: Seren
+      base_url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+      response_format: pcm
+      sample_rate: 24000
+      language_type: Chinese
+      timeout_seconds: 20.0
+      connect_timeout_seconds: 5.0
     mimo-tts:
       type: mimo
       api_key: ${MIMO_API_KEY}
@@ -148,7 +159,7 @@ profiles:
     services:
       llm: deepseek
       asr: mimo-asr
-      tts: qwen-alice
+      tts: dashscope-seren
       vad: mimo-vad
     policy:
       allow_mock: false
@@ -159,4 +170,4 @@ profiles:
       enable_tools: false
       enable_subtitle_translation: false
       enable_active_memes: false
-      tts_timeout_seconds: 120.0
+      tts_timeout_seconds: 20.0

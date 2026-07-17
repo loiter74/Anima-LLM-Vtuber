@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Tests for TTS synthesis node."""
 
+import asyncio
+import base64
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -11,6 +13,7 @@ from langgraph.types import RunnableConfig
 
 from animetta.observability.service_proxy import instrument_service
 from animetta.orchestration.graph import tts_node
+from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
 from animetta.orchestration.graph.state import create_initial_state
 from animetta.services.tts.mock_tts import MockTTS
 from animetta.services.tts.remote_tts import RemoteTTS, RemoteTTSUpstreamError
@@ -68,6 +71,40 @@ class TestTTSNode:
         result = await tts_node(state, config)
         assert result["tts_audio"] == b"fake_audio_bytes"
         assert result["media_status"].status == "ready"
+
+    @pytest.mark.parametrize(
+        ("emotion", "modifier"),
+        [
+            ("neutral", "平稳"),
+            ("happy", "轻微上扬"),
+            ("sad", "放慢"),
+            ("angry", "压低"),
+            ("surprised", "短暂停顿"),
+            ("thinking", "思考停顿"),
+        ],
+    )
+    async def test_emotion_aware_engine_receives_character_bounded_instruction(
+        self,
+        mock_service_context,
+        emotion: str,
+        modifier: str,
+    ) -> None:
+        engine = mock_service_context.tts_engine
+        engine.supports_emotion_instructions = True
+        engine.synthesize = AsyncMock(return_value=b"RIFFaudio")
+        state = self._make_state(response_text="这是一条需要合成的回复。")
+        state["emotion"] = emotion
+
+        await tts_node(
+            state,
+            RunnableConfig(configurable={"service_context": mock_service_context}),
+        )
+
+        kwargs = engine.synthesize.await_args.kwargs
+        assert kwargs["emotion"] == emotion
+        assert modifier in kwargs["instruction"]
+        for constraint in ("冷静", "克制", "有教养", "不卖萌", "不夸张"):
+            assert constraint in kwargs["instruction"]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -241,3 +278,395 @@ class TestTTSNode:
         assert result["tts_audio"] is None
         assert result["media_status"].reason == "mock_forbidden"
         target.synthesize.assert_not_awaited()  # type: ignore[attr-defined]
+
+
+class TestStreamingTTSNode:
+    @staticmethod
+    def _state(emotion: str = "thinking"):
+        state = create_initial_state(session_id="socket-1")
+        state["response_text"] = "让我认真想一想。"
+        state["emotion"] = emotion
+        return state
+
+    @staticmethod
+    def _config(
+        engine,
+        socket: AsyncMock,
+        *,
+        runtime_profile: str = "development",
+        timeout_seconds: float = 20.0,
+    ) -> RunnableConfig:
+        context = SimpleNamespace(
+            tts_engine=engine,
+            config=SimpleNamespace(
+                system=SimpleNamespace(
+                    runtime_profile=runtime_profile,
+                    golden_tts_timeout_seconds=timeout_seconds,
+                )
+            ),
+        )
+        return RunnableConfig(configurable={"service_context": context, "socketio": socket})
+
+    @pytest.mark.asyncio
+    async def test_emits_start_ordered_chunks_and_completed_end(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                assert kwargs["emotion"] == "thinking"
+                yield b"\x00\x01"
+                yield b"\x02\x03"
+
+        socket = AsyncMock()
+        result = await tts_node(self._state(), self._config(Engine(), socket))
+
+        calls = socket.emit.await_args_list
+        assert [call.args[0] for call in calls] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]
+        assert [call.args[1].get("sequence") for call in calls[1:3]] == [0, 1]
+        assert base64.b64decode(calls[1].args[1]["audio_data"]) == b"\x00\x01"
+        assert base64.b64decode(calls[2].args[1]["audio_data"]) == b"\x02\x03"
+        assert calls[3].args[1]["status"] == "completed"
+        assert calls[3].args[1]["final_sequence"] == 1
+        assert result["tts_audio"] is None
+        assert result["media_status"].status == "ready"
+        assert result["metadata"]["audio_streamed"] is True
+
+    @pytest.mark.asyncio
+    async def test_retries_once_before_first_chunk_with_same_instruction(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.calls: list[dict] = []
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                self.calls.append(dict(kwargs))
+                if len(self.calls) == 1:
+                    raise RuntimeError("connection dropped before audio")
+                yield b"\x00\x01"
+
+        engine = Engine()
+        socket = AsyncMock()
+        result = await tts_node(self._state("sad"), self._config(engine, socket))
+
+        assert len(engine.calls) == 2
+        assert engine.calls[0] == engine.calls[1]
+        assert [call.args[0] for call in socket.emit.await_args_list] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]
+        assert result["media_status"].status == "ready"
+
+    @pytest.mark.asyncio
+    async def test_failure_after_first_chunk_ends_stream_without_retry(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                self.calls += 1
+                yield b"\x00\x01"
+                raise RuntimeError("connection dropped after audio")
+
+        engine = Engine()
+        socket = AsyncMock()
+        state = self._state("angry")
+        result = await tts_node(state, self._config(engine, socket))
+
+        assert engine.calls == 1
+        assert state["response_text"] == "让我认真想一想。"
+        assert [call.args[0] for call in socket.emit.await_args_list] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]
+        assert socket.emit.await_args_list[-1].args[1]["status"] == "failed"
+        assert result["tts_audio"] is None
+        assert result["media_status"].status == "degraded"
+
+    @pytest.mark.asyncio
+    async def test_timeout_before_first_chunk_retries_once_then_degrades(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                self.calls += 1
+                await asyncio.Future()
+                yield b"\x00\x01"
+
+        engine = Engine()
+        socket = AsyncMock()
+        result = await tts_node(
+            self._state("thinking"),
+            self._config(
+                engine,
+                socket,
+                runtime_profile="golden",
+                timeout_seconds=0.001,
+            ),
+        )
+
+        assert engine.calls == 2
+        socket.emit.assert_not_awaited()
+        assert result["tts_audio"] is None
+        assert result["media_status"].status == "degraded"
+        assert result["media_status"].reason == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_active_stream_uses_idle_timeout_instead_of_total_duration(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                for chunk in (b"\x00\x01", b"\x02\x03", b"\x04\x05", b"\x06\x07"):
+                    await asyncio.sleep(0.02)
+                    yield chunk
+
+        socket = AsyncMock()
+        result = await tts_node(
+            self._state("thinking"),
+            self._config(
+                Engine(),
+                socket,
+                runtime_profile="golden",
+                timeout_seconds=0.05,
+            ),
+        )
+
+        assert result["media_status"].status == "ready"
+        assert [call.args[0] for call in socket.emit.await_args_list] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]
+        assert socket.emit.await_args_list[-1].args[1]["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_cancellation_after_first_chunk_emits_cancelled_end(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.waiting_after_chunk = asyncio.Event()
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                yield b"\x00\x01"
+                self.waiting_after_chunk.set()
+                await asyncio.Future()
+
+        engine = Engine()
+        socket = AsyncMock()
+        task = asyncio.create_task(tts_node(self._state("sad"), self._config(engine, socket)))
+        await engine.waiting_after_chunk.wait()
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert [call.args[0] for call in socket.emit.await_args_list] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]
+        assert socket.emit.await_args_list[-1].args[1]["status"] == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_user_interrupt_closes_stream_and_returns_without_waiting_for_provider(
+        self,
+    ) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.waiting_after_chunk = asyncio.Event()
+                self.finalized = asyncio.Event()
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                try:
+                    yield b"\x00\x01"
+                    self.waiting_after_chunk.set()
+                    await asyncio.Future()
+                finally:
+                    self.finalized.set()
+
+        handler = get_interrupt_handler()
+        handler.remove_session("socket-1")
+        engine = Engine()
+        socket = AsyncMock()
+        try:
+            task = asyncio.create_task(tts_node(self._state("sad"), self._config(engine, socket)))
+            await asyncio.wait_for(engine.waiting_after_chunk.wait(), timeout=1.0)
+
+            handler.set_interrupt("socket-1")
+            result = await asyncio.wait_for(task, timeout=0.2)
+
+            await asyncio.wait_for(engine.finalized.wait(), timeout=0.2)
+            terminal = [
+                call
+                for call in socket.emit.await_args_list
+                if call.args[0] == "chat:audio_stream_end"
+            ]
+            assert len(terminal) == 1
+            assert terminal[0].args[1]["status"] == "cancelled"
+            assert result["tts_audio"] is None
+            assert result["media_status"].status == "skipped"
+            assert result["media_status"].reason == "interrupted"
+        finally:
+            handler.remove_session("socket-1")
+
+    @pytest.mark.asyncio
+    async def test_user_interrupt_terminal_is_not_blocked_by_slow_provider_cleanup(
+        self,
+    ) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.waiting_after_chunk = asyncio.Event()
+                self.cleanup_started = asyncio.Event()
+                self.cleanup_release = asyncio.Event()
+                self.finalized = asyncio.Event()
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                try:
+                    yield b"\x00\x01"
+                    self.waiting_after_chunk.set()
+                    await asyncio.Future()
+                finally:
+                    self.cleanup_started.set()
+                    await self.cleanup_release.wait()
+                    self.finalized.set()
+
+        handler = get_interrupt_handler()
+        handler.remove_session("socket-1")
+        engine = Engine()
+        socket = AsyncMock()
+        task = asyncio.create_task(tts_node(self._state("sad"), self._config(engine, socket)))
+        try:
+            await asyncio.wait_for(engine.waiting_after_chunk.wait(), timeout=1.0)
+            handler.set_interrupt("socket-1")
+
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+
+            assert task in done
+            result = task.result()
+            assert engine.cleanup_started.is_set()
+            assert not engine.finalized.is_set()
+            terminal = [
+                call
+                for call in socket.emit.await_args_list
+                if call.args[0] == "chat:audio_stream_end"
+            ]
+            assert len(terminal) == 1
+            assert terminal[0].args[1]["status"] == "cancelled"
+            assert result["media_status"].reason == "interrupted"
+        finally:
+            engine.cleanup_release.set()
+            if not task.done():
+                await asyncio.wait_for(task, timeout=1.0)
+            await asyncio.wait_for(engine.finalized.wait(), timeout=1.0)
+            handler.remove_session("socket-1")
+
+    @pytest.mark.asyncio
+    async def test_start_emit_failure_closes_first_generator_before_retry(self) -> None:
+        class Engine:
+            supports_streaming = True
+            supports_emotion_instructions = True
+            sample_rate = 24000
+
+            def __init__(self) -> None:
+                self.calls = 0
+                self.first_finalized = asyncio.Event()
+
+            async def synthesize(self, *args, **kwargs):
+                raise AssertionError("complete-audio fallback must not run")
+
+            async def synthesize_stream(self, text: str, **kwargs):
+                self.calls += 1
+                call = self.calls
+                if call == 2:
+                    assert self.first_finalized.is_set()
+                try:
+                    yield b"\x00\x01"
+                finally:
+                    if call == 1:
+                        self.first_finalized.set()
+
+        engine = Engine()
+        socket = AsyncMock()
+        start_attempts = 0
+
+        async def emit(event: str, payload: dict, **kwargs) -> None:
+            nonlocal start_attempts
+            if event == "chat:audio_stream_start":
+                start_attempts += 1
+                if start_attempts == 1:
+                    raise RuntimeError("transient delivery failure")
+
+        socket.emit.side_effect = emit
+
+        result = await tts_node(self._state(), self._config(engine, socket))
+
+        assert engine.calls == 2
+        assert engine.first_finalized.is_set()
+        assert result["media_status"].status == "ready"
+        assert [call.args[0] for call in socket.emit.await_args_list] == [
+            "chat:audio_stream_start",
+            "chat:audio_stream_start",
+            "chat:audio_stream_chunk",
+            "chat:audio_stream_end",
+        ]

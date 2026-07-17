@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, type Ref } from 'vue'
+import { activateChatTask, resetChatTaskGate } from '@/composables/chatTaskGate'
+import { Events } from '@/constants/socket-events'
 
 // Mock pixi.js before any imports
 vi.mock('pixi.js', () => ({
@@ -49,9 +51,19 @@ const mockSocket = vi.hoisted(() => ({
   off: vi.fn(),
 }))
 
+const audioPlayback = vi.hoisted(() => ({
+  playAudio: vi.fn(),
+  stopAudio: vi.fn(),
+  startAudioStream: vi.fn(),
+  pushAudioStreamChunk: vi.fn(),
+  endAudioStream: vi.fn(),
+}))
+
 vi.mock('@/composables/useSocket', () => ({
   getSocket: () => mockSocket,
 }))
+
+vi.mock('@/components/live2d/useAudioPlayback', () => audioPlayback)
 
 describe('useLive2D', () => {
   let canvasRef: Ref<HTMLCanvasElement | null>
@@ -60,6 +72,7 @@ describe('useLive2D', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    resetChatTaskGate()
     canvasRef = ref(document.createElement('canvas'))
     const mod = await import('@/components/live2d/useLive2D')
     useLive2D = mod.useLive2D
@@ -202,10 +215,10 @@ describe('useLive2D', () => {
       await live2d.init()
       await live2d.init()
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(3)
+      expect(mockSocket.on).toHaveBeenCalledTimes(7)
       const registrations = mockSocket.on.mock.calls
       live2d.destroy()
-      expect(mockSocket.off).toHaveBeenCalledTimes(3)
+      expect(mockSocket.off).toHaveBeenCalledTimes(7)
       expect(mockSocket.off.mock.calls).toEqual(
         registrations.map(([event, callback]) => [event, callback]),
       )
@@ -218,11 +231,81 @@ describe('useLive2D', () => {
       await first.init()
       await second.init()
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(3)
+      expect(mockSocket.on).toHaveBeenCalledTimes(7)
       first.destroy()
       expect(mockSocket.off).not.toHaveBeenCalled()
       second.destroy()
-      expect(mockSocket.off).toHaveBeenCalledTimes(3)
+      expect(mockSocket.off).toHaveBeenCalledTimes(7)
+    })
+
+    it('forwards correlated streaming events for only the current chat task', async () => {
+      expect(Events.CHAT.AUDIO_STREAM_START).toBe('chat:audio_stream_start')
+      expect(Events.CHAT.AUDIO_STREAM_CHUNK).toBe('chat:audio_stream_chunk')
+      expect(Events.CHAT.AUDIO_STREAM_END).toBe('chat:audio_stream_end')
+
+      const live2d = useLive2D(canvasRef)
+      await live2d.init()
+      const listeners = new Map<string, (data: unknown) => void>()
+      for (const [event, listener] of mockSocket.on.mock.calls) {
+        if (typeof event === 'string' && typeof listener === 'function') {
+          listeners.set(event, (data: unknown) => listener(data))
+        }
+      }
+      const identity = {
+        message_id: '00000000-0000-0000-0000-000000000001',
+        conversation_id: '00000000-0000-0000-0000-000000000002',
+        task_id: '00000000-0000-0000-0000-000000000003',
+        turn_id: '00000000-0000-0000-0000-000000000003',
+      }
+      const staleIdentity = {
+        ...identity,
+        task_id: '00000000-0000-0000-0000-000000000004',
+        turn_id: '00000000-0000-0000-0000-000000000004',
+      }
+      activateChatTask(identity)
+
+      listeners.get(Events.CHAT.AUDIO_STREAM_START)?.({
+        ...staleIdentity,
+        stream_id: '00000000-0000-0000-0000-000000000010',
+      })
+      listeners.get(Events.CHAT.AUDIO_STREAM_START)?.({
+        ...identity,
+        stream_id: '00000000-0000-0000-0000-000000000010',
+      })
+      listeners.get(Events.CHAT.AUDIO_STREAM_CHUNK)?.({
+        ...identity,
+        stream_id: '00000000-0000-0000-0000-000000000010',
+        sequence: 0,
+        audio_data: 'AA==',
+      })
+      listeners.get(Events.CHAT.AUDIO_STREAM_END)?.({
+        ...identity,
+        stream_id: '00000000-0000-0000-0000-000000000010',
+        final_sequence: 0,
+        status: 'completed',
+      })
+
+      expect(audioPlayback.startAudioStream).toHaveBeenCalledTimes(1)
+      expect(audioPlayback.pushAudioStreamChunk).toHaveBeenCalledTimes(1)
+      expect(audioPlayback.endAudioStream).toHaveBeenCalledTimes(1)
+      live2d.destroy()
+    })
+
+    it('stops buffered audio on disconnect while retaining listeners for reconnect', async () => {
+      const live2d = useLive2D(canvasRef)
+      await live2d.init()
+      const listeners = new Map<string, (data?: unknown) => void>()
+      for (const [event, listener] of mockSocket.on.mock.calls) {
+        if (typeof event === 'string' && typeof listener === 'function') {
+          listeners.set(event, (data?: unknown) => listener(data))
+        }
+      }
+
+      listeners.get('disconnect')?.('transport close')
+
+      expect(audioPlayback.stopAudio).toHaveBeenCalledTimes(1)
+      expect(mockSocket.off).not.toHaveBeenCalled()
+      live2d.destroy()
     })
   })
 

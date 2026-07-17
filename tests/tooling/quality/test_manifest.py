@@ -279,6 +279,33 @@ def test_repository_catalog_covers_full_python_standard_scope() -> None:
     }.issubset(catalog.components["quality-control-plane"].direct_groups)
 
 
+def test_repository_catalog_has_a_dedicated_acceptance_audition_gate() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    group = catalog.groups["backend-acceptance-unit"]
+    component = catalog.components["backend-acceptance"]
+
+    assert group.runner.value == "pytest"
+    assert group.targets == ("tests/acceptance",)
+    assert group.cacheable is True
+    assert component.paths == (
+        "src/animetta/acceptance/**",
+        "tests/acceptance/**",
+        "scripts/tts_audition.py",
+    )
+    assert {
+        "backend-acceptance-unit",
+        "python-format",
+        "backend-static",
+        "backend-typecheck",
+        "backend-support-typecheck",
+        "backend-deadcode",
+        "security-secrets",
+    }.issubset(component.direct_groups)
+    assert "backend-acceptance-unit" in catalog.groups["backend-full"].covers
+    assert "scripts/README.md" in catalog.components["documentation"].paths
+    assert ".gitignore" in catalog.components["repository-governance"].paths
+
+
 def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
 

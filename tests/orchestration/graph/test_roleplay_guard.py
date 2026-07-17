@@ -45,6 +45,25 @@ def test_roleplay_voice_no_drift():
     assert has_drift(text) is False
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Let me pour you another drink, traveler.",
+        "I should know—this is my tavern.",
+        "Let me use the user's map; the cellar is this way, traveler.",
+        "I should consider the user's debt paid; this round is on me.",
+    ],
+)
+def test_legitimate_english_character_dialogue_has_no_drift(text: str) -> None:
+    assert detect_drift(text) == []
+
+
+def test_english_meta_planning_triggers_drift() -> None:
+    text = "Let me analyze the user's request step by step and decide what to say."
+
+    assert detect_drift(text) == ["english_internal_reasoning"]
+
+
 # ── Correction section ordering ──────────────────────────────
 
 

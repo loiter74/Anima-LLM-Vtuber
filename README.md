@@ -114,6 +114,7 @@ cp .env.example .env
 # Choose test, smoke, or production and fill only the keys it needs:
 #   ANIMETTA_PROFILE="test"
 #   DEEPSEEK_API_KEY="..."
+#   DASHSCOPE_API_KEY="..."
 #   MIMO_API_KEY="..."
 #   QWEN_TTS_API_KEY="..."
 ```

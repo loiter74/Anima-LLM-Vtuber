@@ -2,7 +2,13 @@ import { onMounted, onUnmounted, type Ref } from 'vue'
 import type { Live2DAction } from '@/types/live2d'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
-import type { AudioWithExpressionEvent, ChatIdentity } from '@/types/socket-events'
+import type {
+  AudioStreamChunkEvent,
+  AudioStreamEndEvent,
+  AudioStreamStartEvent,
+  AudioWithExpressionEvent,
+  ChatIdentity,
+} from '@/types/socket-events'
 import { isCurrentChatTask } from '@/composables/chatTaskGate'
 
 // ===== Public exports for backward compatibility =====
@@ -20,7 +26,13 @@ import {
   retryLoad,
 } from './useLive2DModel'
 import { tickLipSync, setMouthTarget } from './useLipSync'
-import { playAudio, stopAudio } from './useAudioPlayback'
+import {
+  endAudioStream,
+  playAudio,
+  pushAudioStreamChunk,
+  startAudioStream,
+  stopAudio,
+} from './useAudioPlayback'
 import { playParameterTimeline, setParam, cancelTimeline } from './useParameterTimeline'
 import {
   isLoaded,
@@ -43,7 +55,11 @@ let socketListenerOwners = 0
 let listenerSocket: Live2DSocket | null = null
 let live2dActionListener: ((data: unknown) => void) | null = null
 let audioWithExpressionListener: ((data: AudioWithExpressionEvent) => void) | null = null
+let audioStreamStartListener: ((data: AudioStreamStartEvent) => void) | null = null
+let audioStreamChunkListener: ((data: AudioStreamChunkEvent) => void) | null = null
+let audioStreamEndListener: ((data: AudioStreamEndEvent) => void) | null = null
 let stopAudioListener: ((data: ChatIdentity) => void) | null = null
+let disconnectListener: (() => void) | null = null
 
 // ===== Main Composable =====
 
@@ -158,14 +174,31 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
       }
     }
 
+    audioStreamStartListener = (data: AudioStreamStartEvent) => {
+      if (isCurrentChatTask(data)) startAudioStream(data)
+    }
+    audioStreamChunkListener = (data: AudioStreamChunkEvent) => {
+      if (isCurrentChatTask(data)) pushAudioStreamChunk(data)
+    }
+    audioStreamEndListener = (data: AudioStreamEndEvent) => {
+      if (isCurrentChatTask(data)) endAudioStream(data)
+    }
+
     stopAudioListener = (data: ChatIdentity) => {
       if (!isCurrentChatTask(data)) return
+      stopAudio()
+    }
+    disconnectListener = () => {
       stopAudio()
     }
 
     socket.on(Events.CHAT.LIVE2D_ACTION, live2dActionListener)
     socket.on(Events.CHAT.AUDIO_WITH_EXPRESSION, audioWithExpressionListener)
+    socket.on(Events.CHAT.AUDIO_STREAM_START, audioStreamStartListener)
+    socket.on(Events.CHAT.AUDIO_STREAM_CHUNK, audioStreamChunkListener)
+    socket.on(Events.CHAT.AUDIO_STREAM_END, audioStreamEndListener)
     socket.on(Events.CHAT.STOP_AUDIO, stopAudioListener)
+    socket.on('disconnect', disconnectListener)
   }
 
   function teardownSocketListeners(): void {
@@ -181,14 +214,30 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
     if (audioWithExpressionListener) {
       listenerSocket.off(Events.CHAT.AUDIO_WITH_EXPRESSION, audioWithExpressionListener)
     }
+    if (audioStreamStartListener) {
+      listenerSocket.off(Events.CHAT.AUDIO_STREAM_START, audioStreamStartListener)
+    }
+    if (audioStreamChunkListener) {
+      listenerSocket.off(Events.CHAT.AUDIO_STREAM_CHUNK, audioStreamChunkListener)
+    }
+    if (audioStreamEndListener) {
+      listenerSocket.off(Events.CHAT.AUDIO_STREAM_END, audioStreamEndListener)
+    }
     if (stopAudioListener) {
       listenerSocket.off(Events.CHAT.STOP_AUDIO, stopAudioListener)
+    }
+    if (disconnectListener) {
+      listenerSocket.off('disconnect', disconnectListener)
     }
 
     listenerSocket = null
     live2dActionListener = null
     audioWithExpressionListener = null
+    audioStreamStartListener = null
+    audioStreamChunkListener = null
+    audioStreamEndListener = null
     stopAudioListener = null
+    disconnectListener = null
   }
 
   // ===== Destroy =====

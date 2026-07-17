@@ -701,6 +701,30 @@ def test_default_manifest_entrypoints_are_independent_of_current_working_directo
     assert reloader.config_path == DEFAULT_MANIFEST_PATH
 
 
+def test_default_production_selects_approved_dashscope_voice_and_keeps_qwen_rollback(
+    manifest_secrets: pytest.MonkeyPatch,
+) -> None:
+    effective = load_effective_config(profile="production")
+    selected = effective.providers["tts"]
+    typed = effective.typed_provider("tts")
+    rollback = load_remote_tts_worker_config()
+
+    assert selected.name == "dashscope-seren"
+    assert selected.public_identity() == {
+        "name": "dashscope-seren",
+        "type": "dashscope",
+        "provider": "dashscope",
+        "model": "qwen3-tts-instruct-flash-realtime",
+        "voice": "Seren",
+    }
+    assert typed.type == "dashscope"
+    assert typed.api_key == "test-dashscope-secret"
+    assert rollback.type == "remote"
+    assert rollback.provider == "qwen3"
+    assert rollback.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+    assert rollback.voice == "alice"
+
+
 def test_reloader_defaults_to_the_manifest_that_produced_effective_config(
     manifest_data: dict[str, Any],
     write_manifest,

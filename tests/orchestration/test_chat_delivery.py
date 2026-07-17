@@ -70,3 +70,42 @@ async def test_delivery_rejects_missing_required_payload_field() -> None:
 
     with pytest.raises(ValueError, match="missing required"):
         await delivery.emit("chat", "sentence", {"text": "hello"}, to="sid")
+
+
+@pytest.mark.asyncio
+async def test_stream_delivery_contracts_are_correlated_and_ordered() -> None:
+    sio = MagicMock()
+    sio.emit = AsyncMock()
+    delivery = ChatDelivery(sio, _identity(), ChatTransportMode.CANONICAL)
+    stream_id = str(uuid4())
+
+    await delivery.emit(
+        "chat",
+        "audio_stream_start",
+        {
+            "stream_id": stream_id,
+            "format": "pcm_s16le",
+            "sample_rate": 24000,
+            "channels": 1,
+            "emotion": "thinking",
+        },
+        to="sid",
+    )
+    await delivery.emit(
+        "chat",
+        "audio_stream_chunk",
+        {"stream_id": stream_id, "sequence": 0, "audio_data": "AAE="},
+        to="sid",
+    )
+    await delivery.emit(
+        "chat",
+        "audio_stream_end",
+        {"stream_id": stream_id, "final_sequence": 0, "status": "completed"},
+        to="sid",
+    )
+
+    assert [call.args[0] for call in sio.emit.await_args_list] == [
+        "chat:audio_stream_start",
+        "chat:audio_stream_chunk",
+        "chat:audio_stream_end",
+    ]

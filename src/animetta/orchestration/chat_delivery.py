@@ -133,7 +133,7 @@ class ChatDelivery:
             mark_delivery_evidence(text_delivered=delivered)
         elif action == "control" and payload.get("signal") == "conversation-end":
             mark_delivery_evidence(terminal_control_delivered=delivered)
-        elif action == "audio_with_expression":
+        elif action in {"audio_with_expression", "audio_stream_chunk"}:
             mark_delivery_evidence(audio_delivered=delivered)
 
     async def _record_event(

@@ -109,6 +109,8 @@ C:tmp_pip/
 .playwright-mcp/
 artifacts/health/
 artifacts/test-impact/
+artifacts/tts-audition/
+artifacts/tts-streaming/
 evidence/runtime-config/
 coverage.xml
 junit.xml

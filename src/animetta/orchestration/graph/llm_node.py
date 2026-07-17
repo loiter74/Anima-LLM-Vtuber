@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
+from animetta.orchestration.prompting.reasoning_classifier import is_english_meta_reasoning
 
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
@@ -33,6 +34,10 @@ _THINKING_BLOCK_RE = re.compile(
 _ORPHAN_THINKING_PREFIX_RE = re.compile(
     r"(?is)^.*?(?:</(?:think|thinking)>|\[/(?:think|thinking)\])\s*"
 )
+_LEADING_RESPONSE_TAG_RE = re.compile(
+    r"(?is)^\s*(?:(?:<(?:think|thinking)\b[^>]*>)|"
+    r"\[(?:think|thinking|happy|sad|angry|neutral|surprised)\])\s*"
+)
 _UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?is)^\s*"
     r"(?=(?:the user\s+(?:just\s+)?(?:says|said|asks|asked|wants|is)\b|"
@@ -52,15 +57,31 @@ _CHINESE_UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?P<answer>(?:上一个话题|我的数据库告诉你|你(?:刚才|上次|刚刚)|哎呀|这就|赛博酒馆|后厨|牛到了|欢迎光临|来都来了)[\s\S]*)$"
 )
 _CHINESE_REASONING_START_RE = re.compile(
-    r"^\s*(?:用户(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|作为(?:AI|Anima)|我(?:需要|应该|知道|可以|得))"
+    r"^\s*(?:用户|旅人(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|"
+    r"作为(?:AI|Anima)|我(?:需要|应该|知道|可以|得)|"
+    r"用[^。！？]{0,60}世界观[^。！？]{0,30}(?:包装|回答|回应)|这个问题|"
+    r"保持[^。！？]{0,80}风格)"
 )
 _CHINESE_SENTENCE_RE = re.compile(r"[^。！？]*[。！？]\s*")
 _CHINESE_REASONING_SIGNAL_RE = re.compile(
-    r"(?:用户(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|作为AI|作为Anima|AI VTuber|"
+    r"(?:用户|旅人(?:问|说|想|要|发|在|继续|再次|测试|表示|让)|"
+    r"作为AI|作为Anima|作为[^。！？]{0,20}AI|AI VTuber|我是Anima|让我想想|"
     r"我(?:需要|应该|知道|可以|得)|符合人设|对话历史|方式来回应|方式回应|"
     r"假装记得|保持神秘感|这是(?:个)?测试|实际上|弹幕|轻吐槽|自然收住|"
-    r"调用工具|不要解释|不要写分析|不要跳出角色|角色内|保持[^。！？]{0,30}语气)"
-    r"|连续对话检查|承认上下文|保持角色感|这个问题有点意思"
+    r"调用工具|不要解释|不要写分析|不要跳出角色|角色内|保持[^。！？]{0,30}语气|"
+    r"好感(?:度|值)?[^。！？\d]{0,16}\d*|亲密度[^。！？\d]{0,16}\d*|"
+    r"风格\s*[:：]|表情标签|用[^。！？]{0,60}世界观[^。！？]{0,30}(?:包装|回答|回应)|"
+    r"适合用[^。！？]{0,80}来处理|身份接住|先[^。！？]{0,40}再[^。！？]{0,40}(?:最后|收尾)|"
+    r"连续对话检查|承认上下文|保持角色感|这个问题(?:有点意思|偏[^。！？]{0,40}类)|"
+    r"不需要搜索|直接用自己的知识回答|每条回复必须|保持[^。！？]{0,80}风格)"
+)
+_CHINESE_INLINE_PLANNING_SENTENCE_RE = re.compile(
+    r"\s*(?:然后|再)套(?:一下)?世界观"
+    r"(?:（[^。！？）]{0,40}）|\([^.!?)]{0,40}\))?，?\s*"
+    r"最后(?:再)?(?:轻轻)?接住[。！？]\s*"
+)
+_CHINESE_INCOMPLETE_REASONING_RE = re.compile(
+    r"^(?:好感(?:度|值)?|亲密度|情绪(?:标签)?|表情(?:标签)?)\s*(?::|：)?\s*\d*\s*$"
 )
 
 # Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
@@ -83,12 +104,24 @@ def _strip_model_thinking(text: str) -> str:
 
     stripped = _THINKING_BLOCK_RE.sub("", text)
     stripped = _ORPHAN_THINKING_PREFIX_RE.sub("", stripped, count=1)
+    # Providers occasionally emit an unclosed leading ``[thinking]`` or
+    # ``<think>`` tag. Remove only the leading tag, then classify the body;
+    # in-character emotion-tagged replies keep their visible text.
+    stripped = _LEADING_RESPONSE_TAG_RE.sub("", stripped, count=1)
     match = _UNTAGGED_REASONING_PREFIX_RE.match(stripped)
     if match:
         stripped = match.group("answer")
     else:
         stripped = _strip_chinese_untagged_reasoning_prefix(stripped)
+        if is_english_meta_reasoning(_AFFINITY_MARKER_RE.sub("", stripped)):
+            return ""
+    stripped = _CHINESE_INLINE_PLANNING_SENTENCE_RE.sub("", stripped)
     return stripped.strip()
+
+
+def _visible_response_or_fallback(text: str) -> str:
+    """Return a user-visible response, never an empty stripped reasoning trace."""
+    return _strip_model_thinking(text) or FALLBACK_RESPONSE
 
 
 def _strip_chinese_untagged_reasoning_prefix(text: str) -> str:
@@ -96,6 +129,7 @@ def _strip_chinese_untagged_reasoning_prefix(text: str) -> str:
     if not _CHINESE_REASONING_START_RE.match(text):
         return text
 
+    unambiguous_user_prefix = text.lstrip().startswith("用户")
     pos = 0
     reasoning_sentence_count = 0
     while match := _CHINESE_SENTENCE_RE.match(text, pos):
@@ -105,8 +139,11 @@ def _strip_chinese_untagged_reasoning_prefix(text: str) -> str:
         reasoning_sentence_count += 1
         pos = match.end()
 
-    if reasoning_sentence_count >= 2 and pos < len(text):
-        return text[pos:].lstrip()
+    if reasoning_sentence_count >= 2 or (reasoning_sentence_count >= 1 and unambiguous_user_prefix):
+        remainder = text[pos:].lstrip()
+        if not remainder or _CHINESE_INCOMPLETE_REASONING_RE.fullmatch(remainder):
+            return ""
+        return remainder
 
     fallback_match = _CHINESE_UNTAGGED_REASONING_PREFIX_RE.match(text)
     if fallback_match:
@@ -510,7 +547,7 @@ async def _llm_with_tools(
                     for tc in tool_calls
                 ]
 
-                visible_content = _strip_model_thinking(
+                visible_content = _visible_response_or_fallback(
                     response.get("content", "") or "Calling tools..."
                 )
                 visible_content = _strip_emotion_tags(visible_content)
@@ -526,7 +563,7 @@ async def _llm_with_tools(
                     "tool_calls": formatted_tool_calls,
                 }
             else:
-                full_response = _strip_model_thinking(response.get("content", ""))
+                full_response = _visible_response_or_fallback(response.get("content", ""))
                 logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
 
                 # ── Affinity marker parsing ── (same as streaming path)
@@ -648,7 +685,7 @@ async def _llm_without_tools(
     # history (used for roleplay-guard drift detection next turn) doesn't
     # carry stale markers.
     raw_response = full_response
-    full_response = _strip_model_thinking(full_response)
+    full_response = _visible_response_or_fallback(full_response)
     full_response = _extract_and_update_affinity(state, full_response)
     original_response = full_response
     full_response = _enforce_persona_verbal_tics(full_response, enriched_prompt)

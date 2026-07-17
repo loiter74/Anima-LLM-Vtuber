@@ -12,6 +12,14 @@ from animetta.orchestration.server.stats_api import health_check
 from animetta.services.tts.mock_tts import MockTTS
 
 
+class _StaticModelManager:
+    def __init__(self, **statuses: str) -> None:
+        self.statuses = statuses
+
+    def get_status(self) -> dict[str, str]:
+        return dict(self.statuses)
+
+
 @pytest.fixture
 def effective_config(monkeypatch: pytest.MonkeyPatch) -> callable:
     for name in (
@@ -27,6 +35,7 @@ def effective_config(monkeypatch: pytest.MonkeyPatch) -> callable:
     monkeypatch.setenv("ANIMETTA_HOST", "127.0.0.1")
     monkeypatch.setenv("ANIMETTA_PORT", "12394")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "readiness-deepseek-secret")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "readiness-dashscope-secret")
     monkeypatch.setenv("MIMO_API_KEY", "readiness-mimo-secret")
     monkeypatch.setenv("QWEN_TTS_API_KEY", "readiness-qwen-secret")
     monkeypatch.setenv("QWEN_TTS_URL", "http://qwen-tts.internal:8001")
@@ -100,6 +109,7 @@ def _seed_ready(config: EffectiveConfig) -> None:
     ServicePool._llm = object()
     ServicePool._tts = object()
     ServicePool._asr = object()
+    ServicePool._model_manager = _StaticModelManager(tts="loaded")
     ServicePool._resolved_identities = _resolved(config)
     ServicePool._llm_connectivity = {
         "state": "ready",
@@ -129,7 +139,7 @@ def test_smoke_snapshot_publishes_one_config_identity_and_distinct_asr_tts_rows(
     assert payload["components"]["asr"] != payload["components"]["tts"]
 
 
-def test_production_remote_tts_requires_exact_qwen_provider_model_and_voice(
+def test_production_tts_requires_exact_dashscope_model_and_seren_voice(
     effective_config,
 ) -> None:
     config = effective_config("production")
@@ -142,10 +152,11 @@ def test_production_remote_tts_requires_exact_qwen_provider_model_and_voice(
 
     tts = payload["components"]["tts"]
     assert tts["ready"] is True
-    assert tts["configured"]["type"] == "remote"
-    assert tts["configured"]["provider"] == "qwen3"
-    assert tts["resolved"]["provider"] == "qwen3"
-    assert tts["resolved"]["voice"] == "alice"
+    assert tts["configured"]["type"] == "dashscope"
+    assert tts["configured"]["provider"] == "dashscope"
+    assert tts["configured"]["model"] == "qwen3-tts-instruct-flash-realtime"
+    assert tts["resolved"]["provider"] == "dashscope"
+    assert tts["resolved"]["voice"] == "Seren"
 
 
 def test_remote_identity_mismatch_fails_readiness_with_sanitized_cause(
@@ -163,8 +174,30 @@ def test_remote_identity_mismatch_fails_readiness_with_sanitized_cause(
     assert payload["ready"] is False
     assert payload["components"]["tts"]["reason"] == "identity_mismatch"
     serialized = json.dumps(payload)
-    assert "readiness-qwen-secret" not in serialized
-    assert "qwen-tts.internal" not in serialized
+    assert "readiness-dashscope-secret" not in serialized
+    assert "dashscope.aliyuncs.com" not in serialized
+
+
+def test_production_dashscope_preload_failure_fails_pool_readiness(
+    effective_config,
+) -> None:
+    config = effective_config("production")
+    _seed_ready(config)
+    ServicePool._model_manager = _StaticModelManager(tts="error")
+
+    payload = ServicePool.get_readiness_snapshot(
+        config=config,
+        frontend=_frontend(),
+    ).to_dict()
+
+    assert payload["ready"] is False
+    assert payload["components"]["tts"]["state"] == "failed"
+    assert payload["components"]["tts"]["reason"] == "preload_failed"
+    assert payload["components"]["pool"]["ready"] is False
+    assert payload["components"]["pool"]["reason"] == "component_not_ready"
+    serialized = json.dumps(payload)
+    assert "readiness-dashscope-secret" not in serialized
+    assert "dashscope.aliyuncs.com" not in serialized
 
 
 def test_stale_config_snapshot_fails_closed(effective_config) -> None:
@@ -213,7 +246,7 @@ def test_ready_snapshot_uses_cached_remote_identity_without_network_call(
     _seed_ready(config)
 
     with patch(
-        "animetta.services.tts.remote_tts.RemoteTTS.check_readiness",
+        "animetta.services.tts.dashscope_tts._default_connector",
         side_effect=AssertionError("/ready must not perform network I/O"),
     ) as check:
         payload = ServicePool.get_readiness_snapshot(

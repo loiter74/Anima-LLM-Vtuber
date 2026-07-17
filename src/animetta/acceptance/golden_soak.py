@@ -19,6 +19,9 @@ GOLDEN_EVENTS = {
     "chat:expression",
     "chat:live2d_action",
     "chat:audio_with_expression",
+    "chat:audio_stream_start",
+    "chat:audio_stream_chunk",
+    "chat:audio_stream_end",
     "chat:subtitle_translation",
     "system:error",
 }
@@ -39,11 +42,17 @@ class TurnTracker:
     events: list[dict[str, Any]] = field(default_factory=list)
     final_text: str = ""
     text_ready_at: float | None = None
+    audio_ready_at: float | None = None
     media_ready_at: float | None = None
     completion_count: int = 0
     expression_count: int = 0
     action_count: int = 0
     audio_count: int = 0
+    audio_transport: str | None = None
+    audio_stream_id: str | None = None
+    audio_stream_next_sequence: int = 0
+    audio_stream_chunk_count: int = 0
+    audio_stream_status: str | None = None
     degradation_count: int = 0
     terminal_count: int = 0
 
@@ -71,7 +80,49 @@ class TurnTracker:
         elif event == "chat:audio_with_expression":
             if not payload.get("audio_data") or not payload.get("volumes"):
                 raise GateFailureError("empty_or_silent_audio")
+            if self.audio_transport is not None:
+                raise GateFailureError("multiple_audio_transports")
+            self.audio_transport = "complete_audio"
+            self.audio_ready_at = now
             self.audio_count += 1
+        elif event == "chat:audio_stream_start":
+            if self.audio_transport is not None or self.audio_stream_id is not None:
+                raise GateFailureError("multiple_audio_transports")
+            if (
+                not payload.get("stream_id")
+                or payload.get("format") != "pcm_s16le"
+                or payload.get("sample_rate") != 24_000
+                or payload.get("channels") != 1
+            ):
+                raise GateFailureError("invalid_audio_stream_start")
+            self.audio_transport = "pcm_stream"
+            self.audio_stream_id = str(payload["stream_id"])
+        elif event == "chat:audio_stream_chunk":
+            if payload.get("stream_id") != self.audio_stream_id:
+                raise GateFailureError("audio_stream_identity_mismatch")
+            if payload.get("sequence") != self.audio_stream_next_sequence:
+                raise GateFailureError("audio_stream_sequence_mismatch")
+            if not payload.get("audio_data"):
+                raise GateFailureError("empty_audio_stream_chunk")
+            if self.audio_ready_at is None:
+                self.audio_ready_at = now
+            self.audio_stream_chunk_count += 1
+            self.audio_stream_next_sequence += 1
+        elif event == "chat:audio_stream_end":
+            if payload.get("stream_id") != self.audio_stream_id:
+                raise GateFailureError("audio_stream_identity_mismatch")
+            if self.audio_stream_status is not None:
+                raise GateFailureError("duplicate_audio_stream_end")
+            if payload.get("final_sequence") != self.audio_stream_next_sequence - 1:
+                raise GateFailureError("audio_stream_final_sequence_mismatch")
+            status = str(payload.get("status") or "")
+            if status not in {"completed", "failed", "cancelled"}:
+                raise GateFailureError("invalid_audio_stream_status")
+            if status == "completed" and self.audio_stream_chunk_count < 1:
+                raise GateFailureError("empty_audio_stream")
+            self.audio_stream_status = status
+            if status == "completed":
+                self.audio_count += 1
         elif event == "chat:control" and payload.get("type") == "media-degraded":
             self.degradation_count += 1
         elif event == "chat:control" and payload.get("signal") == "conversation-end":
@@ -84,7 +135,14 @@ class TurnTracker:
         if not self.final_text or self.completion_count != 1:
             raise GateFailureError("incomplete_text_delivery")
         if self.expression_count < 1 or self.action_count < 1 or self.terminal_count != 1:
-            raise GateFailureError("incomplete_performance_delivery")
+            raise GateFailureError(
+                "incomplete_performance_delivery:"
+                f"expression={self.expression_count},"
+                f"action={self.action_count},"
+                f"terminal={self.terminal_count}"
+            )
+        if self.audio_stream_id is not None and self.audio_stream_status is None:
+            raise GateFailureError("incomplete_audio_stream")
         degraded = self.degradation_count == 1
         if degraded and self.audio_count:
             raise GateFailureError("degraded_turn_emitted_audio")
@@ -101,7 +159,14 @@ class TurnTracker:
             "events": self.events,
             "safe_output": safe_excerpt(self.final_text),
             "text_ready_ms": round((self.text_ready_at - self.started_at) * 1000, 2),
+            "audio_ready_ms": (
+                round((self.audio_ready_at - self.started_at) * 1000, 2)
+                if self.audio_ready_at is not None
+                else None
+            ),
             "media_ready_ms": round((self.media_ready_at - self.started_at) * 1000, 2),
+            "audio_transport": self.audio_transport,
+            "audio_chunk_count": self.audio_stream_chunk_count,
             "degraded": degraded,
             "drift": [],
             "marker_leak": [],
@@ -114,6 +179,35 @@ def percentile(values: list[float], percentile_value: float) -> float:
     ordered = sorted(values)
     index = max(0, math.ceil(percentile_value / 100 * len(ordered)) - 1)
     return float(ordered[index])
+
+
+def evaluate_audio_latency(
+    turns: list[dict[str, Any]],
+    *,
+    p50_limit_ms: float,
+    p95_limit_ms: float,
+) -> dict[str, int | float | bool]:
+    """Evaluate user-send to first-audio latency without hiding missing turns."""
+    latencies = [
+        float(value)
+        for turn in turns
+        if isinstance((value := turn.get("audio_ready_ms")), (int, float))
+        and not isinstance(value, bool)
+    ]
+    p50_ms = percentile(latencies, 50)
+    p95_ms = percentile(latencies, 95)
+    complete = len(latencies) == len(turns) and bool(turns)
+    passed = complete and p50_ms <= p50_limit_ms and p95_ms <= p95_limit_ms
+    return {
+        "turn_count": len(turns),
+        "sample_count": len(latencies),
+        "p50_ms": p50_ms,
+        "p95_ms": p95_ms,
+        "p50_limit_ms": float(p50_limit_ms),
+        "p95_limit_ms": float(p95_limit_ms),
+        "complete": complete,
+        "passed": passed,
+    }
 
 
 def evaluate_degradation_budget(turns: list[dict[str, Any]]) -> tuple[bool, str]:
@@ -179,6 +273,11 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "retryable",
         "format",
         "emotion",
+        "stream_id",
+        "sequence",
+        "final_sequence",
+        "sample_rate",
+        "channels",
     }
     result = {key: payload[key] for key in allowed if key in payload}
     if payload.get("text"):

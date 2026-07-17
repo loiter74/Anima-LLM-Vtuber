@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .contrib.glm_tts import GLMTTS as GLMTTS
     from .contrib.kokoro_tts import KokoroTTS as KokoroTTS
     from .contrib.vibe_voice_tts import VibeVoiceTTS as VibeVoiceTTS
+    from .dashscope_tts import DashScopeRealtimeTTS as DashScopeRealtimeTTS
     from .edge_tts import EdgeTTS as EdgeTTS
     from .factory import TTSFactory as TTSFactory
     from .gpt_sovits_tts import GPTSoVITSTTS as GPTSoVITSTTS
@@ -30,6 +31,7 @@ _EXPORTS = {
     "TTSFactory": (".factory", "TTSFactory"),
     "MockTTS": (".mock_tts", "MockTTS"),
     "EdgeTTS": (".edge_tts", "EdgeTTS"),
+    "DashScopeRealtimeTTS": (".dashscope_tts", "DashScopeRealtimeTTS"),
     "GPTSoVITSTTS": (".gpt_sovits_tts", "GPTSoVITSTTS"),
     "MimoTTS": (".mimo_tts", "MimoTTS"),
     "RemoteTTS": (".remote_tts", "RemoteTTS"),

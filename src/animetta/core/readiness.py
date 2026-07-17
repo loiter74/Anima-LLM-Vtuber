@@ -117,6 +117,7 @@ def build_runtime_readiness_snapshot(
             resolved_identities=resolved_identities,
             init_state=init_state,
             init_reason=init_reason,
+            model_manager=model_manager,
             connectivity=connectivity,
             frontend=frontend,
         )
@@ -379,6 +380,7 @@ def _effective_config_snapshot(
     resolved_identities: Any,
     init_state: str,
     init_reason: str | None,
+    model_manager: Any,
     connectivity: Any,
     frontend: Any,
 ) -> RuntimeReadinessSnapshot:
@@ -428,6 +430,7 @@ def _effective_config_snapshot(
             else ("identity_unavailable" if supplied is None else "identity_mismatch")
         )
         component_ready = pool_ready and identity_ready
+        component_state = "ready" if component_ready else "failed"
         if category == "llm" and profile in {"smoke", "production"}:
             connectivity_ready = (
                 isinstance(connectivity, dict)
@@ -444,19 +447,49 @@ def _effective_config_snapshot(
                     if supplied_reason in _SAFE_CONNECTIVITY_REASONS
                     else "connectivity_status_unavailable"
                 )
+            component_state = "ready" if component_ready else "failed"
+        if (
+            category == "tts"
+            and profile in {"smoke", "production"}
+            and configured.get("type") == "dashscope"
+            and identity_ready
+        ):
+            manager_state = _model_state(model_manager, "tts")
+            if manager_state != "loaded":
+                component_ready = False
+                if manager_state == "error":
+                    component_state = "failed"
+                    reason = "preload_failed"
+                elif manager_state == "unloaded":
+                    component_state = "pending"
+                    reason = None
+                elif manager_state == "loading":
+                    component_state = "loading"
+                    reason = None
+                elif manager_state == "unavailable":
+                    component_state = "failed"
+                    reason = "preload_untracked"
+                else:
+                    component_state = "failed"
+                    reason = "preload_status_unavailable"
         components[category] = {
-            "state": "ready" if component_ready else "failed",
+            "state": component_state,
             "ready": component_ready,
             "configured": configured,
             "resolved": resolved,
             "reason": reason,
         }
     components["frontend"] = frontend_component
-    ready = bool(
-        pool_ready
-        and frontend_component["ready"]
-        and all(components[name]["ready"] for name in ("llm", "asr", "tts", "vad"))
-    )
+    services_ready = all(components[name]["ready"] for name in ("llm", "asr", "tts", "vad"))
+    if pool_ready and not services_ready:
+        pool_component.update(
+            {
+                "state": "failed",
+                "ready": False,
+                "reason": "component_not_ready",
+            }
+        )
+    ready = bool(pool_component["ready"] and frontend_component["ready"] and services_ready)
     return RuntimeReadinessSnapshot(
         ready=ready,
         profile=profile,

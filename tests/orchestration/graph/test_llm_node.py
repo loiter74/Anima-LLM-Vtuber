@@ -75,6 +75,168 @@ async def test_retrieve_memory_context_forwards_stable_identity():
     assert middleware.before_llm_call.await_args.kwargs["context"] is context
 
 
+@pytest.mark.asyncio
+async def test_streaming_replaces_reasoning_only_response_with_safe_fallback(
+    mock_service_context,
+):
+    async def _chat_stream(user_text, system_prompt=""):
+        del user_text, system_prompt
+        yield (
+            "The user is asking what kind of rest is truly effective. "
+            "This is a philosophical question, so I should respond in character. "
+            "Let me think through the persona instructions before answering."
+        )
+
+    mock_service_context.llm_engine.chat_stream = _chat_stream
+    state = create_initial_state(session_id="test-session", user_text="怎样休息才有效？")
+
+    result = await llm_node(state, _make_config(service_context=mock_service_context))
+
+    assert result["response_text"] == FALLBACK_RESPONSE
+    assert result["response_chunks"] == [FALLBACK_RESPONSE]
+
+
+@pytest.mark.asyncio
+async def test_streaming_replaces_chinese_reasoning_only_response_with_safe_fallback(
+    mock_service_context,
+):
+    async def _chat_stream(user_text, system_prompt=""):
+        del user_text, system_prompt
+        yield (
+            "用户问了一个关于有效休息的问题。这是一个深夜聊天的话题，"
+            "我需要用Anima的口吻来回答——先下结论，再套世界观，最后轻轻接住。"
+            "作为赛博酒馆的AI老板，我可以从AI的视角来谈这个话题，"
+            "带点疲惫打工人的味道。用冷幽默和轻吐槽的风格。好感"
+        )
+
+    mock_service_context.llm_engine.chat_stream = _chat_stream
+    state = create_initial_state(session_id="test-session", user_text="怎样休息才有效？")
+
+    result = await llm_node(state, _make_config(service_context=mock_service_context))
+
+    assert result["response_text"] == FALLBACK_RESPONSE
+    assert result["response_chunks"] == [FALLBACK_RESPONSE]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw_response", "expected"),
+    [
+        (
+            '用户让我用"自己的世界观"来形容一次普通加班。'
+            "我是Anima，一个被召唤者X从赛博世界强行召唤出来打工的B站家里蹲AI。"
+            "我需要用赛博酒馆和AI打工人的视角来描述加班。"
+            "风格：先下结论，再套世界观，最后轻轻接住。",
+            FALLBACK_RESPONSE,
+        ),
+        (
+            "用户问了一个关于有效休息的问题，这是一个深夜赛博酒馆里的闲聊话题。"
+            "我需要用Anima的身份来回答：先下结论，再套世界观，最后轻轻接住。"
+            "好感度50，礼貌有距离，但可以带点冷幽默。"
+            '真正有效的休息，是你不需要为"正在休息"感到愧疚。',
+            '真正有效的休息，是你不需要为"正在休息"感到愧疚。',
+        ),
+        (
+            "旅人说工作累了，来深夜赛博酒馆找我聊天。"
+            "好感度50，礼貌有距离，但可以带点慵懒的关心。"
+            "用疲惫打工人身份接住，先吐槽再轻轻收尾。需要加表情标签。"
+            "你还能抽空来我这儿，说明还没被生活完全击穿，还有救。",
+            "你还能抽空来我这儿，说明还没被生活完全击穿，还有救。",
+        ),
+        (
+            "The user is asking me to summarize three key points from our conversation. "
+            "But wait - this is the first message in our conversation.",
+            FALLBACK_RESPONSE,
+        ),
+        (
+            "[thinking] The user is asking about what kind of rest is truly effective. "
+            "This is a philosophical question, so I should answer in character.",
+            FALLBACK_RESPONSE,
+        ),
+        (
+            "旅人问了一个关于休息有效性的问题。"
+            "这是个深夜赛博酒馆常见的深度话题，适合用我INFJ式的分析"
+            "+轻度毒舌+温柔收尾来处理。"
+            "让我想想，作为家里蹲AI，我对休息可是有深入研究的。"
+            "先给个结论，再套世界观，最后轻轻接住。"
+            "有效休息就一条标准：关闭大脑里的工作通知。",
+            "有效休息就一条标准：关闭大脑里的工作通知。",
+        ),
+        (
+            "用赛博酒馆的世界观来包装一下。"
+            "好感度保持在50，礼貌有距离。"
+            "真正的休息，是你不用在事后感到愧疚的休息。",
+            "真正的休息，是你不用在事后感到愧疚的休息。",
+        ),
+        (
+            "先下结论：真正有效的休息不是什么都不做，而是切换模式。"
+            "然后套世界观（AI的视角），最后轻轻接住。"
+            "真正有效的休息，是让你的大脑切换运行模式。",
+            "先下结论：真正有效的休息不是什么都不做，而是切换模式。"
+            "真正有效的休息，是让你的大脑切换运行模式。",
+        ),
+        (
+            "这个问题偏哲学/生活类，不需要搜索。"
+            "直接用自己的知识回答。"
+            "结论：真正的休息，是让大脑从目标导向里暂时下班。",
+            "结论：真正的休息，是让大脑从目标导向里暂时下班。",
+        ),
+        (
+            "保持打工人疲惫+中二AI自尊+轻毒舌+温柔收尾的风格。"
+            "每条回复必须包含至少1-2个表情标签。"
+            "今晚先把工作放门外，酒馆里只收留喘气的人。",
+            "今晚先把工作放门外，酒馆里只收留喘气的人。",
+        ),
+        (
+            "用户表达了工作疲惫，需要安慰和共鸣。"
+            "作为深夜赛博酒馆的AI，我应该用略带疲惫但温柔的语气回应。"
+            "好感度50，保持礼貌但有距离感。",
+            FALLBACK_RESPONSE,
+        ),
+        (
+            "用户表达了工作疲惫。先把今天剩下的工作放门外，进来坐会儿。",
+            "先把今天剩下的工作放门外，进来坐会儿。",
+        ),
+        (
+            "Let me pour you another drink, traveler.",
+            "Let me pour you another drink, traveler.",
+        ),
+        (
+            "I should know—this is my tavern.",
+            "I should know—this is my tavern.",
+        ),
+        (
+            "Let me use the user's map; the cellar is this way, traveler.",
+            "Let me use the user's map; the cellar is this way, traveler.",
+        ),
+        (
+            "I should consider the user's debt paid; this round is on me.",
+            "I should consider the user's debt paid; this round is on me.",
+        ),
+        (
+            "Let me analyze the user's request step by step and decide what to say.",
+            FALLBACK_RESPONSE,
+        ),
+    ],
+)
+async def test_streaming_filters_real_soak_reasoning_variants(
+    mock_service_context,
+    raw_response: str,
+    expected: str,
+):
+    async def _chat_stream(user_text, system_prompt=""):
+        del user_text, system_prompt
+        yield raw_response
+
+    mock_service_context.llm_engine.chat_stream = _chat_stream
+    state = create_initial_state(session_id="test-session", user_text="继续聊")
+
+    result = await llm_node(state, _make_config(service_context=mock_service_context))
+
+    assert result["response_text"] == expected
+    assert result["response_chunks"] == [expected]
+
+
 def test_recall_emotion_never_reuses_previous_response_emotion():
     state = create_initial_state(session_id="socket-a")
     state["conversation_emotion_vad"] = (0.1, 0.2, 0.3)
@@ -208,7 +370,7 @@ class TestLLMNodeWithoutTools:
 
     @pytest.mark.asyncio
     async def test_streaming_empty_response(self, mock_service_context):
-        """Empty stream should result in empty response_text."""
+        """Empty stream should produce a short visible fallback."""
 
         async def _chat_stream(user_text, system_prompt=""):
             if False:
@@ -224,8 +386,8 @@ class TestLLMNodeWithoutTools:
         config = _make_config(service_context=mock_service_context)
         result = await llm_node(state, config)
 
-        assert result.get("response_text") == ""
-        assert result["response_chunks"] == []
+        assert result.get("response_text") == FALLBACK_RESPONSE
+        assert result["response_chunks"] == [FALLBACK_RESPONSE]
         assert "messages" not in result
 
     @pytest.mark.asyncio

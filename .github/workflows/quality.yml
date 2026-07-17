@@ -401,13 +401,14 @@ jobs:
           retention-days: 14
 
   release-runtime:
-    name: cold production runtime
+    name: production streaming runtime
     needs: plan
     if: >-
       needs.plan.outputs.tier == 'full' ||
       needs.plan.outputs.tier == 'nightly'
     runs-on: [self-hosted, windows, gpu, animetta-release]
     env:
+      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
       QWEN_TTS_API_KEY: ${{ secrets.QWEN_TTS_API_KEY }}
@@ -440,7 +441,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec playwright install chromium
 
-      - name: Run cold production startup and recovery gate
+      - name: Run production streaming startup and acceptance gate
         shell: pwsh
         run: >-
           python scripts/release_runtime_gate.py
@@ -467,9 +468,7 @@ jobs:
       - name: Stop production stack
         if: ${{ always() }}
         shell: pwsh
-        run: |
-          docker compose down --remove-orphans
-          docker compose -f docker-compose.qwen.yml down --remove-orphans
+        run: docker compose down --remove-orphans
 
   quality-gate:
     name: quality-gate

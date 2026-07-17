@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const startLipSync = vi.hoisted(() => vi.fn())
 const stopLipSync = vi.hoisted(() => vi.fn())
+const setMouthTarget = vi.hoisted(() => vi.fn())
 const setExpression = vi.hoisted(() => vi.fn())
 
-vi.mock('./useLipSync', () => ({ startLipSync, stopLipSync }))
+vi.mock('./useLipSync', () => ({ setMouthTarget, startLipSync, stopLipSync }))
 vi.mock('./useLive2DModel', () => ({ setExpression }))
 
 class MockAudio {

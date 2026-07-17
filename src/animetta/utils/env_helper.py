@@ -214,6 +214,7 @@ class EnvHelper:
             "ANIMETTA_HOST": "127.0.0.1",
             "ANIMETTA_PORT": "12394",
             "DEEPSEEK_API_KEY": "",
+            "DASHSCOPE_API_KEY": "",
             "MIMO_API_KEY": "",
             "QWEN_TTS_API_KEY": "",
         }

@@ -472,6 +472,239 @@
         }
       }
     },
+    "audio_stream_start": {
+      "name": "chat:audio_stream_start",
+      "aliases": [
+        "audio_stream_start"
+      ],
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "stream_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "format": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "pcm_s16le"
+          ],
+          "min_length": 9,
+          "max_length": 9
+        },
+        "sample_rate": {
+          "type": "integer",
+          "required": true,
+          "strict": true,
+          "enum": [
+            24000
+          ]
+        },
+        "channels": {
+          "type": "integer",
+          "required": true,
+          "strict": true,
+          "enum": [
+            1
+          ]
+        },
+        "emotion": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "neutral",
+            "happy",
+            "sad",
+            "angry",
+            "surprised",
+            "thinking"
+          ],
+          "min_length": 3,
+          "max_length": 16
+        }
+      }
+    },
+    "audio_stream_chunk": {
+      "name": "chat:audio_stream_chunk",
+      "aliases": [
+        "audio_stream_chunk"
+      ],
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "stream_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "sequence": {
+          "type": "integer",
+          "required": true,
+          "strict": true
+        },
+        "audio_data": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "min_length": 1,
+          "max_length": 2796204
+        }
+      }
+    },
+    "audio_stream_end": {
+      "name": "chat:audio_stream_end",
+      "aliases": [
+        "audio_stream_end"
+      ],
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "turn_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "stream_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "final_sequence": {
+          "type": "integer",
+          "required": true,
+          "strict": true
+        },
+        "status": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "enum": [
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "min_length": 6,
+          "max_length": 9
+        },
+        "reason?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": [
+            "timeout",
+            "provider_error",
+            "cancelled"
+          ],
+          "default": null,
+          "min_length": 7,
+          "max_length": 32
+        }
+      }
+    },
     "subtitle_translation": {
       "name": "chat:subtitle_translation",
       "aliases": ["subtitle.translation"],

@@ -73,6 +73,7 @@ cp .env.example .env
 # 选择 profile，并填写它实际需要的 key：
 #   ANIMETTA_PROFILE="test"
 #   DEEPSEEK_API_KEY="..."
+#   DASHSCOPE_API_KEY="..."
 #   MIMO_API_KEY="..."
 #   QWEN_TTS_API_KEY="..."
 ```

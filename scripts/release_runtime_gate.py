@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cold production Docker release gate with fresh runtime and browser evidence."""
+"""Production Docker release gate for DashScope streaming TTS."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
-from uuid import uuid4
 
 from dotenv import load_dotenv
 
@@ -30,6 +29,7 @@ from scripts.qwen_preflight import run_preflight as run_qwen_preflight
 
 REQUIRED_ENVIRONMENT = (
     "ALICE_REF_AUDIO",
+    "DASHSCOPE_API_KEY",
     "DEEPSEEK_API_KEY",
     "HF_CACHE_DIR",
     "MIMO_API_KEY",
@@ -39,6 +39,12 @@ _FORBIDDEN_LOG_PATTERN = re.compile(
     r"Traceback|(?:^|[|\s])(?:ERROR|CRITICAL|FATAL)(?:[|\s:]|$)",
     re.MULTILINE,
 )
+_PRODUCTION_TTS_IDENTITY = {
+    "type": "dashscope",
+    "provider": "dashscope",
+    "model": "qwen3-tts-instruct-flash-realtime",
+    "voice": "Seren",
+}
 
 
 class ReleaseGateError(RuntimeError):
@@ -46,7 +52,7 @@ class ReleaseGateError(RuntimeError):
 
 
 def validate_release_environment(environment: Mapping[str, str]) -> tuple[str, ...]:
-    """Validate release-only secrets and mounts without returning their values."""
+    """Validate production secrets and persistent rollback mounts."""
     missing = [name for name in REQUIRED_ENVIRONMENT if not environment.get(name, "").strip()]
     if missing:
         raise ReleaseGateError("Missing release environment fields: " + ", ".join(sorted(missing)))
@@ -56,108 +62,128 @@ def validate_release_environment(environment: Mapping[str, str]) -> tuple[str, .
     return tuple(sorted(REQUIRED_ENVIRONMENT))
 
 
-def validate_smoke_evidence(evidence: Mapping[str, Any]) -> None:
-    """Require real Alice WAV evidence from the isolated remote Qwen service."""
-    provider = evidence.get("provider")
-    resolved = provider.get("resolved") if isinstance(provider, Mapping) else None
-    expected_identity = (
-        isinstance(provider, Mapping)
-        and provider.get("type") == "remote"
-        and provider.get("provider") == "qwen3"
-        and provider.get("model") == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-        and provider.get("voice") == "alice"
-        and isinstance(resolved, Mapping)
-        and resolved.get("provider") == provider.get("provider")
-        and resolved.get("model") == provider.get("model")
-        and resolved.get("voice") == provider.get("voice")
-        and resolved.get("revision") == "5d83992436eae1d760afd27aff78a71d676296fc"
-    )
-    if not expected_identity:
-        raise ReleaseGateError("Alice smoke provider identity is not exact and resolved")
-    if (
-        evidence.get("ok") is not True
-        or int(evidence.get("audio_bytes", 0)) <= 44
-        or int(evidence.get("volume_samples", 0)) < 1
-        or int(evidence.get("volume_nonzero", 0)) < 1
-    ):
-        raise ReleaseGateError("Alice smoke did not produce valid WAV evidence")
-
-
 def validate_production_readiness(payload: Mapping[str, Any]) -> None:
-    """Require the exact production Qwen/Alice identity in application readiness."""
+    """Require the selected DashScope/Seren identity in production readiness."""
     components = payload.get("components")
     tts = components.get("tts") if isinstance(components, Mapping) else None
     configured = tts.get("configured") if isinstance(tts, Mapping) else None
     resolved = tts.get("resolved") if isinstance(tts, Mapping) else None
-    expected = {
-        "provider": "qwen3",
-        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "voice": "alice",
-    }
     if not (
         _ready(payload)
         and payload.get("profile") == "production"
+        and payload.get("acceptance_eligible") is True
         and isinstance(tts, Mapping)
         and tts.get("ready") is True
         and isinstance(configured, Mapping)
-        and configured.get("type") == "remote"
-        and all(configured.get(key) == value for key, value in expected.items())
+        and all(configured.get(key) == value for key, value in _PRODUCTION_TTS_IDENTITY.items())
         and isinstance(resolved, Mapping)
-        and all(resolved.get(key) == value for key, value in expected.items())
+        and all(resolved.get(key) == value for key, value in _PRODUCTION_TTS_IDENTITY.items())
     ):
-        raise ReleaseGateError("Application readiness lacks exact production Qwen/Alice identity")
+        raise ReleaseGateError(
+            "Application readiness lacks exact production DashScope/Seren identity"
+        )
 
 
-def validate_turn_probe_evidence(
-    evidence: Mapping[str, Any],
-    *,
-    expect: str,
-    conversation_id: str,
-) -> None:
-    """Require application-level typed degradation or recovered audio continuity."""
-    degraded = evidence.get("degraded") is True
-    if not (
-        evidence.get("status") == "passed"
-        and evidence.get("conversation_id") == conversation_id
-        and bool(str(evidence.get("safe_output", "")).strip())
-        and int(evidence.get("expression_count", 0)) >= 1
-        and int(evidence.get("action_count", 0)) >= 1
-    ):
-        raise ReleaseGateError("Application turn probe lacks text/Live2D continuity")
-    if expect == "degraded" and not (
-        degraded
-        and int(evidence.get("degradation_count", 0)) == 1
-        and int(evidence.get("audio_count", 0)) == 0
-    ):
-        raise ReleaseGateError("Qwen outage did not produce one typed media degradation")
-    if expect == "audio" and not (
-        not degraded
-        and int(evidence.get("degradation_count", 0)) == 0
-        and int(evidence.get("audio_count", 0)) == 1
-    ):
-        raise ReleaseGateError("Next turn did not retry the configured provider with audio")
+def _completed_browser_turn(turn: Any) -> bool:
+    if not isinstance(turn, Mapping):
+        return False
+    stream = turn.get("stream")
+    audio = turn.get("audio")
+    if not isinstance(stream, Mapping) or not isinstance(audio, list) or not audio:
+        return False
+    sequences = stream.get("sequences")
+    if not isinstance(sequences, list) or sequences != list(range(len(sequences))):
+        return False
+    return bool(
+        stream.get("format") == "pcm_s16le"
+        and stream.get("sample_rate") == 24000
+        and stream.get("channels") == 1
+        and stream.get("status") == "completed"
+        and int(stream.get("chunks", 0)) > 0
+        and stream.get("final_sequence") == int(stream.get("chunks", 0)) - 1
+        and any(float(entry.get("rms", 0.0)) > 0.001 for entry in audio)
+        and all(entry.get("ended") is True and entry.get("stopped") is not True for entry in audio)
+        and int(turn.get("legacy_audio_events", 0)) == 0
+    )
 
 
 def validate_playwright_evidence(evidence: Mapping[str, Any]) -> None:
-    """Reject empty-shell pages and incomplete production browser acceptance."""
-    core = evidence.get("core_ui")
-    release = evidence.get("release_acceptance")
-    audio = release.get("audio") if isinstance(release, Mapping) else None
+    """Require fresh streamed playback, interruption, recovery, and clean browser state."""
+    turns = evidence.get("turns")
+    playback = evidence.get("playback")
+    interrupted = turns.get("interrupted") if isinstance(turns, Mapping) else None
+    interruption_ok = (
+        isinstance(interrupted, Mapping) and int(interrupted.get("stop_audio_events", 0)) > 0
+    )
+    if interruption_ok:
+        audio = interrupted.get("audio")
+        stream = interrupted.get("stream")
+        sequences = stream.get("sequences") if isinstance(stream, Mapping) else None
+        chunks = int(stream.get("chunks", 0)) if isinstance(stream, Mapping) else 0
+        cancel_to_end_ms = interrupted.get("cancel_to_end_ms")
+        observation_ms = interrupted.get("post_terminal_observation_ms")
+        interruption_ok = (
+            isinstance(audio, list)
+            and bool(audio)
+            and all(entry.get("stopped") is True or entry.get("ended") is True for entry in audio)
+            and isinstance(stream, Mapping)
+            and stream.get("status") == "cancelled"
+            and isinstance(sequences, list)
+            and sequences == list(range(len(sequences)))
+            and chunks > 0
+            and stream.get("final_sequence") == chunks - 1
+            and int(interrupted.get("chunks_after_end", 0)) == 0
+            and isinstance(cancel_to_end_ms, (int, float))
+            and 0.0 <= float(cancel_to_end_ms) <= 3000.0
+            and isinstance(observation_ms, (int, float))
+            and float(observation_ms) >= 250.0
+        )
+    errors = (
+        evidence.get("console_errors"),
+        evidence.get("page_errors"),
+        evidence.get("request_failures"),
+        evidence.get("http_errors"),
+        evidence.get("marker_leaks"),
+    )
     if not (
         evidence.get("status") == "passed"
-        and isinstance(core, Mapping)
-        and core.get("passed") is True
-        and isinstance(release, Mapping)
-        and release.get("passed") is True
-        and release.get("provider_rows_exact") is True
-        and release.get("chinese_turn_complete") is True
-        and isinstance(audio, Mapping)
-        and audio.get("play_calls") == 1
-        and audio.get("play_resolved") == 1
-        and audio.get("ended") == 1
-        and audio.get("play_rejected") == 0
+        and evidence.get("context") == "fresh"
+        and evidence.get("provider_rows_exact") is True
+        and isinstance(turns, Mapping)
+        and _completed_browser_turn(turns.get("first"))
+        and _completed_browser_turn(turns.get("recovery"))
+        and interruption_ok
+        and isinstance(playback, Mapping)
+        and playback.get("audio_contexts") == 1
+        and playback.get("initial_buffer_seconds") == 0.2
+        and playback.get("no_overlap") is True
+        and playback.get("nonzero_pcm_lip_sync_input") is True
+        and playback.get("legacy_play_calls") == 1
+        and all(value == [] for value in errors)
     ):
-        raise ReleaseGateError("Fresh Playwright production evidence is incomplete")
+        raise ReleaseGateError("Fresh Playwright streaming TTS evidence is incomplete")
+
+
+def validate_live_soak_evidence(evidence: Mapping[str, Any]) -> None:
+    """Require 30 complete real turns and the approved first-sound latency budget."""
+    turns = evidence.get("turns")
+    thresholds = evidence.get("thresholds")
+    audio = thresholds.get("audio_latency") if isinstance(thresholds, Mapping) else None
+    decisions = evidence.get("decisions")
+    if not (
+        evidence.get("status") == "passed"
+        and isinstance(turns, list)
+        and len(turns) >= 30
+        and isinstance(audio, Mapping)
+        and audio.get("complete") is True
+        and audio.get("passed") is True
+        and int(audio.get("sample_count", 0)) >= 30
+        and float(audio.get("p50_ms", 0.0)) <= 3000.0
+        and float(audio.get("p95_ms", 0.0)) <= 5000.0
+        and isinstance(decisions, Mapping)
+        and all(value for value in decisions.values() if isinstance(value, bool))
+    ):
+        raise ReleaseGateError("Thirty-turn streaming latency evidence is incomplete")
 
 
 def assert_clean_logs(logs: str) -> None:
@@ -252,73 +278,10 @@ def _frontend_probe(url: str) -> dict[str, Any]:
     return {"status": status, "bytes": len(body)}
 
 
-def _run_alice_smoke(compose_file: Path) -> dict[str, Any]:
-    completed = _run(
-        _compose(
-            compose_file,
-            "exec",
-            "-T",
-            "animetta",
-            "python",
-            "scripts/smoke_qwen_alice.py",
-        )
-    )
-    try:
-        evidence = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise ReleaseGateError("Alice smoke did not emit JSON evidence") from exc
-    if not isinstance(evidence, dict):
-        raise ReleaseGateError("Alice smoke evidence must be a JSON object")
-    validate_smoke_evidence(evidence)
-    return evidence
-
-
-def _run_turn_probe(
-    compose_file: Path,
-    *,
-    expect: str,
-    conversation_id: str,
-    text: str,
-) -> dict[str, Any]:
-    completed = _run(
-        _compose(
-            compose_file,
-            "exec",
-            "-T",
-            "animetta",
-            "python",
-            "scripts/probe_release_turn.py",
-            "--expect",
-            expect,
-            "--conversation-id",
-            conversation_id,
-            "--text",
-            text,
-        )
-    )
-    try:
-        evidence = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise ReleaseGateError("Application turn probe did not emit JSON evidence") from exc
-    if not isinstance(evidence, dict):
-        raise ReleaseGateError("Application turn probe evidence must be a JSON object")
-    validate_turn_probe_evidence(
-        evidence,
-        expect=expect,
-        conversation_id=conversation_id,
-    )
-    return evidence
-
-
-def _container_id(compose_file: Path, service: str) -> str:
+def _container_metadata(compose_file: Path, service: str) -> dict[str, Any]:
     container_id = _run(_compose(compose_file, "ps", "-q", service)).stdout.strip()
     if not container_id:
         raise ReleaseGateError(f"No running container found for {service}")
-    return container_id
-
-
-def _container_metadata(compose_file: Path, service: str) -> dict[str, Any]:
-    container_id = _container_id(compose_file, service)
     completed = _run(["docker", "inspect", container_id])
     try:
         current = json.loads(completed.stdout)[0]
@@ -333,23 +296,6 @@ def _container_metadata(compose_file: Path, service: str) -> dict[str, Any]:
         raise ReleaseGateError(f"Invalid Docker metadata for {service}") from exc
 
 
-def _qwen_logs(qwen_compose_file: Path, started_at: datetime) -> str:
-    return _run(
-        _compose(
-            qwen_compose_file,
-            "logs",
-            "--no-color",
-            "--since",
-            started_at.isoformat(),
-            "qwen-tts",
-        )
-    ).stdout
-
-
-def _preload_event_count(logs: str) -> int:
-    return logs.count("Qwen3-TTS model load started")
-
-
 def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]:
     api_key, expected_identity = load_qwen_expected_settings()
     return run_qwen_preflight(
@@ -361,6 +307,47 @@ def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]
     )
 
 
+def _run_live_soak(evidence_dir: Path) -> dict[str, Any]:
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    completed = _run(
+        [
+            sys.executable,
+            "scripts/soak_golden_path.py",
+            "--url",
+            "http://localhost",
+            "--duration",
+            "0",
+            "--turns",
+            "30",
+            "--turn-timeout",
+            "60",
+            "--probe-seconds",
+            "5",
+            "--audio-p50-ms",
+            "3000",
+            "--audio-p95-ms",
+            "5000",
+            "--media-p95-ms",
+            "0",
+            "--evidence-dir",
+            str(evidence_dir),
+        ]
+    )
+    output_lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if not output_lines:
+        raise ReleaseGateError("Thirty-turn soak did not report an evidence path")
+    evidence_path = Path(output_lines[-1])
+    if not evidence_path.is_absolute():
+        evidence_path = ROOT / evidence_path
+    if not evidence_path.exists():
+        raise ReleaseGateError("Thirty-turn soak evidence file is missing")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if not isinstance(evidence, dict):
+        raise ReleaseGateError("Thirty-turn soak evidence must be a JSON object")
+    validate_live_soak_evidence(evidence)
+    return evidence
+
+
 def _run_playwright(evidence_dir: Path) -> dict[str, Any]:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     pnpm = shutil.which("pnpm")
@@ -368,9 +355,8 @@ def _run_playwright(evidence_dir: Path) -> dict[str, Any]:
         raise ReleaseGateError("pnpm is required for fresh Playwright release evidence")
     environment = dict(os.environ)
     environment["PLAYWRIGHT_EVIDENCE_DIR"] = str(evidence_dir.resolve())
-    environment["PLAYWRIGHT_RELEASE_MODE"] = "1"
     _run(
-        [pnpm, "exec", "node", "smoke-test.mjs"],
+        [pnpm, "exec", "node", "streaming-tts-smoke.mjs"],
         cwd=ROOT / "frontend",
         environment=environment,
     )
@@ -397,44 +383,22 @@ def run_release_gate(
     attempts: int,
     interval_seconds: float,
 ) -> dict[str, Any]:
-    """Execute the mandatory cold release topology protocol."""
+    """Run the persistent-Qwen, Animetta-only rebuild, and fresh acceptance protocol."""
     environment_fields = validate_release_environment(os.environ)
+    if not plan.exists():
+        raise ReleaseGateError(f"Frozen quality plan does not exist: {plan}")
     started_at = datetime.now(UTC)
     evidence_root.mkdir(parents=True, exist_ok=True)
 
-    _run(_compose(compose_file, "down", "--remove-orphans"))
-    _run(_compose(qwen_compose_file, "down", "--remove-orphans"))
-    build = _run(
-        [
-            sys.executable,
-            "-m",
-            "tooling.quality",
-            "docker-build",
-            "--plan",
-            str(plan),
-            "--no-cache",
-            "--json",
-        ]
-    )
-    build_evidence = json.loads(build.stdout)
-    if build_evidence.get("status") != "passed" or len(build_evidence.get("actions", ())) != 2:
-        raise ReleaseGateError("Release gate must cold-build both Docker image scopes")
+    qwen_before = _container_metadata(qwen_compose_file, "qwen-tts")
+    _run([sys.executable, "scripts/runtime_lifecycle.py", "qwen-up"])
+    qwen_ready = _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
+    qwen_after_preflight = _container_metadata(qwen_compose_file, "qwen-tts")
+    if qwen_after_preflight != qwen_before:
+        raise ReleaseGateError("Routine Qwen preflight mutated the persistent rollback container")
 
-    _run(
-        _compose(
-            qwen_compose_file,
-            "up",
-            "-d",
-            "--no-build",
-            "--force-recreate",
-            "qwen-tts",
-        )
-    )
-    qwen_initial_ready = _preflight_qwen(
-        attempts=attempts,
-        interval_seconds=interval_seconds,
-    )
-    _run(_compose(compose_file, "up", "-d", "--no-build", "animetta"))
+    _run([sys.executable, "scripts/runtime_lifecycle.py", "anima-down"])
+    _run([sys.executable, "scripts/runtime_lifecycle.py", "anima-up"])
     health = _wait_json(
         "http://localhost/health",
         lambda payload: payload.get("status") == "ok",
@@ -442,147 +406,37 @@ def run_release_gate(
         interval_seconds=interval_seconds,
         description="Animetta health",
     )
-    initial_ready = _wait_json(
+    readiness = _wait_json(
         "http://localhost/ready",
         _ready,
         attempts=attempts,
         interval_seconds=interval_seconds,
         description="production readiness",
     )
-    validate_production_readiness(initial_ready)
+    validate_production_readiness(readiness)
     frontend_before = _frontend_probe("http://localhost/")
-    initial_smoke = _run_alice_smoke(compose_file)
 
-    qwen_persistence_before = _container_metadata(qwen_compose_file, "qwen-tts")
-    preload_events_before = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
-    noop_up_seconds: list[float] = []
-    for _ in range(2):
-        noop_started = time.perf_counter()
-        _run(
-            _compose(
-                qwen_compose_file,
-                "up",
-                "-d",
-                "--no-build",
-                "--no-recreate",
-                "qwen-tts",
-            )
-        )
-        noop_duration = time.perf_counter() - noop_started
-        noop_up_seconds.append(noop_duration)
-        if noop_duration > 5:
-            raise ReleaseGateError(
-                f"No-op Qwen startup exceeded five-second budget: {noop_duration:.3f}s"
-            )
-        _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
-
-    for cycle in range(1, 3):
-        _run(_compose(compose_file, "down", "--remove-orphans"))
-        _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
-        _run(_compose(compose_file, "up", "-d", "--no-build", "animetta"))
-        _wait_json(
-            "http://localhost/health",
-            lambda payload: payload.get("status") == "ok",
-            attempts=attempts,
-            interval_seconds=interval_seconds,
-            description=f"Animetta health after persistence cycle {cycle}",
-        )
-        cycle_ready = _wait_json(
-            "http://localhost/ready",
-            _ready,
-            attempts=attempts,
-            interval_seconds=interval_seconds,
-            description=f"production readiness after persistence cycle {cycle}",
-        )
-        validate_production_readiness(cycle_ready)
-        if _container_metadata(qwen_compose_file, "qwen-tts") != qwen_persistence_before:
-            raise ReleaseGateError(
-                f"Animetta lifecycle cycle {cycle} mutated the persistent Qwen container"
-            )
-
-    persistence_smoke = _run_alice_smoke(compose_file)
-    qwen_persistence_after = _container_metadata(qwen_compose_file, "qwen-tts")
-    preload_events_after = _preload_event_count(_qwen_logs(qwen_compose_file, started_at))
-    if qwen_persistence_after != qwen_persistence_before:
-        raise ReleaseGateError("Animetta lifecycle recreated or restarted persistent Qwen")
-    if preload_events_after != preload_events_before:
-        raise ReleaseGateError("Animetta lifecycle caused an extra Qwen model preload")
-    persistent_qwen = {
-        "preserved": True,
-        "before": qwen_persistence_before,
-        "after": qwen_persistence_after,
-        "preload_events_before": preload_events_before,
-        "preload_events_after": preload_events_after,
-        "build_actions": 0,
-        "noop_up_seconds": noop_up_seconds,
-        "animetta_lifecycle_cycles": 2,
-    }
-
-    conversation_id = str(uuid4())
-    animetta_container_before = _container_id(compose_file, "animetta")
-    qwen_container_before = _container_id(qwen_compose_file, "qwen-tts")
-    _run(_compose(qwen_compose_file, "stop", "qwen-tts"))
-    outage = _wait_json(
-        "http://localhost/ready",
-        lambda payload: not _ready(payload),
-        attempts=max(24, attempts // 4),
-        interval_seconds=interval_seconds,
-        description="remote TTS outage",
-    )
-    outage_turn = _run_turn_probe(
-        compose_file,
-        expect="degraded",
-        conversation_id=conversation_id,
-        text="这一轮用于验证音频降级，但必须保留文字和 Live2D。",
-    )
-    _run(_compose(qwen_compose_file, "start", "qwen-tts"))
-    qwen_recovered_ready = _preflight_qwen(
-        attempts=attempts,
-        interval_seconds=interval_seconds,
-    )
-    recovered_ready = _wait_json(
-        "http://localhost/ready",
-        _ready,
-        attempts=attempts,
-        interval_seconds=interval_seconds,
-        description="same-container remote TTS recovery",
-    )
-    validate_production_readiness(recovered_ready)
-    animetta_container_after = _container_id(compose_file, "animetta")
-    qwen_container_after = _container_id(qwen_compose_file, "qwen-tts")
-    if animetta_container_before != animetta_container_after:
-        raise ReleaseGateError("Qwen recovery did not preserve the Animetta container")
-    if qwen_container_before != qwen_container_after:
-        raise ReleaseGateError("Qwen recovery recreated its container instead of restarting it")
-    recovery_turn = _run_turn_probe(
-        compose_file,
-        expect="audio",
-        conversation_id=conversation_id,
-        text="故障已经撤销，请继续使用同一个 Alice 声音确认恢复。",
-    )
-    recovery_smoke = _run_alice_smoke(compose_file)
-    frontend_after = _frontend_probe("http://localhost/")
+    live_soak = _run_live_soak(evidence_root / "thirty-turn-soak")
     playwright = _run_playwright(evidence_root / "playwright")
+    frontend_after = _frontend_probe("http://localhost/")
 
     animetta_logs = _run(
         _compose(compose_file, "logs", "--no-color", "--since", started_at.isoformat())
     ).stdout
     qwen_logs = _run(
-        _compose(
-            qwen_compose_file,
-            "logs",
-            "--no-color",
-            "--since",
-            started_at.isoformat(),
-        )
+        _compose(qwen_compose_file, "logs", "--no-color", "--since", started_at.isoformat())
     ).stdout
     (evidence_root / "animetta-docker.log").write_text(animetta_logs, encoding="utf-8")
     (evidence_root / "qwen-docker.log").write_text(qwen_logs, encoding="utf-8")
     assert_clean_logs(animetta_logs)
     assert_clean_logs(qwen_logs)
 
+    qwen_after = _container_metadata(qwen_compose_file, "qwen-tts")
+    if qwen_after != qwen_before:
+        raise ReleaseGateError("Animetta release protocol mutated the persistent Qwen container")
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "passed",
         "started_at": started_at.isoformat(),
         "finished_at": datetime.now(UTC).isoformat(),
@@ -590,28 +444,21 @@ def run_release_gate(
         "main_compose_file": str(compose_file),
         "qwen_compose_file": str(qwen_compose_file),
         "environment_fields": environment_fields,
-        "build": build_evidence,
-        "qwen_initial_ready": qwen_initial_ready,
+        "qwen_ready": qwen_ready,
+        "persistent_qwen": {
+            "preserved": True,
+            "before": qwen_before,
+            "after_preflight": qwen_after_preflight,
+            "after": qwen_after,
+            "build_actions": 0,
+            "recreate_actions": 0,
+        },
         "health": health,
-        "initial_ready": initial_ready,
+        "readiness": readiness,
         "frontend_before": frontend_before,
-        "initial_alice_smoke": initial_smoke,
-        "persistence_alice_smoke": persistence_smoke,
-        "persistent_qwen": persistent_qwen,
-        "conversation_id": conversation_id,
-        "animetta_container_before": animetta_container_before,
-        "animetta_container_after": animetta_container_after,
-        "outage": outage,
-        "outage_turn": outage_turn,
-        "recovered_ready": recovered_ready,
-        "qwen_recovered_ready": qwen_recovered_ready,
-        "qwen_container_before": qwen_container_before,
-        "qwen_container_after": qwen_container_after,
-        "same_container_recovery": True,
-        "recovery_turn": recovery_turn,
-        "recovery_alice_smoke": recovery_smoke,
-        "frontend_after": frontend_after,
+        "live_soak": live_soak,
         "playwright": playwright,
+        "frontend_after": frontend_after,
         "clean_logs": True,
     }
 
@@ -630,7 +477,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=ROOT / "artifacts" / "test-impact" / "release-runtime" / "evidence.json",
     )
-    parser.add_argument("--attempts", type=int, default=120)
+    parser.add_argument("--attempts", type=int, default=24)
     parser.add_argument("--interval-seconds", type=float, default=5.0)
     args = parser.parse_args(argv)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -646,7 +493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except (OSError, ValueError, ReleaseGateError) as exc:
         evidence = {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "failed",
             "finished_at": datetime.now(UTC).isoformat(),
             "error_type": type(exc).__name__,

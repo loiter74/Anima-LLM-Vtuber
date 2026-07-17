@@ -13,8 +13,9 @@ Configure these in Zeabur's secret/environment settings:
 | `ANIMETTA_PORT=12394` | Internal backend port |
 | `DEEPSEEK_API_KEY` | Remote LLM authentication |
 | `MIMO_API_KEY` | Remote ASR/VAD authentication |
-| `QWEN_TTS_URL` | Reachable standalone Qwen TTS endpoint |
-| `QWEN_TTS_API_KEY` | Shared Qwen TTS authentication |
+| `DASHSCOPE_API_KEY` | Beijing DashScope realtime TTS authentication for production Seren |
+
+`QWEN_TTS_URL` and `QWEN_TTS_API_KEY` are needed only when manually rolling back to the local Qwen provider.
 
 Provider names, models, and voices are not environment settings. Change them only in `config/animetta.yaml`, then redeploy.
 

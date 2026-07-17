@@ -87,6 +87,7 @@ Set in `.env` or pass via `docker compose`:
 |---|---|---|
 | `MIMO_API_KEY` | — | Mimo provider API key |
 | `DEEPSEEK_API_KEY` | — | DeepSeek LLM API key |
+| `DASHSCOPE_API_KEY` | — | DashScope realtime TTS API key used by production Seren |
 | `QWEN_TTS_API_KEY` | — | Shared authentication for the isolated Qwen TTS service |
 | `QWEN_TTS_URL` | profile/Compose value | Qwen TTS service endpoint |
 | `ANIMETTA_PROFILE` | required | `test`, `smoke`, or `production` |

@@ -753,7 +753,12 @@ def load_effective_config(
 def load_remote_tts_worker_config(
     path: str | Path = DEFAULT_MANIFEST_PATH,
 ) -> ProviderConfig:
-    """Resolve only production TTS fields for the least-privilege GPU worker."""
+    """Resolve the pinned manual-rollback TTS worker declaration.
+
+    A directly selected cloud provider has no local worker. In that case the
+    unique remote declaration with worker settings remains available to the
+    independent Qwen lifecycle without becoming the active application TTS.
+    """
     _detect_legacy_selectors()
     manifest, raw = _read_manifest(Path(path).resolve())
     _validate_environment_locations(raw)
@@ -762,13 +767,27 @@ def load_remote_tts_worker_config(
     declarations = manifest.providers.tts
     if name not in declarations:
         raise ManifestValidationError(f"tts provider reference '{name}' is not declared")
+    selected_declaration = declarations[name]
+    if selected_declaration.get("type") == "mock":
+        raise ProviderPolicyError("TTS worker requires a non-Mock provider declaration")
+    if selected_declaration.get("type") != "remote":
+        rollback_names = [
+            candidate_name
+            for candidate_name, candidate in declarations.items()
+            if candidate.get("type") == "remote" and isinstance(candidate.get("worker"), dict)
+        ]
+        if len(rollback_names) != 1:
+            raise ProviderPolicyError(
+                "TTS worker requires exactly one remote declaration with worker settings"
+            )
+        name = rollback_names[0]
     declaration = _resolve_selected_declaration(
         declarations[name],
         ("providers", "tts", name),
     )
     provider_type = declaration.get("type")
-    if provider_type == "mock" or not isinstance(provider_type, str):
-        raise ProviderPolicyError("Production TTS worker requires a non-Mock provider")
+    if provider_type != "remote":
+        raise ProviderPolicyError("TTS worker requires a remote provider declaration")
     configured = ConfiguredProvider(
         category="tts",
         name=name,

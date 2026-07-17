@@ -1,6 +1,18 @@
-import type { ParameterTimeline } from '@/types/socket-events'
+import type {
+  AudioStreamChunkEvent,
+  AudioStreamEndEvent,
+  AudioStreamStartEvent,
+  ParameterTimeline,
+} from '@/types/socket-events'
 import { startLipSync, stopLipSync } from './useLipSync'
 import { setExpression } from './useLive2DModel'
+import {
+  endPcmAudioStream,
+  pushPcmAudioStreamChunk,
+  startPcmAudioStream,
+  stopPcmAudioStream,
+  unlockPcmAudioPlayback,
+} from './usePcmStreamPlayback'
 
 // ===== Audio State =====
 
@@ -38,6 +50,7 @@ function getAudioElement(): HTMLAudioElement {
  * permission has expired, so the later response must reuse this element.
  */
 export function unlockAudioPlayback(): void {
+  unlockPcmAudioPlayback()
   if (audioUnlocked || unlockPending || currentBlobUrl) return
 
   const audio = getAudioElement()
@@ -72,6 +85,7 @@ export interface AudioPlaybackPayload {
 
 export function playAudio(data: AudioPlaybackPayload): void {
   if (!data?.audio_data) return
+  stopPcmAudioStream()
   cleanup()
 
   const binary = atob(data.audio_data)
@@ -98,11 +112,26 @@ export function playAudio(data: AudioPlaybackPayload): void {
   })
 }
 
+export function startAudioStream(data: AudioStreamStartEvent): void {
+  stopLipSync()
+  cleanup()
+  startPcmAudioStream(data)
+}
+
+export function pushAudioStreamChunk(data: AudioStreamChunkEvent): void {
+  pushPcmAudioStreamChunk(data)
+}
+
+export function endAudioStream(data: AudioStreamEndEvent): void {
+  endPcmAudioStream(data)
+}
+
 export function stopAudio(): void {
   if (currentAudio) {
     currentAudio.pause()
     currentAudio.currentTime = 0
   }
+  stopPcmAudioStream()
   stopLipSync()
   cleanup()
 }

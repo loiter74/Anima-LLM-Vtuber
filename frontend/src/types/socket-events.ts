@@ -72,6 +72,29 @@ export interface AudioWithExpressionEvent extends ChatIdentity {
   return_to_idle?: boolean
 }
 
+export type ChatEmotion = 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'thinking'
+
+export interface AudioStreamStartEvent extends ChatIdentity {
+  stream_id: string
+  format: 'pcm_s16le'
+  sample_rate: 24000
+  channels: 1
+  emotion: ChatEmotion
+}
+
+export interface AudioStreamChunkEvent extends ChatIdentity {
+  stream_id: string
+  sequence: number
+  audio_data: string
+}
+
+export interface AudioStreamEndEvent extends ChatIdentity {
+  stream_id: string
+  final_sequence: number
+  status: 'completed' | 'failed' | 'cancelled'
+  reason?: 'timeout' | 'provider_error' | 'cancelled'
+}
+
 export interface ChatErrorEvent extends ChatIdentity {
   type: 'validation_error' | 'processing_error' | 'timeout' | 'interrupted' | 'internal_error'
   message: string

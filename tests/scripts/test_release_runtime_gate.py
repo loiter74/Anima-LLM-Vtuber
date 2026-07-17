@@ -4,8 +4,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from uuid import UUID
 
 import pytest
 
@@ -13,30 +11,116 @@ from scripts import release_runtime_gate as gate
 from scripts.release_runtime_gate import (
     ReleaseGateError,
     assert_clean_logs,
+    validate_live_soak_evidence,
     validate_playwright_evidence,
     validate_production_readiness,
     validate_release_environment,
-    validate_smoke_evidence,
 )
-from scripts.smoke_qwen_alice import build_evidence
 
 ROOT = Path(__file__).resolve().parents[2]
-RESOLVED_IDENTITY = {
-    "provider": "qwen3",
-    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    "voice": "alice",
-    "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+TTS_IDENTITY = {
+    "type": "dashscope",
+    "provider": "dashscope",
+    "model": "qwen3-tts-instruct-flash-realtime",
+    "voice": "Seren",
 }
 
 
-def test_preload_counter_uses_the_qwen_runtime_log_event() -> None:
-    logs = (
-        "Qwen3-TTS model load started\n"
-        "Qwen3-TTS model loaded successfully\n"
-        "Qwen3-TTS model load started\n"
-    )
+def _readiness() -> dict[str, object]:
+    return {
+        "ready": True,
+        "status": "ready",
+        "profile": "production",
+        "acceptance_eligible": True,
+        "components": {
+            "tts": {
+                "ready": True,
+                "configured": {"name": "dashscope-seren", **TTS_IDENTITY},
+                "resolved": dict(TTS_IDENTITY),
+            }
+        },
+    }
 
-    assert gate._preload_event_count(logs) == 2
+
+def _completed_browser_turn() -> dict[str, object]:
+    return {
+        "stream": {
+            "format": "pcm_s16le",
+            "sample_rate": 24000,
+            "channels": 1,
+            "status": "completed",
+            "sequences": [0, 1],
+            "chunks": 2,
+            "final_sequence": 1,
+        },
+        "audio": [
+            {"rms": 0.12, "ended": True, "stopped": False},
+            {"rms": 0.11, "ended": True, "stopped": False},
+        ],
+        "legacy_audio_events": 0,
+    }
+
+
+def _playwright_evidence() -> dict[str, object]:
+    return {
+        "status": "passed",
+        "context": "fresh",
+        "provider_rows_exact": True,
+        "turns": {
+            "first": _completed_browser_turn(),
+            "interrupted": {
+                "stop_audio_events": 1,
+                "stream": {
+                    "stream_id": "interrupt-stream",
+                    "status": "cancelled",
+                    "chunks": 1,
+                    "sequences": [0],
+                    "final_sequence": 0,
+                },
+                "cancel_to_end_ms": 120.0,
+                "chunks_after_end": 0,
+                "post_terminal_observation_ms": 350.0,
+                "audio": [{"rms": 0.1, "ended": False, "stopped": True}],
+            },
+            "recovery": _completed_browser_turn(),
+        },
+        "playback": {
+            "audio_contexts": 1,
+            "initial_buffer_seconds": 0.2,
+            "no_overlap": True,
+            "nonzero_pcm_lip_sync_input": True,
+            "legacy_play_calls": 1,
+        },
+        "marker_leaks": [],
+        "console_errors": [],
+        "page_errors": [],
+        "request_failures": [],
+        "http_errors": [],
+    }
+
+
+def _soak_evidence() -> dict[str, object]:
+    return {
+        "status": "passed",
+        "turns": [{"audio_ready_ms": 900.0} for _ in range(30)],
+        "thresholds": {
+            "audio_latency": {
+                "turn_count": 30,
+                "sample_count": 30,
+                "p50_ms": 900.0,
+                "p95_ms": 1400.0,
+                "complete": True,
+                "passed": True,
+            }
+        },
+        "decisions": {
+            "turn_count": True,
+            "disconnects": True,
+            "audio_latency_complete": True,
+            "audio_p50": True,
+            "audio_p95": True,
+        },
+    }
 
 
 def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
@@ -54,7 +138,7 @@ def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
     assert "--qwen-compose-file" in completed.stdout
 
 
-def test_release_environment_requires_secrets_and_existing_model_mounts(
+def test_release_environment_requires_dashscope_and_persistent_rollback_mounts(
     tmp_path: Path,
 ) -> None:
     cache = tmp_path / "hf"
@@ -62,6 +146,7 @@ def test_release_environment_requires_secrets_and_existing_model_mounts(
     cache.mkdir()
     audio.write_bytes(b"RIFF")
     environment = {
+        "DASHSCOPE_API_KEY": "dashscope-secret",
         "DEEPSEEK_API_KEY": "deepseek-secret",
         "MIMO_API_KEY": "mimo-secret",
         "QWEN_TTS_API_KEY": "qwen-secret",
@@ -71,105 +156,86 @@ def test_release_environment_requires_secrets_and_existing_model_mounts(
 
     assert validate_release_environment(environment) == tuple(sorted(environment))
 
-    environment["MIMO_API_KEY"] = ""
-    with pytest.raises(ReleaseGateError, match="MIMO_API_KEY"):
+    environment["DASHSCOPE_API_KEY"] = ""
+    with pytest.raises(ReleaseGateError, match="DASHSCOPE_API_KEY"):
         validate_release_environment(environment)
 
 
-def test_alice_smoke_requires_exact_resolved_remote_identity_and_wav() -> None:
-    evidence = {
-        "ok": True,
-        "audio_bytes": 4096,
-        "volume_samples": 4,
-        "volume_nonzero": 4,
-        "provider": {
-            "type": "remote",
-            "provider": "qwen3",
-            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "voice": "alice",
-            "resolved": RESOLVED_IDENTITY,
-        },
-    }
-
-    validate_smoke_evidence(evidence)
-
-    evidence["provider"]["voice"] = "default"
-    with pytest.raises(ReleaseGateError, match="identity"):
-        validate_smoke_evidence(evidence)
-
-
-def test_real_alice_smoke_builder_schema_is_accepted() -> None:
-    provider = SimpleNamespace(
-        provider="qwen3",
-        model="Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        voice="alice",
-        resolved_identity=RESOLVED_IDENTITY,
-    )
-    evidence = build_evidence(b"not-empty-audio", provider, "task-id")
-    evidence.update(ok=True, audio_bytes=4096, volume_samples=4, volume_nonzero=4)
-
-    validate_smoke_evidence(evidence)
-
-
-def test_alice_smoke_rejects_silent_wav_evidence() -> None:
-    evidence = {
-        "ok": True,
-        "audio_bytes": 4096,
-        "volume_samples": 4,
-        "volume_nonzero": 0,
-        "provider": {
-            "type": "remote",
-            "provider": "qwen3",
-            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "voice": "alice",
-            "resolved": RESOLVED_IDENTITY,
-        },
-    }
-
-    with pytest.raises(ReleaseGateError, match="WAV"):
-        validate_smoke_evidence(evidence)
-
-
-def test_release_validates_exact_application_and_browser_evidence() -> None:
-    readiness = {
-        "ready": True,
-        "status": "ready",
-        "profile": "production",
-        "components": {
-            "tts": {
-                "ready": True,
-                "configured": {
-                    "type": "remote",
-                    "provider": "qwen3",
-                    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-                    "voice": "alice",
-                },
-                "resolved": RESOLVED_IDENTITY,
-            }
-        },
-    }
-    browser = {
-        "status": "passed",
-        "core_ui": {"passed": True},
-        "release_acceptance": {
-            "passed": True,
-            "provider_rows_exact": True,
-            "chinese_turn_complete": True,
-            "audio": {
-                "play_calls": 1,
-                "play_resolved": 1,
-                "ended": 1,
-                "play_rejected": 0,
-            },
-        },
-    }
+def test_release_validates_exact_dashscope_seren_identity() -> None:
+    readiness = _readiness()
 
     validate_production_readiness(readiness)
-    validate_playwright_evidence(browser)
 
-    browser["core_ui"]["passed"] = False
+    readiness["components"]["tts"]["resolved"]["voice"] = "Vivian"  # type: ignore[index]
+    with pytest.raises(ReleaseGateError, match="DashScope/Seren"):
+        validate_production_readiness(readiness)
+
+
+def test_release_validates_fresh_streaming_browser_evidence() -> None:
+    evidence = _playwright_evidence()
+
+    validate_playwright_evidence(evidence)
+
+    evidence["turns"]["recovery"]["stream"]["sequences"] = [1, 0]  # type: ignore[index]
     with pytest.raises(ReleaseGateError, match="Playwright"):
-        validate_playwright_evidence(browser)
+        validate_playwright_evidence(evidence)
+
+
+def test_release_requires_prompt_cancelled_terminal_stream_before_recovery() -> None:
+    evidence = _playwright_evidence()
+    evidence["turns"]["interrupted"]["stream"]["status"] = "completed"  # type: ignore[index]
+
+    with pytest.raises(ReleaseGateError, match="Playwright"):
+        validate_playwright_evidence(evidence)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("chunks_after_end", 1),
+        ("post_terminal_observation_ms", 100.0),
+    ],
+)
+def test_release_requires_quiet_observation_after_cancelled_terminal(
+    field: str,
+    value: int | float,
+) -> None:
+    evidence = _playwright_evidence()
+    evidence["turns"]["interrupted"][field] = value  # type: ignore[index]
+
+    with pytest.raises(ReleaseGateError, match="Playwright"):
+        validate_playwright_evidence(evidence)
+
+
+def test_release_requires_thirty_complete_turns_and_latency_budget() -> None:
+    evidence = _soak_evidence()
+
+    validate_live_soak_evidence(evidence)
+
+    evidence["thresholds"]["audio_latency"]["p95_ms"] = 5001.0  # type: ignore[index]
+    with pytest.raises(ReleaseGateError, match="Thirty-turn"):
+        validate_live_soak_evidence(evidence)
+
+
+def test_release_soak_reports_media_completion_without_gating_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_path = tmp_path / "golden-soak.json"
+    evidence_path.write_text(json.dumps(_soak_evidence()), encoding="utf-8")
+    commands: list[tuple[str, ...]] = []
+
+    def fake_run(argv, **_kwargs):
+        command = tuple(str(part) for part in argv)
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout=f"{evidence_path}\n", stderr="")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    assert gate._run_live_soak(tmp_path / "evidence") == _soak_evidence()
+    command = commands[0]
+    media_index = command.index("--media-p95-ms")
+    assert command[media_index + 1] == "0"
 
 
 def test_release_log_gate_rejects_forbidden_levels_but_not_error_counters() -> None:
@@ -201,15 +267,18 @@ def test_failed_command_reports_both_stdout_and_stderr(
     assert "provider import warning" in message
 
 
-def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_recovery(
+def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache = tmp_path / "hf"
     audio = tmp_path / "alice.wav"
+    plan = tmp_path / "plan.json"
     cache.mkdir()
     audio.write_bytes(b"RIFF")
+    plan.write_text("{}\n", encoding="utf-8")
     for name, value in {
+        "DASHSCOPE_API_KEY": "dashscope-secret",
         "DEEPSEEK_API_KEY": "deepseek-secret",
         "MIMO_API_KEY": "mimo-secret",
         "QWEN_TTS_API_KEY": "qwen-secret",
@@ -218,58 +287,18 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
     }.items():
         monkeypatch.setenv(name, value)
 
-    smoke = {
-        "ok": True,
-        "audio_bytes": 4096,
-        "volume_samples": 4,
-        "volume_nonzero": 4,
-        "provider": {
-            "type": "remote",
-            "provider": "qwen3",
-            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "voice": "alice",
-            "resolved": RESOLVED_IDENTITY,
-        },
-    }
     commands: list[tuple[str, ...]] = []
 
     def fake_run(argv, **_kwargs):
         command = tuple(str(part) for part in argv)
         commands.append(command)
-        if "docker-build" in command:
-            stdout = json.dumps(
-                {
-                    "status": "passed",
-                    "actions": [{"scope_id": "animetta"}, {"scope_id": "qwen-tts"}],
-                }
-            )
-        elif any(part.endswith("smoke_qwen_alice.py") for part in command):
-            stdout = json.dumps(smoke)
-        elif any(part.endswith("probe_release_turn.py") for part in command):
-            expected = command[command.index("--expect") + 1]
-            conversation_id = command[command.index("--conversation-id") + 1]
-            stdout = json.dumps(
-                {
-                    "status": "passed",
-                    "conversation_id": conversation_id,
-                    "safe_output": "安全的中文回复。",
-                    "degraded": expected == "degraded",
-                    "audio_count": 0 if expected == "degraded" else 1,
-                    "degradation_count": 1 if expected == "degraded" else 0,
-                    "expression_count": 1,
-                    "action_count": 1,
-                }
-            )
-        elif "ps" in command and "qwen-tts" in command:
+        if "ps" in command and "qwen-tts" in command:
             stdout = "stable-qwen-container\n"
-        elif "ps" in command and "animetta" in command:
-            stdout = "stable-animetta-container\n"
         elif "inspect" in command:
-            container_id = command[-1]
             stdout = json.dumps(
                 [
                     {
-                        "Id": container_id,
+                        "Id": "stable-qwen-container",
                         "Image": "sha256:qwen-image",
                         "State": {"StartedAt": "2026-07-16T00:00:00Z"},
                         "RestartCount": 0,
@@ -277,64 +306,29 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
                 ]
             )
         elif "logs" in command:
-            stdout = "Qwen3-TTS model load started\nall services ready\nerror_count=0\n"
+            stdout = "all services ready\nerror_count=0\n"
         else:
             stdout = ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
     def fake_wait(_url, _predicate, *, description, **_kwargs):
-        if description == "remote TTS outage":
-            return {"ready": False, "status": "not_ready"}
         if description == "Animetta health":
             return {"status": "ok"}
-        return {
-            "ready": True,
-            "status": "ready",
-            "profile": "production",
-            "components": {
-                "tts": {
-                    "ready": True,
-                    "configured": {
-                        "type": "remote",
-                        "provider": "qwen3",
-                        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-                        "voice": "alice",
-                    },
-                    "resolved": RESOLVED_IDENTITY,
-                }
-            },
-        }
+        return _readiness()
 
     monkeypatch.setattr(gate, "_run", fake_run)
     monkeypatch.setattr(gate, "_wait_json", fake_wait)
     monkeypatch.setattr(
         gate,
         "_preflight_qwen",
-        lambda **_kwargs: {"status": "passed", "identity": {"ready": True, **RESOLVED_IDENTITY}},
+        lambda **_kwargs: {"status": "passed", "identity": {"ready": True}},
     )
     monkeypatch.setattr(gate, "_frontend_probe", lambda _url: {"status": 200, "bytes": 12})
-    monkeypatch.setattr(
-        gate,
-        "_run_playwright",
-        lambda _path: {
-            "status": "passed",
-            "core_ui": {"passed": True},
-            "release_acceptance": {
-                "passed": True,
-                "provider_rows_exact": True,
-                "chinese_turn_complete": True,
-                "audio": {
-                    "play_calls": 1,
-                    "play_resolved": 1,
-                    "ended": 1,
-                    "play_rejected": 0,
-                },
-            },
-        },
-    )
+    monkeypatch.setattr(gate, "_run_live_soak", lambda _path: _soak_evidence())
+    monkeypatch.setattr(gate, "_run_playwright", lambda _path: _playwright_evidence())
 
     evidence = gate.run_release_gate(
-        plan=tmp_path / "plan.json",
+        plan=plan,
         compose_file=tmp_path / "docker-compose.yml",
         qwen_compose_file=tmp_path / "docker-compose.qwen.yml",
         evidence_root=tmp_path / "evidence",
@@ -344,43 +338,16 @@ def test_release_gate_runs_cold_dual_image_startup_outage_and_same_container_rec
 
     flattened = [" ".join(command) for command in commands]
     assert evidence["status"] == "passed"
-    assert evidence["same_container_recovery"] is True
-    assert sum("smoke_qwen_alice.py" in command for command in flattened) == 3
-    assert sum("probe_release_turn.py" in command for command in flattened) == 2
-    probe_commands = [
-        command
-        for command in commands
-        if any(part.endswith("probe_release_turn.py") for part in command)
-    ]
-    conversation_ids = {
-        command[command.index("--conversation-id") + 1] for command in probe_commands
-    }
-    assert len(conversation_ids) == 1
-    assert str(UUID(next(iter(conversation_ids)))) == next(iter(conversation_ids))
-    assert any("down --remove-orphans" in command for command in flattened)
-    assert any("docker-build" in command and "--no-cache" in command for command in flattened)
-    assert not any(
-        "docker-build" in command and "--compose-file" in command for command in flattened
-    )
-    assert any(
-        "docker-compose.qwen.yml up -d --no-build --force-recreate qwen-tts" in command
-        for command in flattened
-    )
-    assert any("docker-compose.yml up -d --no-build animetta" in command for command in flattened)
-    assert any("stop qwen-tts" in command for command in flattened)
-    assert any("start qwen-tts" in command for command in flattened)
-    assert all(
-        "docker-compose.qwen.yml" in command
-        for command in flattened
-        if " qwen-tts" in command and (" stop " in command or " start " in command)
-    )
-    assert evidence["qwen_compose_file"].endswith("docker-compose.qwen.yml")
-    assert evidence["main_compose_file"].endswith("docker-compose.yml")
+    assert evidence["readiness"]["components"]["tts"]["resolved"] == TTS_IDENTITY
     assert evidence["persistent_qwen"]["preserved"] is True
     assert evidence["persistent_qwen"]["before"] == evidence["persistent_qwen"]["after"]
-    assert evidence["persistent_qwen"]["preload_events_before"] == 1
-    assert evidence["persistent_qwen"]["preload_events_after"] == 1
     assert evidence["persistent_qwen"]["build_actions"] == 0
-    assert len(evidence["persistent_qwen"]["noop_up_seconds"]) == 2
-    assert max(evidence["persistent_qwen"]["noop_up_seconds"]) <= 5
-    assert sum("--no-recreate qwen-tts" in command for command in flattened) == 2
+    assert evidence["persistent_qwen"]["recreate_actions"] == 0
+    assert any("runtime_lifecycle.py qwen-up" in command for command in flattened)
+    assert any("runtime_lifecycle.py anima-down" in command for command in flattened)
+    assert any("runtime_lifecycle.py anima-up" in command for command in flattened)
+    assert not any("qwen-deploy" in command for command in flattened)
+    assert not any("qwen-build" in command for command in flattened)
+    assert not any("qwen-stop" in command for command in flattened)
+    assert not any("qwen-destroy" in command for command in flattened)
+    assert not any("--force-recreate" in command for command in flattened)

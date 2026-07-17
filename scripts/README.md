@@ -12,11 +12,21 @@ Development and training utilities for the Anima VTuber project.
 | `health_check.py` | Local health gate orchestrator |
 | `route_smoke.py` | Lightweight ASGI route probes |
 | `validate-events.py` | Socket.IO event contract validator |
+| `tts_audition.py` | Beijing DashScope 24-sample anonymous emotive TTS audition (Python 3.13, no Docker) |
 | `download-models.sh` | Pre-download AI models (Kokoro, Qwen3, Whisper) |
 | `collect_danmaku.py` | Build danmaku sample datasets |
 | `analyze_danmaku_opencode.py` | Analyze collected danmaku samples |
 | `e2e_test_events.py` | Socket event end-to-end checks |
 | `start-mc-bot.bat` | Windows helper for the Minecraft bot |
+
+## Emotive TTS audition
+
+The audition reads only `DASHSCOPE_API_KEY`, creates two original CosyVoice voices, compares them with two Qwen preset voices, and writes a complete anonymous bundle under `artifacts/tts-audition/`. It does not modify runtime configuration or invoke Docker.
+
+```powershell
+$env:DASHSCOPE_API_KEY = "<Beijing Model Studio API key>"
+py -3.13 scripts/tts_audition.py
+```
 
 ## Subdirectories
 

@@ -335,6 +335,25 @@ def test_unknown_fallback_path_is_bound_to_selected_group_fingerprints() -> None
     assert backend_full.cacheable is True
 
 
+def test_acceptance_audition_paths_use_dedicated_gate_without_unknown_fallback() -> None:
+    changes = from_paths(
+        [
+            "src/animetta/acceptance/tts_audition/runner.py",
+            "tests/acceptance/test_tts_audition_runner.py",
+            "scripts/tts_audition.py",
+            "scripts/README.md",
+        ],
+        repo_root=ROOT,
+    )
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert "backend-acceptance-unit" in _group_ids(plan)
+    assert "docs-contract" in _group_ids(plan)
+    assert "backend-full" not in _group_ids(plan)
+    assert not any("unknown" in fallback for fallback in plan.fallbacks)
+
+
 def test_deleted_and_renamed_fallback_changes_have_distinct_fingerprints() -> None:
     deleted = ChangeSet(
         changes=(Change(path="scripts/removed-smoke.py", status=ChangeStatus.DELETED),),

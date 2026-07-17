@@ -18,6 +18,7 @@ from loguru import logger
 from animetta.config.core.registry import ProviderRegistry
 from animetta.config.providers.tts import (
     ChatTTSConfig,
+    DashScopeTTSConfig,
     EdgeTTSConfig,
     GLMTTSConfig,
     GPTSoVITSConfig,
@@ -43,6 +44,7 @@ from .remote_tts import RemoteTTS  # noqa: F401 - ensure provider registration
 
 _AVAILABLE_TTS_PROVIDERS = (
     "mock",
+    "dashscope",
     "edge",
     "mimo",
     "gpt_sovits",
@@ -102,6 +104,7 @@ class TTSFactory:
         try:
             module_name = {
                 "mock": ".mock_tts",
+                "dashscope": ".dashscope_tts",
                 "edge": ".edge_tts",
                 "edge_tts": ".edge_tts",
                 "mimo": ".mimo_tts",
@@ -166,6 +169,21 @@ class TTSFactory:
                     model=kwargs.get("model", "tts-1"),
                     voice=kwargs.get("voice", "alloy"),
                     base_url=kwargs.get("base_url"),
+                )
+            elif provider == "dashscope":
+                return DashScopeTTSConfig(
+                    api_key=kwargs.get("api_key"),
+                    model=kwargs.get("model", "qwen3-tts-instruct-flash-realtime"),
+                    voice=kwargs.get("voice", "Seren"),
+                    base_url=kwargs.get(
+                        "base_url",
+                        "wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
+                    ),
+                    response_format=kwargs.get("response_format", "pcm"),
+                    sample_rate=kwargs.get("sample_rate", 24000),
+                    language_type=kwargs.get("language_type", "Chinese"),
+                    timeout_seconds=kwargs.get("timeout_seconds", 20.0),
+                    connect_timeout_seconds=kwargs.get("connect_timeout_seconds", 5.0),
                 )
             elif provider in ("edge", "edge_tts"):
                 return EdgeTTSConfig(

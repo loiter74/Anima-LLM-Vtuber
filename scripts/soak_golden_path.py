@@ -22,6 +22,7 @@ from animetta.acceptance.golden_soak import (
     EvidenceWriter,
     GateFailureError,
     TurnTracker,
+    evaluate_audio_latency,
     evaluate_degradation_budget,
     percentile,
     scan_sanitized_logs,
@@ -69,6 +70,25 @@ def _revision() -> str:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, timeout=5).strip()
     except Exception:
         return "unknown"
+
+
+def _evaluate_media_completion(
+    turns: list[dict[str, Any]],
+    *,
+    limit_ms: float,
+) -> dict[str, float | bool | None]:
+    """Report full-turn completion latency, optionally enforcing a limit."""
+    p95_ms = percentile(
+        [turn["media_ready_ms"] for turn in turns if not turn["degraded"]],
+        95,
+    )
+    enforced = limit_ms > 0
+    return {
+        "p95_ms": p95_ms,
+        "limit_ms": limit_ms if enforced else None,
+        "enforced": enforced,
+        "passed": not enforced or p95_ms <= limit_ms,
+    }
 
 
 async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
@@ -158,6 +178,8 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
                 raise GateFailureError(f"turn_timeout:{identity['task_id']}") from exc
             if asynchronous_failure:
                 raise asynchronous_failure[0]
+            if disconnected:
+                raise GateFailureError(f"connection_dropped_during_turn:{identity['task_id']}")
             turn = active.finalize()
             turn["input_index"] = index
             trace = await _get_json(f"{args.url}/api/stats/traces/{identity['task_id']}")
@@ -178,15 +200,24 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
         turns = writer.data["turns"]
         degradation_ok, degradation_reason = evaluate_degradation_budget(turns)
         text_p95 = percentile([turn["text_ready_ms"] for turn in turns], 95)
-        media_p95 = percentile(
-            [turn["media_ready_ms"] for turn in turns if not turn["degraded"]], 95
+        media_completion = _evaluate_media_completion(
+            turns,
+            limit_ms=args.media_p95_ms,
+        )
+        audio_latency = evaluate_audio_latency(
+            turns,
+            p50_limit_ms=args.audio_p50_ms,
+            p95_limit_ms=args.audio_p95_ms,
         )
         decisions = {
             "duration": elapsed >= args.duration,
             "turn_count": len(turns) >= args.turns,
             "disconnects": not disconnected,
             "text_p95": text_p95 <= 8000,
-            "media_p95": media_p95 <= 20000,
+            "media_p95": bool(media_completion["passed"]),
+            "audio_latency_complete": bool(audio_latency["complete"]),
+            "audio_p50": float(audio_latency["p50_ms"]) <= args.audio_p50_ms,
+            "audio_p95": float(audio_latency["p95_ms"]) <= args.audio_p95_ms,
             "degradation_budget": degradation_ok,
             "degradation_reason": degradation_reason,
         }
@@ -198,7 +229,12 @@ async def run(args: argparse.Namespace, writer: EvidenceWriter) -> None:
             writer.update(log_scan={"path": args.log_file, "violations": violations})
         writer.update(
             duration_seconds=elapsed,
-            thresholds={"text_ready_p95_ms": text_p95, "media_ready_p95_ms": media_p95},
+            thresholds={
+                "text_ready_p95_ms": text_p95,
+                "media_ready_p95_ms": media_completion["p95_ms"],
+                "media_completion": media_completion,
+                "audio_latency": audio_latency,
+            },
             decisions=decisions,
         )
         if not all(value for value in decisions.values() if isinstance(value, bool)):
@@ -225,6 +261,14 @@ def main() -> int:
     parser.add_argument("--turns", type=int, default=12)
     parser.add_argument("--turn-timeout", type=float, default=60.0)
     parser.add_argument("--probe-seconds", type=float, default=5.0)
+    parser.add_argument("--audio-p50-ms", type=float, default=3000.0)
+    parser.add_argument("--audio-p95-ms", type=float, default=5000.0)
+    parser.add_argument(
+        "--media-p95-ms",
+        type=float,
+        default=20_000.0,
+        help="Full-turn completion P95 limit; 0 records the metric without gating.",
+    )
     parser.add_argument("--log-file")
     parser.add_argument("--evidence-dir", default="evidence/golden-soak")
     args = parser.parse_args()

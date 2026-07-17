@@ -266,10 +266,10 @@ class TestBuildGraph:
         assert call("llm", "humor_rewrite") in edge_calls
         assert call("humor_rewrite", "humor_validation") in edge_calls
         assert call("humor_validation", "reply_output") in edge_calls
-        assert call("reply_output", "tts") in edge_calls
+        assert call("reply_output", "emotion") in edge_calls
         assert call("llm", "tts") not in edge_calls
-        assert call("tts", "emotion") in edge_calls
-        assert call("emotion", "output") in edge_calls
+        assert call("emotion", "tts") in edge_calls
+        assert call("tts", "output") in edge_calls
         # END edge
         assert call("output", ANY) in edge_calls
 
@@ -289,7 +289,19 @@ class TestBuildGraph:
         assert call("tools", "llm") in edge_calls
         assert call("humor_rewrite", "humor_validation") in edge_calls
         assert call("humor_validation", "reply_output") in edge_calls
-        assert call("reply_output", "tts") in edge_calls
+        assert call("reply_output", "emotion") in edge_calls
+        assert call("emotion", "tts") in edge_calls
+        assert call("tts", "output") in edge_calls
+
+    def test_golden_graph_resolves_emotion_before_tts(self, mock_state_graph):
+        graph, _ = mock_state_graph
+        with patch("animetta.orchestration.graph.builder.StateGraph", return_value=graph):
+            build_graph(golden_profile=True)
+
+        edge_calls = graph.add_edge.call_args_list
+        assert call("reply_output", "emotion") in edge_calls
+        assert call("emotion", "tts") in edge_calls
+        assert call("tts", "performance_output") in edge_calls
 
     def test_build_graph_passes_checkpointer(self, mock_state_graph):
         """Compile receives the supplied checkpointer."""

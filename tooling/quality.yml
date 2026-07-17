@@ -93,6 +93,7 @@ docker_scopes:
       - ANIMETTA_HOST
       - ANIMETTA_PORT
       - DEEPSEEK_API_KEY
+      - DASHSCOPE_API_KEY
       - MIMO_API_KEY
       - QWEN_TTS_API_KEY
       - QWEN_TTS_URL
@@ -297,6 +298,18 @@ groups:
     resource_weight: 2
     input_sets: [python-toolchain]
 
+  backend-acceptance-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/acceptance]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
   backend-route-smoke:
     domain: backend
     kind: smoke
@@ -383,6 +396,7 @@ groups:
       - backend-memory-unit
       - backend-tools-unit
       - backend-observability-unit
+      - backend-acceptance-unit
 
   backend-deadcode:
     domain: repository
@@ -711,6 +725,23 @@ components:
     impacts: [backend-core]
     risk: normal
 
+  backend-acceptance:
+    domain: backend
+    paths:
+      - src/animetta/acceptance/**
+      - tests/acceptance/**
+      - scripts/tts_audition.py
+    direct_groups:
+      - backend-acceptance-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-support-typecheck
+      - backend-deadcode
+      - security-secrets
+    impacts: []
+    risk: normal
+
   frontend-source:
     domain: frontend
     paths:
@@ -791,6 +822,7 @@ components:
   repository-governance:
     domain: repository
     paths:
+      - .gitignore
       - .github/workflows/**
       - AGENTS.md
       - tests/AGENTS.md
@@ -808,6 +840,7 @@ components:
       - README.md
       - CONTRIBUTING.md
       - docs/**
+      - scripts/README.md
     direct_groups: [docs-contract]
     impacts: []
     risk: normal

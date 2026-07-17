@@ -89,6 +89,7 @@ def test_production_compose_owns_only_animetta_and_joins_external_inference_netw
     app = compose["services"]["animetta"]
     assert app["build"]["dockerfile"] == "Dockerfile"
     assert "ANIMETTA_PROFILE=production" in app["environment"]
+    assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
     assert "QWEN_TTS_URL=http://qwen-tts:8766" in app["environment"]
     assert "depends_on" not in app
     assert app["networks"] == ["inference"]
@@ -118,7 +119,7 @@ def test_qwen_compose_owns_persistent_single_model_gpu_worker() -> None:
     assert "${ALICE_REF_AUDIO:?" in "\n".join(qwen["volumes"])
 
 
-def test_production_qwen_uses_distinct_generation_and_warmup_budgets() -> None:
+def test_manual_qwen_rollback_keeps_its_distinct_generation_and_warmup_budgets() -> None:
     manifest = yaml.safe_load(_text("config/animetta.yaml"))
     qwen = manifest["providers"]["tts"]["qwen-alice"]
     worker = qwen["worker"]
@@ -129,7 +130,8 @@ def test_production_qwen_uses_distinct_generation_and_warmup_budgets() -> None:
     assert worker["temperature"] == 0.9
     assert worker["top_p"] == 1.0
     assert qwen["timeout_seconds"] == 120.0
-    assert production["runtime"]["tts_timeout_seconds"] == 120.0
+    assert production["services"]["tts"] == "dashscope-seren"
+    assert production["runtime"]["tts_timeout_seconds"] == 20.0
 
 
 def test_cpu_and_core_compose_choose_only_supported_profiles() -> None:
@@ -141,6 +143,16 @@ def test_cpu_and_core_compose_choose_only_supported_profiles() -> None:
     assert cpu["animetta"]["build"]["dockerfile"] == "Dockerfile"
     assert "ANIMETTA_PROFILE=test" in core["animetta"]["environment"]
     assert core["animetta"]["build"]["dockerfile"] == "Dockerfile"
+
+
+def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> None:
+    for path in (
+        "docker-compose.yml",
+        "docker-compose.cpu.yml",
+        "docker-compose.core.yml",
+    ):
+        app = _compose(path)["services"]["animetta"]
+        assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
 
 
 def test_compose_services_inject_only_explicit_least_privilege_environment() -> None:
@@ -157,6 +169,7 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "ANIMETTA_HOST=0.0.0.0",
         "ANIMETTA_PORT=12394",
         "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}",
+        "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}",
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
     }
     assert not any(

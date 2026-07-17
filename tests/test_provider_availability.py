@@ -60,7 +60,7 @@ assert set(LLMFactory.get_available_configs()) == {
 }
 assert set(TTSFactory.get_available_configs()) == {
     "mock", "edge", "mimo", "gpt_sovits", "qwen3", "glm",
-    "chattts", "kokoro", "vibe_voice", "remote"
+    "chattts", "kokoro", "vibe_voice", "remote", "dashscope"
 }
 assert set(ASRFactory.get_available_configs()) == {
     "mock", "funasr", "glm", "mimo", "faster_whisper"
@@ -260,6 +260,7 @@ class TestConfigRegistry:
         from animetta.config.core.registry import ProviderRegistry
 
         registry = ProviderRegistry._configs.get("tts", {})
+        assert "dashscope" in registry
         expected = {
             "mock",
             "edge",

@@ -20,6 +20,8 @@ def test_repository_ignores_quality_generated_worktree_outputs() -> None:
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 
     assert "artifacts/test-impact/" in gitignore
+    assert "artifacts/tts-audition/" in gitignore
+    assert "artifacts/tts-streaming/" in gitignore
     assert "evidence/runtime-config/" in gitignore
     assert "coverage.xml" in gitignore
     assert "junit.xml" in gitignore
