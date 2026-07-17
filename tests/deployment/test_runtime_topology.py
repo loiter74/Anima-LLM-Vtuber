@@ -49,6 +49,12 @@ def test_main_image_installs_only_core_runtime_dependencies() -> None:
     assert "Acquire::Retries=5" in dockerfile
 
 
+def test_main_image_does_not_copy_removed_stats_placeholder() -> None:
+    dockerfile = _text("Dockerfile")
+
+    assert "frontend/stats" not in dockerfile
+
+
 def test_build_context_excludes_reference_audio_from_all_images() -> None:
     dockerignore = _text(".dockerignore")
 
@@ -91,6 +97,8 @@ def test_production_compose_owns_only_animetta_and_joins_external_inference_netw
         "name": "animetta-inference",
     }
     assert app["healthcheck"]["start_period"] == "360s"
+
+
 def test_qwen_compose_owns_persistent_single_model_gpu_worker() -> None:
     compose = _compose("docker-compose.qwen.yml")
     assert compose["name"] == "animetta-qwen"

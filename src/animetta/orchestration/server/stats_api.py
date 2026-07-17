@@ -1,13 +1,11 @@
 """Pipeline stats HTTP API"""
 
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import BaseRoute, Mount, Route
-from starlette.staticfiles import StaticFiles
+from starlette.routing import BaseRoute, Route
 
 from animetta.core.service_pool import ServicePool
 from animetta.observability.dto import (
@@ -51,10 +49,6 @@ def set_component_readiness_cache(cache: Any | None) -> None:
     """Register the background-owned local component readiness cache."""
     global _component_readiness_cache
     _component_readiness_cache = cache
-
-
-# Dashboard frontend file directory
-STATS_FRONTEND_DIR = str(Path(__file__).parent.parent.parent.parent.parent / "frontend" / "stats")
 
 
 async def stats_overview(request: Request) -> JSONResponse:
@@ -308,11 +302,6 @@ def get_stats_routes() -> list[BaseRoute]:
         Route("/api/stats/traces/{trace_id}/events", stats_trace_events),
         Route("/api/stats/observation-health", stats_observation_health),
         Route("/api/stats/inspection/latest", stats_inspection_latest),
-        Mount(
-            "/stats",
-            app=StaticFiles(directory=STATS_FRONTEND_DIR, html=True),
-            name="stats_dashboard",
-        ),
     ]
 
 

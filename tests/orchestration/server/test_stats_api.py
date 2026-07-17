@@ -506,4 +506,4 @@ class TestRouteRegistration:
         assert "/api/stats/traces/{trace_id}" in path_set
         assert "/api/stats/traces/{trace_id}/tree" in path_set
         assert "/api/stats/inspection/latest" in path_set
-        assert "/stats" in path_set
+        assert "/stats" not in path_set

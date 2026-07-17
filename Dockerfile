@@ -95,9 +95,6 @@ RUN python scripts/validate-events.py
 # Copy frontend build
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 
-# Copy stats frontend placeholder (for /stats dashboard)
-COPY frontend/stats/ /app/frontend/stats/
-
 # Copy Docker config files
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/entrypoint.sh /app/entrypoint.sh
