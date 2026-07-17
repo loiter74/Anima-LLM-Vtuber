@@ -145,7 +145,8 @@ def _augment(input_dir: Path, output_dir: Path, cfg: dict) -> list[Path]:
 
     outputs = []
     for wav in sorted(input_dir.glob("*.wav")):
-        audio, sr = librosa.load(str(wav), sr=None, mono=True)
+        audio, loaded_sr = librosa.load(str(wav), sr=None, mono=True)
+        sr = int(loaded_sr)
         f0, _ = pw.dio(audio.astype(np.float64), sr)
         median_pitch = float(np.median(f0[f0 > 0])) if np.any(f0 > 0) else 0
 

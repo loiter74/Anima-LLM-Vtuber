@@ -97,13 +97,18 @@ async def fetch_live_danmaku(
         )
         return []
 
+    get_history_danmaku = getattr(live_module, "get_danmaku", None)
+    if not callable(get_history_danmaku):
+        logger.debug("[bilibili.api] Installed bilibili-api-python has no live history endpoint")
+        return []
+
     try:
         loop = asyncio.get_event_loop()
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
                 lambda: sync_func(
-                    live_module.get_danmaku(
+                    get_history_danmaku(
                         room_id=room_id,
                         page_index=1,
                     )
@@ -222,18 +227,20 @@ async def fetch_comments(
 
         comment_module = bilibili_api.comment
         sync_func = bilibili_api.sync
+        video_module = bilibili_api.video
     except ImportError:
         logger.warning("[bilibili.api] bilibili-api-python not installed, skipping comments")
         return []
 
     try:
+        aid = video_module.Video(bvid=bvid).get_aid()
         loop = asyncio.get_event_loop()
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 None,
                 lambda: sync_func(
                     comment_module.get_comments(
-                        oid=bvid,
+                        oid=aid,
                         type_=comment_module.CommentResourceType.VIDEO,
                         order=comment_module.OrderType.LIKE,
                         page_index=1,

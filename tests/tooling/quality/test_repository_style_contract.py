@@ -22,6 +22,14 @@ def test_ruff_formatter_normalizes_python_line_endings() -> None:
     assert config["tool"]["ruff"]["format"]["line-ending"] == "lf"
 
 
+def test_git_attributes_make_lf_checkout_cross_platform() -> None:
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+
+    assert "* text=auto eol=lf" in attributes
+    assert "*.bat text eol=crlf" in attributes
+    assert "*.cmd text eol=crlf" in attributes
+
+
 def test_ruff_does_not_hide_undefined_names_by_package() -> None:
     config = _load_config()
     per_file_ignores = config["tool"]["ruff"]["lint"].get("per-file-ignores", {})
