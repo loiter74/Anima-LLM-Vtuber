@@ -103,6 +103,7 @@ docker_scopes:
       - docker-compose.yml
       - docker-compose.cpu.yml
       - docker-compose.core.yml
+      - docker-compose.selftest.yml
       - docker/entrypoint.sh
       - docker/nginx.conf
       - requirements-core.txt
@@ -558,6 +559,26 @@ groups:
     resource_class: exclusive
     resource_weight: 8
 
+  docker-compose-selftest-contract:
+    domain: repository
+    kind: smoke
+    runner: docker
+    isolation: hermetic
+    args:
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.selftest.yml
+      - config
+      - --quiet
+    capabilities: [docker]
+    timeout_seconds: 180
+    include_in_full: true
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
   docker-compose-qwen-contract:
     domain: repository
     kind: smoke
@@ -797,6 +818,7 @@ components:
       - docker-compose-contract
       - docker-compose-cpu-contract
       - docker-compose-core-contract
+      - docker-compose-selftest-contract
       - docker-compose-qwen-contract
     impacts: []
     risk: high

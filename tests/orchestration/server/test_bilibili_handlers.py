@@ -9,6 +9,7 @@ import pytest
 from animetta.config import ReplyPolicyConfig
 from animetta.orchestration.server.handlers.bilibili_handlers import BilibiliHandlers
 from animetta.services.bilibili import DanmakuMessage
+from animetta.services.scene_analysis.models import SceneGuidance
 
 
 class FakeGateway:
@@ -251,3 +252,89 @@ async def test_real_session_integration_serializes_admitted_ai_reply() -> None:
     assert handler.metrics.displayed == 1
     assert handler.metrics.admitted == 1
     await handler.stop_bilibili()
+
+
+class ActiveSceneRuntime:
+    def __init__(self, guidance: SceneGuidance) -> None:
+        self.guidance = guidance
+        self.bound_llm = None
+        self.host_replies: list[str] = []
+
+    def bind_gateway(self, gateway) -> None:
+        self.bound_llm = gateway
+
+    async def guidance_for_reply(self) -> SceneGuidance:
+        return self.guidance
+
+    async def record_host_reply(self, text: str) -> None:
+        self.host_replies.append(text)
+
+
+async def test_room_start_binds_profile_llm_before_any_reply() -> None:
+    guidance = SceneGuidance(
+        scene_revision=0,
+        scene_summary="Livestream is starting.",
+        response_objective="Welcome the room.",
+        confidence=0,
+        expires_at=time.time() + 60,
+    )
+    scene_runtime = ActiveSceneRuntime(guidance)
+    llm = MagicMock()
+    service_context = MagicMock()
+    service_context.llm_engine = llm
+    admin = MagicMock()
+    admin.get_or_create_context = AsyncMock(return_value=service_context)
+    session = MagicMock()
+    session.set_room = AsyncMock(return_value=_snapshot("connecting"))
+    handler = BilibiliHandlers(
+        MagicMock(),
+        MagicMock(),
+        admin,
+        session=session,
+        scene_runtime=scene_runtime,
+    )
+
+    await handler.start_bilibili(123)
+
+    admin.get_or_create_context.assert_awaited_once_with("bilibili")
+    assert scene_runtime.bound_llm is not None
+    assert scene_runtime.bound_llm._llm is llm
+    session.set_room.assert_awaited_once_with(123, sessdata="")
+
+
+async def test_active_scene_guidance_enters_turn_metadata_and_host_reply_feeds_back() -> None:
+    sio = MagicMock()
+    sio.emit = AsyncMock()
+    guidance = SceneGuidance(
+        scene_revision=2,
+        scene_summary="A room joke is rising.",
+        response_objective="Build on the joke without changing topics.",
+        tone=["playful"],
+        confidence=0.9,
+        expires_at=time.time() + 60,
+    )
+    scene_runtime = ActiveSceneRuntime(guidance)
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(
+        return_value={"response_text": "接住了，这波是穿模艺术。"}
+    )
+    orchestrator.service_context = MagicMock()
+    orchestrator.service_context.llm_engine = MagicMock()
+    admin = MagicMock()
+    admin._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
+    handler = BilibiliHandlers(
+        sio,
+        MagicMock(),
+        admin,
+        session=MagicMock(),
+        scene_runtime=scene_runtime,
+    )
+
+    await handler._process_ai_reply(
+        DanmakuMessage(text="穿模了", user_name="观众", user_id=7),
+        321,
+    )
+
+    kwargs = orchestrator.process_text.await_args.kwargs
+    assert SceneGuidance.model_validate(kwargs["scene_guidance"]) == guidance
+    assert scene_runtime.host_replies == ["接住了，这波是穿模艺术。"]

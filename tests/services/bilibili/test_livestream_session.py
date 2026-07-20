@@ -438,3 +438,47 @@ async def test_raw_display_and_buffer_precede_and_survive_admission_rejection() 
 
     assert order == ["displayed", "rejected"]
     assert buffer.get_recent_danmaku() == ["不会触发 AI"]
+
+
+class RecordingSceneRuntime:
+    def __init__(self) -> None:
+        self.generations: list[tuple[int, int]] = []
+        self.messages: list[tuple[DanmakuMessage, int, int]] = []
+
+    async def switch_generation(self, *, room_id: int, generation_id: int) -> None:
+        self.generations.append((room_id, generation_id))
+
+    async def observe_danmaku(
+        self,
+        message: DanmakuMessage,
+        *,
+        room_id: int,
+        generation_id: int,
+    ) -> None:
+        self.messages.append((message, room_id, generation_id))
+
+
+async def test_scene_runtime_observes_rejected_danmaku_and_resets_on_room_switch() -> None:
+    gateways: list[FakeGateway] = []
+    scene_runtime = RecordingSceneRuntime()
+
+    def factory(room_id: int, sessdata: str) -> FakeGateway:
+        del sessdata
+        gateway = FakeGateway(room_id)
+        gateways.append(gateway)
+        return gateway
+
+    session = LivestreamSession(
+        gateway_factory=factory,
+        candidate_sink=lambda *_args: asyncio.sleep(0),
+        scene_runtime=scene_runtime,
+    )
+    await session.set_room(321)
+    message = DanmakuMessage(text="不会获得回复", user_id=7, timestamp=100.0)
+    gateways[0].emit_message(message)
+    await _settle_callbacks()
+    await session.set_room(654)
+    await session.stop()
+
+    assert scene_runtime.messages == [(message, 321, 1)]
+    assert scene_runtime.generations == [(321, 1), (654, 2), (654, 3)]

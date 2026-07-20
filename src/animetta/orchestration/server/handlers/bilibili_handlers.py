@@ -8,7 +8,7 @@ from uuid import uuid4
 from loguru import logger
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer
-from animetta.config import ReplyPolicyConfig
+from animetta.config import ReplyPolicyConfig, SceneAnalysisConfig
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.services.bilibili import (
     DanmakuBuffer,
@@ -18,6 +18,7 @@ from animetta.services.bilibili import (
     ReplyCandidate,
     ReplyMetrics,
 )
+from animetta.services.scene_analysis import SceneModelGateway, SceneRuntime
 from animetta.utils.tempfiles import write_temp_bytes
 
 from ...chat_contracts import ChatIdentity, ChatTransportMode
@@ -65,6 +66,7 @@ class BilibiliHandlers:
         reply_policy: ReplyPolicyConfig | None = None,
         buffer: DanmakuBuffer | None = None,
         gateway_factory: Any | None = None,
+        scene_runtime: SceneRuntime | Any | None = None,
     ) -> None:
         self.sio = sio
         self.session_manager = session_manager
@@ -74,8 +76,16 @@ class BilibiliHandlers:
         self._configured_enabled = False
         self._configured_room_id = 0
         self._reply_policy = reply_policy or ReplyPolicyConfig()
+        self._scene_config = SceneAnalysisConfig()
         self._buffer = buffer or DanmakuBuffer()
         if session is None:
+            if scene_runtime is None:
+                scene_runtime = SceneRuntime(
+                    session_id="bilibili-livestream",
+                    room_id=1,
+                    generation_id=0,
+                    mode="shadow",
+                )
             reply_runtime = DanmakuReplyRuntime(
                 self._reply_policy,
                 self._process_reply_candidate,
@@ -87,10 +97,16 @@ class BilibiliHandlers:
                 status_sink=self.emit_status_snapshot,
                 raw_message_sink=self._broadcast_raw_danmaku,
                 reply_runtime=reply_runtime,
+                scene_runtime=scene_runtime,
                 buffer=self._buffer,
                 **session_kwargs,
             )
         self.session = session
+        self.scene_runtime = scene_runtime
+        if self.scene_runtime is not None:
+            configure_runtime = getattr(self.scene_runtime, "configure", None)
+            if callable(configure_runtime):
+                configure_runtime(self._scene_config)
 
         # Deprecated compatibility attributes. Lifecycle ownership lives in session.
         self._bilibili_service = None
@@ -116,6 +132,14 @@ class BilibiliHandlers:
             self._reply_policy = ReplyPolicyConfig.model_validate(policy_values)
         self.session.configure_reply_policy(self._reply_policy)
 
+    def configure_scene_analysis(self, config: SceneAnalysisConfig) -> None:
+        """Apply application-owned scene settings before room startup."""
+        self._scene_config = config
+        if self.scene_runtime is not None:
+            configure_runtime = getattr(self.scene_runtime, "configure", None)
+            if callable(configure_runtime):
+                configure_runtime(config)
+
     async def start_configured(self) -> dict[str, Any]:
         """Start the configured room during the ASGI lifespan."""
         if not self._configured_enabled or self._configured_room_id <= 0:
@@ -128,6 +152,7 @@ class BilibiliHandlers:
         sessdata: str | None = None,
     ) -> dict[str, Any]:
         """Delegate an atomic room command to the single session owner."""
+        await self._prepare_scene_runtime()
         return await self.session.set_room(
             room_id,
             sessdata=self._sessdata if sessdata is None else sessdata,
@@ -167,6 +192,35 @@ class BilibiliHandlers:
     async def _process_reply_candidate(self, candidate: ReplyCandidate) -> None:
         await self._process_ai_reply(candidate.message, candidate.room_id)
 
+    async def _prepare_scene_runtime(self) -> None:
+        """Bind the selected profile LLM before room events can trigger reflection."""
+        if self.scene_runtime is None or self._scene_config.mode == "off":
+            return
+        try:
+            service_context = await self.admin.get_or_create_context("bilibili")
+            self._bind_scene_context(service_context)
+        except Exception as exc:
+            logger.warning(
+                "Scene runtime preparation failed: error_type={}",
+                type(exc).__name__,
+            )
+
+    def _bind_scene_context(self, service_context: object) -> None:
+        """Apply current scene controls and reuse the context's shared LLM engine."""
+        effective_config = getattr(service_context, "config", None)
+        scene_config = getattr(effective_config, "scene_analysis", None)
+        if isinstance(scene_config, SceneAnalysisConfig):
+            self.configure_scene_analysis(scene_config)
+        llm = getattr(service_context, "llm_engine", None)
+        if llm is not None and self.scene_runtime is not None:
+            self.scene_runtime.bind_gateway(
+                SceneModelGateway(
+                    llm,
+                    timeout_seconds=self._scene_config.model_timeout_seconds,
+                    max_tokens=self._scene_config.model_max_tokens,
+                )
+            )
+
     async def _process_danmaku(self, msg: DanmakuMessage) -> None:
         """Backward-compatible direct processing helper used by focused tests."""
         snapshot = self.session.snapshot()
@@ -192,6 +246,20 @@ class BilibiliHandlers:
             )
             delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
             orchestrator = await self.admin._get_or_create_orchestrator("bilibili")
+            scene_metadata: dict[str, object] = {}
+            if self.scene_runtime is not None:
+                try:
+                    service_context = getattr(orchestrator, "service_context", None)
+                    if service_context is not None:
+                        self._bind_scene_context(service_context)
+                    guidance = await self.scene_runtime.guidance_for_reply()
+                    if guidance is not None:
+                        scene_metadata["scene_guidance"] = guidance.model_dump(mode="json")
+                except Exception as exc:
+                    logger.warning(
+                        "Scene guidance lookup failed: error_type={}",
+                        type(exc).__name__,
+                    )
             actor_id = normalize_actor_id(msg.user_id, "bilibili")
             stream_id = f"bilibili:{room_id}" if room_id else None
             result = await orchestrator.process_text(
@@ -207,6 +275,7 @@ class BilibiliHandlers:
                 transport_mode=ChatTransportMode.CANONICAL.value,
                 channel="bilibili",
                 stream_id=stream_id,
+                **scene_metadata,
             )
 
             reply_text = result.get("response_text", "")
@@ -313,6 +382,14 @@ class BilibiliHandlers:
                         "timestamp": time.time(),
                     },
                 )
+            if reply_text and self.scene_runtime is not None:
+                try:
+                    await self.scene_runtime.record_host_reply(reply_text)
+                except Exception as exc:
+                    logger.warning(
+                        "Scene host-reply feedback failed: error_type={}",
+                        type(exc).__name__,
+                    )
         except Exception as exc:
             logger.error(
                 "Bilibili reply processing failed: error_type={}",

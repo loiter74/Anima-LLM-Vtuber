@@ -14,6 +14,7 @@ application:
     privacy:
       test: full
       smoke: redacted
+      selftest: redacted
       production: redacted
       digest_salt: animetta-local-observation
     prometheus:
@@ -25,6 +26,14 @@ application:
       schedule_delay_millis: 5000
   humor:
     enabled: false
+  scene_analysis:
+    mode: shadow
+    reflection_interval_seconds: 30
+    event_threshold: 30
+    max_reflections_per_minute: 4
+    guidance_wait_seconds: 0.3
+    model_timeout_seconds: 5
+    model_max_tokens: 800
 
 providers:
   llm:
@@ -154,6 +163,23 @@ profiles:
       enable_subtitle_translation: false
       enable_active_memes: false
       tts_timeout_seconds: 20.0
+
+  selftest:
+    services:
+      llm: deepseek
+      asr: mimo-asr
+      tts: qwen-alice
+      vad: mimo-vad
+    policy:
+      allow_mock: false
+      require_remote_identity: true
+    runtime:
+      debug: false
+      long_term_memory_mode: "off"
+      enable_tools: false
+      enable_subtitle_translation: false
+      enable_active_memes: false
+      tts_timeout_seconds: 120.0
 
   production:
     services:

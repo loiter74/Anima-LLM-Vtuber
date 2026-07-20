@@ -3,6 +3,7 @@ from __future__ import annotations
 """Tests for graph-visible Humor Agent rewrite and validation nodes."""
 
 import json
+import time
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -146,6 +147,30 @@ class TestHumorRewriteNode:
         assert result["metadata"][HUMOR_AGENT_KEY]["accepted"] is False
         assert result["metadata"][HUMOR_AGENT_KEY]["fallback_reason"] == "invalid_json"
         assert HUMOR_CANDIDATE_KEY not in result["metadata"]
+
+    async def test_active_scene_guidance_bypasses_humor_llm(self):
+        llm = _HumorNodeLLM(response=_humor_json("不该生成"))
+        state = _make_state(
+            "普通回复",
+            metadata={
+                "scene_guidance": {
+                    "scene_revision": 1,
+                    "scene_summary": "当前笑点正在上升。",
+                    "response_objective": "接住当前笑点。",
+                    "tone": ["playful"],
+                    "confidence": 0.9,
+                    "expires_at": time.time() + 60,
+                }
+            },
+        )
+        config = _make_config(_ServiceContext(llm), HumorConfig(enabled=True))
+
+        result = await humor_rewrite_node(state, config)
+
+        assert result["response_text"] == "普通回复"
+        assert result["metadata"]["scene_guidance"]["scene_revision"] == 1
+        assert HUMOR_CANDIDATE_KEY not in result["metadata"]
+        assert llm.chat_messages_calls == 0
 
 
 class TestHumorValidationNode:

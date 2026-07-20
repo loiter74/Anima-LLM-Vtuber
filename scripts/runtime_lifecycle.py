@@ -13,6 +13,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 QWEN_COMPOSE = ["docker", "compose", "-f", "docker-compose.qwen.yml"]
+SELFTEST_COMPOSE = [
+    "docker",
+    "compose",
+    "-f",
+    "docker-compose.yml",
+    "-f",
+    "docker-compose.selftest.yml",
+]
 OPERATIONS = (
     "qwen-build",
     "qwen-up",
@@ -20,6 +28,7 @@ OPERATIONS = (
     "qwen-stop",
     "qwen-destroy",
     "anima-up",
+    "anima-selftest-up",
     "anima-down",
 )
 
@@ -91,6 +100,10 @@ def run_operation(operation: str) -> None:
         _run(_preflight(wait=False))
         _run(["docker", "compose", "build", "animetta"])
         _run(["docker", "compose", "up", "-d", "--no-build", "animetta"])
+    elif operation == "anima-selftest-up":
+        _run(_preflight(wait=True))
+        _run([*SELFTEST_COMPOSE, "build", "animetta"])
+        _run([*SELFTEST_COMPOSE, "up", "-d", "--no-build", "animetta"])
     elif operation == "anima-down":
         _run(["docker", "compose", "down", "--remove-orphans"])
     else:

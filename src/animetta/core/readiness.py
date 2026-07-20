@@ -110,7 +110,7 @@ def build_runtime_readiness_snapshot(
 ) -> RuntimeReadinessSnapshot:
     """Build a readiness snapshot without performing I/O."""
     profile = _runtime_profile(config)
-    if profile in {"test", "smoke", "production"} and hasattr(config, "effective_hash"):
+    if profile in {"test", "smoke", "selftest", "production"} and hasattr(config, "effective_hash"):
         return _effective_config_snapshot(
             config=config,
             pool_config=pool_config,
@@ -278,7 +278,7 @@ def normalize_reference_path(value: Any) -> str | None:
 
 def _runtime_profile(config: Any) -> str:
     direct = getattr(config, "profile", None)
-    if direct in {"test", "smoke", "production"}:
+    if direct in {"test", "smoke", "selftest", "production"}:
         return direct
     try:
         value = getattr(getattr(config, "system", None), "runtime_profile", None)
@@ -286,7 +286,7 @@ def _runtime_profile(config: Any) -> str:
         value = None
     return (
         value
-        if value in {"development", "test", "smoke", "production", "golden"}
+        if value in {"development", "test", "smoke", "selftest", "production", "golden"}
         else "development"
     )
 
@@ -387,7 +387,7 @@ def _effective_config_snapshot(
     profile = config.profile
     frontend_component = _frontend_component(
         frontend,
-        required=profile in {"smoke", "production"},
+        required=profile in {"smoke", "selftest", "production"},
     )
     stale = pool_config is not None and (
         getattr(pool_config, "version", None) != config.version
@@ -431,7 +431,7 @@ def _effective_config_snapshot(
         )
         component_ready = pool_ready and identity_ready
         component_state = "ready" if component_ready else "failed"
-        if category == "llm" and profile in {"smoke", "production"}:
+        if category == "llm" and profile in {"smoke", "selftest", "production"}:
             connectivity_ready = (
                 isinstance(connectivity, dict)
                 and connectivity.get("state") == "ready"

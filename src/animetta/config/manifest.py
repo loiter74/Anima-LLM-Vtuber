@@ -25,10 +25,11 @@ from .core.base import ProviderConfig
 from .core.registry import ProviderRegistry
 from .humor import HumorConfig
 from .observability import ObservabilityConfig
+from .scene_analysis import SceneAnalysisConfig
 
-ProfileName = Literal["test", "smoke", "production"]
+ProfileName = Literal["test", "smoke", "selftest", "production"]
 ServiceCategory = Literal["llm", "asr", "tts", "vad"]
-PROFILE_NAMES: tuple[ProfileName, ...] = ("test", "smoke", "production")
+PROFILE_NAMES: tuple[ProfileName, ...] = ("test", "smoke", "selftest", "production")
 SERVICE_CATEGORIES: tuple[ServiceCategory, ...] = ("llm", "asr", "tts", "vad")
 DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[3] / "config" / "animetta.yaml"
 _MERGE_KEY = re.compile(r"(?m)^\s*<<\s*:")
@@ -105,6 +106,12 @@ class ApplicationManifest(StrictFrozenModel):
         exclude=True,
         repr=False,
     )
+    scene_analysis_snapshot_json: str = Field(
+        default_factory=lambda: _canonical_model_json(SceneAnalysisConfig()),
+        alias="scene_analysis",
+        exclude=True,
+        repr=False,
+    )
 
     @field_validator("observability_snapshot_json", mode="before")
     @classmethod
@@ -116,6 +123,11 @@ class ApplicationManifest(StrictFrozenModel):
     def validate_humor_snapshot(cls, value: Any) -> str:
         return _validated_snapshot_json(value, HumorConfig)
 
+    @field_validator("scene_analysis_snapshot_json", mode="before")
+    @classmethod
+    def validate_scene_analysis_snapshot(cls, value: Any) -> str:
+        return _validated_snapshot_json(value, SceneAnalysisConfig)
+
     @property
     def observability(self) -> Mapping[str, Any]:
         return cast(Mapping[str, Any], _freeze_json(json.loads(self.observability_snapshot_json)))
@@ -124,6 +136,13 @@ class ApplicationManifest(StrictFrozenModel):
     def humor(self) -> Mapping[str, Any]:
         return cast(Mapping[str, Any], _freeze_json(json.loads(self.humor_snapshot_json)))
 
+    @property
+    def scene_analysis(self) -> Mapping[str, Any]:
+        return cast(
+            Mapping[str, Any],
+            _freeze_json(json.loads(self.scene_analysis_snapshot_json)),
+        )
+
     def manifest_dict(self) -> dict[str, Any]:
         """Return the canonical public structure used for hashing and comparison."""
         return {
@@ -131,6 +150,7 @@ class ApplicationManifest(StrictFrozenModel):
             "system": self.system.model_dump(),
             "observability": json.loads(self.observability_snapshot_json),
             "humor": json.loads(self.humor_snapshot_json),
+            "scene_analysis": json.loads(self.scene_analysis_snapshot_json),
         }
 
 
@@ -141,7 +161,7 @@ class EffectiveSystemConfig(StrictFrozenModel):
     port: int
     debug: bool
     log_level: str = "INFO"
-    runtime_profile: Literal["test", "smoke", "production"]
+    runtime_profile: Literal["test", "smoke", "selftest", "production"]
     long_term_memory_mode: Literal["off", "read_only", "read_write"]
     enable_tools: bool
     enable_subtitle_translation: bool
@@ -317,6 +337,12 @@ class EffectiveConfig(StrictFrozenModel):
     @property
     def observability(self) -> Any:
         return ObservabilityConfig.model_validate_json(self.application.observability_snapshot_json)
+
+    @property
+    def scene_analysis(self) -> SceneAnalysisConfig:
+        return SceneAnalysisConfig.model_validate_json(
+            self.application.scene_analysis_snapshot_json
+        )
 
     @property
     def bilibili(self) -> None:
@@ -544,11 +570,11 @@ def _select_profile(
     selected = profile or os.getenv("ANIMETTA_PROFILE")
     if not selected:
         raise ProfileSelectionError(
-            "ANIMETTA_PROFILE is required; choose test, smoke, or production"
+            "ANIMETTA_PROFILE is required; choose test, smoke, selftest, or production"
         )
     if selected not in manifest.profiles:
         raise ProfileSelectionError(
-            f"Unknown profile '{selected}'. Valid profiles: test, smoke, production"
+            f"Unknown profile '{selected}'. Valid profiles: test, smoke, selftest, production"
         )
     profile_name = cast(ProfileName, selected)
     return profile_name, manifest.profiles[profile_name]

@@ -3,6 +3,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const releaseMode = process.env.PLAYWRIGHT_RELEASE_MODE === '1'
+const releaseAudioTimeoutMs = Number(process.env.PLAYWRIGHT_RELEASE_AUDIO_TIMEOUT_MS ?? 60000)
+if (!Number.isSafeInteger(releaseAudioTimeoutMs) || releaseAudioTimeoutMs <= 0) {
+  throw new Error('PLAYWRIGHT_RELEASE_AUDIO_TIMEOUT_MS must be a positive integer')
+}
 const browser = await chromium.launch({
   headless: true,
   args: releaseMode ? ['--autoplay-policy=no-user-gesture-required'] : [],
@@ -17,17 +21,31 @@ if (releaseMode) {
       ended: 0,
       errors: [],
     }
+    const nativeOnEnded = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'onended')
+    if (!nativeOnEnded?.get || !nativeOnEnded.set) {
+      throw new Error('Unable to instrument HTML media completion')
+    }
+    Object.defineProperty(HTMLMediaElement.prototype, 'onended', {
+      configurable: true,
+      enumerable: nativeOnEnded.enumerable,
+      get() {
+        return nativeOnEnded.get.call(this)
+      },
+      set(handler) {
+        const wrapped =
+          typeof handler === 'function'
+            ? function (event) {
+                window.__releaseAudio.ended += 1
+                return handler.call(this, event)
+              }
+            : handler
+        nativeOnEnded.set.call(this, wrapped)
+      },
+    })
     const originalPlay = HTMLMediaElement.prototype.play
     HTMLMediaElement.prototype.play = function (...args) {
       const state = window.__releaseAudio
       state.play_calls += 1
-      this.addEventListener(
-        'ended',
-        () => {
-          state.ended += 1
-        },
-        { once: true },
-      )
       this.addEventListener(
         'error',
         () => {
@@ -153,9 +171,14 @@ if (releaseMode) {
     prompt,
     { timeout: 60000 },
   )
-  await page.waitForFunction(() => window.__releaseAudio?.ended === 1, undefined, {
-    timeout: 60000,
-  })
+  await page.waitForFunction(
+    () =>
+      window.__releaseAudio?.play_calls >= 2 &&
+      window.__releaseAudio?.play_rejected === 0 &&
+      window.__releaseAudio?.ended >= 1,
+    undefined,
+    { timeout: releaseAudioTimeoutMs },
+  )
   const messageText = await page.locator('[data-testid="message-list"]').innerText()
   const assistantText = await page
     .locator('[data-testid="message-list"] > div.flex')
@@ -177,10 +200,10 @@ if (releaseMode) {
   releaseAcceptance.passed =
     releaseAcceptance.provider_rows_exact &&
     releaseAcceptance.chinese_turn_complete &&
-    releaseAcceptance.audio.play_calls === 1 &&
-    releaseAcceptance.audio.play_resolved === 1 &&
+    releaseAcceptance.audio.play_calls === 2 &&
+    releaseAcceptance.audio.play_resolved === 2 &&
     releaseAcceptance.audio.play_rejected === 0 &&
-    releaseAcceptance.audio.ended === 1 &&
+    releaseAcceptance.audio.ended >= 1 &&
     releaseAcceptance.audio.errors.length === 0
   await page.screenshot({ path: path.join(evidenceDir, 'chinese-alice-turn.png'), fullPage: true })
 }

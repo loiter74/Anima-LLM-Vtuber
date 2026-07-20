@@ -134,6 +134,43 @@ def test_manual_qwen_rollback_keeps_its_distinct_generation_and_warmup_budgets()
     assert production["runtime"]["tts_timeout_seconds"] == 20.0
 
 
+def test_selftest_compose_selects_local_qwen_without_overriding_production() -> None:
+    manifest = yaml.safe_load(_text("config/animetta.yaml"))
+    production = manifest["profiles"]["production"]
+    selftest = manifest["profiles"]["selftest"]
+    base = _compose("docker-compose.yml")["services"]["animetta"]
+    override = _compose("docker-compose.selftest.yml")["services"]["animetta"]
+
+    assert production["services"]["tts"] == "dashscope-seren"
+    assert selftest["services"] == {
+        "llm": "deepseek",
+        "asr": "mimo-asr",
+        "tts": "qwen-alice",
+        "vad": "mimo-vad",
+    }
+    assert selftest["runtime"]["tts_timeout_seconds"] == 120.0
+    assert "ANIMETTA_PROFILE=production" in base["environment"]
+    assert override["environment"] == ["ANIMETTA_PROFILE=selftest"]
+
+
+def test_release_browser_smoke_allows_a_slow_local_qwen_audio_budget() -> None:
+    smoke = _text("frontend/smoke-test.mjs")
+
+    assert "PLAYWRIGHT_RELEASE_AUDIO_TIMEOUT_MS" in smoke
+    assert "const releaseAudioTimeoutMs" in smoke
+    assert "timeout: releaseAudioTimeoutMs" in smoke
+
+
+def test_release_browser_smoke_observes_audio_end_before_application_cleanup() -> None:
+    smoke = _text("frontend/smoke-test.mjs")
+
+    assert "Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'onended')" in smoke
+    assert "Object.defineProperty(HTMLMediaElement.prototype, 'onended'" in smoke
+    assert "releaseAcceptance.audio.play_calls === 2" in smoke
+    assert "releaseAcceptance.audio.play_resolved === 2" in smoke
+    assert "releaseAcceptance.audio.ended >= 1" in smoke
+
+
 def test_cpu_and_core_compose_choose_only_supported_profiles() -> None:
     cpu = yaml.safe_load(_text("docker-compose.cpu.yml"))["services"]
     core = yaml.safe_load(_text("docker-compose.core.yml"))["services"]

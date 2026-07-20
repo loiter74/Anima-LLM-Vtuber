@@ -7,6 +7,7 @@ from typing import Any
 from langgraph.types import RunnableConfig
 
 from animetta.config.runtime_reload import build_runtime_system_prompt
+from animetta.services.scene_analysis.validation import validate_scene_guidance
 
 from .types import PromptContext
 
@@ -24,6 +25,7 @@ def build_context(
     metadata = state.get("metadata", {})
     service_context = _get_service_context(config)
     base_system_prompt, base_warnings = _build_base_system_prompt(state, service_context)
+    scene_guidance, scene_warnings = validate_scene_guidance(metadata.get("scene_guidance"))
     return PromptContext(
         session_id=state.get("session_id", "unknown"),
         base_system_prompt=base_system_prompt,
@@ -50,6 +52,8 @@ def build_context(
             getattr(service_context, "runtime_config_version", state.get("config_version", 1)),
         ),
         base_system_prompt_warnings=base_warnings,
+        scene_guidance=scene_guidance,
+        scene_guidance_warnings=scene_warnings,
     )
 
 

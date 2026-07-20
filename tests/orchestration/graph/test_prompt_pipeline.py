@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from animetta.orchestration.prompting.pipeline import compile as compile_prompt
@@ -472,3 +474,101 @@ async def test_persona_and_affinity_unchanged_after_improvisation():
     persona_pos = result.system_prompt.index("[FIXED-PERSONA]")
     improv_pos = result.system_prompt.index("即兴闲聊模式")
     assert persona_pos < improv_pos
+
+
+def _scene_guidance(**overrides):
+    guidance = {
+        "scene_revision": 3,
+        "scene_summary": "观众正在围绕穿模形成共同笑点。",
+        "response_objective": "接住笑点并在两句内收住，不切换话题。",
+        "tone": ["playful", "quick"],
+        "scope": {
+            "max_sentences": 2,
+            "max_chars": 120,
+            "allow_topic_switch": False,
+            "audience_target": "whole_room",
+        },
+        "must_address": ["回应付费事件"],
+        "avoid": ["不要重复已经过热的梗"],
+        "technique": {
+            "technique_id": "callback",
+            "instruction": "用一句回扣主播刚才的失误。",
+        },
+        "meme_policy": {
+            "action": "use",
+            "meme_id": "clipping",
+            "instruction": "只轻点一次穿模梗。",
+        },
+        "confidence": 0.9,
+        "expires_at": time.time() + 60,
+    }
+    guidance.update(overrides)
+    return guidance
+
+
+async def test_valid_scene_guidance_replaces_generic_improvisation() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "live",
+            "system_prompt": "Base.",
+            "metadata": {"scene_guidance": _scene_guidance()},
+        }
+    )
+
+    assert "scene_guidance" in result.section_names
+    assert "improvised_chat" not in result.section_names
+    assert "直播场景导演建议" in result.system_prompt
+    assert "接住笑点并在两句内收住" in result.system_prompt
+    assert "用一句回扣主播刚才的失误" in result.system_prompt
+    assert "只轻点一次穿模梗" in result.system_prompt
+    assert '"scene_revision"' not in result.system_prompt
+
+
+async def test_scene_meme_policy_suppresses_recalled_meme_documents() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "live",
+            "system_prompt": "Base.",
+            "metadata": {
+                "scene_guidance": _scene_guidance(
+                    meme_policy={
+                        "action": "avoid",
+                        "instruction": "让已经饱和的梗休息。",
+                    }
+                )
+            },
+        },
+        memory_context=(
+            "## 相关记忆\n- 观众喜欢短回复\n\n"
+            "## 活跃梗\n- 继续反复使用穿模梗\n\n"
+            "## 用户画像\n- 偏好: 轻松"
+        ),
+    )
+
+    assert "观众喜欢短回复" in result.system_prompt
+    assert "偏好: 轻松" in result.system_prompt
+    assert "活跃梗" not in result.system_prompt
+    assert "继续反复使用穿模梗" not in result.system_prompt
+    assert "本轮不要主动用梗" in result.system_prompt
+
+
+@pytest.mark.parametrize(
+    "guidance",
+    [
+        {"unexpected": "document"},
+        _scene_guidance(expires_at=1),
+    ],
+)
+async def test_malformed_or_expired_guidance_is_contained(guidance) -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "live",
+            "system_prompt": "Base.",
+            "metadata": {"scene_guidance": guidance},
+        }
+    )
+
+    assert "scene_guidance" not in result.section_names
+    assert "improvised_chat" in result.section_names
+    assert "即兴闲聊模式" in result.system_prompt
+    assert any("scene guidance" in warning.lower() for warning in result.warnings)

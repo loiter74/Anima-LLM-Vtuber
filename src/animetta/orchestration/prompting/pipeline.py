@@ -15,6 +15,7 @@ from .sources import (
     PersonaPromptSource,
     RoleplayGuardPromptSource,
     RuntimePersonalityPromptSource,
+    SceneGuidancePromptSource,
 )
 from .types import CompiledPrompt, PromptSection, PromptSource
 
@@ -45,6 +46,7 @@ async def compile(
         PersonaPromptSource(),
         AffinityPromptSource(),
         RuntimePersonalityPromptSource(),
+        SceneGuidancePromptSource(),
         ImprovisedChatPromptSource(),
         RoleplayGuardPromptSource(),
         MemoryPromptSource(),
@@ -69,5 +71,6 @@ async def compile(
             )
 
     compiled = assemble(sections)
+    compiled.warnings.extend(ctx.scene_guidance_warnings)
     compiled.config_version = ctx.config_version
     return compiled

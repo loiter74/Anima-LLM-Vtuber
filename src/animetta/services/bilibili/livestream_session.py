@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from loguru import logger
 
@@ -22,6 +22,18 @@ GatewayFactory = Callable[[int, str], DanmakuGateway]
 StatusSink = Callable[[dict[str, object]], Awaitable[None]]
 RawMessageSink = Callable[[DanmakuMessage, int], Awaitable[None]]
 CandidateSink = Callable[[DanmakuMessage, int, int], Awaitable[None]]
+
+
+class LivestreamSceneRuntime(Protocol):
+    async def switch_generation(self, *, room_id: int, generation_id: int) -> None: ...
+
+    async def observe_danmaku(
+        self,
+        message: DanmakuMessage,
+        *,
+        room_id: int,
+        generation_id: int,
+    ) -> object: ...
 
 
 async def _discard_status(_payload: dict[str, object]) -> None:
@@ -50,6 +62,7 @@ class LivestreamSession:
         raw_message_sink: RawMessageSink = _discard_message,
         candidate_sink: CandidateSink = _discard_candidate,
         reply_runtime: DanmakuReplyRuntime | None = None,
+        scene_runtime: LivestreamSceneRuntime | None = None,
         buffer: DanmakuBuffer | None = None,
         shutdown_timeout_seconds: float = 5.0,
         clock: Callable[[], float] = time.time,
@@ -59,6 +72,7 @@ class LivestreamSession:
         self._raw_message_sink = raw_message_sink
         self._candidate_sink = candidate_sink
         self._reply_runtime = reply_runtime
+        self._scene_runtime = scene_runtime
         self._buffer = buffer
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
         self._clock = clock
@@ -109,6 +123,7 @@ class LivestreamSession:
                 return self.snapshot()
 
             next_generation = self._snapshot.generation_id + 1
+            await self._switch_scene_generation(room_id, next_generation)
             old_gateway = self._gateway
             self._gateway = None
 
@@ -195,6 +210,9 @@ class LivestreamSession:
                 return self.snapshot()
 
             generation = self._snapshot.generation_id + 1
+            scene_room_id = self._snapshot.room_id or self._snapshot.desired_room_id
+            if scene_room_id is not None:
+                await self._switch_scene_generation(scene_room_id, generation)
             self._gateway = None
             self._transition(
                 state=LivestreamState.STOPPING,
@@ -229,6 +247,21 @@ class LivestreamSession:
             )
             await self._publish_status()
             return self.snapshot()
+
+    async def _switch_scene_generation(self, room_id: int, generation_id: int) -> None:
+        """Reset optional scene state without making room lifecycle depend on it."""
+        if self._scene_runtime is None:
+            return
+        try:
+            await self._scene_runtime.switch_generation(
+                room_id=room_id,
+                generation_id=generation_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Scene runtime generation reset failed: error_type={}",
+                type(exc).__name__,
+            )
 
     async def _stop_gateway(self, gateway: DanmakuGateway) -> str | None:
         try:
@@ -359,6 +392,18 @@ class LivestreamSession:
         if room_id is None:
             return
         self._metrics.received += 1
+        if self._scene_runtime is not None:
+            try:
+                await self._scene_runtime.observe_danmaku(
+                    message,
+                    room_id=room_id,
+                    generation_id=generation,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Scene runtime observation failed: error_type={}",
+                    type(exc).__name__,
+                )
         if self._buffer is not None:
             self._buffer.add(message.text, room_id=room_id)
         try:

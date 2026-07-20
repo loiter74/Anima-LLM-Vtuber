@@ -136,6 +136,15 @@ class ImprovisedChatPromptSource:
     name = "improvised_chat"
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        if ctx.scene_guidance is not None:
+            return [
+                PromptSection(
+                    name=self.name,
+                    role=SectionRole.IMPROVISATION,
+                    priority=SectionPriority.IMPROVISATION,
+                    content="",
+                )
+            ]
         content = (
             "## 即兴闲聊模式\n\n"
             "把当前回复当成直播弹幕即兴接话：先接住弹幕，再抛一个短包袱或轻吐槽，"
@@ -164,6 +173,65 @@ class ImprovisedChatPromptSource:
         ]
 
 
+class SceneGuidancePromptSource:
+    """Render one validated scene decision without passing retrieval documents."""
+
+    name = "scene_guidance"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        guidance = ctx.scene_guidance
+        if guidance is None:
+            return [
+                PromptSection(
+                    name=self.name,
+                    role=SectionRole.SCENE_GUIDANCE,
+                    priority=SectionPriority.SCENE_GUIDANCE,
+                    content="",
+                )
+            ]
+
+        scope = guidance.scope
+        lines = [
+            "## 直播场景导演建议",
+            "",
+            f"场景结论：{guidance.scene_summary}",
+            f"本轮目标：{guidance.response_objective}",
+            f"语气：{'、'.join(guidance.tone) if guidance.tone else '自然'}",
+            (
+                f"回复范围：最多 {scope.max_sentences} 句、{scope.max_chars} 字；"
+                f"{'允许' if scope.allow_topic_switch else '不要'}切换话题；"
+                f"面向{'全场' if scope.audience_target == 'whole_room' else '当前观众'}。"
+            ),
+        ]
+        if guidance.must_address:
+            lines.append(f"必须回应：{'；'.join(guidance.must_address)}")
+        if guidance.avoid:
+            lines.append(f"避免：{'；'.join(guidance.avoid)}")
+        if guidance.technique is not None:
+            lines.append(f"直播技巧建议：{guidance.technique.instruction}")
+        meme_policy = guidance.meme_policy
+        if meme_policy.action == "use":
+            lines.append(
+                f"梗策略：只使用已选中的 {meme_policy.meme_id}；{meme_policy.instruction or ''}"
+            )
+        elif meme_policy.action == "avoid":
+            lines.append(f"梗策略：本轮不要主动用梗；{meme_policy.instruction or ''}")
+        else:
+            lines.append("梗策略：本轮不主动加梗。")
+        if guidance.degraded:
+            lines.append("置信度不足时优先遵守回复范围与明确的必须回应项。")
+
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.SCENE_GUIDANCE,
+                priority=SectionPriority.SCENE_GUIDANCE,
+                content="\n".join(lines),
+                metadata={"scene_revision": guidance.scene_revision},
+            )
+        ]
+
+
 class MemoryPromptSource:
     """Produces memory context section from pre-retrieved memory.
 
@@ -173,6 +241,23 @@ class MemoryPromptSource:
 
     name = "memory"
     REALTIME_MAX_CHARS = 500
+
+    @staticmethod
+    def _without_active_meme_section(content: str) -> tuple[str, bool]:
+        """Remove recalled meme instructions when scene guidance owns meme policy."""
+        kept_lines: list[str] = []
+        suppressing = False
+        suppressed = False
+        for line in content.splitlines():
+            if line.strip() == "## 活跃梗":
+                suppressing = True
+                suppressed = True
+                continue
+            if suppressing and line.startswith("## "):
+                suppressing = False
+            if not suppressing:
+                kept_lines.append(line)
+        return "\n".join(kept_lines).strip(), suppressed
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         if not ctx.memory_context:
@@ -186,7 +271,11 @@ class MemoryPromptSource:
             ]
 
         content = ctx.memory_context
-        warnings = []
+        warnings: list[str] = []
+        if ctx.scene_guidance is not None:
+            content, suppressed = self._without_active_meme_section(content)
+            if suppressed:
+                warnings.append("active meme memory suppressed by scene guidance")
 
         # Cap memory in realtime roleplay mode
         if (

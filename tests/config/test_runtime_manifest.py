@@ -94,6 +94,16 @@ def test_application_snapshot_json_is_validated_and_canonicalized() -> None:
             },
             False,
         ),
+        (
+            "selftest",
+            {
+                "llm": "deepseek",
+                "asr": "mimo-asr",
+                "tts": "qwen-alice",
+                "vad": "mimo-vad",
+            },
+            False,
+        ),
     ],
 )
 def test_cfg_001_profiles_resolve_exact_service_references(
@@ -484,7 +494,7 @@ def test_cfg_012_public_status_is_sanitized_and_separates_provider_identities(
     assert "C:/Users/private" not in serialized
 
 
-@pytest.mark.parametrize("profile", ["test", "smoke", "production"])
+@pytest.mark.parametrize("profile", ["test", "smoke", "selftest", "production"])
 def test_repository_manifest_resolves_every_declared_profile(
     profile: str,
     manifest_secrets: pytest.MonkeyPatch,
@@ -586,6 +596,15 @@ def test_selected_provider_lists_are_frozen_and_hashable() -> None:
         ),
         (
             "production",
+            {
+                "llm": DeepSeekLLMConfig,
+                "asr": MimoASRConfig,
+                "tts": RemoteTTSConfig,
+                "vad": MimoVADConfig,
+            },
+        ),
+        (
+            "selftest",
             {
                 "llm": DeepSeekLLMConfig,
                 "asr": MimoASRConfig,
@@ -723,6 +742,22 @@ def test_default_production_selects_approved_dashscope_voice_and_keeps_qwen_roll
     assert rollback.provider == "qwen3"
     assert rollback.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
     assert rollback.voice == "alice"
+
+
+def test_repository_selftest_uses_local_qwen_without_changing_production(
+    manifest_secrets: pytest.MonkeyPatch,
+) -> None:
+    selftest = load_effective_config(profile="selftest")
+    production = load_effective_config(profile="production")
+
+    assert selftest.profile == "selftest"
+    assert selftest.services.tts == "qwen-alice"
+    assert selftest.tts.type == "remote"
+    assert selftest.tts.provider == "qwen3"
+    assert selftest.tts.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+    assert selftest.tts.voice == "alice"
+    assert selftest.system.tts_timeout_seconds == 120.0
+    assert production.services.tts == "dashscope-seren"
 
 
 def test_reloader_defaults_to_the_manifest_that_produced_effective_config(

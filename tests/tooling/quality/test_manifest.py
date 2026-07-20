@@ -366,6 +366,15 @@ def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
             "config",
             "--quiet",
         ),
+        "docker-compose-selftest-contract": (
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "docker-compose.selftest.yml",
+            "config",
+            "--quiet",
+        ),
         "docker-compose-qwen-contract": (
             "compose",
             "--env-file",

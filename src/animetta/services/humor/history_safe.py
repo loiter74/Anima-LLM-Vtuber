@@ -8,25 +8,14 @@ from typing import Any
 from loguru import logger
 
 from animetta.services.llm.interface import LLMInterface
+from animetta.services.llm.internal_calls import (
+    has_native_chat_messages,
+    unwrap_service_proxy,
+)
 
 from .models import HumorFallbackReason, InternalLLMCallResult
 
 _HISTORY_ATTRS = ("history", "_history", "_conversation_history")
-
-
-def unwrap_service_proxy(service: object) -> object:
-    """Return the wrapped service object when a tracing proxy is supplied."""
-    try:
-        return object.__getattribute__(service, "_target")
-    except AttributeError:
-        return service
-
-
-def has_native_chat_messages(llm: object) -> bool:
-    """Return True when the concrete LLM overrides LLMInterface.chat_messages."""
-    target = unwrap_service_proxy(llm)
-    implementation = getattr(type(target), "chat_messages", None)
-    return implementation is not None and implementation is not LLMInterface.chat_messages
 
 
 def _copy_history(history: Sequence[Any]) -> list[Any]:

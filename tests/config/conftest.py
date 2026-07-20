@@ -115,6 +115,16 @@ def manifest_data() -> dict[str, Any]:
                 "policy": {"allow_mock": False, "require_remote_identity": True},
                 "runtime": {"debug": False},
             },
+            "selftest": {
+                "services": {
+                    "llm": "deepseek",
+                    "asr": "mimo-asr",
+                    "tts": "qwen-alice",
+                    "vad": "mimo-vad",
+                },
+                "policy": {"allow_mock": False, "require_remote_identity": True},
+                "runtime": {"debug": False, "tts_timeout_seconds": 120.0},
+            },
             "production": {
                 "services": {
                     "llm": "deepseek",

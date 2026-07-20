@@ -178,7 +178,7 @@ async def readiness_check(request: Request) -> JSONResponse:
 
 def _merge_component_readiness(payload: dict[str, Any]) -> None:
     """Merge cached local checks into canonical-profile readiness without I/O."""
-    if payload.get("profile") not in {"test", "smoke", "production"}:
+    if payload.get("profile") not in {"test", "smoke", "selftest", "production"}:
         return
     required = {"memory_runtime"}
     observation = getattr(_runtime_config, "observability", None)

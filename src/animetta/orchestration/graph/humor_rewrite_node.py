@@ -7,6 +7,7 @@ from loguru import logger
 
 from animetta.services.humor import HumorAgent, HumorRewriteRequest
 from animetta.services.humor.metadata import record_humor_candidate
+from animetta.services.scene_analysis.validation import validate_scene_guidance
 
 from .humor_utils import get_service_context, resolve_humor_config
 from .state import AgentState
@@ -21,6 +22,14 @@ async def humor_rewrite_node(
     normal_response = state.get("response_text", "")
     response_chunks = state.get("response_chunks", [])
     metadata = {**state.get("metadata", {})}
+
+    scene_guidance, _ = validate_scene_guidance(metadata.get("scene_guidance"))
+    if scene_guidance is not None:
+        return {
+            "response_text": normal_response,
+            "response_chunks": response_chunks,
+            "metadata": metadata,
+        }
 
     service_context = get_service_context(config)
     humor_config = resolve_humor_config(config, service_context)

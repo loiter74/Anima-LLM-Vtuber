@@ -153,6 +153,28 @@ class TestInit:
 
     @pytest.mark.asyncio
     @patch("animetta.core.service_context.ServiceContext")
+    async def test_selftest_waits_for_warmup_and_llm_connectivity(
+        self, MockServiceContext, mock_llm, mock_tts, mock_asr
+    ):
+        """Self-test keeps the production-like DeepSeek readiness contract."""
+        mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
+        mock_ctx.wait_for_llm_connectivity = AsyncMock(
+            return_value={"state": "ready", "ready": True, "reason": None}
+        )
+        MockServiceContext.return_value = mock_ctx
+        manager = MagicMock()
+        manager.warmup = AsyncMock()
+        config = MagicMock()
+        config.profile = "selftest"
+
+        with patch.object(ServicePool, "_compute_engine_readiness", return_value=True):
+            await ServicePool.init(config, model_manager=manager)
+
+        manager.warmup.assert_awaited_once_with()
+        mock_ctx.wait_for_llm_connectivity.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    @patch("animetta.core.service_context.ServiceContext")
     async def test_keeps_ctx_alive(self, MockServiceContext, mock_llm, mock_tts, mock_asr):
         """_ctx is stored on the class so shared engines stay in memory."""
         mock_ctx = _mock_context_base(mock_llm, mock_tts, mock_asr)
@@ -418,6 +440,13 @@ class TestGetContext:
         result = ServicePool.get_context()
 
         assert result == {}
+
+    def test_selftest_rejects_unready_pool_instead_of_initializing_per_session(self):
+        """Self-test must not allocate a second set of real provider engines."""
+        ServicePool._runtime_config = MagicMock(profile="selftest")
+
+        with pytest.raises(RuntimeError, match="Real-profile ServicePool is not ready"):
+            ServicePool.get_context()
 
 
 # ═══════════════════════════════════════════════════════════════════════

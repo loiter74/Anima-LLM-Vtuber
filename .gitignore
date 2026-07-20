@@ -142,7 +142,9 @@ memory_db/wiki/index.md
 !memory_db/wiki/WIKI_RULES.md
 
 # OpenSpec change archives (kept in docs/archive/ or separate wiki)
-openspec/changes/
+openspec/changes/*
+!openspec/changes/add-livestream-scene-director/
+!openspec/changes/add-livestream-scene-director/**
 memory_db/chroma_v2/
 .codegraph/
 .understand-anything/

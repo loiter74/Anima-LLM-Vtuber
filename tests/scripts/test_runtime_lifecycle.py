@@ -83,6 +83,32 @@ def test_animetta_up_preflights_before_build_and_never_manages_qwen(monkeypatch)
     assert all("docker-compose.qwen.yml" not in command for command in commands[1:])
 
 
+def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypatch) -> None:
+    commands: list[list[str]] = []
+    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
+
+    runtime_lifecycle.run_operation("anima-selftest-up")
+
+    assert commands[0][-2:] == ["scripts/qwen_preflight.py", "--wait"]
+    compose_prefix = [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.selftest.yml",
+    ]
+    assert commands[1] == [*compose_prefix, "build", "animetta"]
+    assert commands[2] == [
+        *compose_prefix,
+        "up",
+        "-d",
+        "--no-build",
+        "animetta",
+    ]
+    assert all("--force-recreate" not in command for command in commands)
+
+
 def test_cleanup_operations_are_scoped_and_non_destructive(monkeypatch) -> None:
     commands: list[list[str]] = []
     monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))

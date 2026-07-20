@@ -23,6 +23,7 @@ class ObservationPrivacyConfig(BaseConfig):
     golden: Literal["full", "redacted"] = "redacted"
     test: Literal["full", "redacted"] = "full"
     smoke: Literal["full", "redacted"] = "redacted"
+    selftest: Literal["full", "redacted"] = "redacted"
     production: Literal["full", "redacted"] = "redacted"
     digest_salt: str = "animetta-local-observation"
 

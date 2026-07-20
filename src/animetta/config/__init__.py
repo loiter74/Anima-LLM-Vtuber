@@ -94,6 +94,7 @@ from .providers.vc import (
     VCBaseConfig,
     VCConfig,
 )
+from .scene_analysis import SceneAnalysisConfig
 from .system import SystemConfig
 
 __all__ = [
@@ -105,6 +106,7 @@ __all__ = [
     "DeviceMixin",
     "TemperatureMixin",
     "HumorConfig",
+    "SceneAnalysisConfig",
     # LLM Providers
     "LLMConfig",
     "LLMBaseConfig",

@@ -157,6 +157,9 @@ class RouteHandlers:
     def set_global_config(self, config: EffectiveConfig) -> None:
         """Set global config — delegates to domain handlers."""
         self.global_config = config
+        scene_analysis = getattr(config, "scene_analysis", None)
+        if scene_analysis is not None:
+            self.bilibili.configure_scene_analysis(scene_analysis)
 
     def set_user_settings(self, user_settings: UserSettings) -> None:
         """Set user settings — delegates to domain handlers."""

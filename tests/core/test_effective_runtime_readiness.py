@@ -159,6 +159,39 @@ def test_production_tts_requires_exact_dashscope_model_and_seren_voice(
     assert tts["resolved"]["voice"] == "Seren"
 
 
+def test_selftest_requires_deepseek_connectivity(effective_config) -> None:
+    config = effective_config("selftest")
+    _seed_ready(config)
+    ServicePool._llm_connectivity = {
+        "state": "failed",
+        "ready": False,
+        "reason": "request_failed",
+    }
+
+    payload = ServicePool.get_readiness_snapshot(
+        config=config,
+        frontend=_frontend(),
+    ).to_dict()
+
+    assert payload["ready"] is False
+    assert payload["components"]["llm"]["ready"] is False
+    assert payload["components"]["llm"]["reason"] == "request_failed"
+
+
+def test_selftest_requires_frontend_assets(effective_config) -> None:
+    config = effective_config("selftest")
+    _seed_ready(config)
+
+    payload = ServicePool.get_readiness_snapshot(
+        config=config,
+        frontend=_frontend(False),
+    ).to_dict()
+
+    assert payload["ready"] is False
+    assert payload["components"]["frontend"]["required"] is True
+    assert payload["components"]["frontend"]["reason"] == "assets_missing"
+
+
 def test_remote_identity_mismatch_fails_readiness_with_sanitized_cause(
     effective_config,
 ) -> None:

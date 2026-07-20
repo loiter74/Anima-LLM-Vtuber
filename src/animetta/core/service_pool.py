@@ -169,7 +169,7 @@ class ServicePool:
                 ctx.audio_processor = None
 
             profile = cls._runtime_profile(config)
-            strict_runtime = profile in {"smoke", "production", "golden"}
+            strict_runtime = profile in {"smoke", "selftest", "production", "golden"}
             if strict_runtime:
                 # ServiceContext registers preload functions before returning.
                 # Await a post-registration pass even though the ASGI bootstrap
@@ -265,6 +265,7 @@ class ServicePool:
         if not cls.is_ready():
             if cls._runtime_profile(cls._runtime_config) in {
                 "smoke",
+                "selftest",
                 "production",
                 "golden",
             }:
@@ -426,7 +427,7 @@ class ServicePool:
         if cls._shutdown_requested or cls._init_state in {"closing", "closed"}:
             return False
         profile = cls._runtime_profile(cls._runtime_config)
-        if profile not in {"smoke", "production", "golden"}:
+        if profile not in {"smoke", "selftest", "production", "golden"}:
             return cls._ready or (
                 cls._init_state == "ready" and cls._llm is not None and cls._tts is not None
             )
@@ -438,7 +439,7 @@ class ServicePool:
     @staticmethod
     def _runtime_profile(config: Any | None) -> str:
         direct = getattr(config, "profile", None)
-        if direct in {"test", "smoke", "production"}:
+        if direct in {"test", "smoke", "selftest", "production"}:
             return direct
         try:
             profile = config.system.runtime_profile
@@ -446,7 +447,7 @@ class ServicePool:
             return "development"
         return (
             profile
-            if profile in {"development", "test", "smoke", "production", "golden"}
+            if profile in {"development", "test", "smoke", "selftest", "production", "golden"}
             else "development"
         )
 

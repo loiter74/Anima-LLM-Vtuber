@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from animetta.services.humor.history_safe import has_native_chat_messages
 from animetta.services.llm.interface import LLMInterface
+from animetta.services.llm.internal_calls import has_native_chat_messages
 
 from .contracts import (
     ComposerResult,
