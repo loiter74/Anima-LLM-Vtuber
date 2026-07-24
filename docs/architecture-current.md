@@ -183,18 +183,19 @@ emotion/viseme analysis.
 **Inspection probe path** (defense in depth, verified 2026-07-25):
 `inspection/checks/pipeline.py` connects as an external Socket.IO client and
 emits `chat:text` with `{"text": "[inspection] ping", "is_inspection": True}`.
-This is dropped at **three** layers:
-1. `ChatHandlers.on_text_event` → `is_probe_message(data)` (`chat_handlers.py:123`)
-2. `ChatTurnCommand._reject_unfiltered_probe` pydantic validator (`chat_contracts.py:160`)
-3. `reasoner_node` / `conversation_finalizer_node` re-check `metadata.is_inspection` (`dialogue_nodes.py:46,154`)
+This is dropped at **four** layers (the fourth was added in the follow-up to
+the 2026-07-25 audit):
+1. `ChatHandlers.on_text_event` → `is_probe_message(data)` (`chat_handlers.py:123`) — payload-flag + text-shape check at the canonical transport.
+2. `Live2DHandlers.on_desktop_chat_message` → `is_probe_message(data)` (`live2d_handlers.py:101`) — same check at the desktop transport (added by P0-1).
+3. `ChatTurnCommand._reject_unfiltered_probe` pydantic validator (`chat_contracts.py:160`) — fail-closed normalization.
+4. `LangGraphOrchestrator.process_text` → `should_skip_llm(text)` (`orchestrator.py`) — **centralized choke point**: the text-only probe check runs at the single entry all text takes into the model, so no transport caller (chat, desktop, Bilibili, or any future one) can route a probe-shaped text into the LLM. Added by P0-3 to close the whole transport-bypass class of bug.
+5. `reasoner_node` / `conversation_finalizer_node` re-check `metadata.is_inspection` (`dialogue_nodes.py:46,154`) — in-graph defense for payload-flagged probes.
 
-> ⚠️ **Gap (see audit-report P0-1)**: the **`desktop.chat_message`** event
-> (`routes.py:438` → `live2d_handlers.on_desktop_chat_message:99`) calls
-> `orchestrator.process_text` **directly**, bypassing `is_probe_message`,
-> `normalize_chat_command`, and never sets `is_inspection` metadata — so the
-> in-graph Layer 3 guards do not fire either. Any Socket.IO client that emits
-> `desktop.chat_message` can send probe-shaped or drift-inducing text straight
-> to the LLM.
+> The Bilibili danmaku caller (`bilibili_handlers.py:265`) wraps text as
+> `f"{user_name}说: {text}"` and never applied the handler-level filter, but
+> the centralized Layer 4 now covers it: a danmaku that happens to contain
+> `"ping"` as a substring (`"用户名说: ping"`) is **not** a bare probe token
+> and still flows through to the LLM (correct — it is real user text).
 
 ---
 

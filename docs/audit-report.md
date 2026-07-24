@@ -39,6 +39,19 @@ Risk levels: **P0** (bug / security / data-loss), **P1** (low-risk structural),
 
 ---
 
+## P0-3 — Probe containment enforced per-transport, not at the LLM boundary (class of bug)
+
+| | |
+|---|---|
+| **Problem** | The "probes never reach the LLM" invariant is enforced at each **transport handler** (`ChatHandlers`, `Live2DHandlers` after P0-1), not at the single choke point that all text takes into the model. Three callers invoke `LangGraphOrchestrator.process_text`: `ChatHandlers.on_text_command`, `Live2DHandlers.on_desktop_chat_message` (fixed in P0-1), and `BilibiliHandlers` (`bilibili_handlers.py:265`, wraps danmaku as `f"{user_name}说: {text}"` and passes it through unfiltered). Any future transport, or a regression in an existing one, can route probe-shaped text into the LLM. P0-1 was one instance of this class. |
+| **File locations** | Callers: `chat_handlers.py:169`, `live2d_handlers.py:106`, `bilibili_handlers.py:265`. Choke point: `src/animetta/orchestration/graph/orchestrator.py:process_text`. |
+| **Risk** | **P0** — the invariant is only as strong as the most forgetful caller. |
+| **Root cause** | The filter was added at the handler level historically; the orchestrator entry point was never made the authoritative gate. |
+| **Recommended fix** | Apply `message_filter.should_skip_llm(text)` (text-only check — bare `ping` / `[inspection]` prefix / exact probe token) inside `process_text` as defense-in-depth, short-circuiting the graph run when it fires. This is purely a backstop: real user text still flows through (a danmaku `"用户名说: ping"` is a substring, not a bare probe token, so it correctly passes). The per-handler filters remain for payload-flag + transport-contract concerns. |
+| **Auto-fixable?** | **Yes** — done in this pass (follow-up commit). Regression tests added in `tests/orchestration/graph/test_orchestrator.py::TestOrchestratorCentralIngressFilter`. |
+
+---
+
 ## P1-1 — Dead `BLEED_MARKERS` telemetry surface has zero consumers
 
 | | |
