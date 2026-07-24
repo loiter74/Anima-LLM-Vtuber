@@ -28,9 +28,14 @@ from .tool_manager import ToolManager
 
 
 class LangGraphOrchestrator:
-    """LangGraph orchestrator"""
+    """LangGraph orchestrator
 
-    _instances: dict[str, LangGraphOrchestrator] = {}
+    Per-session instances are owned by ``SessionManager.orchestrators`` (the
+    real registry, cleaned up in ``cleanup_session``). This class deliberately
+    does **not** keep its own class-level registry — an earlier ``_instances``
+    dict was populated by ``create()`` but never read or evicted, which caused
+    an unbounded memory leak across sessions.
+    """
 
     def __init__(
         self,
@@ -421,7 +426,12 @@ class LangGraphOrchestrator:
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
     ) -> LangGraphOrchestrator:
-        """Create orchestrator instance"""
+        """Create orchestrator instance
+
+        The returned orchestrator is owned by the caller (``SessionManager``
+        stores it in its per-session ``orchestrators`` dict and is responsible
+        for cleanup via ``orchestrator.stop()``).
+        """
         orchestrator = LangGraphOrchestrator(
             service_context=service_context,
             socketio=socketio,
@@ -433,21 +443,4 @@ class LangGraphOrchestrator:
         )
 
         await orchestrator.start()
-        cls._instances[session_id] = orchestrator
         return orchestrator
-
-    @classmethod
-    def get(cls, session_id: str) -> LangGraphOrchestrator | None:
-        return cls._instances.get(session_id)
-
-    @classmethod
-    async def remove(cls, session_id: str) -> None:
-        orchestrator = cls._instances.pop(session_id, None)
-        if orchestrator:
-            await orchestrator.stop()
-
-    @classmethod
-    async def clear_all(cls) -> None:
-        for session_id, orchestrator in cls._instances.items():
-            await orchestrator.stop()
-        cls._instances.clear()
