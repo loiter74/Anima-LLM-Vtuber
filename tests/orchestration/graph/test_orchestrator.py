@@ -164,6 +164,93 @@ class TestOrchestratorProcessText:
         assert trace.trace_id == finish[0]
 
 
+class TestOrchestratorCentralIngressFilter:
+    """Defense-in-depth: process_text drops probe-shaped text itself.
+
+    Even if a transport handler forgets to call ``is_probe_messages`` (the
+    historical ``desktop.chat_message`` and Bilibili danmaku paths did not),
+    a probe-shaped text is dropped here so no caller can route an internal
+    probe into the LLM. This is the centralized fix for the transport-bypass
+    class of bug (audit P0-1 was one instance).
+    """
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "ping",
+            "PING",
+            "  Ping  ",
+            "pong",
+            "healthcheck",
+            "[inspection] secret payload",
+            "[health] ok",
+            "[probe] 1+1",
+            "   ",  # whitespace-only — nothing to say
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_probe_shaped_text_short_circuits_without_graph_run(
+        self, orchestrator, mock_graph, text
+    ):
+        await orchestrator.start()
+        mock_graph.ainvoke.reset_mock()
+
+        result = await orchestrator.process_text(text=text)
+
+        # The graph (and therefore the LLM) must never run for a probe.
+        mock_graph.ainvoke.assert_not_awaited()
+        # No error — the turn is simply dropped.
+        assert result.get("error") is None
+        assert result["response_text"] == ""
+        assert result["response_chunks"] == []
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "hello",
+            "讲个笑话",
+            # A danmaku that happens to contain "ping" as a substring is NOT a
+            # bare probe token and must still flow through to the LLM.
+            "用户名说: ping",
+            "ping 我一下呗",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_real_text_runs_the_graph(self, orchestrator, mock_graph, text):
+        await orchestrator.start()
+        mock_graph.ainvoke.reset_mock()
+
+        await orchestrator.process_text(text=text)
+
+        mock_graph.ainvoke.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_probe_short_circuit_preserves_chat_identity(
+        self, orchestrator, mock_graph
+    ):
+        """Dropped probes still echo the caller-supplied identity fields."""
+        await orchestrator.start()
+        result = await orchestrator.process_text(
+            text="ping",
+            message_id="mid",
+            conversation_id="cid",
+            task_id="tid",
+            turn_id="tid",
+        )
+        assert result["message_id"] == "mid"
+        assert result["conversation_id"] == "cid"
+        assert result["task_id"] == "tid"
+        assert result["turn_id"] == "tid"
+
+    @pytest.mark.asyncio
+    async def test_probe_check_happens_after_running_state(self, orchestrator, mock_graph):
+        """A probe on a not-started orchestrator returns the not-started error,
+        not the probe-drop result — running-state check takes precedence."""
+        result = await orchestrator.process_text(text="ping")
+        assert "error" in result
+        mock_graph.ainvoke.assert_not_awaited()
+
+
 class TestOrchestratorProcessAudio:
     """Audio processing flow."""
 
