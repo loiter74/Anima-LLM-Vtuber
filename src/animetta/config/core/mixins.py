@@ -9,7 +9,23 @@ Usage:
         pass  # All common fields come from Mixins
 """
 
+import warnings
+
 from pydantic import Field
+
+# Provider configs intentionally re-declare mixin fields (``model``, ``base_url``,
+# ``temperature``, ``top_p``) to supply provider-specific defaults like
+# ``model="deepseek-chat"`` or ``base_url="http://localhost:8765"``. Pydantic V2
+# emits a ``UserWarning`` for every such override (30+ providers × 1-3 fields =
+# hundreds of warnings per test run). The override is deliberate and safe — the
+# subclass default wins, exactly as intended — so silence the noise here, at the
+# single source of the inherited fields, rather than per-provider.
+# If a future change makes a shadow unintentional, remove this filter to surface it.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*shadows an attribute in parent.*",
+    category=UserWarning,
+)
 
 
 class ApiKeyMixin:
