@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from loguru import logger
+
 from animetta.inspection.checks.consistency import (
     check_data_consistency,
     chroma_responds,
@@ -59,3 +62,61 @@ async def test_runtime_error_is_reported_without_private_database_probe() -> Non
     result = await check_data_consistency(runtime)
     assert result.ok is False
     assert result.detail["memory_runtime_ok"] is False
+
+
+# ── Probe-failure diagnostics (P1-3) ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "probe_fn, setup",
+    [
+        (
+            # observation_ledger_responds(runtime)
+            lambda r: observation_ledger_responds(r),
+            lambda r: setattr(
+                r.observation_query, "observation_health", AsyncMock(side_effect=RuntimeError("boom"))
+            ),
+        ),
+        (
+            # has_trace_in_last(minutes, runtime) — note the leading minutes arg
+            lambda r: has_trace_in_last(60, r),
+            lambda r: setattr(
+                r.observation_query, "recent_traces", AsyncMock(side_effect=RuntimeError("boom"))
+            ),
+        ),
+        (
+            # chroma_responds(runtime)
+            lambda r: chroma_responds(r),
+            lambda r: setattr(
+                r.memory_runtime, "health", AsyncMock(side_effect=RuntimeError("boom"))
+            ),
+        ),
+    ],
+)
+async def test_probe_exception_logs_warning_and_returns_false(probe_fn, setup) -> None:
+    """When a probe dependency raises, the check must log the root cause.
+
+    Regression: previously these three probes swallowed every exception
+    silently and returned False, making inspection failures invisible.
+    The check still returns False (degraded), but the failure is now visible
+    in logs instead of disappearing.
+    """
+    runtime = _runtime()
+    setup(runtime)
+
+    # Capture loguru output via a temporary in-memory sink. Loguru does not
+    # route through stdlib ``logging`` by default, so pytest's ``caplog``
+    # fixture cannot see it.
+    captured: list[str] = []
+
+    def _sink(message) -> None:
+        captured.append(str(message))
+
+    handler_id = logger.add(_sink, level="WARNING")
+    try:
+        result = await probe_fn(runtime)
+    finally:
+        logger.remove(handler_id)
+
+    assert result is False
+    assert any("probe failed" in line and "boom" in line for line in captured)

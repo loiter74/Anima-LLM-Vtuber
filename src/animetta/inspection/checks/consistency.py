@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+from loguru import logger
+
 from ..models import CheckResult
 from ..runtime import InspectionRuntime
 
@@ -15,7 +17,11 @@ async def observation_ledger_responds(runtime: InspectionRuntime | None = None) 
         health = await runtime.observation_query.observation_health()
         overview = await runtime.observation_query.overview()
         return bool(health.ready and overview.get("schema_version") == 2)
-    except Exception:
+    except Exception as exc:
+        # Previously swallowed silently — a failed readiness probe is exactly
+        # the case where a diagnostic log matters most. Keep returning False
+        # (degraded) but surface the root cause at warning level.
+        logger.warning(f"[inspection:consistency] observation_ledger probe failed: {exc}")
         return False
 
 
@@ -25,7 +31,8 @@ async def has_trace_in_last(minutes: int, runtime: InspectionRuntime | None = No
         return False
     try:
         return bool(await runtime.observation_query.recent_traces(1, 0))
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"[inspection:consistency] recent_trace probe failed: {exc}")
         return False
 
 
@@ -35,7 +42,8 @@ async def chroma_responds(runtime: InspectionRuntime | None = None) -> bool:
     try:
         health = await runtime.memory_runtime.health()
         return bool(health.get("ready") and not health.get("last_error"))
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"[inspection:consistency] chroma health probe failed: {exc}")
         return False
 
 

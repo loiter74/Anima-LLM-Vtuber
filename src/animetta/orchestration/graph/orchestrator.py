@@ -12,6 +12,7 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.core.message_filter import should_skip_llm
 from animetta.observability.conversation import ConversationObserver
 from animetta.observability.domain import PrivacyMode
 from animetta.observability.ports import (
@@ -28,9 +29,14 @@ from .tool_manager import ToolManager
 
 
 class LangGraphOrchestrator:
-    """LangGraph orchestrator"""
+    """LangGraph orchestrator
 
-    _instances: dict[str, LangGraphOrchestrator] = {}
+    Per-session instances are owned by ``SessionManager.orchestrators`` (the
+    real registry, cleaned up in ``cleanup_session``). This class deliberately
+    does **not** keep its own class-level registry — an earlier ``_instances``
+    dict was populated by ``create()`` but never read or evicted, which caused
+    an unbounded memory leak across sessions.
+    """
 
     def __init__(
         self,
@@ -166,9 +172,36 @@ class LangGraphOrchestrator:
         turn_id: str | None = None,
         **metadata,
     ) -> dict[str, Any]:
-        """Process text input"""
+        """Process text input.
+
+        Central ingress defense: even if a transport handler forgets to call
+        ``is_probe_message`` (the historical ``desktop.chat_message`` and
+        Bilibili danmaku paths did not), a probe-shaped text — bare ``"ping"``,
+        ``"[inspection] ..."`` etc. — is dropped here before the graph runs,
+        so no caller can route an internal probe into the LLM. This mirrors the
+        text-only branch of ``message_filter.should_skip_llm`` and is purely a
+        backstop: real user text (including a danmaku that happens to say
+        ``"用户名说: ping"``, which is not a bare probe token) still flows
+        through unchanged.
+        """
         if not self._is_running:
             return {"error": "Orchestrator not started"}
+
+        if should_skip_llm(text):
+            logger.debug(
+                f"[{self.session_id}] [LangGraph] Dropping probe-shaped text before graph run"
+            )
+            return {
+                "response_text": "",
+                "response_chunks": [],
+                "tts_audio": None,
+                "emotion": None,
+                "error": None,
+                "message_id": message_id,
+                "conversation_id": conversation_id,
+                "task_id": task_id,
+                "turn_id": turn_id,
+            }
 
         logger.info(f"[{self.session_id}] [LangGraph] Processing text input: {text[:50]}...")
 
@@ -421,7 +454,12 @@ class LangGraphOrchestrator:
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
     ) -> LangGraphOrchestrator:
-        """Create orchestrator instance"""
+        """Create orchestrator instance
+
+        The returned orchestrator is owned by the caller (``SessionManager``
+        stores it in its per-session ``orchestrators`` dict and is responsible
+        for cleanup via ``orchestrator.stop()``).
+        """
         orchestrator = LangGraphOrchestrator(
             service_context=service_context,
             socketio=socketio,
@@ -433,21 +471,4 @@ class LangGraphOrchestrator:
         )
 
         await orchestrator.start()
-        cls._instances[session_id] = orchestrator
         return orchestrator
-
-    @classmethod
-    def get(cls, session_id: str) -> LangGraphOrchestrator | None:
-        return cls._instances.get(session_id)
-
-    @classmethod
-    async def remove(cls, session_id: str) -> None:
-        orchestrator = cls._instances.pop(session_id, None)
-        if orchestrator:
-            await orchestrator.stop()
-
-    @classmethod
-    async def clear_all(cls) -> None:
-        for session_id, orchestrator in cls._instances.items():
-            await orchestrator.stop()
-        cls._instances.clear()

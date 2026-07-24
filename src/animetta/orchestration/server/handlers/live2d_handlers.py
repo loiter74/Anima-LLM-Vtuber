@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from animetta.core.message_filter import is_probe_message
 from animetta.services.live2d.action_queue import ActionMessage
 
 from ...socket_events import EVENTS
@@ -97,7 +98,26 @@ class Live2DHandlers:
         await self.sio.emit(EVENTS["desktop"]["action_queued"]["name"], result, to=sid)
 
     async def on_desktop_chat_message(self, sid: str, data: dict) -> None:
-        """Handle chat message from Electron Chat window."""
+        """Handle chat message from Electron Chat window.
+
+        Routes through the same ingress filter as the canonical ``chat:text``
+        event so inspection/health probes never reach the LLM. This is the
+        desktop-transport equivalent of ``ChatHandlers.on_text_event``'s
+        ``is_probe_message`` guard; without it, any Socket.IO client that
+        emits ``desktop.chat_message`` could send probe-shaped text (e.g.
+        ``"ping"``, ``"[inspection] ..."``) straight into ``process_text``,
+        bypassing the three-layer probe containment documented in
+        ``core/message_filter.py``.
+        """
+        if is_probe_message(data):
+            logger.debug(
+                f"[{sid}] [Desktop][Chat] Dropping inspection/health probe before dispatch"
+            )
+            return
+
+        # is_probe_message above drops non-dict payloads, non-string ``text``,
+        # and empty/whitespace text, so reaching here ``text`` is a non-empty
+        # string that is safe to slice and dispatch.
         text = data.get("text", "")
         logger.info(f"[Desktop][Chat] Received message: {text[:50]}...")
 

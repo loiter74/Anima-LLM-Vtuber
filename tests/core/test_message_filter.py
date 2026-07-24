@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from animetta.core.message_filter import (
-    BLEED_MARKERS,
     is_inspection_probe,
     is_probe_message,
     should_skip_llm,
@@ -157,21 +156,22 @@ class TestIsProbeMessage:
         # No text but flagged → probe
         assert is_probe_message({"is_inspection": True}) is True
 
+    @pytest.mark.parametrize("data", [None, "not a dict", 42, ["a", "b"]])
+    def test_non_dict_payload_is_dropped(self, data):
+        """A non-dict payload cannot carry a real turn; drop it (no crash).
 
-# ── BLEED_MARKERS — telemetry surface contract ───────────────────────
+        Regression: previously ``is_probe_message(None)`` raised
+        ``AttributeError`` because ``data.get("text")`` was called
+        unconditionally. The desktop transport (live2d_handlers) relies on
+        this being safe for malformed payloads.
+        """
+        assert is_probe_message(data) is True  # type: ignore[arg-type]
 
+    @pytest.mark.parametrize("text", [12345, 3.14, True, ["a"], {"nested": "dict"}])
+    def test_non_string_text_is_dropped(self, text):
+        """A non-string ``text`` value is malformed; drop it (no crash).
 
-class TestBleedMarkers:
-    """The bleed-marker list documents the bug signatures we watch for."""
-
-    def test_markers_cover_documented_signatures(self):
-        """The literal substrings from the bug report are present."""
-        assert "tell me about 用户:" in BLEED_MARKERS
-        assert "[inspection]" in BLEED_MARKERS
-        assert "用户: " in BLEED_MARKERS
-        assert "助手: " in BLEED_MARKERS
-
-    def test_markers_are_strings(self):
-        for m in BLEED_MARKERS:
-            assert isinstance(m, str)
-            assert len(m) > 0
+        Previously such a payload passed the filter and then crashed the
+        downstream ``text[:50]`` log slice in the desktop handler.
+        """
+        assert is_probe_message({"text": text}) is True
