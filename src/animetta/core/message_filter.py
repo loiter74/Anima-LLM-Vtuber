@@ -40,18 +40,6 @@ _PROBE_TOKENS: frozenset[str] = frozenset(
     }
 )
 
-# Substrings that signal prompt-injection / context-bleed attempts. These are
-# NOT used to skip the LLM (we still want Anima to respond in character), but
-# callers may use them for telemetry. Kept here so the filter is the single
-# source of truth for "what does a probe look like?".
-BLEED_MARKERS: tuple[str, ...] = (
-    "tell me about 用户:",
-    "tell me about 助手:",
-    "用户: ",
-    "助手: ",
-    "[inspection]",
-)
-
 
 def should_skip_llm(text: str) -> bool:
     """Return True when ``text`` is a probe and should NOT reach the LLM.
@@ -115,14 +103,26 @@ def is_probe_message(data: dict[str, Any]) -> bool:
     This is the canonical entry point for ingress handlers — call this once
     at the top of ``on_text_input`` and short-circuit when it returns True.
 
+    A non-dict payload (e.g. ``None``, a bare string, a list) is treated as a
+    probe and dropped: it cannot carry a real conversational turn, and letting
+    it through would crash the downstream ``data.get("text")`` reads. This is
+    the conservative choice — when uncertain, drop.
+
     Args:
         data: The raw payload dict received on the ``chat:text`` event.
 
     Returns:
         True if the message should be dropped before orchestrator dispatch.
     """
+    if not isinstance(data, dict):
+        return True
+
     if is_inspection_probe(data):
         return True
 
     text = data.get("text", "")
-    return isinstance(text, str) and should_skip_llm(text)
+    # A missing or non-string ``text`` cannot be a real conversational turn;
+    # drop it rather than letting a malformed payload reach the LLM.
+    if not isinstance(text, str):
+        return True
+    return should_skip_llm(text)
