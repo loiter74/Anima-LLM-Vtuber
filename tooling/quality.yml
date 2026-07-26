@@ -35,6 +35,7 @@ input_sets:
   frontend-runtime:
     paths:
       - frontend/src/**
+      - frontend/tests/**
       - frontend/public/**
       - frontend/electron/**
       - frontend/scripts/**
@@ -767,6 +768,7 @@ components:
     domain: frontend
     paths:
       - frontend/src/**
+      - frontend/tests/**
       - frontend/electron/**
       - frontend/scripts/**
       - frontend/*.mjs

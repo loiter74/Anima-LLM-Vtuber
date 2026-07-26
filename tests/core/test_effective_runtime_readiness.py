@@ -41,10 +41,22 @@ class _StaticFailoverTTS:
             "primary": {
                 "ready": self.primary_ready,
                 "error_category": None if self.primary_ready else "billing",
+                "identity": {
+                    "type": "dashscope",
+                    "provider": "dashscope",
+                    "model": "qwen3-tts-instruct-flash-realtime",
+                    "voice": "Seren",
+                },
             },
             "fallback": {
                 "ready": self.fallback_ready,
                 "error_category": None if self.fallback_ready else "connection",
+                "identity": {
+                    "type": "remote",
+                    "provider": "qwen3-tts",
+                    "model": "Qwen3-TTS-12Hz-1.7B-Base",
+                    "voice": "tosaka-rin-cn",
+                },
             },
             "circuit": {
                 "state": "closed" if self.primary_ready else "open",
@@ -193,8 +205,16 @@ def test_production_tts_exposes_exact_composite_and_child_status(
     assert tts["resolved"]["provider"] == "failover"
     assert tts["degraded"] is False
     assert tts["active_backend"] == "primary"
-    assert tts["primary"] == {"ready": True, "error_category": None}
-    assert tts["fallback"] == {"ready": True, "error_category": None}
+    assert tts["primary"]["ready"] is True
+    assert tts["primary"]["error_category"] is None
+    assert tts["primary"]["identity"] == {
+        "type": "dashscope",
+        "provider": "dashscope",
+        "model": "qwen3-tts-instruct-flash-realtime",
+        "voice": "Seren",
+    }
+    assert tts["fallback"]["ready"] is True
+    assert tts["fallback"]["error_category"] is None
 
 
 @pytest.mark.parametrize(

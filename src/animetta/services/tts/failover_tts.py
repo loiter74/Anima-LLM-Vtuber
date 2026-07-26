@@ -34,6 +34,10 @@ _METRIC_REASONS = {
 }
 
 
+def _safe_identity_value(value: Any) -> str | None:
+    return str(value) if isinstance(value, (str, int, float)) else None
+
+
 class FailoverTTSUnavailableError(RuntimeError):
     """Neither configured backend could be preloaded."""
 
@@ -399,6 +403,8 @@ class FailoverTTS(TTSInterface):
             if self._fallback_ready
             else None
         )
+        primary_identity = self._child_identity(self.primary)
+        fallback_identity = self._child_identity(self.fallback)
         return {
             "ready": ready,
             "degraded": ready
@@ -410,15 +416,34 @@ class FailoverTTS(TTSInterface):
             "primary": {
                 "ready": self._primary_ready,
                 "error_category": self._primary_error_category,
+                **({"identity": primary_identity} if any(primary_identity.values()) else {}),
             },
             "fallback": {
                 "ready": self._fallback_ready,
                 "error_category": self._fallback_error_category,
+                **({"identity": fallback_identity} if any(fallback_identity.values()) else {}),
             },
             "circuit": {
                 "state": self._circuit_state,
                 "cooldown_remaining_seconds": remaining,
             },
+        }
+
+    @staticmethod
+    def _child_identity(child: TTSInterface) -> dict[str, str | None]:
+        supplied = getattr(child, "resolved_identity", None)
+        if not isinstance(supplied, dict):
+            supplied = {}
+        provider = supplied.get("provider")
+        if provider is None:
+            provider = getattr(child, "provider_identity", None)
+        if provider is None:
+            provider = getattr(child, "provider", None)
+        return {
+            "type": _safe_identity_value(supplied.get("type")),
+            "provider": _safe_identity_value(provider),
+            "model": _safe_identity_value(supplied.get("model", getattr(child, "model", None))),
+            "voice": _safe_identity_value(supplied.get("voice", getattr(child, "voice", None))),
         }
 
     @property

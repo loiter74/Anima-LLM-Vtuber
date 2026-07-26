@@ -88,8 +88,8 @@ button {
 }
 .danmaku-panel {
   position: absolute;
+  top: var(--live-danmaku-panel-top, 108px);
   right: 28px;
-  bottom: 36px;
   z-index: 12;
   width: min(420px, calc(100vw - 56px));
   overflow: hidden;
@@ -124,21 +124,14 @@ button {
   color: var(--c-text-muted);
   font-size: 12px;
 }
-.toggle-panel {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: var(--c-accent-soft);
-  color: var(--c-accent);
-  cursor: pointer;
-}
 .danmaku-list {
-  max-height: min(520px, 42vh);
+  max-height: min(290px, 24vh);
   overflow: auto;
+  scrollbar-width: none;
   padding: 6px 18px 14px;
+}
+.danmaku-list::-webkit-scrollbar {
+  display: none;
 }
 .danmaku-item {
   padding: 12px 0;
@@ -155,10 +148,32 @@ button {
   color: var(--c-text-muted);
   font-size: 11px;
 }
+.danmaku-identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .danmaku-user {
   color: var(--c-accent);
   font-size: 12px;
   font-weight: 600;
+}
+.danmaku-kind {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.danmaku-kind--gift {
+  background: color-mix(in srgb, var(--c-success) 14%, transparent);
+  color: var(--c-success);
+}
+.danmaku-kind--super-chat {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
 }
 .danmaku-item p {
   margin: 5px 0 0;
@@ -173,13 +188,6 @@ button {
   text-align: center;
   font-size: 13px;
 }
-.danmaku-panel.is-collapsed .danmaku-list,
-.danmaku-panel.is-collapsed .empty-state {
-  display: none;
-}
-.danmaku-panel.is-collapsed .panel-header {
-  border-bottom: 0;
-}
 @keyframes enter {
   from {
     opacity: 0;
@@ -192,8 +200,8 @@ button {
 }
 @media (max-width: 600px) {
   .danmaku-panel {
+    top: 16px;
     right: 16px;
-    bottom: 20px;
     width: calc(100vw - 32px);
   }
   .status-rail {

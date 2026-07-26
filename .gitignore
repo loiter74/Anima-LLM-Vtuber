@@ -155,3 +155,5 @@ smoke_test_result.json
 
 # Temporary files
 tmp/
+artifacts/live-review/
+artifacts/playwright/

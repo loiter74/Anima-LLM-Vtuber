@@ -15,13 +15,16 @@ function harness(search = '') {
     }),
     emit: vi.fn(),
   }
-  const view: LiveView = {
+  const view = {
     renderMessages: vi.fn(),
     setSocketState: vi.fn(),
     setLivestreamStatus: vi.fn(),
     setCollapsed: vi.fn(),
     setBackground: vi.fn(),
     bindToggle: vi.fn(),
+  } satisfies LiveView & {
+    setCollapsed: ReturnType<typeof vi.fn>
+    bindToggle: ReturnType<typeof vi.fn>
   }
   const controller = createLiveController({
     socket,
@@ -86,14 +89,19 @@ describe('standalone live controller', () => {
     })
   })
 
-  it('injects demo content only when demo=1', () => {
+  it('leaves review fixture injection to the selected socket runtime', () => {
     const normal = harness()
     const demo = harness('demo=1')
 
     expect(normal.controller.messages).toHaveLength(0)
-    expect(demo.controller.messages.length).toBeGreaterThan(0)
-    expect(demo.view.setLivestreamStatus).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'reconnecting', retry_count: 2 }),
-    )
+    expect(demo.controller.messages).toHaveLength(0)
+    expect(demo.view.setLivestreamStatus).not.toHaveBeenCalled()
+  })
+
+  it('does not bind the removed collapse interaction', () => {
+    const { view } = harness()
+
+    expect(view.bindToggle).not.toHaveBeenCalled()
+    expect(view.setCollapsed).not.toHaveBeenCalled()
   })
 })

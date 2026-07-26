@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Animetta Live</title>
+    <link rel="icon" href="/favicon.svg" />
     <script src="/live2d/live2dcubismcore.min.js"></script>
   </head>
   <body>
@@ -26,15 +27,6 @@
             <h1 class="panel-title">实时弹幕</h1>
           </div>
           <span class="message-count" id="messageCount">0</span>
-          <button
-            class="toggle-panel"
-            id="togglePanel"
-            type="button"
-            aria-label="折叠弹幕"
-            aria-expanded="true"
-          >
-            ⌄
-          </button>
         </header>
         <div class="empty-state" id="emptyState">等待直播弹幕…</div>
         <div class="danmaku-list" id="danmakuList" aria-live="polite"></div>

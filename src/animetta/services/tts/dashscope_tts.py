@@ -27,6 +27,7 @@ from .interface import TTSInterface
 from .remote_tts import RemoteTTSError
 
 _ACCOUNT_STANDING_ERROR = "access denied, please make sure your account is in good standing"
+_ACCOUNT_STANDING_CODES = {"accountnotingoodstanding", "account_not_in_good_standing"}
 
 
 class DashScopeError(RemoteTTSError):
@@ -448,15 +449,22 @@ class DashScopeRealtimeTTS(TTSInterface):
             if isinstance(error, Mapping)
             else "remote_error"
         )
+        message = str(error.get("message") or "") if isinstance(error, Mapping) else ""
+        normalized_code = code.replace("-", "_").lower()
+        billing = (
+            normalized_code in _ACCOUNT_STANDING_CODES or "not in good standing" in message.lower()
+        )
         category = (
-            "authentication"
-            if code in {"invalid_api_key", "authentication_error"}
+            "billing"
+            if billing
+            else "authentication"
+            if normalized_code in {"invalid_api_key", "authentication_error"}
             else "provider_error"
         )
         return DashScopeError(
             f"DashScope realtime failed: {code}",
             category=category,
-            retryable=category != "authentication",
+            retryable=category not in {"authentication", "billing"},
         )
 
     def _headers(self) -> dict[str, str]:

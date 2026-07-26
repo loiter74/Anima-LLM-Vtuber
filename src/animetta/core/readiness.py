@@ -550,9 +550,15 @@ def _safe_failover_status(status: dict[str, Any]) -> dict[str, Any]:
     def child(value: Any) -> dict[str, Any]:
         value = value if isinstance(value, dict) else {}
         category = value.get("error_category")
+        identity = value.get("identity")
+        identity = identity if isinstance(identity, dict) else {}
         return {
             "ready": value.get("ready") is True,
             "error_category": category if category in safe_categories else "provider_error",
+            "identity": {
+                field: _safe_identity_value(identity.get(field))
+                for field in ("type", "provider", "model", "voice")
+            },
         }
 
     circuit = circuit if isinstance(circuit, dict) else {}

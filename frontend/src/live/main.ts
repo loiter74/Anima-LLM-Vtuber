@@ -1,11 +1,17 @@
 import { io } from 'socket.io-client'
 import * as PIXI from 'pixi.js'
-import { Live2DModel } from 'pixi-live2d-display/cubism4'
-import { Events } from '@/constants/socket-events'
-import type { Live2DAction } from '@/types/live2d'
-import { createLiveController, type LiveSocket } from './controller'
+import { mountTtsFailoverReviewNotification } from '@/tts-failover/main'
+import { DisposerStack } from '@/review/disposable'
+import { bootstrapLiveSession } from './bootstrap'
+import type { LiveSocket } from './controller'
+import { applyLiveReviewLayout } from './layout'
+import { createLive2DStage } from './live2d-stage'
+import { parseReviewMouthTimeline } from './review-lip-sync'
+import type { LiveSocketRuntime } from './socket-runtime'
 import { createDomLiveView } from './view'
+import 'virtual:uno.css'
 import './styles.css'
+import '@/tts-failover/styles.css'
 
 declare global {
   interface Window {
@@ -14,74 +20,64 @@ declare global {
 }
 
 window.PIXI = PIXI
+applyLiveReviewLayout(document.documentElement)
+const search = new URLSearchParams(window.location.search)
 
-const socket = io(window.location.origin, {
-  path: '/socket.io/',
-  transports: ['websocket', 'polling'],
-  reconnection: true,
-  reconnectionDelay: 3000,
-  reconnectionAttempts: Infinity,
-  timeout: 120000,
-})
-
-const liveSocket: LiveSocket = {
-  on(event, handler) {
-    socket.on(event, handler)
-    return liveSocket
-  },
-  off(event, handler) {
-    socket.off(event, handler)
-    return liveSocket
-  },
-}
-
-createLiveController({
-  socket: liveSocket,
-  view: createDomLiveView(document),
-})
-
-async function initializeLive2D(): Promise<void> {
-  const canvas = document.getElementById('live2dCanvas')
-  const state = document.getElementById('modelStatus')
-  if (!(canvas instanceof HTMLCanvasElement) || !state) return
-
-  try {
-    const app = new PIXI.Application({
-      view: canvas,
-      resizeTo: window,
-      backgroundAlpha: 0,
-      autoStart: true,
-    })
-    const model = await Live2DModel.from('/live2d/hiyori/Hiyori.model3.json', {
-      autoInteract: false,
-    })
-    const baseWidth = model.width / model.scale.x
-    const baseHeight = model.height / model.scale.y
-
-    const layout = (): void => {
-      const scale = Math.min(
-        (app.screen.width * 0.88) / baseWidth,
-        (app.screen.height * 0.82) / baseHeight,
-      )
-      model.scale.set(scale)
-      model.anchor.set(0.5, 0.5)
-      model.position.set(app.screen.width * 0.5, app.screen.height * 0.55)
-    }
-
-    app.stage.addChild(model)
-    layout()
-    window.addEventListener('resize', layout)
-    socket.on(Events.CHAT.LIVE2D_ACTION, (action: Live2DAction) => {
-      if (action.type === 'expression' && action.name) model.expression(action.name)
-      if (action.type === 'motion' && action.group) model.motion(action.group, action.index ?? 0)
-    })
-    state.textContent = 'Live2D 已加载'
-    state.dataset.state = 'live'
-  } catch (error) {
-    state.textContent = 'Live2D 加载失败'
-    state.dataset.state = 'error'
-    console.error('[Live] Live2D initialization failed', error)
+function createNetworkRuntime(): LiveSocketRuntime {
+  const socket = io(window.location.origin, {
+    path: '/socket.io/',
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 3000,
+    reconnectionAttempts: Infinity,
+    timeout: 120000,
+  })
+  const liveSocket: LiveSocket = {
+    on(event, handler) {
+      socket.on(event, handler)
+      return liveSocket
+    },
+    off(event, handler) {
+      socket.off(event, handler)
+      return liveSocket
+    },
+  }
+  return {
+    mode: 'network',
+    socket: liveSocket,
+    start() {},
+    dispose() {
+      socket.disconnect()
+    },
   }
 }
 
-void initializeLive2D()
+const session = bootstrapLiveSession({
+  search,
+  view: createDomLiveView(document),
+  createNetworkRuntime,
+})
+
+const pageDisposers = new DisposerStack()
+let pageDisposed = false
+const live2dStage = createLive2DStage(session.socket)
+pageDisposers.add(() => session.dispose())
+pageDisposers.add(() => live2dStage.dispose())
+const disposePage = (): void => {
+  if (pageDisposed) return
+  pageDisposed = true
+  pageDisposers.dispose()
+}
+window.addEventListener('beforeunload', disposePage, { once: true })
+pageDisposers.add(() => window.removeEventListener('beforeunload', disposePage))
+
+void live2dStage.ready.finally(() => {
+  if (pageDisposed) return
+  const notification = mountTtsFailoverReviewNotification(document, search, { autoplay: false })
+  if (notification) {
+    pageDisposers.add(() => notification.dispose())
+    const volumes = parseReviewMouthTimeline(search.get('mouthTimeline'))
+    live2dStage.playReviewAudio(notification.element, volumes)
+  }
+  session.start()
+})

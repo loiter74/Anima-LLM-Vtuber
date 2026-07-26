@@ -48,3 +48,15 @@ The service pool SHALL not restart or close shared LLM, TTS, or ASR engines as p
 - **WHEN** runtime reload fails validation
 - **THEN** the shared LLM, TTS, and ASR engines SHALL retain their previous settings and prompt
 
+### Requirement: ServicePool shares one composite TTS
+ServicePool SHALL construct and share one composite TTS instance whose child lifecycle is owned and closed exactly once by the composite.
+
+#### Scenario: One child preloads
+- **WHEN** one composite child preloads successfully and the other fails
+- **THEN** ServicePool SHALL retain the composite engine and become ready in degraded mode
+
+#### Scenario: Composite shutdown
+- **WHEN** ServicePool shuts down
+- **THEN** both child engines SHALL be closed exactly once
+- **AND** later child completion SHALL NOT make ServicePool ready again
+

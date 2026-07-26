@@ -298,6 +298,34 @@ async def test_preload_classifies_account_standing_failure_as_nonretryable_billi
     assert len(connector.calls) == 1
 
 
+async def test_protocol_error_classifies_account_not_in_good_standing_as_billing() -> None:
+    module = importlib.import_module("animetta.services.tts.dashscope_tts")
+    connector = FakeConnector(
+        [
+            FakeWebSocket(
+                [
+                    {"type": "session.created", "session": {"id": "session-a"}},
+                    {
+                        "type": "error",
+                        "error": {
+                            "code": "AccountNotInGoodStanding",
+                            "message": "Account balance is not in good standing",
+                        },
+                    },
+                ]
+            )
+        ]
+    )
+    service = module.DashScopeRealtimeTTS(api_key="secret", connector=connector)
+
+    with pytest.raises(module.DashScopeError) as exc_info:
+        await service.preload()
+
+    assert exc_info.value.category == "billing"
+    assert exc_info.value.retryable is False
+    assert len(connector.calls) == 1
+
+
 async def test_different_instructions_use_isolated_hot_connections() -> None:
     module = importlib.import_module("animetta.services.tts.dashscope_tts")
     sockets = [

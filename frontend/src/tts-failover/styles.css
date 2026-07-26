@@ -1,0 +1,138 @@
+.tts-failover-notification {
+  position: absolute;
+  top: 28px;
+  left: var(--tts-failover-island-left, 50%);
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  max-width: var(--tts-failover-island-max-width, calc(100vw - 56px));
+  border: 1px solid color-mix(in srgb, var(--c-border-accent) 58%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--c-panel) 52%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--c-bg) 46%, transparent);
+  backdrop-filter: blur(20px);
+  pointer-events: none;
+  animation: tts-failover-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    width 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    min-height 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tts-failover-notification[data-state='expanded'] {
+  width: min(280px, var(--tts-failover-island-max-width, 280px));
+  min-height: 52px;
+  padding: 7px 14px;
+}
+
+.tts-failover-notification[data-state='collapsed'] {
+  width: min(180px, var(--tts-failover-island-max-width, 180px));
+  min-height: 32px;
+  padding: 3px 12px;
+}
+
+.tts-failover-indicator {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: var(--c-warning);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c-warning) 70%, transparent);
+}
+
+.tts-failover-notification[data-state='collapsed'] .tts-failover-indicator {
+  background: var(--c-success);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c-success) 65%, transparent);
+}
+
+.tts-failover-copy {
+  min-width: 0;
+  opacity: 1;
+}
+
+.tts-failover-title,
+.tts-failover-detail {
+  margin: 0;
+}
+
+.tts-failover-title {
+  color: var(--c-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.tts-failover-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--c-text-dim);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.tts-failover-takeover {
+  color: var(--c-success);
+}
+
+.tts-failover-metrics {
+  display: none;
+  overflow: hidden;
+  color: var(--c-text-muted);
+  font-family: 'SF Mono', Menlo, Consolas, 'Source Han Mono SC', monospace;
+  text-overflow: ellipsis;
+}
+
+.tts-failover-collapsed-label {
+  display: none;
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.tts-failover-notification[data-state='collapsed'] .tts-failover-copy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tts-failover-notification[data-state='collapsed'] .tts-failover-collapsed-label {
+  display: inline;
+}
+
+.tts-failover-notification audio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes tts-failover-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tts-failover-notification {
+    animation: none;
+    transition: none;
+  }
+}

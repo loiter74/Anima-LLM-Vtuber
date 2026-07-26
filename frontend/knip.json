@@ -12,6 +12,7 @@
     "scripts/**/*.{mjs,ts}",
     "*.{ts,mjs,cjs}"
   ],
+  "ignoreBinaries": ["py"],
   "ignoreDependencies": ["electron-builder-squirrel-windows"],
   "ignoreExportsUsedInFile": true
 }

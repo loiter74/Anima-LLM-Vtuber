@@ -12,8 +12,6 @@ export function createDomLiveView(document: Document): LiveView {
   const list = requiredElement<HTMLDivElement>(document, 'danmakuList')
   const empty = requiredElement<HTMLDivElement>(document, 'emptyState')
   const count = requiredElement<HTMLSpanElement>(document, 'messageCount')
-  const panel = requiredElement<HTMLElement>(document, 'danmakuPanel')
-  const toggle = requiredElement<HTMLButtonElement>(document, 'togglePanel')
   const socketStatus = requiredElement<HTMLSpanElement>(document, 'socketStatus')
   const livestreamStatus = requiredElement<HTMLSpanElement>(document, 'livestreamStatus')
   const background = requiredElement<HTMLDivElement>(document, 'liveBackground')
@@ -24,11 +22,28 @@ export function createDomLiveView(document: Document): LiveView {
       for (const message of messages) {
         const item = document.createElement('article')
         item.className = 'danmaku-item'
+        if (message.is_gift) item.classList.add('is-gift')
+        if (message.is_super_chat) item.classList.add('is-super-chat')
         const header = document.createElement('div')
         header.className = 'danmaku-meta'
+        const identity = document.createElement('span')
+        identity.className = 'danmaku-identity'
         const user = document.createElement('span')
         user.className = 'danmaku-user'
         user.textContent = message.user_name || '匿名观众'
+        identity.append(user)
+        if (message.is_gift) {
+          const kind = document.createElement('span')
+          kind.className = 'danmaku-kind danmaku-kind--gift'
+          kind.textContent = '礼物'
+          identity.append(kind)
+        }
+        if (message.is_super_chat) {
+          const kind = document.createElement('span')
+          kind.className = 'danmaku-kind danmaku-kind--super-chat'
+          kind.textContent = '醒目留言'
+          identity.append(kind)
+        }
         const time = document.createElement('time')
         time.textContent = new Date(message.timestamp * 1000).toLocaleTimeString('zh-CN', {
           hour: '2-digit',
@@ -36,7 +51,7 @@ export function createDomLiveView(document: Document): LiveView {
         })
         const text = document.createElement('p')
         text.textContent = message.text
-        header.append(user, time)
+        header.append(identity, time)
         item.append(header, text)
         list.append(item)
       }
@@ -61,19 +76,12 @@ export function createDomLiveView(document: Document): LiveView {
       livestreamStatus.textContent = labels[status.state]
       livestreamStatus.dataset.state = status.state
     },
-    setCollapsed(collapsed: boolean): void {
-      panel.classList.toggle('is-collapsed', collapsed)
-      toggle.setAttribute('aria-expanded', String(!collapsed))
-    },
     setBackground(config: BackgroundConfig): void {
       background.style.opacity = String(config.opacity)
       background.style.backgroundPosition = config.position
       background.style.backgroundImage = config.file
         ? `url("/backgrounds/${encodeURIComponent(config.file)}")`
         : 'none'
-    },
-    bindToggle(callback: () => void): void {
-      toggle.addEventListener('click', callback)
     },
   }
 }

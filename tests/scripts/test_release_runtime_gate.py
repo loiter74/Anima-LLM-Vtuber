@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,8 +36,24 @@ def _readiness() -> dict[str, object]:
         "components": {
             "tts": {
                 "ready": True,
-                "configured": {"name": "dashscope-seren", **TTS_IDENTITY},
-                "resolved": dict(TTS_IDENTITY),
+                "configured": {
+                    "name": "dashscope-local-failover",
+                    "type": "failover",
+                    "provider": "failover",
+                    "model": None,
+                    "voice": None,
+                },
+                "resolved": {
+                    "type": "failover",
+                    "provider": "failover",
+                    "model": None,
+                    "voice": None,
+                },
+                "primary": {
+                    "ready": False,
+                    "error_category": "billing",
+                    "identity": dict(TTS_IDENTITY),
+                },
             }
         },
     }
@@ -166,7 +183,7 @@ def test_release_validates_exact_dashscope_seren_identity() -> None:
 
     validate_production_readiness(readiness)
 
-    readiness["components"]["tts"]["resolved"]["voice"] = "Vivian"  # type: ignore[index]
+    readiness["components"]["tts"]["primary"]["identity"]["voice"] = "Vivian"  # type: ignore[index]
     with pytest.raises(ReleaseGateError, match="DashScope/Seren"):
         validate_production_readiness(readiness)
 
@@ -224,10 +241,13 @@ def test_release_soak_reports_media_completion_without_gating_it(
     evidence_path = tmp_path / "golden-soak.json"
     evidence_path.write_text(json.dumps(_soak_evidence()), encoding="utf-8")
     commands: list[tuple[str, ...]] = []
+    environments: list[dict[str, str]] = []
+    monkeypatch.setenv("PYTHONPATH", "existing-path")
 
-    def fake_run(argv, **_kwargs):
+    def fake_run(argv, **kwargs):
         command = tuple(str(part) for part in argv)
         commands.append(command)
+        environments.append(dict(kwargs["environment"]))
         return subprocess.CompletedProcess(command, 0, stdout=f"{evidence_path}\n", stderr="")
 
     monkeypatch.setattr(gate, "_run", fake_run)
@@ -236,6 +256,10 @@ def test_release_soak_reports_media_completion_without_gating_it(
     command = commands[0]
     media_index = command.index("--media-p95-ms")
     assert command[media_index + 1] == "0"
+    assert environments[0]["PYTHONPATH"].split(os.pathsep) == [
+        str((gate.ROOT / "src").resolve()),
+        "existing-path",
+    ]
 
 
 def test_release_log_gate_rejects_forbidden_levels_but_not_error_counters() -> None:
@@ -338,7 +362,7 @@ def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
 
     flattened = [" ".join(command) for command in commands]
     assert evidence["status"] == "passed"
-    assert evidence["readiness"]["components"]["tts"]["resolved"] == TTS_IDENTITY
+    assert evidence["readiness"]["components"]["tts"]["primary"]["identity"] == TTS_IDENTITY
     assert evidence["persistent_qwen"]["preserved"] is True
     assert evidence["persistent_qwen"]["before"] == evidence["persistent_qwen"]["after"]
     assert evidence["persistent_qwen"]["build_actions"] == 0

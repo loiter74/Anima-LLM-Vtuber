@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "scripts/review/**/*.ts",
+    "tests/**/*.test.ts",
+    "src/review/**/*.ts",
+    "src/live/review/**/*.ts",
+    "src/tts-failover/**/*.ts",
+    "src/constants/**/*.ts",
+    "src/types/**/*.ts"
+  ]
+}

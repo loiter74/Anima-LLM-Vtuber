@@ -45,6 +45,10 @@ _PRODUCTION_TTS_IDENTITY = {
     "model": "qwen3-tts-instruct-flash-realtime",
     "voice": "Seren",
 }
+_PRODUCTION_COMPOSITE_TTS_IDENTITY = {
+    "type": "failover",
+    "provider": "failover",
+}
 
 
 class ReleaseGateError(RuntimeError):
@@ -63,11 +67,13 @@ def validate_release_environment(environment: Mapping[str, str]) -> tuple[str, .
 
 
 def validate_production_readiness(payload: Mapping[str, Any]) -> None:
-    """Require the selected DashScope/Seren identity in production readiness."""
+    """Require the failover route and exact DashScope/Seren primary identity."""
     components = payload.get("components")
     tts = components.get("tts") if isinstance(components, Mapping) else None
     configured = tts.get("configured") if isinstance(tts, Mapping) else None
     resolved = tts.get("resolved") if isinstance(tts, Mapping) else None
+    primary = tts.get("primary") if isinstance(tts, Mapping) else None
+    primary_identity = primary.get("identity") if isinstance(primary, Mapping) else None
     if not (
         _ready(payload)
         and payload.get("profile") == "production"
@@ -75,9 +81,18 @@ def validate_production_readiness(payload: Mapping[str, Any]) -> None:
         and isinstance(tts, Mapping)
         and tts.get("ready") is True
         and isinstance(configured, Mapping)
-        and all(configured.get(key) == value for key, value in _PRODUCTION_TTS_IDENTITY.items())
+        and all(
+            configured.get(key) == value
+            for key, value in _PRODUCTION_COMPOSITE_TTS_IDENTITY.items()
+        )
         and isinstance(resolved, Mapping)
-        and all(resolved.get(key) == value for key, value in _PRODUCTION_TTS_IDENTITY.items())
+        and all(
+            resolved.get(key) == value for key, value in _PRODUCTION_COMPOSITE_TTS_IDENTITY.items()
+        )
+        and isinstance(primary_identity, Mapping)
+        and all(
+            primary_identity.get(key) == value for key, value in _PRODUCTION_TTS_IDENTITY.items()
+        )
     ):
         raise ReleaseGateError(
             "Application readiness lacks exact production DashScope/Seren identity"
@@ -309,6 +324,14 @@ def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]
 
 def _run_live_soak(evidence_dir: Path) -> dict[str, Any]:
     evidence_dir.mkdir(parents=True, exist_ok=True)
+    environment = dict(os.environ)
+    source_root = str((ROOT / "src").resolve())
+    existing_pythonpath = environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = (
+        source_root
+        if not existing_pythonpath
+        else os.pathsep.join((source_root, existing_pythonpath))
+    )
     completed = _run(
         [
             sys.executable,
@@ -331,7 +354,8 @@ def _run_live_soak(evidence_dir: Path) -> dict[str, Any]:
             "0",
             "--evidence-dir",
             str(evidence_dir),
-        ]
+        ],
+        environment=environment,
     )
     output_lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
     if not output_lines:

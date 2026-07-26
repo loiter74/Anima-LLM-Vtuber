@@ -16,9 +16,7 @@ export interface LiveView {
   renderMessages(messages: readonly DanmakuItem[]): void
   setSocketState(state: 'connecting' | 'connected' | 'disconnected' | 'error'): void
   setLivestreamStatus(status: BilibiliStatusPayload): void
-  setCollapsed(collapsed: boolean): void
   setBackground(config: BackgroundConfig): void
-  bindToggle(callback: () => void): void
 }
 
 export interface LiveControllerOptions {
@@ -65,18 +63,11 @@ function backgroundFrom(search: URLSearchParams): BackgroundConfig {
   return { file, opacity, position }
 }
 
-const DEMO_MESSAGES: DanmakuItem[] = [
-  { text: '今晚也一起开心直播吧', user_name: '星野', user_id: -1, timestamp: Date.now() / 1000 },
-  { text: '画面和弹幕都准备好了', user_name: '小雨', user_id: -2, timestamp: Date.now() / 1000 },
-]
-
 export function createLiveController(options: LiveControllerOptions) {
   const { socket, view } = options
   const search = options.search ?? new URLSearchParams(window.location.search)
   const maxMessages = options.maxMessages ?? 500
-  const demoMode = search.get('demo') === '1'
   const messages: DanmakuItem[] = []
-  let collapsed = false
 
   const onConnect = (): void => view.setSocketState('connected')
   const onDisconnect = (): void => view.setSocketState('disconnected')
@@ -90,7 +81,7 @@ export function createLiveController(options: LiveControllerOptions) {
     view.renderMessages(messages)
   }
   const onStatus = (value: unknown): void => {
-    if (!demoMode && isStatus(value)) view.setLivestreamStatus(value)
+    if (isStatus(value)) view.setLivestreamStatus(value)
   }
 
   socket.on('connect', onConnect)
@@ -100,25 +91,6 @@ export function createLiveController(options: LiveControllerOptions) {
   socket.on(Events.BILIBILI.DANMAKU_STATUS, onStatus)
   view.setSocketState('connecting')
   view.setBackground(backgroundFrom(search))
-  view.bindToggle(() => {
-    collapsed = !collapsed
-    view.setCollapsed(collapsed)
-  })
-
-  if (demoMode) {
-    view.setLivestreamStatus({
-      state: 'reconnecting',
-      connected: false,
-      room_id: null,
-      desired_room_id: 2233,
-      retry_count: 2,
-      error_code: null,
-      generation_id: 1,
-      message: 'Demo reconnecting',
-      updated_at: Date.now() / 1000,
-    })
-    for (const message of DEMO_MESSAGES) onDanmaku(message)
-  }
 
   return {
     get messages(): readonly DanmakuItem[] {
