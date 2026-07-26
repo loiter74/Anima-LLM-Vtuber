@@ -76,6 +76,34 @@ providers:
       language_type: Chinese
       timeout_seconds: 20.0
       connect_timeout_seconds: 5.0
+    dashscope-local-failover:
+      type: failover
+      cooldown_seconds: 300.0
+      primary_pre_audio_retries: 1
+      primary:
+        type: dashscope
+        api_key: ${DASHSCOPE_API_KEY}
+        model: qwen3-tts-instruct-flash-realtime
+        voice: Seren
+        base_url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+        response_format: pcm
+        sample_rate: 24000
+        language_type: Chinese
+        timeout_seconds: 20.0
+        connect_timeout_seconds: 5.0
+      fallback:
+        type: remote
+        api_key: ${QWEN_TTS_API_KEY}
+        base_url: ${QWEN_HOST_TTS_URL}
+        provider: qwen3-tts-gguf-host
+        model: Qwen3-TTS-1.7B-Base
+        revision: 0eb32e283ee46b86820c67843abb04cf12bc58d7
+        quantization: talker=Q5_K,predictor=Q8_0,onnx=FP16
+        runtime_commit: 0eb32e283ee46b86820c67843abb04cf12bc58d7
+        voice: tosaka-rin-cn
+        response_format: wav
+        language: Chinese
+        timeout_seconds: 120.0
     mimo-tts:
       type: mimo
       api_key: ${MIMO_API_KEY}
@@ -185,7 +213,7 @@ profiles:
     services:
       llm: deepseek
       asr: mimo-asr
-      tts: dashscope-seren
+      tts: dashscope-local-failover
       vad: mimo-vad
     policy:
       allow_mock: false

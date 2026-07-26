@@ -62,10 +62,13 @@ VALID_WAV = valid_wav_bytes()
 class FakeQwenEngine:
     def __init__(self, audio: bytes = VALID_WAV) -> None:
         self.audio = audio
+        self.stream_chunks = [b"\x01\x00" * 64, b"\x02\x00" * 64]
         self.preload_calls = 0
         self.synthesize_calls: list[dict[str, Any]] = []
+        self.synthesize_stream_calls: list[dict[str, Any]] = []
         self.closed = False
         self.error: Exception | None = None
+        self.stream_error: Exception | None = None
         self.started: asyncio.Event | None = None
         self.release: asyncio.Event | None = None
 
@@ -81,6 +84,17 @@ class FakeQwenEngine:
         if self.error is not None:
             raise self.error
         return self.audio
+
+    async def synthesize_stream(self, text: str, **kwargs: Any) -> Any:
+        self.synthesize_stream_calls.append({"text": text, **kwargs})
+        if self.started is not None:
+            self.started.set()
+        if self.release is not None:
+            await self.release.wait()
+        for chunk in self.stream_chunks:
+            yield chunk
+        if self.stream_error is not None:
+            raise self.stream_error
 
     async def close(self) -> None:
         self.closed = True
@@ -250,6 +264,28 @@ async def test_preload_publishes_exact_ready_and_identity_contracts() -> None:
     assert engine.preload_calls == 1
 
 
+async def test_identity_includes_fixed_host_runtime_metadata_when_configured() -> None:
+    engine = FakeQwenEngine()
+    app, service = app_for(
+        engine,
+        service_settings=settings(
+            provider="qwen3-tts-gguf-host",
+            model="Qwen3-TTS-1.7B-Base",
+            revision="0eb32e283ee46b86820c67843abb04cf12bc58d7",
+            voice="tosaka-rin-cn",
+            quantization="talker=Q5_K,predictor=Q8_0,onnx=FP16",
+            runtime_commit="0eb32e283ee46b86820c67843abb04cf12bc58d7",
+        ),
+    )
+    await service.preload()
+
+    identity = await request(app, "GET", "/v1/identity", headers=auth_headers())
+
+    assert identity.status_code == 200
+    assert identity.json()["quantization"] == ("talker=Q5_K,predictor=Q8_0,onnx=FP16")
+    assert identity.json()["runtime_commit"] == ("0eb32e283ee46b86820c67843abb04cf12bc58d7")
+
+
 async def test_preload_warms_generation_before_publishing_readiness() -> None:
     engine = FakeQwenEngine()
     _, service = app_for(
@@ -320,6 +356,63 @@ async def test_valid_speech_returns_audio_and_correlated_identity_headers() -> N
             "max_new_tokens": 48,
         }
     ]
+
+
+async def test_streaming_speech_returns_ordered_pcm16_chunks_and_identity_headers() -> None:
+    engine = FakeQwenEngine()
+    app, service = app_for(engine)
+    await service.preload()
+
+    response = await request(
+        app,
+        "POST",
+        "/v1/audio/speech",
+        headers=auth_headers(),
+        json=speech_payload(stream=True),
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"".join(engine.stream_chunks)
+    assert response.headers["content-type"] == "audio/pcm"
+    assert response.headers["x-animetta-audio-format"] == "pcm_s16le"
+    assert response.headers["x-animetta-sample-rate"] == "24000"
+    assert response.headers["x-animetta-channels"] == "1"
+    assert response.headers["x-animetta-provider"] == "qwen3"
+    assert response.headers["x-animetta-model"] == settings().model
+    assert response.headers["x-animetta-voice"] == "alice"
+    assert response.headers["x-request-id"] == "turn-7"
+    assert engine.synthesize_stream_calls == [
+        {
+            "text": "你好，爱丽丝",
+            "language": "Chinese",
+            "max_new_tokens": 48,
+        }
+    ]
+    assert engine.synthesize_calls == []
+
+
+@pytest.mark.parametrize("chunks", [[], [b""], [b"\x01"]])
+async def test_streaming_rejects_empty_or_odd_first_pcm_chunk(
+    chunks: list[bytes],
+) -> None:
+    engine = FakeQwenEngine()
+    engine.stream_chunks = chunks
+    app, service = app_for(engine)
+    await service.preload()
+
+    response = await request(
+        app,
+        "POST",
+        "/v1/audio/speech",
+        headers=auth_headers(),
+        json=speech_payload(stream=True),
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "category": "invalid_audio",
+        "request_id": "turn-7",
+    }
 
 
 async def test_interactive_synthesis_forwards_bounded_codec_token_budget() -> None:
@@ -569,6 +662,41 @@ async def test_capacity_is_bounded_and_request_identities_do_not_cross() -> None
     assert first.status_code == 200
     assert first.headers["x-request-id"] == "first"
     assert len(engine.synthesize_calls) == 1
+
+
+async def test_host_queue_admits_two_fifo_waiters_and_rejects_the_next() -> None:
+    engine = FakeQwenEngine()
+    engine.started = asyncio.Event()
+    engine.release = asyncio.Event()
+    _, service = app_for(
+        engine,
+        service_settings=settings(queue_capacity=2),
+    )
+    await service.preload()
+
+    first = asyncio.create_task(service.synthesize(speech_payload(request_id="first")))
+    await engine.started.wait()
+    second = asyncio.create_task(service.synthesize(speech_payload(request_id="second")))
+    third = asyncio.create_task(service.synthesize(speech_payload(request_id="third")))
+    await asyncio.sleep(0)
+    rejected = await service.synthesize(speech_payload(request_id="fourth"))
+
+    assert rejected.status_code == 429
+    assert rejected.body == b'{"category":"busy","request_id":"fourth"}'
+
+    engine.release.set()
+    responses = await asyncio.gather(first, second, third)
+
+    assert [response.headers["x-request-id"] for response in responses] == [
+        "first",
+        "second",
+        "third",
+    ]
+    assert [call["text"] for call in engine.synthesize_calls] == [
+        "你好，爱丽丝",
+        "你好，爱丽丝",
+        "你好，爱丽丝",
+    ]
 
 
 async def test_timeout_keeps_capacity_reserved_until_gpu_work_finishes() -> None:

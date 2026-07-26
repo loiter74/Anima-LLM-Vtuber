@@ -7,6 +7,7 @@ from .base import TTSBaseConfig  # noqa: F401 — triggers registration chain
 from .chattts import ChatTTSConfig  # noqa: F401
 from .dashscope import DashScopeTTSConfig  # noqa: F401
 from .edge import EdgeTTSConfig  # noqa: F401
+from .failover import FailoverTTSConfig  # noqa: F401
 from .glm import GLMTTSConfig  # noqa: F401
 from .gpt_sovits import GPTSoVITSConfig  # noqa: F401
 from .kokoro import KokoroTTSConfig  # noqa: F401
@@ -24,6 +25,7 @@ __all__ = [
     "TTSBaseConfig",
     "TTSConfig",
     "DashScopeTTSConfig",
+    "FailoverTTSConfig",
     "MimoTTSConfig",
     "RemoteTTSConfig",
 ]

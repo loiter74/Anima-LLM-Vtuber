@@ -60,7 +60,7 @@ assert set(LLMFactory.get_available_configs()) == {
 }
 assert set(TTSFactory.get_available_configs()) == {
     "mock", "edge", "mimo", "gpt_sovits", "qwen3", "glm",
-    "chattts", "kokoro", "vibe_voice", "remote", "dashscope"
+    "chattts", "kokoro", "vibe_voice", "remote", "dashscope", "failover"
 }
 assert set(ASRFactory.get_available_configs()) == {
     "mock", "funasr", "glm", "mimo", "faster_whisper"

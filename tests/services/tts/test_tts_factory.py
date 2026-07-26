@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from animetta.services.tts.factory import TTSFactory
+from animetta.services.tts.failover_tts import FailoverTTS
 from animetta.services.tts.interface import TTSInterface
 from animetta.services.tts.mock_tts import MockTTS
 from animetta.tracing.proxy import TracingProxy
@@ -33,6 +34,36 @@ class TestTTSFactory:
     def test_create_mock_is_mock_tts(self):
         engine = TTSFactory.create("mock")
         assert isinstance(unwrap_tracing_proxy(engine), MockTTS)
+
+    def test_create_registered_failover_with_exact_child_schemas(self):
+        engine = TTSFactory.create(
+            "failover",
+            strict=True,
+            cooldown_seconds=300,
+            primary_pre_audio_retries=1,
+            primary={
+                "type": "dashscope",
+                "api_key": "dashscope-secret",
+                "model": "qwen3-tts-instruct-flash-realtime",
+                "voice": "Seren",
+            },
+            fallback={
+                "type": "remote",
+                "api_key": "host-secret",
+                "base_url": "http://host.docker.internal:8767",
+                "provider": "qwen3-tts-gguf-host",
+                "model": "Qwen3-TTS-1.7B-Base",
+                "voice": "tosaka-rin-cn",
+                "response_format": "wav",
+                "language": "Chinese",
+                "timeout_seconds": 120,
+            },
+        )
+
+        concrete = unwrap_tracing_proxy(engine)
+        assert isinstance(concrete, FailoverTTS)
+        assert concrete.primary.model == "qwen3-tts-instruct-flash-realtime"
+        assert concrete.fallback.base_url == "http://host.docker.internal:8767"
 
     def test_strict_registry_error_is_propagated_without_mock_fallback(self):
         provider_error = RuntimeError("provider initialization failed")

@@ -130,7 +130,7 @@ def test_manual_qwen_rollback_keeps_its_distinct_generation_and_warmup_budgets()
     assert worker["temperature"] == 0.9
     assert worker["top_p"] == 1.0
     assert qwen["timeout_seconds"] == 120.0
-    assert production["services"]["tts"] == "dashscope-seren"
+    assert production["services"]["tts"] == "dashscope-local-failover"
     assert production["runtime"]["tts_timeout_seconds"] == 20.0
 
 
@@ -141,7 +141,7 @@ def test_selftest_compose_selects_local_qwen_without_overriding_production() -> 
     base = _compose("docker-compose.yml")["services"]["animetta"]
     override = _compose("docker-compose.selftest.yml")["services"]["animetta"]
 
-    assert production["services"]["tts"] == "dashscope-seren"
+    assert production["services"]["tts"] == "dashscope-local-failover"
     assert selftest["services"] == {
         "llm": "deepseek",
         "asr": "mimo-asr",

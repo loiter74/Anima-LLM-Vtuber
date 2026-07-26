@@ -26,6 +26,8 @@ from .emotion_instructions import all_emotion_instructions
 from .interface import TTSInterface
 from .remote_tts import RemoteTTSError
 
+_ACCOUNT_STANDING_ERROR = "access denied, please make sure your account is in good standing"
+
 
 class DashScopeError(RemoteTTSError):
     """Sanitized DashScope realtime failure."""
@@ -264,11 +266,7 @@ class DashScopeRealtimeTTS(TTSInterface):
                 (DashScopeError, asyncio.CancelledError, TimeoutError, GeneratorExit),
             ):
                 raise
-            raise DashScopeConnectionError(
-                "DashScope realtime connection failed",
-                category="connection",
-                retryable=True,
-            ) from exc
+            raise self._connection_error(exc, operation="realtime") from exc
         finally:
             if owns_request:
                 session.lock.release()
@@ -347,11 +345,7 @@ class DashScopeRealtimeTTS(TTSInterface):
                 await connection.__aexit__(type(exc), exc, exc.__traceback__)
                 if isinstance(exc, DashScopeError):
                     raise
-                raise DashScopeConnectionError(
-                    "DashScope WebSocket connection failed",
-                    category="connection",
-                    retryable=True,
-                ) from exc
+                raise self._connection_error(exc, operation="WebSocket") from exc
 
             session = _HotSession(instruction, socket, connection)
             self._sessions[instruction] = session
@@ -470,6 +464,20 @@ class DashScopeRealtimeTTS(TTSInterface):
             "Authorization": f"Bearer {self.api_key}",
             "user-agent": "animetta/0.1",
         }
+
+    @staticmethod
+    def _connection_error(exc: BaseException, *, operation: str) -> DashScopeConnectionError:
+        if _ACCOUNT_STANDING_ERROR in str(exc).lower():
+            return DashScopeConnectionError(
+                "DashScope account billing is not in good standing",
+                category="billing",
+                retryable=False,
+            )
+        return DashScopeConnectionError(
+            f"DashScope {operation} connection failed",
+            category="connection",
+            retryable=True,
+        )
 
     def _wav_bytes(self, pcm: bytes) -> bytes:
         buffer = io.BytesIO()

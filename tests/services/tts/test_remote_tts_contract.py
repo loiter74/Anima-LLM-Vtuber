@@ -257,6 +257,42 @@ async def test_synthesize_validates_request_and_response_identity(tmp_path: Path
     await tts.close()
 
 
+async def test_synthesize_stream_requests_and_validates_pcm_chunks() -> None:
+    pcm = b"\x01\x00" * 120
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            content=pcm,
+            headers={
+                **identity_headers(request_id="stream-1"),
+                "content-type": "audio/pcm",
+                "x-animetta-audio-format": "pcm_s16le",
+                "x-animetta-sample-rate": "24000",
+                "x-animetta-channels": "1",
+            },
+        )
+
+    client = client_for(handler)
+    tts = RemoteTTS.from_config(remote_config(), http_client=client)
+
+    chunks = [
+        chunk
+        async for chunk in tts.synthesize_stream(
+            "流式你好",
+            language="Chinese",
+            request_id="stream-1",
+        )
+    ]
+
+    assert b"".join(chunks) == pcm
+    assert seen["payload"]["stream"] is True
+    assert seen["payload"]["response_format"] == "wav"
+    await tts.close()
+
+
 async def test_synthesize_rejects_local_voice_or_model_override() -> None:
     called = False
 

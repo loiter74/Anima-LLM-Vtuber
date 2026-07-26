@@ -313,6 +313,7 @@ class TestStreamingTTSNode:
             supports_streaming = True
             supports_emotion_instructions = True
             sample_rate = 24000
+            actual_provider = "qwen3-tts-gguf-host"
 
             async def synthesize(self, *args, **kwargs):
                 raise AssertionError("complete-audio fallback must not run")
@@ -340,6 +341,9 @@ class TestStreamingTTSNode:
         assert result["tts_audio"] is None
         assert result["media_status"].status == "ready"
         assert result["metadata"]["audio_streamed"] is True
+        assert result["metadata"]["tts_provider"] == "qwen3-tts-gguf-host"
+        assert result["metadata"]["tts_first_audio_ms"] >= 0
+        assert result["metadata"]["tts_rtf"] >= 0
 
     @pytest.mark.asyncio
     async def test_retries_once_before_first_chunk_with_same_instruction(self) -> None:

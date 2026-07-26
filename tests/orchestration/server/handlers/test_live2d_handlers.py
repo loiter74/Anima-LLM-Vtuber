@@ -33,9 +33,7 @@ async def test_inspection_flag_probe_is_dropped(handler) -> None:
     """A payload self-flagged as inspection never reaches the orchestrator."""
     live2d, sio, admin = handler
 
-    await live2d.on_desktop_chat_message(
-        "sid", {"text": "hello", "is_inspection": True}
-    )
+    await live2d.on_desktop_chat_message("sid", {"text": "hello", "is_inspection": True})
 
     admin._get_or_create_orchestrator.assert_not_awaited()
     sio.emit.assert_not_awaited()
@@ -56,9 +54,7 @@ async def test_mode_inspection_is_dropped(handler) -> None:
     """``mode == "inspection"`` payloads are dropped."""
     live2d, sio, admin = handler
 
-    await live2d.on_desktop_chat_message(
-        "sid", {"text": "hi", "mode": "inspection"}
-    )
+    await live2d.on_desktop_chat_message("sid", {"text": "hi", "mode": "inspection"})
 
     admin._get_or_create_orchestrator.assert_not_awaited()
 

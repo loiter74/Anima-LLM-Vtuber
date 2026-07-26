@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .dashscope_tts import DashScopeRealtimeTTS as DashScopeRealtimeTTS
     from .edge_tts import EdgeTTS as EdgeTTS
     from .factory import TTSFactory as TTSFactory
+    from .failover_tts import FailoverTTS as FailoverTTS
     from .gpt_sovits_tts import GPTSoVITSTTS as GPTSoVITSTTS
     from .interface import TTSInterface as TTSInterface
     from .mimo_tts import MimoTTS as MimoTTS
@@ -31,6 +32,7 @@ _EXPORTS = {
     "TTSFactory": (".factory", "TTSFactory"),
     "MockTTS": (".mock_tts", "MockTTS"),
     "EdgeTTS": (".edge_tts", "EdgeTTS"),
+    "FailoverTTS": (".failover_tts", "FailoverTTS"),
     "DashScopeRealtimeTTS": (".dashscope_tts", "DashScopeRealtimeTTS"),
     "GPTSoVITSTTS": (".gpt_sovits_tts", "GPTSoVITSTTS"),
     "MimoTTS": (".mimo_tts", "MimoTTS"),

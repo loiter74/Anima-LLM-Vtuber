@@ -17,6 +17,7 @@ services:
       - MIMO_API_KEY=${MIMO_API_KEY:-}
       - QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}
       - QWEN_TTS_URL=http://qwen-tts:8766
+      - QWEN_HOST_TTS_URL=http://host.docker.internal:8767
     volumes:
       - animetta-memory-db:/app/memory_db
       - animetta-data:/app/data

@@ -225,9 +225,7 @@ class TestOrchestratorCentralIngressFilter:
         mock_graph.ainvoke.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_probe_short_circuit_preserves_chat_identity(
-        self, orchestrator, mock_graph
-    ):
+    async def test_probe_short_circuit_preserves_chat_identity(self, orchestrator, mock_graph):
         """Dropped probes still echo the caller-supplied identity fields."""
         await orchestrator.start()
         result = await orchestrator.process_text(

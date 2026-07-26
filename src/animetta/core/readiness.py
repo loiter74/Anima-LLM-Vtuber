@@ -114,6 +114,7 @@ def build_runtime_readiness_snapshot(
         return _effective_config_snapshot(
             config=config,
             pool_config=pool_config,
+            tts_engine=tts_engine,
             resolved_identities=resolved_identities,
             init_state=init_state,
             init_reason=init_reason,
@@ -377,6 +378,7 @@ def _effective_config_snapshot(
     *,
     config: Any,
     pool_config: Any,
+    tts_engine: Any,
     resolved_identities: Any,
     init_state: str,
     init_reason: str | None,
@@ -451,7 +453,7 @@ def _effective_config_snapshot(
         if (
             category == "tts"
             and profile in {"smoke", "production"}
-            and configured.get("type") == "dashscope"
+            and configured.get("type") in {"dashscope", "failover"}
             and identity_ready
         ):
             manager_state = _model_state(model_manager, "tts")
@@ -472,13 +474,36 @@ def _effective_config_snapshot(
                 else:
                     component_state = "failed"
                     reason = "preload_status_unavailable"
-        components[category] = {
+        component = {
             "state": component_state,
             "ready": component_ready,
             "configured": configured,
             "resolved": resolved,
             "reason": reason,
         }
+        if category == "tts" and configured.get("type") == "failover":
+            target = unwrap_tracing_proxy(tts_engine)
+            snapshot_method = getattr(target, "readiness_snapshot", None)
+            try:
+                failover = snapshot_method() if callable(snapshot_method) else None
+            except Exception:
+                failover = None
+            if not isinstance(failover, dict):
+                component.update(
+                    {
+                        "state": "failed",
+                        "ready": False,
+                        "reason": "readiness_status_unavailable",
+                    }
+                )
+            else:
+                route_ready = failover.get("ready") is True
+                component["ready"] = bool(component["ready"] and route_ready)
+                component["state"] = "ready" if component["ready"] else "failed"
+                if identity_ready and not route_ready:
+                    component["reason"] = "tts_unavailable"
+                component.update(_safe_failover_status(failover))
+        components[category] = component
     components["frontend"] = frontend_component
     services_ready = all(components[name]["ready"] for name in ("llm", "asr", "tts", "vad"))
     if pool_ready and not services_ready:
@@ -500,6 +525,51 @@ def _effective_config_snapshot(
         effective_hash=config.effective_hash,
         semantic_hash=config.semantic_hash,
     )
+
+
+def _safe_failover_status(status: dict[str, Any]) -> dict[str, Any]:
+    """Project only bounded composite state into public readiness."""
+    active = status.get("active_backend")
+    primary = status.get("primary")
+    fallback = status.get("fallback")
+    circuit = status.get("circuit")
+    safe_categories = {
+        "authentication",
+        "billing",
+        "connection",
+        "empty_audio",
+        "identity_mismatch",
+        "incompatible_contract",
+        "not_preloaded",
+        "not_ready",
+        "provider_error",
+        "timeout",
+        None,
+    }
+
+    def child(value: Any) -> dict[str, Any]:
+        value = value if isinstance(value, dict) else {}
+        category = value.get("error_category")
+        return {
+            "ready": value.get("ready") is True,
+            "error_category": category if category in safe_categories else "provider_error",
+        }
+
+    circuit = circuit if isinstance(circuit, dict) else {}
+    state = circuit.get("state")
+    remaining = circuit.get("cooldown_remaining_seconds")
+    return {
+        "degraded": status.get("degraded") is True,
+        "active_backend": active if active in {"primary", "fallback"} else None,
+        "primary": child(primary),
+        "fallback": child(fallback),
+        "circuit": {
+            "state": state if state in {"closed", "open", "half_open"} else "open",
+            "cooldown_remaining_seconds": (
+                max(0.0, float(remaining)) if isinstance(remaining, (int, float)) else 0.0
+            ),
+        },
+    }
 
 
 def _safe_lifecycle_state(value: Any) -> str:

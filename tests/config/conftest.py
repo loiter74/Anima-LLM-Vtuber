@@ -35,6 +35,7 @@ def isolated_manifest_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch
         "ANIMETTA_BACKEND_URL",
         "QWEN_TTS_URL",
         "QWEN_TTS_API_KEY",
+        "QWEN_HOST_TTS_URL",
         "DASHSCOPE_API_KEY",
         "DEEPSEEK_API_KEY",
         "MIMO_API_KEY",
@@ -158,6 +159,10 @@ def manifest_secrets(isolated_manifest_env: pytest.MonkeyPatch) -> pytest.Monkey
     isolated_manifest_env.setenv("DEEPSEEK_API_KEY", "test-deepseek-secret")
     isolated_manifest_env.setenv("MIMO_API_KEY", "test-mimo-secret")
     isolated_manifest_env.setenv("QWEN_TTS_API_KEY", "test-qwen-secret")
+    isolated_manifest_env.setenv(
+        "QWEN_HOST_TTS_URL",
+        "http://host.docker.internal:8767",
+    )
     isolated_manifest_env.setenv("QWEN_TTS_URL", "http://qwen-tts.test:8001")
     isolated_manifest_env.setenv("DASHSCOPE_API_KEY", "test-dashscope-secret")
     return isolated_manifest_env

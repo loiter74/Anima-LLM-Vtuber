@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import logging
 import re
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
-from loguru import logger
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from animetta.services.tts.audio_validation import is_valid_audio_payload
+
+logger = logging.getLogger(__name__)
 
 _CJK_CHARACTER = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 _NON_CJK_WORD = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*", re.UNICODE)
@@ -39,6 +42,12 @@ class QwenEngine(Protocol):
 
     async def synthesize(self, text: str, **_kwargs: Any) -> bytes | str: ...
 
+    def synthesize_stream(
+        self,
+        text: str,
+        **_kwargs: Any,
+    ) -> AsyncIterator[bytes]: ...
+
     async def close(self) -> None: ...
 
 
@@ -51,12 +60,15 @@ class QwenServiceSettings:
     model: str
     revision: str
     voice: str
+    quantization: str | None = None
+    runtime_commit: str | None = None
     language: str = "Chinese"
     response_format: str = "wav"
     sample_rate: int = 24000
     synthesis_timeout_seconds: float = 20.0
     capacity_wait_seconds: float = 0.05
     max_concurrency: int = 1
+    queue_capacity: int = 0
     max_new_tokens: int = 48
     warmup_enabled: bool = True
     warmup_text: str = "你好，我是爱丽丝。"
@@ -75,6 +87,8 @@ class QwenServiceSettings:
             raise ValueError(f"Missing Qwen service setting(s): {', '.join(missing)}")
         if self.max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
+        if self.queue_capacity < 0:
+            raise ValueError("queue_capacity must not be negative")
         if self.max_new_tokens < 1:
             raise ValueError("Qwen service codec token limit must be positive")
         if self.synthesis_timeout_seconds <= 0 or self.capacity_wait_seconds <= 0:
@@ -92,6 +106,8 @@ class QwenTTSService:
         self.settings = settings
         self.engine = engine
         self._capacity = asyncio.Semaphore(settings.max_concurrency)
+        self._admission_lock = asyncio.Lock()
+        self._queued_requests = 0
         self._preload_lock = asyncio.Lock()
         self._ready = False
         self._readiness_category = "not_ready"
@@ -124,7 +140,7 @@ class QwenTTSService:
             self._ready = True
             self._readiness_category = "ready"
             logger.info(
-                "Qwen TTS ready: provider={}, model={}, revision={}, voice={}",
+                "Qwen TTS ready: provider=%s, model=%s, revision=%s, voice=%s",
                 self.settings.provider,
                 self.settings.model,
                 self.settings.revision,
@@ -139,7 +155,7 @@ class QwenTTSService:
                 "api_version": "v1",
                 "category": self._readiness_category,
             }
-        return {
+        identity = {
             "ready": True,
             "service": "qwen-tts",
             "api_version": "v1",
@@ -149,6 +165,11 @@ class QwenTTSService:
             "voice": self.settings.voice,
             "sample_rate": self.settings.sample_rate,
         }
+        if self.settings.quantization is not None:
+            identity["quantization"] = self.settings.quantization
+        if self.settings.runtime_commit is not None:
+            identity["runtime_commit"] = self.settings.runtime_commit
+        return identity
 
     def authorized(self, request: Request) -> bool:
         supplied = request.headers.get("authorization", "")
@@ -177,14 +198,8 @@ class QwenTTSService:
         if not isinstance(text, str) or not text.strip():
             return self._unsupported("input", request_id)
 
-        acquired = False
-        try:
-            await asyncio.wait_for(
-                self._capacity.acquire(),
-                timeout=self.settings.capacity_wait_seconds,
-            )
-            acquired = True
-        except TimeoutError:
+        acquired = await self._acquire_capacity()
+        if not acquired:
             return JSONResponse(
                 {"category": "busy", "request_id": request_id},
                 status_code=429,
@@ -196,10 +211,17 @@ class QwenTTSService:
             self.settings.max_new_tokens,
         )
         logger.debug(
-            "Qwen TTS generation budget: text_length={}, max_new_tokens={}",
+            "Qwen TTS generation budget: text_length=%s, max_new_tokens=%s",
             len(text),
             token_budget,
         )
+        if payload.get("stream") is True:
+            return await self._stream_response(
+                text=text,
+                request_id=request_id,
+                token_budget=token_budget,
+            )
+
         synthesis_task = asyncio.create_task(
             self.engine.synthesize(
                 text,
@@ -253,6 +275,133 @@ class QwenTTSService:
                 "x-animetta-voice": self.settings.voice,
                 "x-request-id": request_id,
             },
+        )
+
+    async def _acquire_capacity(self) -> bool:
+        if self.settings.queue_capacity == 0:
+            try:
+                await asyncio.wait_for(
+                    self._capacity.acquire(),
+                    timeout=self.settings.capacity_wait_seconds,
+                )
+                return True
+            except TimeoutError:
+                return False
+
+        queued = False
+        async with self._admission_lock:
+            if self._capacity.locked():
+                if self._queued_requests >= self.settings.queue_capacity:
+                    return False
+                self._queued_requests += 1
+                queued = True
+            else:
+                await self._capacity.acquire()
+                return True
+        try:
+            await self._capacity.acquire()
+        except asyncio.CancelledError:
+            async with self._admission_lock:
+                self._queued_requests -= 1
+            raise
+        async with self._admission_lock:
+            if queued:
+                self._queued_requests -= 1
+        return True
+
+    async def _stream_response(
+        self,
+        *,
+        text: str,
+        request_id: str,
+        token_budget: int,
+    ) -> Response:
+        stream_method = getattr(self.engine, "synthesize_stream", None)
+        if not callable(stream_method):
+            self._capacity.release()
+            return self._unsupported("stream", request_id)
+
+        stream = stream_method(
+            text,
+            language=self.settings.language,
+            max_new_tokens=token_budget,
+        )
+        deadline = asyncio.get_running_loop().time() + self.settings.synthesis_timeout_seconds
+        try:
+            first_chunk = await self._next_stream_chunk(stream, deadline)
+        except StopAsyncIteration:
+            self._capacity.release()
+            return self._invalid_stream_response(request_id)
+        except TimeoutError:
+            await stream.aclose()
+            self._capacity.release()
+            return JSONResponse(
+                {"category": "timeout", "request_id": request_id},
+                status_code=504,
+            )
+        except Exception:
+            await stream.aclose()
+            self._capacity.release()
+            return JSONResponse(
+                {"category": "generation_failed", "request_id": request_id},
+                status_code=502,
+            )
+
+        if not self._valid_pcm_chunk(first_chunk):
+            await stream.aclose()
+            self._capacity.release()
+            return self._invalid_stream_response(request_id)
+
+        async def body() -> AsyncIterator[bytes]:
+            try:
+                yield first_chunk
+                while True:
+                    try:
+                        chunk = await self._next_stream_chunk(stream, deadline)
+                    except StopAsyncIteration:
+                        return
+                    if not chunk:
+                        continue
+                    if not self._valid_pcm_chunk(chunk):
+                        raise RuntimeError("Qwen TTS emitted invalid PCM")
+                    yield chunk
+            finally:
+                await stream.aclose()
+                self._capacity.release()
+
+        return StreamingResponse(
+            body(),
+            media_type="audio/pcm",
+            headers={
+                "x-animetta-audio-format": "pcm_s16le",
+                "x-animetta-sample-rate": str(self.settings.sample_rate),
+                "x-animetta-channels": "1",
+                "x-animetta-provider": self.settings.provider,
+                "x-animetta-model": self.settings.model,
+                "x-animetta-voice": self.settings.voice,
+                "x-request-id": request_id,
+            },
+        )
+
+    @staticmethod
+    async def _next_stream_chunk(
+        stream: AsyncIterator[bytes],
+        deadline: float,
+    ) -> bytes:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError
+        return await asyncio.wait_for(anext(stream), timeout=remaining)
+
+    @staticmethod
+    def _valid_pcm_chunk(chunk: Any) -> bool:
+        return isinstance(chunk, bytes) and bool(chunk) and len(chunk) % 2 == 0
+
+    @staticmethod
+    def _invalid_stream_response(request_id: str) -> JSONResponse:
+        return JSONResponse(
+            {"category": "invalid_audio", "request_id": request_id},
+            status_code=502,
         )
 
     @staticmethod

@@ -29,7 +29,12 @@ from animetta.config.manifest import (
 )
 from animetta.config.providers.asr import MimoASRConfig, MockASRConfig
 from animetta.config.providers.llm import DeepSeekLLMConfig, MockLLMConfig
-from animetta.config.providers.tts import MimoTTSConfig, MockTTSConfig, RemoteTTSConfig
+from animetta.config.providers.tts import (
+    FailoverTTSConfig,
+    MimoTTSConfig,
+    MockTTSConfig,
+    RemoteTTSConfig,
+)
 from animetta.config.providers.vad import MimoVADConfig, MockVADConfig
 from animetta.config.runtime_reload import RuntimeConfigReloader
 
@@ -728,16 +733,21 @@ def test_default_production_selects_approved_dashscope_voice_and_keeps_qwen_roll
     typed = effective.typed_provider("tts")
     rollback = load_remote_tts_worker_config()
 
-    assert selected.name == "dashscope-seren"
+    assert selected.name == "dashscope-local-failover"
     assert selected.public_identity() == {
-        "name": "dashscope-seren",
-        "type": "dashscope",
-        "provider": "dashscope",
-        "model": "qwen3-tts-instruct-flash-realtime",
-        "voice": "Seren",
+        "name": "dashscope-local-failover",
+        "type": "failover",
+        "provider": "failover",
+        "model": None,
+        "voice": None,
     }
-    assert typed.type == "dashscope"
-    assert typed.api_key == "test-dashscope-secret"
+    assert typed.type == "failover"
+    assert isinstance(typed, FailoverTTSConfig)
+    assert typed.primary.model == "qwen3-tts-instruct-flash-realtime"
+    assert typed.primary.voice == "Seren"
+    assert typed.fallback.model == "Qwen3-TTS-1.7B-Base"
+    assert typed.fallback.voice == "tosaka-rin-cn"
+    assert typed.fallback.base_url == "http://host.docker.internal:8767"
     assert rollback.type == "remote"
     assert rollback.provider == "qwen3"
     assert rollback.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
@@ -757,7 +767,7 @@ def test_repository_selftest_uses_local_qwen_without_changing_production(
     assert selftest.tts.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
     assert selftest.tts.voice == "alice"
     assert selftest.system.tts_timeout_seconds == 120.0
-    assert production.services.tts == "dashscope-seren"
+    assert production.services.tts == "dashscope-local-failover"
 
 
 def test_reloader_defaults_to_the_manifest_that_produced_effective_config(

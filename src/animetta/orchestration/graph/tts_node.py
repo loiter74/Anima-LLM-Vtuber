@@ -240,6 +240,8 @@ async def _synthesize_streaming(
     stream_id = str(uuid4())
     sequence = -1
     stream_started = False
+    first_audio_at: float | None = None
+    pcm_bytes = 0
     synthesis_kwargs = {"emotion": emotion, "instruction": instruction}
     interrupt_signal = get_interrupt_handler().get_signal(state["session_id"])
 
@@ -263,7 +265,9 @@ async def _synthesize_streaming(
                     break
                 if not isinstance(chunk, bytes) or not chunk or len(chunk) % 2:
                     raise RuntimeError("TTS stream returned invalid PCM")
+                pcm_bytes += len(chunk)
                 if not stream_started:
+                    first_audio_at = time.perf_counter()
                     await delivery.emit(
                         "chat",
                         "audio_stream_start",
@@ -384,18 +388,26 @@ async def _synthesize_streaming(
                 final_sequence=sequence,
                 status="completed",
             )
+            completed_at = time.perf_counter()
+            actual_provider = _actual_tts_provider(tts_engine, provider)
+            sample_rate = int(getattr(tts_engine, "sample_rate", 24000))
+            audio_seconds = pcm_bytes / (2 * sample_rate)
+            first_audio_ms = ((first_audio_at or completed_at) - started) * 1000
+            rtf = (completed_at - started) / audio_seconds if audio_seconds > 0 else 0.0
             log_timing(
                 state,
                 "tts.synthesize",
-                (time.perf_counter() - started) * 1000,
+                (completed_at - started) * 1000,
                 "ready:streamed",
             )
             return {
                 "tts_audio": None,
-                "media_status": MediaStatus("ready", provider=provider),
+                "media_status": MediaStatus("ready", provider=actual_provider),
                 "metadata": {
                     **state.get("metadata", {}),
-                    "tts_provider": provider,
+                    "tts_provider": actual_provider,
+                    "tts_first_audio_ms": first_audio_ms,
+                    "tts_rtf": rtf,
                     "media_status": "ready",
                     "audio_streamed": True,
                     "audio_stream_id": stream_id,
@@ -403,6 +415,11 @@ async def _synthesize_streaming(
             }
 
     raise AssertionError("stream retry loop must return or raise")
+
+
+def _actual_tts_provider(tts_engine: Any, default: str) -> str:
+    value = getattr(tts_engine, "actual_provider", None)
+    return value if isinstance(value, str) and value else default
 
 
 async def tts_node(
@@ -590,6 +607,7 @@ async def tts_node(
     elif isinstance(audio, str):
         logger.info(f"[{session_id}] [TTSNode] Audio file: {audio}")
 
+    provider = _actual_tts_provider(tts_engine, provider)
     log_timing(state, "tts.synthesize", (time.perf_counter() - started) * 1000, "ready")
     return {
         "tts_audio": audio,

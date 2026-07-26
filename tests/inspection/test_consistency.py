@@ -74,7 +74,9 @@ async def test_runtime_error_is_reported_without_private_database_probe() -> Non
             # observation_ledger_responds(runtime)
             lambda r: observation_ledger_responds(r),
             lambda r: setattr(
-                r.observation_query, "observation_health", AsyncMock(side_effect=RuntimeError("boom"))
+                r.observation_query,
+                "observation_health",
+                AsyncMock(side_effect=RuntimeError("boom")),
             ),
         ),
         (

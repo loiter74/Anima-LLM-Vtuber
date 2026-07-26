@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -89,6 +90,8 @@ class RemoteTTS(TTSInterface):
         language: str | None,
         timeout_seconds: float,
         revision: str | None,
+        quantization: str | None = None,
+        runtime_commit: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.api_key = api_key
@@ -100,6 +103,8 @@ class RemoteTTS(TTSInterface):
         self.language = language
         self.timeout_seconds = timeout_seconds
         self.revision = revision
+        self.quantization = quantization
+        self.runtime_commit = runtime_commit
         self._client = http_client
         self._resolved_identity: dict[str, Any] | None = None
 
@@ -114,18 +119,25 @@ class RemoteTTS(TTSInterface):
             response_format=config.response_format,
             language=config.language,
             timeout_seconds=config.timeout_seconds,
-            revision=config.worker.revision if config.worker else None,
+            revision=config.revision or (config.worker.revision if config.worker else None),
+            quantization=config.quantization,
+            runtime_commit=config.runtime_commit,
             http_client=kwargs.get("http_client"),
         )
 
     @property
     def configured_identity(self) -> dict[str, str | None]:
-        return {
+        identity = {
             "provider": self.provider,
             "model": self.model,
             "revision": self.revision,
             "voice": self.voice,
         }
+        if self.quantization is not None:
+            identity["quantization"] = self.quantization
+        if self.runtime_commit is not None:
+            identity["runtime_commit"] = self.runtime_commit
+        return identity
 
     @property
     def resolved_identity(self) -> dict[str, Any] | None:
@@ -241,6 +253,136 @@ class RemoteTTS(TTSInterface):
             path.write_bytes(audio)
             return str(path)
         return audio
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        **kwargs: Any,
+    ) -> AsyncIterator[bytes]:
+        """Stream authenticated PCM16 while validating the fixed worker identity."""
+        if not text or not text.strip():
+            return
+        actual_model = kwargs.get("model", self.model)
+        actual_voice = kwargs.get("voice", self.voice)
+        if actual_model != self.model:
+            self._raise_identity_error("model", self.model, actual_model)
+        if actual_voice != self.voice:
+            self._raise_identity_error("voice", self.voice, actual_voice)
+
+        request_id = str(kwargs.get("request_id") or uuid4())
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "voice": self.voice,
+            "input": text,
+            "response_format": self.response_format,
+            "request_id": request_id,
+            "stream": True,
+        }
+        language = kwargs.get("language", self.language)
+        if language:
+            payload["language"] = language
+
+        retry_delays = self._BUSY_RETRY_DELAYS_SECONDS
+        for attempt in range(len(retry_delays) + 1):
+            try:
+                async with self._get_client().stream(
+                    "POST",
+                    f"{self.base_url}/v1/audio/speech",
+                    headers=self._headers(),
+                    json=payload,
+                    timeout=self.timeout_seconds,
+                ) as response:
+                    if response.status_code == 429 and attempt < len(retry_delays):
+                        await response.aread()
+                        await asyncio.sleep(retry_delays[attempt])
+                        continue
+                    if response.status_code >= 400:
+                        await response.aread()
+                        self._raise_for_speech_status(response, request_id)
+                    self._validate_stream_headers(response, request_id)
+                    yielded = False
+                    carry = b""
+                    async for network_chunk in response.aiter_bytes():
+                        data = carry + network_chunk
+                        even_length = len(data) - (len(data) % 2)
+                        if even_length:
+                            yielded = True
+                            yield data[:even_length]
+                        carry = data[even_length:]
+                    if carry or not yielded:
+                        raise RemoteTTSProtocolError(
+                            "Remote TTS stream contains invalid PCM audio",
+                            category="invalid_audio",
+                            request_id=request_id,
+                            retryable=True,
+                        )
+                    return
+            except httpx.TimeoutException as exc:
+                raise RemoteTTSTimeoutError(
+                    "Remote TTS streaming timed out",
+                    category="timeout",
+                    request_id=request_id,
+                    retryable=True,
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise RemoteTTSUpstreamError(
+                    "Remote TTS streaming connection failed",
+                    category="connection",
+                    request_id=request_id,
+                    retryable=True,
+                ) from exc
+
+        raise AssertionError("streaming busy retry loop must return")
+
+    def _validate_stream_headers(
+        self,
+        response: httpx.Response,
+        request_id: str,
+    ) -> None:
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+        if content_type != "audio/pcm":
+            raise RemoteTTSProtocolError(
+                "Remote TTS stream has unsupported content type",
+                category="invalid_audio",
+                request_id=request_id,
+                retryable=False,
+            )
+        if response.headers.get("x-animetta-audio-format") != "pcm_s16le":
+            raise RemoteTTSProtocolError(
+                "Remote TTS stream has incompatible audio format",
+                category="incompatible_contract",
+                request_id=request_id,
+                retryable=False,
+            )
+        if response.headers.get("x-animetta-sample-rate") != "24000":
+            raise RemoteTTSProtocolError(
+                "Remote TTS stream has incompatible sample rate",
+                category="incompatible_contract",
+                request_id=request_id,
+                retryable=False,
+            )
+        if response.headers.get("x-animetta-channels") != "1":
+            raise RemoteTTSProtocolError(
+                "Remote TTS stream has incompatible channel count",
+                category="incompatible_contract",
+                request_id=request_id,
+                retryable=False,
+            )
+        self._validate_identity(
+            {
+                "provider": response.headers.get("x-animetta-provider"),
+                "model": response.headers.get("x-animetta-model"),
+                "voice": response.headers.get("x-animetta-voice"),
+            },
+            include_revision=False,
+            request_id=request_id,
+        )
+        if response.headers.get("x-request-id") != request_id:
+            raise RemoteTTSIdentityMismatchError(
+                "Remote TTS response request ID mismatch",
+                category="identity_mismatch",
+                request_id=request_id,
+            )
 
     async def _post_speech_with_busy_retry(
         self,
@@ -371,6 +513,10 @@ class RemoteTTS(TTSInterface):
         }
         if include_revision and self.revision:
             expected["revision"] = self.revision
+        if include_revision and self.quantization:
+            expected["quantization"] = self.quantization
+        if include_revision and self.runtime_commit:
+            expected["runtime_commit"] = self.runtime_commit
         for field, expected_value in expected.items():
             actual_value = identity.get(field)
             if actual_value != expected_value:

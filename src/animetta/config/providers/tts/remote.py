@@ -40,4 +40,7 @@ class RemoteTTSConfig(TTSBaseConfig):
     response_format: Literal["wav", "mp3", "opus"] = "wav"
     language: str | None = None
     timeout_seconds: float = Field(default=20.0, gt=0)
+    revision: str | None = Field(default=None, min_length=1)
+    quantization: str | None = Field(default=None, min_length=1)
+    runtime_commit: str | None = Field(default=None, min_length=1)
     worker: RemoteTTSWorkerConfig | None = None

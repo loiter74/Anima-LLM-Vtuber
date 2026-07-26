@@ -20,6 +20,39 @@ class _StaticModelManager:
         return dict(self.statuses)
 
 
+class _StaticFailoverTTS:
+    def __init__(
+        self,
+        *,
+        primary_ready: bool = True,
+        fallback_ready: bool = True,
+    ) -> None:
+        self.primary_ready = primary_ready
+        self.fallback_ready = fallback_ready
+
+    def readiness_snapshot(self) -> dict[str, object]:
+        ready = self.primary_ready or self.fallback_ready
+        return {
+            "ready": ready,
+            "degraded": ready and not (self.primary_ready and self.fallback_ready),
+            "active_backend": (
+                "primary" if self.primary_ready else "fallback" if self.fallback_ready else None
+            ),
+            "primary": {
+                "ready": self.primary_ready,
+                "error_category": None if self.primary_ready else "billing",
+            },
+            "fallback": {
+                "ready": self.fallback_ready,
+                "error_category": None if self.fallback_ready else "connection",
+            },
+            "circuit": {
+                "state": "closed" if self.primary_ready else "open",
+                "cooldown_remaining_seconds": 0.0 if self.primary_ready else 300.0,
+            },
+        }
+
+
 @pytest.fixture
 def effective_config(monkeypatch: pytest.MonkeyPatch) -> callable:
     for name in (
@@ -39,6 +72,7 @@ def effective_config(monkeypatch: pytest.MonkeyPatch) -> callable:
     monkeypatch.setenv("MIMO_API_KEY", "readiness-mimo-secret")
     monkeypatch.setenv("QWEN_TTS_API_KEY", "readiness-qwen-secret")
     monkeypatch.setenv("QWEN_TTS_URL", "http://qwen-tts.internal:8001")
+    monkeypatch.setenv("QWEN_HOST_TTS_URL", "http://host.docker.internal:8767")
 
     def _load(profile: str) -> EffectiveConfig:
         return load_effective_config("config/animetta.yaml", profile=profile)
@@ -107,7 +141,9 @@ def _seed_ready(config: EffectiveConfig) -> None:
     ServicePool._init_state = "ready"
     ServicePool._ready = True
     ServicePool._llm = object()
-    ServicePool._tts = object()
+    ServicePool._tts = (
+        _StaticFailoverTTS() if config.providers["tts"].type == "failover" else object()
+    )
     ServicePool._asr = object()
     ServicePool._model_manager = _StaticModelManager(tts="loaded")
     ServicePool._resolved_identities = _resolved(config)
@@ -139,7 +175,7 @@ def test_smoke_snapshot_publishes_one_config_identity_and_distinct_asr_tts_rows(
     assert payload["components"]["asr"] != payload["components"]["tts"]
 
 
-def test_production_tts_requires_exact_dashscope_model_and_seren_voice(
+def test_production_tts_exposes_exact_composite_and_child_status(
     effective_config,
 ) -> None:
     config = effective_config("production")
@@ -152,11 +188,47 @@ def test_production_tts_requires_exact_dashscope_model_and_seren_voice(
 
     tts = payload["components"]["tts"]
     assert tts["ready"] is True
-    assert tts["configured"]["type"] == "dashscope"
-    assert tts["configured"]["provider"] == "dashscope"
-    assert tts["configured"]["model"] == "qwen3-tts-instruct-flash-realtime"
-    assert tts["resolved"]["provider"] == "dashscope"
-    assert tts["resolved"]["voice"] == "Seren"
+    assert tts["configured"]["type"] == "failover"
+    assert tts["configured"]["provider"] == "failover"
+    assert tts["resolved"]["provider"] == "failover"
+    assert tts["degraded"] is False
+    assert tts["active_backend"] == "primary"
+    assert tts["primary"] == {"ready": True, "error_category": None}
+    assert tts["fallback"] == {"ready": True, "error_category": None}
+
+
+@pytest.mark.parametrize(
+    ("primary_ready", "fallback_ready", "expected_ready", "active_backend"),
+    [
+        (True, False, True, "primary"),
+        (False, True, True, "fallback"),
+        (False, False, False, None),
+    ],
+)
+def test_production_composite_readiness_accepts_any_single_route(
+    effective_config,
+    primary_ready: bool,
+    fallback_ready: bool,
+    expected_ready: bool,
+    active_backend: str | None,
+) -> None:
+    config = effective_config("production")
+    _seed_ready(config)
+    ServicePool._tts = _StaticFailoverTTS(
+        primary_ready=primary_ready,
+        fallback_ready=fallback_ready,
+    )
+
+    payload = ServicePool.get_readiness_snapshot(
+        config=config,
+        frontend=_frontend(),
+    ).to_dict()
+
+    tts = payload["components"]["tts"]
+    assert tts["ready"] is expected_ready
+    assert tts["degraded"] is expected_ready
+    assert tts["active_backend"] == active_backend
+    assert payload["ready"] is expected_ready
 
 
 def test_selftest_requires_deepseek_connectivity(effective_config) -> None:

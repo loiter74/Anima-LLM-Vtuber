@@ -20,6 +20,7 @@ from animetta.config.providers.tts import (
     ChatTTSConfig,
     DashScopeTTSConfig,
     EdgeTTSConfig,
+    FailoverTTSConfig,
     GLMTTSConfig,
     GPTSoVITSConfig,
     KokoroTTSConfig,
@@ -46,6 +47,7 @@ _AVAILABLE_TTS_PROVIDERS = (
     "mock",
     "dashscope",
     "edge",
+    "failover",
     "mimo",
     "gpt_sovits",
     "qwen3",
@@ -107,6 +109,7 @@ class TTSFactory:
                 "dashscope": ".dashscope_tts",
                 "edge": ".edge_tts",
                 "edge_tts": ".edge_tts",
+                "failover": ".failover_tts",
                 "mimo": ".mimo_tts",
                 "mimo_tts": ".mimo_tts",
                 "mimo-tts": ".mimo_tts",
@@ -192,6 +195,8 @@ class TTSFactory:
                     pitch=kwargs.get("pitch"),
                     preset=kwargs.get("preset"),
                 )
+            elif provider == "failover":
+                return FailoverTTSConfig.model_validate({"type": "failover", **kwargs})
             elif provider == "glm":
                 return GLMTTSConfig(
                     api_key=kwargs.get("api_key"),

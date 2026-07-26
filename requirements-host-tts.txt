@@ -1,0 +1,3 @@
+# Windows host ASGI boundary. GGUF/model dependencies live in the pinned D-drive runtime.
+starlette==0.52.1
+uvicorn==0.42.0

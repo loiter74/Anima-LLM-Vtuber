@@ -265,6 +265,39 @@ async def test_preload_retries_one_transient_connection_failure(monkeypatch) -> 
     assert len(service._sessions) == 0
 
 
+async def test_preload_classifies_account_standing_failure_as_nonretryable_billing() -> None:
+    module = importlib.import_module("animetta.services.tts.dashscope_tts")
+    account_error = "Access denied, please make sure your account is in good standing."
+    connector = FakeConnector(
+        [
+            FakeWebSocket(
+                [
+                    {"type": "session.created", "session": {"id": "session-a"}},
+                    ConnectionError(account_error),
+                ]
+            ),
+            FakeWebSocket(
+                [
+                    {"type": "session.created", "session": {"id": "session-b"}},
+                    ConnectionError(account_error),
+                ]
+            ),
+        ]
+    )
+    service = module.DashScopeRealtimeTTS(api_key="secret", connector=connector)
+    service._preload_retry_delay_seconds = 0.0
+
+    with pytest.raises(
+        module.DashScopeConnectionError,
+        match="account billing is not in good standing",
+    ) as exc_info:
+        await service.preload()
+
+    assert exc_info.value.category == "billing"
+    assert exc_info.value.retryable is False
+    assert len(connector.calls) == 1
+
+
 async def test_different_instructions_use_isolated_hot_connections() -> None:
     module = importlib.import_module("animetta.services.tts.dashscope_tts")
     sockets = [
