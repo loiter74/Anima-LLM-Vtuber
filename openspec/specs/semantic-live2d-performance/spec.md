@@ -1,5 +1,8 @@
-## ADDED Requirements
+# semantic-live2d-performance Specification
 
+## Purpose
+TBD - created by archiving change add-semantic-live2d-performance-control. Update Purpose after archive.
+## Requirements
 ### Requirement: Bounded semantic performance marker
 The response prompt SHALL request exactly one leading marker in the form `[live2d:<base>|<intensity>|<accent>]`, where values are limited to the version-one semantic vocabulary. The system SHALL NOT make an additional LLM request to create the performance plan.
 
@@ -42,3 +45,4 @@ The system SHALL observe normalized source, base, accent, fallback category, sta
 #### Scenario: Invalid marker falls back
 - **WHEN** marker validation fails
 - **THEN** the observation SHALL record only the normalized fallback category and bounded plan labels
+
