@@ -124,14 +124,17 @@ export class TtsHarnessLease {
     }
   }
 
-  async prepareAttempt(context: ReviewAttemptContext): Promise<ReviewAttemptPreparation> {
+  async prepareAttempt(
+    context: ReviewAttemptContext,
+    harnessSceneId = context.sceneId,
+  ): Promise<ReviewAttemptPreparation> {
     const response = await fetch(`${this.baseUrl}/v1/review/synthesize`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.token}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ scene_id: context.sceneId }),
+      body: JSON.stringify({ scene_id: harnessSceneId }),
       signal: AbortSignal.timeout(60_000),
     })
     if (!response.ok) throw new Error(`TTS failover attempt failed (${response.status})`)

@@ -23,6 +23,7 @@ let currentAudio: HTMLAudioElement | null = null
 let currentBlobUrl: string | null = null
 let audioUnlocked = false
 let unlockPending = false
+let currentLifecycle: AudioPlaybackLifecycle | null = null
 
 // ===== Audio Playback =====
 
@@ -83,9 +84,17 @@ export interface AudioPlaybackPayload {
   return_to_idle?: boolean
 }
 
-export function playAudio(data: AudioPlaybackPayload): void {
+export interface AudioPlaybackLifecycle {
+  onStart?: () => void
+  onComplete?: () => void
+  onCancel?: () => void
+}
+
+export function playAudio(data: AudioPlaybackPayload, lifecycle?: AudioPlaybackLifecycle): void {
   if (!data?.audio_data) return
   stopPcmAudioStream()
+  currentLifecycle?.onCancel?.()
+  currentLifecycle = lifecycle ?? null
   cleanup()
 
   const binary = atob(data.audio_data)
@@ -97,25 +106,42 @@ export function playAudio(data: AudioPlaybackPayload): void {
   currentBlobUrl = url
   const audio = getAudioElement()
   audio.src = url
+  const playbackLifecycle = currentLifecycle
 
   if (data.volumes?.length) startLipSync(audio, data.volumes)
 
   audio.onended = () => {
+    const completed = currentLifecycle
+    currentLifecycle = null
     stopLipSync()
     if (data.return_to_idle) setExpression('idle')
     cleanup()
+    completed?.onComplete?.()
   }
 
-  audio.play().catch((error: unknown) => {
-    console.warn('[audio] Chat audio playback failed', error)
-    cleanup()
-  })
+  audio
+    .play()
+    .then(() => {
+      if (currentLifecycle === playbackLifecycle) playbackLifecycle?.onStart?.()
+    })
+    .catch((error: unknown) => {
+      console.warn('[audio] Chat audio playback failed', error)
+      const cancelled = currentLifecycle === playbackLifecycle ? playbackLifecycle : null
+      if (cancelled) currentLifecycle = null
+      cleanup()
+      cancelled?.onCancel?.()
+    })
 }
 
-export function startAudioStream(data: AudioStreamStartEvent): void {
+export function startAudioStream(
+  data: AudioStreamStartEvent,
+  lifecycle?: AudioPlaybackLifecycle,
+): void {
   stopLipSync()
+  currentLifecycle?.onCancel?.()
+  currentLifecycle = null
   cleanup()
-  startPcmAudioStream(data)
+  startPcmAudioStream(data, lifecycle)
 }
 
 export function pushAudioStreamChunk(data: AudioStreamChunkEvent): void {
@@ -131,7 +157,10 @@ export function stopAudio(): void {
     currentAudio.pause()
     currentAudio.currentTime = 0
   }
+  const cancelled = currentLifecycle
+  currentLifecycle = null
   stopPcmAudioStream()
   stopLipSync()
   cleanup()
+  cancelled?.onCancel?.()
 }

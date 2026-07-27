@@ -35,6 +35,7 @@ class AgentState(TypedDict):
     response_chunks: list[str]
     tts_audio: bytes | str | None
     media_status: Any | None
+    performance_plan: dict[str, object] | None
     emotion: str | None
     emotion_vad: tuple[float, float, float] | None  # VAD vector from emotion_node
     # Explicit channels prevent a previous model response from biasing recall.
@@ -121,6 +122,7 @@ def create_initial_state(
         "response_chunks": [],
         "tts_audio": None,
         "media_status": None,
+        "performance_plan": None,
         "emotion": None,
         "emotion_vad": None,
         "conversation_emotion": None,

@@ -1,0 +1,32 @@
+.live2d-performance-review {
+  position: fixed;
+  left: 50%;
+  top: 116px;
+  z-index: 48;
+  width: min(720px, calc(100vw - 64px));
+  transform: translateX(-50%);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-panel) 72%, transparent);
+  padding: 16px 20px;
+  color: var(--c-text);
+  text-align: center;
+  backdrop-filter: blur(16px);
+}
+
+.live2d-performance-review h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.live2d-performance-current {
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+
+.live2d-performance-catalog {
+  margin: 8px 0 0;
+  color: var(--c-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}

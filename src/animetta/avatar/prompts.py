@@ -197,6 +197,51 @@ class EmotionPromptBuilder:
         return cls(emotions=emotions)
 
 
+class PerformancePromptBuilder:
+    """Build the bounded, calm-first Live2D performance contract."""
+
+    def __init__(self, language: str = "zh"):
+        self.language = language
+
+    def build_prompt(self) -> str:
+        """Return a provider-neutral in-band marker contract."""
+
+        if self.language == "en":
+            return "\n".join(
+                [
+                    "# Live2D Semantic Performance",
+                    "",
+                    "Start every response with exactly one marker:",
+                    "`[live2d:<base>|<intensity>|<accent>]`",
+                    "",
+                    "- base: calm | cheerful | concerned | annoyed | surprised | thinking | smug",
+                    "- intensity: subtle | medium",
+                    "- accent: none | brighten | skeptical | startle | sigh",
+                    "",
+                    "Use `[live2d:calm|subtle|none]` for most responses.",
+                    "Choose another value only when the spoken content clearly expresses it.",
+                    "Never output a raw parameter, motion group, motion index, or more than one marker.",
+                ]
+            )
+
+        return "\n".join(
+            [
+                "# Live2D 语义表演指南",
+                "",
+                "每条回复必须在回复最开头输出以下 marker，且只能输出一个：",
+                "`[live2d:<base>|<intensity>|<accent>]`",
+                "",
+                "- base: calm | cheerful | concerned | annoyed | surprised | thinking | smug",
+                "- intensity: subtle | medium",
+                "- accent: none | brighten | skeptical | startle | sigh",
+                "",
+                "大多数回复使用 calm，即 `[live2d:calm|subtle|none]`。",
+                "只有回复正文明确表达对应情绪时才选择其他值。",
+                "禁止输出原始模型参数、动作组、动作编号或多个 marker。",
+            ]
+        )
+
+
 def load_prompt_template(template_path: str) -> str:
     """
     Load a prompt template from a file

@@ -10,7 +10,7 @@ from loguru import logger
 from .base import ExpressionFrame, IEmotionParamMapper, ParameterState
 
 # Default emotion parameter mapping configuration
-DEFAULT_EMOTION_MAPPINGS = {
+_LEGACY_EMOTION_MAPPINGS = {
     "happy": {
         # Mouth: smiling
         "ParamMouthOpenY": 0.6,
@@ -159,6 +159,22 @@ DEFAULT_EMOTION_MAPPINGS = {
 }
 
 
+def _normalize_parameter_mapping(mapping: dict[str, float]) -> dict[str, float]:
+    """Keep facial shape parameters valid while reserving mouth opening for lip sync."""
+
+    return {
+        name.replace("ParamEyebrow", "ParamBrow"): value
+        for name, value in mapping.items()
+        if name != "ParamMouthOpenY"
+    }
+
+
+DEFAULT_EMOTION_MAPPINGS = {
+    emotion: _normalize_parameter_mapping(mapping)
+    for emotion, mapping in _LEGACY_EMOTION_MAPPINGS.items()
+}
+
+
 class EmotionParamMapper(IEmotionParamMapper):
     """
     Emotion Parameter Mapper
@@ -187,7 +203,11 @@ class EmotionParamMapper(IEmotionParamMapper):
             mappings: Custom mapping configuration (defaults to DEFAULT_EMOTION_MAPPINGS)
             default_duration: Default transition duration
         """
-        self.mappings = mappings or DEFAULT_EMOTION_MAPPINGS
+        source_mappings = mappings or DEFAULT_EMOTION_MAPPINGS
+        self.mappings = {
+            emotion: _normalize_parameter_mapping(mapping)
+            for emotion, mapping in source_mappings.items()
+        }
         self.default_duration = default_duration
 
     def map_emotion(
@@ -217,9 +237,7 @@ class EmotionParamMapper(IEmotionParamMapper):
         for param_name, base_value in param_config.items():
             # Apply intensity
             value = self.apply_intensity(base_value, intensity)
-
-            # Add random variance (avoid mechanical feel)
-            value = self._add_variance(value, intensity)
+            value = max(-1.0, min(1.0, value))
 
             parameters.append(
                 ParameterState(name=param_name, value=value, duration=self.default_duration)
@@ -256,30 +274,6 @@ class EmotionParamMapper(IEmotionParamMapper):
         frames.sort(key=lambda f: f.timestamp)
 
         return frames
-
-    def _add_variance(self, value: float, intensity: float) -> float:
-        """
-        Add random variance
-
-        Makes expressions more natural, avoiding mechanical feel.
-
-        Args:
-            value: Base value
-            intensity: Intensity
-
-        Returns:
-            float: Value after adding variance
-        """
-        import random
-
-        # Variance range decreases with intensity
-        variance = 0.05 * intensity
-
-        if variance > 0:
-            value += random.uniform(-variance, variance)
-
-        # Clamp to valid range
-        return max(-1.0, min(1.0, value))
 
     @property
     def name(self) -> str:
@@ -319,7 +313,12 @@ class EmotionParamMapper(IEmotionParamMapper):
             config = yaml.safe_load(f)
 
         if "emotions" in config:
-            self.mappings.update(config["emotions"])
+            self.mappings.update(
+                {
+                    emotion: _normalize_parameter_mapping(mapping)
+                    for emotion, mapping in config["emotions"].items()
+                }
+            )
             logger.info(
                 f"[EmotionParamMapper] Loaded {len(config['emotions'])} emotion mappings from {yaml_path}"
             )

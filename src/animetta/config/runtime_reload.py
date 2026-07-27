@@ -309,16 +309,14 @@ def build_runtime_system_prompt(config: Any) -> RuntimePrompt:
 def build_live2d_prompt() -> tuple[str | None, list[str]]:
     """Build the Live2D prompt fragment, returning warnings instead of raising."""
     try:
-        from animetta.avatar.prompts import EmotionPromptBuilder
+        from animetta.avatar.prompts import PerformancePromptBuilder
         from animetta.config.live2d import get_live2d_config
 
         live2d_config = get_live2d_config()
         if live2d_config is None or not getattr(live2d_config, "enabled", False):
             return None, []
 
-        builder = EmotionPromptBuilder.from_config(
-            {"valid_emotions": list(getattr(live2d_config, "valid_emotions", []) or [])}
-        )
+        builder = PerformancePromptBuilder()
         return builder.build_prompt(), []
     except Exception as exc:
         warning = f"Live2D prompt unavailable: {_redact(str(exc))}"

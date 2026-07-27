@@ -247,7 +247,7 @@ class TestOutputNode:
 
     @pytest.mark.asyncio
     async def test_emits_expression_for_emotion(self, mock_socketio, mock_service_context):
-        """Emotion in state triggers expression event + Live2D motion."""
+        """Emotion remains compatible without exposing raw Live2D motion indices."""
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "I'm happy"
@@ -267,8 +267,39 @@ class TestOutputNode:
         action_calls = [
             c for c in mock_socketio.emit.call_args_list if c[0][0] == "chat:live2d_action"
         ]
-        assert len(action_calls) >= 1
-        assert action_calls[0][0][1]["index"] == 3  # happy -> 3
+        assert action_calls == []
+
+    @pytest.mark.asyncio
+    async def test_complete_audio_carries_only_validated_performance(
+        self, mock_socketio, mock_service_context, monkeypatch
+    ):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好"
+        state["tts_audio"] = b"RIFFaudio"
+        state["performance_plan"] = {
+            "version": 1,
+            "base": "cheerful",
+            "intensity": "subtle",
+            "accent": "brighten",
+            "source": "llm",
+        }
+        monkeypatch.setattr(_output_node_module, "_compute_volumes", lambda _path: [0.1])
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        payload = next(
+            call.args[1]
+            for call in mock_socketio.emit.call_args_list
+            if call.args[0] == "chat:audio_with_expression"
+        )
+        assert payload["performance"] == state["performance_plan"]
+        assert not {"group", "index", "parameters"} & payload.keys()
 
     @pytest.mark.asyncio
     async def test_memory_storage_called(self, mock_socketio, mock_service_context):
@@ -380,7 +411,6 @@ class TestOutputNode:
             "chat:control",
             "chat:sentence",
             "chat:expression",
-            "chat:live2d_action",
         }
         calls = [
             call for call in mock_socketio.emit.call_args_list if call.args[0] in golden_events

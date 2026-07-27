@@ -324,7 +324,15 @@ class TestStreamingTTSNode:
                 yield b"\x02\x03"
 
         socket = AsyncMock()
-        result = await tts_node(self._state(), self._config(Engine(), socket))
+        state = self._state()
+        state["performance_plan"] = {
+            "version": 1,
+            "base": "thinking",
+            "intensity": "subtle",
+            "accent": "skeptical",
+            "source": "llm",
+        }
+        result = await tts_node(state, self._config(Engine(), socket))
 
         calls = socket.emit.await_args_list
         assert [call.args[0] for call in calls] == [
@@ -334,6 +342,8 @@ class TestStreamingTTSNode:
             "chat:audio_stream_end",
         ]
         assert [call.args[1].get("sequence") for call in calls[1:3]] == [0, 1]
+        assert calls[0].args[1]["performance"] == state["performance_plan"]
+        assert not {"group", "index", "parameters"} & calls[0].args[1].keys()
         assert base64.b64decode(calls[1].args[1]["audio_data"]) == b"\x00\x01"
         assert base64.b64decode(calls[2].args[1]["audio_data"]) == b"\x02\x03"
         assert calls[3].args[1]["status"] == "completed"
@@ -344,6 +354,13 @@ class TestStreamingTTSNode:
         assert result["metadata"]["tts_provider"] == "qwen3-tts-gguf-host"
         assert result["metadata"]["tts_first_audio_ms"] >= 0
         assert result["metadata"]["tts_rtf"] >= 0
+
+    def test_clean_text_strips_semantic_and_invalid_live2d_markers(self) -> None:
+        clean = _tts_node_module._clean_text_for_tts(
+            "[live2d:cheerful|subtle|brighten] 你好 [live2d:raw|unsafe|motion]"
+        )
+
+        assert clean == "你好"
 
     @pytest.mark.asyncio
     async def test_retries_once_before_first_chunk_with_same_instruction(self) -> None:

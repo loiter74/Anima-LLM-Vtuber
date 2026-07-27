@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer, trim_leading_silence
+from animetta.avatar.performance import validated_performance_payload
 from animetta.observability.context import noncritical_observation_context
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery
@@ -163,32 +164,12 @@ async def output_node(
 
         translation_task = asyncio.create_task(_translate_and_emit())
 
-    # Send emotion event — also send motion command to frontend
+    # Keep the legacy expression event for compatibility. Semantic performance
+    # is synchronized with actual audio below and never exposes motion indices.
     emotion = state.get("emotion")
     if emotion:
         await delivery.emit("chat", "expression", {"emotion": emotion}, to=to)
         logger.debug(f"[{session_id}] [OutputNode] Sent emotion: {emotion}")
-
-        # Map emotion to Live2D motion command (for models like Hiyori without expression files)
-        emotion_motion_map = {
-            "happy": 3,
-            "sad": 1,
-            "angry": 2,
-            "surprised": 4,
-            "neutral": 0,
-            "thinking": 5,
-        }
-        motion_idx = emotion_motion_map.get(emotion)
-        if motion_idx is not None:
-            await delivery.emit(
-                "chat",
-                "live2d_action",
-                {"type": "motion", "group": "Idle", "index": motion_idx},
-                to=to,
-            )
-            logger.debug(
-                f"[{session_id}] [OutputNode] Sent Live2D motion: Idle[{motion_idx}] for {emotion}"
-            )
 
     # Send audio data (with parallel processing for independent operations)
     tts_audio = state.get("tts_audio")
@@ -233,6 +214,9 @@ async def output_node(
                 payload: dict[str, Any] = {"audio_data": audio_data, "format": format}
                 if volumes:
                     payload["volumes"] = volumes
+                performance = validated_performance_payload(state.get("performance_plan"))
+                if performance is not None:
+                    payload["performance"] = performance
                 await delivery.emit("chat", "audio_with_expression", payload, to=to)
                 logger.info(
                     f"[{session_id}] [OutputNode] ✅ Sent audio data (volumes: {len(volumes)} samples)"

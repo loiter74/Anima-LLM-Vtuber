@@ -75,7 +75,7 @@ async def test_degraded_media_keeps_live2d_and_emits_no_audio() -> None:
     events = emitted(socket)
     names = [event for event, _ in events]
     assert "chat:expression" in names
-    assert "chat:live2d_action" in names
+    assert "chat:live2d_action" not in names
     assert "chat:audio_with_expression" not in names
     degradation = next(
         payload

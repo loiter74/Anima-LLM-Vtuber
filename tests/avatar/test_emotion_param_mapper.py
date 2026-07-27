@@ -10,8 +10,6 @@ from animetta.avatar.mappers.emotion_param_mapper import (
 Tests for EmotionParamMapper — emotion to Live2D parameter mapping.
 """
 
-from unittest.mock import patch
-
 # ============================================================
 # Initialization
 # ============================================================
@@ -28,7 +26,7 @@ class TestEmotionParamMapperInit:
 
     def test_custom_mappings(self):
         """Custom mappings override defaults."""
-        custom = {"happy": {"ParamMouthOpenY": 0.5}}
+        custom = {"happy": {"ParamMouthForm": 0.5}}
         mapper = EmotionParamMapper(mappings=custom)
         assert mapper.mappings == custom
         assert "sad" not in mapper.mappings
@@ -60,22 +58,22 @@ class TestEmotionParamMapperMapEmotion:
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("happy")
         param_names = [p.name for p in frame.parameters]
-        assert "ParamMouthOpenY" in param_names
+        assert "ParamMouthOpenY" not in param_names
         assert "ParamMouthForm" in param_names
-        assert "ParamEyebrowLY" in param_names
+        assert "ParamBrowLY" in param_names
 
     def test_sad_eyebrows_lowered(self):
         """Sad should have lowered eyebrows (negative values)."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("sad")
-        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamEyebrowLY")
+        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamBrowLY")
         assert eyebrow_l.value < 0
 
     def test_angry_eyebrows_furrowed(self):
         """Angry should have furrowed eyebrows (strongly negative)."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("angry")
-        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamEyebrowLY")
+        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamBrowLY")
         assert eyebrow_l.value < -0.3
 
     def test_surprised_eyes_wide_open(self):
@@ -87,23 +85,19 @@ class TestEmotionParamMapperMapEmotion:
 
     def test_neutral_all_zero(self):
         """Neutral should have mostly zero/default values."""
-        import random
-
         mapper = EmotionParamMapper()
-        # Use a fixed seed for deterministic test
-        random.seed(42)
         frame = mapper.map_emotion("neutral")
         param_dict = {p.name: p.value for p in frame.parameters}
         assert abs(param_dict["ParamAngleX"]) < 0.1
         assert abs(param_dict["ParamAngleY"]) < 0.1
-        assert abs(param_dict["ParamMouthOpenY"]) < 0.1
+        assert "ParamMouthOpenY" not in param_dict
 
     def test_thinking_asymmetric_eyebrows(self):
         """Thinking should have asymmetric eyebrows."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("thinking")
-        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamEyebrowLY")
-        eyebrow_r = next(p for p in frame.parameters if p.name == "ParamEyebrowRY")
+        eyebrow_l = next(p for p in frame.parameters if p.name == "ParamBrowLY")
+        eyebrow_r = next(p for p in frame.parameters if p.name == "ParamBrowRY")
         assert eyebrow_l.value != eyebrow_r.value
 
     def test_confused_head_tilt(self):
@@ -114,11 +108,11 @@ class TestEmotionParamMapperMapEmotion:
         assert angle_z.value != 0
 
     def test_love_gentle_smile(self):
-        """Love should have gentle mouth open."""
+        """Love should have a gentle mouth shape without owning mouth opening."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("love")
-        mouth = next(p for p in frame.parameters if p.name == "ParamMouthOpenY")
-        assert 0.2 < mouth.value < 0.6
+        mouth = next(p for p in frame.parameters if p.name == "ParamMouthForm")
+        assert 0 < mouth.value < 0.6
 
     def test_shy_looking_down(self):
         """Shy should have eyes looking down."""
@@ -128,20 +122,17 @@ class TestEmotionParamMapperMapEmotion:
         assert eye_ball_y.value > 0
 
     def test_excited_laughing_mouth(self):
-        """Excited should have wide mouth open."""
+        """Excited should have a strong smile shape without owning mouth opening."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("excited")
-        mouth = next(p for p in frame.parameters if p.name == "ParamMouthOpenY")
-        assert mouth.value >= 0.6
+        mouth = next(p for p in frame.parameters if p.name == "ParamMouthForm")
+        assert mouth.value >= 0.4
 
     def test_unknown_emotion_falls_back_to_neutral(self):
         """Unknown emotion should map to neutral and log a warning."""
-        import random
-
-        random.seed(42)
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("nonexistent_emotion")
-        # Should use neutral config (mostly zeros), variance adds tiny offsets
+        # Should use deterministic neutral config.
         param_dict = {p.name: p.value for p in frame.parameters}
         assert abs(param_dict.get("ParamAngleX", 1.0)) < 0.1
         assert abs(param_dict.get("ParamAngleY", 1.0)) < 0.1
@@ -193,19 +184,17 @@ class TestEmotionParamMapperIntensity:
         mapper = EmotionParamMapper()
         frame_half = mapper.map_emotion("happy", intensity=0.5)
         frame_full = mapper.map_emotion("happy", intensity=1.0)
-        # Each value in half should be roughly half of full (with variance)
+        # Each value in half is exactly scaled from the deterministic full value.
         for p_half in frame_half.parameters:
             p_full = next(p for p in frame_full.parameters if p.name == p_half.name)
-            # With variance, they won't be exactly half, but should be <= full
-            assert abs(p_half.value) <= abs(p_full.value) + 0.1
+            assert abs(p_half.value) <= abs(p_full.value)
 
     def test_intensity_full(self):
-        """Intensity 1.0 should use full base values (with variance)."""
+        """Intensity 1.0 should use full deterministic base values."""
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("happy", intensity=1.0)
-        mouth = next(p for p in frame.parameters if p.name == "ParamMouthOpenY")
-        # Base is 0.6, with variance ±0.05, so should be ~0.55-0.65
-        assert 0.5 <= mouth.value <= 0.7
+        mouth = next(p for p in frame.parameters if p.name == "ParamMouthForm")
+        assert mouth.value == 0.3
 
     def test_intensity_negative_clamped(self):
         """Intensity value should not cause out of range params."""
@@ -223,25 +212,20 @@ class TestEmotionParamMapperIntensity:
 
 
 # ============================================================
-# Random variance
+# Deterministic mapping
 # ============================================================
 
 
-class TestEmotionParamMapperVariance:
-    """Random variance behavior."""
+class TestEmotionParamMapperDeterminism:
+    """The response path must never introduce random parameter variance."""
 
-    def test_variance_introduces_small_changes(self):
-        """Variance should introduce small random changes."""
+    def test_repeated_mapping_is_identical(self):
         mapper = EmotionParamMapper()
-        # Mock random to return fixed offset
-        with patch("random.uniform", return_value=0.03):
-            frame = mapper.map_emotion("happy", intensity=1.0)
-            mouth = next(p for p in frame.parameters if p.name == "ParamMouthOpenY")
-            # Base 0.6 + 0.03 = 0.63
-            assert mouth.value == 0.63
+        first = mapper.map_emotion("happy", intensity=1.0)
+        second = mapper.map_emotion("happy", intensity=1.0)
+        assert first.parameters == second.parameters
 
-    def test_variance_zero_at_zero_intensity(self):
-        """Variance should be 0 when intensity is 0."""
+    def test_zero_intensity_is_zero(self):
         mapper = EmotionParamMapper()
         frame = mapper.map_emotion("happy", intensity=0.0)
         # At 0 intensity, variance range is 0, so values should be exactly 0

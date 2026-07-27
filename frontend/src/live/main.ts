@@ -7,11 +7,13 @@ import type { LiveSocket } from './controller'
 import { applyLiveReviewLayout } from './layout'
 import { createLive2DStage } from './live2d-stage'
 import { parseReviewMouthTimeline } from './review-lip-sync'
+import { mountLive2DPerformanceReview } from '@/live2d-performance/main'
 import type { LiveSocketRuntime } from './socket-runtime'
 import { createDomLiveView } from './view'
 import 'virtual:uno.css'
 import './styles.css'
 import '@/tts-failover/styles.css'
+import '@/live2d-performance/styles.css'
 
 declare global {
   interface Window {
@@ -79,5 +81,14 @@ void live2dStage.ready.finally(() => {
     const volumes = parseReviewMouthTimeline(search.get('mouthTimeline'))
     live2dStage.playReviewAudio(notification.element, volumes)
   }
+  const performanceReview = mountLive2DPerformanceReview(
+    document,
+    search,
+    live2dStage,
+    search.get('live2dPerformance') === '1'
+      ? parseReviewMouthTimeline(search.get('mouthTimeline'))
+      : [],
+  )
+  if (performanceReview) pageDisposers.add(() => performanceReview.dispose())
   session.start()
 })

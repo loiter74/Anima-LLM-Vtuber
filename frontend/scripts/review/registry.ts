@@ -2,6 +2,7 @@ import type { ReviewDefinition } from '../../src/review/contracts'
 import type { AssertionRecord, ReviewPageAdapter, StructuredObservation } from './browser'
 import { liveReviewNodePlugin } from './plugins/live'
 import { ttsFailoverReviewNodePlugin } from './plugins/tts-failover'
+import { live2dPerformanceReviewNodePlugin } from './plugins/live2d-performance'
 
 export interface ReviewCapabilities {
   requireObs?: boolean
@@ -64,6 +65,7 @@ export interface NodeReviewPlugin<Action = unknown> {
 const plugins = new Map<string, NodeReviewPlugin>([
   ['live', liveReviewNodePlugin as unknown as NodeReviewPlugin],
   ['tts-failover', ttsFailoverReviewNodePlugin as unknown as NodeReviewPlugin],
+  ['live2d-performance', live2dPerformanceReviewNodePlugin as unknown as NodeReviewPlugin],
 ])
 
 export const REVIEW_FEATURE_IDS = Object.freeze([...plugins.keys()])

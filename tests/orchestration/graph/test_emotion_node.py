@@ -36,24 +36,22 @@ class TestEmotionNode:
         assert result["emotion"] == "neutral"
 
     @pytest.mark.asyncio
-    async def test_analyzer_via_service_context(self, mock_service_context):
-        """emotion_analyzer from service_context is used when available."""
+    async def test_missing_marker_does_not_invoke_legacy_analyzer(self, mock_service_context):
+        """Missing markers deterministically fall back instead of guessing."""
 
-        mock_result = MagicMock()
-        mock_result.primary = "happy"
-        mock_result.confidence = 0.95
-
-        mock_service_context.emotion_analyzer.extract = MagicMock(return_value=mock_result)
+        mock_service_context.emotion_analyzer.extract = MagicMock()
 
         state = create_initial_state(session_id="test")
         state["response_text"] = "I am so happy!"
         config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await emotion_node(state, config)
-        assert result["emotion"] == "happy"
+        assert result["emotion"] == "neutral"
+        assert result["performance_plan"]["base"] == "calm"
+        mock_service_context.emotion_analyzer.extract.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_analyzer_error_returns_default(self, mock_service_context):
-        """If the analyzer raises, fall back to neutral."""
+    async def test_legacy_analyzer_is_not_part_of_semantic_control(self, mock_service_context):
+        """Semantic control is independent of the legacy analyzer."""
 
         mock_service_context.emotion_analyzer.extract = MagicMock(side_effect=ValueError("fail"))
 
@@ -62,3 +60,74 @@ class TestEmotionNode:
         config = RunnableConfig(configurable={"service_context": mock_service_context})
         result = await emotion_node(state, config)
         assert result["emotion"] == "neutral"
+        mock_service_context.emotion_analyzer.extract.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_semantic_marker_builds_performance_plan_and_compatible_vad(self):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "本小姐早就知道了。"
+        state["response_chunks"] = ["[live2d:smug|subtle|skeptical] 本小姐早就知道了。"]
+
+        result = await emotion_node(state)
+
+        assert result["performance_plan"] == {
+            "version": 1,
+            "base": "smug",
+            "intensity": "subtle",
+            "accent": "skeptical",
+            "source": "llm",
+        }
+        assert result["emotion"] == "neutral"
+        assert result["response_emotion"] == "neutral"
+        assert result["response_emotion_vad"] == result["emotion_vad"]
+        assert result["metadata"]["live2d_performance"] == {
+            "source": "llm",
+            "base": "smug",
+            "accent": "skeptical",
+            "fallback": "none",
+        }
+
+    @pytest.mark.asyncio
+    async def test_missing_marker_uses_calm_fallback_without_analyzer(self):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "普通回复。"
+
+        result = await emotion_node(state)
+
+        assert result["performance_plan"] == {
+            "version": 1,
+            "base": "calm",
+            "intensity": "subtle",
+            "accent": "none",
+            "source": "fallback",
+        }
+        assert result["emotion"] == "neutral"
+        assert result["metadata"]["live2d_performance"]["fallback"] == "missing_marker"
+
+    @pytest.mark.asyncio
+    async def test_legacy_marker_maps_to_semantic_plan(self):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "你好，很高兴见到你。"
+        state["response_chunks"] = ["你好，[happy] 很高兴见到你。"]
+
+        result = await emotion_node(state)
+
+        assert result["performance_plan"]["base"] == "cheerful"
+        assert result["performance_plan"]["source"] == "legacy"
+        assert result["emotion"] == "happy"
+
+    @pytest.mark.asyncio
+    async def test_marker_can_span_streaming_response_chunks(self):
+        state = create_initial_state(session_id="test")
+        state["response_text"] = "让我想想。"
+        state["response_chunks"] = [
+            "[live2d:thinking|",
+            "subtle|skeptical] ",
+            "让我想想。",
+        ]
+
+        result = await emotion_node(state)
+
+        assert result["performance_plan"]["base"] == "thinking"
+        assert result["performance_plan"]["accent"] == "skeptical"
+        assert result["emotion"] == "thinking"

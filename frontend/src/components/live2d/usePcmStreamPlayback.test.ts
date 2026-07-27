@@ -28,7 +28,14 @@ interface StreamEnd {
 }
 
 interface PlaybackModule {
-  startAudioStream(data: StreamStart): void
+  startAudioStream(
+    data: StreamStart,
+    lifecycle?: {
+      onStart?: () => void
+      onComplete?: () => void
+      onCancel?: () => void
+    },
+  ): void
   pushAudioStreamChunk(data: StreamChunk): void
   endAudioStream(data: StreamEnd): void
   playAudio(data: { audio_data: string; format: string }): void
@@ -301,5 +308,36 @@ describe('progressive PCM playback', () => {
 
     expect(sources.every((source) => source.stop.mock.calls.length === 1)).toBe(true)
     expect(setMouthTarget).toHaveBeenLastCalledWith(0)
+  })
+
+  it('notifies start at the first scheduled audio frame and completes after drain', async () => {
+    const playback = await loadPlayback()
+    const lifecycle = {
+      onStart: vi.fn(),
+      onComplete: vi.fn(),
+      onCancel: vi.fn(),
+    }
+    playback.startAudioStream(startEvent(), lifecycle)
+    for (let sequence = 0; sequence < 4; sequence++) {
+      playback.pushAudioStreamChunk({
+        stream_id: 'stream-a',
+        sequence,
+        audio_data: pcmChunk(4_000),
+      })
+    }
+
+    expect(lifecycle.onStart).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(20)
+    expect(lifecycle.onStart).toHaveBeenCalledTimes(1)
+
+    playback.endAudioStream({
+      stream_id: 'stream-a',
+      final_sequence: 3,
+      status: 'completed',
+    })
+    for (const source of MockAudioContext.instances[0].sources) source.onended?.()
+
+    expect(lifecycle.onComplete).toHaveBeenCalledTimes(1)
+    expect(lifecycle.onCancel).not.toHaveBeenCalled()
   })
 })

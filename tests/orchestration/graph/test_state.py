@@ -43,6 +43,7 @@ class TestAgentStateKeys:
             "response_text",
             "response_chunks",
             "tts_audio",
+            "performance_plan",
             "media_status",
             "emotion",
             "emotion_vad",

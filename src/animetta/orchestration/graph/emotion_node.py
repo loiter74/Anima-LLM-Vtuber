@@ -6,86 +6,66 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.avatar.performance import PerformanceParseResult, parse_performance_plan
 from animetta.memory.v2.emotion_field import VAD_MAP
 
 from .state import AgentState, log_timing
 
 
-def _get_from_config(config: RunnableConfig | None, key: str) -> Any | None:
-    """Get value from LangGraph config"""
-    if config:
-        return config.get("configurable", {}).get(key)
-    return None
-
-
-def _emotion_result(emotion: str) -> dict[str, Any]:
+def _emotion_result(
+    state: AgentState,
+    parsed: PerformanceParseResult,
+) -> dict[str, Any]:
     """Build result dict with both discrete emotion and VAD vector."""
+    emotion = parsed.compatible_emotion
     vad = VAD_MAP.get(emotion, VAD_MAP["neutral"])
     values = vad.to_tuple()
+    metadata = {
+        **(state.get("metadata", {}) or {}),
+        "live2d_performance": {
+            "source": parsed.plan.source,
+            "base": parsed.plan.base,
+            "accent": parsed.plan.accent,
+            "fallback": parsed.fallback_reason or "none",
+        },
+    }
     return {
-        # Compatibility aliases used by Live2D/output consumers.
+        "performance_plan": parsed.plan.to_dict(),
         "emotion": emotion,
         "emotion_vad": values,
-        # Response emotion must not leak into the next turn's recall context.
         "response_emotion": emotion,
         "response_emotion_vad": values,
+        "metadata": metadata,
     }
 
 
-def _timed_result(state: AgentState, started: float, emotion: str) -> dict[str, Any]:
+def _timed_result(
+    state: AgentState,
+    started: float,
+    parsed: PerformanceParseResult,
+) -> dict[str, Any]:
     log_timing(state, "emotion.analyze", (time.perf_counter() - started) * 1000)
-    return _emotion_result(emotion)
+    return _emotion_result(state, parsed)
 
 
 async def emotion_node(
     state: AgentState,
     config: RunnableConfig | None = None,
 ) -> dict[str, Any]:
-    """
-    Emotion analysis node
-
-    Input: state["response_text"]
-    Output: state["emotion"]
-    """
+    """Normalize bounded Live2D performance and compatible emotion fields."""
+    del config
     session_id = state.get("session_id", "unknown")
     started = time.perf_counter()
-    # Prefer response_chunks (raw text with [emotion] tags intact) over
-    # response_text (tags already stripped by llm_node).
     response_chunks = state.get("response_chunks") or []
-    response_text = response_chunks[0] if response_chunks else state.get("response_text", "")
+    response_text = "".join(response_chunks) if response_chunks else state.get("response_text", "")
 
-    logger.info(f"[{session_id}] [EmotionNode] Starting analysis...")
-
-    if not response_text:
-        logger.warning(f"[{session_id}] [EmotionNode] No response text, using default emotion")
-        return _timed_result(state, started, "neutral")
-
-    # Get emotion_analyzer from config
-    emotion_analyzer = _get_from_config(config, "emotion_analyzer")
-
-    if not emotion_analyzer:
-        # Try to get from service_context
-        service_context = _get_from_config(config, "service_context")
-        if service_context and hasattr(service_context, "emotion_analyzer"):
-            emotion_analyzer = service_context.emotion_analyzer
-
-    if not emotion_analyzer:
-        logger.debug(f"[{session_id}] [EmotionNode] No emotion analyzer, using default emotion")
-        return _timed_result(state, started, "neutral")
-
-    try:
-        logger.debug(f"[{session_id}] [EmotionNode] Calling emotion analyzer...")
-
-        result = emotion_analyzer.extract(response_text)
-        primary_emotion = result.primary
-        confidence = result.confidence
-
-        logger.info(
-            f"[{session_id}] [EmotionNode] Analysis result: {primary_emotion} (confidence: {confidence:.2f})"
-        )
-
-        return _timed_result(state, started, primary_emotion)
-
-    except Exception as e:
-        logger.error(f"[{session_id}] [EmotionNode] Analysis failed: {e}")
-        return _timed_result(state, started, "neutral")
+    parsed = parse_performance_plan(response_text)
+    logger.info(
+        "[{}] [EmotionNode] Performance normalized: source={}, base={}, accent={}, fallback={}",
+        session_id,
+        parsed.plan.source,
+        parsed.plan.base,
+        parsed.plan.accent,
+        parsed.fallback_reason or "none",
+    )
+    return _timed_result(state, started, parsed)

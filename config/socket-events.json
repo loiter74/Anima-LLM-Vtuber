@@ -469,14 +469,18 @@
           "required": true,
           "strict": true,
           "items": "number"
+        },
+        "performance?": {
+          "type": "object",
+          "required": false,
+          "strict": true,
+          "default": null
         }
       }
     },
     "audio_stream_start": {
       "name": "chat:audio_stream_start",
-      "aliases": [
-        "audio_stream_start"
-      ],
+      "aliases": ["audio_stream_start"],
       "identity": "correlated",
       "golden_path": true,
       "payload": {
@@ -524,9 +528,7 @@
           "type": "string",
           "required": true,
           "strict": true,
-          "enum": [
-            "pcm_s16le"
-          ],
+          "enum": ["pcm_s16le"],
           "min_length": 9,
           "max_length": 9
         },
@@ -534,40 +536,33 @@
           "type": "integer",
           "required": true,
           "strict": true,
-          "enum": [
-            24000
-          ]
+          "enum": [24000]
         },
         "channels": {
           "type": "integer",
           "required": true,
           "strict": true,
-          "enum": [
-            1
-          ]
+          "enum": [1]
         },
         "emotion": {
           "type": "string",
           "required": true,
           "strict": true,
-          "enum": [
-            "neutral",
-            "happy",
-            "sad",
-            "angry",
-            "surprised",
-            "thinking"
-          ],
+          "enum": ["neutral", "happy", "sad", "angry", "surprised", "thinking"],
           "min_length": 3,
           "max_length": 16
+        },
+        "performance?": {
+          "type": "object",
+          "required": false,
+          "strict": true,
+          "default": null
         }
       }
     },
     "audio_stream_chunk": {
       "name": "chat:audio_stream_chunk",
-      "aliases": [
-        "audio_stream_chunk"
-      ],
+      "aliases": ["audio_stream_chunk"],
       "identity": "correlated",
       "golden_path": true,
       "payload": {
@@ -627,9 +622,7 @@
     },
     "audio_stream_end": {
       "name": "chat:audio_stream_end",
-      "aliases": [
-        "audio_stream_end"
-      ],
+      "aliases": ["audio_stream_end"],
       "identity": "correlated",
       "golden_path": true,
       "payload": {
@@ -682,11 +675,7 @@
           "type": "string",
           "required": true,
           "strict": true,
-          "enum": [
-            "completed",
-            "failed",
-            "cancelled"
-          ],
+          "enum": ["completed", "failed", "cancelled"],
           "min_length": 6,
           "max_length": 9
         },
@@ -694,11 +683,7 @@
           "type": "string",
           "required": false,
           "strict": true,
-          "enum": [
-            "timeout",
-            "provider_error",
-            "cancelled"
-          ],
+          "enum": ["timeout", "provider_error", "cancelled"],
           "default": null,
           "min_length": 7,
           "max_length": 32
@@ -1219,7 +1204,7 @@
       "payload": {
         "health?": "number",
         "food?": "number",
-        "position?": {"x": "number", "y": "number", "z": "number"},
+        "position?": { "x": "number", "y": "number", "z": "number" },
         "dimension?": "string",
         "biome?": "string",
         "time?": "string",
@@ -1287,40 +1272,44 @@
       }
     }
   },
-    "memory": {
-      "list": {
-        "name": "memory:list",
-        "payload": {"cursor?": "string", "limit?": "number", "scope?": "string"}
-      },
-      "get": {
-        "name": "memory:get",
-        "payload": {"id": "string"}
-      },
-      "search": {
-        "name": "memory:search",
-        "payload": {"query": "string", "limit?": "number"}
-      },
-      "pin": {
-        "name": "memory:pin",
-        "payload": {"id": "string", "pinned": "boolean"}
-      },
-      "forget": {
-        "name": "memory:forget",
-        "payload": {"id": "string"}
-      },
-      "change": {
-        "name": "memory:change",
-        "payload": {"id": "string", "summary": "string"}
-      },
-      "job": {
-        "name": "memory:job",
-        "payload": {"job_id": "string"}
-      },
-      "changed": {
-        "name": "memory:changed",
-        "payload": {"revision": "number", "reason": "string", "atom_id?": "string"}
-      },
-      "organize": {
+  "memory": {
+    "list": {
+      "name": "memory:list",
+      "payload": { "cursor?": "string", "limit?": "number", "scope?": "string" }
+    },
+    "get": {
+      "name": "memory:get",
+      "payload": { "id": "string" }
+    },
+    "search": {
+      "name": "memory:search",
+      "payload": { "query": "string", "limit?": "number" }
+    },
+    "pin": {
+      "name": "memory:pin",
+      "payload": { "id": "string", "pinned": "boolean" }
+    },
+    "forget": {
+      "name": "memory:forget",
+      "payload": { "id": "string" }
+    },
+    "change": {
+      "name": "memory:change",
+      "payload": { "id": "string", "summary": "string" }
+    },
+    "job": {
+      "name": "memory:job",
+      "payload": { "job_id": "string" }
+    },
+    "changed": {
+      "name": "memory:changed",
+      "payload": {
+        "revision": "number",
+        "reason": "string",
+        "atom_id?": "string"
+      }
+    },
+    "organize": {
       "name": "memory:organize",
       "payload": {}
     },
@@ -1330,23 +1319,23 @@
         "session_id": "string"
       }
     },
-      "organize_progress": {
-        "name": "memory:organize_progress",
-        "payload": {
-          "job_id": "string",
-          "text": "string",
-          "progress": "number",
-          "status": "string"
-        }
+    "organize_progress": {
+      "name": "memory:organize_progress",
+      "payload": {
+        "job_id": "string",
+        "text": "string",
+        "progress": "number",
+        "status": "string"
+      }
     },
     "organize_result": {
       "name": "memory:organize_result",
-        "payload": {
-          "job_id": "string",
-          "status": "string",
-          "message": "string",
-          "revision?": "number"
-        }
+      "payload": {
+        "job_id": "string",
+        "status": "string",
+        "message": "string",
+        "revision?": "number"
+      }
     }
   },
   "sing": {
