@@ -43,6 +43,29 @@ FALLBACK_IDENTITY = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class ReviewSpeech:
+    text: str
+    emotion: str
+
+
+REVIEW_SPEECHES = {
+    REVIEW_SCENE_ID: ReviewSpeech(FIXED_REVIEW_TEXT, "neutral"),
+    "live2d-calm": ReviewSpeech(
+        "晚上好，今天也一起轻松聊聊天吧。",
+        "neutral",
+    ),
+    "live2d-annoyed": ReviewSpeech(
+        "哼，这种事情居然还要本小姐提醒你吗？",
+        "angry",
+    ),
+    "live2d-surprised": ReviewSpeech(
+        "诶？这是真的吗？完全没想到会变成这样！",
+        "surprised",
+    ),
+}
+
+
 class TTSFailoverReviewError(RuntimeError):
     """Base class for bounded, sanitized review failures."""
 
@@ -149,7 +172,8 @@ class TTSFailoverReviewHarness:
         self._authorize(authorization)
         if not self._prepared:
             raise TTSFailoverReviewError("Review harness is not prepared")
-        if scene_id != REVIEW_SCENE_ID:
+        speech = REVIEW_SPEECHES.get(scene_id)
+        if speech is None:
             raise ReviewSceneError("Unsupported review scene")
         if self._attempt_lock.locked():
             raise ReviewBusyError("Review attempt is already running")
@@ -157,18 +181,18 @@ class TTSFailoverReviewHarness:
         async with self._attempt_lock:
             try:
                 async with asyncio.timeout(self.timeout_seconds):
-                    return await self._run_attempt()
+                    return await self._run_attempt(scene_id, speech)
             except TimeoutError as exc:
                 raise ReviewTimeoutError("Review synthesis timed out") from exc
 
-    async def _run_attempt(self) -> ReviewResult:
+    async def _run_attempt(self, scene_id: str, speech: ReviewSpeech) -> ReviewResult:
         started = self._clock()
         first_audio_seconds: float | None = None
         chunks: list[bytes] = []
         stream = self.engine.synthesize_stream(
-            FIXED_REVIEW_TEXT,
-            instruction=build_emotion_instruction("neutral"),
-            emotion="neutral",
+            speech.text,
+            instruction=build_emotion_instruction(speech.emotion),
+            emotion=speech.emotion,
         )
         try:
             async for chunk in stream:
@@ -197,7 +221,7 @@ class TTSFailoverReviewHarness:
         report = {
             "schema_version": 1,
             "feature": "tts-failover",
-            "scene_id": REVIEW_SCENE_ID,
+            "scene_id": scene_id,
             "actual_backend": self.engine.actual_backend,
             "actual_provider": self.engine.actual_provider,
             "primary_error_category": readiness["primary"]["error_category"],

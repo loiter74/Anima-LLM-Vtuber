@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ReviewScene } from '../../src/review/contracts'
 import { comparePngRegion, type ImageRegion } from './image-compare'
+import type { ReviewPluginArtifacts } from './registry'
 
 export interface AssertionRecord {
   name: string
@@ -48,10 +49,7 @@ export interface BrowserAttemptResult {
   startedAt: string
   finishedAt: string
   observations?: readonly StructuredObservation[]
-  pluginArtifacts?: {
-    audioWav?: string | null
-    backendReport?: string | null
-  }
+  pluginArtifacts?: ReviewPluginArtifacts
 }
 
 export interface StructuredObservation {

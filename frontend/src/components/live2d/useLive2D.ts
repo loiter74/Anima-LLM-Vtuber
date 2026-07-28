@@ -23,7 +23,9 @@ import {
   setExpression,
   playMotion,
   getModel,
+  getParameterValue,
   retryLoad,
+  setClampedParameter,
 } from './useLive2DModel'
 import { tickLipSync, setMouthTarget } from './useLipSync'
 import {
@@ -34,6 +36,11 @@ import {
   stopAudio,
 } from './useAudioPlayback'
 import { playParameterTimeline, setParam, cancelTimeline } from './useParameterTimeline'
+import {
+  DEFAULT_LIVE2D_PERFORMANCE_PLAN,
+  createLive2DPerformanceController,
+} from './live2dPerformanceController'
+import { dispatchLive2DPerformanceObservation } from './live2dPerformanceObservability'
 import {
   isLoaded,
   isLoading,
@@ -60,6 +67,29 @@ let audioStreamChunkListener: ((data: AudioStreamChunkEvent) => void) | null = n
 let audioStreamEndListener: ((data: AudioStreamEndEvent) => void) | null = null
 let stopAudioListener: ((data: ChatIdentity) => void) | null = null
 let disconnectListener: (() => void) | null = null
+const performanceController = createLive2DPerformanceController({
+  read: getParameterValue,
+  write: setClampedParameter,
+})
+
+function isCurrentPerformanceEvent(
+  data: ChatIdentity,
+  event:
+    | 'audio_with_expression'
+    | 'audio_stream_start'
+    | 'audio_stream_chunk'
+    | 'audio_stream_end'
+    | 'stop_audio',
+): boolean {
+  if (isCurrentChatTask(data)) return true
+  dispatchLive2DPerformanceObservation({ kind: 'stale_drop', event })
+  return false
+}
+
+function tickPerformanceThenLipSync(): void {
+  performanceController.tick()
+  tickLipSync()
+}
 
 // ===== Main Composable =====
 
@@ -90,7 +120,7 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
         // pipeline. Mitigation: reduce ticker FPS if warnings are excessive:
         //   app.ticker.maxFPS = 30
         // See: .gstack/qa-reports/qa-report-localhost-3000-2026-06-02.md (ISSUE-008)
-        app.ticker.add(tickLipSync)
+        app.ticker.add(tickPerformanceThenLipSync, undefined, -50)
         setupSocketListeners()
       }
     } catch (e) {
@@ -166,30 +196,46 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
     }
 
     audioWithExpressionListener = (data: AudioWithExpressionEvent) => {
-      if (!isCurrentChatTask(data)) return
+      if (!isCurrentPerformanceEvent(data, 'audio_with_expression')) return
+      stopAudio()
+      performanceController.arm(data.performance ?? DEFAULT_LIVE2D_PERFORMANCE_PLAN, data.task_id)
+      const lifecycle = {
+        onStart: () => performanceController.start(data.task_id),
+        onComplete: () => performanceController.finish(data.task_id),
+        onCancel: () => performanceController.cancel(),
+      }
       if (data.use_parameter_mapping && data.expressions?.frames) {
-        playParameterTimeline({ ...data, expressions: data.expressions })
+        playParameterTimeline({ ...data, expressions: data.expressions }, lifecycle)
       } else {
-        playAudio(data)
+        playAudio(data, lifecycle)
       }
     }
 
     audioStreamStartListener = (data: AudioStreamStartEvent) => {
-      if (isCurrentChatTask(data)) startAudioStream(data)
+      if (!isCurrentPerformanceEvent(data, 'audio_stream_start')) return
+      stopAudio()
+      performanceController.arm(data.performance ?? DEFAULT_LIVE2D_PERFORMANCE_PLAN, data.task_id)
+      startAudioStream(data, {
+        onStart: () => performanceController.start(data.task_id),
+        onComplete: () => performanceController.finish(data.task_id),
+        onCancel: () => performanceController.cancel(),
+      })
     }
     audioStreamChunkListener = (data: AudioStreamChunkEvent) => {
-      if (isCurrentChatTask(data)) pushAudioStreamChunk(data)
+      if (isCurrentPerformanceEvent(data, 'audio_stream_chunk')) pushAudioStreamChunk(data)
     }
     audioStreamEndListener = (data: AudioStreamEndEvent) => {
-      if (isCurrentChatTask(data)) endAudioStream(data)
+      if (isCurrentPerformanceEvent(data, 'audio_stream_end')) endAudioStream(data)
     }
 
     stopAudioListener = (data: ChatIdentity) => {
-      if (!isCurrentChatTask(data)) return
+      if (!isCurrentPerformanceEvent(data, 'stop_audio')) return
       stopAudio()
+      performanceController.cancel()
     }
     disconnectListener = () => {
       stopAudio()
+      performanceController.cancel()
     }
 
     socket.on(Events.CHAT.LIVE2D_ACTION, live2dActionListener)
@@ -244,12 +290,13 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
 
   function destroy(): void {
     stopAudio()
+    performanceController.destroy()
     cancelTimeline()
     teardownSocketListeners()
 
     const app = getApp()
     if (app) {
-      app.ticker.remove(tickLipSync)
+      app.ticker.remove(tickPerformanceThenLipSync)
       unloadModel()
     }
     destroyPixiApp()

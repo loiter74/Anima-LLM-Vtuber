@@ -1,6 +1,10 @@
 import type { ParameterTimeline, ParameterTimelineFrame } from '@/types/socket-events'
 import { getModel } from './useLive2DModel'
-import { playAudio, type AudioPlaybackPayload } from './useAudioPlayback'
+import {
+  playAudio,
+  type AudioPlaybackLifecycle,
+  type AudioPlaybackPayload,
+} from './useAudioPlayback'
 
 // ===== Timeline State =====
 
@@ -73,8 +77,9 @@ function tickTimeline(): void {
 
 export function playParameterTimeline(
   data: AudioPlaybackPayload & { expressions: ParameterTimeline },
+  lifecycle?: AudioPlaybackLifecycle,
 ): void {
-  playAudio(data)
+  playAudio(data, lifecycle)
   if (data.expressions?.frames) {
     setTimeout(() => {
       timelineFrames = data.expressions.frames

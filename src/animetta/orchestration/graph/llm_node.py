@@ -93,8 +93,10 @@ _SENTENCE_END_RE = re.compile(r"([^。！？!?]+)([。！？!?])")
 
 
 def _strip_emotion_tags(text: str) -> str:
-    """Remove emotion tags like [happy], [neutral] from LLM output."""
-    return _EMOTION_TAG_RE.sub(" ", text).strip()
+    """Remove bounded performance and legacy emotion tags from visible text."""
+    from animetta.avatar.performance import parse_performance_plan
+
+    return parse_performance_plan(text).cleaned_text
 
 
 def _strip_model_thinking(text: str) -> str:
@@ -547,10 +549,10 @@ async def _llm_with_tools(
                     for tc in tool_calls
                 ]
 
-                visible_content = _visible_response_or_fallback(
+                raw_content = _visible_response_or_fallback(
                     response.get("content", "") or "Calling tools..."
                 )
-                visible_content = _strip_emotion_tags(visible_content)
+                visible_content = _strip_emotion_tags(raw_content)
                 ai_message = AIMessage(content=visible_content, tool_calls=tool_calls)
 
                 # after_llm_call notification (non-blocking)
@@ -558,7 +560,7 @@ async def _llm_with_tools(
 
                 return {
                     "response_text": visible_content,
-                    "response_chunks": [visible_content],
+                    "response_chunks": [raw_content],
                     "messages": [ai_message],
                     "tool_calls": formatted_tool_calls,
                 }

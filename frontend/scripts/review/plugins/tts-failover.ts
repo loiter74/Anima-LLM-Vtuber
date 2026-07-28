@@ -3,6 +3,11 @@ import { TTS_FAILOVER_REVIEW_DEFINITION } from '../../../src/tts-failover/catalo
 import type { AssertionRecord, PageAssertionResult, ReviewPageAdapter } from '../browser'
 import { recordAssertion as check } from '../assertions'
 import { TtsHarnessLease } from '../tts-harness-lease'
+import {
+  ttsReviewAssertions,
+  ttsReviewObservations,
+  ttsReviewPageParams,
+} from '../tts-review-client'
 
 interface Box {
   x: number
@@ -116,14 +121,24 @@ export const ttsFailoverReviewNodePlugin = {
   enableObsAudioMonitoring: true,
   prepareRun: ({ repositoryDir }: { repositoryDir: string }) =>
     TtsHarnessLease.acquire(repositoryDir),
-  prepareAttempt: (context: Parameters<TtsHarnessLease['prepareAttempt']>[0], state: unknown) => {
+  prepareAttempt: async (context: import('../registry').ReviewAttemptContext, state: unknown) => {
     if (!(state instanceof TtsHarnessLease)) throw new Error('TTS review harness is unavailable')
-    return state.prepareAttempt(context)
+    const synthesis = await state.client.synthesize(context, { sceneId: context.sceneId })
+    return {
+      pageParams: ttsReviewPageParams(synthesis.payload, synthesis.audioUrl),
+      assertions: ttsReviewAssertions(synthesis.payload),
+      observations: ttsReviewObservations(synthesis.payload),
+      artifacts: {
+        audioWav: synthesis.audioWav,
+        backendReport: synthesis.backendReport,
+      },
+    }
   },
-  artifacts: async (context: Parameters<TtsHarnessLease['artifactsFor']>[0], state: unknown) => {
-    if (!(state instanceof TtsHarnessLease)) throw new Error('TTS review harness is unavailable')
-    return state.artifactsFor(context)
-  },
+  artifacts: async (
+    _context: unknown,
+    _state: unknown,
+    preparation: import('../registry').ReviewAttemptPreparation | void,
+  ) => preparation?.artifacts ?? {},
   cleanupRun: async (_context: unknown, state: unknown) => {
     if (state instanceof TtsHarnessLease) await state.dispose()
   },

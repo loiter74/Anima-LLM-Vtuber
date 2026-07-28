@@ -6,10 +6,25 @@ import type { Live2DAction } from '@/types/live2d'
 import type { LiveSocket } from './controller'
 import { computeLive2DLayout } from './layout'
 import { bindReviewMouthAfterMotion, createReviewVolumeTimelineLipSync } from './review-lip-sync'
+import type { Live2DPerformancePlanV1 } from '@/types/socket-events'
+import {
+  DEFAULT_LIVE2D_PERFORMANCE_PLAN,
+  createLive2DPerformanceController,
+  Live2DPerformanceController,
+} from '@/components/live2d/live2dPerformanceController'
+import {
+  createCubismParameterAdapter,
+  type CubismParameterModel,
+} from '@/components/live2d/live2dPerformanceProfile'
 
 export interface Live2DStage {
   ready: Promise<void>
-  playReviewAudio(notification: HTMLElement, volumes: readonly number[]): void
+  playReviewAudio(
+    notification: HTMLElement,
+    volumes: readonly number[],
+    performance?: Live2DPerformancePlanV1,
+  ): void
+  cancelReviewAudio(): void
   dispose(): void
 }
 
@@ -17,7 +32,12 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
   const canvas = document.getElementById('live2dCanvas')
   const state = document.getElementById('modelStatus')
   if (!(canvas instanceof HTMLCanvasElement) || !state) {
-    return { ready: Promise.resolve(), playReviewAudio() {}, dispose() {} }
+    return {
+      ready: Promise.resolve(),
+      playReviewAudio() {},
+      cancelReviewAudio() {},
+      dispose() {},
+    }
   }
 
   const disposers = new DisposerStack()
@@ -25,10 +45,9 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
   let app: PIXI.Application | null = null
   let setReviewMouth: (value: number) => void = () => {}
   let setReviewMouthSampler: (callback: (() => void) | null) => void = () => {}
-  let stopReviewMotion = (): void => {}
-  let restartIdleMotion = (): void => {}
   let markReviewMouthApplied = (): void => {}
   let reviewLipSync: ReturnType<typeof createReviewVolumeTimelineLipSync> | null = null
+  let performanceController: Live2DPerformanceController | null = null
 
   const ready = (async (): Promise<void> => {
     try {
@@ -60,16 +79,15 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
       setReviewMouth = mouthBinding.setMouth
       setReviewMouthSampler = mouthBinding.setBeforeApply
       disposers.add(() => mouthBinding.dispose())
-      stopReviewMotion = (): void => {
-        try {
-          model.internalModel.motionManager?.stopAllMotions()
-        } catch {}
-      }
-      restartIdleMotion = (): void => {
-        try {
-          void model.motion('Idle', 0)
-        } catch {}
-      }
+      const coreModel = model.internalModel.coreModel as CubismParameterModel
+      performanceController = createLive2DPerformanceController(
+        createCubismParameterAdapter(coreModel),
+      )
+      setReviewMouthSampler(() => {
+        performanceController?.tick()
+        reviewLipSync?.sample()
+      })
+      disposers.add(() => performanceController?.destroy())
 
       const layout = (): void => {
         if (!app) return
@@ -107,14 +125,20 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
 
   return {
     ready,
-    playReviewAudio(notification: HTMLElement, volumes: readonly number[]): void {
+    playReviewAudio(
+      notification: HTMLElement,
+      volumes: readonly number[],
+      performance = DEFAULT_LIVE2D_PERFORMANCE_PLAN,
+    ): void {
       const audio = notification.querySelector<HTMLAudioElement>('#reviewAudio')
       if (!audio) throw new Error('TTS review audio is unavailable')
-      stopReviewMotion()
+      const taskId = `${performance.base}:${performance.accent}:${audio.currentSrc || audio.src}`
+      performanceController?.arm(performance, taskId)
+      notification.dataset.performanceBase = performance.base
+      notification.dataset.performanceAccent = performance.accent
       markReviewMouthApplied = () => {
         notification.dataset.lipSync = 'observed'
       }
-      setReviewMouthSampler(null)
       reviewLipSync?.stop()
       reviewLipSync = createReviewVolumeTimelineLipSync({
         audio,
@@ -122,24 +146,33 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
         setMouth: setReviewMouth,
         manualSampling: true,
       })
-      setReviewMouthSampler(reviewLipSync.sample)
       const stop = (): void => {
-        setReviewMouthSampler(null)
         reviewLipSync?.stop()
-        restartIdleMotion()
+        performanceController?.finish(taskId)
       }
       audio.addEventListener('ended', stop, { once: true })
       audio.addEventListener('error', stop, { once: true })
       reviewLipSync.start()
-      void audio.play().catch(() => {
-        audio.dataset.complete = 'blocked'
-        stop()
-      })
+      void audio
+        .play()
+        .then(() => performanceController?.start(taskId))
+        .catch(() => {
+          audio.dataset.complete = 'blocked'
+          performanceController?.cancel()
+          stop()
+        })
+    },
+    cancelReviewAudio(): void {
+      reviewLipSync?.stop()
+      reviewLipSync = null
+      setReviewMouth(0)
+      performanceController?.cancel()
     },
     dispose(): void {
       if (disposed) return
       disposed = true
       reviewLipSync?.stop()
+      performanceController?.cancel()
       disposers.dispose()
     },
   }

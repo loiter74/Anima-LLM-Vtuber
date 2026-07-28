@@ -11,6 +11,7 @@ from uuid import uuid4
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.avatar.performance import parse_performance_plan, validated_performance_payload
 from animetta.core.readiness import resolve_service_identity, unwrap_tracing_proxy
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery
@@ -45,6 +46,7 @@ _INTERRUPT_CLEANUP_GRACE_SECONDS = 0.2
 
 def _clean_text_for_tts(text: str) -> str:
     """Remove emoji and emotion tags from text before TTS synthesis."""
+    text = parse_performance_plan(text).cleaned_text
     text = _EMOTION_TAG_RE.sub("", text)
     text = _EMOJI_RE.sub("", text)
     # Collapse multiple spaces into one
@@ -243,6 +245,7 @@ async def _synthesize_streaming(
     first_audio_at: float | None = None
     pcm_bytes = 0
     synthesis_kwargs = {"emotion": emotion, "instruction": instruction}
+    performance = validated_performance_payload(state.get("performance_plan"))
     interrupt_signal = get_interrupt_handler().get_signal(state["session_id"])
 
     for attempt in range(2):
@@ -268,16 +271,19 @@ async def _synthesize_streaming(
                 pcm_bytes += len(chunk)
                 if not stream_started:
                     first_audio_at = time.perf_counter()
+                    start_payload: dict[str, Any] = {
+                        "stream_id": stream_id,
+                        "format": "pcm_s16le",
+                        "sample_rate": int(getattr(tts_engine, "sample_rate", 24000)),
+                        "channels": 1,
+                        "emotion": emotion,
+                    }
+                    if performance is not None:
+                        start_payload["performance"] = performance
                     await delivery.emit(
                         "chat",
                         "audio_stream_start",
-                        {
-                            "stream_id": stream_id,
-                            "format": "pcm_s16le",
-                            "sample_rate": int(getattr(tts_engine, "sample_rate", 24000)),
-                            "channels": 1,
-                            "emotion": emotion,
-                        },
+                        start_payload,
                         to=to,
                     )
                     stream_started = True

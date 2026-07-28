@@ -63,6 +63,13 @@ export interface ParameterTimeline {
   total_duration?: number
 }
 
+export type {
+  Live2DPerformanceAccent,
+  Live2DPerformanceBase,
+  Live2DPerformancePlanV1,
+} from '@/components/live2d/live2dPerformanceContract'
+import type { Live2DPerformancePlanV1 } from '@/components/live2d/live2dPerformanceContract'
+
 export interface AudioWithExpressionEvent extends ChatIdentity {
   audio_data: string
   format: string
@@ -70,6 +77,7 @@ export interface AudioWithExpressionEvent extends ChatIdentity {
   use_parameter_mapping?: boolean
   expressions?: ParameterTimeline
   return_to_idle?: boolean
+  performance?: Live2DPerformancePlanV1
 }
 
 export type ChatEmotion = 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'thinking'
@@ -80,6 +88,7 @@ export interface AudioStreamStartEvent extends ChatIdentity {
   sample_rate: 24000
   channels: 1
   emotion: ChatEmotion
+  performance?: Live2DPerformancePlanV1
 }
 
 export interface AudioStreamChunkEvent extends ChatIdentity {

@@ -50,43 +50,20 @@ export function tickLipSync(): void {
 
 export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
   stopLipSync()
-  _lipSyncRafActive = true
-  const model = getModel()
-
-  // Stop idle motion that may override mouth parameters via motionManager
-  try {
-    model?.internalModel?.motionManager?.stopAllMotions()
-  } catch {}
+  _lipSyncRafActive = false
   const intervalMs = 20
   let lastIndex = -1
   let hasStarted = false
   let preRollCount = 0
   const preRollTarget = 3
-  let lipSyncMouth = 0
   let lipSyncTarget = 0
 
-  // Direct parameter setter — runs every RAF frame, NOT through the PIXI
-  // ticker, so it wins over any motion-driven mouth keyframes.
+  // RAF tracks the audio envelope only. The PIXI late-frame ticker owns the
+  // actual parameter write so mouth opening is always applied after motion
+  // and semantic expression overlays.
   function setLipSyncParam(value: number) {
     lipSyncTarget = Math.max(0, Math.min(1, value))
-    // Smooth interpolation
-    const delta = Math.abs(lipSyncTarget - lipSyncMouth)
-    const factor = 0.5 + 0.4 * Math.min(delta / 0.3, 1.0)
-    lipSyncMouth += (lipSyncTarget - lipSyncMouth) * factor
-    const m = getModel()
-    if (!mouthParam) {
-      for (const name of MOUTH_PARAMS) {
-        const idx = m?.internalModel?.coreModel?.getParameterIndex(name)
-        if (idx !== undefined && idx >= 0) {
-          mouthParam = name
-          break
-        }
-      }
-    }
-    if (mouthParam && m?.internalModel?.coreModel) {
-      const idx = m.internalModel.coreModel.getParameterIndex(mouthParam)
-      if (idx >= 0) m.internalModel.coreModel.setParameterValueByIndex(idx, lipSyncMouth)
-    }
+    setMouthTarget(lipSyncTarget)
   }
 
   const tick = () => {
@@ -131,9 +108,4 @@ export function stopLipSync(): void {
   lipSyncCancel = null
   _lipSyncRafActive = false
   setMouthTarget(0)
-  const model = getModel()
-  // Restart idle motion for head sway now that lip sync is done
-  try {
-    model?.motion?.('Idle', 0)
-  } catch {}
 }

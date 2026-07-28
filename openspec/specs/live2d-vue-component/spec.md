@@ -1,8 +1,6 @@
 ## Purpose
 Defines the accepted behavior and requirements for the live2d-vue-component capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
-
 ## Requirements
-
 ### Requirement: Live2D 渲染组件
 系统 SHALL 提供 `<Live2DRenderer>` Vue 3 组件，封装 pixi.js Application 和 pixi-live2d-display，接受 props 控制模型和表情。pixi.js SHALL 通过 ES module import（`import * as PIXI from 'pixi.js'`）加载，pixi-live2d-display SHALL 通过 `import { Live2DModel } from 'pixi-live2d-display/cubism4'` 加载。组件初始化时 SHALL 设置 `window.PIXI = PIXI` 以满足 pixi-live2d-display 内部的 Ticker 驱动依赖。
 
@@ -19,25 +17,33 @@ Defines the accepted behavior and requirements for the live2d-vue-component capa
 - **THEN** `window.PIXI` 被设为导入的 PIXI 模块对象，使 pixi-live2d-display 可获取 `window.PIXI.Ticker` 用于模型逐帧更新
 
 ### Requirement: 表情控制
-`<Live2DRenderer>` SHALL 通过 prop 接受表情指令，驱动 Live2D 模型表情切换。
+`<Live2DRenderer>` SHALL accept an optional versioned semantic performance plan with audio delivery and SHALL resolve it through the active model profile. The response LLM path SHALL NOT control raw Live2D parameters or motion indices.
 
-#### Scenario: 切换表情
-- **WHEN** `expression` prop 变化为 `"happy"`
-- **THEN** Live2D 模型执行 "happy" 表情动画，按表情策略控制持续时间和强度
+#### Scenario: 音频开始时切换表情
+- **WHEN** 当前任务的真实音频开始且携带有效的 cheerful performance plan
+- **THEN** Live2D 模型在 250 ms 内淡入模型配置的柔和开心表情
+
+#### Scenario: 无效计划
+- **WHEN** performance plan 无效、过期或当前模型不支持
+- **THEN** Live2D 模型保持平静待机且不执行原始动作
 
 ### Requirement: 口型同步
-`<Live2DRenderer>` SHALL 支持口型同步（viseme/lip sync），根据 TTS 音频数据驱动嘴部参数。
+`<Live2DRenderer>` SHALL support lip sync from TTS audio and SHALL give the lip-sync layer exclusive ownership of `ParamMouthOpenY`. Facial expressions MAY control mouth form but SHALL NOT write mouth-open.
 
 #### Scenario: TTS 音频播放时口型同步
-- **WHEN** 收到 `audio_with_expression` 事件包含音频和 viseme 数据
-- **THEN** Live2D 模型嘴部参数随音频数据实时变化
+- **WHEN** 收到当前任务的流式或完整 TTS 音频
+- **THEN** Live2D 模型嘴部开合 SHALL follow the audio after model motion and performance overlays are applied
 
 ### Requirement: 自动行为
-`<Live2DRenderer>` SHALL 支持自动眨眼、自动注视鼠标、空闲眼球运动等自然行为。
+`<Live2DRenderer>` SHALL support automatic blinking, mouse focus, and a deterministic calm idle. For Hiyori, `Hiyori_m01` SHALL be the only automatic idle motion; unreviewed `m02`–`m10` motions SHALL NOT be selected automatically or by the LLM response path.
 
 #### Scenario: 自动眨眼
 - **WHEN** Live2D 模型处于空闲状态
 - **THEN** 模型以随机间隔执行眨眼动画
+
+#### Scenario: 平静待机
+- **WHEN** 没有当前可播放语音
+- **THEN** Hiyori SHALL remain on the looping `m01` calm sway
 
 #### Scenario: 鼠标注视跟踪
 - **WHEN** 用户在 Live2D 渲染区域内移动鼠标
@@ -60,3 +66,15 @@ pixi.js 和 pixi-live2d-display SHALL NOT 通过 `index.html` 的 `<script>` 标
 #### Scenario: 生产构建
 - **WHEN** 运行 `pnpm build` 构建生产版本
 - **THEN** pixi.js 和 pixi-live2d-display 被打包进 renderer 产物，Live2D 渲染正常，不依赖 `node_modules` 目录
+
+### Requirement: 分层表演生命周期
+`<Live2DRenderer>` SHALL coordinate calm, armed, speaking, and settling states. It SHALL apply model motion and physics first, performance overlays second, and lip sync last.
+
+#### Scenario: 正常播放完成
+- **WHEN** 当前语音播放结束
+- **THEN** 表情 SHALL 在 350 ms 内回到平静并继续 `m01`
+
+#### Scenario: 播放中断
+- **WHEN** 当前语音被取消、断流、任务替换或连接断开
+- **THEN** 控制器 SHALL cancel pending accents, close the mouth, and return safely to calm
+

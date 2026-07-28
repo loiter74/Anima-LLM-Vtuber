@@ -693,6 +693,36 @@ class TestLLMNodeWithTools:
         assert result["tool_calls"][0]["args"]["query"] == "weather"
 
     @pytest.mark.asyncio
+    async def test_tool_call_keeps_raw_performance_marker_for_next_graph_pass(
+        self, mock_service_context
+    ):
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = [MagicMock(name="web_search")]
+        raw = "[live2d:thinking|subtle|skeptical] Let me search."
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={
+                "content": raw,
+                "tool_calls": [
+                    {"id": "call_1", "name": "web_search", "args": {"query": "weather"}}
+                ],
+            }
+        )
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="Search weather",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "Let me search."
+        assert result["response_chunks"] == [raw]
+
+    @pytest.mark.asyncio
     async def test_tool_call_without_tools_returns_text(self, mock_service_context):
         """When LLM returns content without tool_calls, response_text is set."""
 
@@ -719,6 +749,29 @@ class TestLLMNodeWithTools:
         assert result["tool_calls"] is None
         assert result["response_text"] == "The weather is sunny today!"
         assert "messages" not in result
+
+    @pytest.mark.asyncio
+    async def test_tool_text_keeps_raw_performance_marker_for_emotion_node(
+        self, mock_service_context
+    ):
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = []
+        raw = "[live2d:cheerful|subtle|brighten] 今天天气很好。"
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(return_value={"content": raw})
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="今天天气怎么样？",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "今天天气很好。"
+        assert result["response_chunks"] == [raw]
 
     @pytest.mark.asyncio
     async def test_tool_text_enforces_explicit_nya_suffix(self, mock_service_context):
@@ -1238,6 +1291,12 @@ class TestEmotionRegexAndAffinityMarker:
 
         assert _strip_emotion_tags("Reply [happy]") == "Reply"
         assert _strip_emotion_tags("[neutral] hi") == "hi"
+
+    def test_strip_emotion_tags_strips_semantic_performance_markers(self):
+        from animetta.orchestration.graph.llm_node import _strip_emotion_tags
+
+        assert _strip_emotion_tags("[live2d:cheerful|subtle|brighten] 晚上好。") == "晚上好。"
+        assert _strip_emotion_tags("[live2d:invalid|strong|dance] 正常文本。") == "正常文本。"
 
     def test_strip_emotion_tags_preserves_plain_text(self):
         """Text without any bracket tags is returned unchanged (modulo whitespace)."""

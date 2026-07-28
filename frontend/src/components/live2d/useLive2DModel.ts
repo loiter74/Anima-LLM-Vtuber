@@ -91,20 +91,12 @@ export async function loadModel(modelPath: string): Promise<void> {
       ),
     ])) as Live2DModel<Cubism4InternalModel>
 
-    // Disable idle group to prevent random idle motion cycling,
-    // then play motion[0] (Hiyori_m01: gentle head sway with ParamAngleX)
-    // on loop for a natural subtle swaying effect.
+    // The manifest exposes only Hiyori_m01 in Idle, so the model's normal
+    // idle scheduler can safely keep the gentle sway running without chance.
     try {
       model.internalModel?.motionManager?.stopAllMotions()
-      if (model.internalModel?.motionManager?.groups) {
-        const mutableGroups = model.internalModel.motionManager.groups as unknown as Record<
-          string,
-          string
-        >
-        mutableGroups.idle = '_none'
-      }
     } catch {}
-    // Play the gentlest motion on loop (m01 has natural head sway + breathing)
+    // Start the calm motion immediately; the one-item Idle group repeats it.
     try {
       model.motion('Idle', 0)
     } catch {}
@@ -209,6 +201,27 @@ export function setExpression(name: string): void {
 
 export function playMotion(group: string, index: number): void {
   model?.motion?.(group, index)
+}
+
+export function setClampedParameter(name: string, value: number): void {
+  const coreModel = model?.internalModel?.coreModel
+  if (!coreModel) return
+  const index = coreModel.getParameterIndex(name)
+  if (index < 0) return
+  const bounded = coreModel as typeof coreModel & {
+    getParameterMinimumValue?: (parameterIndex: number) => number
+    getParameterMaximumValue?: (parameterIndex: number) => number
+  }
+  const minimum = bounded.getParameterMinimumValue?.(index) ?? -1
+  const maximum = bounded.getParameterMaximumValue?.(index) ?? 1
+  coreModel.setParameterValueByIndex(index, Math.max(minimum, Math.min(maximum, value)))
+}
+
+export function getParameterValue(name: string): number {
+  const coreModel = model?.internalModel?.coreModel
+  if (!coreModel) return 0
+  const index = coreModel.getParameterIndex(name)
+  return index < 0 ? 0 : coreModel.getParameterValueByIndex(index)
 }
 
 // ===== Retry =====

@@ -59,4 +59,22 @@ describe('useAudioPlayback', () => {
     expect(MockAudio.instances[0].src).toBe('blob:qwen-audio')
     expect(MockAudio.instances[0].play).toHaveBeenCalledTimes(2)
   })
+
+  it('starts performance only after play resolves and completes it on audio end', async () => {
+    const { playAudio } = await import('./useAudioPlayback')
+    const lifecycle = {
+      onStart: vi.fn(),
+      onComplete: vi.fn(),
+      onCancel: vi.fn(),
+    }
+
+    playAudio({ audio_data: btoa('qwen wav'), format: 'wav' }, lifecycle)
+    expect(lifecycle.onStart).not.toHaveBeenCalled()
+
+    await Promise.resolve()
+    expect(lifecycle.onStart).toHaveBeenCalledTimes(1)
+    MockAudio.instances[0].onended?.()
+    expect(lifecycle.onComplete).toHaveBeenCalledTimes(1)
+    expect(lifecycle.onCancel).not.toHaveBeenCalled()
+  })
 })

@@ -157,3 +157,4 @@ smoke_test_result.json
 tmp/
 artifacts/live-review/
 artifacts/playwright/
+scripts/danmaku_output/

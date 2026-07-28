@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from animetta.avatar.performance import validated_performance_payload
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery
 
@@ -79,15 +80,6 @@ async def performance_output_node(
         return {"error": "Socket.IO not configured"}
     emotion = state.get("emotion") or "neutral"
     await delivery.emit("chat", "expression", {"emotion": emotion}, to=to)
-    motion = {"happy": 3, "sad": 1, "angry": 2, "surprised": 4, "neutral": 0, "thinking": 5}.get(
-        emotion, 0
-    )
-    await delivery.emit(
-        "chat",
-        "live2d_action",
-        {"type": "motion", "group": "Idle", "index": motion},
-        to=to,
-    )
 
     media = state.get("media_status")
     if not isinstance(media, MediaStatus):
@@ -102,6 +94,9 @@ async def performance_output_node(
                 "format": fmt,
                 "volumes": volumes,
             }
+            performance = validated_performance_payload(state.get("performance_plan"))
+            if performance is not None:
+                payload["performance"] = performance
             await delivery.emit("chat", "audio_with_expression", payload, to=to)
     elif media.status == "degraded":
         await delivery.emit(

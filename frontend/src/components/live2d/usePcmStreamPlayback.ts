@@ -4,6 +4,7 @@ import type {
   AudioStreamStartEvent,
 } from '@/types/socket-events'
 import { setMouthTarget } from './useLipSync'
+import type { AudioPlaybackLifecycle } from './useAudioPlayback'
 
 const INITIAL_BUFFER_SECONDS = 0.2
 const PLAYBACK_LEAD_SECONDS = 0.02
@@ -27,6 +28,8 @@ interface ActivePcmStream {
   nextStartAt: number
   sources: Set<AudioBufferSourceNode>
   lipSyncTimers: Set<ReturnType<typeof setTimeout>>
+  lifecycle: AudioPlaybackLifecycle | null
+  startNotified: boolean
 }
 
 let pcmAudioContext: AudioContext | null = null
@@ -105,6 +108,7 @@ function scheduleChunk(stream: ActivePcmStream, chunk: DecodedChunk): void {
     if (stream.ended && stream.sources.size === 0 && activePcmStream === stream) {
       setMouthTarget(0)
       activePcmStream = null
+      stream.lifecycle?.onComplete?.()
     }
   }
   scheduleMouthTargets(stream, chunk.samples, startAt)
@@ -118,6 +122,15 @@ function flushReadyChunks(stream: ActivePcmStream): void {
       stream.nextStartAt,
       stream.context.currentTime + PLAYBACK_LEAD_SECONDS,
     )
+    const startDelayMs = Math.max(0, (stream.nextStartAt - stream.context.currentTime) * 1000)
+    const startTimer = setTimeout(() => {
+      stream.lipSyncTimers.delete(startTimer)
+      if (activePcmStream === stream && !stream.startNotified) {
+        stream.startNotified = true
+        stream.lifecycle?.onStart?.()
+      }
+    }, startDelayMs)
+    stream.lipSyncTimers.add(startTimer)
   }
   for (const chunk of stream.ready.splice(0)) scheduleChunk(stream, chunk)
   stream.bufferedFrames = 0
@@ -144,7 +157,10 @@ export function unlockPcmAudioPlayback(): void {
   if (context) resumeContext(context)
 }
 
-export function startPcmAudioStream(data: AudioStreamStartEvent): void {
+export function startPcmAudioStream(
+  data: AudioStreamStartEvent,
+  lifecycle?: AudioPlaybackLifecycle,
+): void {
   stopPcmAudioStream()
   if (data.format !== 'pcm_s16le' || data.sample_rate !== 24_000 || data.channels !== 1) {
     console.warn('[audio] Rejected unsupported streaming PCM format')
@@ -166,6 +182,8 @@ export function startPcmAudioStream(data: AudioStreamStartEvent): void {
     nextStartAt: 0,
     sources: new Set(),
     lipSyncTimers: new Set(),
+    lifecycle: lifecycle ?? null,
+    startNotified: false,
   }
 }
 
@@ -199,6 +217,7 @@ export function endPcmAudioStream(data: AudioStreamEndEvent): void {
   if (stream.sources.size === 0) {
     setMouthTarget(0)
     activePcmStream = null
+    stream.lifecycle?.onComplete?.()
     return
   }
   const delayMs = Math.max(0, (stream.nextStartAt - stream.context.currentTime) * 1000)
@@ -207,6 +226,7 @@ export function endPcmAudioStream(data: AudioStreamEndEvent): void {
     if (activePcmStream === stream) {
       setMouthTarget(0)
       activePcmStream = null
+      stream.lifecycle?.onComplete?.()
     }
   }, delayMs)
   stream.lipSyncTimers.add(timer)
@@ -227,6 +247,7 @@ export function stopPcmAudioStream(): void {
       }
     }
     stream.sources.clear()
+    stream.lifecycle?.onCancel?.()
   }
   setMouthTarget(0)
 }

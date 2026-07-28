@@ -191,13 +191,13 @@ async def test_live2d_prompt_is_included_from_runtime_config(monkeypatch: pytest
         def build_prompt(self) -> str:
             return "LIVE2D-PROMPT"
 
-    from animetta.avatar.prompts import EmotionPromptBuilder
+    from animetta.avatar.prompts import PerformancePromptBuilder
 
     monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: Live2DConfig())
     monkeypatch.setattr(
-        EmotionPromptBuilder,
-        "from_config",
-        classmethod(lambda cls, config: Live2DPromptBuilder()),
+        PerformancePromptBuilder,
+        "__new__",
+        staticmethod(lambda cls, *args, **kwargs: Live2DPromptBuilder()),
     )
 
     state = {
@@ -230,13 +230,13 @@ async def test_live2d_prompt_failure_keeps_prompt_and_warns(monkeypatch: pytest.
         enabled = True
         valid_emotions = ["happy"]
 
-    from animetta.avatar.prompts import EmotionPromptBuilder
+    from animetta.avatar.prompts import PerformancePromptBuilder
 
-    def fail_from_config(cls, config):
+    def fail_builder(cls, *args, **kwargs):
         raise RuntimeError("live2d boom")
 
     monkeypatch.setattr("animetta.config.live2d.get_live2d_config", lambda: Live2DConfig())
-    monkeypatch.setattr(EmotionPromptBuilder, "from_config", classmethod(fail_from_config))
+    monkeypatch.setattr(PerformancePromptBuilder, "__new__", staticmethod(fail_builder))
 
     state = {
         "session_id": "test",
