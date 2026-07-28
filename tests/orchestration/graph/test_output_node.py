@@ -298,7 +298,13 @@ class TestOutputNode:
             for call in mock_socketio.emit.call_args_list
             if call.args[0] == "chat:audio_with_expression"
         )
-        assert payload["performance"] == state["performance_plan"]
+        assert payload["performance"] == {
+            "version": 1,
+            "base": "calm",
+            "intensity": "subtle",
+            "accent": "none",
+            "source": "legacy",
+        }
         assert not {"group", "index", "parameters"} & payload.keys()
 
     @pytest.mark.asyncio

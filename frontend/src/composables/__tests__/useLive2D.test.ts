@@ -245,6 +245,11 @@ describe('useLive2D', () => {
 
       const live2d = useLive2D(canvasRef)
       await live2d.init()
+      const observations: unknown[] = []
+      const observe = (event: Event) => {
+        observations.push((event as CustomEvent).detail)
+      }
+      window.addEventListener('animetta:live2d-performance-observation', observe)
       const listeners = new Map<string, (data: unknown) => void>()
       for (const [event, listener] of mockSocket.on.mock.calls) {
         if (typeof event === 'string' && typeof listener === 'function') {
@@ -288,6 +293,11 @@ describe('useLive2D', () => {
       expect(audioPlayback.startAudioStream).toHaveBeenCalledTimes(1)
       expect(audioPlayback.pushAudioStreamChunk).toHaveBeenCalledTimes(1)
       expect(audioPlayback.endAudioStream).toHaveBeenCalledTimes(1)
+      expect(observations).toContainEqual({
+        kind: 'stale_drop',
+        event: 'audio_stream_start',
+      })
+      window.removeEventListener('animetta:live2d-performance-observation', observe)
       live2d.destroy()
     })
 

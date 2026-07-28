@@ -72,18 +72,18 @@ class TestEmotionNode:
 
         assert result["performance_plan"] == {
             "version": 1,
-            "base": "smug",
+            "base": "calm",
             "intensity": "subtle",
-            "accent": "skeptical",
-            "source": "llm",
+            "accent": "none",
+            "source": "legacy",
         }
         assert result["emotion"] == "neutral"
         assert result["response_emotion"] == "neutral"
         assert result["response_emotion_vad"] == result["emotion_vad"]
         assert result["metadata"]["live2d_performance"] == {
-            "source": "llm",
-            "base": "smug",
-            "accent": "skeptical",
+            "source": "legacy",
+            "base": "calm",
+            "accent": "none",
             "fallback": "none",
         }
 
@@ -112,7 +112,7 @@ class TestEmotionNode:
 
         result = await emotion_node(state)
 
-        assert result["performance_plan"]["base"] == "cheerful"
+        assert result["performance_plan"]["base"] == "calm"
         assert result["performance_plan"]["source"] == "legacy"
         assert result["emotion"] == "happy"
 
@@ -128,6 +128,6 @@ class TestEmotionNode:
 
         result = await emotion_node(state)
 
-        assert result["performance_plan"]["base"] == "thinking"
-        assert result["performance_plan"]["accent"] == "skeptical"
+        assert result["performance_plan"]["base"] == "calm"
+        assert result["performance_plan"]["accent"] == "none"
         assert result["emotion"] == "thinking"

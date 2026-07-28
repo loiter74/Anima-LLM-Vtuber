@@ -342,7 +342,13 @@ class TestStreamingTTSNode:
             "chat:audio_stream_end",
         ]
         assert [call.args[1].get("sequence") for call in calls[1:3]] == [0, 1]
-        assert calls[0].args[1]["performance"] == state["performance_plan"]
+        assert calls[0].args[1]["performance"] == {
+            "version": 1,
+            "base": "calm",
+            "intensity": "subtle",
+            "accent": "none",
+            "source": "legacy",
+        }
         assert not {"group", "index", "parameters"} & calls[0].args[1].keys()
         assert base64.b64decode(calls[1].args[1]["audio_data"]) == b"\x00\x01"
         assert base64.b64decode(calls[2].args[1]["audio_data"]) == b"\x02\x03"

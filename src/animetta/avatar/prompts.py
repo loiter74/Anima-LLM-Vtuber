@@ -5,6 +5,8 @@ Generates expression usage guidelines for the LLM
 
 from pathlib import Path
 
+from animetta.avatar.performance import PERFORMANCE_BASES, PERFORMANCE_INTENSITIES
+
 
 class EmotionPromptBuilder:
     """
@@ -206,6 +208,8 @@ class PerformancePromptBuilder:
     def build_prompt(self) -> str:
         """Return a provider-neutral in-band marker contract."""
 
+        bases = " | ".join(PERFORMANCE_BASES)
+        intensities = " | ".join(PERFORMANCE_INTENSITIES)
         if self.language == "en":
             return "\n".join(
                 [
@@ -214,9 +218,9 @@ class PerformancePromptBuilder:
                     "Start every response with exactly one marker:",
                     "`[live2d:<base>|<intensity>|<accent>]`",
                     "",
-                    "- base: calm | cheerful | concerned | annoyed | surprised | thinking | smug",
-                    "- intensity: subtle | medium",
-                    "- accent: none | brighten | skeptical | startle | sigh",
+                    f"- base: {bases}",
+                    f"- intensity: {intensities}",
+                    "- accent: none",
                     "",
                     "Use `[live2d:calm|subtle|none]` for most responses.",
                     "Choose another value only when the spoken content clearly expresses it.",
@@ -231,9 +235,9 @@ class PerformancePromptBuilder:
                 "每条回复必须在回复最开头输出以下 marker，且只能输出一个：",
                 "`[live2d:<base>|<intensity>|<accent>]`",
                 "",
-                "- base: calm | cheerful | concerned | annoyed | surprised | thinking | smug",
-                "- intensity: subtle | medium",
-                "- accent: none | brighten | skeptical | startle | sigh",
+                f"- base: {bases}",
+                f"- intensity: {intensities}",
+                "- accent: none",
                 "",
                 "大多数回复使用 calm，即 `[live2d:calm|subtle|none]`。",
                 "只有回复正文明确表达对应情绪时才选择其他值。",

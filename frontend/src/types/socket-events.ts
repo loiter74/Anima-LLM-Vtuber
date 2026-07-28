@@ -63,17 +63,12 @@ export interface ParameterTimeline {
   total_duration?: number
 }
 
-export type Live2DPerformanceBase =
-  'calm' | 'cheerful' | 'concerned' | 'annoyed' | 'surprised' | 'thinking' | 'smug'
-export type Live2DPerformanceAccent = 'none' | 'brighten' | 'skeptical' | 'startle' | 'sigh'
-
-export interface Live2DPerformancePlanV1 {
-  version: 1
-  base: Live2DPerformanceBase
-  intensity: 'subtle' | 'medium'
-  accent: Live2DPerformanceAccent
-  source: 'llm' | 'legacy' | 'fallback'
-}
+export type {
+  Live2DPerformanceAccent,
+  Live2DPerformanceBase,
+  Live2DPerformancePlanV1,
+} from '@/components/live2d/live2dPerformanceContract'
+import type { Live2DPerformancePlanV1 } from '@/components/live2d/live2dPerformanceContract'
 
 export interface AudioWithExpressionEvent extends ChatIdentity {
   audio_data: string

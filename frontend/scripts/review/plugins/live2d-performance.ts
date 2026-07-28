@@ -1,25 +1,25 @@
 import { expect, type Page } from 'playwright/test'
-import {
-  LIVE2D_PERFORMANCE_REVIEW_DEFINITION,
-  PERFORMANCE_ACCENTS,
-  PERFORMANCE_BASES,
-} from '../../../src/live2d-performance/catalog'
+import { LIVE2D_PERFORMANCE_REVIEW_DEFINITION } from '../../../src/live2d-performance/catalog'
 import type { AssertionRecord, PageAssertionResult, ReviewPageAdapter } from '../browser'
 import { recordAssertion as check } from '../assertions'
 import { TtsHarnessLease } from '../tts-harness-lease'
+import { ttsReviewAssertions, type PreparedTtsReviewSample } from '../tts-review-client'
+
+const PERFORMANCE_SAMPLES = [
+  { base: 'calm', sceneId: 'live2d-calm' },
+  { base: 'annoyed', sceneId: 'live2d-annoyed' },
+  { base: 'surprised', sceneId: 'live2d-surprised' },
+] as const
 
 async function assertPage(page: Page): Promise<PageAssertionResult> {
   const assertions: AssertionRecord[] = []
-  const panel = page.getByLabel('Live2D 语义表演评审')
+  const panel = page.locator('.live2d-performance-review')
   await check(assertions, 'live2d-stage-visible', () =>
     expect(page.getByLabel('Live2D 舞台')).toBeVisible({ timeout: 20_000 }),
   )
-  await check(assertions, 'performance-panel-visible', () =>
-    expect(panel).toBeVisible({ timeout: 20_000 }),
+  await check(assertions, 'performance-instrumentation-hidden', () =>
+    expect(panel).toBeHidden({ timeout: 20_000 }),
   )
-  for (const semantic of [...PERFORMANCE_BASES, ...PERFORMANCE_ACCENTS]) {
-    await check(assertions, `catalog:${semantic}`, () => expect(panel).toContainText(semantic))
-  }
   await check(assertions, 'semantic-sequence-complete', () =>
     expect(panel).toHaveAttribute('data-complete', 'true', { timeout: 150_000 }),
   )
@@ -28,6 +28,9 @@ async function assertPage(page: Page): Promise<PageAssertionResult> {
   )
   await check(assertions, 'interruption-returned-to-calm', () =>
     expect(panel).toHaveAttribute('data-interruption', 'observed'),
+  )
+  await check(assertions, 'activation-delay-observed', () =>
+    expect(panel).toHaveAttribute('data-activation-observed', 'true'),
   )
   await check(assertions, 'settled-to-calm', async () => {
     await expect(panel).toHaveAttribute('data-current-base', 'calm')
@@ -74,14 +77,65 @@ export const live2dPerformanceReviewNodePlugin = {
   enableObsAudioMonitoring: true,
   prepareRun: ({ repositoryDir }: { repositoryDir: string }) =>
     TtsHarnessLease.acquire(repositoryDir),
-  prepareAttempt: (context: Parameters<TtsHarnessLease['prepareAttempt']>[0], state: unknown) => {
+  prepareAttempt: async (context: import('../registry').ReviewAttemptContext, state: unknown) => {
     if (!(state instanceof TtsHarnessLease)) throw new Error('TTS review harness is unavailable')
-    return state.prepareAttempt(context, 'billing-to-local')
+    const prepared: Array<{
+      base: (typeof PERFORMANCE_SAMPLES)[number]['base']
+      synthesis: PreparedTtsReviewSample
+    }> = []
+    for (const descriptor of PERFORMANCE_SAMPLES) {
+      prepared.push({
+        base: descriptor.base,
+        synthesis: await state.client.synthesize(context, {
+          sceneId: descriptor.sceneId,
+          artifactKey: descriptor.base,
+        }),
+      })
+    }
+    const calm = prepared.find(({ base }) => base === 'calm')!.synthesis
+    return {
+      pageParams: {
+        performanceSamples: JSON.stringify(
+          prepared.map(({ base, synthesis }) => ({
+            base,
+            audio: synthesis.audioUrl,
+            mouthTimeline: synthesis.payload.mouth_timeline,
+          })),
+        ),
+      },
+      assertions: prepared.flatMap(({ base, synthesis }) =>
+        ttsReviewAssertions(synthesis.payload).map((assertion) => ({
+          ...assertion,
+          name: `${base}:${assertion.name}`,
+        })),
+      ),
+      observations: [
+        { name: 'performance_sample_count', value: prepared.length },
+        {
+          name: 'performance_semantics',
+          value: PERFORMANCE_SAMPLES.map(({ base }) => base).join(','),
+        },
+      ],
+      artifacts: {
+        audioWav: calm.audioWav,
+        backendReport: calm.backendReport,
+        audioSamples: Object.fromEntries(
+          prepared.map(({ base, synthesis }) => [
+            base,
+            {
+              audioWav: synthesis.audioWav,
+              backendReport: synthesis.backendReport,
+            },
+          ]),
+        ),
+      },
+    }
   },
-  artifacts: async (context: Parameters<TtsHarnessLease['artifactsFor']>[0], state: unknown) => {
-    if (!(state instanceof TtsHarnessLease)) throw new Error('TTS review harness is unavailable')
-    return state.artifactsFor(context)
-  },
+  artifacts: async (
+    _context: unknown,
+    _state: unknown,
+    preparation: import('../registry').ReviewAttemptPreparation | void,
+  ) => preparation?.artifacts ?? {},
   cleanupRun: async (_context: unknown, state: unknown) => {
     if (state instanceof TtsHarnessLease) await state.dispose()
   },

@@ -8,9 +8,17 @@ def test_performance_prompt_requires_one_leading_bounded_marker() -> None:
     assert "[live2d:<base>|<intensity>|<accent>]" in prompt
     assert "回复最开头" in prompt
     assert "且只能输出一个" in prompt
-    assert "calm | cheerful | concerned | annoyed | surprised | thinking | smug" in prompt
+    assert "calm | annoyed | surprised" in prompt
+    assert "cheerful" not in prompt
+    assert "concerned" not in prompt
+    assert "thinking" not in prompt
+    assert "smug" not in prompt
     assert "subtle | medium" in prompt
-    assert "none | brighten | skeptical | startle | sigh" in prompt
+    assert "- accent: none" in prompt
+    assert "startle" not in prompt
+    assert "brighten" not in prompt
+    assert "skeptical" not in prompt
+    assert "sigh" not in prompt
 
 
 def test_performance_prompt_is_calm_first_and_forbids_raw_controls() -> None:

@@ -6,24 +6,26 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal, cast
 
-PerformanceBase = Literal[
-    "calm",
-    "cheerful",
-    "concerned",
-    "annoyed",
-    "surprised",
-    "thinking",
-    "smug",
-]
+PerformanceBase = Literal["calm", "annoyed", "surprised"]
 PerformanceIntensity = Literal["subtle", "medium"]
-PerformanceAccent = Literal["none", "brighten", "skeptical", "startle", "sigh"]
+PerformanceAccent = Literal["none"]
 PerformanceSource = Literal["llm", "legacy", "fallback"]
 
-PERFORMANCE_BASES = frozenset(
-    {"calm", "cheerful", "concerned", "annoyed", "surprised", "thinking", "smug"}
-)
-PERFORMANCE_INTENSITIES = frozenset({"subtle", "medium"})
-PERFORMANCE_ACCENTS = frozenset({"none", "brighten", "skeptical", "startle", "sigh"})
+PERFORMANCE_BASES: tuple[PerformanceBase, ...] = ("calm", "annoyed", "surprised")
+PERFORMANCE_INTENSITIES: tuple[PerformanceIntensity, ...] = ("subtle", "medium")
+PERFORMANCE_ACCENTS: tuple[PerformanceAccent, ...] = ("none",)
+_DEPRECATED_BASES: dict[str, PerformanceBase] = {
+    "cheerful": "calm",
+    "concerned": "annoyed",
+    "thinking": "calm",
+    "smug": "calm",
+}
+_DEPRECATED_ACCENTS: dict[str, PerformanceAccent] = {
+    "brighten": "none",
+    "skeptical": "none",
+    "startle": "none",
+    "sigh": "none",
+}
 
 _PERFORMANCE_MARKER_SHAPE_RE = re.compile(r"\[live2d:[^\]\r\n]*\]", re.IGNORECASE)
 _LEADING_PERFORMANCE_MARKER_RE = re.compile(
@@ -50,12 +52,12 @@ _BASE_TO_EMOTION: dict[str, str] = {
     "smug": "neutral",
 }
 _LEGACY_TO_BASE: dict[str, PerformanceBase] = {
-    "happy": "cheerful",
-    "sad": "concerned",
+    "happy": "calm",
+    "sad": "annoyed",
     "angry": "annoyed",
     "surprised": "surprised",
     "neutral": "calm",
-    "thinking": "thinking",
+    "thinking": "calm",
 }
 
 
@@ -102,16 +104,20 @@ def parse_performance_plan(text: str) -> PerformanceParseResult:
     legacy = _LEGACY_MARKER_RE.search(raw_text)
 
     if leading is not None:
-        base = leading.group("base").lower()
+        raw_base = leading.group("base").lower()
         intensity = leading.group("intensity").lower()
-        accent = leading.group("accent").lower()
+        raw_accent = leading.group("accent").lower()
+        base = _DEPRECATED_BASES.get(raw_base, cast(PerformanceBase, raw_base))
+        accent = _DEPRECATED_ACCENTS.get(raw_accent, cast(PerformanceAccent, raw_accent))
+        source: PerformanceSource = "legacy" if base != raw_base or accent != raw_accent else "llm"
         plan = Live2DPerformancePlan(
             version=1,
-            base=cast(PerformanceBase, base),
+            base=base,
             intensity=cast(PerformanceIntensity, intensity),
-            accent=cast(PerformanceAccent, accent),
-            source="llm",
+            accent=accent,
+            source=source,
         )
+        compatible_emotion = _BASE_TO_EMOTION[raw_base]
         fallback_reason: Literal["missing_marker", "invalid_marker"] | None = None
     elif legacy is not None:
         emotion = legacy.group("emotion").lower()
@@ -122,9 +128,11 @@ def parse_performance_plan(text: str) -> PerformanceParseResult:
             accent="none",
             source="legacy",
         )
+        compatible_emotion = emotion
         fallback_reason = None
     else:
         plan = CALM_PERFORMANCE_PLAN
+        compatible_emotion = _BASE_TO_EMOTION[plan.base]
         fallback_reason = (
             "invalid_marker" if _PERFORMANCE_MARKER_SHAPE_RE.search(raw_text) else "missing_marker"
         )
@@ -136,7 +144,7 @@ def parse_performance_plan(text: str) -> PerformanceParseResult:
     return PerformanceParseResult(
         plan=plan,
         cleaned_text=cleaned_text,
-        compatible_emotion=_BASE_TO_EMOTION[plan.base],
+        compatible_emotion=compatible_emotion,
         fallback_reason=fallback_reason,
     )
 
@@ -158,17 +166,23 @@ def validated_performance_payload(value: object) -> dict[str, object] | None:
     intensity = value.get("intensity")
     accent = value.get("accent")
     source = value.get("source")
-    if (
-        base not in PERFORMANCE_BASES
-        or intensity not in PERFORMANCE_INTENSITIES
-        or accent not in PERFORMANCE_ACCENTS
-        or source not in {"llm", "legacy", "fallback"}
-    ):
+    if intensity not in PERFORMANCE_INTENSITIES or source not in {
+        "llm",
+        "legacy",
+        "fallback",
+    }:
         return None
+    normalized_base = _DEPRECATED_BASES.get(str(base), cast(PerformanceBase, base))
+    normalized_accent = _DEPRECATED_ACCENTS.get(str(accent), cast(PerformanceAccent, accent))
+    if normalized_base not in PERFORMANCE_BASES or normalized_accent not in PERFORMANCE_ACCENTS:
+        return None
+    normalized_source = (
+        "legacy" if normalized_base != base or normalized_accent != accent else source
+    )
     return {
         "version": 1,
-        "base": base,
+        "base": normalized_base,
         "intensity": intensity,
-        "accent": accent,
-        "source": source,
+        "accent": normalized_accent,
+        "source": normalized_source,
     }

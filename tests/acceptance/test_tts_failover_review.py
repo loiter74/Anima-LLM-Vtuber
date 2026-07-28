@@ -34,13 +34,13 @@ class PCMStreamingFallback:
     def __init__(self, chunks: list[bytes] | None = None) -> None:
         self.chunks = [b"\x01\x00" * 2400] if chunks is None else chunks
         self.closed = 0
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
     async def preload(self) -> None:
         return None
 
     async def synthesize_stream(self, text: str, **kwargs: object) -> AsyncIterator[bytes]:
-        del kwargs
-        assert text == "晚上好，欢迎来到直播间。云端语音暂时不可用，现在由本小姐继续为你播报。"
+        self.calls.append((text, kwargs))
         for chunk in self.chunks:
             yield chunk
 
@@ -67,12 +67,15 @@ def make_harness(tmp_path: Path, fallback: PCMStreamingFallback | None = None):
 
 
 async def test_billing_failure_streams_fixed_local_wav_and_safe_report(tmp_path: Path) -> None:
-    harness, _fallback = make_harness(tmp_path)
+    harness, fallback = make_harness(tmp_path)
     await harness.prepare()
 
     result = await harness.run(
         scene_id="billing-to-local",
         authorization="Bearer review-secret",
+    )
+    assert fallback.calls[-1][0] == (
+        "晚上好，欢迎来到直播间。云端语音暂时不可用，现在由本小姐继续为你播报。"
     )
 
     assert "text" not in result.report
@@ -100,6 +103,33 @@ async def test_billing_failure_streams_fixed_local_wav_and_safe_report(tmp_path:
         assert wav_file.getnchannels() == 1
         assert wav_file.getsampwidth() == 2
         assert wav_file.readframes(wav_file.getnframes()) == b"\x01\x00" * 2400
+
+
+@pytest.mark.parametrize(
+    ("scene_id", "text", "emotion"),
+    [
+        ("live2d-calm", "晚上好，今天也一起轻松聊聊天吧。", "neutral"),
+        ("live2d-annoyed", "哼，这种事情居然还要本小姐提醒你吗？", "angry"),
+        ("live2d-surprised", "诶？这是真的吗？完全没想到会变成这样！", "surprised"),
+    ],
+)
+async def test_live2d_scenes_use_fixed_emotion_matched_text(
+    tmp_path: Path,
+    scene_id: str,
+    text: str,
+    emotion: str,
+) -> None:
+    harness, fallback = make_harness(tmp_path)
+    await harness.prepare()
+
+    result = await harness.run(scene_id=scene_id, authorization="Bearer review-secret")
+
+    actual_text, kwargs = fallback.calls[-1]
+    assert actual_text == text
+    assert kwargs["emotion"] == emotion
+    assert isinstance(kwargs["instruction"], str)
+    assert kwargs["instruction"]
+    assert result.report["scene_id"] == scene_id
 
 
 async def test_harness_rejects_invalid_token_and_unknown_scene(tmp_path: Path) -> None:

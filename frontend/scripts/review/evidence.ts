@@ -18,6 +18,11 @@ export interface ArtifactRecord {
   height?: number
 }
 
+export interface AudioSampleArtifactRecord {
+  audio_wav: ArtifactRecord | null
+  backend_report: ArtifactRecord | null
+}
+
 export interface AttemptSummary {
   scene_id: string
   attempt: number
@@ -25,6 +30,7 @@ export interface AttemptSummary {
   obs_screenshot: ArtifactRecord | null
   audio_wav?: ArtifactRecord | null
   backend_report?: ArtifactRecord | null
+  audio_samples?: Readonly<Record<string, AudioSampleArtifactRecord>>
   evidence?: string
 }
 
@@ -52,6 +58,7 @@ export interface AttemptRecordV2 {
     playwright_trace: ArtifactRecord | null
     audio_wav?: ArtifactRecord | null
     backend_report?: ArtifactRecord | null
+    audio_samples?: Readonly<Record<string, AudioSampleArtifactRecord>>
   }
   observations?: readonly ObservationRecord[]
   console_errors: readonly string[]
@@ -284,6 +291,12 @@ function isStableSummary(
         attempt.audio_wav !== undefined &&
         attempt.backend_report !== null &&
         attempt.backend_report !== undefined)
+    const namedSamplesComplete =
+      attempt.audio_samples === undefined ||
+      (Object.keys(attempt.audio_samples).length > 0 &&
+        Object.values(attempt.audio_samples).every(
+          (sample) => sample.audio_wav !== null && sample.backend_report !== null,
+        ))
     return (
       attempt.scene_id === summary.scene_order[index] &&
       attempt.outcome === 'passed' &&
@@ -292,7 +305,8 @@ function isStableSummary(
       artifact.bytes > 0 &&
       artifact.width === 1080 &&
       artifact.height === 1920 &&
-      featureArtifactsComplete
+      featureArtifactsComplete &&
+      namedSamplesComplete
     )
   })
 }
@@ -329,7 +343,12 @@ async function validateSummaryArtifacts(
       record.artifacts.playwright_trace === null ||
       record.artifacts.obs_screenshot === null ||
       (summary.feature_id === 'tts-failover' &&
-        (record.artifacts.audio_wav == null || record.artifacts.backend_report == null))
+        (record.artifacts.audio_wav == null || record.artifacts.backend_report == null)) ||
+      (record.artifacts.audio_samples !== undefined &&
+        (Object.keys(record.artifacts.audio_samples).length === 0 ||
+          Object.values(record.artifacts.audio_samples).some(
+            (sample) => sample.audio_wav === null || sample.backend_report === null,
+          )))
     ) {
       return false
     }
@@ -340,6 +359,10 @@ async function validateSummaryArtifacts(
       record.artifacts.playwright_trace,
       ...(record.artifacts.audio_wav ? [record.artifacts.audio_wav] : []),
       ...(record.artifacts.backend_report ? [record.artifacts.backend_report] : []),
+      ...Object.values(record.artifacts.audio_samples ?? {}).flatMap((sample) => [
+        ...(sample.audio_wav ? [sample.audio_wav] : []),
+        ...(sample.backend_report ? [sample.backend_report] : []),
+      ]),
     ]) {
       const actual = await artifactFromFile(
         runDir,

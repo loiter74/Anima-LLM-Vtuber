@@ -230,6 +230,19 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
           : Promise.resolve(automaticDecision(technicalPassed)),
       persist: async ({ sceneId, attempt, execution, decision }) => {
         const capturedAt = execution.finishedAt
+        const audioSamples = Object.fromEntries(
+          await Promise.all(
+            Object.entries(execution.pluginArtifacts?.audioSamples ?? {}).map(
+              async ([name, sample]) => [
+                name,
+                {
+                  audio_wav: await optionalArtifact(runDir, sample.audioWav, capturedAt),
+                  backend_report: await optionalArtifact(runDir, sample.backendReport, capturedAt),
+                },
+              ],
+            ),
+          ),
+        )
         const [
           chromeScreenshot,
           chromeStableCrop,
@@ -265,6 +278,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
               ? {
                   audio_wav: audioWav,
                   backend_report: backendReport,
+                  ...(Object.keys(audioSamples).length > 0 ? { audio_samples: audioSamples } : {}),
                 }
               : {}),
           },
@@ -283,7 +297,11 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
           outcome: decision.outcome,
           obs_screenshot: obsScreenshot,
           ...(execution.pluginArtifacts
-            ? { audio_wav: audioWav, backend_report: backendReport }
+            ? {
+                audio_wav: audioWav,
+                backend_report: backendReport,
+                ...(Object.keys(audioSamples).length > 0 ? { audio_samples: audioSamples } : {}),
+              }
             : {}),
           evidence: relativePath(runDir, evidencePath),
         })

@@ -217,6 +217,13 @@ export function setClampedParameter(name: string, value: number): void {
   coreModel.setParameterValueByIndex(index, Math.max(minimum, Math.min(maximum, value)))
 }
 
+export function getParameterValue(name: string): number {
+  const coreModel = model?.internalModel?.coreModel
+  if (!coreModel) return 0
+  const index = coreModel.getParameterIndex(name)
+  return index < 0 ? 0 : coreModel.getParameterValueByIndex(index)
+}
+
 // ===== Retry =====
 
 /** Retry loading the default model after a failure */

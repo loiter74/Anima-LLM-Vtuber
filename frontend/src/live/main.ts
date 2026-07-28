@@ -81,14 +81,7 @@ void live2dStage.ready.finally(() => {
     const volumes = parseReviewMouthTimeline(search.get('mouthTimeline'))
     live2dStage.playReviewAudio(notification.element, volumes)
   }
-  const performanceReview = mountLive2DPerformanceReview(
-    document,
-    search,
-    live2dStage,
-    search.get('live2dPerformance') === '1'
-      ? parseReviewMouthTimeline(search.get('mouthTimeline'))
-      : [],
-  )
+  const performanceReview = mountLive2DPerformanceReview(document, search, live2dStage)
   if (performanceReview) pageDisposers.add(() => performanceReview.dispose())
   session.start()
 })

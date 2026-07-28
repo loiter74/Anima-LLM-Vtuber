@@ -1,94 +1,90 @@
 import type { Live2DStage } from '@/live/live2d-stage'
 import { DisposerStack } from '@/review/disposable'
-import { PERFORMANCE_ACCENTS, PERFORMANCE_BASES, PERFORMANCE_REVIEW_PLANS } from './catalog'
+import {
+  LIVE2D_PERFORMANCE_OBSERVATION_EVENT,
+  type Live2DPerformanceObservation,
+} from '@/components/live2d/live2dPerformanceObservability'
+import { PERFORMANCE_REVIEW_PLANS } from './catalog'
+import { parsePerformanceSamples } from './performanceSamples'
+import { createPerformanceSequenceRunner } from './performanceSequence'
 
 export interface Live2DPerformanceReviewHandle {
   element: HTMLElement
   dispose(): void
 }
 
-function requiredParameter(params: URLSearchParams, name: string): string {
-  const value = params.get(name)?.trim()
-  if (!value) throw new Error(`Missing review parameter: ${name}`)
-  return value
-}
-
 export function mountLive2DPerformanceReview(
   document: Document,
   params: URLSearchParams,
   stage: Live2DStage,
-  volumes: readonly number[],
 ): Live2DPerformanceReviewHandle | null {
   if (params.get('review') !== '1' || params.get('live2dPerformance') !== '1') return null
   const shell = document.querySelector<HTMLElement>('.live-shell')
   if (!shell) throw new Error('Live review surface is unavailable')
+  const samples = parsePerformanceSamples(params.get('performanceSamples'))
 
   const disposers = new DisposerStack()
-  const panel = document.createElement('aside')
+  const panel = document.createElement('div')
   panel.className = 'live2d-performance-review'
   panel.setAttribute('aria-label', 'Live2D 语义表演评审')
+  panel.setAttribute('aria-hidden', 'true')
+  panel.hidden = true
   panel.dataset.complete = 'false'
   panel.dataset.lipSync = 'pending'
+  panel.dataset.activationObserved = 'false'
 
-  const title = document.createElement('h2')
-  title.textContent = '语义表演控制'
-  const current = document.createElement('p')
-  current.className = 'live2d-performance-current'
-  const catalog = document.createElement('p')
-  catalog.className = 'live2d-performance-catalog'
-  catalog.textContent = [...PERFORMANCE_BASES, ...PERFORMANCE_ACCENTS].join(' · ')
+  const onPerformanceObservation = (event: Event): void => {
+    const observation = (event as CustomEvent<Live2DPerformanceObservation>).detail
+    if (observation?.kind === 'activation_delay') panel.dataset.activationObserved = 'true'
+  }
+  window.addEventListener(LIVE2D_PERFORMANCE_OBSERVATION_EVENT, onPerformanceObservation)
+  disposers.add(() =>
+    window.removeEventListener(LIVE2D_PERFORMANCE_OBSERVATION_EVENT, onPerformanceObservation),
+  )
+
   const audio = document.createElement('audio')
   audio.id = 'reviewAudio'
   audio.preload = 'auto'
-  audio.src = requiredParameter(params, 'audio')
-  panel.append(title, current, catalog, audio)
+  panel.append(audio)
   shell.append(panel)
   disposers.add(() => panel.remove())
 
-  let index = 0
-  let timer: number | null = null
   let disposed = false
-  let interruptionExercised = false
-  const playCurrent = (): void => {
-    if (disposed) return
-    const plan = PERFORMANCE_REVIEW_PLANS[index]
-    panel.dataset.currentBase = plan.base
-    panel.dataset.currentAccent = plan.accent
-    current.textContent = `${index + 1}/${PERFORMANCE_REVIEW_PLANS.length} · ${plan.base} · ${plan.accent}`
-    audio.currentTime = 0
-    stage.playReviewAudio(panel, volumes, plan)
-    if (!interruptionExercised) {
-      interruptionExercised = true
-      timer = window.setTimeout(() => {
-        audio.pause()
-        stage.cancelReviewAudio()
-        panel.dataset.interruption = 'observed'
-        timer = window.setTimeout(playCurrent, 450)
-      }, 650)
-    }
-  }
-  const onEnded = (): void => {
-    index += 1
-    if (index >= PERFORMANCE_REVIEW_PLANS.length) {
+  const runner = createPerformanceSequenceRunner({
+    length: PERFORMANCE_REVIEW_PLANS.length,
+    play(index) {
+      const plan = PERFORMANCE_REVIEW_PLANS[index]
+      const sample = samples[index]
+      panel.dataset.currentBase = plan.base
+      panel.dataset.currentAccent = plan.accent
+      audio.src = sample.audio
+      audio.currentTime = 0
+      stage.playReviewAudio(panel, sample.mouthTimeline, plan)
+    },
+    interrupt() {
+      audio.pause()
+      stage.cancelReviewAudio()
+      panel.dataset.interruption = 'observed'
+    },
+    complete() {
       panel.dataset.complete = 'true'
       panel.dataset.currentBase = 'calm'
       panel.dataset.currentAccent = 'none'
-      current.textContent = '完成 · 已回到 calm'
-      return
-    }
-    timer = window.setTimeout(playCurrent, 450)
-  }
+    },
+  })
+  const onEnded = (): void => runner.advance()
   audio.addEventListener('ended', onEnded)
   disposers.add(() => audio.removeEventListener('ended', onEnded))
-  playCurrent()
+  runner.start()
 
   return {
     element: panel,
     dispose(): void {
       if (disposed) return
       disposed = true
-      if (timer !== null) window.clearTimeout(timer)
+      runner.dispose()
       audio.pause()
+      stage.cancelReviewAudio()
       disposers.dispose()
     },
   }

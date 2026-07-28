@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildTtsHarnessAssertions,
   parseTtsFailoverHarnessResponse,
   type TtsFailoverHarnessResponse,
 } from '../scripts/review/tts-harness-contract'
@@ -35,6 +36,17 @@ describe('parseTtsFailoverHarnessResponse', () => {
     expect(parseTtsFailoverHarnessResponse(acceptedPayload()).report.actual_backend).toBe(
       'fallback',
     )
+  })
+
+  it('derives every technical assertion from report values', () => {
+    const payload = acceptedPayload()
+    expect(buildTtsHarnessAssertions(payload).every(({ passed }) => passed)).toBe(true)
+
+    payload.report.rtf = 0.5
+    expect(buildTtsHarnessAssertions(payload)).toContainEqual({
+      name: 'rtf<=0.35',
+      passed: false,
+    })
   })
 
   it.each([

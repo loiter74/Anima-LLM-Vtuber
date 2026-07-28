@@ -45,7 +45,16 @@ describe('review plugin lifecycle', () => {
       },
       artifacts: async () => {
         calls.push('artifacts')
-        return { audioWav: 'evidence/audio.wav', backendReport: 'evidence/report.json' }
+        return {
+          audioWav: 'evidence/audio.wav',
+          backendReport: 'evidence/report.json',
+          audioSamples: {
+            calm: {
+              audioWav: 'evidence/calm-audio.wav',
+              backendReport: 'evidence/calm-report.json',
+            },
+          },
+        }
       },
       cleanupAttempt: async () => {
         calls.push('cleanup')
@@ -61,6 +70,12 @@ describe('review plugin lifecycle', () => {
     expect(result.pluginArtifacts).toEqual({
       audioWav: 'evidence/audio.wav',
       backendReport: 'evidence/report.json',
+      audioSamples: {
+        calm: {
+          audioWav: 'evidence/calm-audio.wav',
+          backendReport: 'evidence/calm-report.json',
+        },
+      },
     })
     expect(result.observations).toEqual([{ name: 'rtf', value: 0.2 }])
   })

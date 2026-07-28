@@ -9,8 +9,13 @@ import { bindReviewMouthAfterMotion, createReviewVolumeTimelineLipSync } from '.
 import type { Live2DPerformancePlanV1 } from '@/types/socket-events'
 import {
   DEFAULT_LIVE2D_PERFORMANCE_PLAN,
+  createLive2DPerformanceController,
   Live2DPerformanceController,
 } from '@/components/live2d/live2dPerformanceController'
+import {
+  createCubismParameterAdapter,
+  type CubismParameterModel,
+} from '@/components/live2d/live2dPerformanceProfile'
 
 export interface Live2DStage {
   ready: Promise<void>
@@ -74,21 +79,10 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
       setReviewMouth = mouthBinding.setMouth
       setReviewMouthSampler = mouthBinding.setBeforeApply
       disposers.add(() => mouthBinding.dispose())
-      const coreModel = model.internalModel.coreModel as {
-        getParameterIndex(name: string): number
-        setParameterValueByIndex(index: number, value: number): void
-        getParameterMinimumValue?: (index: number) => number
-        getParameterMaximumValue?: (index: number) => number
-      }
-      performanceController = new Live2DPerformanceController({
-        write(name, value) {
-          const index = coreModel.getParameterIndex(name)
-          if (index < 0) return
-          const minimum = coreModel.getParameterMinimumValue?.(index) ?? -1
-          const maximum = coreModel.getParameterMaximumValue?.(index) ?? 1
-          coreModel.setParameterValueByIndex(index, Math.max(minimum, Math.min(maximum, value)))
-        },
-      })
+      const coreModel = model.internalModel.coreModel as CubismParameterModel
+      performanceController = createLive2DPerformanceController(
+        createCubismParameterAdapter(coreModel),
+      )
       setReviewMouthSampler(() => {
         performanceController?.tick()
         reviewLipSync?.sample()

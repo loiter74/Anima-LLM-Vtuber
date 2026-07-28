@@ -312,6 +312,18 @@ groups:
     resource_weight: 2
     input_sets: [python-toolchain]
 
+  backend-avatar-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/avatar]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
   backend-route-smoke:
     domain: backend
     kind: smoke
@@ -399,6 +411,7 @@ groups:
       - backend-tools-unit
       - backend-observability-unit
       - backend-acceptance-unit
+      - backend-avatar-unit
 
   backend-deadcode:
     domain: repository
@@ -684,7 +697,9 @@ components:
 
   orchestration-graph:
     domain: backend
-    paths: [src/animetta/orchestration/graph/**]
+    paths:
+      - src/animetta/orchestration/graph/**
+      - tests/orchestration/graph/**
     direct_groups:
       - backend-graph-unit
       - python-format
@@ -764,6 +779,21 @@ components:
     impacts: []
     risk: normal
 
+  backend-avatar:
+    domain: backend
+    paths:
+      - src/animetta/avatar/**
+      - tests/avatar/**
+    direct_groups:
+      - backend-avatar-unit
+      - backend-graph-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [orchestration-graph]
+    risk: normal
+
   frontend-source:
     domain: frontend
     paths:
@@ -781,6 +811,39 @@ components:
       - frontend-deadcode
       - frontend-duplicates
     impacts: [frontend-build-control]
+    risk: normal
+
+  frontend-review-tools:
+    domain: frontend
+    paths:
+      - frontend/scripts/review/**
+      - frontend/tests/review*.test.ts
+      - frontend/tests/tts-*.test.ts
+      - frontend/src/live2d-performance/**
+      - frontend/src/tts-failover/**
+    direct_groups:
+      - frontend-tests
+      - frontend-typecheck
+      - frontend-lint
+      - frontend-format
+      - frontend-deadcode
+      - frontend-duplicates
+    impacts: [frontend-build-control]
+    risk: normal
+
+  danmaku-collector-tools:
+    domain: repository
+    paths:
+      - scripts/collect_danmaku.py
+      - scripts/collect_live_danmaku.py
+      - tests/acceptance/test_live_danmaku_collector.py
+    direct_groups:
+      - backend-acceptance-unit
+      - backend-support-typecheck
+      - python-format
+      - backend-static
+      - backend-deadcode
+    impacts: [backend-services]
     risk: normal
 
   frontend-build-control:
@@ -849,9 +912,11 @@ components:
       - .gitignore
       - .github/workflows/**
       - AGENTS.md
+      - frontend/AGENTS.md
       - tests/AGENTS.md
       - Makefile
       - docs/development/project-health.md
+      - .agents/skills/**
       - openspec/changes/add-impact-aware-quality-pipeline/**
       - openspec/changes/accelerate-impact-aware-verification/**
     direct_groups: [backend-tooling-quality, docs-contract]

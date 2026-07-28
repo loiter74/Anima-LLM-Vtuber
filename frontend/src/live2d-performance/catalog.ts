@@ -1,41 +1,18 @@
 import type { ReviewDefinition } from '@/review/contracts'
-import type {
-  Live2DPerformanceAccent,
-  Live2DPerformanceBase,
-  Live2DPerformancePlanV1,
-} from '@/types/socket-events'
+import {
+  LIVE2D_PERFORMANCE_BASES,
+  type Live2DPerformancePlanV1,
+} from '@/components/live2d/live2dPerformanceContract'
 
-export const PERFORMANCE_BASES = [
-  'calm',
-  'cheerful',
-  'concerned',
-  'annoyed',
-  'surprised',
-  'thinking',
-  'smug',
-] as const satisfies readonly Live2DPerformanceBase[]
-
-export const PERFORMANCE_ACCENTS = [
-  'none',
-  'brighten',
-  'skeptical',
-  'startle',
-  'sigh',
-] as const satisfies readonly Live2DPerformanceAccent[]
+export const PERFORMANCE_BASES = LIVE2D_PERFORMANCE_BASES
+export const PERFORMANCE_ACCENTS = [] as const
 
 export const PERFORMANCE_REVIEW_PLANS: readonly Live2DPerformancePlanV1[] = [
-  ...PERFORMANCE_BASES.map((base): Live2DPerformancePlanV1 => ({
+  ...LIVE2D_PERFORMANCE_BASES.map((base): Live2DPerformancePlanV1 => ({
     version: 1,
     base,
     intensity: base === 'calm' ? 'subtle' : 'medium',
     accent: 'none',
-    source: 'llm',
-  })),
-  ...PERFORMANCE_ACCENTS.map((accent): Live2DPerformancePlanV1 => ({
-    version: 1,
-    base: 'calm',
-    intensity: 'medium',
-    accent,
     source: 'llm',
   })),
 ]
@@ -48,19 +25,10 @@ export const LIVE2D_PERFORMANCE_REVIEW_DEFINITION = {
   scenes: [
     {
       id: 'semantic-catalog',
-      title: 'Hiyori 七种语义与五种强调',
+      title: 'Hiyori 三种关键表情',
       observe:
-        '确认普通状态平静左右摇摆，七种脸部语义与五种强调从真实音频开始，口型始终可见且每轮结束回到平静。',
-      readyTexts: [
-        '语义表演控制',
-        'calm',
-        'cheerful',
-        'concerned',
-        'annoyed',
-        'surprised',
-        'thinking',
-        'smug',
-      ],
+        '确认日常、吐槽和惊讶三种关键表情与对应中文语音同步，口型始终可见且每轮结束回到平静。',
+      readyTexts: ['服务已连接', '弹幕直播中', 'Live2D 已加载'],
       timeline: [],
     },
   ],

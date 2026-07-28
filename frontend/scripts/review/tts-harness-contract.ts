@@ -1,6 +1,11 @@
 const ACCEPTED_PROVIDER = 'qwen3-tts-gguf-host'
 const MAX_MOUTH_TIMELINE_FRAMES = 3_000
 
+export interface TtsHarnessAssertion {
+  name: string
+  passed: boolean
+}
+
 export interface TtsFailoverHarnessResponse {
   report: {
     actual_backend: string
@@ -68,4 +73,43 @@ export function parseTtsFailoverHarnessResponse(value: unknown): TtsFailoverHarn
     validMouthTimeline
   if (!valid) throw new Error('TTS failover harness did not satisfy its acceptance contract')
   return payload
+}
+
+export function buildTtsHarnessAssertions(
+  payload: TtsFailoverHarnessResponse,
+): TtsHarnessAssertion[] {
+  const { report } = payload
+  return [
+    { name: 'primary-error:billing', passed: report.primary_error_category === 'billing' },
+    { name: 'actual-backend:fallback', passed: report.actual_backend === 'fallback' },
+    {
+      name: 'readiness:ready-degraded',
+      passed:
+        report.readiness.ready === true &&
+        report.readiness.degraded === true &&
+        report.readiness.active_backend === 'fallback',
+    },
+    {
+      name: 'pcm:complete-24khz-mono',
+      passed:
+        report.complete === true &&
+        report.sample_rate === 24_000 &&
+        report.channels === 1 &&
+        report.sample_width_bytes === 2 &&
+        Number.isInteger(report.pcm_bytes) &&
+        report.pcm_bytes > 0 &&
+        report.pcm_bytes % 2 === 0,
+    },
+    {
+      name: 'first-audio<=0.75s',
+      passed:
+        Number.isFinite(report.first_audio_seconds) &&
+        report.first_audio_seconds >= 0 &&
+        report.first_audio_seconds <= 0.75,
+    },
+    {
+      name: 'rtf<=0.35',
+      passed: Number.isFinite(report.rtf) && report.rtf >= 0 && report.rtf <= 0.35,
+    },
+  ]
 }

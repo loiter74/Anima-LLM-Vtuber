@@ -27,6 +27,7 @@ export interface ReviewAttemptPreparation {
   pageParams?: Readonly<Record<string, string>>
   assertions?: readonly AssertionRecord[]
   observations?: readonly StructuredObservation[]
+  artifacts?: ReviewPluginArtifacts
 }
 
 export interface ReviewAttemptContext extends ReviewRunContext {
@@ -37,6 +38,7 @@ export interface ReviewAttemptContext extends ReviewRunContext {
 export interface ReviewPluginArtifacts {
   audioWav?: string | null
   backendReport?: string | null
+  audioSamples?: Readonly<Record<string, { audioWav: string | null; backendReport: string | null }>>
 }
 
 export interface NodeReviewPlugin<Action = unknown> {
