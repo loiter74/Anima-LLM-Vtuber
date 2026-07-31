@@ -58,9 +58,29 @@ verified `py -3.13` interpreter and its already-installed ruff. This avoids
 downloading an isolated ruff binary (unreliable on Windows, drifts from the
 `pyproject.toml` pin).
 
-**Side fix:** `scripts/qwen_preflight.py` was flagged by the project's own
-`make format-check` (pre-existing drift). Reformatted so the format gate is
-green. No behavior change.
+**`pass_filenames: false` — two correctness bugs found in verification.** The
+first config draft used `--exit-non-zero-on-fix` + `pass_filenames: true`.
+Both were wrong:
+
+1. `--exit-non-zero-on-fix` makes ruff exit non-zero *only when it applied a
+   fix*. Non-auto-fixable errors (SIM115, ANN001, ANN201) returned exit 0, so
+   the gate passed on real lint errors — too lenient. Dropped; plain
+   `ruff check` fails on any error, matching `make lint`.
+2. `pass_filenames: true` caused a silent false-positive on Windows:
+   pre-commit passes every matching file as a CLI arg, and ~900 Python files
+   overflow the ~32 k Windows command-line limit. ruff then received
+   truncated/empty input and exited 0, reporting success while checking
+   nothing. Switched to `pass_filenames: false` with the directory scope in
+   the entry, so ruff walks the tree itself (honoring `pyproject.toml`).
+
+**Side fix — pre-existing lint/format debt cleared.** The new gate runs ruff
+across the full scope, which surfaced violations that `make lint` /
+`make format-check` were *already failing on* on main (the remote gate was
+red). Cleared in a separate commit so the gate is green on the existing tree:
+`scripts/live_danmaku.py` (13 SIM/ANN errors → annotations added), and ruff
+format / I001 import-sort drift in `glm_llm.py` + `llm_node.py` +
+`qwen_preflight.py`. No behavior change; future violations are now caught at
+commit/PR time.
 
 ### Part 2 — CI preflight job (`.github/workflows/quality.yml`)
 
