@@ -22,6 +22,21 @@ docker compose -f docker-compose.cpu.yml up -d --build
 curl -s http://localhost/health
 ```
 
+## Git Hooks (one-time setup)
+
+Install the pre-commit hook so trivial lint/format/secret mistakes are caught
+locally on every commit (sub-second), instead of waiting for CI:
+
+```bash
+pip install -r requirements-dev.txt   # installs pre-commit + ruff + mypy
+make install-hooks                    # installs .git/hooks/pre-commit
+```
+
+The hook runs `ruff check`, `ruff format --check`, secret/large-file guards,
+and (on frontend changes) `prettier --check`. Slow checks (mypy, frontend
+eslint, pytest) stay on CI; run `make health` before pushing for a full local
+gate. See [docs/ci-gate-plan.md](docs/ci-gate-plan.md) for the gate design.
+
 ## Project Structure
 
 ```
@@ -78,10 +93,15 @@ See [Testing Guide](docs/development/testing.md) for detailed test conventions.
 ## Pull Request Process
 
 1. Create a feature branch from `main`
-2. Write tests first (TDD preferred)
-3. Ensure CI passes (pytest + mypy + ruff)
-4. Update docs if changing public interfaces
-5. Open PR against `main`
+2. Install the local gate once: `make install-hooks` (see [Git Hooks](#git-hooks-one-time-setup) above)
+3. Write tests first (TDD preferred)
+4. Ensure CI passes:
+   - **preflight** (sub-minute, PR-only): ruff + format + scoped mypy on changed files
+   - **Quality** matrix: `tooling/quality` impact-selected tests, then `quality-gate` aggregates
+5. Update docs if changing public interfaces (and tick the impact checklist in the PR template)
+6. Open PR against `main`
+
+> **Branch protection (manual, one-time):** in GitHub Settings → Branches → `main`, enable "Require status checks to pass before merging" and add `preflight` + `quality-gate` as required checks. Enable "Require review from code owners" (see `.github/CODEOWNERS`). This step can't be set from the repo files — see [docs/ci-gate-plan.md §Enabling branch protection](docs/ci-gate-plan.md#enabling-branch-protection-manual-one-time).
 
 ## Change Tracking (openspec)
 
