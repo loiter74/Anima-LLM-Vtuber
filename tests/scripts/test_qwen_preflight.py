@@ -125,3 +125,57 @@ def test_expected_settings_resolve_when_host_worker_url_is_unset(
     assert api_key == "secret"
     assert identity == EXPECTED_IDENTITY
     assert "QWEN_TTS_URL" not in os.environ
+
+
+HOST_TTS_IDENTITY = {
+    "service": "qwen-tts",
+    "api_version": "v1",
+    "provider": "qwen3-tts-gguf-host",
+    "model": "Qwen3-TTS-1.7B-Base",
+    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+    "voice": "tosaka-rin-cn",
+}
+
+
+def test_host_tts_mode_returns_local_gguf_identity_without_manifest_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-tts mode resolves the local gguf identity from QWEN_TTS_API_KEY alone.
+
+    The local gguf-host runtime (port 8767) does not declare a production remote
+    worker in the manifest, so preflight must resolve its identity directly from
+    the runtime lifecycle HOST_TTS_IDENTITY, not from load_remote_tts_worker_config.
+    """
+    monkeypatch.setenv("QWEN_TTS_API_KEY", "host-secret")
+
+    api_key, identity = preflight.load_expected_settings(mode="host-tts")
+
+    assert api_key == "host-secret"
+    assert identity == HOST_TTS_IDENTITY
+
+
+def test_host_tts_mode_runs_against_8767_and_accepts_local_identity() -> None:
+    """run_preflight in host-tts mode probes /ready with QWEN_TTS_API_KEY auth."""
+
+    calls: list[tuple[str, str | None]] = []
+
+    def request_json(url: str, authorization: str | None) -> dict:
+        calls.append((url, authorization))
+        if url.endswith("/health"):
+            return {"status": "ok", "service": "qwen-tts", "api_version": "v1"}
+        return {"ready": True, **HOST_TTS_IDENTITY, "sample_rate": 24000}
+
+    evidence = preflight.run_preflight(
+        base_url="http://127.0.0.1:8767",
+        api_key="host-secret",
+        expected_identity=HOST_TTS_IDENTITY,
+        request_json=request_json,
+        attempts=1,
+        interval_seconds=0,
+    )
+
+    assert evidence["status"] == "passed"
+    assert calls == [
+        ("http://127.0.0.1:8767/health", None),
+        ("http://127.0.0.1:8767/ready", "Bearer host-secret"),
+    ]

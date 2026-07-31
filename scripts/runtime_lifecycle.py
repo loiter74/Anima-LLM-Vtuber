@@ -263,8 +263,8 @@ def _host_tts_stop() -> None:
     _remove_host_pid_file()
 
 
-def _preflight(*, wait: bool) -> list[str]:
-    command = [sys.executable, "scripts/qwen_preflight.py"]
+def _preflight(*, wait: bool, mode: str = "remote") -> list[str]:
+    command = [sys.executable, "scripts/qwen_preflight.py", "--mode", mode]
     if wait:
         command.append("--wait")
     return command
@@ -330,11 +330,11 @@ def run_operation(operation: str) -> None:
         _host_tts_stop()
     elif operation == "anima-up":
         _host_tts_up(best_effort=True)
-        _run(_preflight(wait=False))
+        _run(_preflight(wait=False, mode="host-tts"))
         _run(["docker", "compose", "build", "animetta"])
         _run(["docker", "compose", "up", "-d", "--no-build", "animetta"])
     elif operation == "anima-selftest-up":
-        _run(_preflight(wait=True))
+        _run(_preflight(wait=True, mode="host-tts"))
         _run([*SELFTEST_COMPOSE, "build", "animetta"])
         _run([*SELFTEST_COMPOSE, "up", "-d", "--no-build", "animetta"])
     elif operation == "anima-down":
