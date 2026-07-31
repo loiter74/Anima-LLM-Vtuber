@@ -4,6 +4,13 @@ export interface ObsClient {
   disconnect(): Promise<void>
 }
 
+export interface ReviewObsAdapter {
+  prepare(): Promise<void>
+  updateSource(reviewUrl: string): Promise<void>
+  capture(): Promise<Buffer>
+  dispose(): Promise<void>
+}
+
 export interface ObsPreviewOptions {
   url: string
   password?: string
@@ -14,7 +21,7 @@ export interface ObsPreviewOptions {
   enableAudioMonitoring?: boolean
 }
 
-export class ObsPreviewAdapter {
+export class ObsPreviewAdapter implements ReviewObsAdapter {
   private connected = false
   private prepared = false
   private previousScene: string | null = null

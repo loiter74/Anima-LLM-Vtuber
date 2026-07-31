@@ -17,11 +17,11 @@ class TestMinecraftClientViewerConfig:
     def test_default_values(self):
         cfg = MinecraftClientViewerConfig()
         assert cfg.enabled is False
-        assert cfg.username == ""
+        assert cfg.username == "LUN077"
         assert cfg.mode == "spectator"
         assert cfg.auto_spectate is True
-        assert cfg.poll_interval == 30
-        assert cfg.spectate_timeout == 10
+        assert cfg.poll_interval == 20
+        assert cfg.spectate_timeout == 8
 
     def test_custom_values(self):
         cfg = MinecraftClientViewerConfig(
@@ -41,7 +41,7 @@ class TestMinecraftClientViewerConfig:
 
     def test_enabled_without_username_still_valid(self):
         """Config can be enabled without a username — runtime will report missing."""
-        cfg = MinecraftClientViewerConfig(enabled=True)
+        cfg = MinecraftClientViewerConfig(enabled=True, username="")
         assert cfg.enabled is True
         assert cfg.username == ""
 
@@ -56,7 +56,7 @@ class TestMinecraftConfigClientViewer:
     def test_default_client_viewer_disabled(self):
         cfg = MinecraftConfig()
         assert cfg.client_viewer.enabled is False
-        assert cfg.client_viewer.username == ""
+        assert cfg.client_viewer.username == "LUN077"
         assert cfg.client_viewer.mode == "spectator"
 
     def test_client_viewer_enabled_via_config(self):
@@ -86,14 +86,30 @@ class TestMinecraftConfigClientViewer:
         assert cfg.client_viewer.auto_spectate is False
         assert cfg.client_viewer.poll_interval == 45
 
-    def test_client_viewer_independent_of_viewer(self):
-        """client_viewer and viewer are separate config sections."""
+    def test_legacy_viewer_normalizes_to_canonical_client_viewer(self):
         cfg = MinecraftConfig(
-            enabled=True,
-            client_viewer=MinecraftClientViewerConfig(enabled=True, username="Camera"),
+            viewer={
+                "username": "LegacyCamera",
+                "auto_spectate": False,
+            }
         )
         assert cfg.client_viewer.enabled is True
-        assert cfg.viewer.username == ""  # unchanged
+        assert cfg.client_viewer.username == "LegacyCamera"
+        assert cfg.client_viewer.auto_spectate is False
+
+    def test_explicit_client_viewer_wins_over_legacy_viewer(self):
+        """Explicit canonical config must not be overwritten by legacy settings."""
+        cfg = MinecraftConfig(
+            viewer={"username": "LegacyCamera", "auto_spectate": True},
+            client_viewer={
+                "enabled": False,
+                "username": "CanonicalCamera",
+                "auto_spectate": False,
+            },
+        )
+        assert cfg.client_viewer.enabled is False
+        assert cfg.client_viewer.username == "CanonicalCamera"
+        assert cfg.client_viewer.auto_spectate is False
 
     def test_client_viewer_mode_default_spectator(self):
         cfg = MinecraftConfig(

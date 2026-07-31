@@ -11,8 +11,16 @@ export interface MinecraftStatus {
 
 export interface MinecraftViewerStatus {
   status: 'waiting' | 'joined' | 'left' | 'error'
+  schema_version?: 2
   username?: string
   error?: string
+  mode?: 'spectator'
+  binding_state?: 'disabled' | 'waiting' | 'attaching' | 'following' | 'degraded'
+  confirmed?: boolean
+  target?: string
+  attempt?: number
+  retry_in_ms?: number
+  reason?: string
 }
 
 export interface BotState {
@@ -38,6 +46,14 @@ export const useMinecraftStore = defineStore('minecraft', () => {
   // Viewer spectator state
   const viewerStatus = ref<'idle' | 'waiting' | 'joined' | 'left' | 'error'>('idle')
   const viewerUsername = ref('')
+  const viewerBindingState = ref<'disabled' | 'waiting' | 'attaching' | 'following' | 'degraded'>(
+    'disabled',
+  )
+  const viewerConfirmed = ref(false)
+  const viewerTarget = ref('')
+  const viewerAttempt = ref(0)
+  const viewerRetryInMs = ref<number | null>(null)
+  const viewerReason = ref('')
 
   // Bot state (real-time HUD data)
   const botState = ref<BotState>({
@@ -69,6 +85,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     }
 
     const viewerHandler = (data: MinecraftViewerStatus) => {
+      if (data.binding_state) viewerBindingState.value = data.binding_state
+      if (data.confirmed !== undefined) viewerConfirmed.value = data.confirmed
+      if (data.target !== undefined) viewerTarget.value = data.target
+      if (data.attempt !== undefined) viewerAttempt.value = data.attempt
+      if (data.retry_in_ms !== undefined) viewerRetryInMs.value = data.retry_in_ms
+      if (data.reason !== undefined) viewerReason.value = data.reason
       if (data.status === 'waiting') {
         viewerStatus.value = 'waiting'
         viewerUsername.value = data.username || ''
@@ -135,6 +157,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     socket.emit(Events.MINECRAFT.STOP)
     viewerStatus.value = 'idle'
     viewerUsername.value = ''
+    viewerBindingState.value = 'disabled'
+    viewerConfirmed.value = false
+    viewerTarget.value = ''
+    viewerAttempt.value = 0
+    viewerRetryInMs.value = null
+    viewerReason.value = ''
   }
 
   function spectate(): void {
@@ -150,6 +178,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     error,
     viewerStatus,
     viewerUsername,
+    viewerBindingState,
+    viewerConfirmed,
+    viewerTarget,
+    viewerAttempt,
+    viewerRetryInMs,
+    viewerReason,
     botState,
     setupListener,
     teardownListener,

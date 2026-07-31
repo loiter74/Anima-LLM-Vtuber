@@ -24,6 +24,10 @@ export interface TtsFailoverHarnessResponse {
     sample_width_bytes: number
     pcm_bytes: number
     complete: boolean
+    performance?: {
+      passed: boolean
+      enforced: boolean
+    }
   }
   audio_wav: string
   backend_report: string
@@ -34,7 +38,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function parseTtsFailoverHarnessResponse(value: unknown): TtsFailoverHarnessResponse {
+export function parseTtsFailoverHarnessResponse(
+  value: unknown,
+  options: { performancePolicy?: 'strict' | 'observe' } = {},
+): TtsFailoverHarnessResponse {
   if (!isRecord(value) || !isRecord(value.report)) {
     throw new Error('TTS failover harness did not satisfy its acceptance contract')
   }
@@ -45,6 +52,13 @@ export function parseTtsFailoverHarnessResponse(value: unknown): TtsFailoverHarn
     payload.mouth_timeline.length > 0 &&
     payload.mouth_timeline.length <= MAX_MOUTH_TIMELINE_FRAMES &&
     payload.mouth_timeline.every((volume) => Number.isFinite(volume) && volume >= 0 && volume <= 1)
+  const validPerformance =
+    Number.isFinite(report.first_audio_seconds) &&
+    report.first_audio_seconds >= 0 &&
+    Number.isFinite(report.rtf) &&
+    report.rtf >= 0 &&
+    (options.performancePolicy === 'observe' ||
+      (report.first_audio_seconds <= 0.75 && report.rtf <= 0.35))
   const valid =
     report.actual_backend === 'fallback' &&
     report.actual_provider === ACCEPTED_PROVIDER &&
@@ -60,12 +74,7 @@ export function parseTtsFailoverHarnessResponse(value: unknown): TtsFailoverHarn
     report.pcm_bytes > 0 &&
     report.pcm_bytes % 2 === 0 &&
     report.complete === true &&
-    Number.isFinite(report.first_audio_seconds) &&
-    report.first_audio_seconds >= 0 &&
-    report.first_audio_seconds <= 0.75 &&
-    Number.isFinite(report.rtf) &&
-    report.rtf >= 0 &&
-    report.rtf <= 0.35 &&
+    validPerformance &&
     typeof payload.audio_wav === 'string' &&
     payload.audio_wav.startsWith('/') &&
     typeof payload.backend_report === 'string' &&
@@ -77,9 +86,10 @@ export function parseTtsFailoverHarnessResponse(value: unknown): TtsFailoverHarn
 
 export function buildTtsHarnessAssertions(
   payload: TtsFailoverHarnessResponse,
+  options: { includePerformance?: boolean } = {},
 ): TtsHarnessAssertion[] {
   const { report } = payload
-  return [
+  const assertions: TtsHarnessAssertion[] = [
     { name: 'primary-error:billing', passed: report.primary_error_category === 'billing' },
     { name: 'actual-backend:fallback', passed: report.actual_backend === 'fallback' },
     {
@@ -100,16 +110,19 @@ export function buildTtsHarnessAssertions(
         report.pcm_bytes > 0 &&
         report.pcm_bytes % 2 === 0,
     },
-    {
+  ]
+  if (options.includePerformance !== false) {
+    assertions.push({
       name: 'first-audio<=0.75s',
       passed:
         Number.isFinite(report.first_audio_seconds) &&
         report.first_audio_seconds >= 0 &&
         report.first_audio_seconds <= 0.75,
-    },
-    {
+    })
+    assertions.push({
       name: 'rtf<=0.35',
       passed: Number.isFinite(report.rtf) && report.rtf >= 0 && report.rtf <= 0.35,
-    },
-  ]
+    })
+  }
+  return assertions
 }

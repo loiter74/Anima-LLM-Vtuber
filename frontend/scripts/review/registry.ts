@@ -3,6 +3,8 @@ import type { AssertionRecord, ReviewPageAdapter, StructuredObservation } from '
 import { liveReviewNodePlugin } from './plugins/live'
 import { ttsFailoverReviewNodePlugin } from './plugins/tts-failover'
 import { live2dPerformanceReviewNodePlugin } from './plugins/live2d-performance'
+import { minecraftGameplayReviewNodePlugin } from './plugins/minecraft-gameplay'
+import type { ObsClient, ObsPreviewOptions, ReviewObsAdapter } from './obs'
 
 export interface ReviewCapabilities {
   requireObs?: boolean
@@ -38,6 +40,7 @@ export interface ReviewAttemptContext extends ReviewRunContext {
 export interface ReviewPluginArtifacts {
   audioWav?: string | null
   backendReport?: string | null
+  gameplayReport?: string | null
   audioSamples?: Readonly<Record<string, { audioWav: string | null; backendReport: string | null }>>
 }
 
@@ -46,6 +49,7 @@ export interface NodeReviewPlugin<Action = unknown> {
   pageAdapter: ReviewPageAdapter<Action>
   capabilities?: ReviewCapabilities
   enableObsAudioMonitoring?: boolean
+  createObsAdapter?(client: ObsClient, options: ObsPreviewOptions): ReviewObsAdapter
   prepareRun?(context: ReviewRunContext): Promise<unknown>
   prepareAttempt?(
     context: ReviewAttemptContext,
@@ -68,6 +72,7 @@ const plugins = new Map<string, NodeReviewPlugin>([
   ['live', liveReviewNodePlugin as unknown as NodeReviewPlugin],
   ['tts-failover', ttsFailoverReviewNodePlugin as unknown as NodeReviewPlugin],
   ['live2d-performance', live2dPerformanceReviewNodePlugin as unknown as NodeReviewPlugin],
+  ['minecraft-gameplay', minecraftGameplayReviewNodePlugin as unknown as NodeReviewPlugin],
 ])
 
 export const REVIEW_FEATURE_IDS = Object.freeze([...plugins.keys()])

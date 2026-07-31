@@ -21,6 +21,88 @@ if TYPE_CHECKING:
     from socketio import AsyncServer
 
 
+_VIEWER_BINDING_STATES = frozenset({"disabled", "waiting", "attaching", "following", "degraded"})
+_VIEWER_REASONS = frozenset(
+    {
+        "disabled",
+        "viewer_offline",
+        "viewer_joined",
+        "bot_spawn",
+        "bot_respawn",
+        "dimension_change",
+        "manual_retry",
+        "periodic_check",
+        "confirmation_timeout",
+        "confirmation_rejected",
+        "command_failed",
+        "closed",
+        "config_missing",
+        "unknown",
+    }
+)
+_LEGACY_STATUS_BY_BINDING = {
+    "disabled": "waiting",
+    "waiting": "waiting",
+    "attaching": "waiting",
+    "following": "joined",
+    "degraded": "error",
+}
+
+
+def _safe_nonnegative_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_viewer_text(value: object, *, default: str = "") -> str:
+    if not isinstance(value, str):
+        return default
+    return value[:64]
+
+
+def project_viewer_status(event_type: str, payload: dict[str, Any] | object) -> dict[str, Any]:
+    """Project runtime viewer events onto the safe V2 and legacy socket contract."""
+    if event_type != "client_viewer_status" or not isinstance(payload, dict):
+        joined = event_type == "viewer_joined"
+        return {
+            "schema_version": 2,
+            "status": "joined" if joined else "left",
+            "binding_state": "following" if joined else "waiting",
+            "confirmed": joined,
+            "username": _safe_viewer_text(payload),
+            "mode": "spectator",
+            "target": "AnimettaBot",
+            "attempt": 0,
+            "reason": "viewer_joined" if joined else "viewer_offline",
+        }
+
+    raw_state = payload.get("binding_state", payload.get("state", "waiting"))
+    binding_state = raw_state if raw_state in _VIEWER_BINDING_STATES else "degraded"
+    raw_reason = payload.get("reason", "unknown")
+    reason = raw_reason if raw_reason in _VIEWER_REASONS else "unknown"
+    confirmed = binding_state == "following" and payload.get("confirmed") is True
+    data: dict[str, Any] = {
+        "schema_version": 2,
+        "status": _LEGACY_STATUS_BY_BINDING[binding_state],
+        "binding_state": binding_state,
+        "confirmed": confirmed,
+        "username": _safe_viewer_text(payload.get("username")),
+        "mode": "spectator",
+        "target": _safe_viewer_text(payload.get("target"), default="AnimettaBot"),
+        "attempt": _safe_nonnegative_int(payload.get("attempt")),
+        "reason": reason,
+    }
+    if "retry_in_ms" in payload:
+        data["retry_in_ms"] = _safe_nonnegative_int(payload["retry_in_ms"])
+    return data
+
+
 class MinecraftHandlers:
     """Minecraft bot lifecycle handlers.
 
@@ -54,22 +136,7 @@ class MinecraftHandlers:
         def on_viewer_event(event_type: str, payload: dict[str, Any] | object) -> None:
             import asyncio
 
-            if event_type == "client_viewer_status" and isinstance(payload, dict):
-                data = {
-                    "status": payload.get("state", "unknown"),
-                    "username": payload.get("username", ""),
-                    "mode": payload.get("mode", ""),
-                    "reason": payload.get("reason", ""),
-                }
-                if payload.get("error"):
-                    data["error"] = payload["error"]
-                if payload.get("spectate_command_sent"):
-                    data["spectate_command_sent"] = True
-                    data["commands"] = payload.get("commands", [])
-            else:
-                username = str(payload)
-                status = "joined" if event_type == "viewer_joined" else "left"
-                data = {"status": status, "username": username}
+            data = project_viewer_status(event_type, payload)
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
@@ -145,10 +212,20 @@ class MinecraftHandlers:
             )
 
             # If viewer is configured, emit initial waiting status
-            if config.viewer.username:
+            if config.client_viewer.enabled:
                 await self.sio.emit(
                     EVENTS["minecraft"]["viewer_status"]["name"],
-                    {"status": "waiting", "username": config.viewer.username},
+                    project_viewer_status(
+                        "client_viewer_status",
+                        {
+                            "binding_state": "waiting",
+                            "confirmed": False,
+                            "username": config.client_viewer.username,
+                            "target": config.bot.username,
+                            "attempt": 0,
+                            "reason": "viewer_offline",
+                        },
+                    ),
                     to=sid,
                 )
 

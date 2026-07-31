@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fixtures = vi.hoisted(() => {
   let beforeModelUpdate: (() => void) | null = null
+  let applicationOptions: Record<string, unknown> | null = null
   const setParameterValueByIndex = vi.fn()
   const model = {
     width: 400,
@@ -27,6 +28,10 @@ const fixtures = vi.hoisted(() => {
   return {
     model,
     setParameterValueByIndex,
+    setApplicationOptions: (options: Record<string, unknown>) => {
+      applicationOptions = options
+    },
+    getApplicationOptions: () => applicationOptions,
     emitBeforeModelUpdate: () => beforeModelUpdate?.(),
   }
 })
@@ -37,6 +42,9 @@ vi.mock('pixi.js', () => ({
     stage = { addChild: vi.fn() }
     stop = vi.fn()
     destroy = vi.fn()
+    constructor(options: Record<string, unknown>) {
+      fixtures.setApplicationOptions(options)
+    }
   },
 }))
 vi.mock('pixi-live2d-display/cubism4', () => ({
@@ -75,6 +83,18 @@ describe('createLive2DStage', () => {
     expect(fixtures.setParameterValueByIndex).toHaveBeenCalledWith(1, expect.any(Number))
     expect(notification.dataset.lipSync).toBe('observed')
     stage.dispose()
+    stage.dispose()
+  })
+
+  it('can size the shared stage to a bounded broadcast avatar container', async () => {
+    const { createLive2DStage } = await import('./live2d-stage')
+    const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
+    const avatarContainer = document.createElement('section')
+
+    const stage = createLive2DStage(socket, { resizeTo: avatarContainer })
+    await stage.ready
+
+    expect(fixtures.getApplicationOptions()?.resizeTo).toBe(avatarContainer)
     stage.dispose()
   })
 })

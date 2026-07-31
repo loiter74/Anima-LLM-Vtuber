@@ -5,7 +5,7 @@ Minecraft configuration models
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class MinecraftBotConfig(BaseModel):
@@ -37,11 +37,11 @@ class MinecraftClientViewerConfig(BaseModel):
     """
 
     enabled: bool = False
-    username: str = ""  # MC username of the real-client viewer account
+    username: str = "LUN077"  # MC username of the real-client viewer account
     mode: Literal["spectator"] = "spectator"  # binding mode: only "spectator" for now
     auto_spectate: bool = True  # auto-run /spectate when viewer is online
-    poll_interval: int = 30  # seconds between viewer-online polling checks
-    spectate_timeout: int = 10  # seconds to wait for spectate command result
+    poll_interval: int = 20  # seconds between viewer-online polling checks
+    spectate_timeout: int = 8  # seconds to wait for spectate command result
 
 
 class MinecraftMode(StrEnum):
@@ -81,3 +81,23 @@ class MinecraftConfig(BaseModel):
     viewer: MinecraftViewerConfig = MinecraftViewerConfig()
     client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
     runtime: MinecraftRuntimeConfig = MinecraftRuntimeConfig()
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_viewer(cls, value: object) -> object:
+        """Promote legacy viewer settings when canonical settings are absent."""
+        if not isinstance(value, dict) or "client_viewer" in value:
+            return value
+        legacy = value.get("viewer")
+        if not isinstance(legacy, dict):
+            return value
+        username = legacy.get("username")
+        if not isinstance(username, str) or not username.strip():
+            return value
+        normalized = dict(value)
+        normalized["client_viewer"] = {
+            "enabled": True,
+            "username": username,
+            "auto_spectate": bool(legacy.get("auto_spectate", True)),
+        }
+        return normalized
