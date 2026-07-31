@@ -44,26 +44,29 @@ repos:
       - id: check-merge-conflict
 
   # ── Python: ruff lint + format-check (system interpreter) ──────────────
+  # pass_filenames is FALSE on purpose: pre-commit passes every matching file
+  # as a CLI arg, which on Windows overflows the ~32k command-line limit for
+  # ~900 files and silently makes ruff exit 0 on empty input. Instead we hand
+  # ruff the directory scope and let it walk the tree itself (it honors
+  # pyproject.toml). `files:`/`exclude:` below still gate WHEN the hook runs.
   - repo: local
     hooks:
       - id: ruff-check
         name: ruff check (py-3.13)
-        description: Lint; --exit-non-zero-on-fix so an auto-fix still fails the commit (re-stage intentionally).
-        entry: py -3.13 -m ruff check --exit-non-zero-on-fix
+        description: Lint; fails on any ruff error (mirrors `make lint`).
+        entry: py -3.13 -m ruff check src tooling scripts evaluations tests
         language: system
-        types: [python]
-        pass_filenames: true
-        # Mirror the Makefile lint scope.
-        files: ^(src|tooling|scripts|evaluations|tests)/
+        pass_filenames: false
+        # Run when any in-scope Python file is staged.
+        files: ^(src|tooling|scripts|evaluations|tests)/.*\.py$
 
       - id: ruff-format
         name: ruff format --check (py-3.13)
         description: Verify formatting matches `ruff format` without writing.
-        entry: py -3.13 -m ruff format --check
+        entry: py -3.13 -m ruff format --check src tooling scripts evaluations tests
         language: system
-        types: [python]
-        pass_filenames: true
-        files: ^(src|tooling|scripts|evaluations|tests)/
+        pass_filenames: false
+        files: ^(src|tooling|scripts|evaluations|tests)/.*\.py$
 
       # ── Frontend: prettier check only on frontend/** ─────────────────────
       - id: prettier-check

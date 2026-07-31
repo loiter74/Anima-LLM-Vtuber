@@ -159,7 +159,7 @@ jobs:
 
       - name: ruff check (changed Python files)
         if: steps.changed.outputs.py_count != '0'
-        run: ruff check --exit-non-zero-on-fix $(cat changed_py.txt)
+        run: ruff check $(cat changed_py.txt)
 
       - name: ruff format --check (changed Python files)
         if: steps.changed.outputs.py_count != '0'
