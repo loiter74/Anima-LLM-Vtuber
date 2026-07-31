@@ -28,7 +28,14 @@ export interface Live2DStage {
   dispose(): void
 }
 
-export function createLive2DStage(socket: LiveSocket): Live2DStage {
+export interface Live2DStageOptions {
+  readonly resizeTo?: Window | HTMLElement
+}
+
+export function createLive2DStage(
+  socket: LiveSocket,
+  options: Live2DStageOptions = {},
+): Live2DStage {
   const canvas = document.getElementById('live2dCanvas')
   const state = document.getElementById('modelStatus')
   if (!(canvas instanceof HTMLCanvasElement) || !state) {
@@ -53,7 +60,7 @@ export function createLive2DStage(socket: LiveSocket): Live2DStage {
     try {
       app = new PIXI.Application({
         view: canvas,
-        resizeTo: window,
+        resizeTo: options.resizeTo ?? window,
         backgroundAlpha: 0,
         autoStart: true,
       })

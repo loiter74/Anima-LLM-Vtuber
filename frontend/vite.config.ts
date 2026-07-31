@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
         input: {
           app: resolve(__dirname, 'index.html'),
           live: resolve(__dirname, 'live.html'),
+          minecraftGameplay: resolve(__dirname, 'minecraft-gameplay.html'),
         },
       },
     },

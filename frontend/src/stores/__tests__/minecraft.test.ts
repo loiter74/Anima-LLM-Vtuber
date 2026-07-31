@@ -38,6 +38,32 @@ describe('useMinecraftStore', () => {
     expect(store.error).toBe('Bot not running')
   })
 
+  it('preserves the V2 binding status while projecting legacy status', () => {
+    const store = useMinecraftStore()
+    store.setupListener()
+
+    const viewerHandler = registeredHandler(Events.MINECRAFT.VIEWER_STATUS)
+    viewerHandler?.({
+      schema_version: 2,
+      status: 'joined',
+      binding_state: 'following',
+      confirmed: true,
+      username: 'LUN077',
+      target: 'AnimettaBot',
+      attempt: 2,
+      retry_in_ms: 0,
+      reason: 'viewer_joined',
+    })
+
+    expect(store.viewerStatus).toBe('joined')
+    expect(store.viewerBindingState).toBe('following')
+    expect(store.viewerConfirmed).toBe(true)
+    expect(store.viewerTarget).toBe('AnimettaBot')
+    expect(store.viewerAttempt).toBe(2)
+    expect(store.viewerRetryInMs).toBe(0)
+    expect(store.viewerReason).toBe('viewer_joined')
+  })
+
   it('emits minecraft control events', () => {
     const store = useMinecraftStore()
 

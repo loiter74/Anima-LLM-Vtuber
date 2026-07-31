@@ -30,6 +30,7 @@ export interface AttemptSummary {
   obs_screenshot: ArtifactRecord | null
   audio_wav?: ArtifactRecord | null
   backend_report?: ArtifactRecord | null
+  gameplay_report?: ArtifactRecord | null
   audio_samples?: Readonly<Record<string, AudioSampleArtifactRecord>>
   evidence?: string
 }
@@ -58,6 +59,7 @@ export interface AttemptRecordV2 {
     playwright_trace: ArtifactRecord | null
     audio_wav?: ArtifactRecord | null
     backend_report?: ArtifactRecord | null
+    gameplay_report?: ArtifactRecord | null
     audio_samples?: Readonly<Record<string, AudioSampleArtifactRecord>>
   }
   observations?: readonly ObservationRecord[]
@@ -286,11 +288,18 @@ function isStableSummary(
   return summary.attempts.every((attempt, index) => {
     const artifact = attempt.obs_screenshot
     const featureArtifactsComplete =
-      summary.feature_id !== 'tts-failover' ||
-      (attempt.audio_wav !== null &&
-        attempt.audio_wav !== undefined &&
-        attempt.backend_report !== null &&
-        attempt.backend_report !== undefined)
+      (summary.feature_id !== 'tts-failover' ||
+        (attempt.audio_wav !== null &&
+          attempt.audio_wav !== undefined &&
+          attempt.backend_report !== null &&
+          attempt.backend_report !== undefined)) &&
+      (summary.feature_id !== 'minecraft-gameplay' ||
+        (attempt.audio_wav !== null &&
+          attempt.audio_wav !== undefined &&
+          attempt.backend_report !== null &&
+          attempt.backend_report !== undefined &&
+          attempt.gameplay_report !== null &&
+          attempt.gameplay_report !== undefined))
     const namedSamplesComplete =
       attempt.audio_samples === undefined ||
       (Object.keys(attempt.audio_samples).length > 0 &&
@@ -303,8 +312,10 @@ function isStableSummary(
       artifact !== null &&
       /^[a-f0-9]{64}$/.test(artifact.sha256) &&
       artifact.bytes > 0 &&
-      artifact.width === 1080 &&
-      artifact.height === 1920 &&
+      typeof artifact.width === 'number' &&
+      artifact.width > 0 &&
+      typeof artifact.height === 'number' &&
+      artifact.height > 0 &&
       featureArtifactsComplete &&
       namedSamplesComplete
     )
@@ -344,6 +355,10 @@ async function validateSummaryArtifacts(
       record.artifacts.obs_screenshot === null ||
       (summary.feature_id === 'tts-failover' &&
         (record.artifacts.audio_wav == null || record.artifacts.backend_report == null)) ||
+      (summary.feature_id === 'minecraft-gameplay' &&
+        (record.artifacts.audio_wav == null ||
+          record.artifacts.backend_report == null ||
+          record.artifacts.gameplay_report == null)) ||
       (record.artifacts.audio_samples !== undefined &&
         (Object.keys(record.artifacts.audio_samples).length === 0 ||
           Object.values(record.artifacts.audio_samples).some(
@@ -359,6 +374,7 @@ async function validateSummaryArtifacts(
       record.artifacts.playwright_trace,
       ...(record.artifacts.audio_wav ? [record.artifacts.audio_wav] : []),
       ...(record.artifacts.backend_report ? [record.artifacts.backend_report] : []),
+      ...(record.artifacts.gameplay_report ? [record.artifacts.gameplay_report] : []),
       ...Object.values(record.artifacts.audio_samples ?? {}).flatMap((sample) => [
         ...(sample.audio_wav ? [sample.audio_wav] : []),
         ...(sample.backend_report ? [sample.backend_report] : []),

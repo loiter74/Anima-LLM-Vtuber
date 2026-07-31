@@ -136,6 +136,32 @@ describe('generic Playwright attempt capture', () => {
     expect(result.obsMismatchRatio).toBe(0)
   })
 
+  it('uses a page adapter viewport for horizontal review features', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'animetta-browser-horizontal-'))
+    const test = harness()
+    test.pageAdapter.viewport = { width: 1920, height: 1080 }
+
+    await captureBrowserAttempt({
+      browser: test.browser as never,
+      runDir: root,
+      runId: 'run-horizontal',
+      scene: {
+        id: 'horizontal',
+        title: 'horizontal',
+        observe: 'horizontal',
+        readyTexts: [],
+        timeline: [],
+      },
+      attempt: 1,
+      baseUrl: 'http://127.0.0.1:3000',
+      pageAdapter: test.pageAdapter,
+    })
+
+    expect(test.browser.newContext).toHaveBeenCalledWith({
+      viewport: { width: 1920, height: 1080 },
+    })
+  })
+
   it('records errors that arrive while OBS evidence is being captured', async () => {
     const root = await mkdtemp(join(tmpdir(), 'animetta-browser-late-error-'))
     const test = harness()

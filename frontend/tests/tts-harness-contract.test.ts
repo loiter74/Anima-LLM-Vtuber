@@ -69,4 +69,15 @@ describe('parseTtsFailoverHarnessResponse', () => {
       'TTS failover harness did not satisfy its acceptance contract',
     )
   })
+
+  it('keeps latency metrics observable for scenes without a latency gate', () => {
+    const payload = acceptedPayload()
+    payload.report.first_audio_seconds = 1.5
+    payload.report.rtf = 0.6
+
+    expect(
+      parseTtsFailoverHarnessResponse(payload, { performancePolicy: 'observe' }).report.pcm_bytes,
+    ).toBeGreaterThan(0)
+    expect(buildTtsHarnessAssertions(payload, { includePerformance: false })).toHaveLength(4)
+  })
 })

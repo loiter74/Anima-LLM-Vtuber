@@ -71,6 +71,44 @@ class TestBridgeClientViewerEnvExport:
         assert captured_env.get("MC_CLIENT_VIEWER_SPECTATE_TIMEOUT") == "12"
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
+    async def test_legacy_viewer_exports_single_canonical_controller_config(
+        self, mock_is_available
+    ):
+        cfg = MinecraftConfig(
+            enabled=True,
+            viewer={"username": "LUN077", "auto_spectate": True},
+        )
+        bridge = MinecraftBridge(cfg)
+        captured_env = {}
+
+        async def fake_create(*args, **kwargs):
+            captured_env.update(kwargs.get("env", {}))
+            proc = MagicMock(
+                pid=1,
+                returncode=None,
+                stdin=MagicMock(write=MagicMock(), drain=AsyncMock()),
+                stdout=MagicMock(readline=AsyncMock(return_value=b"")),
+                stderr=MagicMock(readline=AsyncMock(return_value=b"")),
+                terminate=MagicMock(),
+                kill=MagicMock(),
+                wait=AsyncMock(),
+            )
+            return proc
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_create),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+        ):
+            await bridge.start()
+
+        assert captured_env["MC_VIEWER_USERNAME"] == "LUN077"
+        assert captured_env["MC_CLIENT_VIEWER_ENABLED"] == "true"
+        assert captured_env["MC_CLIENT_VIEWER_USERNAME"] == "LUN077"
+        assert captured_env["MC_CLIENT_VIEWER_POLL_INTERVAL"] == "20"
+        assert captured_env["MC_CLIENT_VIEWER_SPECTATE_TIMEOUT"] == "8"
+
+    @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
     async def test_client_viewer_disabled_no_env_vars(self, mock_is_available):
         """When client_viewer.enabled=False, no MC_CLIENT_VIEWER_* vars are set."""
         cfg = MinecraftConfig(

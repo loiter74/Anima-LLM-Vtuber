@@ -23,7 +23,7 @@ import {
   type RunManifestV2,
 } from './evidence'
 import { buildReviewBrowserArgs, captureBrowserAttempt, type BrowserAttemptResult } from './browser'
-import { ObsPreviewAdapter, type ObsClient } from './obs'
+import { ObsPreviewAdapter, type ObsClient, type ReviewObsAdapter } from './obs'
 import { runReviewWorkflow } from './orchestrator'
 import { parseReviewOptions } from './options'
 import { automaticDecision, interactiveDecision } from './policies'
@@ -132,7 +132,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
 
   let server: ServerLease | null = null
   let browser: Browser | null = null
-  let preview: ObsPreviewAdapter | null = null
+  let preview: ReviewObsAdapter | null = null
   let terminal: Interface | null = null
   let interrupted = false
   let cleanupPromise: Promise<void> | null = null
@@ -161,7 +161,8 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
     stdout.write(`场景顺序：${plugin.definition.scenes.map(({ title }) => title).join(' → ')}\n`)
     server = await acquireViteServerLease(options.baseUrl, frontendDir)
     if (options.requireObs) {
-      preview = new ObsPreviewAdapter(new OBSWebSocket() as unknown as ObsClient, {
+      const obsClient = new OBSWebSocket() as unknown as ObsClient
+      const obsOptions = {
         url: options.obsUrl,
         password: process.env.OBS_WEBSOCKET_PASSWORD,
         sceneName: options.obsSceneName,
@@ -169,7 +170,10 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
         width: plugin.definition.viewport.width,
         height: plugin.definition.viewport.height,
         enableAudioMonitoring: plugin.enableObsAudioMonitoring,
-      })
+      }
+      preview =
+        plugin.createObsAdapter?.(obsClient, obsOptions) ??
+        new ObsPreviewAdapter(obsClient, obsOptions)
       await preview.prepare()
     }
     pluginState = await plugin.prepareRun?.(runContext)
@@ -250,6 +254,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
           playwrightTrace,
           audioWav,
           backendReport,
+          gameplayReport,
         ] = await Promise.all([
           optionalArtifact(runDir, execution.chromeScreenshot, capturedAt),
           optionalArtifact(runDir, execution.chromeStableCrop, capturedAt),
@@ -257,6 +262,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
           optionalArtifact(runDir, execution.playwrightTrace, capturedAt),
           optionalArtifact(runDir, execution.pluginArtifacts?.audioWav ?? null, capturedAt),
           optionalArtifact(runDir, execution.pluginArtifacts?.backendReport ?? null, capturedAt),
+          optionalArtifact(runDir, execution.pluginArtifacts?.gameplayReport ?? null, capturedAt),
         ])
         const record: AttemptRecordV2 = {
           schema_version: EVIDENCE_SCHEMA_VERSION,
@@ -278,6 +284,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
               ? {
                   audio_wav: audioWav,
                   backend_report: backendReport,
+                  gameplay_report: gameplayReport,
                   ...(Object.keys(audioSamples).length > 0 ? { audio_samples: audioSamples } : {}),
                 }
               : {}),
@@ -300,6 +307,7 @@ export async function runReviewCli(args = process.argv.slice(2)): Promise<Review
             ? {
                 audio_wav: audioWav,
                 backend_report: backendReport,
+                gameplay_report: gameplayReport,
                 ...(Object.keys(audioSamples).length > 0 ? { audio_samples: audioSamples } : {}),
               }
             : {}),

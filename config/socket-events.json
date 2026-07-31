@@ -1190,13 +1190,17 @@
     "viewer_status": {
       "name": "minecraft:viewer_status",
       "payload": {
+        "schema_version?": "number",
         "status": "string",
         "username?": "string",
         "error?": "string",
         "mode?": "string",
         "reason?": "string",
-        "spectate_command_sent?": "boolean",
-        "commands?": "string[]"
+        "binding_state?": "string",
+        "confirmed?": "boolean",
+        "target?": "string",
+        "attempt?": "number",
+        "retry_in_ms?": "number"
       }
     },
     "bot_state": {

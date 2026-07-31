@@ -12,6 +12,7 @@ import {
 export interface TtsReviewSampleDescriptor {
   sceneId: string
   artifactKey?: string
+  performancePolicy?: 'strict' | 'observe'
 }
 
 export interface PreparedTtsReviewSample {
@@ -58,8 +59,19 @@ export class TtsReviewClient {
       body: JSON.stringify({ scene_id: descriptor.sceneId }),
       signal: AbortSignal.timeout(60_000),
     })
-    if (!response.ok) throw new Error(`TTS failover attempt failed (${response.status})`)
-    const payload = parseTtsFailoverHarnessResponse(await response.json())
+    if (!response.ok) {
+      const failure = (await response.json().catch(() => null)) as {
+        category?: unknown
+        reason?: unknown
+      } | null
+      const category = typeof failure?.category === 'string' ? `: ${failure.category}` : ''
+      const reason =
+        failure?.reason === 'first_audio' || failure?.reason === 'rtf' ? `/${failure.reason}` : ''
+      throw new Error(`TTS failover attempt failed (${response.status}${category}${reason})`)
+    }
+    const payload = parseTtsFailoverHarnessResponse(await response.json(), {
+      performancePolicy: descriptor.performancePolicy,
+    })
     const evidenceDir = join(context.runDir, 'evidence')
     await mkdir(evidenceDir, { recursive: true })
     const stem = [context.sceneId, String(context.attempt).padStart(3, '0'), descriptor.artifactKey]
@@ -108,8 +120,9 @@ export function ttsReviewPageParams(
 
 export function ttsReviewAssertions(
   payload: TtsFailoverHarnessResponse,
+  options: { includePerformance?: boolean } = {},
 ): readonly TtsHarnessAssertion[] {
-  return buildTtsHarnessAssertions(payload)
+  return buildTtsHarnessAssertions(payload, options)
 }
 
 export function ttsReviewObservations(

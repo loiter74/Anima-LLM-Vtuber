@@ -47,6 +47,7 @@ FALLBACK_IDENTITY = {
 class ReviewSpeech:
     text: str
     emotion: str
+    enforce_performance: bool = True
 
 
 REVIEW_SPEECHES = {
@@ -62,6 +63,11 @@ REVIEW_SPEECHES = {
     "live2d-surprised": ReviewSpeech(
         "诶？这是真的吗？完全没想到会变成这样！",
         "surprised",
+    ),
+    "minecraft-survival-iron": ReviewSpeech(
+        "铁装流程开始，本小姐要认真起来了。先观察周围，再一步一步把装备做齐。",
+        "neutral",
+        enforce_performance=False,
     ),
 }
 
@@ -94,6 +100,10 @@ class ReviewTimeoutError(TTSFailoverReviewError):
 
 class ReviewPerformanceError(TTSFailoverReviewError):
     category = "performance"
+
+    def __init__(self, reason: str) -> None:
+        super().__init__("Review synthesis exceeded its performance budget")
+        self.reason = reason
 
 
 class ReviewIdentityError(TTSFailoverReviewError):
@@ -210,8 +220,12 @@ class TTSFailoverReviewHarness:
             raise ReviewAudioError("Review stream contains no PCM audio")
         audio_seconds = len(pcm) / (SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH_BYTES)
         rtf = max(0.0, completed_at - started) / audio_seconds
-        if first_audio_seconds > self.max_first_audio_seconds or rtf > self.max_rtf:
-            raise ReviewPerformanceError("Review synthesis exceeded its performance budget")
+        first_audio_passed = first_audio_seconds <= self.max_first_audio_seconds
+        rtf_passed = rtf <= self.max_rtf
+        if speech.enforce_performance and not first_audio_passed:
+            raise ReviewPerformanceError("first_audio")
+        if speech.enforce_performance and not rtf_passed:
+            raise ReviewPerformanceError("rtf")
 
         wav_bytes = self._wav_bytes(pcm)
         readiness = self.engine.readiness_snapshot()
@@ -237,7 +251,8 @@ class TTSFailoverReviewHarness:
             "performance": {
                 "first_audio_budget_seconds": self.max_first_audio_seconds,
                 "rtf_budget": self.max_rtf,
-                "passed": True,
+                "passed": first_audio_passed and rtf_passed,
+                "enforced": speech.enforce_performance,
             },
         }
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -448,6 +463,8 @@ def create_review_app(harness: TTSFailoverReviewHarness) -> Starlette:
 
 def _safe_error_response(exc: BaseException) -> JSONResponse:
     category = getattr(exc, "category", "review_error")
+    reason = getattr(exc, "reason", None)
+    safe_reason = reason if reason in {"first_audio", "rtf"} else None
     statuses = {
         "authentication": 401,
         "busy": 429,
@@ -457,7 +474,7 @@ def _safe_error_response(exc: BaseException) -> JSONResponse:
         "performance": 422,
         "identity_mismatch": 503,
     }
-    return JSONResponse(
-        {"ok": False, "category": str(category)},
-        status_code=statuses.get(str(category), 503),
-    )
+    payload = {"ok": False, "category": str(category)}
+    if safe_reason is not None:
+        payload["reason"] = safe_reason
+    return JSONResponse(payload, status_code=statuses.get(str(category), 503))

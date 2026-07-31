@@ -132,6 +132,28 @@ async def test_live2d_scenes_use_fixed_emotion_matched_text(
     assert result.report["scene_id"] == scene_id
 
 
+async def test_minecraft_scene_records_slow_local_audio_without_hiding_it(
+    tmp_path: Path,
+) -> None:
+    harness, _fallback = make_harness(tmp_path)
+    clock_values = iter((1.0, 1.8, 2.0))
+    harness._clock = lambda: next(clock_values)
+    await harness.prepare()
+
+    result = await harness.run(
+        scene_id="minecraft-survival-iron",
+        authorization="Bearer review-secret",
+    )
+
+    assert result.report["complete"] is True
+    assert result.report["performance"] == {
+        "first_audio_budget_seconds": 0.75,
+        "rtf_budget": 0.35,
+        "passed": False,
+        "enforced": False,
+    }
+
+
 async def test_harness_rejects_invalid_token_and_unknown_scene(tmp_path: Path) -> None:
     from animetta.acceptance.tts_failover_review import (
         ReviewAuthorizationError,

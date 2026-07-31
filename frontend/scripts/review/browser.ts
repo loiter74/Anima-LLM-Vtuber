@@ -18,7 +18,9 @@ export interface PageAssertionResult {
 }
 
 export interface ReviewPageAdapter<Action> {
+  viewport?: Readonly<{ width: number; height: number }>
   forbiddenRequestPatterns?: readonly RegExp[]
+  stableMismatchThreshold?: number
   buildUrl(input: {
     baseUrl: string
     runId: string
@@ -114,7 +116,7 @@ export async function captureBrowserAttempt<Action>(_options: {
     pageParams: _options.pageParams,
   })
   const context = await _options.browser.newContext({
-    viewport: { width: 1080, height: 1920 },
+    viewport: _options.pageAdapter.viewport ?? { width: 1080, height: 1920 },
   })
   let page: Page | null = null
   let traceStarted = false
@@ -159,6 +161,7 @@ export async function captureBrowserAttempt<Action>(_options: {
         Buffer.from(stableCrop),
         obsCapture,
         pageResult.stableRegion,
+        _options.pageAdapter.stableMismatchThreshold,
       )
       for (
         let syncAttempt = 1;
@@ -167,7 +170,12 @@ export async function captureBrowserAttempt<Action>(_options: {
       ) {
         await waitFor(syncOptions.intervalMs)
         obsCapture = await _options.preview.capture()
-        comparison = comparePngRegion(Buffer.from(stableCrop), obsCapture, pageResult.stableRegion)
+        comparison = comparePngRegion(
+          Buffer.from(stableCrop),
+          obsCapture,
+          pageResult.stableRegion,
+          _options.pageAdapter.stableMismatchThreshold,
+        )
       }
       await writeFile(obsScreenshot, obsCapture)
       obsMismatchRatio = comparison.mismatchRatio
