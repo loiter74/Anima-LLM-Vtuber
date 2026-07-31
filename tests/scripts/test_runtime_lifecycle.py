@@ -22,7 +22,7 @@ def test_qwen_up_never_builds_or_recreates(monkeypatch) -> None:
         "--no-recreate",
         "qwen-tts",
     ]
-    assert commands[1][-2:] == ["scripts/qwen_preflight.py", "--wait"]
+    assert commands[1][-4:] == ["scripts/qwen_preflight.py", "--mode", "remote", "--wait"]
     assert all("build" not in command for command in commands)
 
 
@@ -40,7 +40,7 @@ def test_qwen_deploy_is_the_only_build_and_recreate_path(monkeypatch) -> None:
     ]
     assert "--force-recreate" in commands[1]
     assert "--no-build" in commands[1]
-    assert commands[2][-2:] == ["scripts/qwen_preflight.py", "--wait"]
+    assert commands[2][-4:] == ["scripts/qwen_preflight.py", "--mode", "remote", "--wait"]
 
 
 def test_qwen_build_uses_quality_catalog_content_fingerprint(monkeypatch) -> None:
@@ -77,7 +77,7 @@ def test_animetta_up_preflights_before_build_and_never_manages_qwen(monkeypatch)
     runtime_lifecycle.run_operation("anima-up")
 
     assert host_calls == [True]
-    assert commands[0][-1] == "scripts/qwen_preflight.py"
+    assert commands[0][-3:] == ["scripts/qwen_preflight.py", "--mode", "host-tts"]
     assert commands[1] == ["docker", "compose", "build", "animetta"]
     assert commands[2] == [
         "docker",
@@ -96,7 +96,7 @@ def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypa
 
     runtime_lifecycle.run_operation("anima-selftest-up")
 
-    assert commands[0][-2:] == ["scripts/qwen_preflight.py", "--wait"]
+    assert commands[0][-4:] == ["scripts/qwen_preflight.py", "--mode", "host-tts", "--wait"]
     compose_prefix = [
         "docker",
         "compose",

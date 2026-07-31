@@ -18,6 +18,21 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = "http://127.0.0.1:8766"
+HOST_TTS_DEFAULT_BASE_URL = "http://127.0.0.1:8767"
+
+# Identity of the host-local gguf Qwen TTS runtime (port 8767). This is the
+# single source of truth for the local runtime; keep it in sync with
+# HOST_TTS_IDENTITY in scripts/runtime_lifecycle.py. The /ready endpoint returns
+# both ``revision`` and ``runtime_commit`` (same value); preflight validates the
+# subset that is stable across restarts and shared with the remote-worker mode.
+HOST_TTS_EXPECTED_IDENTITY: dict[str, str] = {
+    "service": "qwen-tts",
+    "api_version": "v1",
+    "provider": "qwen3-tts-gguf-host",
+    "model": "Qwen3-TTS-1.7B-Base",
+    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+    "voice": "tosaka-rin-cn",
+}
 
 
 class QwenPreflightError(RuntimeError):
@@ -141,10 +156,26 @@ def run_preflight(
 def load_expected_settings(
     *,
     fallback_base_url: str = DEFAULT_BASE_URL,
+    mode: str = "remote",
 ) -> tuple[str, dict[str, str]]:
     src = str(ROOT / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
+
+    # Host-tts mode: the local gguf runtime is the real TTS backend. Its identity
+    # is fixed by the runtime build and authenticated by QWEN_TTS_API_KEY; it does
+    # not declare a production remote worker in the manifest, so resolve the
+    # identity directly without touching load_remote_tts_worker_config.
+    if mode == "host-tts":
+        api_key = os.environ.get("QWEN_TTS_API_KEY", "").strip()
+        if not api_key:
+            raise QwenPreflightError(
+                "configuration",
+                "QWEN_TTS_API_KEY is missing",
+                "set QWEN_TTS_API_KEY in the deployment environment",
+            )
+        return api_key, dict(HOST_TTS_EXPECTED_IDENTITY)
+
     from animetta.config.manifest import load_remote_tts_worker_config
     from animetta.config.providers.tts.remote import RemoteTTSConfig
 
@@ -182,17 +213,35 @@ def load_expected_settings(
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--mode",
+        choices=("remote", "host-tts"),
+        default=os.environ.get("QWEN_TTS_MODE", "remote"),
+        help="remote: persistent Docker Qwen worker (manifest identity); "
+        "host-tts: local gguf-host runtime (port 8767, QWEN_TTS_API_KEY auth)",
+    )
+    parser.add_argument(
         "--base-url",
-        default=os.environ.get("QWEN_TTS_HOST_URL", DEFAULT_BASE_URL),
+        default=os.environ.get(
+            "QWEN_TTS_HOST_URL",
+            HOST_TTS_DEFAULT_BASE_URL,  # set below based on mode if unset
+        ),
     )
     parser.add_argument("--wait", action="store_true")
     parser.add_argument("--attempts", type=int)
     parser.add_argument("--interval-seconds", type=float, default=5.0)
     args = parser.parse_args(argv)
     load_dotenv(ROOT / ".env", override=False)
+    # When --base-url is left at the env-derived default and the operator did not
+    # pin QWEN_TTS_HOST_URL, select the mode-appropriate default so host-tts mode
+    # probes 8767 without requiring an explicit flag.
+    if not os.environ.get("QWEN_TTS_HOST_URL") and "--base-url" not in (argv or ()):
+        args.base_url = (
+            HOST_TTS_DEFAULT_BASE_URL if args.mode == "host-tts" else DEFAULT_BASE_URL
+        )
     try:
         api_key, expected_identity = load_expected_settings(
             fallback_base_url=args.base_url,
+            mode=args.mode,
         )
         evidence = run_preflight(
             base_url=args.base_url,
