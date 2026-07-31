@@ -40,8 +40,12 @@ async def personality_node(
     metadata = state.get("metadata", {})
     current_mood = state.get("personality_mood")
 
-    # Determine mode
-    personality_mode = "streaming" if "bilibili" in (channel_id or "").lower() else "default"
+    # Determine mode without changing the Socket.IO delivery room. Evaluation
+    # traffic keeps its real SID in channel_id and carries the live platform in
+    # metadata, while the native Bilibili bridge uses channel_id directly.
+    channel = str(metadata.get("channel") or "")
+    is_livestream = "bilibili" in (channel_id or "").lower() or channel == "bilibili"
+    personality_mode = "streaming" if is_livestream else "default"
 
     # Determine mood
     emotion = (
@@ -56,7 +60,7 @@ async def personality_node(
     overlay_parts = []
 
     if personality_mode == "streaming":
-        overlay_parts.append("当前为直播模式。回复要简短有趣，适合弹幕互动。")
+        overlay_parts.append("当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。")
 
     if personality_mood:
         mood_descriptions = {

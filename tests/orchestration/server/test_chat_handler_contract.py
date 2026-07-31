@@ -13,7 +13,13 @@ from animetta.orchestration.chat_contracts import (
 from animetta.orchestration.server.handlers.chat_handlers import ChatHandlers
 
 
-def _command(*, conversation_id: str | None = None, text: str = "hello") -> ChatTurnCommand:
+def _command(
+    *,
+    conversation_id: str | None = None,
+    text: str = "hello",
+    source: str = "text",
+    is_acceptance: bool = False,
+) -> ChatTurnCommand:
     task_id = str(uuid4())
     return ChatTurnCommand(
         text=text,
@@ -22,7 +28,25 @@ def _command(*, conversation_id: str | None = None, text: str = "hello") -> Chat
         task_id=task_id,
         turn_id=task_id,
         transport_mode=ChatTransportMode.CANONICAL,
+        source=source,
+        is_acceptance=is_acceptance,
     )
+
+
+@pytest.mark.asyncio
+async def test_livestream_acceptance_uses_bilibili_personality_channel(handler) -> None:
+    chat, _, admin = handler
+    command = _command(source="livestream", is_acceptance=True)
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(return_value={})
+    admin._get_or_create_orchestrator.return_value = orchestrator
+
+    await chat.on_text_command("sid", command)
+
+    kwargs = orchestrator.process_text.await_args.kwargs
+    assert kwargs["channel_id"] == "sid"
+    assert kwargs["channel"] == "bilibili"
+    assert kwargs["user_id"] == "bilibili:user"
 
 
 @pytest.fixture

@@ -58,7 +58,7 @@
           "type": "string",
           "required": false,
           "strict": true,
-          "enum": ["text"],
+          "enum": ["text", "livestream"],
           "default": "text",
           "min_length": 1,
           "max_length": 16

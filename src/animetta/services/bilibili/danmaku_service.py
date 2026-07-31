@@ -18,12 +18,14 @@ Usage:
 import asyncio
 import contextlib
 import threading
+import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from .models import DanmakuMessage
+from .event_normalizer import normalize_bilibili_event
+from .models import DanmakuMessage, LivestreamEvent
 
 if TYPE_CHECKING:
     from .danmaku_buffer import DanmakuBuffer
@@ -79,10 +81,13 @@ class DanmakuService:
         self._running = False
 
         # Queue for cross-thread message passing
-        self._queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
+        self._queue: asyncio.Queue[LivestreamEvent] = asyncio.Queue(
+            maxsize=max_queue_size,
+        )
 
         # Callback set by the consumer (RouteHandlers)
         self._on_danmaku: Callable[[DanmakuMessage], None] | None = None
+        self._on_event: Callable[[LivestreamEvent], None] | None = None
         self._on_status_change: Callable[[bool, str], None] | None = None
 
         # bilibili-api client (created inside the thread)
@@ -94,6 +99,8 @@ class DanmakuService:
         # Connection state
         self._connected = False
         self._reconnect_delay = 1.0  # starts at 1s, doubles each retry
+        self._event_sequence = 0
+        self._started_monotonic = time.monotonic()
 
     # ========================================
     # Public API
@@ -102,6 +109,13 @@ class DanmakuService:
     def set_callback(self, callback: Callable[[DanmakuMessage], None]) -> None:
         """Register callback for incoming danmaku messages."""
         self._on_danmaku = callback
+
+    def set_event_callback(
+        self,
+        callback: Callable[[LivestreamEvent], None],
+    ) -> None:
+        """Register callback for all normalized livestream events."""
+        self._on_event = callback
 
     def set_status_callback(self, callback: Callable[[bool, str], None]) -> None:
         """Register callback for connection status changes."""
@@ -127,6 +141,8 @@ class DanmakuService:
             return
 
         self._running = True
+        self._event_sequence = 0
+        self._started_monotonic = time.monotonic()
         self._thread = threading.Thread(
             target=self._run_event_loop,
             name="bilibili-danmaku",
@@ -253,87 +269,96 @@ class DanmakuService:
         @monitor.on("DANMU_MSG")
         async def on_danmaku(event: dict[str, Any]) -> None:
             try:
-                data_info = event["data"]["info"]
-                content = data_info[1]  # danmaku text
-                user_id = data_info[2][0]  # sender UID
-                user_name = data_info[2][1]  # sender nickname
-
-                msg = DanmakuMessage(
-                    text=content,
-                    user_name=user_name,
-                    user_id=user_id,
-                )
-
-                logger.debug(f"[DanmakuService] 弹幕 {user_name}: {content}")
-
-                # Put into queue for cross-thread consumption
-                await self._queue.put(msg)
+                await self._queue.put(self._normalize_event("DANMU_MSG", event))
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing DANMU_MSG: {e}")
 
         @monitor.on("SEND_GIFT")
         async def on_gift(event: dict[str, Any]) -> None:
             try:
-                gift_data = event["data"]["data"]
-                user_name = gift_data.get("uname", "未知")
-                gift_name = gift_data.get("giftName", "礼物")
-                gift_num = gift_data.get("num", 1)
-                content = f"感谢 {user_name} 送出的 {gift_num} 个 {gift_name}"
-
-                msg = DanmakuMessage(
-                    text=content,
-                    user_name=user_name,
-                    user_id=gift_data.get("uid", 0),
-                    is_gift=True,
-                    meta={"gift_name": gift_name, "gift_num": gift_num},
-                )
-
-                await self._queue.put(msg)
+                await self._queue.put(self._normalize_event("SEND_GIFT", event))
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SEND_GIFT: {e}")
 
         @monitor.on("SUPER_CHAT_MESSAGE")
         async def on_sc(event: dict[str, Any]) -> None:
             try:
-                sc_data = event["data"]["data"]
-                user_name = sc_data.get("user_info", {}).get("uname", "未知")
-                price = sc_data.get("price", 0)
-                message = sc_data.get("message", "")
-                content = f"SC ¥{price}: {message}"
-
-                msg = DanmakuMessage(
-                    text=content,
-                    user_name=user_name,
-                    user_id=sc_data.get("uid", 0),
-                    is_super_chat=True,
-                    meta={"price": price},
+                await self._queue.put(
+                    self._normalize_event("SUPER_CHAT_MESSAGE", event),
                 )
-
-                await self._queue.put(msg)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SUPER_CHAT: {e}")
 
         @monitor.on("INTERACT_WORD_V2")
         async def on_interact(event: dict[str, Any]) -> None:
             try:
-                data = event["data"]["data"]
-                decoded = data.get("pb_decoded", {})
-                user_name = decoded.get("uname", "某人")
-                content = f"欢迎 {user_name} 进入直播间"
-
-                msg = DanmakuMessage(
-                    text=content,
-                    user_name=user_name,
-                    user_id=decoded.get("uid", 0),
+                await self._queue.put(
+                    self._normalize_event("INTERACT_WORD_V2", event),
                 )
-
-                await self._queue.put(msg)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing INTERACT_WORD: {e}")
 
+        @monitor.on("LIKE_INFO_V3_CLICK")
+        async def on_like_click(event: dict[str, Any]) -> None:
+            try:
+                await self._queue.put(
+                    self._normalize_event("LIKE_INFO_V3_CLICK", event),
+                )
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing LIKE click: {e}")
+
+        @monitor.on("LIKE_INFO_V3_UPDATE")
+        async def on_like_update(event: dict[str, Any]) -> None:
+            try:
+                await self._queue.put(
+                    self._normalize_event("LIKE_INFO_V3_UPDATE", event),
+                )
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing LIKE update: {e}")
+
+        @monitor.on("VIEW")
+        async def on_popularity(event: dict[str, Any]) -> None:
+            try:
+                await self._queue.put(self._normalize_event("VIEW", event))
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing VIEW: {e}")
+
+        known_commands = {
+            "DANMU_MSG",
+            "SEND_GIFT",
+            "SUPER_CHAT_MESSAGE",
+            "INTERACT_WORD_V2",
+            "LIKE_INFO_V3_CLICK",
+            "LIKE_INFO_V3_UPDATE",
+            "VIEW",
+            "VERIFICATION_SUCCESSFUL",
+            "DISCONNECT",
+        }
+
+        @monitor.on("ALL")
+        async def on_unknown(event: dict[str, Any]) -> None:
+            command = str(event.get("type", "UNKNOWN"))
+            if command in known_commands:
+                return
+            try:
+                await self._queue.put(self._normalize_event(command, event))
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing unknown event: {e}")
+
+        @monitor.on("DISCONNECT")
+        async def on_disconnected(event: dict[str, Any] | object) -> None:
+            try:
+                payload = event if isinstance(event, dict) else {"data": event}
+                await self._queue.put(self._normalize_event("DISCONNECT", payload))
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing DISCONNECT: {e}")
+
         @monitor.on("VERIFICATION_SUCCESSFUL")
-        async def on_verified(_event: dict[str, Any]) -> None:
+        async def on_verified(event: dict[str, Any]) -> None:
             self._connected = True
+            await self._queue.put(
+                self._normalize_event("VERIFICATION_SUCCESSFUL", event),
+            )
             self._notify_status(True, "Connected")
             logger.info("[DanmakuService] Connected to room {}", self.room_id)
 
@@ -371,15 +396,19 @@ class DanmakuService:
         while self._running:
             try:
                 # Wait for a message with timeout so we can check _running
-                msg = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+                event = await asyncio.wait_for(self._queue.get(), timeout=1.0)
 
-                # Forward to main thread via callback
-                if self._on_danmaku:
-                    self._on_danmaku(msg)
+                # Prefer the unified event callback. The legacy message callback
+                # remains the fallback so existing consumers keep their contract.
+                message = event.to_danmaku_message()
+                if self._on_event:
+                    self._on_event(event)
+                elif self._on_danmaku and message is not None:
+                    self._on_danmaku(message)
 
                 # Push to DanmakuBuffer for meme collection pipeline
-                if self._danmaku_buffer:
-                    self._danmaku_buffer.add(msg.text, self.room_id)
+                if self._danmaku_buffer and message is not None:
+                    self._danmaku_buffer.add(message.text, self.room_id)
 
                 self._queue.task_done()
             except TimeoutError:
@@ -390,6 +419,24 @@ class DanmakuService:
     # ========================================
     # Internal: Helpers
     # ========================================
+
+    def _normalize_event(
+        self,
+        command: str,
+        event: dict[str, object],
+    ) -> LivestreamEvent:
+        """Normalize a protocol event and assign its session timeline."""
+        normalized = normalize_bilibili_event(
+            command,
+            event,
+            sequence=self._event_sequence,
+            offset_ms=max(
+                0,
+                int((time.monotonic() - self._started_monotonic) * 1000),
+            ),
+        )
+        self._event_sequence += 1
+        return normalized
 
     async def _disconnect(self) -> None:
         """Disconnect from Bilibili live room."""

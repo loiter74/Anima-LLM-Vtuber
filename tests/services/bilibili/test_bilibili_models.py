@@ -9,6 +9,9 @@ from animetta.services.bilibili.models import (
     DanmakuMessage,
     DanmakuReply,
     InteractionPattern,
+    LivestreamEvent,
+    LivestreamEventMetrics,
+    LivestreamEventType,
     LivestreamStrategy,
     MemeCandidate,
 )
@@ -27,6 +30,79 @@ class TestDanmakuMessage:
         d = msg.to_dict()
         assert d["text"] == "test"
         assert d["user_name"] == "alice"
+
+
+class TestLivestreamEvent:
+    def test_serializes_json_compatible_public_fields(self):
+        event = LivestreamEvent(
+            sequence=7,
+            offset_ms=1250,
+            event_type=LivestreamEventType.GIFT,
+            actor_id="viewer_0001",
+            text="送出一个礼物",
+            payload={"gift_name": "花", "gift_num": 1},
+        )
+
+        assert event.to_dict() == {
+            "sequence": 7,
+            "offset_ms": 1250,
+            "event_type": "gift",
+            "actor_id": "viewer_0001",
+            "text": "送出一个礼物",
+            "payload": {"gift_name": "花", "gift_num": 1},
+        }
+
+    def test_replyable_event_converts_to_backward_compatible_message(self):
+        event = LivestreamEvent(
+            sequence=1,
+            offset_ms=0,
+            event_type=LivestreamEventType.SUPER_CHAT,
+            actor_id="alice",
+            text="SC ¥30: 你好",
+            payload={"user_id": 42, "price": 30},
+        )
+
+        message = event.to_danmaku_message(timestamp=123.0)
+
+        assert message == DanmakuMessage(
+            text="SC ¥30: 你好",
+            user_name="alice",
+            user_id=42,
+            timestamp=123.0,
+            is_super_chat=True,
+            meta={"price": 30},
+        )
+
+    def test_engagement_event_does_not_convert_to_message(self):
+        event = LivestreamEvent(
+            sequence=2,
+            offset_ms=500,
+            event_type=LivestreamEventType.ENTER,
+            actor_id="viewer_0002",
+        )
+
+        assert event.to_danmaku_message() is None
+
+
+class TestLivestreamEventMetrics:
+    def test_counts_event_types_separately_from_dispatch_failures(self):
+        metrics = LivestreamEventMetrics()
+        event = LivestreamEvent(
+            sequence=1,
+            offset_ms=0,
+            event_type=LivestreamEventType.LIKE_BATCH,
+            payload={"count": 3},
+        )
+
+        metrics.record_received(event)
+        metrics.record_dispatched(event)
+        metrics.record_callback_failure()
+
+        assert metrics.received == 1
+        assert metrics.dispatched == 1
+        assert metrics.received_by_type == {"like_batch": 1}
+        assert metrics.dispatched_by_type == {"like_batch": 1}
+        assert metrics.callback_failures == 1
 
 
 class TestCollectedVideo:

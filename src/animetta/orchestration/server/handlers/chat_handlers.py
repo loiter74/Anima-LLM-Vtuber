@@ -165,7 +165,10 @@ class ChatHandlers:
 
         try:
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
-            actor_id = normalize_actor_id(command.user_id or "user", "local")
+            channel = (
+                "bilibili" if command.is_acceptance and command.source == "livestream" else "local"
+            )
+            actor_id = normalize_actor_id(command.user_id or "user", channel)
             result = await orchestrator.process_text(
                 text=text,
                 user_id=actor_id,
@@ -176,7 +179,7 @@ class ChatHandlers:
                 task_id=command.task_id,
                 turn_id=command.task_id,
                 transport_mode=command.transport_mode.value,
-                channel="local",
+                channel=channel,
             )
             if isinstance(result, dict) and result.get("error"):
                 await self._emit_command_error(

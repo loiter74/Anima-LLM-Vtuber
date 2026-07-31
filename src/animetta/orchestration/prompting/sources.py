@@ -100,7 +100,7 @@ class RuntimePersonalityPromptSource:
         parts: list[str] = []
 
         if ctx.personality_mode == "streaming":
-            parts.append("当前为直播模式。回复要简短有趣，适合弹幕互动。")
+            parts.append("当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。")
 
         if ctx.personality_mood:
             mood_map = {

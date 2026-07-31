@@ -127,6 +127,7 @@ async def test_worker_drops_expired_and_isolates_reply_failures() -> None:
 
     assert processed == ["fails", "succeeds"]
     assert metrics.dropped["expired"] == 1
+    assert metrics.admitted_dropped["expired"] == 1
     assert metrics.reply_failure == 1
     assert metrics.reply_success == 1
     assert metrics.queue_depth == 0
@@ -197,4 +198,88 @@ async def test_runtime_counts_processor_failure_and_continues() -> None:
     assert processed == ["bad", "good"]
     assert runtime.metrics.reply_failure == 1
     assert runtime.metrics.reply_success == 1
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_returns_auditable_admission_results_and_max_depth() -> None:
+    release = asyncio.Event()
+
+    async def processor(_candidate: ReplyCandidate) -> None:
+        await release.wait()
+
+    runtime = DanmakuReplyRuntime(
+        ReplyPolicyConfig(
+            ordinary_sample_rate=1.0,
+            per_user_cooldown_seconds=0,
+            duplicate_window_seconds=60,
+            max_queue_size=2,
+        ),
+        processor,
+    )
+    await runtime.switch_generation(1)
+
+    admitted = await runtime.submit(
+        DanmakuMessage(text="hello", user_id=1),
+        room_id=7,
+        generation_id=1,
+    )
+    duplicate = await runtime.submit(
+        DanmakuMessage(text="hello", user_id=2),
+        room_id=7,
+        generation_id=1,
+    )
+
+    assert admitted.admitted is True
+    assert admitted.reason is None
+    assert duplicate.admitted is False
+    assert duplicate.reason == "duplicate"
+    assert runtime.metrics.max_queue_depth <= 2
+    release.set()
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_counts_evicted_admitted_candidate_as_terminal_drop() -> None:
+    release = asyncio.Event()
+
+    async def processor(_candidate: ReplyCandidate) -> None:
+        await release.wait()
+
+    runtime = DanmakuReplyRuntime(
+        ReplyPolicyConfig(
+            ordinary_sample_rate=1.0,
+            per_user_cooldown_seconds=0,
+            duplicate_window_seconds=0,
+            max_queue_size=1,
+        ),
+        processor,
+    )
+    await runtime.switch_generation(1)
+
+    ordinary = await runtime.submit(
+        DanmakuMessage(text="普通弹幕", user_id=1),
+        room_id=7,
+        generation_id=1,
+    )
+    super_chat = await runtime.submit(
+        DanmakuMessage(text="醒目留言", user_id=2, is_super_chat=True),
+        room_id=7,
+        generation_id=1,
+    )
+
+    assert ordinary.admitted is True
+    assert super_chat.admitted is True
+    assert super_chat.evicted_lower_priority is True
+    assert runtime.metrics.admitted == 2
+    assert runtime.metrics.admitted_dropped["queue_evicted"] == 1
+    assert runtime.metrics.reply_failure == 0
+
+    release.set()
+    for _ in range(20):
+        if runtime.metrics.reply_success == 1:
+            break
+        await asyncio.sleep(0)
+    assert runtime.metrics.reply_success == 1
+    assert runtime.metrics.terminal_count == runtime.metrics.admitted
     await runtime.close()

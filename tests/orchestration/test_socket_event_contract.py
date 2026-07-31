@@ -217,7 +217,7 @@ def test_command_catalog_declares_runtime_constraints_and_defaults() -> None:
         "type": "string",
         "required": False,
         "strict": True,
-        "enum": ["text"],
+        "enum": ["text", "livestream"],
         "default": "text",
         "min_length": 1,
         "max_length": 16,

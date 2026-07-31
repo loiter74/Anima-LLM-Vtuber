@@ -585,41 +585,48 @@ def _resolve_providers(
     profile_name: ProfileName,
     profile: ProfileManifest,
 ) -> dict[str, ConfiguredProvider]:
-    resolved: dict[str, ConfiguredProvider] = {}
-    for category in SERVICE_CATEGORIES:
-        name = getattr(profile.services, category)
-        declarations = getattr(manifest.providers, category)
-        if name not in declarations:
-            raise ManifestValidationError(f"{category} provider reference '{name}' is not declared")
-        declaration = _resolve_selected_declaration(
-            declarations[name],
-            ("providers", category, name),
+    return {
+        category: _resolve_provider(manifest, profile_name, profile, category)
+        for category in SERVICE_CATEGORIES
+    }
+
+
+def _resolve_provider(
+    manifest: RuntimeManifest,
+    profile_name: ProfileName,
+    profile: ProfileManifest,
+    category: ServiceCategory,
+) -> ConfiguredProvider:
+    name = getattr(profile.services, category)
+    declarations = getattr(manifest.providers, category)
+    if name not in declarations:
+        raise ManifestValidationError(f"{category} provider reference '{name}' is not declared")
+    declaration = _resolve_selected_declaration(
+        declarations[name],
+        ("providers", category, name),
+    )
+    provider_type = declaration.get("type")
+    if not isinstance(provider_type, str) or not provider_type:
+        raise ManifestValidationError(f"{category} provider '{name}' must declare a non-empty type")
+    if not profile.policy.allow_mock and provider_type == "mock":
+        raise ProviderPolicyError(
+            f"Profile '{profile_name}' forbids {category} provider '{name}' of type mock"
         )
-        provider_type = declaration.get("type")
-        if not isinstance(provider_type, str) or not provider_type:
-            raise ManifestValidationError(
-                f"{category} provider '{name}' must declare a non-empty type"
-            )
-        if not profile.policy.allow_mock and provider_type == "mock":
-            raise ProviderPolicyError(
-                f"Profile '{profile_name}' forbids {category} provider '{name}' of type mock"
-            )
-        configured = ConfiguredProvider(
-            category=category,
-            name=name,
-            type=provider_type,
-            model=declaration.get("model"),
-            voice=declaration.get("voice"),
-            declaration_json=json.dumps(
-                declaration,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ),
-        )
-        configured.typed_config()
-        resolved[category] = configured
-    return resolved
+    configured = ConfiguredProvider(
+        category=category,
+        name=name,
+        type=provider_type,
+        model=declaration.get("model"),
+        voice=declaration.get("voice"),
+        declaration_json=json.dumps(
+            declaration,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+    )
+    configured.typed_config()
+    return configured
 
 
 def _secret_marker(raw_value: Any) -> str:
@@ -773,6 +780,27 @@ def load_effective_config(
         effective_hash=effective_hash,
         semantic_hash=semantic_hash,
         manifest_path=str(manifest_path),
+    )
+
+
+def load_configured_provider(
+    path: str | Path = DEFAULT_MANIFEST_PATH,
+    *,
+    profile: str | None = None,
+    category: str,
+) -> ConfiguredProvider:
+    """Resolve one selected provider without requiring unrelated service secrets."""
+    if category not in SERVICE_CATEGORIES:
+        raise KeyError(category)
+    _detect_legacy_selectors()
+    manifest, raw = _read_manifest(Path(path).resolve())
+    _validate_environment_locations(raw)
+    profile_name, selected = _select_profile(manifest, profile)
+    return _resolve_provider(
+        manifest,
+        profile_name,
+        selected,
+        cast(ServiceCategory, category),
     )
 
 

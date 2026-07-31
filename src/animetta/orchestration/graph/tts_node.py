@@ -42,6 +42,7 @@ _EMOJI_RE = re.compile(
     "]"
 )
 _INTERRUPT_CLEANUP_GRACE_SECONDS = 0.2
+_RETRYABLE_REMOTE_STREAM_DELAYS_SECONDS = (0.25, 0.75, 1.5, 3.0)
 
 
 def _clean_text_for_tts(text: str) -> str:
@@ -248,7 +249,8 @@ async def _synthesize_streaming(
     performance = validated_performance_payload(state.get("performance_plan"))
     interrupt_signal = get_interrupt_handler().get_signal(state["session_id"])
 
-    for attempt in range(2):
+    retry_delays = _RETRYABLE_REMOTE_STREAM_DELAYS_SECONDS
+    for attempt in range(len(retry_delays) + 1):
         stream: Any | None = None
         try:
             stream = aiter(
@@ -363,11 +365,17 @@ async def _synthesize_streaming(
             raise
         except Exception as exc:
             await _close_async_stream(stream)
-            if not stream_started and attempt == 0:
+            retryable_remote = isinstance(exc, RemoteTTSError) and exc.retryable
+            should_retry = not stream_started and (
+                attempt == 0 or (retryable_remote and attempt < len(retry_delays))
+            )
+            if should_retry:
                 logger.warning(
                     "[{}] [TTSNode] Streaming TTS failed before first chunk; retrying same voice",
                     state.get("session_id", "unknown"),
                 )
+                if retryable_remote:
+                    await asyncio.sleep(retry_delays[attempt])
                 continue
             if stream_started:
                 try:

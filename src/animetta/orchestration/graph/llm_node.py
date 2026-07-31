@@ -11,6 +11,7 @@ from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
 from animetta.orchestration.prompting.reasoning_classifier import is_english_meta_reasoning
+from animetta.services.bilibili.response_policy import constrain_livestream_response
 
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
@@ -49,6 +50,16 @@ _UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?P<answer>(?:[\u4e00-\u9fff]|[\"“][^\"”\r\n]{1,64}[\"”]\s*"
     r"(?:[-—–:：]+\s*)?[\u4e00-\u9fff])[\s\S]*)$"
 )
+
+
+def _response_for_delivery(state: AgentState, text: str) -> str:
+    """Apply the service-owned delivery policy selected by graph state."""
+    visible = _strip_emotion_tags(text)
+    if state.get("personality_mode") == "streaming":
+        return constrain_livestream_response(visible)
+    return visible
+
+
 _CHINESE_UNTAGGED_REASONING_PREFIX_RE = re.compile(
     r"(?s)^\s*"
     r"(?=(?:用户(?:问|说|想|要|发|在)|作为AI|作为Anima|我(?:需要|应该|知道|可以|得)|这个问题|实际上))"
@@ -83,6 +94,7 @@ _CHINESE_INLINE_PLANNING_SENTENCE_RE = re.compile(
 _CHINESE_INCOMPLETE_REASONING_RE = re.compile(
     r"^(?:好感(?:度|值)?|亲密度|情绪(?:标签)?|表情(?:标签)?)\s*(?::|：)?\s*\d*\s*$"
 )
+_INVISIBLE_FORMATTING_RE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
 
 # Affinity marker — ``[affinity:N]`` where N is a signed int (clamped later).
 # The LLM emits this at the end of each reply per the AffinityPromptSource
@@ -104,6 +116,7 @@ def _strip_model_thinking(text: str) -> str:
     if not text:
         return text
 
+    text = _INVISIBLE_FORMATTING_RE.sub("", text)
     stripped = _THINKING_BLOCK_RE.sub("", text)
     stripped = _ORPHAN_THINKING_PREFIX_RE.sub("", stripped, count=1)
     # Providers occasionally emit an unclosed leading ``[thinking]`` or
@@ -124,6 +137,15 @@ def _strip_model_thinking(text: str) -> str:
 def _visible_response_or_fallback(text: str) -> str:
     """Return a user-visible response, never an empty stripped reasoning trace."""
     return _strip_model_thinking(text) or FALLBACK_RESPONSE
+
+
+def _has_user_visible_response(text: str | None) -> bool:
+    """Return whether provider output contains text after all delivery markers are removed."""
+    if not text:
+        return False
+    stripped = _strip_model_thinking(text)
+    stripped = _AFFINITY_MARKER_RE.sub("", stripped)
+    return bool(_strip_emotion_tags(stripped))
 
 
 def _strip_chinese_untagged_reasoning_prefix(text: str) -> str:
@@ -565,7 +587,20 @@ async def _llm_with_tools(
                     "tool_calls": formatted_tool_calls,
                 }
             else:
-                full_response = _visible_response_or_fallback(response.get("content", ""))
+                raw_content = response.get("content", "")
+                if not _has_user_visible_response(raw_content):
+                    logger.warning(
+                        f"[{session_id}] [LLMNode] Tool response had no visible text; "
+                        "retrying with streaming provider path"
+                    )
+                    return await _llm_without_tools(
+                        session_id,
+                        state,
+                        service_context,
+                        config,
+                        memory_context,
+                    )
+                full_response = _visible_response_or_fallback(raw_content)
                 logger.info(f"[{session_id}] [LLMNode] LLM response: {full_response[:100]}...")
 
                 # ── Affinity marker parsing ── (same as streaming path)
@@ -578,8 +613,11 @@ async def _llm_with_tools(
                 # after_llm_call notification (non-blocking)
                 _notify_middleware_after(session_id, user_text, full_response, config)
 
+                delivery_response = _response_for_delivery(state, full_response)
+                if state.get("personality_mode") == "streaming":
+                    response_chunks = [delivery_response]
                 return {
-                    "response_text": _strip_emotion_tags(full_response),
+                    "response_text": delivery_response,
                     "response_chunks": response_chunks,
                     "tool_calls": None,
                     "metadata": {**state.get("metadata", {})},
@@ -702,8 +740,11 @@ async def _llm_without_tools(
     # after_llm_call notification (non-blocking)
     _notify_middleware_after(session_id, user_text, full_response, config)
 
+    delivery_response = _response_for_delivery(state, full_response)
+    if state.get("personality_mode") == "streaming":
+        chunks = [delivery_response]
     return {
-        "response_text": _strip_emotion_tags(full_response),
+        "response_text": delivery_response,
         "response_chunks": chunks,
         "tool_calls": None,
         "metadata": {**state.get("metadata", {})},

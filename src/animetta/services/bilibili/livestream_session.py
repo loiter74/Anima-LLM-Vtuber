@@ -15,13 +15,18 @@ from animetta.config import ReplyPolicyConfig
 from .danmaku_buffer import DanmakuBuffer
 from .gateway import DanmakuGateway, create_danmaku_gateway
 from .livestream_state import LivestreamSnapshot, LivestreamState
-from .models import DanmakuMessage
-from .reply_queue import DanmakuReplyRuntime, ReplyMetrics
+from .models import DanmakuMessage, LivestreamEvent, LivestreamEventMetrics
+from .reply_queue import DanmakuReplyRuntime, ReplyMetrics, ReplySubmissionResult
 
 GatewayFactory = Callable[[int, str], DanmakuGateway]
 StatusSink = Callable[[dict[str, object]], Awaitable[None]]
 RawMessageSink = Callable[[DanmakuMessage, int], Awaitable[None]]
+RawEventSink = Callable[[LivestreamEvent, int], Awaitable[None]]
 CandidateSink = Callable[[DanmakuMessage, int, int], Awaitable[None]]
+ReplyDecisionSink = Callable[
+    [DanmakuMessage, ReplySubmissionResult, int],
+    Awaitable[None],
+]
 
 
 class LivestreamSceneRuntime(Protocol):
@@ -44,10 +49,22 @@ async def _discard_message(_message: DanmakuMessage, _room_id: int) -> None:
     return None
 
 
+async def _discard_event(_event: LivestreamEvent, _room_id: int) -> None:
+    return None
+
+
 async def _discard_candidate(
     _message: DanmakuMessage,
     _room_id: int,
     _generation_id: int,
+) -> None:
+    return None
+
+
+async def _discard_reply_decision(
+    _message: DanmakuMessage,
+    _result: ReplySubmissionResult,
+    _room_id: int,
 ) -> None:
     return None
 
@@ -59,8 +76,10 @@ class LivestreamSession:
         self,
         gateway_factory: GatewayFactory = create_danmaku_gateway,
         status_sink: StatusSink = _discard_status,
+        raw_event_sink: RawEventSink = _discard_event,
         raw_message_sink: RawMessageSink = _discard_message,
         candidate_sink: CandidateSink = _discard_candidate,
+        reply_decision_sink: ReplyDecisionSink = _discard_reply_decision,
         reply_runtime: DanmakuReplyRuntime | None = None,
         scene_runtime: LivestreamSceneRuntime | None = None,
         buffer: DanmakuBuffer | None = None,
@@ -69,8 +88,10 @@ class LivestreamSession:
     ) -> None:
         self._gateway_factory = gateway_factory
         self._status_sink = status_sink
+        self._raw_event_sink = raw_event_sink
         self._raw_message_sink = raw_message_sink
         self._candidate_sink = candidate_sink
+        self._reply_decision_sink = reply_decision_sink
         self._reply_runtime = reply_runtime
         self._scene_runtime = scene_runtime
         self._buffer = buffer
@@ -83,11 +104,17 @@ class LivestreamSession:
         self._snapshot = LivestreamSnapshot.initial()
         self._callback_tasks: set[asyncio.Task[None]] = set()
         self._metrics = reply_runtime.metrics if reply_runtime else ReplyMetrics()
+        self._event_metrics = LivestreamEventMetrics()
 
     @property
     def metrics(self) -> ReplyMetrics:
         """Expose read-only access to session-owned runtime counters."""
         return self._metrics
+
+    @property
+    def event_metrics(self) -> LivestreamEventMetrics:
+        """Expose transport-event counters without changing reply metrics."""
+        return self._event_metrics
 
     @property
     def callback_task_count(self) -> int:
@@ -176,6 +203,11 @@ class LivestreamSession:
                 gateway.set_message_callback(
                     lambda message: self._schedule_message(next_generation, message),
                 )
+                set_event_callback = getattr(gateway, "set_event_callback", None)
+                if callable(set_event_callback):
+                    set_event_callback(
+                        lambda event: self._schedule_event(next_generation, event),
+                    )
                 gateway.set_status_callback(
                     lambda connected, message: self._schedule_status(
                         next_generation,
@@ -289,6 +321,9 @@ class LivestreamSession:
 
     def _schedule_message(self, generation: int, message: DanmakuMessage) -> None:
         self._schedule(lambda: self._handle_message(generation, message))
+
+    def _schedule_event(self, generation: int, event: LivestreamEvent) -> None:
+        self._schedule(lambda: self._handle_event(generation, event))
 
     def _schedule(self, coroutine_factory: Callable[[], Awaitable[None]]) -> None:
         loop = self._loop
@@ -416,11 +451,18 @@ class LivestreamSession:
         else:
             self._metrics.displayed += 1
         if self._reply_runtime is not None:
-            await self._reply_runtime.submit(
+            submission = await self._reply_runtime.submit(
                 message,
                 room_id=room_id,
                 generation_id=generation,
             )
+            try:
+                await self._reply_decision_sink(message, submission, room_id)
+            except Exception as exc:
+                logger.error(
+                    "Reply decision sink failed: error_type={}",
+                    type(exc).__name__,
+                )
         try:
             await self._candidate_sink(message, room_id, generation)
         except Exception as exc:
@@ -428,6 +470,34 @@ class LivestreamSession:
                 "Danmaku candidate sink failed: error_type={}",
                 type(exc).__name__,
             )
+
+    async def _handle_event(
+        self,
+        generation: int,
+        event: LivestreamEvent,
+    ) -> None:
+        async with self._lock:
+            if generation != self._snapshot.generation_id or self._gateway is None:
+                return
+            room_id = self._snapshot.desired_room_id
+
+        if room_id is None:
+            return
+        self._event_metrics.record_received(event)
+        try:
+            await self._raw_event_sink(event, room_id)
+        except Exception as exc:
+            self._event_metrics.record_callback_failure()
+            logger.error(
+                "Raw livestream event sink failed: error_type={}",
+                type(exc).__name__,
+            )
+        else:
+            self._event_metrics.record_dispatched(event)
+
+        message = event.to_danmaku_message(timestamp=self._clock())
+        if message is not None:
+            await self._handle_message(generation, message)
 
     def _transition(self, **changes: object) -> None:
         replace_snapshot = cast(Any, replace)

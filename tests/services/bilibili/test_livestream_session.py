@@ -11,8 +11,13 @@ from animetta.services.bilibili.danmaku_buffer import DanmakuBuffer
 from animetta.services.bilibili.gateway import DanmakuServiceGateway
 from animetta.services.bilibili.livestream_session import LivestreamSession
 from animetta.services.bilibili.livestream_state import LivestreamState
-from animetta.services.bilibili.models import DanmakuMessage
+from animetta.services.bilibili.models import (
+    DanmakuMessage,
+    LivestreamEvent,
+    LivestreamEventType,
+)
 from animetta.services.bilibili.reply_admission import ReplyAdmissionController
+from animetta.services.bilibili.reply_queue import DanmakuReplyRuntime
 
 
 class FakeGateway:
@@ -22,6 +27,7 @@ class FakeGateway:
         self.started = False
         self.stopped = False
         self.message_callback: Callable[[DanmakuMessage], None] | None = None
+        self.event_callback: Callable[[LivestreamEvent], None] | None = None
         self.status_callback: Callable[[bool, str], None] | None = None
 
     def set_message_callback(
@@ -29,6 +35,12 @@ class FakeGateway:
         callback: Callable[[DanmakuMessage], None],
     ) -> None:
         self.message_callback = callback
+
+    def set_event_callback(
+        self,
+        callback: Callable[[LivestreamEvent], None],
+    ) -> None:
+        self.event_callback = callback
 
     def set_status_callback(self, callback: Callable[[bool, str], None]) -> None:
         self.status_callback = callback
@@ -46,6 +58,10 @@ class FakeGateway:
     def emit_message(self, message: DanmakuMessage) -> None:
         assert self.message_callback is not None
         self.message_callback(message)
+
+    def emit_event(self, event: LivestreamEvent) -> None:
+        assert self.event_callback is not None
+        self.event_callback(event)
 
 
 async def _settle_callbacks() -> None:
@@ -358,12 +374,16 @@ def test_danmaku_service_gateway_adapts_existing_service_callbacks() -> None:
             self.room_id = room_id
             self.sessdata = sessdata
             self.on_message = None
+            self.on_event = None
             self.on_status = None
             self.started = False
             self.stopped = False
 
         def set_callback(self, callback) -> None:
             self.on_message = callback
+
+        def set_event_callback(self, callback) -> None:
+            self.on_event = callback
 
         def set_status_callback(self, callback) -> None:
             self.on_status = callback
@@ -383,10 +403,14 @@ def test_danmaku_service_gateway_adapts_existing_service_callbacks() -> None:
     def message_callback(_message) -> None:
         return None
 
+    def event_callback(_event) -> None:
+        return None
+
     def status_callback(_connected, _message) -> None:
         return None
 
     gateway.set_message_callback(message_callback)
+    gateway.set_event_callback(event_callback)
     gateway.set_status_callback(status_callback)
     gateway.start()
     gateway.stop()
@@ -394,9 +418,96 @@ def test_danmaku_service_gateway_adapts_existing_service_callbacks() -> None:
     assert gateway.room_id == 789
     assert gateway._service.sessdata == "cookie"
     assert gateway._service.on_message is message_callback
+    assert gateway._service.on_event is event_callback
     assert gateway._service.on_status is status_callback
     assert gateway._service.started is True
     assert gateway._service.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_event_metrics_count_engagement_without_entering_reply_path() -> None:
+    gateway = FakeGateway(987)
+    raw_events: list[LivestreamEvent] = []
+    raw_messages: list[DanmakuMessage] = []
+
+    async def event_sink(event: LivestreamEvent, _room_id: int) -> None:
+        raw_events.append(event)
+
+    async def message_sink(message: DanmakuMessage, _room_id: int) -> None:
+        raw_messages.append(message)
+
+    session = LivestreamSession(
+        gateway_factory=lambda _room_id, _sessdata: gateway,
+        raw_event_sink=event_sink,
+        raw_message_sink=message_sink,
+    )
+    await session.set_room(987)
+
+    enter = LivestreamEvent(
+        sequence=1,
+        offset_ms=0,
+        event_type=LivestreamEventType.ENTER,
+        actor_id="viewer_0001",
+    )
+    danmaku = LivestreamEvent(
+        sequence=2,
+        offset_ms=100,
+        event_type=LivestreamEventType.DANMAKU,
+        actor_id="viewer_0002",
+        text="你好？",
+    )
+    gateway.emit_event(enter)
+    gateway.emit_event(danmaku)
+    await _settle_callbacks()
+
+    assert raw_events == [enter, danmaku]
+    assert [message.text for message in raw_messages] == ["你好？"]
+    assert session.event_metrics.received == 2
+    assert session.event_metrics.dispatched == 2
+    assert session.event_metrics.received_by_type == {"enter": 1, "danmaku": 1}
+    assert session.metrics.received == 1
+
+
+@pytest.mark.asyncio
+async def test_reply_decision_sink_receives_auditable_drop_reason() -> None:
+    gateway = FakeGateway(654)
+    decisions: list[tuple[str, bool, str | None]] = []
+
+    async def processor(_candidate) -> None:
+        return None
+
+    async def decision_sink(message, result, _room_id: int) -> None:
+        decisions.append((message.text, result.admitted, result.reason))
+
+    runtime = DanmakuReplyRuntime(
+        ReplyPolicyConfig(
+            ordinary_sample_rate=1.0,
+            duplicate_window_seconds=60,
+            per_user_cooldown_seconds=0,
+        ),
+        processor,
+    )
+    session = LivestreamSession(
+        gateway_factory=lambda _room_id, _sessdata: gateway,
+        reply_runtime=runtime,
+        reply_decision_sink=decision_sink,
+    )
+    await session.set_room(654)
+
+    for sequence in range(2):
+        gateway.emit_event(
+            LivestreamEvent(
+                sequence=sequence,
+                offset_ms=sequence,
+                event_type=LivestreamEventType.DANMAKU,
+                actor_id=f"viewer_{sequence:04d}",
+                text="same",
+            ),
+        )
+    await _settle_callbacks()
+
+    assert decisions == [("same", True, None), ("same", False, "duplicate")]
+    await session.stop()
 
 
 @pytest.mark.asyncio

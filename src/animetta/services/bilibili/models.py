@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any
 
 
@@ -26,6 +27,101 @@ class DanmakuMessage:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+class LivestreamEventType(StrEnum):
+    """Normalized event categories shared by capture and replay."""
+
+    DANMAKU = "danmaku"
+    GIFT = "gift"
+    SUPER_CHAT = "super_chat"
+    ENTER = "enter"
+    FOLLOW = "follow"
+    LIKE_BATCH = "like_batch"
+    POPULARITY_SNAPSHOT = "popularity_snapshot"
+    CONNECTION_STATE = "connection_state"
+    UNKNOWN = "unknown"
+
+
+_REPLYABLE_EVENT_TYPES = {
+    LivestreamEventType.DANMAKU,
+    LivestreamEventType.GIFT,
+    LivestreamEventType.SUPER_CHAT,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class LivestreamEvent:
+    """One normalized livestream event on a relative dataset timeline."""
+
+    sequence: int
+    offset_ms: int
+    event_type: LivestreamEventType
+    actor_id: str = ""
+    text: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the stable JSON-compatible persisted representation."""
+        return {
+            "sequence": self.sequence,
+            "offset_ms": self.offset_ms,
+            "event_type": self.event_type.value,
+            "actor_id": self.actor_id,
+            "text": self.text,
+            "payload": dict(self.payload),
+        }
+
+    def to_danmaku_message(
+        self,
+        *,
+        timestamp: float | None = None,
+    ) -> DanmakuMessage | None:
+        """Convert replyable events to the backward-compatible message model."""
+        if self.event_type not in _REPLYABLE_EVENT_TYPES:
+            return None
+        raw_user_id = self.payload.get("user_id", 0)
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            user_id = 0
+        metadata = {key: value for key, value in self.payload.items() if key != "user_id"}
+        return DanmakuMessage(
+            text=self.text,
+            user_name=self.actor_id,
+            user_id=user_id,
+            timestamp=time.time() if timestamp is None else timestamp,
+            is_gift=self.event_type is LivestreamEventType.GIFT,
+            is_super_chat=self.event_type is LivestreamEventType.SUPER_CHAT,
+            meta=metadata,
+        )
+
+
+@dataclass(slots=True)
+class LivestreamEventMetrics:
+    """Counters for normalized transport events, separate from AI replies."""
+
+    received: int = 0
+    dispatched: int = 0
+    received_by_type: dict[str, int] = field(default_factory=dict)
+    dispatched_by_type: dict[str, int] = field(default_factory=dict)
+    callback_failures: int = 0
+
+    def record_received(self, event: LivestreamEvent) -> None:
+        """Record one event accepted from a Gateway."""
+        self.received += 1
+        key = event.event_type.value
+        self.received_by_type[key] = self.received_by_type.get(key, 0) + 1
+
+    def record_dispatched(self, event: LivestreamEvent) -> None:
+        """Record one event delivered to downstream consumers."""
+        self.dispatched += 1
+        key = event.event_type.value
+        self.dispatched_by_type[key] = self.dispatched_by_type.get(key, 0) + 1
+
+    def record_callback_failure(self) -> None:
+        """Record a downstream event callback failure."""
+        self.callback_failures += 1
 
 
 @dataclass

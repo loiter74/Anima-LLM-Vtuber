@@ -6,9 +6,10 @@ from collections.abc import Callable
 from typing import Protocol
 
 from .danmaku_service import DanmakuService
-from .models import DanmakuMessage
+from .models import DanmakuMessage, LivestreamEvent
 
 MessageCallback = Callable[[DanmakuMessage], None]
+EventCallback = Callable[[LivestreamEvent], None]
 StatusCallback = Callable[[bool, str], None]
 
 
@@ -19,6 +20,9 @@ class DanmakuGateway(Protocol):
 
     def set_message_callback(self, callback: MessageCallback) -> None:
         """Register the normalized incoming-message callback."""
+
+    def set_event_callback(self, callback: EventCallback) -> None:
+        """Register the normalized incoming-event callback."""
 
     def set_status_callback(self, callback: StatusCallback) -> None:
         """Register the normalized connection-status callback."""
@@ -34,6 +38,8 @@ class _LegacyDanmakuService(Protocol):
     """Narrow interface used to adapt the existing threaded service."""
 
     def set_callback(self, callback: MessageCallback) -> None: ...
+
+    def set_event_callback(self, callback: EventCallback) -> None: ...
 
     def set_status_callback(self, callback: StatusCallback) -> None: ...
 
@@ -60,6 +66,10 @@ class DanmakuServiceGateway:
     def set_message_callback(self, callback: MessageCallback) -> None:
         """Forward a normalized message callback to the legacy service."""
         self._service.set_callback(callback)
+
+    def set_event_callback(self, callback: EventCallback) -> None:
+        """Forward a normalized event callback to the adapted service."""
+        self._service.set_event_callback(callback)
 
     def set_status_callback(self, callback: StatusCallback) -> None:
         """Forward a normalized status callback to the legacy service."""
