@@ -1,0 +1,47 @@
+[
+  {
+    "command": "DANMU_MSG",
+    "raw": {"data": {"info": [[], "你好", [42, "Alice"]]}},
+    "expected_type": "danmaku"
+  },
+  {
+    "command": "SEND_GIFT",
+    "raw": {"data": {"data": {"uid": 42, "uname": "Alice", "giftName": "星星", "num": 2}}},
+    "expected_type": "gift"
+  },
+  {
+    "command": "SUPER_CHAT_MESSAGE",
+    "raw": {"data": {"data": {"uid": 42, "user_info": {"uname": "Alice"}, "price": 30, "message": "加油"}}},
+    "expected_type": "super_chat"
+  },
+  {
+    "command": "INTERACT_WORD_V2",
+    "raw": {"data": {"data": {"pb_decoded": {"uid": 42, "uname": "Alice", "msg_type": 1}}}},
+    "expected_type": "enter"
+  },
+  {
+    "command": "INTERACT_WORD_V2",
+    "raw": {"data": {"data": {"pb_decoded": {"uid": 42, "uname": "Alice", "msg_type": 2}}}},
+    "expected_type": "follow"
+  },
+  {
+    "command": "LIKE_INFO_V3_CLICK",
+    "raw": {"data": {"data": {"uid": 42, "uname": "Alice", "like_count": 3}}},
+    "expected_type": "like_batch"
+  },
+  {
+    "command": "VIEW",
+    "raw": {"data": 12345},
+    "expected_type": "popularity_snapshot"
+  },
+  {
+    "command": "DISCONNECT",
+    "raw": {"data": 1000},
+    "expected_type": "connection_state"
+  },
+  {
+    "command": "FUTURE_PROTOCOL_EVENT",
+    "raw": {"data": {"uid": 42, "room_id": 123, "secret": "never persist"}},
+    "expected_type": "unknown"
+  }
+]
