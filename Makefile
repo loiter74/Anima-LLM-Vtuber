@@ -1,4 +1,4 @@
-.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint qwen-build qwen-up qwen-deploy qwen-stop qwen-destroy anima-up anima-down
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint qwen-build qwen-up qwen-deploy qwen-stop qwen-destroy anima-up anima-down install-hooks hooks
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -72,6 +72,18 @@ health:
 	$(MAKE) test
 	@echo ""
 	@echo "All checks passed."
+
+# ── Git hooks (pre-commit) ──────────────────────────────────────────────
+# Install once after cloning: `make install-hooks`. The hook runs ruff
+# lint+format-check and secret/large-file guards on every commit (sub-second).
+# Slow checks (mypy, frontend eslint, tests) stay on CI; mypy is available
+# as a manual stage: `pre-commit run --hook-stage manual mypy`.
+
+install-hooks:
+	py -3.13 -m pre_commit install
+
+hooks:
+	py -3.13 -m pre_commit run --all-files
 
 # ── Docker targets ───────────────────────────────────────────────────────
 

@@ -114,6 +114,81 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # ── Fast preflight gate (pull_request only) ───────────────────────────
+  # Sub-minute lint + format + (scoped) typecheck on the PR's changed files,
+  # so trivially-broken pushes fail in seconds rather than after the matrix
+  # jobs boot up. This is deliberately a HARD gate (no continue-on-error):
+  # it only checks "obviously broken" — real test coverage stays in the
+  # affected-tier matrix below. Skipped on push-to-main (which runs the full
+  # tier) and on doc/config-only PRs (paths filter).
+  preflight:
+    name: preflight
+    needs: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base ref to diff changed files.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install lint tools (ruff + mypy only)
+        run: python -m pip install --upgrade ruff mypy
+
+      - name: Determine changed Python/frontend files
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          # Files changed in this PR (added/modified, not deleted).
+          mapfile -t ALL < <(git diff --name-only --diff-filter=AM "$BASE" "$GITHUB_SHA")
+          printf '%s\n' "${ALL[@]}" | grep -E '^(src|tooling|scripts|evaluations|tests)/.*\.py$' > changed_py.txt || true
+          printf '%s\n' "${ALL[@]}" | grep -E '^src/animetta/.*\.py$' > changed_src.txt || true
+          printf '%s\n' "${ALL[@]}" | grep -E '^frontend/' > changed_fe.txt || true
+          {
+            echo "py_count=$(wc -l < changed_py.txt | tr -d ' ')"
+            echo "src_count=$(wc -l < changed_src.txt | tr -d ' ')"
+            echo "fe_count=$(wc -l < changed_fe.txt | tr -d ' ')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: ruff check (changed Python files)
+        if: steps.changed.outputs.py_count != '0'
+        run: ruff check $(cat changed_py.txt)
+
+      - name: ruff format --check (changed Python files)
+        if: steps.changed.outputs.py_count != '0'
+        run: ruff format --check $(cat changed_py.txt)
+
+      # Scoped mypy: only on changed files under src/animetta, only when such
+      # files exist. Full-tree mypy stays in the matrix jobs.
+      - name: mypy (changed src/animetta files)
+        if: steps.changed.outputs.src_count != '0'
+        run: mypy $(cat changed_src.txt) --ignore-missing-imports
+
+      - name: Setup pnpm (frontend changed)
+        if: steps.changed.outputs.fe_count != '0'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - name: Setup Node (frontend changed)
+        if: steps.changed.outputs.fe_count != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: prettier --check (frontend changed)
+        if: steps.changed.outputs.fe_count != '0'
+        run: |
+          pnpm --dir frontend install --frozen-lockfile --prefer-offline
+          pnpm --dir frontend format:check
+
   python:
     name: python / ${{ matrix.group }}
     needs: plan

@@ -1,0 +1,90 @@
+# Local pre-commit gate. Install once with: make install-hooks
+#
+# Design notes (see docs/ci-gate-plan.md for the full rationale):
+#
+# - Scope is deliberately NARROW. This hook runs on EVERY commit and must be
+#   sub-second with zero false-positive churn. The repo is not yet globally
+#   normalized for trailing-whitespace / end-of-file / CRLF, so those cosmetic
+#   fixers are intentionally omitted (they would reformat 100+ pre-existing
+#   files on first run and pollute every PR diff). CI remains the place where
+#   full project conformance is enforced.
+#
+# - What IS here:
+#     * ruff check --exit-non-zero-on-fix  (lint; fails if it auto-fixes)
+#     * ruff format --check                (format; verify-only, no write)
+#     * detect-private-key                 (block secret commits — unrecoverable)
+#     * check-added-large-files            (block model/binary accidents)
+#     * check-merge-conflict               (block unresolved conflict markers)
+#   These four guard hooks never produce false churn — they only fail on
+#   genuine problems.
+#
+# - ruff/mypy run with language: system so they reuse the project's verified
+#   `py -3.13` interpreter and its already-installed ruff (requirements-dev.txt).
+#   This avoids downloading an isolated ruff binary (unreliable on Windows and
+#   would drift from the version pinned in pyproject.toml).
+#
+# - Slow checks (mypy, frontend eslint, vue-tsc, pytest) stay on CI. mypy is
+#   available as a manual stage: `pre-commit run --hook-stage manual mypy`.
+
+minimum_pre_commit_version: "3.6.0"
+
+default_install_hook_types: [pre-commit]
+
+repos:
+  # ── Guard hooks: block unrecoverable / high-noise mistakes ─────────────
+  # No cosmetic fixers (EOF/whitespace) here — see header note.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+        # Allow legitimately large fixtures checked in under artifacts/.
+        exclude: ^artifacts/
+      - id: check-merge-conflict
+
+  # ── Python: ruff lint + format-check (system interpreter) ──────────────
+  # pass_filenames is FALSE on purpose: pre-commit passes every matching file
+  # as a CLI arg, which on Windows overflows the ~32k command-line limit for
+  # ~900 files and silently makes ruff exit 0 on empty input. Instead we hand
+  # ruff the directory scope and let it walk the tree itself (it honors
+  # pyproject.toml). `files:`/`exclude:` below still gate WHEN the hook runs.
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (py-3.13)
+        description: Lint; fails on any ruff error (mirrors `make lint`).
+        entry: py -3.13 -m ruff check src tooling scripts evaluations tests
+        language: system
+        pass_filenames: false
+        # Run when any in-scope Python file is staged.
+        files: ^(src|tooling|scripts|evaluations|tests)/.*\.py$
+
+      - id: ruff-format
+        name: ruff format --check (py-3.13)
+        description: Verify formatting matches `ruff format` without writing.
+        entry: py -3.13 -m ruff format --check src tooling scripts evaluations tests
+        language: system
+        pass_filenames: false
+        files: ^(src|tooling|scripts|evaluations|tests)/.*\.py$
+
+      # ── Frontend: prettier check only on frontend/** ─────────────────────
+      - id: prettier-check
+        name: prettier --check (frontend)
+        description: Run `pnpm format:check`. Only triggers when frontend/** changes.
+        entry: pnpm --dir frontend format:check
+        language: system
+        files: ^frontend/
+        types: []
+        pass_filenames: false
+
+      # ── Manual stage: mypy (slow; run before push, not per-commit) ───────
+      - id: mypy
+        name: mypy (py-3.13) — manual stage
+        description: Run with `pre-commit run --hook-stage manual mypy`.
+        entry: py -3.13 -m mypy src/animetta --ignore-missing-imports
+        language: system
+        types: [python]
+        files: ^src/animetta/
+        pass_filenames: false
+        stages: [manual]

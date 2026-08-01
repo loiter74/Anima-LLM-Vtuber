@@ -264,8 +264,9 @@ class GLMLLM(LLMInterface):
 
         self._call_count += 1
 
-        if self._call_count % 100 == 0 and len(self._conversation_history) > 100:
-            self._conversation_history = self._conversation_history[-50:]
+        self._conversation_history = self._trim_history(
+            self._conversation_history, getattr(self.config, "max_history_messages", 20)
+        )
 
     def clear_history(self) -> None:
         self._conversation_history = []
@@ -290,6 +291,9 @@ class GLMLLM(LLMInterface):
         ):
             self._conversation_history.append({"role": "assistant", "content": heard_response})
             self._conversation_history.append({"role": "system", "content": "[用户打断了对话]"})
+            self._conversation_history = self._trim_history(
+                self._conversation_history, getattr(self.config, "max_history_messages", 20)
+            )
         logger.info(
             f"[GLM] Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}..."
         )

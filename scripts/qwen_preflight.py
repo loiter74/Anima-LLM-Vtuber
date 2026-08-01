@@ -235,9 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # pin QWEN_TTS_HOST_URL, select the mode-appropriate default so host-tts mode
     # probes 8767 without requiring an explicit flag.
     if not os.environ.get("QWEN_TTS_HOST_URL") and "--base-url" not in (argv or ()):
-        args.base_url = (
-            HOST_TTS_DEFAULT_BASE_URL if args.mode == "host-tts" else DEFAULT_BASE_URL
-        )
+        args.base_url = HOST_TTS_DEFAULT_BASE_URL if args.mode == "host-tts" else DEFAULT_BASE_URL
     try:
         api_key, expected_identity = load_expected_settings(
             fallback_base_url=args.base_url,

@@ -1,0 +1,13 @@
+# CODEOWNERS for Animetta.
+# https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Single-maintainer project: @loiter74 owns everything by default. Enable
+# "Require review from code owners" in branch protection so PRs request the
+# maintainer automatically (useful once a second contributor joins).
+#
+# To add a sub-owner for a specific area, add a more specific line ABOVE the
+# catch-all, e.g.:
+#   frontend/                @frontend-maintainer
+#   src/animetta/tools/minecraft/  @mc-maintainer
+
+* @loiter74

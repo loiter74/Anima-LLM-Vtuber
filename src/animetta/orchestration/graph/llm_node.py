@@ -5,13 +5,20 @@ import re
 import time as time_module
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+    trim_messages,
+)
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
 from animetta.orchestration.prompting.reasoning_classifier import is_english_meta_reasoning
 from animetta.services.bilibili.response_policy import constrain_livestream_response
+from animetta.services.llm.token_counting import make_trim_token_counter
 
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
@@ -21,6 +28,42 @@ from .state import AFFINITY_MAX, AFFINITY_MIN, AgentState, log_timing
 # Configurable timeout for LLM provider calls (default: 30 seconds)
 TIMEOUT_SECONDS = 30
 FALLBACK_RESPONSE = "I need a moment to think about that."
+
+# Default token budget for the graph ``messages`` window (context-bloat guard).
+DEFAULT_CONTEXT_TOKEN_BUDGET = 6000
+
+
+def _apply_context_budget(
+    messages: list[Any],
+    state: AgentState,
+    session_id: str,
+) -> list[Any]:
+    """Bound the graph messages to a token budget (context-bloat guard)."""
+    raw_budget = state.get("max_context_tokens")
+    budget = (
+        int(raw_budget) if isinstance(raw_budget, (int, float)) else DEFAULT_CONTEXT_TOKEN_BUDGET
+    )
+    if budget <= 0 or len(messages) <= 1:
+        return messages
+    counter = make_trim_token_counter()
+    before = counter(messages)
+    if before <= budget:
+        return messages
+    trimmed = trim_messages(
+        messages,
+        max_tokens=budget,
+        strategy="last",
+        token_counter=counter,
+        allow_partial=False,
+        include_system=True,
+    )
+    logger.info(
+        f"[{session_id}] [LLMNode] Context budget applied: {before} -> "
+        f"{counter(trimmed)} tokens (budget={budget}, "
+        f"messages {len(messages)} -> {len(trimmed)})"
+    )
+    return trimmed
+
 
 # Regex for emotion tags like [happy], [neutral], [sad]. Does NOT match
 # ``[affinity:N]`` — affinity marker stripping is handled exclusively by
@@ -529,6 +572,7 @@ async def _llm_with_tools(
     """Use tool calling mode"""
     user_text = state.get("user_text", "")
     messages = list(state.get("messages", []))
+    messages = _apply_context_budget(messages, state, session_id)
     llm_engine = service_context.llm_engine
 
     logger.info(f"[{session_id}] [LLMNode] Using tool calling mode")
@@ -650,6 +694,7 @@ async def _llm_without_tools(
     user_text = state.get("user_text", "")
     llm_engine = service_context.llm_engine
     messages = list(state.get("messages", []))
+    messages = _apply_context_budget(messages, state, session_id)
 
     logger.info(f"[{session_id}] [LLMNode] Using streaming mode (no tools)")
 
