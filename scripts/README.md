@@ -1,41 +1,81 @@
 # Animetta Utility Scripts
 
-Development and training utilities for the Anima VTuber project.
+Operational, quality-gate, and acceptance scripts for the Anima VTuber project.
+All Python scripts target **Python 3.13** (`py -3.13`). Run from the repository
+root with `PYTHONPATH=src`.
 
-## Scripts
+## Runtime lifecycle & release gates
 
 | Script | Purpose |
 |--------|---------|
-| `anima_cli.py` | RVC training CLI wrapper |
-| `bench.py` | LangGraph pipeline performance benchmark |
-| `check_secrets.py` | Tracked config secret scanner |
-| `health_check.py` | Local health gate orchestrator |
-| `route_smoke.py` | Lightweight ASGI route probes |
-| `validate-events.py` | Socket.IO event contract validator |
-| `tts_audition.py` | Beijing DashScope 24-sample anonymous emotive TTS audition (Python 3.13, no Docker) |
-| `download-models.sh` | Pre-download AI models (Kokoro, Qwen3, Whisper) |
-| `collect_danmaku.py` | Build danmaku sample datasets |
-| `analyze_danmaku_opencode.py` | Analyze collected danmaku samples |
-| `e2e_test_events.py` | Socket event end-to-end checks |
-| `start-mc-bot.bat` | Windows helper for the Minecraft bot |
+| `runtime_lifecycle.py` | Cross-platform lifecycle for the host-local Qwen TTS service and the Animetta Docker compose project (`host-tts-up/status/stop`, `anima-up/down`) |
+| `release_runtime_gate.py` | Production release gate for full/nightly CI: verifies host Qwen identity, cold-builds the image, requires app health + frontend HTTP + clean logs |
+| `qwen_preflight.py` | Read-only readiness preflight for the persistent local Qwen TTS service on `:8767` |
+| `soak_golden_path.py` | Real 600 s / 12-turn golden-path acceptance gate |
+| `baseline_golden_path.py` | Captures fail-closed evidence for the golden-path baseline |
+| `probe_release_turn.py` | Probes one production Socket.IO turn for typed TTS degradation |
 
-## Emotive TTS audition
+## Health & quality gates
 
-The audition reads only `DASHSCOPE_API_KEY`, creates two original CosyVoice voices, compares them with two Qwen preset voices, and writes a complete anonymous bundle under `artifacts/tts-audition/`. It does not modify runtime configuration or invoke Docker.
+| Script | Purpose |
+|--------|---------|
+| `health_check.py` | Repository health gate runner with `quick/affected/full/docker` profiles |
+| `check_source_standards.py` | Validates every tracked operational source file (Dockerfile/shell/yaml/json/toml) |
+| `check_secrets.py` | Scans tracked config files for plaintext secrets |
+| `check_minecraft_architecture.py` | Reports/enforces Minecraft control-plane boundaries |
+| `route_smoke.py` | Lightweight ASGI route probes with mocked model prewarm |
+| `validate-events.py` | Validates Socket.IO event-name consistency across config, Python, and TS (called during Docker build) |
 
-```powershell
-$env:DASHSCOPE_API_KEY = "<Beijing Model Studio API key>"
-py -3.13 scripts/tts_audition.py
-```
+## Minecraft acceptance & contract generation
 
-## Subdirectories
+Gameplay workflows are submitted through the durable single-consumer control
+plane (`mc_execute` / `mc_status` / `mc_stop`), not launched directly.
 
-| Directory | Purpose |
-|-----------|---------|
-| `minecraft_manual/` | Manual Minecraft skill, tech-tree, and bot smoke scripts |
-| `train/` | Character singing model training pipeline |
+| Script | Purpose |
+|--------|---------|
+| `minecraft_adaptive_showcase.py` | Runs the complete real adaptive Minecraft showcase and packages evidence |
+| `minecraft_adaptive_micro_gate.py` | Runs one lowest-layer real Minecraft gate without the full R8 scene |
+| `minecraft_real_model_contract.py` | Captures a real-model natural-language → MissionSpec contract result |
+| `voyager_real_e2e.py` | Real GameBot v2 acceptance: cooperative stop and disconnect quarantine |
+| `verify_minecraft_migration.py` | Verifies additive control-plane migration on a backed-up skill DB |
+| `generate_gamebot_v2_contracts.py` | Generates canonical GameBot v2 JSON schema and golden messages |
+| `generate_minecraft_mission_contracts.py` | Generates the versioned adaptive Minecraft mission contract bundle |
 
-## Training Pipeline
+## Review harnesses (loopback-only)
+
+| Script | Purpose |
+|--------|---------|
+| `minecraft_gameplay_review_harness.py` | Loopback-only Minecraft gameplay review harness (uvicorn) |
+| `tts_failover_review_harness.py` | Loopback-only OBS TTS failover review harness (uvicorn) |
+
+## Benchmarks & smoke gates
+
+| Script | Purpose |
+|--------|---------|
+| `bench.py` | LangGraph pipeline latency benchmark suite (`quick/full/compare/report`) |
+| `benchmark_host_tts.py` | Measures the authenticated Windows host TTS streaming contract |
+| `smoke_real_profile.py` | Real DeepSeek/MiMo smoke gate with sanitized evidence |
+| `smoke_bilibili_room.py` | Opt-in real Bilibili room handshake smoke (never starts the AI pipeline) |
+
+## Danmaku collection
+
+| Script | Purpose |
+|--------|---------|
+| `collect_danmaku.py` | Builds danmaku sample datasets from trending videos via `MemeCollector` |
+| `collect_live_danmaku.py` | Collects normalized live-room danmaku to local CSV/JSONL |
+
+## Utilities
+
+| Script | Purpose |
+|--------|---------|
+| `reset_observability.py` | Deletes disposable observation DBs and bootstraps schema version 2 |
+| `sync_feishu_to_docs.py` | Syncs project data from Feishu sheets to docs via `lark-cli` (cron) |
+| `tts_audition.py` | Anonymous DashScope emotive TTS audition (24 samples, no Docker) |
+| `download-models.sh` | Pre-downloads Kokoro / Qwen3 / Whisper models via `huggingface_hub` |
+
+## Training pipeline (`train/`)
+
+One-command RVC v2 singing-model training.
 
 ```
 train/
@@ -45,9 +85,8 @@ train/
 └── deploy.py            ← Stage 3: deploy model to Anima config
 ```
 
-Usage:
 ```bash
-# Full training pipeline
+# Full pipeline
 python -m scripts.train.cli --character shige_utage
 
 # Dry run (check config)
