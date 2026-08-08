@@ -6,7 +6,6 @@ Loads Live2D action preset configuration (YAML format)
 Based on open-yachiyo's live2d-presets.yaml
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,34 +13,6 @@ import yaml
 from loguru import logger
 
 from .action_queue import ActionFactory, ActionMessage
-
-
-@dataclass
-class EmotePreset:
-    """Emotion preset"""
-
-    name: str
-    intensity: str  # low, medium, high
-    expression: str
-    params: list[dict[str, Any]]
-
-
-@dataclass
-class GesturePreset:
-    """Gesture preset"""
-
-    name: str
-    expression: str | None
-    motion_group: str | None
-    motion_index: int | None
-
-
-@dataclass
-class ReactPreset:
-    """Reaction preset"""
-
-    name: str
-    actions: list[dict[str, Any]]
 
 
 class PresetLoader:

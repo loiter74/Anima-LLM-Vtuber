@@ -261,21 +261,6 @@ def _get_gpu_info() -> dict[str, Any]:
         return {"available": False, "error": str(e)}
 
 
-def _get_model_status() -> dict[str, str]:
-    """Return per-model loading states from ModelLoadingManager.
-
-    Returns a dict mapping model name → state string
-    (unloaded / loading / loaded / error).
-    """
-    if _model_manager is None:
-        return {}
-    try:
-        return _model_manager.get_status()
-    except Exception as e:
-        logger.warning(f"[health/models] Failed to get model status: {e}")
-        return {"_error": str(e)}
-
-
 async def stats_inspection_latest(request: Request) -> JSONResponse:
     """GET /api/stats/inspection/latest — most recent inspection report."""
     try:

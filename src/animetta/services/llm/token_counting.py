@@ -41,11 +41,6 @@ def _get_encoding(model: str | None) -> _TokenizerLike:
         return tiktoken.get_encoding(_DEFAULT_ENCODING)
 
 
-def make_token_counter(model: str | None = None) -> _TokenizerLike:
-    """Return a token encoder suitable for counting (cached)."""
-    return _get_encoding(model)
-
-
 def _extract_text(message: Any) -> str:
     """Extract the textual content from a langchain message or plain dict."""
     # langchain BaseMessage exposes .content

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -185,6 +186,81 @@ def test_run_command_executes_plan_and_writes_aggregate_evidence(
     assert (results_dir / "summary.json").exists()
 
 
+def test_default_execution_publishes_bounded_shard_evidence(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    manifest, _ = _write_cli_fixture(tmp_path)
+    plan_path = tmp_path / "plan.json"
+    results_dir = tmp_path / "results"
+    assert (
+        main(
+            [
+                "plan",
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--tier",
+                "quick",
+                "--paths",
+                "src/example.py",
+                "--output",
+                str(plan_path),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    code = main(
+        [
+            "run",
+            "--manifest",
+            str(manifest),
+            "--repo-root",
+            str(tmp_path),
+            "--plan",
+            str(plan_path),
+            "--results-dir",
+            str(results_dir),
+            "--cache",
+            "off",
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+    summary = json.loads(captured.out)
+
+    assert code == 0
+    assert summary["status"] == "passed"
+    assert "Quality feedback: python-check-shard-1 passed" in captured.err
+    assert "Quality feedback: python-check-shard-1 in_progress" in captured.err
+    assert (results_dir / "feedback-plan.json").exists()
+    assert (results_dir / "feedback" / "python-check-shard-1.json").exists()
+    events = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (results_dir / "events").glob("*.json")
+    ]
+    assert any(event["phase"] == "started" for event in events)
+    assert any(event["phase"] == "terminal" for event in events)
+    assert {event["shard_id"] for event in events} == {"python-check-shard-1"}
+    assert (results_dir / "python-check.json").exists()
+    assert (
+        main(
+            [
+                "aggregate",
+                "--plan",
+                str(plan_path),
+                "--results-dir",
+                str(results_dir),
+                "--json",
+            ]
+        )
+        == 0
+    )
+
+
 def test_run_command_invalidates_stale_selected_evidence_before_execution(
     tmp_path: Path,
     capsys,
@@ -327,6 +403,32 @@ def test_verify_reuses_exact_local_cache_and_emits_current_result(
     )
 
 
+def test_complete_group_cache_hit_skips_test_node_collection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded = quality_cli.load_catalog(ROOT / "tooling" / "quality.yml")
+    plan = quality_cli.plan_verification(
+        loaded,
+        quality_cli.from_paths(["tooling/quality/cli.py"], repo_root=ROOT),
+        quality_cli.Tier.AFFECTED,
+    )
+    tooling_group = next(group for group in plan.groups if group.id == "backend-tooling-quality")
+    plan = plan.model_copy(update={"groups": (tooling_group,)})
+
+    def fail_collection(*_args, **_kwargs):
+        raise AssertionError("cached group must not collect test nodes")
+
+    monkeypatch.setattr(quality_cli, "collect_pytest_test_ids", fail_collection)
+    discovered = quality_cli._feedback_test_ids(
+        argparse.Namespace(repo_root=ROOT),
+        loaded,
+        plan,
+        excluded_groups=frozenset({"backend-tooling-quality"}),
+    )
+
+    assert discovered == {}
+
+
 def test_full_tier_defaults_to_cold_cache_off(tmp_path: Path, capsys) -> None:
     manifest, _ = _write_cli_fixture(tmp_path)
     results_dir = tmp_path / "results"
@@ -375,9 +477,10 @@ def test_verify_command_explains_frozen_groups_before_result(
             "src/example.py",
         ]
     )
-    output = capsys.readouterr().out
+    captured = capsys.readouterr()
+    output = captured.out
 
-    assert code == 0
+    assert code == 0, output + captured.err
     assert output.index("Plan ") < output.index("- python-check: direct match: source")
     assert output.index("- python-check: direct match: source") < output.index(
         "Quality result: passed"
@@ -452,6 +555,57 @@ def test_run_group_rejects_group_not_selected_by_plan(tmp_path: Path, capsys) ->
 
     assert code == 2
     assert "not selected" in capsys.readouterr().err
+
+
+def test_run_group_uses_bounded_shards_by_default(tmp_path: Path, capsys) -> None:
+    manifest, _ = _write_cli_fixture(tmp_path)
+    plan_path = tmp_path / "plan.json"
+    results_dir = tmp_path / "results"
+    assert (
+        main(
+            [
+                "plan",
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--tier",
+                "quick",
+                "--paths",
+                "src/example.py",
+                "--output",
+                str(plan_path),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "run-group",
+                "python-check",
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--plan",
+                str(plan_path),
+                "--output",
+                str(results_dir / "python-check.json"),
+                "--cache",
+                "off",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["status"] == "passed"
+    assert (results_dir / "feedback-plan.json").exists()
+    assert (results_dir / "feedback" / "python-check-shard-1.json").exists()
 
 
 def test_run_rejects_tampered_frozen_plan(tmp_path: Path, capsys) -> None:

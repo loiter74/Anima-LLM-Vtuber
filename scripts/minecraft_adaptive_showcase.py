@@ -200,7 +200,6 @@ async def run(
     run_id: str,
     completion_timeout_seconds: float,
     ledger_path: Path,
-    bounded_feedback: bool = False,
 ) -> Path:
     _require_r8_start(ledger_path)
     scenario = default_showcase_scenario()
@@ -268,11 +267,7 @@ async def run(
             capture_probe_path=capture.capture_probe_path,
             completion_timeout_seconds=completion_timeout_seconds,
             event_emit=projection_server.relay.emit,
-            mission_feedback=(
-                _MissionFeedbackWriter(output_root / run_id / "feedback")
-                if bounded_feedback
-                else None
-            ),
+            mission_feedback=_MissionFeedbackWriter(output_root / run_id / "feedback"),
         )
         runner = ShowcaseRunner(
             scenario_preparer=preparer,
@@ -330,7 +325,6 @@ def main() -> int:
         default=f"adaptive-showcase-{time.time_ns() // 1_000_000}",
     )
     parser.add_argument("--completion-timeout-seconds", type=float, default=1_200)
-    parser.add_argument("--bounded-feedback", action="store_true")
     parser.add_argument(
         "--ledger-path",
         type=Path,
@@ -345,7 +339,6 @@ def main() -> int:
             run_id=args.run_id,
             completion_timeout_seconds=args.completion_timeout_seconds,
             ledger_path=args.ledger_path.resolve(),
-            bounded_feedback=args.bounded_feedback,
         )
     )
     print(output.as_posix())

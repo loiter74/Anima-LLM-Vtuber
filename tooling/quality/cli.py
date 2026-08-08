@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -8,11 +9,14 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+
+from tooling.execution_feedback import FeedbackStatus
 
 from .aggregate import aggregate_results
 from .benchmark import BenchmarkEvidence, BenchmarkRun, percentile
@@ -20,7 +24,13 @@ from .cache import ResultCache, artifact_digest
 from .change_sources import ChangeDiscoveryError, discover_range, discover_worktree, from_paths
 from .docker_plan import compose_identity, fingerprint_docker_scopes
 from .evidence import read_plan, read_results, write_plan, write_summary
-from .executor import run_group, write_result
+from .executor import collect_pytest_test_ids, run_group, write_result
+from .feedback import (
+    QualityShardResult,
+    QualityShardSpec,
+    freeze_quality_feedback_plan,
+    run_feedback_schedule,
+)
 from .fingerprint import FingerprintContext
 from .manifest import LoadedCatalog, load_catalog
 from .models import (
@@ -28,16 +38,15 @@ from .models import (
     AggregateSummary,
     CacheMode,
     ChangeSet,
-    PlannedGroup,
     ResultStatus,
     Runner,
     SchedulerPolicy,
     Tier,
     TrustScope,
     VerificationPlan,
+    VerificationResult,
 )
 from .planner import matching_components, plan_verification
-from .scheduler import run_schedule
 from .warm_topology import (
     TopologyCollectionError,
     collect_desired_environment_identities,
@@ -364,96 +373,513 @@ def _artifact_digest_map(
     return digests
 
 
-def _execute_planned_group(
-    args: argparse.Namespace,
-    loaded: LoadedCatalog,
-    plan: VerificationPlan,
-    group: PlannedGroup,
-    cancellation: threading.Event,
-    *,
-    cache: ResultCache | None,
-    cache_mode: CacheMode,
-    trust_scope: TrustScope,
-):
-    miss_reason = "cache-off"
-    if cache is not None and cache_mode in {CacheMode.READ, CacheMode.READ_WRITE}:
-        lookup = cache.lookup(
-            group,
-            plan_hash=plan.plan_hash,
-            manifest_hash=plan.manifest_hash,
-            trust_scope=trust_scope,
-        )
-        if lookup.hit:
-            assert lookup.result is not None
-            return lookup.result
-        miss_reason = lookup.reason
-    result = run_group(
-        loaded,
-        group.id,
-        plan_hash=plan.plan_hash,
-        repo_root=args.repo_root,
-        cancellation_event=cancellation,
-    )
-    repo_root = Path(args.repo_root).resolve()
-    result = result.model_copy(
-        update={
-            "input_fingerprint": group.input_fingerprint,
-            "trust_scope": trust_scope,
-            "cache_reason": miss_reason,
-            "artifact_digests": _artifact_digest_map(repo_root, result.artifacts),
-        }
-    )
-    if cache is not None and cache_mode is CacheMode.READ_WRITE:
-        write = cache.store(group, result, trust_scope)
-        result = result.model_copy(
-            update={"cache_reason": f"miss:{miss_reason};write:{write.reason}"}
-        )
-    return result
-
-
 def _execute_plan(
     args: argparse.Namespace,
     loaded: LoadedCatalog,
     plan: VerificationPlan,
 ) -> tuple[AggregateStatus, AggregateSummary]:
-    results_dir = _results_directory(args, plan)
-    _invalidate_plan_evidence(results_dir, plan)
+    return _execute_feedback_plan(args, loaded, plan)
+
+
+def _write_feedback_model(model: BaseModel, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the temporary basename short so atomic writes still work in deeply
+    # nested Windows worktrees that are close to MAX_PATH.
+    temporary = path.with_name(f"~{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump(model.model_dump(mode="json"), handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _feedback_test_ids(
+    args: argparse.Namespace,
+    loaded: LoadedCatalog,
+    plan: VerificationPlan,
+    *,
+    excluded_groups: frozenset[str] = frozenset(),
+) -> dict[str, tuple[str, ...]]:
+    discovered: dict[str, tuple[str, ...]] = {}
+    repo_root = Path(args.repo_root).resolve()
+    for planned in plan.groups:
+        if planned.id in excluded_groups:
+            continue
+        group = loaded.catalog.groups[planned.id]
+        if group.runner is Runner.PYTEST:
+            discovered[planned.id] = collect_pytest_test_ids(
+                loaded,
+                planned.id,
+                repo_root=args.repo_root,
+            )
+        elif group.runner is Runner.MYPY and group.targets:
+            expanded: list[str] = []
+            for target in group.targets:
+                path = repo_root / target
+                if not path.is_dir():
+                    expanded.append(target)
+                    continue
+                children = tuple(
+                    child
+                    for child in sorted(path.iterdir(), key=lambda item: item.name.casefold())
+                    if (child.is_file() and child.suffix == ".py")
+                    or (child.is_dir() and any(child.rglob("*.py")))
+                )
+                expanded.extend(child.relative_to(repo_root).as_posix() for child in children)
+            discovered[planned.id] = tuple(expanded)
+        elif group.runner in {Runner.RUFF, Runner.RUFF_FORMAT} and group.targets:
+            discovered[planned.id] = group.targets
+    return discovered
+
+
+def _feedback_estimates(
+    loaded: LoadedCatalog,
+    test_ids_by_group: dict[str, tuple[str, ...]],
+    *,
+    repo_root: Path,
+) -> dict[str, dict[str, float]]:
+    estimates: dict[str, dict[str, float]] = {}
+    for group_id, test_ids in test_ids_by_group.items():
+        if not test_ids:
+            continue
+        group = loaded.catalog.groups[group_id]
+        declared_budget = float(group.timeout_seconds)
+        if group.runner is Runner.MYPY:
+            weights = {
+                test_id: max(
+                    1,
+                    sum(1 for _ in (repo_root / test_id).rglob("*.py"))
+                    if (repo_root / test_id).is_dir()
+                    else 1,
+                )
+                for test_id in test_ids
+            }
+            total_weight = sum(weights.values())
+            estimates[group_id] = {
+                test_id: min(
+                    239.0,
+                    max(0.05, declared_budget * 2 * weight / total_weight),
+                )
+                for test_id, weight in weights.items()
+            }
+            continue
+        per_test = min(239.0, max(0.05, declared_budget / len(test_ids)))
+        estimates[group_id] = {test_id: per_test for test_id in test_ids}
+    return estimates
+
+
+def _coverage_groups(
+    loaded: LoadedCatalog,
+    plan: VerificationPlan,
+) -> frozenset[str]:
+    return frozenset(
+        planned.id
+        for planned in plan.groups
+        if loaded.catalog.groups[planned.id].runner is Runner.PYTEST
+        and loaded.catalog.groups[planned.id].artifacts
+        and any(
+            arg == "--cov" or arg.startswith("--cov=")
+            for arg in loaded.catalog.groups[planned.id].args
+        )
+    )
+
+
+def _load_prior_feedback_results(
+    results_dir: Path,
+    *,
+    plan: VerificationPlan,
+    excluded_groups: frozenset[str],
+) -> tuple[QualityShardResult, ...]:
+    recovered: list[QualityShardResult] = []
+    for path in sorted((results_dir / "feedback").glob("*.json")):
+        try:
+            result = QualityShardResult.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if (
+            result.plan_hash == plan.plan_hash
+            and result.manifest_hash == plan.manifest_hash
+            and result.group_id not in excluded_groups
+            and result.status is FeedbackStatus.PASSED
+            and result.phase == "terminal"
+        ):
+            recovered.append(result)
+    return tuple(recovered)
+
+
+def _pytest_feedback_args(
+    args: tuple[str, ...],
+    *,
+    append_coverage: bool,
+) -> tuple[str, ...]:
+    filtered: list[str] = []
+    skip_next = False
+    coverage_enabled = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--cov":
+            coverage_enabled = True
+            filtered.append(arg)
+            continue
+        if arg.startswith("--cov="):
+            coverage_enabled = True
+            filtered.append(arg)
+            continue
+        if arg in {"--cov-report", "--cov-fail-under"}:
+            skip_next = True
+            continue
+        if arg.startswith(("--cov-report=", "--cov-fail-under=")):
+            continue
+        if arg == "--cov-append":
+            continue
+        filtered.append(arg)
+    if coverage_enabled:
+        filtered.extend(("--cov-report=", "--cov-fail-under=0"))
+        if append_coverage:
+            filtered.append("--cov-append")
+    return tuple(filtered)
+
+
+def _coverage_fail_under(args: tuple[str, ...]) -> str:
+    for index, arg in enumerate(args):
+        if arg.startswith("--cov-fail-under="):
+            return arg.split("=", 1)[1]
+        if arg == "--cov-fail-under" and index + 1 < len(args):
+            return args[index + 1]
+    return "0"
+
+
+def _run_coverage_feedback_shard(
+    *,
+    repo_root: Path,
+    group_id: str,
+    shard: QualityShardSpec,
+    group_args: tuple[str, ...],
+    artifacts: tuple[str, ...],
+) -> QualityShardResult:
+    started = time.perf_counter()
+    outputs: list[str] = []
+    commands = (
+        (sys.executable, "-m", "coverage", "xml"),
+        (
+            sys.executable,
+            "-m",
+            "coverage",
+            "report",
+            f"--fail-under={_coverage_fail_under(group_args)}",
+        ),
+    )
+    exit_code: int | None = 0
+    status = FeedbackStatus.PASSED
+    for command in commands:
+        remaining = shard.action_budget_seconds - (time.perf_counter() - started)
+        if remaining <= 0:
+            status = FeedbackStatus.IN_PROGRESS
+            exit_code = None
+            break
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=repo_root,
+                capture_output=True,
+                check=False,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=remaining,
+            )
+        except subprocess.TimeoutExpired as exc:
+            outputs.extend(str(item) for item in (exc.stdout, exc.stderr) if item)
+            status = FeedbackStatus.IN_PROGRESS
+            exit_code = None
+            break
+        outputs.extend(item for item in (completed.stdout, completed.stderr) if item)
+        if completed.returncode != 0:
+            status = FeedbackStatus.FAILED
+            exit_code = completed.returncode
+            break
+    completed_ids = (
+        shard.test_ids if status in {FeedbackStatus.PASSED, FeedbackStatus.FAILED} else ()
+    )
+    remaining_ids = () if completed_ids else shard.test_ids
+    existing_artifacts = tuple(
+        artifact for artifact in artifacts if (repo_root / artifact).exists()
+    )
+    return QualityShardResult(
+        plan_hash=shard.plan_hash,
+        manifest_hash=shard.manifest_hash,
+        group_id=group_id,
+        shard_id=shard.shard_id,
+        root_shard_id=shard.root_shard_id,
+        status=status,
+        test_ids=shard.test_ids,
+        completed_test_ids=completed_ids,
+        remaining_test_ids=remaining_ids,
+        duration_seconds=min(time.perf_counter() - started, 300),
+        evidence_refs=(f"quality-result:{group_id}:{shard.shard_id}",),
+        artifacts=existing_artifacts,
+        exit_code=exit_code,
+        output="\n".join(outputs),
+    )
+
+
+def _execute_feedback_plan(
+    args: argparse.Namespace,
+    loaded: LoadedCatalog,
+    plan: VerificationPlan,
+) -> tuple[AggregateStatus, AggregateSummary]:
     cache_mode = _resolved_cache_mode(args, plan)
     trust_scope = _resolved_trust_scope(args, plan)
     cache = None if cache_mode is CacheMode.OFF else ResultCache(_cache_root(args), args.repo_root)
-    cancellation = threading.Event()
-    policy = plan.scheduler
-    if getattr(args, "sequential", False) or getattr(args, "shadow_sequential", False):
-        policy = SchedulerPolicy(
-            max_workers=1,
-            max_weight=plan.scheduler.max_weight,
-            max_heavy=1,
-            max_exclusive=1,
-        )
-
-    def execute(group: PlannedGroup, event: threading.Event):
-        return _execute_planned_group(
-            args,
-            loaded,
-            plan,
-            group,
-            event,
-            cache=cache,
-            cache_mode=cache_mode,
-            trust_scope=trust_scope,
-        )
-
-    outcome = run_schedule(
-        plan.groups,
-        policy,
-        execute,
-        cancellation_event=cancellation,
-        plan_hash=plan.plan_hash,
-        manifest_hash=plan.manifest_hash,
+    cached_groups: dict[str, VerificationResult] = {}
+    cache_miss_reasons: dict[str, str] = {group.id: "cache-off" for group in plan.groups}
+    if cache is not None:
+        for group in plan.groups:
+            lookup = cache.lookup(
+                group,
+                plan_hash=plan.plan_hash,
+                manifest_hash=plan.manifest_hash,
+                trust_scope=trust_scope,
+            )
+            if lookup.hit:
+                assert lookup.result is not None
+                cached_groups[group.id] = lookup.result
+            else:
+                cache_miss_reasons[group.id] = lookup.reason
+    results_dir = _results_directory(args, plan)
+    coverage_groups = _coverage_groups(loaded, plan)
+    prior_results = _load_prior_feedback_results(
+        results_dir,
+        plan=plan,
+        excluded_groups=coverage_groups,
     )
-    for result in outcome.results:
+    _invalidate_plan_evidence(results_dir, plan)
+    test_ids = _feedback_test_ids(
+        args,
+        loaded,
+        plan,
+        excluded_groups=frozenset(cached_groups),
+    )
+    estimates_by_group = _feedback_estimates(
+        loaded,
+        test_ids,
+        repo_root=Path(args.repo_root).resolve(),
+    )
+    feedback_plan = freeze_quality_feedback_plan(
+        plan,
+        test_ids_by_group=test_ids,
+        estimated_seconds_by_test={},
+        estimated_seconds_by_group_test=estimates_by_group,
+        coverage_groups=coverage_groups,
+    )
+    if getattr(args, "sequential", False) or getattr(args, "shadow_sequential", False):
+        feedback_plan = feedback_plan.model_copy(
+            update={
+                "scheduler": SchedulerPolicy(
+                    max_workers=1,
+                    max_weight=plan.scheduler.max_weight,
+                    max_heavy=1,
+                    max_exclusive=1,
+                )
+            }
+        )
+    _write_feedback_model(feedback_plan, results_dir / "feedback-plan.json")
+    cached_shard_results: list[QualityShardResult] = []
+    for group_id, cached_result in cached_groups.items():
+        group_shards = tuple(shard for shard in feedback_plan.shards if shard.group_id == group_id)
+        for index, shard in enumerate(group_shards):
+            cached_shard_results.append(
+                QualityShardResult(
+                    plan_hash=plan.plan_hash,
+                    manifest_hash=plan.manifest_hash,
+                    group_id=group_id,
+                    shard_id=shard.shard_id,
+                    root_shard_id=shard.root_shard_id,
+                    status=FeedbackStatus.PASSED,
+                    phase="terminal",
+                    update_sequence=1,
+                    test_ids=shard.test_ids,
+                    completed_test_ids=shard.test_ids,
+                    remaining_test_ids=(),
+                    duration_seconds=0,
+                    evidence_refs=(f"quality-cache:{cached_result.cache_source or group_id}",),
+                    artifacts=cached_result.artifacts if index == len(group_shards) - 1 else (),
+                    exit_code=0,
+                    output="complete-group cache hit",
+                )
+            )
+
+    def execute(
+        shard: QualityShardSpec,
+        cancellation: threading.Event,
+    ) -> QualityShardResult:
+        source_group = loaded.catalog.groups[shard.group_id]
+        publish(
+            QualityShardResult(
+                plan_hash=plan.plan_hash,
+                manifest_hash=plan.manifest_hash,
+                group_id=shard.group_id,
+                shard_id=shard.shard_id,
+                root_shard_id=shard.root_shard_id,
+                status=FeedbackStatus.IN_PROGRESS,
+                phase="started",
+                update_sequence=0,
+                test_ids=shard.test_ids,
+                completed_test_ids=(),
+                remaining_test_ids=shard.test_ids,
+                duration_seconds=0,
+                evidence_refs=(f"quality-plan:{plan.plan_hash}:{shard.shard_id}",),
+                output="feedback window started",
+            )
+        )
+        if shard.operation == "coverage":
+            return _run_coverage_feedback_shard(
+                repo_root=Path(args.repo_root).resolve(),
+                group_id=shard.group_id,
+                shard=shard,
+                group_args=source_group.args,
+                artifacts=source_group.artifacts,
+            )
+        shard_args = (
+            _pytest_feedback_args(
+                source_group.args,
+                append_coverage=shard.group_id in coverage_groups and shard.sequence > 1,
+            )
+            if source_group.runner is Runner.PYTEST
+            else source_group.args
+        )
+
+        def heartbeat(elapsed: float) -> None:
+            publish(
+                QualityShardResult(
+                    plan_hash=plan.plan_hash,
+                    manifest_hash=plan.manifest_hash,
+                    group_id=shard.group_id,
+                    shard_id=shard.shard_id,
+                    root_shard_id=shard.root_shard_id,
+                    status=FeedbackStatus.IN_PROGRESS,
+                    phase="running",
+                    update_sequence=max(1, int(elapsed // 60)),
+                    test_ids=shard.test_ids,
+                    completed_test_ids=(),
+                    remaining_test_ids=shard.test_ids,
+                    duration_seconds=min(elapsed, 300),
+                    evidence_refs=(f"quality-result:{shard.group_id}:{shard.shard_id}:running",),
+                    output=f"action still running after {elapsed:.1f} seconds",
+                )
+            )
+
+        result = run_group(
+            loaded,
+            shard.group_id,
+            plan_hash=plan.plan_hash,
+            repo_root=args.repo_root,
+            cancellation_event=cancellation,
+            targets_override=None if shard.opaque else shard.test_ids,
+            args_override=shard_args,
+            timeout_seconds_override=int(shard.action_budget_seconds),
+            progress_callback=heartbeat,
+        )
+        if result.status is ResultStatus.PASSED:
+            status = FeedbackStatus.PASSED
+            completed = shard.test_ids
+            remaining: tuple[str, ...] = ()
+        elif result.failure_kind == "timeout":
+            status = FeedbackStatus.IN_PROGRESS
+            completed = ()
+            remaining = shard.test_ids
+        elif result.status is ResultStatus.FAILED:
+            status = FeedbackStatus.FAILED
+            completed = shard.test_ids
+            remaining = ()
+        elif result.status is ResultStatus.CANCELLED:
+            status = FeedbackStatus.CANCELLED
+            completed = ()
+            remaining = shard.test_ids
+        else:
+            status = FeedbackStatus.BLOCKED
+            completed = ()
+            remaining = shard.test_ids
+        return QualityShardResult(
+            plan_hash=plan.plan_hash,
+            manifest_hash=plan.manifest_hash,
+            group_id=shard.group_id,
+            shard_id=shard.shard_id,
+            root_shard_id=shard.root_shard_id,
+            status=status,
+            phase="terminal",
+            update_sequence=max(1, int(result.duration_seconds // 60) + 1),
+            test_ids=shard.test_ids,
+            completed_test_ids=completed,
+            remaining_test_ids=remaining,
+            duration_seconds=min(result.duration_seconds, 300),
+            evidence_refs=(f"quality-result:{shard.group_id}:{shard.shard_id}",),
+            artifacts=() if shard.group_id in coverage_groups else result.artifacts,
+            exit_code=result.exit_code,
+            output=result.output or result.remediation,
+        )
+
+    def publish(result: QualityShardResult) -> None:
+        _write_feedback_model(
+            result,
+            results_dir / "feedback" / f"{result.shard_id}.json",
+        )
+        event_key = hashlib.sha256(result.shard_id.encode("utf-8")).hexdigest()[:12]
+        _write_feedback_model(
+            result,
+            results_dir / "events" / f"{event_key}-{result.update_sequence}-{result.phase}.json",
+        )
+        print(
+            (
+                f"Quality feedback: {result.shard_id} {result.status.value} "
+                f"({result.duration_seconds:.1f}s)"
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    outcome = run_feedback_schedule(
+        feedback_plan,
+        execute,
+        publish=publish,
+        prior_results=(*prior_results, *cached_shard_results),
+    )
+    repo_root = Path(args.repo_root).resolve()
+    outcome_by_group = {result.group_id: result for result in outcome.group_results}
+    planned_by_id = {group.id: group for group in plan.groups}
+    finalized: list[VerificationResult] = []
+    for group in plan.groups:
+        if group.id in cached_groups:
+            finalized.append(cached_groups[group.id])
+            continue
+        result = outcome_by_group.get(group.id)
+        if result is None:
+            continue
+        result = result.model_copy(
+            update={
+                "trust_scope": trust_scope,
+                "cache_reason": cache_miss_reasons[group.id],
+                "artifact_digests": _artifact_digest_map(repo_root, result.artifacts),
+            }
+        )
+        if cache is not None and cache_mode is CacheMode.READ_WRITE:
+            write = cache.store(planned_by_id[group.id], result, trust_scope)
+            result = result.model_copy(
+                update={
+                    "cache_reason": (f"miss:{cache_miss_reasons[group.id]};write:{write.reason}")
+                }
+            )
+        finalized.append(result)
+    group_results = tuple(finalized)
+    for result in group_results:
         write_result(result, results_dir / f"{result.group_id}.json")
-    summary = aggregate_results(plan, outcome.results).model_copy(
+    summary = aggregate_results(plan, group_results).model_copy(
         update={
             "wall_seconds": outcome.wall_seconds,
             "critical_path_seconds": outcome.critical_path_seconds,
@@ -526,21 +952,22 @@ def _command_run_group(args: argparse.Namespace) -> int:
         / "results"
         / f"{args.group_id}.json"
     )
-    output.unlink(missing_ok=True)
-    cache_mode = _resolved_cache_mode(args, plan)
-    trust_scope = _resolved_trust_scope(args, plan)
-    cache = None if cache_mode is CacheMode.OFF else ResultCache(_cache_root(args), args.repo_root)
-    result = _execute_planned_group(
-        args,
-        loaded,
-        plan,
-        selected[args.group_id],
-        threading.Event(),
-        cache=cache,
-        cache_mode=cache_mode,
-        trust_scope=trust_scope,
+    group = selected[args.group_id].model_copy(update={"depends_on": ()})
+    group_plan = plan.model_copy(
+        update={
+            "groups": (group,),
+            "required_capabilities": group.capabilities,
+            "dominated_groups": (),
+            "docker_actions": (),
+        }
     )
-    write_result(result, output)
+    execution_args = argparse.Namespace(**vars(args))
+    execution_args.results_dir = output.parent
+    _, _summary = _execute_feedback_plan(execution_args, loaded, group_plan)
+    result_path = output.parent / f"{args.group_id}.json"
+    result = VerificationResult.model_validate_json(result_path.read_text(encoding="utf-8"))
+    if output != result_path:
+        write_result(result, output)
     if args.json:
         print(_json_text(result))
     elif result.output:

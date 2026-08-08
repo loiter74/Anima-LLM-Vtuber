@@ -302,7 +302,6 @@ async def run(
     run_id: str,
     timeout_seconds: float,
     viewer_timeout_seconds: float,
-    bounded_feedback: bool = False,
 ) -> Path:
     ledger = AcceptanceLedgerStore(ledger_path).load()
     ledger.require_gate_start("R7")
@@ -311,7 +310,7 @@ async def run(
     run_root = (output_root / run_id).resolve()
     run_root.mkdir(parents=True, exist_ok=False)
     artifact_path = run_root / "micro-gate.json"
-    feedback_journal = _FeedbackJournal(run_root / "feedback") if bounded_feedback else None
+    feedback_journal = _FeedbackJournal(run_root / "feedback")
     external_runtime = resolve_external_runtime_dir(repository_dir)
     server = MinecraftReviewServerLease(
         repository_dir=repository_dir,
@@ -376,18 +375,15 @@ async def run(
         scenario_receipt = await preparer.prepare(scenario, run_id=run_id)
         artifact["scenario_receipt"] = scenario_receipt.model_dump(mode="json")
         persist()
-        artifact["viewer"] = await viewer.wait(
-            min(viewer_timeout_seconds, 240) if bounded_feedback else viewer_timeout_seconds
-        )
+        artifact["viewer"] = await viewer.wait(min(viewer_timeout_seconds, 240))
         persist()
-        if feedback_journal is not None:
-            await feedback_journal.publish(
-                "viewer-readiness",
-                "passed",
-                "viewer binding was confirmed",
-                (f"viewer:{artifact['viewer'].get('username', '')}:following",),
-                None,
-            )
+        await feedback_journal.publish(
+            "viewer-readiness",
+            "passed",
+            "viewer binding was confirmed",
+            (f"viewer:{artifact['viewer'].get('username', '')}:following",),
+            None,
+        )
         control_plane = await configure_voyager_control_plane(
             bridge,
             blueprint_origins={
@@ -438,7 +434,7 @@ async def run(
                 caller_scope=caller_scope,
                 timeout_seconds=timeout_seconds,
                 step_id=step_id,
-                feedback=(feedback_journal.publish if feedback_journal is not None else None),
+                feedback=feedback_journal.publish,
             )
             artifact["stages"].append(stage)
             persist()
@@ -467,17 +463,16 @@ async def run(
             != validation["validation"]["resource_instance_ref"]
             for validation in validations
         )
-        if feedback_journal is not None:
-            await feedback_journal.publish(
-                "independent-validation",
-                "passed" if independent else "failed",
-                "independent validation used a distinct resource instance",
-                tuple(
-                    str(validation.get("validation", {}).get("resource_instance_ref", ""))
-                    for validation in validations
-                ),
-                None,
-            )
+        await feedback_journal.publish(
+            "independent-validation",
+            "passed" if independent else "failed",
+            "independent validation used a distinct resource instance",
+            tuple(
+                str(validation.get("validation", {}).get("resource_instance_ref", ""))
+                for validation in validations
+            ),
+            None,
+        )
         stage_checks = {
             "combat": all(
                 stage_receipts_passed(stage, "attack") for stage in artifact["stages"][:3]
@@ -497,14 +492,13 @@ async def run(
         stage_checks_passed = all(stage_checks.values())
         artifact["finished_at_ms"] = time.time_ns() // 1_000_000
         persist()
-        if feedback_journal is not None:
-            await feedback_journal.publish(
-                "projection",
-                "passed",
-                "micro-gate projection artifact is current",
-                (f"file:{artifact_path.resolve().as_posix()}",),
-                None,
-            )
+        await feedback_journal.publish(
+            "projection",
+            "passed",
+            "micro-gate projection artifact is current",
+            (f"file:{artifact_path.resolve().as_posix()}",),
+            None,
+        )
         if not stage_checks_passed:
             raise RuntimeError("MICRO_GATE_EVIDENCE_FAILED")
         _record_r7_result(
@@ -516,14 +510,13 @@ async def run(
         )
         artifact["passed"] = True
         persist()
-        if feedback_journal is not None:
-            await feedback_journal.publish(
-                "ledger-settlement",
-                "passed",
-                "R7 real attempt and gate result were durably settled",
-                (f"file:{ledger_path.resolve().as_posix()}",),
-                None,
-            )
+        await feedback_journal.publish(
+            "ledger-settlement",
+            "passed",
+            "R7 real attempt and gate result were durably settled",
+            (f"file:{ledger_path.resolve().as_posix()}",),
+            None,
+        )
         return artifact_path
     except Exception as exc:
         artifact["failure"] = {"type": type(exc).__name__, "message": str(exc)}
@@ -560,7 +553,6 @@ def main() -> int:
     )
     parser.add_argument("--timeout-seconds", type=float, default=900)
     parser.add_argument("--viewer-timeout-seconds", type=float, default=600)
-    parser.add_argument("--bounded-feedback", action="store_true")
     args = parser.parse_args()
     output = asyncio.run(
         run(
@@ -571,7 +563,6 @@ def main() -> int:
             run_id=args.run_id,
             timeout_seconds=args.timeout_seconds,
             viewer_timeout_seconds=args.viewer_timeout_seconds,
-            bounded_feedback=args.bounded_feedback,
         )
     )
     print(output.as_posix())

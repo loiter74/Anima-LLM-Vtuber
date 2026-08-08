@@ -5,7 +5,6 @@
 
 Defines the accepted behavior and requirements for the meme-context-injection capability, so OpenSpec validation, listing, and archive sync can treat this main spec as the canonical source of truth.
 ## Requirements
-
 ### Requirement: 语义匹配替代关键词匹配
 系统 SHALL 升级 `MemePool.select_for_context()` 方法，从简单关键词匹配改为语义匹配。
 
@@ -59,3 +58,20 @@ Defines the accepted behavior and requirements for the meme-context-injection ca
 #### Scenario: 按来源筛选
 - **WHEN** 需要只获取 B 站来源的梗
 - **THEN** 系统 SHALL 支持按 `source_platform == "bilibili"` 过滤
+
+### Requirement: Scene-guided meme policy authority
+The system SHALL treat the validated scene director meme policy as the sole active meme-strategy decision for a scene-guided livestream turn.
+
+#### Scenario: Scene director selects a meme
+- **WHEN** active `SceneGuidance` selects one approved meme with action `use`
+- **THEN** the main prompt SHALL receive only that selected meme instruction
+- **THEN** no post-response Humor LLM call SHALL select or author a different meme response
+
+#### Scenario: Scene director suppresses memes
+- **WHEN** guidance sets meme action to `none` or `avoid`
+- **THEN** automatic meme injection and model-based humor rewriting SHALL not introduce a meme for that turn
+
+#### Scenario: Turn has no scene guidance
+- **WHEN** a normal chat turn or explicit meme invocation has no active scene guidance
+- **THEN** existing meme retrieval, explicit invocation, and Humor configuration behavior SHALL remain unchanged
+

@@ -241,6 +241,7 @@ class TestGetAsgiApp:
     async def test_returns_asgi_app(self, mod):
         """First call creates and returns an ASGI app."""
         self._reset_module_state(mod)
+        mod.global_config = MagicMock()
 
         mock_asgi_app = MagicMock()
         mock_server = MagicMock()
@@ -264,6 +265,7 @@ class TestGetAsgiApp:
     async def test_caches_result_across_calls(self, mod):
         """Subsequent calls return the cached ASGI app without re-creating."""
         self._reset_module_state(mod)
+        mod.global_config = MagicMock()
 
         mock_asgi_app = MagicMock()
         mock_server = MagicMock()

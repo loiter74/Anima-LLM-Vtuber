@@ -18,10 +18,8 @@
 | [development/minecraft-bot-architecture.md](development/minecraft-bot-architecture.md) | MC bot: Python bridge, Node Mineflayer, Voyager skills, survival loop |
 | [development/ai-ui-workflow.md](development/ai-ui-workflow.md) | Asking AI to optimize UI using the design system |
 | [development/runtime-config-reload.md](development/runtime-config-reload.md) | Hot-reload runtime config |
-| [development/deployment.md](development/deployment.md) | Deployment modes (one-click / free-tier / mock) |
 | [development/streaming-interaction-patterns.md](development/streaming-interaction-patterns.md) | Livestream engagement patterns |
 | [development/project-health.md](development/project-health.md) | Project health contract, status model, debt backlog |
-| [development/health-advisories.md](development/health-advisories.md) | Known slow / exploratory / staged health checks |
 | [development/gpt-sovits-rtx5090-setup.md](development/gpt-sovits-rtx5090-setup.md) | GPT-SoVITS on RTX 5090 / WSL2 |
 | [development/rvc-training-guide.md](development/rvc-training-guide.md) | RVC WebUI voice training |
 
@@ -47,8 +45,6 @@
 |----------|-------------|
 | [roadmap.md](roadmap.md) | Monthly roadmap |
 | [risk-log.md](risk-log.md) | Risk register |
-| [scope-2026-07.md](scope-2026-07.md) | July 2026 scope |
-| [runbooks/july-golden-demo.md](runbooks/july-golden-demo.md) | Ops runbook for the July golden demo |
 | [retrospective/2026-07.md](retrospective/2026-07.md) | July monthly review |
 
 ## Demos

@@ -72,19 +72,6 @@ class TechEvidenceReport(BaseModel):
     unlock_record: UnlockRecord | None = None
 
 
-class TechMilestoneEvidence(BaseModel):
-    """Evidence bundle passed from an executing session into milestone validation."""
-
-    model_config = ConfigDict(frozen=True)
-
-    receipts: tuple[ActionReceipt, ...]
-    before: GameBotObservation
-    after: GameBotObservation
-    session_id: str
-    task_id: str
-    runtime_id: str
-
-
 class DiscoveryTask(BaseModel):
     model_config = ConfigDict(frozen=True)
 

@@ -211,6 +211,34 @@ def test_sequential_shadow_plan_can_disable_dominance() -> None:
 
 
 @pytest.mark.parametrize(
+    ("path", "required_group"),
+    [
+        ("tooling/quality/cli.py", "backend-tooling-quality"),
+        ("scripts/runtime_lifecycle.py", "runtime-lifecycle-unit"),
+        ("scripts/minecraft_adaptive_showcase.py", "minecraft-adaptive-mission-unit"),
+        ("scripts/minecraft_adaptive_micro_gate.py", "minecraft-adaptive-mission-unit"),
+        ("tests/core/test_socketio_server.py", "backend-core-unit"),
+    ],
+)
+def test_focused_operational_changes_do_not_expand_to_repository_fallback(
+    path: str,
+    required_group: str,
+) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+    selected = _group_ids(plan)
+
+    assert required_group in selected
+    assert "backend-full" not in selected
+    assert "frontend-build" not in selected
+    assert "minecraft-real-conversation" not in selected
+    assert "minecraft-real-showcase" not in selected
+
+
+@pytest.mark.parametrize(
     "case",
     ["backend", "frontend", "mixed", "high-risk", "global", "rename", "unknown"],
 )

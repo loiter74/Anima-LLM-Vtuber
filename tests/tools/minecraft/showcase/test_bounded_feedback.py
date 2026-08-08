@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from types import SimpleNamespace
 
@@ -8,8 +9,15 @@ from animetta.tools.minecraft.showcase.promotion import (
     AcceptanceLedgerStore,
     PromotionIdentity,
 )
-from scripts.minecraft_adaptive_micro_gate import _FeedbackJournal, _record_r7_result
+from scripts.minecraft_adaptive_micro_gate import (
+    _FeedbackJournal,
+    _record_r7_result,
+)
+from scripts.minecraft_adaptive_micro_gate import (
+    run as run_micro_gate,
+)
 from scripts.minecraft_adaptive_showcase import _MissionFeedbackWriter
+from scripts.minecraft_adaptive_showcase import run as run_showcase
 
 
 def _identity() -> PromotionIdentity:
@@ -22,6 +30,11 @@ def _identity() -> PromotionIdentity:
         model_identity="model-a",
         schema_hashes={"stage_io_v2": "c" * 64},
     )
+
+
+def test_minecraft_acceptance_entrypoints_are_bounded_without_a_migration_switch() -> None:
+    assert "bounded_feedback" not in inspect.signature(run_micro_gate).parameters
+    assert "bounded_feedback" not in inspect.signature(run_showcase).parameters
 
 
 async def test_r7_feedback_journal_publishes_independent_atomic_step_results(tmp_path) -> None:

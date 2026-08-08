@@ -47,12 +47,6 @@ async def chroma_responds(runtime: InspectionRuntime | None = None) -> bool:
         return False
 
 
-def log_file_stale(minutes: int) -> bool:
-    """Obsolete compatibility probe; logs are not a canonical health source."""
-    del minutes
-    return False
-
-
 async def check_data_consistency(
     runtime: InspectionRuntime | None = None,
 ) -> CheckResult:

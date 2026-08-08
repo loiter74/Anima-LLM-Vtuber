@@ -34,7 +34,7 @@ def read_results(directory: str | Path) -> list[VerificationResult]:
     root = Path(directory)
     results: list[VerificationResult] = []
     for path in sorted(root.glob("*.json")):
-        if path.name == "summary.json":
+        if path.name in {"summary.json", "feedback-plan.json"}:
             continue
         payload = json.loads(path.read_text(encoding="utf-8"))
         results.append(VerificationResult.model_validate(payload))

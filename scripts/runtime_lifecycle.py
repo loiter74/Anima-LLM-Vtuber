@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -343,16 +348,290 @@ def run_operation(operation: str) -> None:
         raise ValueError(f"Unknown lifecycle operation: {operation}")
 
 
+class _SystemLifecycleDriver:
+    def __init__(self, *, evidence_root: Path) -> None:
+        from tooling.execution_feedback.lifecycle import LifecycleDriverObservation
+
+        self._observation_type = LifecycleDriverObservation
+        self._evidence_root = evidence_root.resolve()
+        self._evidence_root.mkdir(parents=True, exist_ok=True)
+
+    def _evidence(self, name: str, contents: str) -> str:
+        path = self._evidence_root / f"{name}.log"
+        path.write_text(contents, encoding="utf-8")
+        return path.resolve().as_posix()
+
+    def run_command(self, command: tuple[str, ...], *, timeout_seconds: float):
+        if command == ("qwen-preflight",):
+            command = tuple(_preflight(wait=False, mode="remote"))
+        elif command == ("host-tts-ready",):
+            ready = _host_tts_up(best_effort=True)
+            return self._observation_type(
+                succeeded=True,
+                summary=(
+                    "Host TTS is ready"
+                    if ready
+                    else "Host TTS unavailable; cloud fallback remains enabled"
+                ),
+                evidence_refs=(self._evidence("host-tts-readiness", f"ready={ready}\n"),),
+                exit_code=0,
+            )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=ROOT,
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=timeout_seconds,
+            )
+            output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+            reference = self._evidence(
+                f"command-{hashlib.sha256(repr(command).encode()).hexdigest()[:12]}",
+                output,
+            )
+            return self._observation_type(
+                succeeded=completed.returncode == 0,
+                summary=(f"command completed with exit code {completed.returncode}"),
+                evidence_refs=(reference,),
+                exit_code=completed.returncode,
+            )
+        except subprocess.TimeoutExpired as exc:
+            output = "\n".join(str(part) for part in (exc.stdout, exc.stderr) if part is not None)
+            reference = self._evidence("command-timeout", output)
+            return self._observation_type(
+                succeeded=False,
+                summary=f"command exceeded {timeout_seconds:g} seconds",
+                evidence_refs=(reference,),
+            )
+
+    def check_http(self, target: str, *, timeout_seconds: float):
+        deadline = time.monotonic() + timeout_seconds
+        last_error = "no response"
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(target, timeout=3) as response:  # noqa: S310
+                    body = response.read().decode("utf-8", errors="replace")
+                    healthy = response.status == 200 and (
+                        not target.endswith("/health") or '"status":"ok"' in body.replace(" ", "")
+                    )
+                    if healthy:
+                        reference = self._evidence(
+                            f"http-{hashlib.sha256(target.encode()).hexdigest()[:12]}",
+                            body,
+                        )
+                        return self._observation_type(
+                            succeeded=True,
+                            summary=f"HTTP 200 from {target}",
+                            evidence_refs=(reference,),
+                            exit_code=0,
+                        )
+                    last_error = f"HTTP {response.status} or invalid health body"
+            except (OSError, TimeoutError, urllib.error.URLError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+            time.sleep(5)
+        reference = self._evidence("http-timeout", last_error)
+        return self._observation_type(
+            succeeded=False,
+            summary=f"HTTP readiness timed out for {target}: {last_error}",
+            evidence_refs=(reference,),
+        )
+
+    def check_logs(self, command: tuple[str, ...], *, timeout_seconds: float):
+        observation = self.run_command(command, timeout_seconds=timeout_seconds)
+        output = "\n".join(
+            Path(reference).read_text(encoding="utf-8", errors="replace")
+            for reference in observation.evidence_refs
+            if Path(reference).is_file()
+        )
+        has_error = re.search(r"(?im)(traceback|\berror\b)", output) is not None
+        return self._observation_type(
+            succeeded=observation.succeeded and not has_error,
+            summary="logs contain no Traceback or ERROR"
+            if not has_error
+            else "logs contain errors",
+            evidence_refs=observation.evidence_refs,
+            exit_code=observation.exit_code,
+        )
+
+    def capture_qwen_identity(self):
+        from tooling.execution_feedback.lifecycle import ContainerIdentity
+
+        container = subprocess.run(
+            [*QWEN_COMPOSE, "ps", "-q", "qwen-tts"],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=15,
+        ).stdout.strip()
+        if not container:
+            raise RuntimeError("Qwen container is not running")
+        payload = json.loads(
+            subprocess.run(
+                ["docker", "inspect", container],
+                cwd=ROOT,
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=15,
+            ).stdout
+        )
+        if not isinstance(payload, list) or len(payload) != 1 or not isinstance(payload[0], dict):
+            raise RuntimeError("Docker returned an invalid Qwen identity payload")
+        item = payload[0]
+        state = item.get("State")
+        if not isinstance(state, dict):
+            raise RuntimeError("Docker omitted Qwen State identity")
+        return ContainerIdentity(
+            container_id=str(item.get("Id", "")),
+            image_id=str(item.get("Image", "")),
+            started_at=str(state.get("StartedAt", "")),
+        )
+
+
+def _bounded_input_fingerprint(operation: str) -> str:
+    material = b"\0".join(
+        (
+            operation.encode(),
+            Path(__file__).read_bytes(),
+            (ROOT / "tooling" / "execution_feedback" / "lifecycle.py").read_bytes(),
+        )
+    )
+    return hashlib.sha256(material).hexdigest()
+
+
+async def run_bounded_operation(
+    operation: str,
+    *,
+    run_id: str,
+    artifacts_root: Path,
+) -> int:
+    from tooling.execution_feedback import (
+        ActionResult,
+        FeedbackContext,
+        FeedbackStatus,
+        IterationPlanStore,
+        LeaseManager,
+        PlanStepCheckpoint,
+        supervise_feedback_window,
+    )
+    from tooling.execution_feedback.lifecycle import (
+        BuildStepController,
+        LeasedSubprocessBuildDriver,
+        LifecycleStepContract,
+        LifecycleStepExecutor,
+        QwenIdentityStore,
+        freeze_lifecycle_plan,
+    )
+
+    frozen = freeze_lifecycle_plan(
+        operation,
+        input_fingerprint=_bounded_input_fingerprint(operation),
+        run_id=run_id,
+    )
+    store = IterationPlanStore(artifacts_root)
+    store.write_plan(frozen.plan)
+    run_root = artifacts_root.resolve() / run_id
+    build_log = f"{run_id}/animetta-build.log"
+    build_driver = LeasedSubprocessBuildDriver(
+        root=artifacts_root.resolve(),
+        receipt_path=run_root / "animetta-build-receipt.json",
+    )
+    build_controller = BuildStepController(
+        lease_manager=LeaseManager(store),
+        driver=build_driver,
+        run_id=run_id,
+        owner="lifecycle-worker",
+        lease_id="animetta-build",
+        command=("docker", "compose", "build", "animetta"),
+        command_digest=hashlib.sha256(b"docker compose build animetta").hexdigest(),
+        log_path=build_log,
+    )
+    executor = LifecycleStepExecutor(
+        driver=_SystemLifecycleDriver(evidence_root=run_root / "evidence"),
+        qwen_store=QwenIdentityStore(artifacts_root.resolve()),
+        run_id=run_id,
+        build_controller=build_controller,
+    )
+
+    for step_contract, step_spec in zip(frozen.steps, frozen.plan.steps, strict=True):
+        recovered = store.recover_latest_result(run_id, step_contract.id)
+        if recovered.result is not None and recovered.result.status is FeedbackStatus.PASSED:
+            continue
+        sequence = (recovered.latest_window_sequence or 0) + 1
+
+        async def action(
+            _context: FeedbackContext,
+            *,
+            contract: LifecycleStepContract = step_contract,
+        ) -> ActionResult:
+            return await asyncio.to_thread(executor.run, contract, now=datetime.now(UTC))
+
+        result = await supervise_feedback_window(
+            run_id=run_id,
+            step=step_spec,
+            window_sequence=sequence,
+            store=store,
+            action=action,
+            emit=lambda payload: print(json.dumps(payload, ensure_ascii=False, sort_keys=True)),
+        )
+        if result.status is FeedbackStatus.PASSED:
+            result_reference = (
+                (
+                    run_root
+                    / "steps"
+                    / step_contract.id
+                    / "windows"
+                    / f"{sequence:06d}"
+                    / "result.json"
+                )
+                .resolve()
+                .as_posix()
+            )
+            evidence = result.evidence_refs or (result_reference,)
+            reuse_fingerprint = hashlib.sha256(
+                f"{frozen.plan.input_fingerprint}:{step_contract.id}".encode()
+            ).hexdigest()
+            store.write_checkpoint(
+                PlanStepCheckpoint(
+                    run_id=run_id,
+                    step_id=step_contract.id,
+                    status=FeedbackStatus.PASSED,
+                    reuse_fingerprint=reuse_fingerprint,
+                    evidence_refs=evidence,
+                    result_reference=result_reference,
+                    committed_at=result.feedback_at,
+                )
+            )
+            continue
+        return 2 if result.status is FeedbackStatus.IN_PROGRESS else 1
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=OPERATIONS)
+    parser.add_argument("--run-id")
+    parser.add_argument(
+        "--artifacts-root",
+        type=Path,
+        default=ROOT / "artifacts" / "iteration-plans",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    run_operation(args.operation)
-    return 0
+    run_id = args.run_id or f"{args.operation}-{uuid.uuid4().hex[:12]}"
+    print(json.dumps({"run_id": run_id, "mode": "bounded-feedback"}, sort_keys=True))
+    return asyncio.run(
+        run_bounded_operation(
+            args.operation,
+            run_id=run_id,
+            artifacts_root=args.artifacts_root,
+        )
+    )
 
 
 if __name__ == "__main__":

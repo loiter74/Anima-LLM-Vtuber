@@ -172,12 +172,3 @@ ITEM_TO_BLOCK = {
     "spruce_log": "spruce_log",
     "birch_log": "birch_log",
 }
-
-
-def resolve_block_type(item_name: str) -> str | None:
-    """Translate an inventory item name to the block type to mine.
-
-    Returns the Minecraft block name (suitable for mcData.blocksByName),
-    or None if the item cannot be obtained by mining a block.
-    """
-    return ITEM_TO_BLOCK.get(item_name)
