@@ -24,7 +24,6 @@
 | [development/health-advisories.md](development/health-advisories.md) | Known slow / exploratory / staged health checks |
 | [development/gpt-sovits-rtx5090-setup.md](development/gpt-sovits-rtx5090-setup.md) | GPT-SoVITS on RTX 5090 / WSL2 |
 | [development/rvc-training-guide.md](development/rvc-training-guide.md) | RVC WebUI voice training |
-| [development/archive/](development/archive/) | Historical research & roadmap docs |
 
 ## Reference
 
@@ -52,17 +51,16 @@
 | [runbooks/july-golden-demo.md](runbooks/july-golden-demo.md) | Ops runbook for the July golden demo |
 | [retrospective/2026-07.md](retrospective/2026-07.md) | July monthly review |
 
-## Benchmarks & Demos
+## Demos
 
 | Document | Description |
 |----------|-------------|
-| [benchmarks/results.md](benchmarks/results.md) | Latest benchmark run summary |
 | [demo/interview-demo.md](demo/interview-demo.md) | Interview demo walkthrough |
 | [demo/interview-qa.md](demo/interview-qa.md) | Interview Q&A prep |
 
 ## Change Tracking
 
-New changes go through the [openspec](../openspec/) spec-driven system — run `/opsx-propose` to start a change. Archived changes (including legacy plans migrated from the former `docs/plans/`) live in [openspec/changes/archive/](../openspec/changes/archive/).
+New changes go through the [openspec](../openspec/) spec-driven system — run `/opsx-propose` to start a change.
 
 ## Minecraft
 

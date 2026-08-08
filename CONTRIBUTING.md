@@ -35,7 +35,7 @@ make install-hooks                    # installs .git/hooks/pre-commit
 The hook runs `ruff check`, `ruff format --check`, secret/large-file guards,
 and (on frontend changes) `prettier --check`. Slow checks (mypy, frontend
 eslint, pytest) stay on CI; run `make health` before pushing for a full local
-gate. See [docs/ci-gate-plan.md](docs/ci-gate-plan.md) for the gate design.
+gate.
 
 ## Project Structure
 
@@ -101,7 +101,7 @@ See [Testing Guide](docs/development/testing.md) for detailed test conventions.
 5. Update docs if changing public interfaces (and tick the impact checklist in the PR template)
 6. Open PR against `main`
 
-> **Branch protection (manual, one-time):** in GitHub Settings → Branches → `main`, enable "Require status checks to pass before merging" and add `preflight` + `quality-gate` as required checks. Enable "Require review from code owners" (see `.github/CODEOWNERS`). This step can't be set from the repo files — see [docs/ci-gate-plan.md §Enabling branch protection](docs/ci-gate-plan.md#enabling-branch-protection-manual-one-time).
+> **Branch protection (manual, one-time):** in GitHub Settings → Branches → `main`, enable "Require status checks to pass before merging" and add `preflight` + `quality-gate` as required checks. Enable "Require review from code owners" (see `.github/CODEOWNERS`).
 
 ## Change Tracking (openspec)
 
@@ -111,7 +111,7 @@ New features and changes are tracked via the [openspec](openspec/) spec-driven s
 /opsx-propose <change-name>
 ```
 
-This generates `proposal.md` + `design.md` + `tasks.md` under `openspec/changes/<name>/`. Implement with `/opsx-apply`, then archive with `/opsx-archive`. Historical plans migrated from the former `docs/plans/` live in `openspec/changes/archive/`.
+This generates `proposal.md` + `design.md` + `tasks.md` under `openspec/changes/<name>/`. Implement with `/opsx-apply`, then archive with `/opsx-archive`.
 
 ## Agent Collaboration
 

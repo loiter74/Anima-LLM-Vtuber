@@ -102,16 +102,23 @@ C:tmp_pip/
 # AI agent artifacts
 .opencode/
 .sisyphus/
+.zcode/
 .worktrees/
+.claude/settings.local.json
 
 # Testing artifacts
 .pytest_cache/
 .playwright-mcp/
 artifacts/health/
+artifacts/livestream-eval/
+artifacts/minecraft-demo/
+artifacts/minecraft-adaptive-mission/
 artifacts/test-impact/
 artifacts/tts-audition/
 artifacts/tts-streaming/
 evidence/runtime-config/
+evidence/minecraft-adaptive-showcase/
+docs/benchmarks/
 coverage.xml
 junit.xml
 
@@ -141,7 +148,7 @@ memory_db/wiki/index.md
 # Keep only structural files
 !memory_db/wiki/WIKI_RULES.md
 
-# OpenSpec change archives (kept in docs/archive/ or separate wiki)
+# OpenSpec change workspaces are local unless explicitly whitelisted.
 openspec/changes/*
 !openspec/changes/add-livestream-scene-director/
 !openspec/changes/add-livestream-scene-director/**
@@ -157,4 +164,6 @@ smoke_test_result.json
 tmp/
 artifacts/live-review/
 artifacts/playwright/
+artifacts/*.pid
+evaluations/rag/results/
 scripts/danmaku_output/

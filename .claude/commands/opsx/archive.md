@@ -62,7 +62,7 @@ Archive a completed change in the experimental workflow.
    - If changes needed: "Sync now (recommended)", "Archive without syncing"
    - If already synced: "Archive now", "Sync anyway", "Cancel"
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   If user chooses sync, apply the analyzed delta specs directly to the corresponding files under `openspec/specs/`, then proceed to archive.
 
 5. **Perform the archive**
 
@@ -196,5 +196,5 @@ Target archive directory already exists.
 - Finalize Git after a successful archive: commit the archive-related changes, push the current branch to origin, merge it into `main`, then push `origin/main`
 - Do not stage unrelated worktree changes; only stage the archive move and synced spec files produced by this archive
 - Stop before merging if `main` is dirty, and stop on merge conflicts without force-pushing
-- If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
+- If sync is requested, apply the analyzed delta specs directly to `openspec/specs/`
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting

@@ -32,11 +32,11 @@ The system SHALL provide a PR review checklist in STYLE_GUIDE.md covering design
 #### Scenario: Contributor looks for the Minecraft bot architecture
 - **WHEN** a contributor or agent needs the Minecraft bot architecture
 - **THEN** they find exactly one authoritative document at `docs/development/minecraft-bot-architecture.md`
-- **AND** no verbatim `.zh.md` duplicate, stale status report, or scattered research docs remain in `docs/development/` (long-form research/roadmap docs have been moved to `docs/development/archive/`)
+- **AND** no verbatim `.zh.md` duplicate, stale status report, or scattered research docs remain in `docs/development/`
 
-#### Scenario: Contributor looks for historical plans
-- **WHEN** a contributor looks for past design plans
-- **THEN** they find them under `openspec/changes/archive/` (migrated from the former `docs/plans/`)
+#### Scenario: Contributor looks for current plans
+- **WHEN** a contributor looks for an active design plan
+- **THEN** they find it under `openspec/changes/<name>/`
 - **AND** the `docs/plans/` directory no longer exists
 - **AND** new plans are created exclusively via the `openspec/` spec-driven system
 
