@@ -363,7 +363,7 @@ class _SystemLifecycleDriver:
 
     def run_command(self, command: tuple[str, ...], *, timeout_seconds: float):
         if command == ("qwen-preflight",):
-            command = tuple(_preflight(wait=False, mode="host-tts"))
+            command = tuple(_preflight(wait=False, mode="remote"))
         elif command == ("host-tts-ready",):
             ready = _host_tts_up(best_effort=True)
             return self._observation_type(

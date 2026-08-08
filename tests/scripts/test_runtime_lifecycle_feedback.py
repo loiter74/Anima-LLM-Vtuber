@@ -295,3 +295,28 @@ def test_default_command_routes_to_resumable_bounded_operation(
 
     assert exit_code == 2
     assert calls == [("anima-up", "run-lifecycle")]
+
+
+def test_system_lifecycle_qwen_preflight_targets_persistent_container(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    preflight_calls: list[tuple[bool, str]] = []
+
+    def fake_preflight(*, wait: bool, mode: str) -> list[str]:
+        preflight_calls.append((wait, mode))
+        return ["qwen-probe"]
+
+    def fake_run(command, **kwargs):
+        assert command == ("qwen-probe",)
+        assert kwargs["timeout"] <= 240
+        return runtime_lifecycle.subprocess.CompletedProcess(command, 0, "ready", "")
+
+    monkeypatch.setattr(runtime_lifecycle, "_preflight", fake_preflight)
+    monkeypatch.setattr(runtime_lifecycle.subprocess, "run", fake_run)
+    driver = runtime_lifecycle._SystemLifecycleDriver(evidence_root=tmp_path)
+
+    result = driver.run_command(("qwen-preflight",), timeout_seconds=240)
+
+    assert result.succeeded is True
+    assert preflight_calls == [(False, "remote")]
