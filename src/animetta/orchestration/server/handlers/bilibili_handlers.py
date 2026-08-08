@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from loguru import logger
@@ -275,7 +275,7 @@ class BilibiliHandlers:
                 transport_mode=ChatTransportMode.CANONICAL.value,
                 channel="bilibili",
                 stream_id=stream_id,
-                **scene_metadata,
+                **cast(dict[str, Any], scene_metadata),
             )
 
             reply_text = result.get("response_text", "")

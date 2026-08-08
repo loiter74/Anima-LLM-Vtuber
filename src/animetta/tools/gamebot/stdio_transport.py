@@ -59,7 +59,14 @@ class StdioGameBotTransport:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except (TimeoutError, ProcessLookupError):
+            except TimeoutError:
+                if self._process.returncode is None:
+                    try:
+                        self._process.kill()
+                        await asyncio.wait_for(self._process.wait(), timeout=5.0)
+                    except (TimeoutError, ProcessLookupError):
+                        logger.error("Game-bot runtime did not exit after forced kill")
+            except ProcessLookupError:
                 pass
 
         # Cancel reader tasks

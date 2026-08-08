@@ -1,0 +1,1 @@
+"""Adaptive Minecraft mission tests."""

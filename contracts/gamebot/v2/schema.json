@@ -1,0 +1,1647 @@
+{
+  "$defs": {
+    "ActionInspectionState": {
+      "enum": [
+        "not_found",
+        "accepted",
+        "running",
+        "terminal"
+      ],
+      "title": "ActionInspectionState",
+      "type": "string"
+    },
+    "ActionReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "action_sequence": {
+          "exclusiveMinimum": 0,
+          "title": "Action Sequence",
+          "type": "integer"
+        },
+        "after_observation_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "After Observation Hash",
+          "type": "string"
+        },
+        "before_observation_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Before Observation Hash",
+          "type": "string"
+        },
+        "budget_usage": {
+          "$ref": "#/$defs/BudgetVector"
+        },
+        "capability": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Capability",
+          "type": "string"
+        },
+        "combat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CombatTerminalEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "command_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeProtocolError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "explained_mutations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExplainedMutation"
+          },
+          "title": "Explained Mutations",
+          "type": "array"
+        },
+        "finished_at_ms": {
+          "minimum": 0,
+          "title": "Finished At Ms",
+          "type": "integer"
+        },
+        "finished_tick": {
+          "minimum": 0,
+          "title": "Finished Tick",
+          "type": "integer"
+        },
+        "goal_verification": {
+          "$ref": "#/$defs/GoalVerificationStatus"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ReceiptOutcome"
+        },
+        "parameter_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Parameter Hash",
+          "type": "string"
+        },
+        "post_observation": {
+          "$ref": "#/$defs/PostObservationStatus"
+        },
+        "previous_receipt_hash": {
+          "default": "",
+          "pattern": "^$|^[0-9a-f]{64}$",
+          "title": "Previous Receipt Hash",
+          "type": "string"
+        },
+        "receipt_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Receipt Id",
+          "type": "string"
+        },
+        "reconciliation": {
+          "$ref": "#/$defs/ReconciliationStatus"
+        },
+        "reconciliation_error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeProtocolError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "settlement_trace": {
+          "items": {
+            "$ref": "#/$defs/SettlementSample"
+          },
+          "title": "Settlement Trace",
+          "type": "array"
+        },
+        "started_at_ms": {
+          "minimum": 0,
+          "title": "Started At Ms",
+          "type": "integer"
+        },
+        "started_tick": {
+          "minimum": 0,
+          "title": "Started Tick",
+          "type": "integer"
+        },
+        "step_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Step Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "command_id",
+        "step_id",
+        "correlation_id",
+        "runtime_instance_id",
+        "capability",
+        "parameter_hash",
+        "action_sequence",
+        "started_at_ms",
+        "finished_at_ms",
+        "started_tick",
+        "finished_tick",
+        "outcome",
+        "post_observation",
+        "reconciliation",
+        "goal_verification",
+        "reconciliation_error",
+        "settlement_trace",
+        "before_observation_hash",
+        "after_observation_hash",
+        "budget_usage",
+        "content_hash"
+      ],
+      "title": "ActionReceipt",
+      "type": "object"
+    },
+    "ActionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Capability",
+          "type": "string"
+        },
+        "command_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "deadline_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Deadline Ms",
+          "type": "integer"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "previous_receipt_hash": {
+          "default": "",
+          "pattern": "^$|^[0-9a-f]{64}$",
+          "title": "Previous Receipt Hash",
+          "type": "string"
+        },
+        "remaining_budget": {
+          "$ref": "#/$defs/BudgetVector"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "step_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Step Id",
+          "type": "string"
+        },
+        "transport_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Transport Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transport_id",
+        "command_id",
+        "step_id",
+        "correlation_id",
+        "runtime_instance_id",
+        "capability",
+        "parameters",
+        "remaining_budget",
+        "deadline_ms"
+      ],
+      "title": "ActionRequest",
+      "type": "object"
+    },
+    "ActionStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "receipt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActionReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "request_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Hash"
+        },
+        "retained_until_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retained Until Ms"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ActionInspectionState"
+        }
+      },
+      "required": [
+        "runtime_instance_id",
+        "correlation_id",
+        "state"
+      ],
+      "title": "ActionStatus",
+      "type": "object"
+    },
+    "AdvancementObservedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "add",
+            "remove"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "advancement_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Advancement Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "event_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "observation_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observation Hash",
+          "type": "string"
+        },
+        "observation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "observed_at_ms": {
+          "minimum": 0,
+          "title": "Observed At Ms",
+          "type": "integer"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "const": "version_adapter",
+          "title": "Source",
+          "type": "string"
+        },
+        "tick": {
+          "minimum": 0,
+          "title": "Tick",
+          "type": "integer"
+        },
+        "world_identity": {
+          "$ref": "#/$defs/WorldIdentitySnapshot"
+        }
+      },
+      "required": [
+        "event_id",
+        "runtime_instance_id",
+        "world_identity",
+        "advancement_id",
+        "action",
+        "observation_id",
+        "observation_hash",
+        "observed_at_ms",
+        "tick",
+        "source",
+        "content_hash"
+      ],
+      "title": "AdvancementObservedEvent",
+      "type": "object"
+    },
+    "BudgetVector": {
+      "additionalProperties": false,
+      "description": "Monotonic effect limits or attributable usage for one action.",
+      "properties": {
+        "max_actions": {
+          "minimum": 0,
+          "title": "Max Actions",
+          "type": "integer"
+        },
+        "max_blocks_changed": {
+          "minimum": 0,
+          "title": "Max Blocks Changed",
+          "type": "integer"
+        },
+        "max_damage_taken": {
+          "minimum": 0,
+          "title": "Max Damage Taken",
+          "type": "number"
+        },
+        "max_strategy_attempts": {
+          "minimum": 0,
+          "title": "Max Strategy Attempts",
+          "type": "integer"
+        },
+        "max_travel_distance": {
+          "minimum": 0,
+          "title": "Max Travel Distance",
+          "type": "number"
+        },
+        "protected_items": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Protected Items",
+          "type": "array"
+        },
+        "resource_consumption": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Resource Consumption",
+          "type": "object"
+        }
+      },
+      "required": [
+        "max_actions",
+        "max_strategy_attempts",
+        "max_travel_distance",
+        "max_blocks_changed",
+        "max_damage_taken"
+      ],
+      "title": "BudgetVector",
+      "type": "object"
+    },
+    "CancellationAck": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "accepted_at_ms": {
+          "minimum": 0,
+          "title": "Accepted At Ms",
+          "type": "integer"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_instance_id",
+        "correlation_id",
+        "accepted",
+        "accepted_at_ms"
+      ],
+      "title": "CancellationAck",
+      "type": "object"
+    },
+    "CancellationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "reason": {
+          "default": "controller cancellation",
+          "maxLength": 500,
+          "title": "Reason",
+          "type": "string"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_instance_id",
+        "correlation_id"
+      ],
+      "title": "CancellationRequest",
+      "type": "object"
+    },
+    "CapabilityDefinition": {
+      "additionalProperties": false,
+      "description": "One schema-bound runtime capability.",
+      "properties": {
+        "effect_class": {
+          "enum": [
+            "read_only",
+            "state_changing"
+          ],
+          "title": "Effect Class",
+          "type": "string"
+        },
+        "maximum_cost": {
+          "$ref": "#/$defs/BudgetVector"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters_schema": {
+          "additionalProperties": true,
+          "title": "Parameters Schema",
+          "type": "object"
+        },
+        "receipt_schema_version": {
+          "const": "2",
+          "title": "Receipt Schema Version",
+          "type": "string"
+        },
+        "requires_post_observation": {
+          "title": "Requires Post Observation",
+          "type": "boolean"
+        },
+        "risk": {
+          "enum": [
+            "read_only",
+            "survival_safe",
+            "destructive"
+          ],
+          "title": "Risk",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "risk",
+        "effect_class",
+        "parameters_schema",
+        "receipt_schema_version",
+        "requires_post_observation",
+        "maximum_cost"
+      ],
+      "title": "CapabilityDefinition",
+      "type": "object"
+    },
+    "CapabilityGuarantees": {
+      "additionalProperties": false,
+      "description": "Production guarantees required before the controller becomes ready.",
+      "properties": {
+        "action_budget_enforcement": {
+          "const": true,
+          "title": "Action Budget Enforcement",
+          "type": "boolean"
+        },
+        "cooperative_cancellation": {
+          "const": true,
+          "title": "Cooperative Cancellation",
+          "type": "boolean"
+        },
+        "correlation_idempotency": {
+          "const": true,
+          "title": "Correlation Idempotency",
+          "type": "boolean"
+        },
+        "correlation_inspection": {
+          "const": true,
+          "title": "Correlation Inspection",
+          "type": "boolean"
+        },
+        "receipt_chains": {
+          "const": true,
+          "title": "Receipt Chains",
+          "type": "boolean"
+        },
+        "single_flight": {
+          "const": true,
+          "title": "Single Flight",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "single_flight",
+        "correlation_idempotency",
+        "cooperative_cancellation",
+        "action_budget_enforcement",
+        "receipt_chains",
+        "correlation_inspection"
+      ],
+      "title": "CapabilityGuarantees",
+      "type": "object"
+    },
+    "CombatTerminalEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_health_after": {
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Bot Health After",
+          "type": "number"
+        },
+        "bot_health_before": {
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Bot Health Before",
+          "type": "number"
+        },
+        "finished_tick": {
+          "minimum": 0,
+          "title": "Finished Tick",
+          "type": "integer"
+        },
+        "outcome": {
+          "enum": [
+            "defeated",
+            "escaped",
+            "interrupted"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "started_tick": {
+          "minimum": 0,
+          "title": "Started Tick",
+          "type": "integer"
+        },
+        "target_entity_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Target Entity Id",
+          "type": "string"
+        },
+        "target_entity_type": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Target Entity Type",
+          "type": "string"
+        },
+        "target_health_after": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Health After"
+        },
+        "target_health_before": {
+          "minimum": 0,
+          "title": "Target Health Before",
+          "type": "number"
+        }
+      },
+      "required": [
+        "target_entity_id",
+        "target_entity_type",
+        "outcome",
+        "bot_health_before",
+        "bot_health_after",
+        "target_health_before",
+        "started_tick",
+        "finished_tick"
+      ],
+      "title": "CombatTerminalEvidence",
+      "type": "object"
+    },
+    "DiscoverableBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Block Id",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "block_id",
+        "position"
+      ],
+      "title": "DiscoverableBlock",
+      "type": "object"
+    },
+    "DiscoverableEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "entity_type": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Entity Type",
+          "type": "string"
+        },
+        "health": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Health"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "entity_id",
+        "entity_type",
+        "position"
+      ],
+      "title": "DiscoverableEntity",
+      "type": "object"
+    },
+    "EnvironmentProfile": {
+      "additionalProperties": false,
+      "description": "Stable compatibility identity; transient world state is deliberately absent.",
+      "properties": {
+        "capability_schema_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Capability Schema Digest",
+          "type": "string"
+        },
+        "dimension": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Dimension",
+          "type": "string"
+        },
+        "minecraft_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Minecraft Version",
+          "type": "string"
+        },
+        "modset_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Modset Digest",
+          "type": "string"
+        },
+        "policy_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "runtime_protocol": {
+          "const": "2.0",
+          "title": "Runtime Protocol",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "server_identity_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Server Identity Hash",
+          "type": "string"
+        },
+        "skill_api_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Skill Api Version",
+          "type": "string"
+        },
+        "world_identity_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "World Identity Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_protocol",
+        "minecraft_version",
+        "capability_schema_digest",
+        "skill_api_version",
+        "policy_version",
+        "server_identity_hash",
+        "world_identity_hash",
+        "dimension",
+        "modset_digest"
+      ],
+      "title": "EnvironmentProfile",
+      "type": "object"
+    },
+    "ExplainedMutation": {
+      "additionalProperties": false,
+      "properties": {
+        "delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "inventory",
+            "block",
+            "position",
+            "entity",
+            "health",
+            "combat",
+            "advancement",
+            "region",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "subject": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "title": "ExplainedMutation",
+      "type": "object"
+    },
+    "GoalVerificationStatus": {
+      "enum": [
+        "passed",
+        "failed",
+        "unknown"
+      ],
+      "title": "GoalVerificationStatus",
+      "type": "string"
+    },
+    "Observation": {
+      "additionalProperties": false,
+      "properties": {
+        "action_sequence": {
+          "minimum": 0,
+          "title": "Action Sequence",
+          "type": "integer"
+        },
+        "active_advancements": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 512,
+          "title": "Active Advancements",
+          "type": "array"
+        },
+        "biome": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Biome"
+        },
+        "captured_at_ms": {
+          "minimum": 0,
+          "title": "Captured At Ms",
+          "type": "integer"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "environment": {
+          "additionalProperties": true,
+          "title": "Environment",
+          "type": "object"
+        },
+        "equipment": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Equipment",
+          "type": "object"
+        },
+        "food": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Food"
+        },
+        "health": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Health"
+        },
+        "inventory": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Inventory",
+          "type": "object"
+        },
+        "observation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "profile": {
+          "$ref": "#/$defs/EnvironmentProfile"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tick": {
+          "minimum": 0,
+          "title": "Tick",
+          "type": "integer"
+        },
+        "visible_blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DiscoverableBlock"
+          },
+          "maxItems": 512,
+          "title": "Visible Blocks",
+          "type": "array"
+        },
+        "visible_entities": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DiscoverableEntity"
+          },
+          "maxItems": 128,
+          "title": "Visible Entities",
+          "type": "array"
+        },
+        "world_identity": {
+          "$ref": "#/$defs/WorldIdentitySnapshot"
+        }
+      },
+      "required": [
+        "observation_id",
+        "correlation_id",
+        "runtime_instance_id",
+        "captured_at_ms",
+        "tick",
+        "action_sequence",
+        "content_hash",
+        "profile",
+        "world_identity"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "PostObservationStatus": {
+      "enum": [
+        "stable",
+        "unstable",
+        "unavailable"
+      ],
+      "title": "PostObservationStatus",
+      "type": "string"
+    },
+    "ReceiptOutcome": {
+      "enum": [
+        "success",
+        "error",
+        "cancelled",
+        "unknown"
+      ],
+      "title": "ReceiptOutcome",
+      "type": "string"
+    },
+    "ReconciliationStatus": {
+      "enum": [
+        "accepted",
+        "pending",
+        "quarantined"
+      ],
+      "title": "ReconciliationStatus",
+      "type": "string"
+    },
+    "RegionBounds": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "$ref": "#/$defs/Position"
+        },
+        "min": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "title": "RegionBounds",
+      "type": "object"
+    },
+    "RegionInspection": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 4096,
+          "title": "Blocks",
+          "type": "object"
+        },
+        "bounds": {
+          "$ref": "#/$defs/RegionBounds"
+        },
+        "captured_at_ms": {
+          "minimum": 0,
+          "title": "Captured At Ms",
+          "type": "integer"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "inspection_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Inspection Id",
+          "type": "string"
+        },
+        "observation_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Observation Hash",
+          "type": "string"
+        },
+        "observation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tick": {
+          "minimum": 0,
+          "title": "Tick",
+          "type": "integer"
+        },
+        "world_identity": {
+          "$ref": "#/$defs/WorldIdentitySnapshot"
+        }
+      },
+      "required": [
+        "inspection_id",
+        "correlation_id",
+        "runtime_instance_id",
+        "world_identity",
+        "captured_at_ms",
+        "tick",
+        "observation_id",
+        "observation_hash",
+        "bounds",
+        "content_hash"
+      ],
+      "title": "RegionInspection",
+      "type": "object"
+    },
+    "RegionInspectionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/RegionBounds"
+        },
+        "command_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "correlation_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "deadline_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Deadline Ms",
+          "type": "integer"
+        },
+        "maximum_volume": {
+          "exclusiveMinimum": 0,
+          "maximum": 4096,
+          "title": "Maximum Volume",
+          "type": "integer"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "step_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Step Id",
+          "type": "string"
+        },
+        "transport_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Transport Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transport_id",
+        "command_id",
+        "step_id",
+        "correlation_id",
+        "runtime_instance_id",
+        "bounds",
+        "maximum_volume",
+        "deadline_ms"
+      ],
+      "title": "RegionInspectionRequest",
+      "type": "object"
+    },
+    "RuntimeHealth": {
+      "additionalProperties": false,
+      "properties": {
+        "active_correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Correlation Id"
+        },
+        "busy": {
+          "title": "Busy",
+          "type": "boolean"
+        },
+        "last_completed_action_sequence": {
+          "minimum": 0,
+          "title": "Last Completed Action Sequence",
+          "type": "integer"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ready",
+        "busy",
+        "runtime_instance_id",
+        "last_completed_action_sequence"
+      ],
+      "title": "RuntimeHealth",
+      "type": "object"
+    },
+    "RuntimeManifest": {
+      "additionalProperties": false,
+      "description": "Runtime identity and capabilities validated at readiness.",
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/CapabilityDefinition"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "guarantees": {
+          "$ref": "#/$defs/CapabilityGuarantees"
+        },
+        "profile": {
+          "$ref": "#/$defs/EnvironmentProfile"
+        },
+        "protocol_version": {
+          "const": "2.0",
+          "default": "2.0",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_instance_id",
+        "profile",
+        "guarantees",
+        "capabilities"
+      ],
+      "title": "RuntimeManifest",
+      "type": "object"
+    },
+    "RuntimeProtocolError": {
+      "additionalProperties": false,
+      "description": "Machine-readable failure semantics used for control decisions.",
+      "properties": {
+        "caller_may_resubmit": {
+          "title": "Caller May Resubmit",
+          "type": "boolean"
+        },
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "command_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "maxLength": 1000,
+          "title": "Message",
+          "type": "string"
+        },
+        "operator_action": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Operator Action",
+          "type": "string"
+        },
+        "outcome_known": {
+          "title": "Outcome Known",
+          "type": "boolean"
+        },
+        "phase": {
+          "enum": [
+            "request",
+            "admission",
+            "policy",
+            "budget",
+            "runtime",
+            "verification",
+            "recovery",
+            "internal"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2",
+          "default": "2",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
+        },
+        "world_may_have_changed": {
+          "title": "World May Have Changed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "phase",
+        "outcome_known",
+        "world_may_have_changed",
+        "caller_may_resubmit",
+        "operator_action"
+      ],
+      "title": "RuntimeProtocolError",
+      "type": "object"
+    },
+    "SettlementRejectionReason": {
+      "enum": [
+        "settlement_disabled",
+        "initial_sample",
+        "motion_unsettled",
+        "durable_state_changed",
+        "stable_streak_incomplete"
+      ],
+      "title": "SettlementRejectionReason",
+      "type": "string"
+    },
+    "SettlementSample": {
+      "additionalProperties": false,
+      "properties": {
+        "captured_at_ms": {
+          "minimum": 0,
+          "title": "Captured At Ms",
+          "type": "integer"
+        },
+        "durable_state_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Durable State Hash",
+          "type": "string"
+        },
+        "on_ground": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Ground"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rejection_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SettlementRejectionReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sample_index": {
+          "minimum": 0,
+          "title": "Sample Index",
+          "type": "integer"
+        },
+        "stable_streak": {
+          "minimum": 0,
+          "title": "Stable Streak",
+          "type": "integer"
+        },
+        "velocity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "sample_index",
+        "captured_at_ms",
+        "durable_state_hash",
+        "stable_streak"
+      ],
+      "title": "SettlementSample",
+      "type": "object"
+    },
+    "WorldIdentitySnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Dimension",
+          "type": "string"
+        },
+        "runtime_instance_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Instance Id",
+          "type": "string"
+        },
+        "server_identity_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Server Identity Hash",
+          "type": "string"
+        },
+        "world_identity_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "World Identity Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime_instance_id",
+        "server_identity_hash",
+        "world_identity_hash",
+        "dimension"
+      ],
+      "title": "WorldIdentitySnapshot",
+      "type": "object"
+    }
+  },
+  "$id": "https://animetta.local/contracts/gamebot/v2/schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "2",
+  "title": "Animetta GameBot v2 canonical contract"
+}

@@ -226,3 +226,44 @@ async def test_process_exit_returns_error(fake_process) -> None:
         pass
 
     await transport.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_kills_process_that_ignores_terminate(fake_process) -> None:
+    """A stubborn runtime must be killed before pipe readers are awaited."""
+
+    transport = StdioGameBotTransport(argv=["node", "index.js"], cwd="/fake")
+    fake_process.stdin.write = MagicMock()
+    never_respond = asyncio.Event()
+
+    async def blocking_readline() -> bytes:
+        await never_respond.wait()
+        return b""
+
+    fake_process.stdout.readline = blocking_readline
+    fake_process.stderr.readline = blocking_readline
+    fake_process.kill = MagicMock()
+
+    with patch("asyncio.create_subprocess_exec", return_value=fake_process):
+        await transport.start(login_timeout=0.1)
+
+    wait_calls = 0
+
+    async def timeout_once(awaitable, *, timeout):
+        nonlocal wait_calls
+        del timeout
+        wait_calls += 1
+        if wait_calls == 1:
+            awaitable.close()
+            raise TimeoutError
+        return await awaitable
+
+    with patch(
+        "animetta.tools.gamebot.stdio_transport.asyncio.wait_for",
+        side_effect=timeout_once,
+    ):
+        await transport.stop()
+
+    fake_process.terminate.assert_called_once()
+    fake_process.kill.assert_called_once()
+    assert fake_process.wait.await_count == 1

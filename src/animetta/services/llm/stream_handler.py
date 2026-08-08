@@ -100,8 +100,7 @@ class OpenAIStreamHandler:
                 pass
 
             # Update history
-            self.llm.history.append({"role": "user", "content": user_input})
-            self.llm.history.append({"role": "assistant", "content": full_response})
+            self.llm._append_history_turn(user_input, full_response)
 
         except Exception as e:
             duration_s = time_module.perf_counter() - t_start

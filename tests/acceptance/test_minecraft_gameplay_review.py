@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -197,17 +198,21 @@ async def test_incomplete_run_exposes_only_bounded_material_counts(tmp_path: Pat
 async def test_disposable_server_uses_isolated_project_port_and_world(tmp_path: Path) -> None:
     calls: list[tuple[list[str], dict[str, str]]] = []
 
-    async def run_command(args: list[str], env: dict[str, str]) -> None:
+    async def run_command(args: list[str], env: dict[str, str]) -> str:
         calls.append((args, env))
+        return "Gamerule doMobSpawning is now set to: false"
 
     lease = MinecraftReviewServerLease(
         repository_dir=tmp_path,
         world_dir=tmp_path / "world",
+        world_seed=8_675_309,
         run_command=run_command,
         readiness_probe=AsyncMock(return_value=True),
     )
 
     await lease.start()
+    response = await lease.execute_rcon("gamerule doMobSpawning false")
+    assert response == "Gamerule doMobSpawning is now set to: false"
     ops = json.loads((tmp_path / "world" / "ops.json").read_text(encoding="utf-8"))
     assert ops == [
         {
@@ -224,13 +229,20 @@ async def test_disposable_server_uses_isolated_project_port_and_world(tmp_path: 
     assert calls[0][0][-2:] == ["up", "-d"]
     assert calls[0][1]["ANIMETTA_MC_REVIEW_PORT"] == "25566"
     assert calls[0][1]["ANIMETTA_MC_REVIEW_WORLD_DIR"] == str((tmp_path / "world").resolve())
+    assert calls[0][1]["ANIMETTA_MC_REVIEW_SEED"] == "8675309"
     assert calls[1][0][-4:] == [
         "-T",
         "minecraft",
         "rcon-cli",
         "gamerule spawnRadius 0",
     ]
-    assert calls[2][0][-3:] == ["down", "--volumes", "--remove-orphans"]
+    assert calls[2][0][-4:] == [
+        "-T",
+        "minecraft",
+        "rcon-cli",
+        "gamerule doMobSpawning false",
+    ]
+    assert calls[3][0][-3:] == ["down", "--volumes", "--remove-orphans"]
 
 
 async def test_disposable_server_allows_slow_cold_start_beyond_two_minutes(
@@ -296,6 +308,38 @@ async def test_disposable_server_seeds_verified_runtime_without_copying_world(
     assert (lease.world_dir / "cache" / "mojang_1.21.jar").read_bytes() == b"mojang"
     assert (lease.world_dir / "plugins" / "spectatorplus-paper-1.2.1.jar").read_bytes() == b"plugin"
     assert not (lease.world_dir / "world").exists()
+    await lease.stop()
+
+
+async def test_disposable_server_uses_extended_windows_paths_for_runtime_trees(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed = tmp_path / "seed"
+    (seed / "libraries").mkdir(parents=True)
+    copytree = Mock()
+    monkeypatch.setattr(
+        "animetta.acceptance.minecraft_gameplay_review.shutil.copytree",
+        copytree,
+    )
+
+    lease = MinecraftReviewServerLease(
+        repository_dir=tmp_path,
+        world_dir=tmp_path / "review-world",
+        runtime_seed_dir=seed,
+        run_command=AsyncMock(),
+        readiness_probe=AsyncMock(return_value=True),
+    )
+
+    await lease.start()
+
+    source, target = copytree.call_args.args
+    if os.name == "nt":
+        assert str(source).startswith("\\\\?\\")
+        assert str(target).startswith("\\\\?\\")
+    else:
+        assert Path(source) == seed / "libraries"
+        assert Path(target) == lease.world_dir / "libraries"
     await lease.stop()
 
 

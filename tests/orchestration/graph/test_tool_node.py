@@ -75,6 +75,126 @@ class TestToolNode:
         assert result["messages"][0].tool_call_id == "call_1"
 
     @pytest.mark.asyncio
+    async def test_tool_invocation_observer_wraps_the_real_tool_call(self):
+        """A trusted observer sees the exact call before and result after execution."""
+
+        events: list[tuple[str, object]] = []
+
+        class ObservedTool:
+            async def ainvoke(self, args):
+                events.append(("tool", dict(args)))
+                return {"mission_id": "mission-001"}
+
+        class Observer:
+            async def before_invoke(self, invocation):
+                events.append(
+                    (
+                        "before",
+                        (
+                            invocation.tool_call_id,
+                            invocation.tool_name,
+                            invocation.arguments,
+                            invocation.conversation_id,
+                        ),
+                    )
+                )
+
+            async def after_invoke(self, completion):
+                events.append(
+                    (
+                        "after",
+                        (
+                            completion.invocation.tool_call_id,
+                            completion.result,
+                            completion.error,
+                        ),
+                    )
+                )
+
+        state = create_initial_state(
+            session_id="test",
+            conversation_id="conversation-001",
+        )
+        state["tool_calls"] = [
+            {
+                "id": "call-mission-001",
+                "name": "mc_execute",
+                "args": {"request_id": "request-001", "kind": "mission"},
+            }
+        ]
+        config = RunnableConfig(
+            configurable={
+                "tools_map": {"mc_execute": ObservedTool()},
+                "tool_invocation_observer": Observer(),
+            }
+        )
+
+        result = await tool_node(state, config)
+
+        assert result["tool_results"][0]["result"] == {"mission_id": "mission-001"}
+        assert events == [
+            (
+                "before",
+                (
+                    "call-mission-001",
+                    "mc_execute",
+                    {"request_id": "request-001", "kind": "mission"},
+                    "conversation-001",
+                ),
+            ),
+            ("tool", {"request_id": "request-001", "kind": "mission"}),
+            (
+                "after",
+                (
+                    "call-mission-001",
+                    {"mission_id": "mission-001"},
+                    None,
+                ),
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_observer_failure_after_tool_does_not_erase_real_result(self):
+        """A reporting failure after mutation must not rewrite tool success."""
+
+        class ObservedTool:
+            async def ainvoke(self, _args):
+                return {"mission_id": "mission-committed"}
+
+        class Observer:
+            async def before_invoke(self, _invocation):
+                return None
+
+            async def after_invoke(self, _completion):
+                raise RuntimeError("evidence sink unavailable")
+
+        state = create_initial_state(session_id="test")
+        state["tool_calls"] = [
+            {
+                "id": "call-committed",
+                "name": "mc_execute",
+                "args": {"request_id": "request-committed", "kind": "mission"},
+            }
+        ]
+        config = RunnableConfig(
+            configurable={
+                "tools_map": {"mc_execute": ObservedTool()},
+                "tool_invocation_observer": Observer(),
+            }
+        )
+
+        result = await tool_node(state, config)
+
+        assert result["tool_results"] == [
+            {
+                "tool": "mc_execute",
+                "args": {"request_id": "request-committed", "kind": "mission"},
+                "result": {"mission_id": "mission-committed"},
+            }
+        ]
+        assert result["messages"][0].content == '{\n  "mission_id": "mission-committed"\n}'
+
+    @pytest.mark.asyncio
     async def test_tool_not_found_returns_error(self):
         """Unknown tool name returns an error result."""
 

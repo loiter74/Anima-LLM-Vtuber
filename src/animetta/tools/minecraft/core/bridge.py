@@ -36,12 +36,7 @@ class MinecraftBridge:
     def __init__(
         self,
         config: MinecraftConfig,
-        autonomous: bool = False,
-        service_pool: Any | None = None,
     ):
-        # Kept in the signature for callers that still pass the legacy arguments.
-        # Autonomous mode ownership now belongs exclusively to VoyagerController.
-        del autonomous, service_pool
         self.config = config
         self._process: asyncio.subprocess.Process | None = None
         self._pending: dict[int, asyncio.Future] = {}
@@ -56,6 +51,7 @@ class MinecraftBridge:
 
         # Viewer callback for forwarding viewer_joined/viewer_left events
         self._viewer_callback: Any | None = None
+        self._runtime_event_callbacks: list[Any] = []
 
     async def start(self) -> bool:
         """Start the Mineflayer bot subprocess"""
@@ -84,6 +80,10 @@ class MinecraftBridge:
             self._bot_ready.clear()
             # Build environment with viewer config
             env = os.environ.copy()
+            # GameBot v2 is the sole mutation owner. Keep the external runtime's
+            # legacy auto-combat/eat/swim/planner loops passive even if a parent
+            # process exported a conflicting standalone-mode value.
+            env["GAMEBOT_CONTROL_PLANE_MODE"] = "true"
             if self.config.viewer.username:
                 env["MC_VIEWER_USERNAME"] = self.config.viewer.username
                 env["MC_AUTO_SPECTATE"] = "true" if self.config.viewer.auto_spectate else "false"
@@ -237,6 +237,11 @@ class MinecraftBridge:
 
     def _handle_runtime_event(self, result: dict[str, Any]) -> None:
         """Handle async runtime events emitted by the generic gamebot transport."""
+        for callback in tuple(self._runtime_event_callbacks):
+            try:
+                callback(dict(result))
+            except Exception as exc:
+                logger.error(f"[MinecraftBridge] Runtime event callback error: {exc}")
         if result.get("type") == "heartbeat":
             logger.debug(f"[MinecraftBridge] Heartbeat: {result}")
         elif result.get("type") == "login":
@@ -312,6 +317,14 @@ class MinecraftBridge:
 
                 if resp_id == "system" or (resp_id is None and status == "event"):
                     # Handle events
+                    if isinstance(result, dict):
+                        for callback in tuple(self._runtime_event_callbacks):
+                            try:
+                                callback(dict(result))
+                            except Exception as exc:
+                                logger.error(
+                                    f"[MinecraftBridge] Runtime event callback error: {exc}"
+                                )
                     if isinstance(result, dict) and result.get("type") == "heartbeat":
                         logger.debug(f"[MinecraftBridge] Heartbeat: {result}")
                     elif isinstance(result, dict) and result.get("type") == "login":
@@ -418,6 +431,11 @@ class MinecraftBridge:
         where event_type is 'viewer_joined' or 'viewer_left'.
         """
         self._viewer_callback = callback
+
+    def add_runtime_event_callback(self, callback: Any) -> None:
+        """Subscribe to validated transport events without replacing viewer wiring."""
+
+        self._runtime_event_callbacks.append(callback)
 
     async def stop(self) -> None:
         """Stop the bot subprocess and resolve pending commands."""

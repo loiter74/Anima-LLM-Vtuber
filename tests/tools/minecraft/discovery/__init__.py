@@ -1,0 +1,1 @@
+"""World discovery domain tests."""

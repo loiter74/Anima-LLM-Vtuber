@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time as time_module
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -26,6 +26,9 @@ from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
 from .state import AgentState, create_initial_state
 from .tool_manager import ToolManager
+
+if TYPE_CHECKING:
+    from .tool_observation import ToolInvocationObserver
 
 
 class LangGraphOrchestrator:
@@ -47,6 +50,7 @@ class LangGraphOrchestrator:
         enable_memory: bool = True,
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
+        tool_manager: ToolManager | None = None,
     ):
         self.service_context = service_context
         self.socketio = socketio
@@ -67,7 +71,7 @@ class LangGraphOrchestrator:
         self.conversation_session = ConversationSessionState()
 
         # Initialize tool manager
-        self.tool_manager: ToolManager | None = None
+        self.tool_manager = tool_manager
 
         # Build LangGraph config (passed to nodes via config parameter)
         self._langgraph_config: dict[str, Any] = {
@@ -132,6 +136,17 @@ class LangGraphOrchestrator:
 
     async def _load_tools(self) -> None:
         """Load tools"""
+        if self.tool_manager is not None:
+            if not self.tool_manager.is_loaded():
+                raise RuntimeError("prebuilt tool manager is not loaded")
+            self._langgraph_config["configurable"].update(self.tool_manager.get_config())
+            logger.info(
+                "[{}] [LangGraph] Reusing {} prebuilt tools",
+                self.session_id,
+                len(self.tool_manager.tools),
+            )
+            return
+
         self.tool_manager = ToolManager(self.session_id, self.service_context)
         success = await self.tool_manager.load_tools(self.tools_config)
 
@@ -170,6 +185,7 @@ class LangGraphOrchestrator:
         conversation_id: str | None = None,
         task_id: str | None = None,
         turn_id: str | None = None,
+        tool_invocation_observer: ToolInvocationObserver | None = None,
         **metadata,
     ) -> dict[str, Any]:
         """Process text input.
@@ -221,7 +237,10 @@ class LangGraphOrchestrator:
                 turn_id=turn_id,
                 metadata=metadata,
             )
-            final_state = await self._run_graph(initial_state)
+            final_state = await self._run_graph(
+                initial_state,
+                tool_invocation_observer=tool_invocation_observer,
+            )
             return self._clean_result(final_state)
 
         except Exception as e:
@@ -328,12 +347,25 @@ class LangGraphOrchestrator:
 
         return initial_state
 
-    async def _run_graph(self, initial_state: AgentState) -> dict[str, Any]:
+    async def _run_graph(
+        self,
+        initial_state: AgentState,
+        *,
+        tool_invocation_observer: ToolInvocationObserver | None = None,
+    ) -> dict[str, Any]:
         """Run the state graph, passing service context through LangGraph config"""
         input_type = initial_state.get("input_type", "text")
         user_text = initial_state.get("user_text", "")
         turn = await self._conversation_observer().start(initial_state)
-        run_config = cast(RunnableConfig, dict(self._langgraph_config))
+        run_config = cast(
+            RunnableConfig,
+            {
+                **self._langgraph_config,
+                "configurable": dict(self._langgraph_config.get("configurable", {})),
+            },
+        )
+        if tool_invocation_observer is not None:
+            run_config["configurable"]["tool_invocation_observer"] = tool_invocation_observer
         callbacks = self._callbacks or get_observability().callbacks
         if callbacks:
             run_config["callbacks"] = callbacks
@@ -453,6 +485,7 @@ class LangGraphOrchestrator:
         enable_memory: bool = True,
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
+        tool_manager: ToolManager | None = None,
     ) -> LangGraphOrchestrator:
         """Create orchestrator instance
 
@@ -468,6 +501,7 @@ class LangGraphOrchestrator:
             enable_memory=enable_memory,
             tools_config=tools_config,
             observation_recorder=observation_recorder,
+            tool_manager=tool_manager,
         )
 
         await orchestrator.start()

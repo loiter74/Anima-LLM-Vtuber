@@ -31,27 +31,20 @@ class MockLLM(LLMInterface):
     # Class-level attribute: supported config type
     config_class = MockLLMConfig
 
-    def __init__(self, system_prompt: str = ""):
+    def __init__(self, system_prompt: str = "", max_history_messages: int = 20):
         self.system_prompt = system_prompt
         self.history: list[dict[str, Any]] = []
         self.call_count = 0
         self.instance_id = str(uuid.uuid4())[:8]
+        self.max_history_messages = max_history_messages
 
     @classmethod
     def from_config(cls, config: LLMBaseConfig, system_prompt: str = "", **kwargs) -> MockLLM:
-        """
-        Create an instance from a configuration object
-
-        Args:
-            config: LLM config object
-            system_prompt: System prompt
-            **kwargs: Additional parameters (ignored)
-
-        Returns:
-            MockLLM instance
-        """
-        # Mock does not require any fields from config
-        instance = cls(system_prompt=system_prompt)
+        """Create an instance from a configuration object."""
+        instance = cls(
+            system_prompt=system_prompt,
+            max_history_messages=getattr(config, "max_history_messages", 20),
+        )
         logger.info(f"[MockLLM-{instance.instance_id}] Initialization complete")
         return instance
 
@@ -91,6 +84,7 @@ class MockLLM(LLMInterface):
 
         # Record response to history
         self.history.append({"role": "assistant", "content": response})
+        self.history = self._trim_history(self.history, self.max_history_messages)
 
         # Calculate elapsed time
         elapsed_time = time.time() - start_time
@@ -165,6 +159,7 @@ class MockLLM(LLMInterface):
             # Save partial response to history
             self.history.append({"role": "assistant", "content": heard_response})
             self.history.append({"role": "system", "content": "[用户打断了对话]"})
+            self.history = self._trim_history(self.history, self.max_history_messages)
 
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """

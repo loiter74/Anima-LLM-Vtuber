@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 
 from .conditions import check_preconditions
-from .executor import execute_skill
-from .models import Skill, SkillResult, SkillTrustStage
+from .models import Skill, SkillTrustStage
 from .store import SkillLibraryDB
-
-if TYPE_CHECKING:
-    from ..core.bridge import MinecraftBridge
 
 
 class SkillLibrary:
@@ -224,30 +220,6 @@ class SkillLibrary:
     async def get_learned_skills(self) -> list[Skill]:
         """Get all learned skills."""
         return [s for s in self._skills.values() if s.is_learned]
-
-    async def execute_skill_by_id(
-        self,
-        skill_id: str,
-        bridge: MinecraftBridge,
-        context: dict[str, Any] | None = None,
-        *,
-        threat_check_interval: int = 3,
-    ) -> SkillResult:
-        """Look up and execute a skill."""
-        skill = self._skills.get(skill_id)
-        if skill is None:
-            return SkillResult(
-                success=False,
-                skill_id=skill_id,
-                reason=f"Skill '{skill_id}' not found in library",
-            )
-
-        return await execute_skill(
-            skill,
-            bridge,
-            context,
-            threat_check_interval=threat_check_interval,
-        )
 
     async def match_skills(self, context: dict[str, Any], limit: int = 5) -> list[Skill]:
         """Return skills whose preconditions are all satisfied."""

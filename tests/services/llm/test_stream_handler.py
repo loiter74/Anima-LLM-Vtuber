@@ -21,6 +21,12 @@ def mock_openai_llm():
     llm.client = MagicMock()
     llm._record_usage = MagicMock()
     llm._record_error = MagicMock()
+
+    def append_history_turn(user_input: str, assistant_message: str) -> None:
+        llm.history.append({"role": "user", "content": user_input})
+        llm.history.append({"role": "assistant", "content": assistant_message})
+
+    llm._append_history_turn = append_history_turn
     return llm
 
 

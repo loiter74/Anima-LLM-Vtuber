@@ -65,6 +65,16 @@ def detect_capabilities(repo_root: str | Path) -> frozenset[Capability]:
         playwright = root / "frontend" / "node_modules" / "playwright"
         if playwright.exists():
             capabilities.add(Capability.BROWSER)
+    declared_text = os.environ.get("ANIMETTA_QUALITY_CAPABILITIES", "")
+    declared_names = {name.strip() for name in declared_text.split(",") if name.strip()}
+    allowed_declared = {Capability.NETWORK.value, Capability.GPU.value}
+    invalid = declared_names - allowed_declared
+    if invalid:
+        raise ValueError(
+            "ANIMETTA_QUALITY_CAPABILITIES may declare only network,gpu; "
+            f"invalid values: {','.join(sorted(invalid))}"
+        )
+    capabilities.update(Capability(name) for name in declared_names)
     return frozenset(capabilities)
 
 

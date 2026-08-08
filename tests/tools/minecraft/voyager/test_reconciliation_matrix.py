@@ -1,0 +1,160 @@
+"""Every recovery-matrix row is deterministic and never replays mutation."""
+
+from __future__ import annotations
+
+import pytest
+
+from animetta.tools.minecraft.voyager.reconciliation import (
+    RecoveryDecision,
+    RecoveryEvidence,
+    decide_recovery,
+)
+
+
+@pytest.mark.parametrize(
+    ("evidence", "decision"),
+    [
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_outcome="success",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                mutations_explained=True,
+            ),
+            RecoveryDecision.SUCCEEDED_RECONCILED,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_outcome="success",
+                receipt_reconciliation="pending",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                observation_stable=False,
+                mutations_explained=True,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_outcome="success",
+                receipt_reconciliation="pending",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                observation_stable=True,
+                mutations_explained=True,
+            ),
+            RecoveryDecision.SUCCEEDED_RECONCILED,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_outcome="success",
+                receipt_reconciliation="quarantined",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                observation_stable=True,
+                mutations_explained=True,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(same_instance=True, inspection_state="running"),
+            RecoveryDecision.CANCEL_AND_REINSPECT,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="not_found",
+                retention_guarantee_intact=True,
+                action_was_accepted=False,
+            ),
+            RecoveryDecision.KNOWN_NO_EFFECT,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_valid=False,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(same_instance=False, inspection_state="not_found"),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=False,
+                observation_fresh=True,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_outcome="cancelled",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                mutations_explained=True,
+            ),
+            RecoveryDecision.CANCELLED_RECONCILED,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_valid=True,
+                usage_within_reservation=True,
+                idle=True,
+                observation_fresh=True,
+                mutations_explained=False,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="not_found",
+                effect_class="read_only",
+                idle=True,
+                observation_fresh=True,
+            ),
+            RecoveryDecision.READ_RECONCILED,
+        ),
+        (
+            RecoveryEvidence(
+                same_instance=True,
+                inspection_state="terminal",
+                receipt_valid=True,
+                usage_within_reservation=False,
+                idle=True,
+                observation_fresh=True,
+            ),
+            RecoveryDecision.BLOCKED_UNKNOWN,
+        ),
+    ],
+)
+def test_recovery_decision_matrix(evidence: RecoveryEvidence, decision: RecoveryDecision) -> None:
+    assert decide_recovery(evidence) is decision

@@ -1,0 +1,439 @@
+{
+  "messages": {
+    "ActionReceipt": {
+      "action_sequence": 8,
+      "after_observation_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "before_observation_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "budget_usage": {
+        "max_actions": 1,
+        "max_blocks_changed": 4,
+        "max_damage_taken": 2.0,
+        "max_strategy_attempts": 1,
+        "max_travel_distance": 2.0,
+        "protected_items": [],
+        "resource_consumption": {}
+      },
+      "capability": "collect",
+      "combat": null,
+      "command_id": "command-1",
+      "content_hash": "27995199e12d059aa694e0efe975cef7ffd071e7e1768690112a5c7dfd6c6940",
+      "correlation_id": "correlation-1",
+      "error": null,
+      "explained_mutations": [
+        {
+          "delta": 1.0,
+          "details": {},
+          "kind": "inventory",
+          "subject": "oak_log"
+        }
+      ],
+      "finished_at_ms": 1799999999900,
+      "finished_tick": 48,
+      "goal_verification": "unknown",
+      "outcome": "success",
+      "parameter_hash": "6aea6dfe6561984cdc5c54ead84d47d2cf29e48253ae282aef237404adad4661",
+      "post_observation": "stable",
+      "previous_receipt_hash": "",
+      "receipt_id": "receipt-1",
+      "reconciliation": "accepted",
+      "reconciliation_error": null,
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "settlement_trace": [],
+      "started_at_ms": 1799999999100,
+      "started_tick": 43,
+      "step_id": "step-1"
+    },
+    "ActionRequest": {
+      "capability": "collect",
+      "command_id": "command-1",
+      "correlation_id": "correlation-1",
+      "deadline_ms": 1800000000000,
+      "parameters": {
+        "count": 1
+      },
+      "previous_receipt_hash": "",
+      "remaining_budget": {
+        "max_actions": 4,
+        "max_blocks_changed": 4,
+        "max_damage_taken": 2.0,
+        "max_strategy_attempts": 1,
+        "max_travel_distance": 32.0,
+        "protected_items": [],
+        "resource_consumption": {}
+      },
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "step_id": "step-1",
+      "transport_id": "transport-1"
+    },
+    "ActionStatus": {
+      "correlation_id": "correlation-1",
+      "receipt": {
+        "action_sequence": 8,
+        "after_observation_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "before_observation_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "budget_usage": {
+          "max_actions": 1,
+          "max_blocks_changed": 4,
+          "max_damage_taken": 2.0,
+          "max_strategy_attempts": 1,
+          "max_travel_distance": 2.0,
+          "protected_items": [],
+          "resource_consumption": {}
+        },
+        "capability": "collect",
+        "combat": null,
+        "command_id": "command-1",
+        "content_hash": "27995199e12d059aa694e0efe975cef7ffd071e7e1768690112a5c7dfd6c6940",
+        "correlation_id": "correlation-1",
+        "error": null,
+        "explained_mutations": [
+          {
+            "delta": 1.0,
+            "details": {},
+            "kind": "inventory",
+            "subject": "oak_log"
+          }
+        ],
+        "finished_at_ms": 1799999999900,
+        "finished_tick": 48,
+        "goal_verification": "unknown",
+        "outcome": "success",
+        "parameter_hash": "6aea6dfe6561984cdc5c54ead84d47d2cf29e48253ae282aef237404adad4661",
+        "post_observation": "stable",
+        "previous_receipt_hash": "",
+        "receipt_id": "receipt-1",
+        "reconciliation": "accepted",
+        "reconciliation_error": null,
+        "runtime_instance_id": "runtime-instance-1",
+        "schema_version": "2",
+        "settlement_trace": [],
+        "started_at_ms": 1799999999100,
+        "started_tick": 43,
+        "step_id": "step-1"
+      },
+      "request_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "retained_until_ms": 1800100000000,
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "state": "terminal"
+    },
+    "AdvancementObservedEvent": {
+      "action": "add",
+      "advancement_id": "minecraft:story/mine_stone",
+      "content_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "event_id": "advancement-event-001",
+      "observation_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "observation_id": "observation-advancement-001",
+      "observed_at_ms": 1799999999950,
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "source": "version_adapter",
+      "tick": 220,
+      "world_identity": {
+        "dimension": "minecraft:overworld",
+        "runtime_instance_id": "runtime-instance-1",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "world_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "BudgetVector": {
+      "max_actions": 4,
+      "max_blocks_changed": 4,
+      "max_damage_taken": 2.0,
+      "max_strategy_attempts": 1,
+      "max_travel_distance": 32.0,
+      "protected_items": [],
+      "resource_consumption": {}
+    },
+    "CancellationAck": {
+      "accepted": true,
+      "accepted_at_ms": 1799999999500,
+      "correlation_id": "correlation-1",
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2"
+    },
+    "CancellationRequest": {
+      "correlation_id": "correlation-1",
+      "reason": "operator stop",
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2"
+    },
+    "CombatTerminalEvidence": {
+      "bot_health_after": 17.0,
+      "bot_health_before": 20.0,
+      "finished_tick": 124,
+      "outcome": "defeated",
+      "started_tick": 100,
+      "target_entity_id": "entity-zombie-001",
+      "target_entity_type": "minecraft:zombie",
+      "target_health_after": 0.0,
+      "target_health_before": 20.0
+    },
+    "Observation": {
+      "action_sequence": 7,
+      "active_advancements": [
+        "minecraft:story/root"
+      ],
+      "biome": "minecraft:plains",
+      "captured_at_ms": 1799999999000,
+      "content_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "correlation_id": "correlation-observe-1",
+      "environment": {
+        "weather": "clear"
+      },
+      "equipment": {},
+      "food": 20,
+      "health": 20.0,
+      "inventory": {
+        "oak_log": 1
+      },
+      "observation_id": "observation-1",
+      "position": {
+        "x": 0.0,
+        "y": 64.0,
+        "z": 0.0
+      },
+      "profile": {
+        "capability_schema_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dimension": "minecraft:overworld",
+        "minecraft_version": "1.21.1",
+        "modset_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policy_version": "1",
+        "runtime_protocol": "2.0",
+        "schema_version": "1",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "skill_api_version": "1",
+        "world_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "tick": 42,
+      "visible_blocks": [
+        {
+          "block_id": "minecraft:copper_ore",
+          "position": {
+            "x": 3.0,
+            "y": 62.0,
+            "z": 4.0
+          }
+        }
+      ],
+      "visible_entities": [
+        {
+          "entity_id": "entity-zombie-001",
+          "entity_type": "minecraft:zombie",
+          "health": 20.0,
+          "position": {
+            "x": 8.0,
+            "y": 64.0,
+            "z": 2.0
+          }
+        }
+      ],
+      "world_identity": {
+        "dimension": "minecraft:overworld",
+        "runtime_instance_id": "runtime-instance-1",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "world_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "RegionInspection": {
+      "blocks": {
+        "0,60,0": "minecraft:oak_planks"
+      },
+      "bounds": {
+        "max": {
+          "x": 3.0,
+          "y": 63.0,
+          "z": 3.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 60.0,
+          "z": 0.0
+        }
+      },
+      "captured_at_ms": 1799999999900,
+      "content_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "correlation_id": "correlation-region-1",
+      "inspection_id": "inspection-1",
+      "observation_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "observation_id": "observation-region-001",
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "tick": 200,
+      "world_identity": {
+        "dimension": "minecraft:overworld",
+        "runtime_instance_id": "runtime-instance-1",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "world_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "RegionInspectionRequest": {
+      "bounds": {
+        "max": {
+          "x": 3.0,
+          "y": 63.0,
+          "z": 3.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 60.0,
+          "z": 0.0
+        }
+      },
+      "command_id": "command-region-1",
+      "correlation_id": "correlation-region-1",
+      "deadline_ms": 1800000000000,
+      "maximum_volume": 64,
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2",
+      "step_id": "inspect-shelter",
+      "transport_id": "transport-region-1"
+    },
+    "RuntimeHealth": {
+      "active_correlation_id": null,
+      "busy": false,
+      "last_completed_action_sequence": 8,
+      "ready": true,
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2"
+    },
+    "RuntimeManifest": {
+      "capabilities": [
+        {
+          "effect_class": "state_changing",
+          "maximum_cost": {
+            "max_actions": 1,
+            "max_blocks_changed": 4,
+            "max_damage_taken": 2.0,
+            "max_strategy_attempts": 1,
+            "max_travel_distance": 32.0,
+            "protected_items": [],
+            "resource_consumption": {}
+          },
+          "name": "collect",
+          "parameters_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "count"
+            ],
+            "type": "object"
+          },
+          "receipt_schema_version": "2",
+          "requires_post_observation": true,
+          "risk": "survival_safe"
+        },
+        {
+          "effect_class": "state_changing",
+          "maximum_cost": {
+            "max_actions": 1,
+            "max_blocks_changed": 4,
+            "max_damage_taken": 4.0,
+            "max_strategy_attempts": 1,
+            "max_travel_distance": 32.0,
+            "protected_items": [],
+            "resource_consumption": {}
+          },
+          "name": "attack",
+          "parameters_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "target_entity_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "target_entity_id"
+            ],
+            "type": "object"
+          },
+          "receipt_schema_version": "2",
+          "requires_post_observation": true,
+          "risk": "survival_safe"
+        },
+        {
+          "effect_class": "read_only",
+          "maximum_cost": {
+            "max_actions": 1,
+            "max_blocks_changed": 4,
+            "max_damage_taken": 2.0,
+            "max_strategy_attempts": 1,
+            "max_travel_distance": 32.0,
+            "protected_items": [],
+            "resource_consumption": {}
+          },
+          "name": "inspect_region",
+          "parameters_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "bounds": {
+                "type": "object"
+              },
+              "maximum_volume": {
+                "maximum": 4096,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "bounds",
+              "maximum_volume"
+            ],
+            "type": "object"
+          },
+          "receipt_schema_version": "2",
+          "requires_post_observation": false,
+          "risk": "read_only"
+        }
+      ],
+      "guarantees": {
+        "action_budget_enforcement": true,
+        "cooperative_cancellation": true,
+        "correlation_idempotency": true,
+        "correlation_inspection": true,
+        "receipt_chains": true,
+        "single_flight": true
+      },
+      "profile": {
+        "capability_schema_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dimension": "minecraft:overworld",
+        "minecraft_version": "1.21.1",
+        "modset_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policy_version": "1",
+        "runtime_protocol": "2.0",
+        "schema_version": "1",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "skill_api_version": "1",
+        "world_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "protocol_version": "2.0",
+      "runtime_instance_id": "runtime-instance-1",
+      "schema_version": "2"
+    },
+    "RuntimeProtocolError": {
+      "caller_may_resubmit": false,
+      "code": "RESOURCE_NOT_FOUND",
+      "command_id": "command-1",
+      "correlation_id": "correlation-1",
+      "details": {},
+      "message": "tree missing",
+      "operator_action": "inspect status",
+      "outcome_known": true,
+      "phase": "runtime",
+      "schema_version": "2",
+      "step_id": "step-1",
+      "world_may_have_changed": false
+    }
+  },
+  "schema_digest": "c0d787324758d42db72c1c3bfdfc6c89524e253e779602eafa8a146a126f0bcf"
+}

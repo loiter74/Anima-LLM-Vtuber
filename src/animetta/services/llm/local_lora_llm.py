@@ -35,6 +35,7 @@ class LocalLoraLLM(LLMInterface):
         lora_path: str = "models/lora/neuro-vtuber-v1",
         device: str = "cuda",
         system_prompt: str = "",
+        max_history_messages: int = 20,
         **kwargs,
     ):
         """
@@ -51,6 +52,7 @@ class LocalLoraLLM(LLMInterface):
         self.requested_device = device  # Save user-requested device
         self.device = self._resolve_device(device)  # Auto-degradation
         self.system_prompt = system_prompt
+        self.max_history_messages = max_history_messages
 
         # Transformers and PEFT expose version-dependent runtime protocols.
         self.model: Any = None
@@ -126,6 +128,7 @@ class LocalLoraLLM(LLMInterface):
             lora_path=config.lora_path,
             device=config.device,
             system_prompt=system_prompt,
+            max_history_messages=getattr(config, "max_history_messages", 20),
         )
 
     def load_model(self) -> None:
@@ -364,6 +367,7 @@ class LocalLoraLLM(LLMInterface):
         # Can save the partial response heard into history here
         if heard_response:
             self.history.append({"role": "assistant", "content": heard_response})
+            self.history = self._trim_history(self.history, self.max_history_messages)
 
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
         """Restore conversation memory from history (not yet implemented)"""

@@ -197,7 +197,7 @@ groups:
     runner: pytest
     targets: [tests/tooling/quality]
     args: [-q, -o, addopts=]
-    timeout_seconds: 180
+    timeout_seconds: 240
     include_in_full: true
     cacheable: true
     resource_class: cpu
@@ -288,6 +288,157 @@ groups:
     resource_weight: 3
     input_sets: [python-toolchain]
 
+  minecraft-contract-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests/tools/minecraft/core/test_gamebot_v2_adapter.py]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
+
+  minecraft-voyager-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/tools/minecraft/voyager]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-domain-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets:
+      - tests/tools/minecraft/skill
+      - tests/tools/minecraft/survival
+      - tests/tools/minecraft/tech_tree
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-runtime-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets:
+      - tests/tools/minecraft/core
+      - tests/orchestration/server/handlers/test_minecraft_voyager_wiring.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-architecture-audit:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/check_minecraft_architecture.py
+    args: [--report]
+    timeout_seconds: 120
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source]
+
+  minecraft-adaptive-mission-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets:
+      - tests/tools/minecraft/mission
+      - tests/tools/minecraft/showcase
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-world-discovery-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/tools/minecraft/discovery]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-cross-runtime-contract:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/tools/gamebot/contracts/v2
+      - tests/tools/minecraft/core/test_gamebot_v2_adapter.py
+      - tests/tools/minecraft/voyager/test_mocked_cross_runtime.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 300
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  minecraft-real-conversation:
+    domain: repository
+    kind: integration
+    runner: python
+    isolation: service
+    entrypoint: scripts/minecraft_real_model_contract.py
+    capabilities: [network]
+    timeout_seconds: 900
+    required: false
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  minecraft-real-showcase:
+    domain: repository
+    kind: e2e
+    runner: python
+    isolation: service
+    entrypoint: scripts/minecraft_adaptive_showcase.py
+    capabilities: [browser, docker, network, gpu]
+    timeout_seconds: 1200
+    artifacts:
+      - evidence/minecraft-adaptive-showcase/manifest.json
+      - evidence/minecraft-adaptive-showcase/screenshots
+      - evidence/minecraft-adaptive-showcase/showcase.mp4
+    required: false
+    include_in_nightly: true
+    resource_class: exclusive
+    resource_weight: 8
+
+  minecraft-presentation-artifacts:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/tools/minecraft/showcase/test_presentation.py
+      - tests/tools/minecraft/showcase/test_runner.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
+
   backend-observability-unit:
     domain: backend
     kind: contract
@@ -365,7 +516,6 @@ groups:
     targets:
       - tests/smoke/test_readme_alignment.py
       - tests/smoke/test_frontend_agents_docs.py
-      - tests/smoke/test_opsx_archive_docs.py
     args: [-q, -o, addopts=]
     timeout_seconds: 120
     include_in_full: true
@@ -409,6 +559,14 @@ groups:
       - backend-services-unit
       - backend-memory-unit
       - backend-tools-unit
+      - minecraft-contract-unit
+      - minecraft-voyager-unit
+      - minecraft-domain-unit
+      - minecraft-runtime-unit
+      - minecraft-adaptive-mission-unit
+      - minecraft-world-discovery-unit
+      - minecraft-cross-runtime-contract
+      - minecraft-presentation-artifacts
       - backend-observability-unit
       - backend-acceptance-unit
       - backend-avatar-unit
@@ -644,12 +802,137 @@ components:
       - tooling/**
       - tests/tooling/**
       - scripts/health_check.py
+      - scripts/check_minecraft_architecture.py
       - tests/smoke/test_health_check.py
     direct_groups:
       - backend-tooling-quality
       - backend-support-typecheck
       - backend-static
       - python-format
+      - backend-deadcode
+    impacts: []
+    risk: high
+
+  minecraft-gamebot-contract:
+    domain: backend
+    paths:
+      - src/animetta/tools/gamebot/**
+      - contracts/gamebot/**
+      - tests/tools/gamebot/**
+      - tests/tools/minecraft/core/test_gamebot_v2_adapter.py
+    direct_groups:
+      - minecraft-contract-unit
+      - minecraft-cross-runtime-contract
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [minecraft-voyager-control-plane]
+    risk: high
+
+  minecraft-voyager-control-plane:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/voyager/**
+      - tests/tools/minecraft/voyager/**
+      - scripts/voyager_real_e2e.py
+    direct_groups:
+      - minecraft-voyager-unit
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [orchestration-server]
+    risk: high
+
+  minecraft-skill-domain:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/skill/**
+      - src/animetta/tools/minecraft/survival/**
+      - src/animetta/tools/minecraft/tech_tree/**
+      - tests/tools/minecraft/skill/**
+      - tests/tools/minecraft/survival/**
+      - tests/tools/minecraft/tech_tree/**
+    direct_groups:
+      - minecraft-domain-unit
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [minecraft-voyager-control-plane]
+    risk: high
+
+  minecraft-runtime-adapter:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/core/bridge.py
+      - src/animetta/tools/minecraft/core/config.py
+      - src/animetta/tools/minecraft/core/tools.py
+      - src/animetta/orchestration/server/handlers/minecraft_handlers.py
+      - tests/tools/minecraft/core/**
+      - tests/orchestration/server/handlers/test_minecraft_voyager_wiring.py
+    direct_groups:
+      - minecraft-runtime-unit
+      - minecraft-cross-runtime-contract
+      - minecraft-real-conversation
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [minecraft-voyager-control-plane, orchestration-server]
+    risk: high
+
+  minecraft-adaptive-missions:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/mission/**
+      - tests/tools/minecraft/mission/**
+    direct_groups:
+      - minecraft-adaptive-mission-unit
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [minecraft-voyager-control-plane, orchestration-server]
+    risk: high
+
+  minecraft-world-discovery:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/discovery/**
+      - tests/tools/minecraft/discovery/**
+    direct_groups:
+      - minecraft-world-discovery-unit
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [minecraft-adaptive-missions]
+    risk: high
+
+  minecraft-showcase-acceptance:
+    domain: repository
+    paths:
+      - scripts/minecraft_adaptive_showcase.py
+      - scripts/minecraft_real_model_contract.py
+      - src/animetta/tools/minecraft/showcase/**
+      - tests/tools/minecraft/showcase/**
+    direct_groups:
+      - minecraft-adaptive-mission-unit
+      - minecraft-architecture-audit
+      - minecraft-real-conversation
+      - minecraft-real-showcase
+      - minecraft-presentation-artifacts
+      - python-format
+      - backend-static
+      - backend-support-typecheck
       - backend-deadcode
     impacts: []
     risk: high

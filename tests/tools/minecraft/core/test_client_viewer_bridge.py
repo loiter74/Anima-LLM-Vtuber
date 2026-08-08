@@ -21,6 +21,35 @@ class TestBridgeClientViewerEnvExport:
     """Verify bridge.start() passes client_viewer settings to Node environment."""
 
     @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
+    async def test_bridge_forces_control_plane_runtime_mode(self, mock_is_available):
+        """Anima-owned runtimes must not start legacy background mutations."""
+        bridge = MinecraftBridge(MinecraftConfig(enabled=True))
+        captured_env = {}
+
+        async def fake_create(*args, **kwargs):
+            captured_env.update(kwargs.get("env", {}))
+            return MagicMock(
+                pid=1,
+                returncode=None,
+                stdin=MagicMock(write=MagicMock(), drain=AsyncMock()),
+                stdout=MagicMock(readline=AsyncMock(return_value=b"")),
+                stderr=MagicMock(readline=AsyncMock(return_value=b"")),
+                terminate=MagicMock(),
+                kill=MagicMock(),
+                wait=AsyncMock(),
+            )
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_create),
+            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
+            patch.dict("os.environ", {"GAMEBOT_CONTROL_PLANE_MODE": "false"}),
+        ):
+            await bridge.start()
+
+        assert captured_env["GAMEBOT_CONTROL_PLANE_MODE"] == "true"
+
+    @patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True)
     async def test_client_viewer_enabled_exports_env(self, mock_is_available, tmp_path):
         """When client_viewer.enabled=True, bridge exports MC_CLIENT_VIEWER_* vars."""
         cfg = MinecraftConfig(

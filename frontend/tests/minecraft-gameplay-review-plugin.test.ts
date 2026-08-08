@@ -7,13 +7,16 @@ import { MinecraftObsCompositeAdapter } from '../scripts/review/minecraft-obs'
 import { resolveMinecraftStableIndicator } from '../scripts/review/plugins/minecraft-gameplay'
 
 describe('minecraft gameplay review plugin', () => {
-  it('registers an independent full-OBS survival scene', () => {
+  it('registers the independent full-OBS gameplay scenes', () => {
     expect(REVIEW_FEATURE_IDS).toContain('minecraft-gameplay')
     const plugin = getReviewPlugin('minecraft-gameplay')
 
     expect(plugin.definition.route).toBe('/minecraft-gameplay.html')
     expect(plugin.definition.viewport).toEqual({ width: 1920, height: 1080 })
-    expect(plugin.definition.scenes.map(({ id }) => id)).toEqual(['survival-iron'])
+    expect(plugin.definition.scenes.map(({ id }) => id)).toEqual([
+      'survival-iron',
+      'adaptive-mission',
+    ])
     expect(plugin.capabilities).toEqual({
       requireObs: true,
       requireInteractive: true,

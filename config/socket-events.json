@@ -1179,14 +1179,6 @@
         "username?": "string"
       }
     },
-    "command": {
-      "name": "minecraft:command",
-      "payload": {
-        "action?": "string",
-        "params?": "object",
-        "timeout?": "number"
-      }
-    },
     "viewer_status": {
       "name": "minecraft:viewer_status",
       "payload": {
@@ -1203,6 +1195,128 @@
         "retry_in_ms?": "number"
       }
     },
+    "command_transition": {
+      "name": "minecraft:command_transition",
+      "payload": {
+        "event": "string",
+        "event_id": "string",
+        "transition_id": "string",
+        "command_id": "string",
+        "from_state?": "string",
+        "to_state": "string",
+        "reason_code": "string",
+        "occurred_at_ms": "number"
+      }
+    },
+    "skill_trust": {
+      "name": "minecraft:skill_trust",
+      "payload": {
+        "event": "string",
+        "event_id": "string",
+        "revision_hash": "string",
+        "environment_fingerprint": "string",
+        "status": "string",
+        "source_command_id": "string"
+      }
+    },
+    "mission_projection": {
+      "name": "minecraft:mission_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "objective_projection": {
+      "name": "minecraft:objective_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "proposal_projection": {
+      "name": "minecraft:proposal_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "discovery_projection": {
+      "name": "minecraft:discovery_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "skill_validation": {
+      "name": "minecraft:skill_validation",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "advancement_projection": {
+      "name": "minecraft:advancement_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
+    "stage_projection": {
+      "name": "minecraft:stage_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
     "bot_state": {
       "name": "minecraft:bot_state",
       "payload": {
@@ -1217,15 +1331,6 @@
         "action_target?": "string",
         "held_item?": "string",
         "inventory?": "array"
-      }
-    },
-    "command_result": {
-      "name": "minecraft:command_result",
-      "payload": {
-        "status?": "string",
-        "error?": "string",
-        "action?": "string",
-        "result?": "object"
       }
     }
   },

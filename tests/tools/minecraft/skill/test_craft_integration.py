@@ -331,38 +331,6 @@ class TestCraftSkillMatching:
         assert "craft_basic_tools" in result_ids
         assert "craft_armor" in result_ids
 
-    async def test_execute_skill_blocks_on_unmet_preconditions(
-        self,
-        lib_with_craft_skills: SkillLibrary,
-    ) -> None:
-        """execute_skill_by_id fails when preconditions not met."""
-        ctx = _inventory_ctx({"iron_ingot": 10})  # not enough iron
-        # Create a minimal bridge mock that won't be called
-        from unittest.mock import AsyncMock, MagicMock
-
-        mock_bridge = MagicMock()
-        mock_bridge.send_command = AsyncMock()
-
-        result = await lib_with_craft_skills.execute_skill_by_id("craft_armor", mock_bridge, ctx)
-        assert result.success is False, (
-            f"craft_armor should fail with only 10 iron, got: {result.reason}"
-        )
-        assert result.failed_at == -1, "Should fail at skill-level precondition check"
-        assert "preconditions" in result.reason.lower(), (
-            f"Reason should mention preconditions: {result.reason}"
-        )
-
-    async def test_execute_skill_skips_when_not_found(
-        self,
-        lib_with_craft_skills: SkillLibrary,
-    ) -> None:
-        """execute_skill_by_id fails for unknown skill."""
-        from unittest.mock import MagicMock
-
-        result = await lib_with_craft_skills.execute_skill_by_id("nonexistent_skill", MagicMock())
-        assert result.success is False
-        assert "not found" in result.reason.lower()
-
     async def test_precondition_check_at_step_level(self) -> None:
         """Step-level preconditions are checked during execution."""
         # Create a skill with a check step that validates inventory

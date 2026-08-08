@@ -85,6 +85,13 @@ class LLMInterface(ABC):
         """Clear conversation history"""
         pass
 
+    @staticmethod
+    def _trim_history(history: list[Any], max_messages: int) -> list[Any]:
+        """Bound ``history`` to the last ``max_messages`` entries (context-bloat guard)."""
+        if max_messages > 0 and len(history) > max_messages:
+            return history[-max_messages:]
+        return history
+
     @abstractmethod
     async def close(self) -> None:
         """Clean up resources"""

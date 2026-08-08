@@ -61,7 +61,8 @@ async def test_process_text_propagates_identity_to_state_and_result() -> None:
     orchestrator._get_persona_dict = MagicMock(return_value={})
     orchestrator._get_system_prompt = MagicMock(return_value=None)
 
-    async def run_graph(state):
+    async def run_graph(state, *, tool_invocation_observer=None):
+        assert tool_invocation_observer is None
         return {**state, "response_text": "reply"}
 
     orchestrator._run_graph = AsyncMock(side_effect=run_graph)

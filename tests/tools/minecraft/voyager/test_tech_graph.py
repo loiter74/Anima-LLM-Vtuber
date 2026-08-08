@@ -13,7 +13,7 @@ from animetta.tools.gamebot.contracts import (
 
 
 def _tech():
-    return importlib.import_module("animetta.tools.minecraft.voyager.tech_graph")
+    return importlib.import_module("animetta.tools.minecraft.tech_tree.graph")
 
 
 def _observation(

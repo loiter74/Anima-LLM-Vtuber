@@ -61,8 +61,10 @@ mcp_servers:
 # ========================================
 minecraft:
   enabled: true                 # 已启用，AI 控制 Mineflayer Bot 自动连接
-  mode: fallback                # fallback(默认,纯Survival Runner) | learn(Voyager学习期) | live(直播选技能)
-  autonomous: true              # deprecated: 由 mode 派生，保留向后兼容
+  queue_capacity: 100           # all gameplay uses one bounded FIFO consumer
+  max_tool_wait_seconds: 10     # caller wait only; does not cancel queued/running work
+  journal_path: data/minecraft_commands.db
+  skill_path: data/mc_skills.db
   bot:
     host: "localhost"
     port: 25565

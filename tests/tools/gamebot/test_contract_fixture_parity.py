@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from animetta.tools.gamebot.contracts import (
     CapabilityManifest,
     GameBotObservation,
     SkillExecutionResult,
     validate_receipt_chain,
 )
-from animetta.tools.minecraft.voyager.policy import VoyagerPolicy
+from animetta.tools.gamebot.contracts.v2 import RuntimeManifest
 
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "gamebot_contract_v1.json"
 
@@ -39,18 +42,11 @@ def test_shared_v1_fixture_validates_and_preserves_node_hash_links() -> None:
     assert execution.receipts[1].previous_receipt_hash == execution.receipts[0].content_hash
 
 
-def test_incompatible_fixture_is_rejected_by_python_controller_policy() -> None:
+def test_v1_fixture_cannot_be_used_as_a_v2_readiness_manifest() -> None:
     fixture = _fixture()
-    manifest = CapabilityManifest.model_validate(fixture["incompatible_manifest"])
-    policy = VoyagerPolicy(
-        supported_protocol="1.0",
-        allowed_capabilities={"collect", "craft"},
-    )
 
-    report = policy.validate_manifest(manifest)
-
-    assert report.allowed is False
-    assert [violation.code for violation in report.violations] == ["INCOMPATIBLE_PROTOCOL"]
+    with pytest.raises(ValidationError):
+        RuntimeManifest.model_validate(fixture["incompatible_manifest"])
 
 
 def test_local_fixture_matches_sibling_node_runtime_when_present() -> None:

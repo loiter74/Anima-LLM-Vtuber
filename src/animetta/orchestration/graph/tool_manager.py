@@ -23,10 +23,12 @@ class ToolManager:
         self.tools_map: dict[str, Any] = {}
         self.chat_model: Any | None = None
         self._mcp_manager: Any | None = None
+        self._owns_tool_lifecycle = True
 
     async def load_tools(self, tools_config: dict[str, Any]) -> bool:
         """Load tools and create ChatModel"""
         try:
+            self._owns_tool_lifecycle = True
             logger.info(f"[{self.session_id}] [ToolManager] Starting tool loading...")
 
             # 1. Load built-in/LangChain/custom tools (sync)
@@ -54,6 +56,30 @@ class ToolManager:
 
         except Exception as e:
             logger.error(f"[{self.session_id}] [ToolManager] Tool loading failed: {e}")
+            return False
+
+    async def load_prebuilt_tools(self, tools: list[Any]) -> bool:
+        """Bind runtime-owned tool instances without rerunning their lifecycle loader."""
+
+        try:
+            names = [getattr(item, "name", None) for item in tools]
+            if any(not isinstance(name, str) or not name for name in names):
+                raise ValueError("prebuilt tools require non-empty names")
+            if len(names) != len(set(names)):
+                raise ValueError("prebuilt tool names must be unique")
+            self._owns_tool_lifecycle = False
+            self.tools = list(tools)
+            self.tools_map = dict(zip(names, self.tools, strict=True))
+            self.chat_model = await self._create_chat_model()
+            if self.chat_model is not None and self.tools:
+                self.chat_model = self.chat_model.bind_tools(self.tools)
+            return True
+        except Exception as exc:
+            logger.error(
+                "[{}] [ToolManager] Prebuilt tool binding failed: {}",
+                self.session_id,
+                exc,
+            )
             return False
 
     async def _create_chat_model(self) -> Any | None:
@@ -86,6 +112,9 @@ class ToolManager:
         if self._mcp_manager:
             await self._mcp_manager.close_all()
             self._mcp_manager = None
+
+        if not self._owns_tool_lifecycle:
+            return
 
         # Cleanup Minecraft bridge
         try:

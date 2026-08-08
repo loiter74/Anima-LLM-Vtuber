@@ -290,7 +290,7 @@ def test_qwen_deploy_waits_for_readiness_and_animetta_preflights_before_build() 
     assert 'operation == "qwen-deploy"' in lifecycle
     assert "_preflight(wait=True)" in lifecycle
     assert 'operation == "anima-up"' in lifecycle
-    assert lifecycle.index("_run(_preflight(wait=False))") < lifecycle.index(
+    assert lifecycle.index('_run(_preflight(wait=False, mode="host-tts"))') < lifecycle.index(
         '_run(["docker", "compose", "build", "animetta"])'
     )
 

@@ -2,10 +2,9 @@
 Minecraft configuration models
 """
 
-from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MinecraftBotConfig(BaseModel):
@@ -44,19 +43,6 @@ class MinecraftClientViewerConfig(BaseModel):
     spectate_timeout: int = 8  # seconds to wait for spectate command result
 
 
-class MinecraftMode(StrEnum):
-    """Bot 运行模式（mc-bot-voyager-learning）。
-
-    FALLBACK: 纯 Survival Runner 确定性流程（默认，最可靠）
-    LEARN:    Voyager 学习期——自动课程 + 迭代代码生成 + 自我验证闭环，攒 verified 技能
-    LIVE:     直播期——从 verified 技能库选技能执行，不生成新代码
-    """
-
-    FALLBACK = "fallback"
-    LEARN = "learn"
-    LIVE = "live"
-
-
 class MinecraftRuntimeConfig(BaseModel):
     """External runtime configuration for the Minecraft bot process.
 
@@ -73,20 +59,35 @@ class MinecraftRuntimeConfig(BaseModel):
 
 
 class MinecraftConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = False
-    mode: MinecraftMode = MinecraftMode.FALLBACK
-    autonomous: bool = False  # deprecated: 由 mode != FALLBACK 派生；保留向后兼容
-    bot: MinecraftBotConfig = MinecraftBotConfig()
-    safety: MinecraftSafetyConfig = MinecraftSafetyConfig()
-    viewer: MinecraftViewerConfig = MinecraftViewerConfig()
-    client_viewer: MinecraftClientViewerConfig = MinecraftClientViewerConfig()
-    runtime: MinecraftRuntimeConfig = MinecraftRuntimeConfig()
+    queue_capacity: int = Field(default=100, gt=0, le=10_000)
+    max_tool_wait_seconds: float = Field(default=10, ge=0, le=60)
+    cancellation_grace_seconds: float = Field(default=10, gt=0, le=120)
+    reconciliation_timeout_seconds: float = Field(default=30, gt=0, le=300)
+    journal_path: str = "data/minecraft_commands.db"
+    skill_path: str = "data/mc_skills.db"
+    bot: MinecraftBotConfig = Field(default_factory=MinecraftBotConfig)
+    safety: MinecraftSafetyConfig = Field(default_factory=MinecraftSafetyConfig)
+    viewer: MinecraftViewerConfig = Field(default_factory=MinecraftViewerConfig)
+    client_viewer: MinecraftClientViewerConfig = Field(default_factory=MinecraftClientViewerConfig)
+    runtime: MinecraftRuntimeConfig = Field(default_factory=MinecraftRuntimeConfig)
 
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_viewer(cls, value: object) -> object:
         """Promote legacy viewer settings when canonical settings are absent."""
-        if not isinstance(value, dict) or "client_viewer" in value:
+        if not isinstance(value, dict):
+            return value
+        removed = sorted({"mode", "autonomous"} & value.keys())
+        if removed:
+            raise ValueError(
+                "Removed Minecraft config field(s): "
+                + ", ".join(removed)
+                + "; submit a typed mission policy or bounded atomic probe"
+            )
+        if "client_viewer" in value:
             return value
         legacy = value.get("viewer")
         if not isinstance(legacy, dict):

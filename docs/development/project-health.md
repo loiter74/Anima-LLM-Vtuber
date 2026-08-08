@@ -11,6 +11,10 @@ The quality catalog owns components, path patterns, impact edges, risk, verifica
 - Isolation and capabilities are orthogonal: `isolation` describes runtime state, while `capabilities` declares the tools or environment the runner needs.
 - `service` groups start or connect to live runtime state and are isolated from ordinary unit checks.
 - A missing required capability blocks the result. A missing optional capability is recorded as skipped/degraded evidence.
+- Docker and browser availability are machine-detected. Non-detectable live capabilities
+  are fail-closed and must be asserted per invocation with
+  `ANIMETTA_QUALITY_CAPABILITIES=network` or
+  `ANIMETTA_QUALITY_CAPABILITIES=network,gpu`; other declared values are rejected.
 
 ### Acceleration safety model
 

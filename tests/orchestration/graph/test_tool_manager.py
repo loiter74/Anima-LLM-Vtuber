@@ -127,6 +127,70 @@ class TestToolManager:
 
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_load_prebuilt_tools_binds_exact_instances_without_config_loader(
+        self, tool_manager
+    ):
+        """A runtime-owned control plane can reuse the ordinary graph without reinitializing it."""
+
+        first = MagicMock()
+        first.name = "mc_execute"
+        second = MagicMock()
+        second.name = "mc_status"
+        third = MagicMock()
+        third.name = "mc_stop"
+        chat_model = MagicMock()
+        bound_model = MagicMock()
+        chat_model.bind_tools.return_value = bound_model
+
+        assert hasattr(tool_manager, "load_prebuilt_tools")
+        with (
+            patch("animetta.orchestration.graph.tool_manager.load_tools_from_config") as loader,
+            patch.object(
+                tool_manager,
+                "_create_chat_model",
+                AsyncMock(return_value=chat_model),
+            ),
+        ):
+            result = await tool_manager.load_prebuilt_tools([first, second, third])
+
+        assert result is True
+        assert tool_manager.tools == [first, second, third]
+        assert tool_manager.tools_map == {
+            "mc_execute": first,
+            "mc_status": second,
+            "mc_stop": third,
+        }
+        assert tool_manager.chat_model is bound_model
+        loader.assert_not_called()
+        chat_model.bind_tools.assert_called_once_with([first, second, third])
+
+    @pytest.mark.asyncio
+    async def test_cleanup_does_not_stop_runtime_owned_by_prebuilt_tools(self, tool_manager):
+        tool = MagicMock()
+        tool.name = "mc_execute"
+        chat_model = MagicMock()
+        chat_model.bind_tools.return_value = chat_model
+        bridge = MagicMock()
+        bridge.is_running = True
+        bridge.stop = AsyncMock()
+
+        with (
+            patch.object(
+                tool_manager,
+                "_create_chat_model",
+                AsyncMock(return_value=chat_model),
+            ),
+            patch(
+                "animetta.orchestration.graph.tool_manager.get_bridge",
+                return_value=bridge,
+            ),
+        ):
+            assert await tool_manager.load_prebuilt_tools([tool]) is True
+            await tool_manager.cleanup()
+
+        bridge.stop.assert_not_awaited()
+
     # ── _create_chat_model ────────────────────────────────────────
 
     @pytest.mark.asyncio

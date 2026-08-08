@@ -297,9 +297,6 @@ class RouteHandlers:
     async def on_minecraft_spectate(self, sid: str, data: dict) -> None:
         return await self.minecraft.on_minecraft_spectate(sid, data)
 
-    async def on_minecraft_command(self, sid: str, data: dict) -> None:
-        return await self.minecraft.on_minecraft_command(sid, data)
-
     # ── Persona events ────────────────────────────────────────────────
 
     async def on_translation_configure(self, sid: str, data: dict) -> None:
@@ -448,7 +445,6 @@ def register_routes(
     sio.on(event_name("minecraft", "start"), handlers.on_minecraft_start)
     sio.on(event_name("minecraft", "stop"), handlers.on_minecraft_stop)
     sio.on(event_name("minecraft", "spectate"), handlers.on_minecraft_spectate)
-    sio.on(event_name("minecraft", "command"), handlers.on_minecraft_command)
 
     # Translation configuration events
     sio.on(event_name("translation", "configure"), handlers.on_translation_configure)

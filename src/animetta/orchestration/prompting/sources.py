@@ -31,6 +31,73 @@ class PersonaPromptSource:
         ]
 
 
+class MinecraftMissionPromptSource:
+    """Constrain ordinary Minecraft conversation to the typed mission boundary."""
+
+    name = "minecraft_mission"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        if "mc_execute" not in ctx.available_tool_names:
+            content = ""
+        else:
+            from animetta.tools.minecraft.blueprint import starter_shelter_blueprint
+
+            shelter = starter_shelter_blueprint()
+            content = (
+                "## Minecraft typed mission contract\n\n"
+                "For any ordinary user request to act in Minecraft, call mc_execute with "
+                "root kind=mission and contract_version=2; do not add an outer request object. "
+                "The exact root shape is {contract_version, kind, request_id, mission}. Omit "
+                "wait_seconds when it is zero. A fixed request is still a "
+                "one-objective MissionSpec. Compound requests use typed objectives, explicit "
+                "DAG dependencies, independently verifiable success predicates, one parent "
+                "budget, and explicit execution/autonomy policies. Open-ended discovery or "
+                "skill outcomes belong in typed mission completion predicates.\n\n"
+                "Keep the tool arguments compact: omit optional/default-valued fields, avoid "
+                "duplicate predicates, and emit strict complete JSON.\n\n"
+                "Use a deployable parent budget no larger than: queue_timeout_ms=60000, "
+                "execution_timeout_ms=900000, max_actions=128, max_strategy_attempts=8, "
+                "max_travel_distance=512, max_blocks_changed=128, max_damage_taken=8. "
+                "For every quantitative field, the sum across all objective budgets must be "
+                "less than or equal to the parent value. Give zero damage/block cost to "
+                "objectives that do not need it, and express the two vanilla advancements as "
+                "a mission-level completion predicate rather than extra placeholder goals.\n\n"
+                "When the concrete novel item and reusable skill are not known yet, do not "
+                "invent discover/learn/reuse placeholder objectives. Put novel_fact>=1 and "
+                "trusted_skill>=1 in mission completion predicates and authorize bounded "
+                "discovery/skill autonomy; curriculum will append concrete evidence-backed "
+                "children later. For the showcase-shaped request with zombie, skeleton, spider, "
+                "and starter shelter, the initial DAG therefore has exactly four fixed goals. "
+                "Use these conservative child budgets: each combat goal actions=4, attempts=2, "
+                "travel=32, blocks=0, damage=2; shelter actions=84, attempts=2, travel=32, "
+                "blocks=85, damage=0. Use exact namespaced entity IDs minecraft:zombie, "
+                "minecraft:skeleton, and minecraft:spider in both target and entity_defeated. "
+                "If the user asks to learn a new reusable skill, execution must set "
+                "allow_skill_learning=true.\n\n"
+                f"The approved starter shelter is blueprint_id={shelter.blueprint_id} and "
+                f"blueprint_hash={shelter.canonical_hash}; building it must use a "
+                "structure_matches_blueprint predicate with those exact values.\n\n"
+                "Never select learn, live, or fallback; Voyager chooses authorized internal "
+                "strategies from MissionSpec.execution. Also never use the atomic branch for "
+                "an ordinary user request or emit free-form Voyager steps, JavaScript, or a "
+                "hidden atomic action plan. Atomic is reserved for trusted internal/operator "
+                "probes.\n\n"
+                "If mission validation fails, repair the complete schema at most once. If the "
+                "repaired call fails, do not call mc_execute again: explain the structured "
+                "error visibly. Call mc_status before progress or final narration and only "
+                "report committed typed status/evidence. Never claim an objective, discovery, "
+                "skill, or advancement from prose or intent alone."
+            )
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.TOOL_INSTRUCTION,
+                priority=SectionPriority.TOOL_INSTRUCTION,
+                content=content,
+            )
+        ]
+
+
 class AffinityPromptSource:
     """Produces the 好感度 (affinity) overlay section.
 

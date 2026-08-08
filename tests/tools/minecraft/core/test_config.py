@@ -3,7 +3,6 @@ from __future__ import annotations
 from animetta.tools.minecraft.core.config import (
     MinecraftBotConfig,
     MinecraftConfig,
-    MinecraftMode,
     MinecraftRuntimeConfig,
     MinecraftSafetyConfig,
 )
@@ -97,7 +96,6 @@ class TestMinecraftConfig:
     def test_default_values(self):
         cfg = MinecraftConfig()
         assert cfg.enabled is False
-        assert cfg.mode == MinecraftMode.FALLBACK
         assert cfg.bot.host == "localhost"
         assert cfg.bot.port == 25565
         assert cfg.safety.no_griefing is True
@@ -105,14 +103,17 @@ class TestMinecraftConfig:
     def test_enabled_config(self):
         cfg = MinecraftConfig(
             enabled=True,
-            mode=MinecraftMode.LEARN,
             bot=MinecraftBotConfig(host="mc.example.com", username="TestBot"),
         )
         assert cfg.enabled is True
-        assert cfg.mode == MinecraftMode.LEARN
         assert cfg.bot.host == "mc.example.com"
         assert cfg.bot.username == "TestBot"
 
     def test_nested_safety_config(self):
         cfg = MinecraftConfig(safety=MinecraftSafetyConfig(max_distance=300))
         assert cfg.safety.max_distance == 300
+
+    @pytest.mark.parametrize("field", ["mode", "autonomous"])
+    def test_removed_control_plane_fields_have_explicit_migration_error(self, field):
+        with pytest.raises(ValidationError, match="Removed Minecraft config field"):
+            MinecraftConfig.model_validate({field: "learn"})

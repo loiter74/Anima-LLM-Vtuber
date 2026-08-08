@@ -182,31 +182,7 @@ async def test_client_execute_action_returns_typed_receipt(client, fake_transpor
     assert timeout == 30.0
 
 
-async def test_client_eval_skill_cancel_and_health_are_runtime_operations(
-    client, fake_transport
-) -> None:
-    fake_transport.responses["eval_skill"] = {
-        "status": "success",
-        "result": {
-            "receipts": [
-                {
-                    "receipt_id": "receipt-skill",
-                    "session_id": "session-1",
-                    "task_id": "task-1",
-                    "correlation_id": "corr-skill",
-                    "runtime_id": "runtime-1",
-                    "capability": "collect",
-                    "params": {},
-                    "started_at": "2026-07-12T00:00:00Z",
-                    "finished_at": "2026-07-12T00:00:01Z",
-                    "before_observation_hash": "obs-0",
-                    "after_observation_hash": "obs-1",
-                    "outcome": "success",
-                }
-            ],
-            "output": {"collected": 1},
-        },
-    }
+async def test_client_cancel_and_health_are_runtime_operations(client, fake_transport) -> None:
     fake_transport.responses["cancel_action"] = {
         "status": "success",
         "result": {"cancelled": True},
@@ -216,18 +192,8 @@ async def test_client_eval_skill_cancel_and_health_are_runtime_operations(
         "result": {"healthy": True, "runtime_id": "runtime-1"},
     }
 
-    execution = await client.eval_skill(
-        "await collect('oak_log', 1)",
-        allowed_capabilities=["collect"],
-        session_id="session-1",
-        task_id="task-1",
-        correlation_id="corr-skill",
-        timeout=30.0,
-    )
     cancelled = await client.cancel_action("corr-skill")
     health = await client.health()
 
-    assert execution.receipts[0].receipt_id == "receipt-skill"
-    assert execution.output == {"collected": 1}
     assert cancelled == {"cancelled": True}
     assert health == {"healthy": True, "runtime_id": "runtime-1"}

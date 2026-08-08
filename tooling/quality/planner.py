@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import fnmatch
-import hashlib
-import json
 from collections import deque
 from pathlib import Path
 
@@ -14,6 +12,7 @@ from .fingerprint import (
     fingerprint_group,
     is_safe_fingerprint_pattern,
 )
+from .hashing import canonical_json_hash
 from .manifest import LoadedCatalog
 from .models import (
     Capability,
@@ -56,13 +55,7 @@ def _infer_domain(path: str) -> Domain:
 
 
 def _plan_hash(payload: dict) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return canonical_json_hash(payload)
 
 
 def _repository_root(manifest_path: Path) -> Path:
@@ -80,17 +73,15 @@ def verification_plan_hash(plan: VerificationPlan) -> str:
         "source": plan.source,
         "base_sha": plan.base_sha,
         "head_sha": plan.head_sha,
-        "changes": [change.model_dump(mode="json") for change in plan.changes],
-        "groups": [group.model_dump(mode="json") for group in plan.groups],
-        "required_capabilities": sorted(
-            capability.value for capability in plan.required_capabilities
-        ),
+        "changes": plan.changes,
+        "groups": plan.groups,
+        "required_capabilities": plan.required_capabilities,
         "fallbacks": sorted(plan.fallbacks),
-        "dominated_groups": [group.model_dump(mode="json") for group in plan.dominated_groups],
-        "docker_actions": [action.model_dump(mode="json") for action in plan.docker_actions],
+        "dominated_groups": plan.dominated_groups,
+        "docker_actions": plan.docker_actions,
         "docker_scope_fingerprints": dict(sorted(plan.docker_scope_fingerprints.items())),
         "compose_identity": plan.compose_identity,
-        "scheduler": plan.scheduler.model_dump(mode="json"),
+        "scheduler": plan.scheduler,
         "manifest_hash": plan.manifest_hash,
     }
     return _plan_hash(payload)

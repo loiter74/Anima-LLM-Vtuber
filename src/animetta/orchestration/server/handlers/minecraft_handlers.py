@@ -13,7 +13,6 @@ from loguru import logger
 from ....tools.minecraft.core import tools as mc_tools
 from ....tools.minecraft.core.bridge import MinecraftBridge, get_bridge
 from ....tools.minecraft.core.config import MinecraftConfig
-from ....tools.minecraft.core.state_collector import StateCollector
 from ....tools.minecraft.core.tools import cleanup_bridge, init_bridge
 from ...socket_events import EVENTS
 
@@ -112,22 +111,25 @@ class MinecraftHandlers:
 
     def __init__(self, sio: "AsyncServer"):
         self.sio = sio
-        self._state_collector: StateCollector | None = None
 
     async def _configure_voyager(self, bridge: MinecraftBridge) -> bool:
-        """Attach the Python control plane when the shared LLM is available."""
-        from animetta.core.service_pool import ServicePool
+        """Validate GameBot v2 and attach the unified Python control plane."""
 
-        if not ServicePool._ready or ServicePool._llm is None:
-            logger.warning(
-                "[Minecraft] Shared LLM is unavailable; Voyager controller not configured"
-            )
-            return False
-        await mc_tools.configure_voyager_controller(
-            bridge,
-            llm_service=ServicePool._llm,
-        )
-        logger.info("[Minecraft] Python Voyager controller configured")
+        async def emit_transition(payload: dict[str, Any]) -> None:
+            event_key = {
+                "minecraft.skill.trust": "skill_trust",
+                "minecraft.mission.projection": "mission_projection",
+                "minecraft.objective.projection": "objective_projection",
+                "minecraft.proposal.projection": "proposal_projection",
+                "minecraft.discovery.projection": "discovery_projection",
+                "minecraft.skill_validation.projection": "skill_validation",
+                "minecraft.advancement.projection": "advancement_projection",
+                "minecraft.stage.projection": "stage_projection",
+            }.get(str(payload.get("event")), "command_transition")
+            await self.sio.emit(EVENTS["minecraft"][event_key]["name"], payload)
+
+        await mc_tools.configure_voyager_control_plane(bridge, event_emit=emit_transition)
+        logger.info("[Minecraft] Python Voyager control plane configured")
         return True
 
     def _setup_viewer_callback(self, bridge: MinecraftBridge) -> None:
@@ -199,12 +201,6 @@ class MinecraftHandlers:
             logger.info("[Minecraft] Bot started successfully")
             await self._configure_voyager(bridge)
 
-            # Start state collector for HUD + web dashboard
-            collector = StateCollector(bridge, self.sio, interval=2.0)
-            self._state_collector = collector
-            mc_tools._state_collector = collector
-            await collector.start()
-
             await self.sio.emit(
                 EVENTS["minecraft"]["status"]["name"],
                 {"connected": True, "username": config.bot.username},
@@ -244,12 +240,6 @@ class MinecraftHandlers:
         """
         try:
             logger.info("[Minecraft] Frontend requested stop")
-
-            # Stop state collector first
-            if self._state_collector:
-                await self._state_collector.stop()
-                self._state_collector = None
-                mc_tools._state_collector = None
 
             bridge = get_bridge()
             if bridge is not None:
@@ -313,39 +303,6 @@ class MinecraftHandlers:
             logger.error(f"[Minecraft] Spectate failed: {e}")
             await self.sio.emit(
                 EVENTS["minecraft"]["viewer_status"]["name"],
-                {"status": "error", "error": str(e)},
-                to=sid,
-            )
-
-    async def on_minecraft_command(self, sid: str, data: dict) -> None:
-        """Send a raw command to the bot (for direct control/debugging).
-
-        data: {"action": "goto", "params": {"x": 10, "y": 64, "z": 20}}
-        """
-        try:
-            bridge = get_bridge()
-            if bridge is None or not bridge.is_running:
-                await self.sio.emit(
-                    EVENTS["minecraft"]["command_result"]["name"],
-                    {"status": "error", "error": "Bot not running"},
-                    to=sid,
-                )
-                return
-
-            action = data.get("action", "status")
-            params = data.get("params", {})
-            timeout = data.get("timeout", 60)
-
-            result = await bridge.send_command(action, params, timeout=timeout)
-            await self.sio.emit(
-                EVENTS["minecraft"]["command_result"]["name"],
-                {"action": action, "result": result},
-                to=sid,
-            )
-        except Exception as e:
-            logger.error(f"[Minecraft] Command failed: {e}")
-            await self.sio.emit(
-                EVENTS["minecraft"]["command_result"]["name"],
                 {"status": "error", "error": str(e)},
                 to=sid,
             )

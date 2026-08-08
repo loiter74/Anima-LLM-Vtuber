@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
+import { isStageIOView, type StageIOView } from '@/types/minecraft-stage'
 
 export interface MinecraftStatus {
   connected: boolean
@@ -37,11 +38,41 @@ export interface BotState {
   inventory: Array<{ name: string; count: number; slot: number }>
 }
 
+type ProjectionKind =
+  'mission' | 'objective' | 'proposal' | 'discovery' | 'skill_validation' | 'advancement' | 'stage'
+
+export interface MinecraftProjectionEvent {
+  schema_version: 1 | '1'
+  event: string
+  event_id: string
+  projection_kind: ProjectionKind
+  projection_version: number
+  occurred_at_ms: number
+  mission_id?: string
+  entity_id: string
+  payload: Record<string, unknown>
+}
+
+export interface MissionStatusPage {
+  missions: Array<Record<string, unknown>>
+  next_cursor?: string | null
+}
+
 export const useMinecraftStore = defineStore('minecraft', () => {
   const connected = ref(false)
   const isConnecting = ref(false)
   const username = ref('')
   const error = ref('')
+  const missionProjections = ref<Record<string, Record<string, unknown>>>({})
+  const objectiveProjections = ref<Record<string, Record<string, unknown>>>({})
+  const proposalProjections = ref<Record<string, Record<string, unknown>>>({})
+  const discoveryProjections = ref<Record<string, Record<string, unknown>>>({})
+  const skillValidationProjections = ref<Record<string, Record<string, unknown>>>({})
+  const advancementProjections = ref<Record<string, Record<string, unknown>>>({})
+  const stageProjections = ref<Record<string, Record<string, unknown>>>({})
+  const acceptedProjectionEventCount = ref(0)
+  const seenProjectionEventIds = new Set<string>()
+  const MAX_PROJECTION_EVENT_IDS = 10_000
 
   // Viewer spectator state
   const viewerStatus = ref<'idle' | 'waiting' | 'joined' | 'left' | 'error'>('idle')
@@ -71,6 +102,77 @@ export const useMinecraftStore = defineStore('minecraft', () => {
   })
 
   let cleanup: (() => void) | null = null
+
+  function targetProjection(kind: ProjectionKind): Record<string, Record<string, unknown>> {
+    return {
+      mission: missionProjections.value,
+      objective: objectiveProjections.value,
+      proposal: proposalProjections.value,
+      discovery: discoveryProjections.value,
+      skill_validation: skillValidationProjections.value,
+      advancement: advancementProjections.value,
+      stage: stageProjections.value,
+    }[kind]
+  }
+
+  function applyProjectionEvent(data: MinecraftProjectionEvent): void {
+    if (seenProjectionEventIds.has(data.event_id)) return
+    const target = targetProjection(data.projection_kind)
+    const currentVersion = Number(target[data.entity_id]?.projection_version ?? -1)
+    if (data.projection_version < currentVersion) return
+    seenProjectionEventIds.add(data.event_id)
+    while (seenProjectionEventIds.size > MAX_PROJECTION_EVENT_IDS) {
+      const oldest = seenProjectionEventIds.values().next().value
+      if (oldest === undefined) break
+      seenProjectionEventIds.delete(oldest)
+    }
+    target[data.entity_id] = {
+      ...data.payload,
+      mission_id: data.mission_id,
+      projection_version: data.projection_version,
+      occurred_at_ms: data.occurred_at_ms,
+      event_id: data.event_id,
+    }
+    acceptedProjectionEventCount.value += 1
+  }
+
+  function rehydrateMissionStatus(page: MissionStatusPage): void {
+    const missions: Record<string, Record<string, unknown>> = {}
+    const objectives: Record<string, Record<string, unknown>> = {}
+    const proposals: Record<string, Record<string, unknown>> = {}
+    for (const mission of page.missions) {
+      const missionId = String(mission.mission_id ?? '')
+      if (!missionId) continue
+      missions[missionId] = mission
+      for (const objective of (mission.objectives as Array<Record<string, unknown>> | undefined) ??
+        []) {
+        const objectiveId = String(objective.objective_id ?? '')
+        if (objectiveId) objectives[objectiveId] = { ...objective, mission_id: missionId }
+      }
+      for (const proposal of (mission.proposals as Array<Record<string, unknown>> | undefined) ??
+        []) {
+        const proposalId = String(proposal.proposal_id ?? '')
+        if (proposalId) proposals[proposalId] = { ...proposal, mission_id: missionId }
+      }
+    }
+    missionProjections.value = missions
+    objectiveProjections.value = objectives
+    proposalProjections.value = proposals
+  }
+
+  function walkthroughStages(missionId: string, runId?: string): StageIOView[] {
+    return Object.values(stageProjections.value)
+      .filter(
+        (stage): stage is Record<string, unknown> & StageIOView =>
+          isStageIOView(stage) &&
+          stage.mission_id === missionId &&
+          (runId === undefined || stage.run_id === runId),
+      )
+      .sort(
+        (left, right) =>
+          left.ordinal - right.ordinal || left.stage_id.localeCompare(right.stage_id),
+      )
+  }
 
   function setupListener(): void {
     const socket = getSocket()
@@ -131,10 +233,21 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     socket.on(Events.MINECRAFT.STATUS, statusHandler)
     socket.on(Events.MINECRAFT.VIEWER_STATUS, viewerHandler)
     socket.on(Events.MINECRAFT.BOT_STATE, botStateHandler)
+    const projectionEvents = [
+      Events.MINECRAFT.MISSION_PROJECTION,
+      Events.MINECRAFT.OBJECTIVE_PROJECTION,
+      Events.MINECRAFT.PROPOSAL_PROJECTION,
+      Events.MINECRAFT.DISCOVERY_PROJECTION,
+      Events.MINECRAFT.SKILL_VALIDATION,
+      Events.MINECRAFT.ADVANCEMENT_PROJECTION,
+      Events.MINECRAFT.STAGE_PROJECTION,
+    ]
+    for (const eventName of projectionEvents) socket.on(eventName, applyProjectionEvent)
     cleanup = () => {
       socket.off(Events.MINECRAFT.STATUS, statusHandler)
       socket.off(Events.MINECRAFT.VIEWER_STATUS, viewerHandler)
       socket.off(Events.MINECRAFT.BOT_STATE, botStateHandler)
+      for (const eventName of projectionEvents) socket.off(eventName, applyProjectionEvent)
     }
   }
 
@@ -185,6 +298,16 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     viewerRetryInMs,
     viewerReason,
     botState,
+    missionProjections,
+    objectiveProjections,
+    proposalProjections,
+    discoveryProjections,
+    skillValidationProjections,
+    advancementProjections,
+    stageProjections,
+    acceptedProjectionEventCount,
+    walkthroughStages,
+    rehydrateMissionStatus,
     setupListener,
     teardownListener,
     start,

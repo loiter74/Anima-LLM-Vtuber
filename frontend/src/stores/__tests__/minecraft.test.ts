@@ -75,4 +75,95 @@ describe('useMinecraftStore', () => {
     expect(socket.emit).toHaveBeenCalledWith(Events.MINECRAFT.SPECTATE, {})
     expect(socket.emit).toHaveBeenCalledWith(Events.MINECRAFT.STOP)
   })
+
+  it('deduplicates mission-domain projections and rejects stale versions', () => {
+    const store = useMinecraftStore()
+    store.setupListener()
+    const missionHandler = registeredHandler(Events.MINECRAFT.MISSION_PROJECTION)
+    const event = {
+      schema_version: 1,
+      event: 'minecraft.mission.projection',
+      event_id: 'mission-1:mission:2',
+      projection_kind: 'mission',
+      projection_version: 2,
+      occurred_at_ms: 100,
+      mission_id: 'mission-1',
+      entity_id: 'mission-1',
+      payload: { mission_id: 'mission-1', status: 'running' },
+    }
+
+    missionHandler?.(event)
+    missionHandler?.({ ...event, payload: { mission_id: 'mission-1', status: 'failed' } })
+    missionHandler?.({
+      ...event,
+      event_id: 'mission-1:mission:1',
+      projection_version: 1,
+      payload: { mission_id: 'mission-1', status: 'accepted' },
+    })
+
+    expect(store.missionProjections['mission-1']?.status).toBe('running')
+    expect(store.acceptedProjectionEventCount).toBe(1)
+  })
+
+  it('rehydrates mission objective and proposal state from mc_status projection', () => {
+    const store = useMinecraftStore()
+
+    store.rehydrateMissionStatus({
+      missions: [
+        {
+          mission_id: 'mission-1',
+          projection_version: 7,
+          status: 'running',
+          objectives: [
+            { objective_id: 'fight-zombie', readiness: 'active', command_phase: 'running' },
+          ],
+          proposals: [{ proposal_id: 'proposal-1', outcome: 'accepted', reason_code: 'ADMITTED' }],
+        },
+      ],
+      next_cursor: null,
+    })
+
+    expect(store.missionProjections['mission-1']?.projection_version).toBe(7)
+    expect(store.objectiveProjections['fight-zombie']?.readiness).toBe('active')
+    expect(store.proposalProjections['proposal-1']?.outcome).toBe('accepted')
+  })
+
+  it('projects StageIO v2 into an ordinal walkthrough for one run and mission', () => {
+    const store = useMinecraftStore()
+    store.setupListener()
+    const stageHandler = registeredHandler(Events.MINECRAFT.STAGE_PROJECTION)
+    const stage = {
+      schema_version: '2',
+      run_id: 'run-1',
+      mission_id: 'mission-1',
+      stage_id: 'combat',
+      ordinal: 5,
+      gameplay_evidence_eligible: true,
+      lifecycle: 'running',
+      input_refs: [],
+      output_refs: [],
+      state_deltas: [],
+      predicates: [],
+      checkpoints: [],
+      evidence_refs: [],
+      media: [],
+    }
+
+    stageHandler?.({
+      schema_version: 1,
+      event: 'minecraft.stage.projection',
+      event_id: 'run-1:mission-1:combat:1',
+      projection_kind: 'stage',
+      projection_version: 1,
+      occurred_at_ms: 100,
+      mission_id: 'mission-1',
+      entity_id: 'run-1:mission-1:combat',
+      payload: stage,
+    })
+
+    expect(store.walkthroughStages('mission-1', 'run-1')).toEqual([
+      expect.objectContaining({ stage_id: 'combat', ordinal: 5, lifecycle: 'running' }),
+    ])
+    expect(store.walkthroughStages('mission-2', 'run-1')).toEqual([])
+  })
 })

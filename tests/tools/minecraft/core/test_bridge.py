@@ -80,14 +80,7 @@ class TestMinecraftBridgeInit:
                     "animetta.tools.minecraft.core.config.MinecraftConfig", return_value=mock_config
                 ),
                 patch("animetta.tools.minecraft.core.bridge.MinecraftBridge") as bridge_cls,
-                patch("animetta.tools.minecraft.core.tools.asyncio.get_running_loop") as get_loop,
-                patch("animetta.tools.minecraft.core.tools.asyncio.ensure_future"),
             ):
-                mock_loop = MagicMock()
-                mock_loop.is_running.return_value = True
-                get_loop.return_value = mock_loop
-                bridge_cls.return_value.start = AsyncMock()
-
                 tools_module.init_bridge({"enabled": True})
 
             assert tools_module._bridge is bridge_cls.return_value
@@ -102,10 +95,6 @@ class TestMinecraftBridgeInit:
         assert bridge._process is None
         assert bridge._pending == {}
         assert bridge._next_id == 1
-
-    def test_autonomous_flag_is_ignored_for_compatibility(self, mock_config):
-        bridge = MinecraftBridge(mock_config, autonomous=True)
-        assert not hasattr(bridge, "_autonomous_enabled")
 
     def test_bridge_has_no_autonomous_owner_by_default(self, mock_config):
         bridge = MinecraftBridge(mock_config)
@@ -237,21 +226,6 @@ class TestMinecraftBridgeStart:
 
         assert result is False
         assert bridge.is_running is False
-
-    async def test_legacy_autonomous_flag_does_not_start_competing_loop(
-        self, mock_config, mock_process
-    ):
-        bridge = MinecraftBridge(mock_config, autonomous=True)
-
-        with (
-            patch("animetta.tools.minecraft.core.bridge.is_service_available", return_value=True),
-            patch("os.path.exists", return_value=True),
-            patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)),
-            patch("asyncio.wait_for", side_effect=_complete_ready_wait),
-        ):
-            result = await bridge.start()
-
-        assert result is True
 
 
 class TestMinecraftBridgeSendCommand:
@@ -470,6 +444,20 @@ class TestMinecraftBridgeReadStdout:
         await bridge._read_stdout()
 
         assert events == [("client_viewer_status", payload)]
+
+    def test_runtime_event_subscribers_receive_advancement_payload(self, mock_config):
+        bridge = MinecraftBridge(mock_config)
+        events = []
+        bridge.add_runtime_event_callback(events.append)
+        payload = {
+            "type": "advancement_observed",
+            "event_id": "advancement-1",
+            "advancement_id": "minecraft:story/root",
+        }
+
+        bridge._handle_runtime_event(payload)
+
+        assert events == [payload]
 
     async def test_read_stdout_handles_cancellation(self, mock_config, mock_process):
         bridge = MinecraftBridge(mock_config)

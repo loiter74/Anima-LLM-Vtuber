@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..autonomous.loop import AutonomousLoop
 from .criteria import (
     _check_building_criteria,
     _check_learning_criteria,
@@ -19,7 +18,6 @@ from .models import (
     _Snapshot,
 )
 from .report import generate_benchmark_report
-from .runner import BenchmarkRunner
 from .scenarios import (
     ALL_CONFIGS,
     ALL_SCENARIOS,
@@ -48,6 +46,4 @@ __all__ = [
     "_check_learning_criteria",
     "_check_tech_tree_criteria",
     "generate_benchmark_report",
-    "AutonomousLoop",
-    "BenchmarkRunner",
 ]

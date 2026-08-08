@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from tooling.quality import planner as quality_planner
 from tooling.quality.aggregate import aggregate_results
 from tooling.quality.change_sources import from_paths
+from tooling.quality.evidence import write_plan
 from tooling.quality.manifest import load_catalog
 from tooling.quality.models import (
     AggregateStatus,
@@ -20,6 +25,25 @@ from tooling.quality.models import (
 from tooling.quality.planner import plan_verification
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _isolate_production_catalog_fingerprints(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep planner-selection tests independent of the real worktree size."""
+    minimal_root = tmp_path / "minimal-repository"
+    minimal_root.mkdir()
+    production_manifest = (ROOT / "tooling" / "quality.yml").resolve()
+    original_repository_root = quality_planner._repository_root
+
+    def repository_root(manifest_path: Path) -> Path:
+        if manifest_path.resolve() == production_manifest:
+            return minimal_root
+        return original_repository_root(manifest_path)
+
+    monkeypatch.setattr(quality_planner, "_repository_root", repository_root)
 
 
 def _catalog():
@@ -354,7 +378,45 @@ def test_acceptance_audition_paths_use_dedicated_gate_without_unknown_fallback()
     assert not any("unknown" in fallback for fallback in plan.fallbacks)
 
 
-def test_deleted_and_renamed_fallback_changes_have_distinct_fingerprints() -> None:
+def test_deleted_and_renamed_fallback_changes_have_distinct_fingerprints(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "quality.yml"
+    manifest.write_text(
+        """
+schema_version: 1
+input_sets:
+  toolchain:
+    paths: [pyproject.toml]
+default_input_sets: [toolchain]
+groups:
+  backend-full:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests]
+components:
+  source:
+    domain: backend
+    paths: [src/**]
+    direct_groups: [backend-full]
+fallbacks:
+  backend: [backend-full]
+  frontend: [backend-full]
+  repository: [backend-full]
+""".strip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_placeholder.py").write_text(
+        "def test_placeholder(): pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='fingerprint-test'\n",
+        encoding="utf-8",
+    )
+    catalog = load_catalog(manifest)
     deleted = ChangeSet(
         changes=(Change(path="scripts/removed-smoke.py", status=ChangeStatus.DELETED),),
         source="worktree",
@@ -370,8 +432,8 @@ def test_deleted_and_renamed_fallback_changes_have_distinct_fingerprints() -> No
         source="worktree",
     )
 
-    deleted_plan = plan_verification(_catalog(), deleted, Tier.AFFECTED)
-    renamed_plan = plan_verification(_catalog(), renamed, Tier.AFFECTED)
+    deleted_plan = plan_verification(catalog, deleted, Tier.AFFECTED)
+    renamed_plan = plan_verification(catalog, renamed, Tier.AFFECTED)
     deleted_group = next(group for group in deleted_plan.groups if group.id == "backend-full")
     renamed_group = next(group for group in renamed_plan.groups if group.id == "backend-full")
 
@@ -490,6 +552,36 @@ def test_identical_inputs_produce_identical_plan_hash() -> None:
     assert first == second
     assert first.plan_hash == second.plan_hash
     assert len(first.plan_hash) == 64
+
+
+def test_plan_hash_survives_cross_process_json_round_trip(tmp_path: Path) -> None:
+    changes = from_paths(
+        ["src/animetta/tools/minecraft/showcase/live.py"],
+        repo_root=ROOT,
+    )
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+    plan_path = tmp_path / "plan.json"
+    write_plan(plan, plan_path)
+    script = (
+        "from tooling.quality.evidence import read_plan; "
+        "import sys; "
+        "print(read_plan(sys.argv[1]).plan_hash)"
+    )
+
+    for seed in ("1", "2", "4", "7"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = seed
+        completed = subprocess.run(
+            [sys.executable, "-c", script, str(plan_path)],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+        assert completed.stdout.strip() == plan.plan_hash
 
 
 def test_execution_dependencies_are_frozen_before_dependents(tmp_path: Path) -> None:

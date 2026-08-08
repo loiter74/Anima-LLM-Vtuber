@@ -54,6 +54,25 @@ def build_context(
         base_system_prompt_warnings=base_warnings,
         scene_guidance=scene_guidance,
         scene_guidance_warnings=scene_warnings,
+        available_tool_names=_available_tool_names(config),
+    )
+
+
+def _available_tool_names(config: RunnableConfig | None) -> frozenset[str]:
+    if not config:
+        return frozenset()
+    configurable = (
+        config.get("configurable") or {}
+        if isinstance(config, dict)
+        else getattr(config, "configurable", {}) or {}
+    )
+    tools_map = (
+        configurable.get("tools_map")
+        if isinstance(configurable, dict)
+        else getattr(configurable, "tools_map", None)
+    )
+    return (
+        frozenset(str(name) for name in tools_map) if isinstance(tools_map, dict) else frozenset()
     )
 
 

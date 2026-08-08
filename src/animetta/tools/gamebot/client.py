@@ -8,7 +8,6 @@ from animetta.tools.gamebot.contracts import (
     ActionReceipt,
     CapabilityManifest,
     GameBotObservation,
-    SkillExecutionResult,
 )
 from animetta.tools.gamebot.transport import GameBotTransport
 
@@ -74,29 +73,6 @@ class GameBotClient:
             timeout=timeout,
         )
         return ActionReceipt.model_validate(self._payload(response, "execute_action"))
-
-    async def eval_skill(
-        self,
-        code: str,
-        *,
-        allowed_capabilities: list[str],
-        session_id: str,
-        task_id: str,
-        correlation_id: str,
-        timeout: float = 60.0,
-    ) -> SkillExecutionResult:
-        response = await self._transport.send_command(
-            "eval_skill",
-            {
-                "code": code,
-                "allowed_capabilities": allowed_capabilities,
-                "session_id": session_id,
-                "task_id": task_id,
-                "correlation_id": correlation_id,
-            },
-            timeout=timeout,
-        )
-        return SkillExecutionResult.model_validate(self._payload(response, "eval_skill"))
 
     async def cancel_action(self, correlation_id: str) -> dict[str, Any]:
         response = await self._transport.send_command(

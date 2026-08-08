@@ -9,6 +9,7 @@ core LLM implementation.
 
 import json
 import time as time_module
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -22,6 +23,28 @@ def _get_args_schema_parameters(args_schema: Any) -> dict[str, Any]:
     if hasattr(args_schema, "model_json_schema"):
         return args_schema.model_json_schema()
     return args_schema.schema()
+
+
+def _parse_tool_arguments(raw_args: str) -> tuple[Any, dict[str, Any]]:
+    """Parse function arguments with one narrow, auditable provider repair."""
+
+    try:
+        return json.loads(raw_args), {}
+    except json.JSONDecodeError as error:
+        suffix = raw_args[error.pos :].strip()
+        if error.msg == "Extra data" and suffix == "}":
+            try:
+                repaired = json.loads(raw_args[: error.pos].rstrip())
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(repaired, dict):
+                    return repaired, {
+                        "arguments_repaired": True,
+                        "arguments_repair": "removed_one_trailing_brace",
+                        "raw_arguments_sha256": sha256(raw_args.encode("utf-8")).hexdigest(),
+                    }
+        return {"__invalid_json__": raw_args}, {}
 
 
 class OpenAIToolHandler:
@@ -185,17 +208,16 @@ class OpenAIToolHandler:
             if hasattr(message, "tool_calls") and message.tool_calls:
                 for tc in message.tool_calls:
                     args = tc.function.arguments
+                    argument_metadata: dict[str, Any] = {}
                     if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except json.JSONDecodeError:
-                            args = {}
+                        args, argument_metadata = _parse_tool_arguments(args)
 
                     tool_calls.append(
                         {
                             "id": tc.id,
                             "name": tc.function.name,
                             "args": args,
+                            **argument_metadata,
                         }
                     )
 
@@ -203,13 +225,13 @@ class OpenAIToolHandler:
                 return {
                     "content": content or "Calling tool......",
                     "tool_calls": tool_calls,
+                    "finish_reason": getattr(response.choices[0], "finish_reason", None),
                 }
 
             logger.debug(f"[OpenAI] Response: {content[:100]}...")
 
             # Update conversation history
-            self.llm.history.append({"role": "user", "content": user_input})
-            self.llm.history.append({"role": "assistant", "content": content})
+            self.llm._append_history_turn(user_input, content)
 
             return {
                 "content": content,

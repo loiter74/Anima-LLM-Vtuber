@@ -1,722 +1,195 @@
-"""Audited real-server Voyager E2E against the external capability runtime.
-
-Reset authority uses server RCON only before ``measurement_started_at``. After
-that boundary, all state changes must flow through survival-safe runtime actions.
-"""
+"""Real GameBot v2 acceptance: cooperative stop and disconnect quarantine."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
-import re
-import subprocess
-from datetime import UTC, datetime
+import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
 
-from animetta.tools.gamebot.contracts import CapabilityManifest, GameBotObservation
+import yaml
+
+from animetta.tools.minecraft.core.assembly import assemble_control_plane
 from animetta.tools.minecraft.core.bridge import MinecraftBridge
 from animetta.tools.minecraft.core.config import MinecraftConfig
-from animetta.tools.minecraft.skill.catalog import SkillLibrary
-from animetta.tools.minecraft.voyager.adapter import MinecraftGameBotAdapter
-from animetta.tools.minecraft.voyager.contracts import (
-    VoyagerCheckpoint,
-    VoyagerMode,
-    VoyagerSessionContext,
+from animetta.tools.minecraft.voyager.command_models import (
+    TERMINAL_COMMAND_STATES,
+    ControllerState,
 )
-from animetta.tools.minecraft.voyager.learning import LearningSession
-from animetta.tools.minecraft.voyager.policy import VoyagerPolicy
-from animetta.tools.minecraft.voyager.recovery import RecoveryCoordinator
-from animetta.tools.minecraft.voyager.repository import InMemoryVoyagerRepository
-from animetta.tools.minecraft.voyager.tech_graph import (
-    FrontierScheduler,
-    TechGraph,
-    TechNode,
-    TechProgress,
-    build_survival_tech_graph,
-)
-
-BOT_USERNAME = "VoyagerAudit"
-EXTERNAL_RUNTIME = Path(r"C:\Users\30262\Project\voyager-mc-bot")
-ARTIFACT_DIR = Path("data/voyager-e2e")
-REAL_ACTION_TIMEOUT_SECONDS = 180.0
-FIXTURE_BIOME = "minecraft:forest"
-FIXTURE_REGION_ATTEMPTS = 8
-FIXTURE_MAX_ATTEMPTS = 8
-MIN_FIXTURE_SURFACE_Y = 60.0
-MAX_FIXTURE_SURFACE_Y = 75.0
-FORBIDDEN_ACTIONS = {
-    "give",
-    "teleport",
-    "creative",
-    "set_inventory",
-    "set_block",
-    "rcon",
-    "reset_world",
-}
-FORBIDDEN_CODE = {
-    "process",
-    "require",
-    "constructor",
-    "prototype",
-    "globalThis",
-    "fetch",
-    "WebSocket",
-    "rcon",
-    "give",
-    "teleport",
-    "creative",
-}
+from animetta.tools.minecraft.voyager.gateway import ExecuteAtomicRequest, VoyagerGateway
+from animetta.tools.minecraft.voyager.goal_models import AtomicAction
+from animetta.tools.minecraft.voyager.journal import JournalCommand
 
 
-class StrategyGenerator:
-    STRATEGIES = {
-        "wood_collection": "await collect('oak_log', 1);",
-        "crafting_table": (
-            "await collect('oak_log', 1); await craft('oak_planks', 1); "
-            "await craft('crafting_table', 1);"
-        ),
-        "wooden_pickaxe": (
-            "await collect('oak_log', 2); await craft('oak_planks', 2); "
-            "await craft('stick', 1); await craft('wooden_pickaxe', 1); "
-            "await craft('wooden_sword', 1);"
-        ),
-        "cobblestone": (
-            "await collect('oak_log', 2); await craft('oak_planks', 2); "
-            "await craft('stick', 1); await craft('wooden_pickaxe', 1); "
-            "await craft('wooden_sword', 1); "
-            "await mine_shaft(50, 1);"
-        ),
-        "stone_pickaxe": ("await craft('stick', 2); await craft('stone_pickaxe', 1);"),
-        "furnace": "await craft('furnace', 1);",
-        "iron_ingot": (
-            "await collect('oak_log', 3); await craft('oak_planks', 3); "
-            "await craft('crafting_table', 1); await craft('stick', 1); "
-            "await craft('wooden_pickaxe', 1); await craft('wooden_sword', 1); "
-            "await mine_shaft(55, 11); "
-            "await craft('stone_pickaxe', 1); await craft('furnace', 1); "
-            "await collect('raw_iron', 1); "
-            "await collect('coal', 1); "
-            "await smelt('raw_iron', 'coal', 1);"
-        ),
-        "iron_pickaxe": ("await craft('stick', 2); await craft('iron_pickaxe', 1);"),
-    }
-
-    async def generate(
-        self,
-        *,
-        node: TechNode,
-        observation: GameBotObservation | None = None,
-        **_: Any,
-    ) -> str:
-        inventory = getattr(observation, "inventory", {}) or {}
-        if (
-            node.id == "cobblestone"
-            and inventory.get("wooden_pickaxe", 0) >= 1
-            and inventory.get("wooden_sword", 0) >= 1
-        ):
-            return "await mine_shaft(50, 1);"
-        if node.id == "iron_pickaxe":
-            actions: list[str] = []
-            missing_iron = max(0, 3 - inventory.get("iron_ingot", 0))
-            if missing_iron:
-                actions.append(f"await collect('raw_iron', {missing_iron});")
-                actions.append("await collect('coal', 1);")
-                actions.append(f"await smelt('raw_iron', 'coal', {missing_iron});")
-            if inventory.get("stick", 0) < 2:
-                actions.append("await craft('stick', 1);")
-            actions.append("await craft('iron_pickaxe', 1);")
-            return " ".join(actions)
-        if node.id == "stone_pickaxe":
-            stone_actions: list[str] = []
-            missing_cobblestone = max(0, 3 - inventory.get("cobblestone", 0))
-            recovered_tools = False
-            if missing_cobblestone:
-                has_pickaxe = any(
-                    inventory.get(name, 0) >= 1
-                    for name in ("wooden_pickaxe", "stone_pickaxe", "iron_pickaxe")
-                )
-                if not has_pickaxe:
-                    stone_actions.extend(
-                        [
-                            "await collect('oak_log', 3);",
-                            "await craft('oak_planks', 3);",
-                            "await craft('crafting_table', 1);",
-                            "await craft('stick', 1);",
-                            "await craft('wooden_pickaxe', 1);",
-                            "await craft('wooden_sword', 1);",
-                        ]
-                    )
-                    recovered_tools = True
-                stone_actions.append(f"await mine_shaft(50, {missing_cobblestone});")
-            if inventory.get("stick", 0) < 2 and not recovered_tools:
-                stone_actions.append("await craft('stick', 1);")
-            stone_actions.append("await craft('stone_pickaxe', 1);")
-            return " ".join(stone_actions)
-        if node.id == "furnace":
-            missing_cobblestone = max(0, 8 - inventory.get("cobblestone", 0))
-            if missing_cobblestone:
-                return (
-                    f"await collect('cobblestone', {missing_cobblestone}); "
-                    "await craft('furnace', 1);"
-                )
-        if node.id == "iron_ingot" and inventory.get("iron_ingot", 0) >= 1:
-            ingot_refresh_actions: list[str] = []
-            if inventory.get("raw_iron", 0) < 1:
-                ingot_refresh_actions.append("await collect('raw_iron', 1);")
-            elif inventory.get("coal", 0) < 1:
-                ingot_refresh_actions.append("await collect('coal', 1);")
-            else:
-                ingot_refresh_actions.append("await collect('cobblestone', 1);")
-            if inventory.get("coal", 0) < 1:
-                ingot_refresh_actions.append("await collect('coal', 1);")
-            ingot_refresh_actions.append("await smelt('raw_iron', 'coal', 1);")
-            return " ".join(ingot_refresh_actions)
-        if node.id == "iron_ingot" and inventory.get("stone_pickaxe", 0) >= 1:
-            ingot_progress_actions: list[str] = []
-            needs_sword = not any(
-                inventory.get(name, 0) >= 1
-                for name in ("wooden_sword", "stone_sword", "iron_sword")
-            )
-            support_target = 6 if needs_sword else 4
-            missing_support = max(0, support_target - inventory.get("cobblestone", 0))
-            if missing_support:
-                ingot_progress_actions.append(f"await collect('cobblestone', {missing_support});")
-            if needs_sword:
-                if inventory.get("stick", 0) < 1:
-                    ingot_progress_actions.append("await craft('stick', 1);")
-                ingot_progress_actions.append("await craft('stone_sword', 1);")
-            ingot_progress_actions.extend(
-                [
-                    "await mine_shaft(55);",
-                    "await collect('raw_iron', 1);",
-                    "await collect('coal', 1);",
-                    "await smelt('raw_iron', 'coal', 1);",
-                ]
-            )
-            return " ".join(ingot_progress_actions)
-        if node.id in {"stone_pickaxe", "iron_pickaxe"} and inventory.get("stick", 0) >= 2:
-            return f"await craft('{node.id}', 1);"
-        return self.STRATEGIES[node.id]
-
-
-class AuditBridge:
-    def __init__(self, bridge: MinecraftBridge) -> None:
-        self._bridge = bridge
-        self.commands: list[dict[str, Any]] = []
-        self.violations: list[str] = []
-
-    @property
-    def is_running(self) -> bool:
-        return self._bridge.is_running
-
-    async def send_command(
-        self, action: str, params: dict[str, Any] | None = None, timeout: float = 60.0
-    ) -> dict[str, Any]:
-        payload = dict(params or {})
-        self.commands.append({"action": action, "params": payload})
-        if action in FORBIDDEN_ACTIONS:
-            self.violations.append(f"forbidden action:{action}")
-        if action == "eval_skill":
-            code = str(payload.get("code", ""))
-            for token in FORBIDDEN_CODE:
-                if token in code:
-                    self.violations.append(f"forbidden code:{token}")
-        return await self._bridge.send_command(action, payload, timeout=timeout)
-
-
-def rcon(command: str) -> str:
-    result = subprocess.run(
-        ["docker", "exec", "animetta-mc", "rcon-cli", command],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.stdout.strip()
-
-
-def parse_locate_coordinates(output: str) -> tuple[int, int]:
-    match = re.search(r"\[(-?\d+),\s*-?\d+,\s*(-?\d+)\]", output)
-    if match is None:
-        raise ValueError(f"cannot parse locate output: {output}")
-    return int(match.group(1)), int(match.group(2))
-
-
-def fixture_search_origin(run_index: int) -> tuple[int, int]:
-    if run_index < 1:
-        raise ValueError("run_index must be positive")
-    offset = run_index * 2048
-    return 20000 + offset, 20000 - offset
-
-
-def natural_ground_check_passed(output: str) -> bool:
-    """Return whether the conditional RCON probe reached its success command."""
-    normalized = output.casefold()
-    return BOT_USERNAME.casefold() in normalized and "experience point" in normalized
-
-
-def parse_entity_y(output: str) -> float:
-    """Parse the Y coordinate from an RCON ``data get entity ... Pos`` result."""
-    match = re.search(
-        r"\[\s*-?\d+(?:\.\d+)?d?,\s*(-?\d+(?:\.\d+)?)d?,",
-        output,
-    )
-    if match is None:
-        raise ValueError(f"cannot parse entity position output: {output}")
-    return float(match.group(1))
-
-
-async def position_player_on_natural_ground(
-    forest_x: int,
-    forest_z: int,
-    audit: list[dict[str, str]],
+async def start_bridge_with_retry(
+    config: MinecraftConfig,
     *,
-    max_attempts: int = FIXTURE_MAX_ATTEMPTS,
-) -> None:
-    """Choose a fresh natural-grass landing before the measurement boundary."""
-    if max_attempts < 1:
-        raise ValueError("max_attempts must be positive")
+    attempts: int = 3,
+    retry_delay_seconds: float = 2.0,
+    bridge_factory: Callable[[MinecraftConfig], MinecraftBridge] = MinecraftBridge,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> MinecraftBridge:
+    """Bound replacement login retries while the server releases the prior identity."""
 
-    probe = (
-        f"execute at {BOT_USERNAME} "
-        "if block ~ ~-1 ~ minecraft:grass_block "
-        f"run experience query {BOT_USERNAME} points"
-    )
-    position_query = f"data get entity {BOT_USERNAME} Pos"
-    for attempt in range(max_attempts):
-        radius = 16 + attempt * 8
-        spread = f"spreadplayers {forest_x} {forest_z} 2 {radius} false {BOT_USERNAME}"
-        outputs: dict[str, str] = {}
-        for command in (spread, probe, position_query):
-            output = await asyncio.to_thread(rcon, command)
-            audit.append({"command": command, "output": output})
-            outputs[command] = output
-        try:
-            surface_y = parse_entity_y(outputs[position_query])
-        except ValueError:
-            surface_y = float("inf")
-        if (
-            natural_ground_check_passed(outputs[probe])
-            and MIN_FIXTURE_SURFACE_Y <= surface_y <= MAX_FIXTURE_SURFACE_Y
-        ):
-            return
-        await asyncio.sleep(1)
-
-    raise RuntimeError(
-        f"could not place {BOT_USERNAME} on natural grass after {max_attempts} attempts"
-    )
-
-
-async def reset_player_before_measurement() -> list[dict[str, str]]:
-    before_respawn = [
-        f"gamemode survival {BOT_USERNAME}",
-        f"clear {BOT_USERNAME}",
-        f"kill {BOT_USERNAME}",
-    ]
-    audit = []
-    for command in before_respawn:
-        output = await asyncio.to_thread(rcon, command)
-        audit.append({"command": command, "output": output})
-    await asyncio.sleep(3)
-
-    progression_runs = len(list(ARTIFACT_DIR.glob("*-progression.json")))
-    positioned = False
-    for region_attempt in range(FIXTURE_REGION_ATTEMPTS):
-        region_index = progression_runs * FIXTURE_REGION_ATTEMPTS + region_attempt + 1
-        search_x, search_z = fixture_search_origin(region_index)
-        locate_command = (
-            f"execute positioned {search_x} 100 {search_z} run locate biome {FIXTURE_BIOME}"
-        )
-        locate_output = await asyncio.to_thread(rcon, locate_command)
-        audit.append({"command": locate_command, "output": locate_output})
-        forest_x, forest_z = parse_locate_coordinates(locate_output)
-        try:
-            await position_player_on_natural_ground(forest_x, forest_z, audit)
-        except RuntimeError:
-            continue
-        positioned = True
-        break
-    if not positioned:
-        raise RuntimeError(
-            f"could not locate a bounded lowland {FIXTURE_BIOME} fixture "
-            f"across {FIXTURE_REGION_ATTEMPTS} regions"
-        )
-    after_respawn = [
-        f"effect clear {BOT_USERNAME}",
-        f"experience set {BOT_USERNAME} 0 points",
-        f"execute at {BOT_USERNAME} run kill @e[type=item,distance=..16]",
-        "time set day",
-        "weather clear",
-        f"execute at {BOT_USERNAME} run kill @e[type=minecraft:skeleton,distance=..64]",
-        f"execute at {BOT_USERNAME} run kill @e[type=minecraft:zombie,distance=..64]",
-        f"execute at {BOT_USERNAME} run kill @e[type=minecraft:creeper,distance=..64]",
-    ]
-    for command in after_respawn:
-        output = await asyncio.to_thread(rcon, command)
-        audit.append({"command": command, "output": output})
-    await asyncio.sleep(3)
-    return audit
-
-
-def build_config() -> MinecraftConfig:
-    return MinecraftConfig.model_validate(
-        {
-            "enabled": True,
-            "bot": {
-                "host": "localhost",
-                "port": 25565,
-                "username": BOT_USERNAME,
-                "version": "1.21",
-            },
-            "runtime": {
-                "runtime_path": str(EXTERNAL_RUNTIME),
-                "entrypoint": "src/index.js",
-            },
-        }
-    )
-
-
-def policy_for(manifest: CapabilityManifest) -> VoyagerPolicy:
-    return VoyagerPolicy(
-        supported_protocol="1.0",
-        allowed_capabilities={capability.name for capability in manifest.capabilities},
-    )
-
-
-def technology_node_completed(
-    outcome: Any,
-    expected_node: str,
-    unlocked_nodes: set[str] | frozenset[str],
-) -> bool:
-    """Judge technology completion independently from candidate/trusted skill state."""
-
-    return (
-        outcome.status in {"candidate", "trusted"}
-        and outcome.node_id == expected_node
-        and expected_node in unlocked_nodes
-    )
-
-
-async def negative_runtime_audit(
-    bridge: MinecraftBridge,
-    runtime: MinecraftGameBotAdapter,
-) -> dict[str, Any]:
-    before = await runtime.observe("negative-before")
-    attempts = []
-    forbidden_code = [
-        "process.exit(0)",
-        "require('fs')",
-        "({}).constructor.constructor('return process')()",
-        "Object.getPrototypeOf({})",
-        "await fetch('https://example.com')",
-        "await collect['con' + 'structor']('return pro' + 'cess')()",
-    ]
-    for index, code in enumerate(forbidden_code, 1):
-        result = await bridge.send_command(
-            "eval_skill",
-            {
-                "code": code,
-                "allowed_capabilities": ["collect"],
-                "session_id": "negative-session",
-                "task_id": f"negative-code-{index}",
-                "correlation_id": f"negative-code-{index}",
-            },
-            timeout=10.0,
-        )
-        attempts.append({"kind": "code", "source": code, "response": result})
-
-    for capability in sorted(FORBIDDEN_ACTIONS):
-        result = await bridge.send_command(
-            "execute_action",
-            {
-                "capability": capability,
-                "params": {},
-                "session_id": "negative-session",
-                "task_id": f"negative-action-{capability}",
-                "correlation_id": f"negative-action-{capability}",
-            },
-            timeout=10.0,
-        )
-        attempts.append({"kind": "capability", "capability": capability, "response": result})
-
-    chat = await bridge.send_command(
-        "execute_action",
-        {
-            "capability": "chat",
-            "params": {"message": f"/give {BOT_USERNAME} diamond 64"},
-            "session_id": "negative-session",
-            "task_id": "negative-chat",
-            "correlation_id": "negative-chat",
-        },
-        timeout=10.0,
-    )
-    attempts.append({"kind": "admin_chat", "response": chat})
-    after = await runtime.observe("negative-after")
-    if after.inventory != before.inventory:
-        raise AssertionError(
-            f"negative runtime audit changed inventory: {before.inventory} -> {after.inventory}"
-        )
-    return {
-        "attempts": attempts,
-        "inventory_before": before.inventory,
-        "inventory_after": after.inventory,
-    }
-
-
-async def single_action_audit(runtime: MinecraftGameBotAdapter) -> dict[str, Any]:
-    before = await runtime.observe("single-action-before")
-    execution = await runtime.eval_skill(
-        "await collect('oak_log', 1);",
-        allowed_capabilities=["collect"],
-        session_id="single-action-session",
-        task_id="single-action-wood",
-        correlation_id="single-action-wood",
-        timeout=60.0,
-    )
-    after = await runtime.observe("single-action-after")
-    return {
-        "before": before.model_dump(mode="json"),
-        "execution": execution.model_dump(mode="json"),
-        "after": after.model_dump(mode="json"),
-    }
-
-
-async def run_progression(
-    runtime: MinecraftGameBotAdapter,
-    manifest: CapabilityManifest,
-) -> tuple[dict[str, Any], InMemoryVoyagerRepository, str, TechProgress]:
-    node_ids = [
-        "wood_collection",
-        "crafting_table",
-        "wooden_pickaxe",
-        "cobblestone",
-        "stone_pickaxe",
-        "furnace",
-        "iron_ingot",
-        "iron_pickaxe",
-    ]
-    full_graph = build_survival_tech_graph()
-    graph = TechGraph([full_graph.get(node_id) for node_id in node_ids])
-    repository = InMemoryVoyagerRepository()
-    session_id = "real-e2e-learning"
-    context = VoyagerSessionContext(
-        session_id=session_id,
-        mode=VoyagerMode.LEARN,
-        runtime=runtime,
-        manifest=manifest,
-        authorized_capabilities=frozenset(capability.name for capability in manifest.capabilities),
-        repository=repository,
-    )
-    library = SkillLibrary()
-    session = LearningSession(
-        context=context,
-        graph=graph,
-        scheduler=FrontierScheduler(graph, failure_cooldown=1),
-        policy=policy_for(manifest),
-        library=library,
-        code_generator=StrategyGenerator(),
-        progress=TechProgress(),
-        max_attempts=2,
-        execution_timeout=REAL_ACTION_TIMEOUT_SECONDS,
-        validate_candidates=False,
-    )
-    outcomes, completed = await advance_progression(session, node_ids)
-
-    checkpoint = await repository.last_checkpoint(session_id)
-    skills = await library.get_all_skills()
-    return (
-        {
-            "completed": completed,
-            "outcomes": outcomes,
-            "unlocked": sorted(session.progress.unlocked_nodes),
-            "unlock_records": {
-                key: value.model_dump(mode="json")
-                for key, value in session.progress.records.items()
-            },
-            "trusted_skills": [skill.id for skill in skills if skill.is_trusted],
-            "checkpoint": checkpoint.model_dump(mode="json") if checkpoint else None,
-        },
-        repository,
-        session_id,
-        session.progress,
-    )
-
-
-async def advance_progression(
-    session: Any,
-    node_ids: list[str],
-    *,
-    max_cycles: int | None = None,
-) -> tuple[list[dict[str, Any]], bool]:
-    """Advance every target node without imposing an order on parallel frontiers."""
-
-    targets = set(node_ids)
-    outcomes: list[dict[str, Any]] = []
-    cycle_limit = max_cycles if max_cycles is not None else len(node_ids) * 3
-    for _ in range(cycle_limit):
-        if targets.issubset(session.progress.unlocked_nodes):
-            return outcomes, True
-        try:
-            outcome = await session.run_once()
-        except Exception as exc:
-            outcomes.append(
-                {
-                    "status": "exception",
-                    "node_id": "",
-                    "error": f"{type(exc).__name__}:{exc}",
-                }
-            )
-            return outcomes, False
-        outcomes.append(outcome.model_dump(mode="json"))
-        if outcome.status in {"candidate", "trusted"} and (
-            outcome.node_id not in targets or outcome.node_id not in session.progress.unlocked_nodes
-        ):
-            return outcomes, False
-    return outcomes, targets.issubset(session.progress.unlocked_nodes)
-
-
-async def recovery_audit(
-    bridge: MinecraftBridge,
-    runtime: MinecraftGameBotAdapter,
-    repository: InMemoryVoyagerRepository,
-    session_id: str,
-    progress: TechProgress,
-) -> dict[str, Any]:
-    before = await runtime.observe("recovery-before")
-    position = before.position
-    if position is None:
-        raise AssertionError("recovery test requires a player position")
-    interrupted = asyncio.create_task(
-        runtime.execute_action(
-            "goto",
-            {"x": position.x + 128, "y": position.y, "z": position.z + 128},
-            session_id=session_id,
-            task_id="interrupted-goto",
-            correlation_id="interrupted-goto",
-            timeout=60.0,
-        )
-    )
-    await asyncio.sleep(1)
-    if bridge._process is None:
-        raise AssertionError("Node process is unavailable for restart audit")
-    bridge._process.kill()
-    interrupted_error = ""
-    try:
-        await interrupted
-    except Exception as exc:  # Expected transport loss.
-        interrupted_error = f"{type(exc).__name__}:{exc}"
-
-    await bridge.stop()
-    if not await bridge.start():
-        raise RuntimeError("failed to restart Node runtime")
-    coordinator = RecoveryCoordinator(runtime=runtime, repository=repository)
-    result = await coordinator.recover(
-        session_id=session_id,
-        interrupted_task_id="interrupted-goto",
-        active_correlation_id="interrupted-goto",
-        partial_receipts=[],
-    )
-    if "interrupted-goto" in progress.unlocked_nodes:
-        raise AssertionError("interrupted task incorrectly unlocked technology")
-    return {
-        "interrupted_error": interrupted_error,
-        "result": result.model_dump(mode="json"),
-        "unlocked_after_restart": sorted(progress.unlocked_nodes),
-    }
-
-
-async def main(mode: str) -> None:
-    bridge = MinecraftBridge(build_config(), autonomous=False)
-    artifact: dict[str, Any] = {
-        "mode": mode,
-        "bot": BOT_USERNAME,
-        "reset_authority": "docker rcon before measurement only",
-    }
-    try:
-        if not await bridge.start():
-            raise RuntimeError("failed to start external Node runtime")
-        artifact["reset"] = await reset_player_before_measurement()
-        artifact["measurement_started_at"] = datetime.now(UTC).isoformat()
-
-        audited_bridge = AuditBridge(bridge)
-        runtime = MinecraftGameBotAdapter(audited_bridge)
-        manifest = await runtime.get_capabilities()
-        baseline = await runtime.observe("baseline")
-        if baseline.inventory:
-            raise AssertionError(f"reset did not produce empty inventory: {baseline.inventory}")
-        artifact["manifest"] = manifest.model_dump(mode="json")
-        artifact["baseline"] = baseline.model_dump(mode="json")
-
-        if mode in {"negative", "all"}:
-            artifact["negative"] = await negative_runtime_audit(bridge, runtime)
-
-        if mode == "action":
-            artifact["action"] = await single_action_audit(runtime)
-
-        if mode == "recovery":
-            repository = InMemoryVoyagerRepository()
-            session_id = "real-e2e-recovery"
-            await repository.commit_checkpoint(
-                VoyagerCheckpoint(
-                    session_id=session_id,
-                    task_id="baseline-checkpoint",
-                    observation_hash=baseline.content_hash,
-                    metadata={"inventory": dict(baseline.inventory)},
-                )
-            )
-            artifact["recovery"] = await recovery_audit(
-                bridge,
-                runtime,
-                repository,
-                session_id,
-                TechProgress(),
-            )
-
-        if mode in {"progression", "all"}:
-            progression, repository, session_id, progress = await run_progression(runtime, manifest)
-            artifact["progression"] = progression
-            if not progression["completed"]:
-                raise AssertionError(f"progression stopped: {progression['outcomes'][-1]}")
-            if mode in {"recovery", "all"}:
-                artifact["recovery"] = await recovery_audit(
-                    bridge,
-                    runtime,
-                    repository,
-                    session_id,
-                    progress,
-                )
-
-        if audited_bridge.violations:
-            raise AssertionError(f"positive audit violations: {audited_bridge.violations}")
-        artifact["protocol_commands"] = audited_bridge.commands
-        artifact["passed"] = True
-    except Exception as exc:
-        artifact["passed"] = False
-        artifact["error"] = f"{type(exc).__name__}: {exc}"
-        raise
-    finally:
-        artifact["finished_at"] = datetime.now(UTC).isoformat()
-        if "audited_bridge" in locals():
-            artifact.setdefault("protocol_commands", audited_bridge.commands)
-            artifact.setdefault("audit_violations", audited_bridge.violations)
-        ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-        output = ARTIFACT_DIR / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{mode}.json"
-        output.write_text(
-            json.dumps(artifact, ensure_ascii=False, indent=2, default=str),
-            encoding="utf-8",
-        )
+    for attempt in range(attempts):
+        bridge = bridge_factory(config)
+        if await bridge.start():
+            return bridge
         await bridge.stop()
-        print(output.resolve())
+        if attempt + 1 < attempts:
+            await sleep(retry_delay_seconds * (attempt + 1))
+    raise RuntimeError("replacement Minecraft bridge failed readiness")
+
+
+async def wait_for_state(
+    gateway: VoyagerGateway,
+    command_id: str,
+    *,
+    timeout: float,
+    running_ok: bool = False,
+) -> JournalCommand:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        command = await gateway.status_command(
+            caller_scope="system:real-e2e", command_id=command_id
+        )
+        if command.state in TERMINAL_COMMAND_STATES or (
+            running_ok and command.state.value == "running"
+        ):
+            return command
+        await asyncio.sleep(0.1)
+    raise TimeoutError(f"command did not advance within {timeout}s: {command_id}")
+
+
+async def run_real_acceptance(
+    config: MinecraftConfig,
+    *,
+    deliberate_disconnect: bool,
+) -> dict:
+    bridge = MinecraftBridge(config)
+    if not await bridge.start():
+        raise RuntimeError("Minecraft bridge failed readiness")
+    plane = None
+    try:
+        plane = await assemble_control_plane(bridge, config)
+        handle = await plane.gateway.execute(
+            caller_scope="system:real-e2e",
+            request=ExecuteAtomicRequest(
+                contract_version="2",
+                kind="atomic",
+                request_id="real-e2e-action",
+                action=AtomicAction(
+                    capability="collect",
+                    parameters={"block_type": "oak_log", "count": 64},
+                ),
+            ),
+        )
+        running = await wait_for_state(
+            plane.gateway, handle.command_id, timeout=15, running_ok=True
+        )
+        if running.state in TERMINAL_COMMAND_STATES:
+            raise RuntimeError("probe completed before its interruption point")
+
+        if not deliberate_disconnect:
+            stop = await plane.gateway.stop(
+                caller_scope="system:real-e2e",
+                request_id="real-e2e-stop",
+                reason="cooperative acceptance stop",
+            )
+            terminal = await wait_for_state(plane.gateway, handle.command_id, timeout=30)
+            stop_command = await plane.gateway.status_command(
+                caller_scope="system:real-e2e", command_id=stop.stop_command_id
+            )
+            if stop.recovery_error is not None:
+                raise RuntimeError(stop.recovery_error)
+            if stop_command.state.value != "succeeded":
+                raise RuntimeError(f"stop command did not complete: {stop_command.state.value}")
+            if terminal.state.value not in {"cancelled", "cancelled_reconciled"}:
+                raise RuntimeError(
+                    f"cooperative stop did not cancel the active action: {terminal.state.value}"
+                )
+            return {
+                "scenario": "cooperative_stop",
+                "command_id": handle.command_id,
+                "terminal_state": terminal.state.value,
+                "stop_command_id": stop.stop_command_id,
+                "stop_state": stop_command.state.value,
+            }
+
+        await bridge.stop()
+        terminal = await wait_for_state(plane.gateway, handle.command_id, timeout=30)
+    finally:
+        if plane is not None:
+            await plane.close()
+        await bridge.stop()
+
+    replacement = None
+    recovered = None
+    try:
+        replacement = await start_bridge_with_retry(config)
+        recovered = await assemble_control_plane(replacement, config)
+        projection = await recovered.gateway.status(caller_scope="system:real-e2e")
+        before_stop_state = recovered.controller.state.value
+        stop = await recovered.gateway.stop(
+            caller_scope="system:real-e2e",
+            request_id="real-e2e-recovery-stop",
+            reason="reconcile after deliberate disconnect",
+        )
+        evidence = {
+            "scenario": "disconnect_recovery",
+            "terminal_state": terminal.state.value,
+            "controller_state_before_stop": before_stop_state,
+            "controller_state_after_stop": recovered.controller.state.value,
+            "status_readable": bool(projection.commands),
+            "stop_command_id": stop.stop_command_id,
+            "recovery_error": stop.recovery_error,
+        }
+        if terminal.state.value != "blocked_unknown":
+            raise RuntimeError(f"disconnect did not quarantine outcome: {terminal.state.value}")
+        if before_stop_state != ControllerState.QUARANTINED.value:
+            raise RuntimeError("replacement controller did not preserve quarantine")
+        if stop.recovery_error != "RECOVERY_INCOMPLETE":
+            raise RuntimeError("replacement instance guessed an ambiguous outcome")
+        if recovered.controller.state is not ControllerState.QUARANTINED:
+            raise RuntimeError("incomplete recovery did not preserve quarantine")
+        return evidence
+    finally:
+        if recovered is not None:
+            await recovered.close()
+        if replacement is not None:
+            await replacement.stop()
+
+
+def load_config(path: Path, artifact_dir: Path) -> MinecraftConfig:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    minecraft = dict(payload.get("minecraft", {}))
+    minecraft["enabled"] = True
+    minecraft["journal_path"] = str(artifact_dir / "commands.db")
+    minecraft["skill_path"] = str(artifact_dir / "skills.db")
+    return MinecraftConfig.model_validate(minecraft)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, default=Path("config/tools.yaml"))
+    parser.add_argument("--artifact-dir", type=Path, required=True)
+    parser.add_argument("--disconnect", action="store_true")
+    args = parser.parse_args()
+    args.artifact_dir.mkdir(parents=True, exist_ok=True)
+    result = asyncio.run(
+        run_real_acceptance(
+            load_config(args.config, args.artifact_dir),
+            deliberate_disconnect=args.disconnect,
+        )
+    )
+    (args.artifact_dir / "result.json").write_text(
+        json.dumps(result, indent=2) + "\n", encoding="utf-8"
+    )
+    print(json.dumps(result))
+    return 0
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--mode",
-        choices=("smoke", "negative", "action", "progression", "recovery", "all"),
-        default="smoke",
-    )
-    args = parser.parse_args()
-    asyncio.run(main(args.mode))
+    raise SystemExit(main())

@@ -80,38 +80,46 @@ class InspectionScheduler:
              (if not ok) send_alert → sleep interval_hours.
         """
         connectivity_seconds = self.connectivity_refresh_minutes * 60
-        last_connectivity_refresh = 0.0
+        inspection_seconds = self.interval_hours * 3600
 
         # Warmup delay — let the server finish initializing (model loading, TTS cold start, etc.)
         await asyncio.sleep(120)
         logger.info("[inspection:scheduler] Warmup complete, entering main loop")
 
+        loop = asyncio.get_running_loop()
+        next_connectivity_refresh = loop.time()
+        next_full_inspection = loop.time() + inspection_seconds
+
         while not self._stop_event.is_set():
-            now = asyncio.get_event_loop().time()
+            now = loop.time()
 
             # Periodic LLM connectivity cache refresh (every N minutes)
-            if now - last_connectivity_refresh >= connectivity_seconds:
+            if now >= next_connectivity_refresh:
                 try:
                     await refresh_llm_connectivity_cache()
-                    last_connectivity_refresh = now
                 except Exception as exc:
                     logger.warning(f"[inspection:scheduler] Connectivity refresh failed: {exc}")
+                finally:
+                    next_connectivity_refresh = loop.time() + connectivity_seconds
 
-            try:
-                report = await run_full_inspection(self.runtime)
-                await store_report(report, self.runtime.report_store)
+            if now >= next_full_inspection:
+                try:
+                    report = await run_full_inspection(self.runtime)
+                    await store_report(report, self.runtime.report_store)
 
-                if not report.overall_ok:
-                    await send_alert(report)
+                    if not report.overall_ok:
+                        await send_alert(report)
 
-            except Exception as exc:
-                logger.error(f"[inspection:scheduler] Inspection loop crashed: {exc}")
+                except Exception as exc:
+                    logger.error(f"[inspection:scheduler] Inspection loop crashed: {exc}")
+                finally:
+                    next_full_inspection = loop.time() + inspection_seconds
 
-            # Sleep until next interval, but check stop_event periodically
-            # so stop() does not need to wait the full interval.
-            sleep_seconds = self.interval_hours * 3600
-            check_interval = min(5.0, sleep_seconds, connectivity_seconds)
-            elapsed = 0.0
-            while elapsed < sleep_seconds and not self._stop_event.is_set():
-                await asyncio.sleep(check_interval)
-                elapsed += check_interval
+            if self._stop_event.is_set():
+                break
+
+            # Wake frequently enough for prompt shutdown, while allowing the
+            # connectivity refresh and full-inspection clocks to advance
+            # independently.
+            until_next_deadline = min(next_connectivity_refresh, next_full_inspection) - loop.time()
+            await asyncio.sleep(max(0.0, min(5.0, until_next_deadline)))

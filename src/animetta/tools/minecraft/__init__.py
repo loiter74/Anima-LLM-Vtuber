@@ -11,7 +11,7 @@ Provides:
 # Import directly from submodules when needed:
 #   from animetta.tools.minecraft.core.bridge import MinecraftBridge
 #   from animetta.tools.minecraft.core.config import MinecraftConfig
-#   from animetta.tools.minecraft.survival.runner import SurvivalIronRunner
+#   from animetta.tools.minecraft.core.tools import mc_execute, mc_status, mc_stop
 
 from .core.bridge import get_bridge
 

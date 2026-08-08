@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from animetta.tools.gamebot.contracts.events import (
     KNOWN_EVENT_TYPES,
@@ -44,6 +45,7 @@ def test_known_event_types_cover_protocol() -> None:
         "viewer_joined",
         "viewer_left",
         "client_viewer_status",
+        "advancement_observed",
     ]:
         assert expected in KNOWN_EVENT_TYPES, f"Missing known event type: {expected}"
 
@@ -91,4 +93,41 @@ def test_parse_event_from_response_line_malformed_json() -> None:
 def test_parse_event_from_response_line_missing_type() -> None:
     """Event result without type field should return None."""
     line = json.dumps({"id": None, "status": "event", "result": {"data": 123}})
+    assert parse_event_from_response_line(line) is None
+
+
+def test_advancement_event_uses_the_shared_v2_golden_contract() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3]
+        / "contracts"
+        / "gamebot"
+        / "v2"
+        / "fixtures"
+        / "golden.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    payload = fixture["messages"]["AdvancementObservedEvent"]
+    line = json.dumps(
+        {"id": None, "status": "event", "result": {"type": "advancement_observed", **payload}}
+    )
+
+    event = parse_event_from_response_line(line)
+
+    assert event is not None
+    assert event.payload["action"] == "add"
+    assert event.payload["observation_id"] == "observation-advancement-001"
+
+
+def test_malformed_known_advancement_event_is_not_relayed_as_authoritative() -> None:
+    line = json.dumps(
+        {
+            "id": None,
+            "status": "event",
+            "result": {
+                "type": "advancement_observed",
+                "advancement_id": "minecraft:story/root",
+            },
+        }
+    )
+
     assert parse_event_from_response_line(line) is None

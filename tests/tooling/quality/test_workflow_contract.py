@@ -29,6 +29,7 @@ def test_quality_workflow_has_authoritative_event_and_permission_contract() -> N
     assert "github.event.pull_request.number || github.run_id" in workflow["concurrency"]["group"]
     assert set(workflow["jobs"]) == {
         "plan",
+        "preflight",
         "python",
         "node",
         "service",

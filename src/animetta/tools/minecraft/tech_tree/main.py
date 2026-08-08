@@ -14,7 +14,6 @@ from .defaults import (
 )
 from .models import TechTreeConfig, TechTreeMetrics, TechTreePhase, TechTreeReport
 from .report import _REPORT_DIR, render_markdown_report, save_markdown_report
-from .runner import TechTreeRunner
 
 __all__ = [
     "TechTreePhase",
@@ -32,5 +31,4 @@ __all__ = [
     "render_markdown_report",
     "save_markdown_report",
     "report_to_benchmark_metrics",
-    "TechTreeRunner",
 ]

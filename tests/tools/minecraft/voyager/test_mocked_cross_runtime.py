@@ -1,182 +1,145 @@
-"""Mocked JSON-line runtime integration from learning evidence to live reuse."""
+"""Mocked acceptance chain across gateway, strategies, trust, status, and stop."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import json
+from pathlib import Path
 
-from animetta.tools.gamebot.contracts import (
-    ActionOutcome,
-    ActionReceipt,
-    CapabilityManifest,
-    CapabilityRisk,
-    GameBotCapability,
-    GameBotObservation,
-    SkillExecutionResult,
+from pydantic import TypeAdapter
+
+from animetta.tools.gamebot.contracts.v2 import Observation, RuntimeManifest
+from animetta.tools.minecraft.skill.applicability import applicability_for_goal
+from animetta.tools.minecraft.skill.trust import (
+    SkillEnvironmentTrust,
+    stable_environment_fingerprint,
 )
-from animetta.tools.minecraft.skill.catalog import SkillLibrary
-from animetta.tools.minecraft.voyager.adapter import MinecraftGameBotAdapter
-from animetta.tools.minecraft.voyager.contracts import (
-    VoyagerMode,
-    VoyagerSessionContext,
+from animetta.tools.minecraft.survival.registry import WorkflowRegistry
+from animetta.tools.minecraft.survival.workflows import iron_survival_workflow
+from animetta.tools.minecraft.voyager.budget import (
+    BudgetUsage,
+    ExecutionBudget,
+    ModeBudgetPolicy,
 )
-from animetta.tools.minecraft.voyager.learning import LearningSession
-from animetta.tools.minecraft.voyager.live import LiveSession
-from animetta.tools.minecraft.voyager.policy import VoyagerPolicy
-from animetta.tools.minecraft.voyager.repository import InMemoryVoyagerRepository
-from animetta.tools.minecraft.voyager.tech_graph import (
-    FrontierScheduler,
-    TechGraph,
-    TechNode,
-    TechProgress,
-)
+from animetta.tools.minecraft.voyager.gateway import ExecuteAtomicRequest, VoyagerGateway
+from animetta.tools.minecraft.voyager.goal_models import AtomicAction, GoalSpec
+from animetta.tools.minecraft.voyager.journal import InMemoryCommandJournal
+from animetta.tools.minecraft.voyager.stop import GlobalStopBarrier
+from animetta.tools.minecraft.voyager.strategies.atomic import AtomicStrategy
+from animetta.tools.minecraft.voyager.strategies.fallback import FallbackStrategy
+from animetta.tools.minecraft.voyager.strategies.learn import LearnStrategy
+from animetta.tools.minecraft.voyager.strategies.live import LiveStrategy
+
+ROOT = Path(__file__).resolve().parents[4]
+MESSAGES = json.loads(
+    (ROOT / "contracts/gamebot/v2/fixtures/golden.json").read_text(encoding="utf-8")
+)["messages"]
 
 
-class FakeNodeBridge:
-    """Emit the same payload shapes as the external Node capability runtime."""
-
-    is_running = True
-
-    def __init__(self) -> None:
-        self.inventory: dict[str, int] = {}
-        self.sequence = 0
-        self.last_observation: GameBotObservation | None = None
-        self.pending_observation: GameBotObservation | None = None
-
-    def _observation(self, correlation_id: str) -> GameBotObservation:
-        self.sequence += 1
-        return GameBotObservation(
-            observation_id=f"observation-{self.sequence}",
-            correlation_id=correlation_id,
-            runtime_id="node-runtime-1",
-            captured_at=datetime(2026, 7, 12, tzinfo=UTC) + timedelta(seconds=self.sequence),
-            inventory=dict(self.inventory),
-            equipment={},
-            environment={"dimension": "overworld"},
-        )
-
-    async def send_command(self, action, params, timeout=60.0):
-        del timeout
-        if action == "capabilities":
-            manifest = CapabilityManifest(
-                protocol_version="1.0",
-                runtime_id="node-runtime-1",
-                capabilities=[
-                    GameBotCapability(
-                        name="collect",
-                        risk=CapabilityRisk.SURVIVAL_SAFE,
-                        parameters={},
-                    )
-                ],
-            )
-            return {"status": "success", "result": manifest.model_dump(mode="json")}
-
-        if action == "observe":
-            observation = self.pending_observation or self._observation(params["correlation_id"])
-            self.pending_observation = None
-            self.last_observation = observation
-            return {
-                "status": "success",
-                "result": observation.model_dump(mode="json"),
-            }
-
-        if action == "eval_skill":
-            assert self.last_observation is not None
-            self.inventory["oak_log"] = self.inventory.get("oak_log", 0) + 1
-            after = self._observation(f"{params['correlation_id']}:after")
-            receipt = ActionReceipt(
-                receipt_id=f"receipt-{self.sequence}",
-                session_id=params["session_id"],
-                task_id=params["task_id"],
-                correlation_id=f"{params['correlation_id']}:1:collect",
-                runtime_id="node-runtime-1",
-                capability="collect",
-                params={"block_type": "oak_log", "count": 1},
-                started_at=after.captured_at,
-                finished_at=after.captured_at + timedelta(seconds=1),
-                before_observation_hash=self.last_observation.content_hash,
-                after_observation_hash=after.content_hash,
-                outcome=ActionOutcome.SUCCESS,
-            )
-            self.pending_observation = after
-            result = SkillExecutionResult(receipts=[receipt], output={"collected": 1})
-            return {"status": "success", "result": result.model_dump(mode="json")}
-
-        raise AssertionError(f"unexpected Node command: {action}")
-
-
-class Generator:
-    async def generate(self, **kwargs) -> str:
-        return "await collect('oak_log', 1);"
-
-
-class UnusedFallback:
-    async def run_goal(self, goal, *, reason, parent_task_id):
-        raise AssertionError((goal, reason, parent_task_id))
-
-
-async def test_mocked_node_learning_promotes_then_live_reuses_trusted_skill() -> None:
-    bridge = FakeNodeBridge()
-    runtime = MinecraftGameBotAdapter(bridge)
-    manifest = await runtime.get_capabilities()
-    repository = InMemoryVoyagerRepository()
-    library = SkillLibrary()
-    policy = VoyagerPolicy(
-        supported_protocol="1.0",
-        allowed_capabilities={"collect"},
+def _goal() -> GoalSpec:
+    return TypeAdapter(GoalSpec).validate_python(
+        {
+            "intent": "acquire",
+            "target": "iron_ingot",
+            "quantity": 1,
+            "success_predicates": [
+                {"kind": "inventory_at_least", "item": "iron_ingot", "quantity": 1}
+            ],
+        }
     )
-    graph = TechGraph(
-        [
-            TechNode(
-                id="wood_collection",
-                name="Collect wood",
-                allowed_capabilities=frozenset({"collect"}),
-                required_capabilities=("collect",),
-                postconditions={"oak_log": 1},
-            )
-        ]
+
+
+def _budget() -> ExecutionBudget:
+    return ExecutionBudget(
+        queue_timeout_ms=1_000,
+        execution_timeout_ms=10_000,
+        max_actions=16,
+        max_strategy_attempts=4,
+        max_travel_distance=256,
+        max_blocks_changed=64,
+        max_damage_taken=4,
     )
-    learn_context = VoyagerSessionContext(
-        session_id="learn-session",
-        mode=VoyagerMode.LEARN,
-        runtime=runtime,
+
+
+async def _noop(*_args) -> None:
+    return None
+
+
+async def test_atomic_learn_validate_live_fallback_status_stop_chain() -> None:
+    manifest = RuntimeManifest.model_validate(MESSAGES["RuntimeManifest"])
+    observation = Observation.model_validate(MESSAGES["Observation"])
+
+    atomic = AtomicStrategy(
+        action=AtomicAction(capability="collect", parameters={"count": 1}),
         manifest=manifest,
-        authorized_capabilities=frozenset({"collect"}),
-        repository=repository,
     )
-    learning = LearningSession(
-        context=learn_context,
-        graph=graph,
-        scheduler=FrontierScheduler(graph),
-        policy=policy,
-        library=library,
-        code_generator=Generator(),
-        progress=TechProgress(),
-    )
+    assert atomic.propose(atomic.prepare(None), observation).kind == "execute"
 
-    learned = await learning.run_once()
-
-    assert learned.status == "trusted"
-    trusted = await library.match_trusted_skills({}, limit=5)
-    assert len(trusted) == 1
-
-    live_context = VoyagerSessionContext(
-        session_id="live-session",
-        mode=VoyagerMode.LIVE,
-        runtime=runtime,
+    learn = LearnStrategy(
+        resolve_frontier=lambda _goal: ("iron_ingot",),
+        propose_node=lambda node: {
+            "node": node,
+            "capability": "collect",
+            "parameters": {"count": 1},
+            "maximum_cost": BudgetUsage(max_actions=1),
+        },
+        max_frontier_nodes=1,
+        max_attempts=2,
         manifest=manifest,
-        authorized_capabilities=frozenset({"collect"}),
+        compilation_budget=_budget(),
+        source_command_id="learn-command",
+    )
+    state = learn.prepare(_goal())
+    state = learn.accept_result(state, {"receipt_hash": "a" * 64})
+    state = learn.accept_result(state, {"receipt_hash": "b" * 64})
+    learned = learn.propose(state, observation)
+    revision = learned.output["candidate_revisions"][0]
+    trust = SkillEnvironmentTrust.trusted(
+        revision.revision_hash,
+        stable_environment_fingerprint(manifest.profile),
+        successes=1,
+    )
+
+    live = LiveStrategy(
+        revisions={revision.revision_hash: revision},
+        applicabilities={revision.revision_hash: applicability_for_goal(revision, _goal())},
+        trusts=[trust],
+        manifest=manifest,
+    )
+    assert live.propose(live.prepare(_goal()), observation).kind == "execute"
+
+    registry = WorkflowRegistry()
+    registry.register(iron_survival_workflow())
+    fallback = FallbackStrategy(registry=registry)
+    fallback_state = fallback.prepare(_goal())
+    assert fallback.propose(fallback_state, observation).kind == "execute"
+    assert fallback_state["learning_evidence_eligible"] is False
+
+    repository = InMemoryCommandJournal()
+    barrier = GlobalStopBarrier(repository=repository, signal_active=_noop, now_ms=lambda: 100)
+    policy = ModeBudgetPolicy(atomic=_budget(), learn=_budget(), live=_budget(), fallback=_budget())
+    gateway = VoyagerGateway(
         repository=repository,
+        stop_barrier=barrier,
+        manifest=manifest,
+        budget_policy=policy,
+        now_ms=lambda: 100,
+        make_id=lambda prefix: f"{prefix}-acceptance",
     )
-    live = LiveSession(
-        context=live_context,
-        library=library,
-        policy=policy,
-        fallback=UnusedFallback(),
+    handle = await gateway.execute(
+        caller_scope="principal:acceptance",
+        request=ExecuteAtomicRequest(
+            contract_version="2",
+            kind="atomic",
+            request_id="acceptance-atomic",
+            action=AtomicAction(capability="collect", parameters={"count": 1}),
+        ),
+    )
+    status = await gateway.status(caller_scope="principal:acceptance")
+    stopped = await gateway.stop(
+        caller_scope="principal:acceptance",
+        request_id="acceptance-stop",
+        reason="acceptance complete",
     )
 
-    result = await live.run_goal("collect wood")
-
-    assert result["outcome"] == "success"
-    assert result["skill_id"] == trusted[0].id
-    assert result["evidence_eligible"] is True
-    assert bridge.inventory["oak_log"] == 3
+    assert status.commands[0].command_id == handle.command_id
+    assert stopped.cancelled_command_ids == (handle.command_id,)

@@ -5,6 +5,7 @@ from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 
 """Tests for LangGraph orchestrator — initialization and input processing."""
 
+from inspect import signature
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -90,6 +91,40 @@ class TestOrchestratorInit:
         await orchestrator.stop()
         assert orchestrator._is_running is False
 
+    @pytest.mark.asyncio
+    async def test_start_reuses_prebuilt_tool_manager_without_loading_config(
+        self, mock_service_context, mock_socketio, monkeypatch
+    ):
+        """A showcase shares runtime-owned tools instead of starting a second bridge."""
+
+        assert "tool_manager" in signature(LangGraphOrchestrator).parameters
+        prebuilt = MagicMock()
+        prebuilt.tools = [MagicMock(name="mc_execute")]
+        prebuilt.tools_map = {"mc_execute": prebuilt.tools[0]}
+        prebuilt.is_loaded.return_value = True
+        graph = AsyncMock()
+        create_graph = MagicMock(return_value=graph)
+        monkeypatch.setattr(
+            "animetta.orchestration.graph.orchestrator.create_default_graph",
+            create_graph,
+        )
+        monkeypatch.setattr(
+            "animetta.orchestration.graph.orchestrator.get_observability",
+            lambda: MagicMock(_initialized=True, callbacks=[]),
+        )
+
+        instance = LangGraphOrchestrator(
+            service_context=mock_service_context,
+            socketio=mock_socketio,
+            enable_tools=True,
+            tool_manager=prebuilt,
+        )
+        await instance.start()
+
+        prebuilt.load_tools.assert_not_called()
+        assert create_graph.call_args.kwargs["tools"] is prebuilt.tools
+        assert create_graph.call_args.kwargs["tools_map"] is prebuilt.tools_map
+
 
 class TestOrchestratorProcessText:
     """Text processing flow."""
@@ -112,6 +147,26 @@ class TestOrchestratorProcessText:
         )
         assert "response_text" in result
         assert result["response_text"] == "mock reply"
+
+    @pytest.mark.asyncio
+    async def test_process_text_injects_trusted_tool_observer_into_run_config(
+        self, orchestrator, mock_graph
+    ):
+        """The observer is server-owned run configuration, never user metadata."""
+
+        observer = object()
+        await orchestrator.start()
+
+        await orchestrator.process_text(
+            text="完成 Minecraft 任务",
+            conversation_id="conversation-showcase-001",
+            tool_invocation_observer=observer,
+        )
+
+        initial_state = mock_graph.ainvoke.await_args.args[0]
+        run_config = mock_graph.ainvoke.await_args.kwargs["config"]
+        assert run_config["configurable"]["tool_invocation_observer"] is observer
+        assert "tool_invocation_observer" not in initial_state["metadata"]
 
     @pytest.mark.asyncio
     async def test_process_text_records_canonical_root_without_synthetic_snapshots(

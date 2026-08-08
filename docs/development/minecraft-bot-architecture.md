@@ -1,570 +1,145 @@
-# Minecraft Bot Architecture
+# Minecraft adaptive mission architecture
 
-> Last updated: 2026-07-04
->
-> This document explains the current Minecraft bot implementation in Animetta.
-> The short version: Python decides, stores state, exposes tools, and runs
-> higher-level loops; Node.js owns the live Mineflayer bot and executes concrete
-> in-game actions.
+This document describes the current post-cutover architecture. Minecraft has one
+world-mutation path, one durable command journal, and exactly three public tools.
 
-## Mental Model
+## Non-negotiable invariants
 
-The Minecraft module is not one single bot loop. It is a stack of cooperating
-layers that all converge on the same JSON-line bridge:
+- The public tool surface is exactly `mc_execute`, `mc_status`, and `mc_stop`.
+- Only `CommandExecutor` may invoke a state-changing GameBot v2 capability.
+- `MissionCoordinator` is side-effect-free: it advances durable state and makes at
+  most one child command eligible; it never claims or executes a command.
+- `mc_status` reads caller-scoped projections and does not query the live runtime.
+- `mc_stop` commits the global stop barrier before cooperative cancellation.
+- Natural-language callers submit a typed `MissionSpec`; they do not select
+  `learn`, `live`, or `fallback`, and they do not provide a hidden action plan.
+- Scenario RCON is restricted to pre-mission setup and is never gameplay evidence.
+- A screenshot, narration, fallback result, or placement count cannot prove a world
+  outcome. Only committed observations, events, receipts, and independent verifiers
+  can do so.
 
-```mermaid
-flowchart LR
-  Frontend["Vue / Electron UI"] --> SocketHandlers["MinecraftHandlers"]
-  LLM["LangGraph / LangChain tools"] --> Tools["core/tools.py"]
-  Auto["AutonomousLoop"] --> Bridge["MinecraftBridge"]
-  Survival["SurvivalIronRunner"] --> Bridge
-  TechTree["TechTreeRunner"] --> Bridge
-  Skills["SkillLibrary / Executor"] --> Bridge
-  SocketHandlers --> Bridge
-  Tools --> Bridge
-  Bridge --> IPC["JSON-line IPC"]
-  IPC --> Node["voyager-mc-bot/src/index.js"]
-  Node --> Mineflayer["Mineflayer Bot"]
-  Mineflayer --> Server["Minecraft Server"]
-```
+## Five layers and their dependency direction
 
-Everything that touches the actual Minecraft world eventually becomes:
+| Layer | Owns | Main modules |
+|---|---|---|
+| Interaction | conversation-to-contract, the three tools, visible progress and narration | `orchestration/prompting/`, `core/tools.py`, Socket.IO handlers, frontend projections |
+| Mission decision | `MissionSpec` DAG, proposal/admission, budgets, durable mission state and projections | `mission/models.py`, `mission/admission.py`, `mission/coordinator.py`, `mission/repository.py` |
+| Voyager control | gateway admission, journal, single scheduler, policy-selected strategies, recovery and the only executor | `voyager/gateway.py`, `voyager/journal.py`, `voyager/scheduler.py`, `voyager/control_plane.py`, `voyager/command_executor.py` |
+| Minecraft domains | reusable knowledge and pure decisions for discovery, skills, blueprints, technology and survival | `discovery/`, `skill/`, `blueprint/`, `tech_tree/`, `survival/` |
+| GameBot runtime | typed atomic capabilities, runtime identity, observations, receipts, cancellation and region inspection | `tools/gamebot/contracts/v2/`, `core/adapter.py`, external `voyager-mc-bot` |
 
-```json
-{"id": 1, "action": "collect", "params": {"block_type": "oak_log", "count": 5}}
-```
+Dependencies move downward. Evidence moves upward. Domain packages expose typed
+values and protocols; they do not import the concrete gateway, controller, runtime
+adapter, or SQLite implementation.
 
-Node replies with:
-
-```json
-{"id": 1, "status": "success", "result": "Collected 5 oak_log"}
-```
-
-or:
-
-```json
-{"id": 1, "status": "error", "result": {"message": "No recipes for diamond_pickaxe", "code": "NO_RECIPE"}}
-```
-
-## Directory Map
-
-| Path | Role |
-| --- | --- |
-| `src/animetta/tools/minecraft/core/` | Python bridge, config, LangChain tool registration, HUD state collection |
-| `src/animetta/tools/gamebot/` | Generic game-bot contracts, client, and stdio transport |
-| `C:/Users/30262/Project/voyager-mc-bot/src/` | External Node.js Mineflayer runtime and concrete action handlers |
-| `C:/Users/30262/Project/voyager-mc-bot/src/behaviors/` | Node-side auto-eat, combat guard, plan executor |
-| `src/animetta/tools/minecraft/autonomous/` | Python-side autonomous decision loop, rules engine, LLM planner |
-| `src/animetta/tools/minecraft/skill/` | Voyager-style skill models, library, executor, extractor, validator |
-| `src/animetta/tools/minecraft/survival/` | Deterministic wood-to-iron survival state machine |
-| `src/animetta/tools/minecraft/tech_tree/` | Longer benchmark/progression runner built around phases and milestones |
-| `src/animetta/tools/minecraft/benchmark/` | Scenario metrics and reports |
-| `src/animetta/tools/minecraft/other/` | World-state parsing, trace recording, one-off scripts and experiments |
-| `tests/tools/minecraft/` | Python tests for bridge, autonomous loop, skills, survival, tech tree |
-
-## Startup Paths
-
-There are two important ways the bot is created.
-
-### 1. Frontend Start Button
-
-```mermaid
-sequenceDiagram
-  participant UI as Frontend
-  participant H as MinecraftHandlers
-  participant T as core/tools.py
-  participant B as MinecraftBridge
-  participant N as Node voyager-mc-bot/src/index.js
-
-  UI->>H: minecraft:start
-  H->>T: init_bridge(config)
-  T->>B: MinecraftBridge(...)
-  H->>B: bridge.start()
-  B->>N: spawn configured external runtime host port username
-  N-->>B: event login/spawn
-  H->>H: start StateCollector
-  H-->>UI: minecraft.status connected=true
-```
-
-Main files:
-
-- `src/animetta/orchestration/server/handlers/minecraft_handlers.py`
-- `src/animetta/tools/minecraft/core/tools.py`
-- `src/animetta/tools/minecraft/core/bridge.py`
-
-Current caveat: `MinecraftHandlers.on_minecraft_start()` constructs
-`MinecraftConfig(enabled=True, autonomous=True)` directly. That means frontend
-startup is not yet fully driven by `config/tools.yaml`.
-
-### 2. LangChain Tool Loading
-
-`core/tools.py` exposes public `@tool` functions such as `mc_collect`,
-`mc_craft`, `mc_status`, and `mc_survival_iron`.
-
-These functions call `_send()`, which formats the bridge result for LLM
-consumption:
+## Request and evidence flow
 
 ```text
-mc_collect("oak_log", 5)
-  -> _send("collect", {"block_type": "oak_log", "count": 5})
-  -> MinecraftBridge.send_command(...)
-  -> Node action "collect"
+user text
+  -> Anima prompt/tool calling
+  -> mc_execute(ExecuteMissionRequest)
+  -> MissionSpec validation + caller scope injection
+  -> MissionCoordinator + GoalAdmission
+  -> durable child command in CommandJournal
+  -> single Scheduler
+  -> UnifiedVoyagerController
+  -> applicable trusted skill | bounded learning | approved fallback | atomic strategy
+  -> CommandExecutor
+  -> GameBot v2 adapter
+  -> external Mineflayer runtime
+
+runtime observation/event/receipt
+  -> contract validation + receipt-chain checks
+  -> goal verifier + discovery/skill/advancement projections
+  -> mission transition and budget settlement
+  -> mc_status / Socket.IO projection
+  -> Anima evidence-based narration and presentation bundle
 ```
 
-## Bridge Layer
-
-`MinecraftBridge` owns the Node subprocess lifecycle and the request/response
-bookkeeping.
-
-Key responsibilities in `core/bridge.py`:
-
-- starts `node bot/index.js <host> <port> <username>`
-- writes one JSON command per line to stdin
-- reads stdout line-by-line and parses JSON responses
-- matches response `id` to pending Python futures
-- handles id-less events such as `login`, `spawn`, `heartbeat`,
-  `viewer_joined`, and `viewer_left`
-- starts/stops the Python autonomous loop when enabled
-- forwards spectator viewer events to the backend callback
-
-Important fields:
-
-| Field | Meaning |
-| --- | --- |
-| `_process` | Async subprocess handle for Node |
-| `_pending` | `id -> Future` waiting for command responses |
-| `_next_id` | Monotonic command id counter |
-| `_lock` | Protects id allocation |
-| `_bot_ready` | Set when Node emits the `login` event |
-| `_autonomous_loop` | Optional Python-side decision loop |
-
-The bridge has a module-level singleton:
-
-```python
-from animetta.tools.minecraft.core.bridge import get_bridge
-```
-
-`core/tools.py` also stores a `_bridge`. The current implementation keeps those
-two singleton references synchronized in `init_bridge()` and `cleanup_bridge()`.
-
-## Node Bot Layer
-
-`bot/index.js` is the live Mineflayer process. It owns the actual bot object:
-
-```js
-const bot = mineflayer.createBot({ host, port, username });
-bot.loadPlugin(pathfinder);
-bot.loadPlugin(pvp);
-```
-
-It contains three kinds of functions.
-
-### Core Actions
-
-These directly use Mineflayer:
-
-| Function | Action |
-| --- | --- |
-| `_goto()` | Pathfind to a block position |
-| `_mine()` / `_mineInner()` | Find and dig matching blocks |
-| `_collect()` / `_collectInner()` | Mine and pick up dropped items |
-| `_place()` | Place a block at coordinates |
-| `_craft()` | Craft using inventory or nearby crafting table |
-| `_attack()` | Attack nearest hostile/player/entity |
-| `_waterBucketClutch()` | Equip water bucket, look down, activate item |
-| `_recipes()` | Inspect available recipes |
-
-Some actions have been split into modules:
-
-| Module | Role |
-| --- | --- |
-| `smelt.js` | Furnace/smelting actions |
-| `equip.js` | Equip item to hand/armor slots |
-| `mine_shaft.js` | Controlled shaft mining |
-| `sandbox.js` | Voyager `eval_code` sandbox and status snapshot |
-| `spectator.js` | Auto-spectate viewer handling |
-| `commandRuntime.js` | Timeout helper, response guard, busy bypass rules |
-
-### IPC Command Handlers
-
-`handleCommand()` maps bridge actions to handlers:
-
-| Bridge action | Handler |
-| --- | --- |
-| `goto` | `handleGoto()` |
-| `mine` | `handleMine()` |
-| `collect` | `handleCollect()` |
-| `craft` | `handleCraft()` |
-| `smelt` | `handleSmelt()` |
-| `status` | `handleStatus()` |
-| `stop` | `handleStop()` |
-| `set_mode` | `handleSetMode()` |
-| `plan_status` | `handlePlanStatus()` |
-| `eval_code` | `handleEvalCode()` |
-| `equip` | `handleEquip()` |
-| `mine_shaft` | `handleMineShaft()` |
-| `water_bucket_clutch` | `handleWaterBucketClutch()` |
-
-### Runtime Safety
-
-`commandRuntime.js` protects the command channel:
-
-- `createResponseGuard()` suppresses duplicate responses for the same id.
-  This prevents logs like timeout followed by a late `Digging aborted` response
-  for the same command.
-- `withTimeout()` races long actions against a timeout and calls cleanup.
-- `isBusyBypassAction()` allows `status`, `stop`, and `plan_status` while the bot
-  is busy.
-
-`index.js` also has `abortCurrentAction()`, which stops pathfinding, PVP,
-digging, collect-block tasks, and then resumes auto systems.
-
-## Status Shape
-
-`status` is the most important read action. Node returns a dict used by the UI,
-autonomous loop, survival runner, and skills.
-
-Common fields:
-
-| Field | Meaning |
-| --- | --- |
-| `position` | Current block position |
-| `health`, `food` | Survival stats |
-| `dimension`, `time`, `weather`, `biome` | Environment |
-| `inventory` | Item name to count |
-| `nearby_entities` | Hostile/player/passive/neutral summary |
-| `fall_distance`, `on_ground`, `velocity` | Fall-risk detection |
-| `current_goal` | Node-side idle goal |
-
-Python parses this in `other/world_state.py`.
-
-`WorldState` adds derived helpers:
-
-- `get_threat_level()`
-- `get_fall_risk_level()`
-- `has_water_bucket`
-- `get_material_gaps()`
-- `distance_to()`
-
-## Autonomous Loop
-
-`autonomous/loop.py` is a Python perception-decision-action loop.
-
-Every tick:
-
-```text
-status -> WorldState -> _evaluate() -> _execute()
-```
-
-Decision priority:
-
-1. Fall safety: if falling and has water bucket, run `water_bucket_clutch`
-2. Threat safety: attack nearby hostiles
-3. Low health / night return
-4. SkillLibrary match
-5. Building material gaps
-6. Proactive chat
-7. Random exploration
-8. Idle
-
-The loop can be paused/resumed by the bridge when direct LLM instructions are
-active.
-
-If learning components are wired, successful autonomous actions are recorded by
-`TraceRecorder`, extracted into skills by `SkillExtractor`, validated by
-`SkillValidator`, and saved into `SkillLibrary`.
-
-## Rules Engine
-
-`autonomous/rules_engine.py` reads `rules.md` and turns it into a
-`BehaviorRules` object.
-
-It controls:
-
-- bot character name/personality for behavior flavor
-- priority order
-- building target and required materials
-- safety settings
-- proactive chat topics and cooldown
-
-The rules engine is deliberately lower authority than hard safety constraints.
-For example, config-level safety can override weaker rules.
-
-## Planner Mode
-
-There are two planning systems:
-
-### Python LLM Planner
-
-`autonomous/planner.py` takes a natural-language goal and returns a list of
-`PlanStep(action, params, description)`.
-
-It first tries `SkillLibrary.search_skills()`. If no skill matches and an LLM
-service exists, it asks the LLM for JSON.
-
-### Node Plan Executor
-
-`bot/behaviors/planExecutor.js` stores and steps through plans on the Node side.
-
-Python switches Node into planner mode with:
-
-```python
-await bridge.set_planner_mode(plan_steps)
-```
-
-which sends:
-
-```json
-{"action": "set_mode", "params": {"mode": "planner", "plan": [...]}}
-```
-
-Node's plan loop then executes one step at a time through the same internal
-handlers.
-
-## Voyager-Style Skills
-
-The skill system lives in `skill/`.
-
-Core model:
-
-```text
-Skill
-  id
-  name
-  description
-  preconditions
-  steps: list[SkillStep]
-  body: optional code-body skill
-  stats: success/fail/avg_duration
-```
-
-`SkillStep.name` must be one of:
-
-```text
-goto, smart_goto, collect, mine, place, smart_build, craft, chat,
-check, wait, attack, smelt, water_bucket_clutch
-```
-
-Execution flow:
-
-```mermaid
-flowchart TD
-  A["SkillLibrary.match_skills(context)"] --> B["execute_skill_by_id"]
-  B --> C["check skill preconditions"]
-  C --> D["for each SkillStep"]
-  D --> E["check step preconditions"]
-  E --> F["bridge.send_command(step.name, step.params)"]
-  F --> G["update skill success/failure stats"]
-```
-
-There are two skill types:
-
-| Type | Execution |
-| --- | --- |
-| Step skill | Python executes each `SkillStep` via bridge commands |
-| Code-body skill | Python sends JS to Node `eval_code`; Node runs it inside `sandbox.js` |
-
-Built-in predefined skills are in `skill/predefined.py`; learned skills can be
-persisted in SQLite via `SkillLibrary(db_path="data/mc_skills.db")`.
-
-## Deterministic Survival Runner
-
-`survival/runner.py` is separate from autonomous behavior. It is a deterministic
-state machine for the wood-to-iron path.
-
-Phase order:
-
-```text
-WOOD
-CRAFTING_TABLE
-WOODEN_PICKAXE
-COBBLESTONE
-STONE_KIT
-FUEL
-IRON_ORE
-SMELT_IRON
-IRON_GEAR
-DONE
-```
-
-Each phase:
-
-1. refreshes inventory through `status`
-2. checks whether the phase goal is already met
-3. sends explicit bridge commands such as `collect`, `craft`, `smelt`
-4. retries within a phase-specific budget
-5. maps structured errors to recovery actions
-6. records a `PhaseResult`
-
-This runner is exposed to the LLM as `mc_survival_iron()`.
-
-Use it when you want repeatable survival progression rather than open-ended
-autonomous behavior.
-
-## Tech Tree Runner
-
-`tech_tree/runner.py` is a longer benchmark/progression runner.
-
-It differs from `SurvivalIronRunner` in two ways:
-
-- it is milestone-based rather than hardcoded to only the iron path
-- it tries to reuse `SkillLibrary` before falling back to raw bridge commands
-
-Flow:
-
-```text
-for each TechTreePhase:
-  for each task:
-    try matching skill
-    if skill fails or not found, send bridge command
-    check inventory milestone
-```
-
-It produces `TechTreeMetrics` and markdown reports for benchmarking.
-
-## Frontend and HUD
-
-Frontend lifecycle is handled through `MinecraftHandlers`.
-
-Relevant events:
-
-| Event | Direction | Meaning |
-| --- | --- | --- |
-| `minecraft:start` | UI -> backend | Start bridge and Node bot |
-| `minecraft:stop` | UI -> backend | Stop state collector and bridge |
-| `minecraft:spectate` | UI -> backend | Attach viewer to bot perspective |
-| `minecraft:command` | UI -> backend | Send raw bridge command |
-| `minecraft.status` | backend -> UI | Connected/disconnected status |
-| `minecraft.viewer_status` | backend -> UI | Viewer joined/left/error |
-| `mc_bot_state` | backend -> UI | Periodic HUD/dashboard state |
-
-`core/state_collector.py` polls `status` every few seconds and pushes:
-
-- Minecraft HUD commands through bot chat commands
-- Socket.IO state to the frontend
-
-Known caveat: `StateCollector` currently asks for an `inventory` action, but
-`bot/index.js` does not expose an `inventory` command in `handleCommand()`.
-The collector still receives inventory from `status`, so this should be cleaned
-up rather than relied on.
-
-## Common Call Chains
-
-### LLM asks bot to collect wood
-
-```text
-mc_collect("oak_log", 5)
-  -> core/tools._send("collect", ...)
-  -> MinecraftBridge.send_command("collect", ...)
-  -> Node handleCommand("collect")
-  -> handleCollect()
-  -> _collect()
-  -> Mineflayer pathfinder/dig/pickup
-  -> JSON response to Python
-  -> formatted text back to LLM
-```
-
-### Autonomous water-bucket clutch
-
-```text
-AutonomousLoop tick
-  -> bridge status
-  -> WorldState.get_fall_risk_level()
-  -> fall_risk >= 2 and has water_bucket
-  -> bridge.send_command("water_bucket_clutch", timeout=3)
-  -> Node _waterBucketClutch()
-```
-
-### Survival iron run
-
-```text
-mc_survival_iron()
-  -> SurvivalIronRunner.run()
-  -> phase WOOD: collect oak_log
-  -> phase CRAFTING_TABLE: craft planks/table
-  -> ...
-  -> phase IRON_GEAR: craft iron tools/armor
-  -> RunReport -> markdown-like summary
-```
-
-### Learned skill execution
-
-```text
-AutonomousLoop / TechTreeRunner / direct SkillLibrary call
-  -> SkillLibrary.execute_skill_by_id()
-  -> execute_skill()
-  -> bridge.send_command(each step)
-  -> update success/failure stats
-```
-
-## What To Change Where
-
-| Task | File(s) |
-| --- | --- |
-| Add a new low-level bot action | `bot/index.js`, optionally a new `bot/*.js` module |
-| Add a bridge-exposed action | `bot/index.js::handleCommand()` and a handler |
-| Add an LLM tool | `core/tools.py::get_minecraft_tools()` and new `@tool` |
-| Add fields to `status` | Node `handleStatus()` plus `other/world_state.py` parser if Python needs it |
-| Change autonomous priorities | `autonomous/loop.py::_evaluate()` |
-| Change behavior rules | `rules.md` and `autonomous/rules_engine.py` |
-| Add a reusable skill | `skill/predefined.py`, `skill/models.py` if a new step type is needed |
-| Add a deterministic survival phase | `survival/models.py`, `survival/inventory.py`, `survival/runner.py`, recovery tests |
-| Add benchmark/progression goals | `tech_tree/defaults.py`, `tech_tree/models.py`, tests |
-| Fix frontend start/stop | `orchestration/server/handlers/minecraft_handlers.py` |
-
-## Current Sharp Edges
-
-These are worth keeping in mind while debugging:
-
-- Frontend start currently hardcodes `MinecraftConfig(enabled=True, autonomous=True)`.
-- There are multiple execution modes sharing one Node bot, so command-level
-  timeouts and `busy` handling matter a lot.
-- `status`, `stop`, and `plan_status` are allowed during busy periods; most
-  other actions are rejected while another action is running.
-- Node late responses are suppressed per request id, so a timeout should not
-  produce a second error line for the same command.
-- Some docs still lag behind current code. `survival/SKILLS.md` describes older
-  busy behavior and older skill counts.
-- `StateCollector` has an `inventory` command request that does not match the
-  current Node command list.
-- Code-body Voyager skills run JS in a restricted sandbox, but they still drive
-  real bot actions. Treat generated skill code as behavior code, not plain data.
-
-## Verification Commands
-
-Useful checks after Minecraft bot changes:
-
-```powershell
-node --check src\animetta\tools\minecraft\bot\index.js
-node --test src\animetta\tools\minecraft\bot\commandRuntime.test.js
-$env:PYTHONPATH='src'; python -m pytest -o addopts='' tests/tools/minecraft -q
-```
-
-For full application verification after code changes, follow the project Docker
-startup protocol from `AGENTS.md`.
-
-## Extraction Status (2026-07-04)
-
-The Mineflayer runtime is being extracted out of Anima into a standalone external
-project, launched by Anima's `MinecraftBridge` through the generic game-bot stdio
-transport in `src/animetta/tools/gamebot/`.
-
-**Migrated to the external runtime:**
-- Node.js Mineflayer runtime startup and command handlers.
-- Node-side behavior helpers: initial loadout, smelting, mining, spectator, client-viewer.
-- `survival_iron` — deterministic wood-to-iron-gear runner (Anima delegates via `_send("survival_iron", ...)`, no Python survival imports).
-- Voyager mode switching (`set_voyager_mode`).
-
-**Retained in Anima:**
-- Generic contracts, client, and stdio transport: `src/animetta/tools/gamebot/`.
-- Minecraft compatibility adapter and LangChain tool surface: `src/animetta/tools/minecraft/core/`.
-- Socket.IO integration, config loading, viewer event forwarding, state collection.
-- Python-side orchestration not yet replaced: `autonomous/`, `survival/`, `skill/`, `tech_tree/`, `benchmark/`.
-
-**Remaining extraction phases** (each needs contract tests + adapter tests + real-server smoke):
-1. ~~`survival_iron`~~ ✅ Done (2026-07-04)
-2. `run_skill` · 3. `learn_skill` · 4. `benchmark` · 5. `tech_tree_step` · 6. `voyager_live_goal`
-
-> Detailed long-form research and roadmap for the Voyager ecosystem are archived in
-> `docs/development/archive/` (`voyager-landscape-research.zh.md`,
-> `voyager-self-evolution-optimization-roadmap.zh.md`).
+## Mission DAG and adaptive children
+
+`MissionSpec` is an immutable bounded DAG. Each `MissionObjective` contains one
+typed, independently verifiable `GoalSpec` leaf. Version 1 accepts only
+`all_required` completion; duplicate IDs, missing dependencies, cycles, unbounded
+autonomy, and child reservations above the parent budget are rejected.
+
+Open-ended outcomes are mission predicates, for example a minimum number of newly
+acquired facts, independently trusted skills, or vanilla advancements. After a
+committed child transition, `ExplorationProposer` may produce one bounded
+`GoalProposal`. Every user, scenario, curriculum, and recovery proposal passes the
+same deterministic `GoalAdmission` checks for provenance, capability coverage,
+risk, duplication, quarantine state, dependencies, and remaining budget.
+
+The coordinator settles the completed child's reservation with actual receipt
+usage before considering another child. `NOVELTY_EXHAUSTED`, budget exhaustion,
+mission completion, stop, or ambiguous world state ends adaptive proposal
+generation.
+
+## Domain ownership
+
+- Discovery stores world-scoped `WorldFact` records. `observed` requires a fresh
+  committed observation; `acquired` additionally requires an attributable receipt
+  and observation delta.
+- Skills store immutable Skill IR revisions plus applicability. Selection filters
+  by goal applicability, runtime/environment compatibility, current preconditions,
+  policy, trust, success, and conservative cost—in that order.
+- Learning and validation use distinct correlation/receipt chains and varied
+  resource or starting conditions. Only independent validation creates trust.
+- Blueprints compile an approved bounded structure into placement steps. Final
+  verification uses `inspect_region`; partial resume places only proven missing
+  blocks and never auto-demolishes conflicts.
+- Vanilla advancements remain separate from the internal technology graph. Both
+  are projected from shared evidence but are never inferred from each other.
+
+## Public tool semantics
+
+| Tool | Mutation | Contract |
+|---|---:|---|
+| `mc_execute` | indirect, through the journal and sole executor | discriminated mission or bounded atomic request; caller scope is injected outside model arguments |
+| `mc_status` | no | paginated caller-scoped mission/command projection with objective, proposal, budget, evidence and recovery state |
+| `mc_stop` | stop barrier only | durable global barrier followed by best-effort cancellation and reconciliation |
+
+## Layered regression strategy
+
+`tooling/quality.yml` is the only component-to-test mapping. A frozen affected plan
+selects groups and content fingerprints; agents do not manually omit selected
+groups. Every layer below must be current for the content under acceptance.
+
+| Layer | Proves | Required evidence |
+|---|---|---|
+| R0 architecture | three tools, downward dependencies, one scheduler/executor, no legacy mutation path | architecture AST audit and OpenSpec strict validation |
+| R1 contracts | mission DAGs, proposals, budgets, facts, blueprints, GameBot schemas and stable hashes | Python model/golden tests and generated contract digests |
+| R2 pure domains | admission, novelty, applicability, selection, compilation and independent verification | deterministic unit/property tests without services |
+| R3 durability | idempotency, transactions, state transitions, restart, stop and parent/child budget settlement | in-memory and SQLite repository/state-machine tests |
+| R4 faults | timeout, duplicate/stale evidence, disconnect, broken receipt chain, partial build and unknown outcome | fault-harness tests proving quarantine or `blocked_unknown` |
+| R5 cross-runtime | Python/Node parity for manifest, observation, combat, inspection, advancement, cancellation and spectator state | shared fixtures/digests plus the external Node suite |
+| R6 conversation | fixed and compound intent, one repair attempt, refusal after second invalid output and semantic narration | scripted dialogue tests plus a fresh configured real-provider capture |
+| R7 real world | the typed mission actually runs in a disposable Minecraft world with a confirmed viewer | fresh runtime health, scenario receipts, journal/receipt evidence and no post-start RCON |
+| R8 presentation | a person can inspect every stage and distinguish setup from bot-earned results | fresh screenshots, full-run video, stage I/O, hashes and user walkthrough |
+
+R0–R4 are hermetic and frequent. R5 is cross-repository. R6 requires a new model
+call. R7/R8 are release/final-demo gates and may not reuse earlier health, viewer,
+browser, screenshot, video, or run artifacts.
+
+## Real showcase stage contract
+
+One successful run must retain actual values for every row. The presentation writer
+links the same run ID and mission ID across stage records, evidence, media, and the
+hashed manifest.
+
+| Stage | Actual input to show | Actual decision/output to show | Required proof |
+|---|---|---|---|
+| S0 scenario setup | `ScenarioSpec` seed, zones, build area, loadout and hidden resource | closed setup operations and receipts | pre-start timestamps; explicitly excluded from gameplay evidence |
+| S1 readiness | runtime identity, health and authenticated viewer target | `following=true` before mission start | fresh viewer projection and capture probe |
+| S2 dialogue | exact user utterance | visible Anima response and typed `mc_execute` call | fresh real-provider artifact; no injected plan |
+| S3 admission | submitted `MissionSpec`, policies and parent budget | DAG, admitted objectives and reservations | canonical mission hash and durable projection |
+| S4 combat | zombie, skeleton and spider leaf goals | one terminal outcome per target | attributable combat receipts with target identity/type and health/ticks |
+| S5 construction | approved shelter blueprint and binding | compiled steps, partial/resume decisions and final result | bounded region inspection proving shell, roof, door, light and bed |
+| S6 exploration | latest committed observation and bounded frontier | proposal/admission, discovery and acquisition result | world-scoped fact plus receipt/observation delta |
+| S7 skill lifecycle | acquisition goal, applicability and candidate revision | learning, independent validation and second-resource reuse | distinct receipt chains, immutable revision hash and environment trust |
+| S8 progress | runtime advancement events and shared evidence | at least two vanilla additions plus internal technology projection | journaled advancement events; projections shown separately |
+| S9 completion | verified objective/predicate projection | final `MissionReport` and Anima summary | evidence references for every claimed result |
+| S10 presentation | all stage records and media | complete walkthrough manifest | per-file hashes, fresh timestamps, screenshot coverage and full-run video |
+
+The change is incomplete until R8 is shown directly to the user. A failed or
+aborted run remains diagnostic evidence and must not be presented as acceptance.

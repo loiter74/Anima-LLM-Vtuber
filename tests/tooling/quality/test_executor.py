@@ -10,11 +10,12 @@ import pytest
 from pydantic import ValidationError
 
 from tooling.quality.aggregate import aggregate_results
-from tooling.quality.executor import build_argv, run_group, write_result
+from tooling.quality.executor import build_argv, detect_capabilities, run_group, write_result
 from tooling.quality.manifest import load_catalog
 from tooling.quality.models import (
     AggregateStatus,
     AggregateSummary,
+    Capability,
     PlannedGroup,
     ResultStatus,
     Runner,
@@ -24,6 +25,25 @@ from tooling.quality.models import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_detect_capabilities_accepts_explicit_live_environment_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANIMETTA_QUALITY_CAPABILITIES", "network, gpu")
+
+    detected = detect_capabilities(ROOT)
+
+    assert {Capability.NETWORK, Capability.GPU}.issubset(detected)
+
+
+def test_detect_capabilities_rejects_unknown_or_machine_detected_declarations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANIMETTA_QUALITY_CAPABILITIES", "network,docker,unknown")
+
+    with pytest.raises(ValueError, match="ANIMETTA_QUALITY_CAPABILITIES"):
+        detect_capabilities(ROOT)
 
 
 def _repository_catalog():

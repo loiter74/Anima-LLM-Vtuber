@@ -1,0 +1,44 @@
+{
+  "manifest": {
+    "protocol_version": "1.0",
+    "runtime_id": "runtime-characterization",
+    "capabilities": [
+      {
+        "name": "collect",
+        "risk": "survival_safe",
+        "parameters": {
+          "block_type": {"type": "string"},
+          "count": {"type": "integer"}
+        }
+      }
+    ]
+  },
+  "observation": {
+    "observation_id": "obs-characterization",
+    "correlation_id": "corr-observe",
+    "runtime_id": "runtime-characterization",
+    "captured_at": "2026-08-01T00:00:00Z",
+    "position": {"x": 0, "y": 64, "z": 0},
+    "health": 20,
+    "food": 20,
+    "inventory": {"oak_log": 1},
+    "equipment": {},
+    "environment": {"dimension": "overworld"}
+  },
+  "receipt": {
+    "receipt_id": "receipt-characterization",
+    "session_id": "session-characterization",
+    "task_id": "task-characterization",
+    "correlation_id": "corr-action",
+    "runtime_id": "runtime-characterization",
+    "capability": "collect",
+    "params": {"block_type": "oak_log", "count": 1},
+    "started_at": "2026-08-01T00:00:01Z",
+    "finished_at": "2026-08-01T00:00:02Z",
+    "before_observation_hash": "before-hash",
+    "after_observation_hash": "after-hash",
+    "previous_receipt_hash": "",
+    "outcome": "success",
+    "error": null
+  }
+}

@@ -1,481 +1,261 @@
-"""
-Minecraft gameplay tools for Anima LLM
-
-Each tool maps to a Mineflayer bot action and is registered as a LangChain @tool.
-The bridge (MinecraftBridge) manages the Node.js subprocess lifecycle.
-"""
+"""The complete public Minecraft tool surface: execute, status, and stop."""
 
 from __future__ import annotations
 
-import asyncio  # noqa: F401  (patch anchor: tests/tools/minecraft/core/test_bridge.py)
 import json
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Literal
 
 from langchain_core.tools import tool
 from loguru import logger
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import DEFAULT_REF_TEMPLATE, GenerateJsonSchema, JsonSchemaMode
 
-if TYPE_CHECKING:
-    from ..skill.catalog import SkillLibrary
-    from ..voyager.contracts import VoyagerSessionContext
-    from ..voyager.controller import VoyagerController
-    from ..voyager.learning import LearningSession
-    from ..voyager.live import FallbackSession, LiveSession
-    from ..voyager.repository import VoyagerRepository
-    from .bridge import MinecraftBridge
-    from .state_collector import StateCollector
+from animetta.tools.minecraft.mission.adaptive import ExplorationFrontier
+from animetta.tools.minecraft.mission.models import MissionSpec
+from animetta.tools.minecraft.voyager.budget import RequestedBudget
+from animetta.tools.minecraft.voyager.gateway import (
+    EXECUTE_REQUEST_ADAPTER,
+    ExecuteRequest,
+)
+from animetta.tools.minecraft.voyager.goal_models import AtomicAction
 
-# Global bridge instance (initialized by init_bridge)
+from .assembly import MinecraftControlPlane, assemble_control_plane
+from .bridge import MinecraftBridge
+
 _bridge = None
-_voyager_controller = None
-_voyager_library = None
-# Global state collector (set by MinecraftHandlers after start)
-_state_collector: StateCollector | None = None
+_control_plane: MinecraftControlPlane | None = None
+_state_collector = None
+_caller_scope: ContextVar[str] = ContextVar("minecraft_caller_scope", default="system:animetta")
+
+
+class MinecraftExecuteToolInput(BaseModel):
+    """Flat discriminated public input without caller-controlled identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["2"] = "2"
+    kind: Literal["mission", "atomic"]
+    request_id: str = Field(pattern=r"^[A-Za-z0-9_.:\-]{1,128}$")
+    mission: MissionSpec | None = None
+    action: AtomicAction | None = None
+    requested_budget: RequestedBudget | None = None
+    wait_seconds: float = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_branch(self) -> MinecraftExecuteToolInput:
+        EXECUTE_REQUEST_ADAPTER.validate_python(self.model_dump(mode="python", exclude_none=True))
+        return self
+
+    @property
+    def request(self) -> ExecuteRequest:
+        """Return the immutable gateway request represented by this tool input."""
+
+        return EXECUTE_REQUEST_ADAPTER.validate_python(
+            self.model_dump(mode="python", exclude_none=True)
+        )
+
+    @classmethod
+    def model_json_schema(
+        cls,
+        by_alias: bool = True,
+        ref_template: str = DEFAULT_REF_TEMPLATE,
+        schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+        mode: JsonSchemaMode = "validation",
+        *,
+        union_format: Literal["any_of", "primitive_type_array"] = "any_of",
+    ) -> dict[str, Any]:
+        """Expose the gateway union directly instead of a redundant wrapper."""
+
+        schema = EXECUTE_REQUEST_ADAPTER.json_schema(
+            by_alias=by_alias,
+            ref_template=ref_template,
+            schema_generator=schema_generator,
+            mode=mode,
+            union_format=union_format,
+        )
+        schema["type"] = "object"
+        return schema
+
+
+@contextmanager
+def bind_minecraft_caller_scope(caller_scope: str) -> Iterator[None]:
+    """Inject trusted caller identity outside model-generated tool arguments."""
+
+    token = _caller_scope.set(caller_scope)
+    try:
+        yield
+    finally:
+        _caller_scope.reset(token)
 
 
 def init_bridge(config: dict | None = None) -> None:
-    """Initialize the Minecraft bridge (called from load_tools_from_config)
+    """Create the transport-only bridge; lifecycle handlers start it explicitly."""
 
-    Args:
-        config: Minecraft config dict from tools.yaml
-    """
     global _bridge
     if _bridge is not None:
         return
-
     from . import bridge as bridge_module
     from .bridge import MinecraftBridge
     from .config import MinecraftConfig
 
     mc_config = MinecraftConfig(**(config or {}))
-
     if not mc_config.enabled:
         logger.info("[MinecraftTools] Minecraft gameplay is disabled in config")
         return
-
-    # Try to get ServicePool for LLM-powered learning loop
-    service_pool_ref = None
-    try:
-        from animetta.core.service_pool import ServicePool
-
-        if ServicePool._ready:
-            service_pool_ref = ServicePool
-    except Exception:
-        pass
-
-    _bridge = MinecraftBridge(
-        mc_config,
-        autonomous=False,
-        service_pool=service_pool_ref,
-    )
+    _bridge = MinecraftBridge(mc_config)
     bridge_module._bridge = _bridge
+    logger.info("[MinecraftTools] Transport bridge created")
 
-    # Bridge is created but NOT started here.
-    # Callers should await _bridge.start() explicitly.
-    logger.info("[MinecraftTools] Bridge created (not started yet)")
+
+async def configure_voyager_control_plane(
+    bridge: MinecraftBridge,
+    *,
+    event_emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    blueprint_origins: dict[str, tuple[int, int, int]] | None = None,
+    entity_origins: dict[str, tuple[int, int, int]] | None = None,
+    adaptive_frontier: ExplorationFrontier | None = None,
+) -> MinecraftControlPlane:
+    """Validate GameBot v2 and assemble exactly one production control plane."""
+
+    global _control_plane
+    if _control_plane is not None:
+        await _control_plane.close()
+    _control_plane = await assemble_control_plane(
+        bridge,
+        bridge.config,
+        event_emit=event_emit,
+        blueprint_origins=blueprint_origins,
+        entity_origins=entity_origins,
+        adaptive_frontier=adaptive_frontier,
+    )
+    logger.info(
+        "[MinecraftTools] GameBot v2 control plane ready: {}",
+        _control_plane.adapter.runtime_instance_id,
+    )
+    return _control_plane
 
 
 async def cleanup_bridge() -> None:
-    """Cleanup bridge resources (called from ToolManager.cleanup)"""
-    global _bridge, _voyager_controller, _voyager_library
-    if _voyager_controller is not None:
-        await _voyager_controller.stop()
-        _voyager_controller = None
-    if _voyager_library is not None:
-        await _voyager_library.close_db()
-        _voyager_library = None
-    if _bridge:
+    """Persist ambiguous work, stop the worker, close stores, then stop transport."""
+
+    global _bridge, _control_plane, _state_collector
+    if _control_plane is not None:
+        await _control_plane.close()
+        _control_plane = None
+    if _bridge is not None:
         await _bridge.stop()
         _bridge = None
         from . import bridge as bridge_module
 
         bridge_module._bridge = None
-        logger.info("[MinecraftTools] Bridge cleaned up")
+    _state_collector = None
 
 
-async def configure_voyager_controller(
-    bridge: MinecraftBridge,
-    *,
-    llm_service: Any,
-    library: SkillLibrary | None = None,
-    repository: VoyagerRepository | None = None,
-) -> VoyagerController:
-    """Compose the sole Voyager controller around a running game-bot runtime."""
-    global _voyager_controller, _voyager_library
-
-    from animetta.tools.minecraft.skill.catalog import SkillLibrary
-    from animetta.tools.minecraft.survival.runner import SurvivalIronRunner
-    from animetta.tools.minecraft.voyager.adapter import MinecraftGameBotAdapter
-    from animetta.tools.minecraft.voyager.contracts import VoyagerMode
-    from animetta.tools.minecraft.voyager.controller import VoyagerController
-    from animetta.tools.minecraft.voyager.learning import (
-        FrontierLLMCodeGenerator,
-        LearningSession,
-    )
-    from animetta.tools.minecraft.voyager.live import FallbackSession, LiveSession
-    from animetta.tools.minecraft.voyager.policy import VoyagerPolicy
-    from animetta.tools.minecraft.voyager.recovery import RecoveryCoordinator
-    from animetta.tools.minecraft.voyager.repository import InMemoryVoyagerRepository
-    from animetta.tools.minecraft.voyager.tech_graph import (
-        FrontierScheduler,
-        TechProgress,
-        build_survival_tech_graph,
-    )
-
-    if _voyager_controller is not None:
-        await _voyager_controller.stop()
-    if _voyager_library is not None and _voyager_library is not library:
-        await _voyager_library.close_db()
-
-    runtime = MinecraftGameBotAdapter(bridge)
-    skill_library = library or SkillLibrary(db_path="data/minecraft_skills.db")
-    await skill_library.init_db()
-    voyager_repository = repository or InMemoryVoyagerRepository()
-    graph = build_survival_tech_graph()
-    allowed_capabilities = {
-        "observe",
-        "status",
-        "goto",
-        "collect",
-        "mine",
-        "craft",
-        "place",
-        "smelt",
-        "equip",
-        "attack",
-        "chat",
-        "recipes",
-        "mine_shaft",
-    }
-    policy = VoyagerPolicy(
-        supported_protocol="1.0",
-        allowed_capabilities=allowed_capabilities,
-    )
-    generator = FrontierLLMCodeGenerator(llm_service)
-
-    async def run_fallback(goal: str, *, task_id: str) -> dict[str, Any]:
-        del goal, task_id
-        report = await SurvivalIronRunner(bridge, skill_library=skill_library).run()
-        return report.summary()
-
-    def fallback_factory(context: VoyagerSessionContext) -> FallbackSession:
-        return FallbackSession(context=context, runner=run_fallback)
-
-    def learning_factory(context: VoyagerSessionContext) -> LearningSession:
-        return LearningSession(
-            context=context,
-            graph=graph,
-            scheduler=FrontierScheduler(graph),
-            policy=policy,
-            library=skill_library,
-            code_generator=generator,
-            progress=TechProgress(),
+def _gateway():
+    if _control_plane is None:
+        raise RuntimeError(
+            "Minecraft control plane is not ready; start the bot and validate GameBot v2"
         )
+    return _control_plane.gateway
 
-    def live_factory(context: VoyagerSessionContext) -> LiveSession:
-        return LiveSession(
-            context=context,
-            library=skill_library,
-            policy=policy,
-            fallback=fallback_factory(context),
-        )
 
-    controller = VoyagerController(
-        runtime=runtime,
-        policy=policy,
-        session_factories={
-            VoyagerMode.LEARN: learning_factory,
-            VoyagerMode.LIVE: live_factory,
-            VoyagerMode.FALLBACK: fallback_factory,
+@tool(args_schema=MinecraftExecuteToolInput)
+async def mc_execute(
+    request_id: str,
+    kind: Literal["mission", "atomic"],
+    contract_version: Literal["2"] = "2",
+    mission: MissionSpec | None = None,
+    action: AtomicAction | None = None,
+    requested_budget: RequestedBudget | None = None,
+    wait_seconds: float = 0,
+) -> str:
+    """Durably submit one typed Minecraft mission or bounded operator probe.
+
+    Normal conversation must use the `mission` branch. The `atomic` branch is
+    reserved for internal/operator probes and must not be synthesized as a hidden
+    gameplay plan. The request ID is persistent and idempotent.
+    """
+
+    request = MinecraftExecuteToolInput(
+        contract_version=contract_version,
+        kind=kind,
+        request_id=request_id,
+        mission=mission,
+        action=action,
+        requested_budget=requested_budget,
+        wait_seconds=wait_seconds,
+    ).request
+    result = await _gateway().execute(caller_scope=_caller_scope.get(), request=request)
+    return json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
+
+
+@tool
+async def mc_status(
+    command_id: str | None = None,
+    request_id: str | None = None,
+    cursor: str | None = None,
+    limit: int = 20,
+    projection_kind: Literal["commands", "missions"] = "commands",
+) -> str:
+    """Read immediate caller-scoped command/controller projection state.
+
+    This never enters the gameplay queue and never asks the runtime for a fresh
+    world observation. Pass at most one of command_id or request_id; use an atomic
+    `observe` command when fresh game state is required.
+    """
+
+    if command_id and request_id:
+        raise ValueError("command_id and request_id are mutually exclusive")
+    gateway = _gateway()
+    scope = _caller_scope.get()
+    if projection_kind == "missions":
+        if command_id or request_id:
+            raise ValueError("mission projection cannot use command selectors")
+        page = await gateway.status_missions(caller_scope=scope, limit=limit, cursor=cursor)
+        return json.dumps(page.model_dump(mode="json"), ensure_ascii=False)
+    if command_id:
+        command = await gateway.status_command(caller_scope=scope, command_id=command_id)
+        return json.dumps(command.model_dump(mode="json"), ensure_ascii=False)
+    if request_id:
+        command = await gateway.status_request(caller_scope=scope, request_id=request_id)
+        return json.dumps(command.model_dump(mode="json"), ensure_ascii=False)
+    projection = await gateway.status(caller_scope=scope, limit=limit, cursor=cursor)
+    return json.dumps(projection.model_dump(mode="json"), ensure_ascii=False)
+
+
+@tool
+async def mc_stop(
+    request_id: str,
+    reason: str = "operator stop",
+    wait_seconds: float = 0,
+) -> str:
+    """Create an idempotent durable global stop barrier.
+
+    The barrier blocks new execution admission, cancels every pending command,
+    records cancellation intent for the active command, and only then signals
+    cooperative runtime cancellation. `wait_seconds` is caller waiting metadata.
+    """
+
+    del wait_seconds
+    result = await _gateway().stop(
+        caller_scope=_caller_scope.get(), request_id=request_id, reason=reason
+    )
+    return json.dumps(
+        {
+            "stop_command_id": result.stop_command_id,
+            "idempotency_reused": result.idempotency_reused,
+            "active_command_id": result.active_command_id,
+            "cancelled_command_ids": result.cancelled_command_ids,
+            "recovery_error": result.recovery_error,
         },
-        repository=voyager_repository,
-        recovery=RecoveryCoordinator(runtime=runtime, repository=voyager_repository),
+        ensure_ascii=False,
     )
-    _voyager_controller = controller
-    _voyager_library = skill_library
-    return controller
 
 
 def get_minecraft_tools() -> list[Any]:
-    """Get all minecraft tools for registration
+    """Return the exact complete public Minecraft LangChain tool surface."""
 
-    Returns:
-        List of LangChain tool objects
-    """
-    return [
-        mc_goto,
-        mc_mine,
-        mc_build,
-        mc_attack,
-        mc_chat,
-        mc_status,
-        mc_goal,
-        mc_stop,
-        mc_collect,
-        mc_craft,
-        mc_smelt,
-        mc_recipes,
-        mc_survival_iron,
-        mc_voyager_learn,
-        mc_voyager_live,
-    ]
-
-
-async def _send(action: str, params: dict | None = None, timeout: float = 60.0) -> str:
-    """Send command via bridge and format result for LLM consumption"""
-    global _bridge
-    if _bridge is None or not _bridge.is_running:
-        return (
-            "Minecraft bot is not connected. "
-            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
-        )
-
-    # Notify state collector of action
-    if _state_collector is not None:
-        target = ""
-        if params:
-            if action == "mine_block":
-                target = params.get("block_type", "")
-            elif action == "goto":
-                target = f"({params.get('x', 0)},{params.get('y', 0)},{params.get('z', 0)})"
-            elif action == "craft_item":
-                target = params.get("item_name", "")
-            elif action == "chop_tree":
-                target = params.get("tree_type", "tree")
-        _state_collector.update_action(action, target)
-
-    result = await _bridge.send_command(action, params, timeout=timeout)
-
-    status = result.get("status", "error")
-    payload = result.get("result", "No result returned")
-
-    if status == "error":
-        return f"Action failed: {payload}"
-
-    # If result is a dict (like status response), format it nicely
-    if isinstance(payload, dict):
-        lines = []
-        for key, value in payload.items():
-            if isinstance(value, dict):
-                lines.append(f"{key}: {value}")
-            elif isinstance(value, list):
-                lines.append(f"{key}: {', '.join(str(v) for v in value)}")
-            else:
-                lines.append(f"{key}: {value}")
-        return "\n".join(lines)
-
-    return str(payload)
-
-
-@tool
-async def mc_goto(x: int, y: int, z: int) -> str:
-    """Move the Minecraft character to specific XYZ coordinates.
-    Use this to explore, travel to a location, or approach a target.
-    The bot will automatically find a path using A* pathfinding.
-
-    Args:
-        x: Target X coordinate
-        y: Target Y coordinate (height)
-        z: Target Z coordinate
-    """
-    return await _send("goto", {"x": x, "y": y, "z": z})
-
-
-@tool
-async def mc_mine(block_type: str, count: int = 1) -> str:
-    """Mine blocks of a specific type in Minecraft.
-    The bot finds the nearest matching block within 10 blocks and digs it.
-    Use this to collect resources like wood, stone, ores, etc.
-
-    Args:
-        block_type: Type of block to mine (e.g. 'oak_log', 'stone', 'diamond_ore', 'coal_ore')
-        count: Number of blocks to mine (default: 1, max: 64)
-    """
-    return await _send("mine", {"block_type": block_type, "count": min(count, 64)})
-
-
-@tool
-async def mc_build(block_type: str, x: int, y: int, z: int) -> str:
-    """Place a block at specific coordinates in Minecraft.
-    There must be a solid block below the target position.
-    Use this to build structures, walls, floors, bridges, etc.
-
-    Args:
-        block_type: Type of block to place (e.g. 'dirt', 'stone', 'oak_planks', 'glass')
-        x: X coordinate to place at
-        y: Y coordinate to place at
-        z: Z coordinate to place at
-    """
-    return await _send("place", {"block_type": block_type, "x": x, "y": y, "z": z})
-
-
-@tool
-async def mc_attack(target: str = "nearest_hostile") -> str:
-    """Attack a nearby entity in Minecraft.
-    Use this to fight monsters and defend yourself.
-
-    Args:
-        target: What to attack.
-            'nearest_hostile' - attack the nearest hostile mob (creeper, zombie, skeleton, etc.)
-            'nearest_player' - attack the nearest player
-            '<entity_name>' - attack a specific entity by name (e.g. 'Zombie', 'Creeper')
-    """
-    return await _send("attack", {"target": target})
-
-
-@tool
-async def mc_chat(message: str) -> str:
-    """Send a chat message in the Minecraft game chat.
-    Use this to communicate with other players or announce actions.
-    Messages are visible to all players on the server.
-
-    Args:
-        message: The chat message text to send
-    """
-    return await _send("chat", {"message": message})
-
-
-@tool
-async def mc_status() -> str:
-    """Get the current status of the Minecraft character.
-    Returns position, health, food level, dimension, weather, time of day,
-    biome, inventory items, and nearby entities.
-    Use this before other actions to assess the situation.
-    """
-    return await _send("status")
-
-
-@tool
-async def mc_goal(goal: str = "") -> str:
-    """Set or clear an autonomous goal for the Minecraft character.
-    When a goal is set, the bot will work towards it during idle moments
-    (when no commands are being sent). This is useful for live streaming
-    where the bot should keep doing something even without viewer input.
-    Call with an empty string to clear the current goal.
-
-    Args:
-        goal: Description of what to do (e.g. 'Explore the cave', 'Collect wood',
-              'Build a small house'). Empty string to clear the current goal.
-    """
-    return await _send("setgoal", {"goal": goal})
-
-
-@tool
-async def mc_stop() -> str:
-    """Emergency stop - cancel all current actions, pathfinding, and combat.
-    Use this if the bot is stuck, doing something wrong, or needs to reset.
-    Also clears any autonomous goal.
-    """
-    return await _send("stop")
-
-
-@tool
-async def mc_collect(block_type: str, count: int = 1) -> str:
-    """Collect blocks of a specific type and bring them to the bot's inventory.
-    Unlike mc_mine which only digs, this will find, approach, mine, and pick up
-    the blocks automatically. More reliable for collecting resources.
-
-    Args:
-        block_type: Type of block to collect (e.g. 'oak_log', 'stone', 'diamond_ore')
-        count: Number of blocks to collect (default: 1)
-    """
-    return await _send("collect", {"block_type": block_type, "count": min(count, 64)})
-
-
-@tool
-async def mc_craft(recipe: str, count: int = 1) -> str:
-    """Craft items in Minecraft. Requires sufficient materials in inventory.
-
-    Args:
-        recipe: Item name to craft (e.g. 'oak_planks', 'stick', 'stone_pickaxe', 'crafting_table')
-        count: Number of items to craft (default: 1, max: 64)
-    """
-    return await _send("craft", {"recipe": recipe, "count": min(count, 64)})
-
-
-@tool
-async def mc_smelt(item: str, fuel: str, count: int = 1) -> str:
-    """Smelt items in a furnace. Requires a furnace nearby and fuel in inventory.
-
-    Args:
-        item: Item to smelt (e.g. 'iron_ore', 'sand', 'raw_iron')
-        fuel: Fuel to use (e.g. 'coal', 'oak_log', 'charcoal')
-        count: Number of items to smelt (default: 1, max: 64)
-    """
-    return await _send("smelt", {"item": item, "fuel": fuel, "count": min(count, 64)})
-
-
-@tool
-async def mc_recipes(item: str) -> str:
-    """Query crafting recipes for an item. Shows required materials.
-
-    Args:
-        item: Item name to query (e.g. 'stone_pickaxe', 'furnace', 'iron_ingot')
-    """
-    return await _send("recipes", {"item": item})
-
-
-@tool
-async def mc_survival_iron() -> str:
-    """Run a deterministic survival path from empty inventory to stable iron equipment.
-
-    Phases: wood -> crafting_table -> wooden_pickaxe -> cobblestone -> stone_kit ->
-    fuel -> iron_ore -> smelt_iron -> iron_gear.
-
-    Returns a structured report with phase progress, final inventory, and
-    success/failure status for each phase. This tool uses a state machine,
-    not LLM planning, so it is reliable and deterministic.
-    """
-    return await _send("survival_iron", {}, timeout=60.0)
-
-
-@tool
-async def mc_voyager_learn() -> str:
-    """Switch the Minecraft bot to Voyager offline LEARNING mode.
-
-    In learn mode the bot runs the full Voyager 4-component loop offline
-    (automatic curriculum → iterative code generation → skill library →
-    self-verification) to accumulate a library of verified, reusable skills.
-    This is offline exploration — it does NOT generate code during live streaming.
-    Use mc_voyager_live to switch to the reliable live mode after training.
-    """
-    global _bridge, _voyager_controller
-    if _bridge is None or not _bridge.is_running:
-        return (
-            "Minecraft bot is not connected. "
-            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
-        )
-
-    if _voyager_controller is None:
-        return "Voyager controller is not configured. Restart the Minecraft integration."
-    status = await _voyager_controller.start_learning()
-    return json.dumps(status.model_dump(mode="json"), ensure_ascii=False)
-
-
-@tool
-async def mc_voyager_live(goal: str = "") -> str:
-    """Switch to Voyager LIVE mode — reuse verified skills only, no new code generation.
-
-    In live mode the bot selects skills from the verified library (by precondition
-    match + success rate) and re-executes them. This is the reliable streaming mode.
-    If all skills fail or the bot gets stuck, it automatically falls back to the
-    deterministic Survival Runner.
-
-    Args:
-        goal: Optional goal to pursue immediately (e.g. 'collect wood', 'smelt iron').
-              If omitted, the bot just enters live standby.
-    """
-    global _bridge, _voyager_controller
-    if _bridge is None or not _bridge.is_running:
-        return (
-            "Minecraft bot is not connected. "
-            "Make sure the Minecraft server is running and 'minecraft.enabled' is set to true in tools.yaml."
-        )
-
-    if _voyager_controller is None:
-        return "Voyager controller is not configured. Restart the Minecraft integration."
-    status = await _voyager_controller.start_live()
-    if not goal:
-        return json.dumps(status.model_dump(mode="json"), ensure_ascii=False)
-
-    result = await _voyager_controller.run_live_goal(goal)
-    return json.dumps(result, ensure_ascii=False, default=str)
+    return [mc_execute, mc_status, mc_stop]

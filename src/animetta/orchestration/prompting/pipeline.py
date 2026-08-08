@@ -12,6 +12,7 @@ from .sources import (
     AffinityPromptSource,
     ImprovisedChatPromptSource,
     MemoryPromptSource,
+    MinecraftMissionPromptSource,
     PersonaPromptSource,
     RoleplayGuardPromptSource,
     RuntimePersonalityPromptSource,
@@ -50,6 +51,7 @@ async def compile(
         ImprovisedChatPromptSource(),
         RoleplayGuardPromptSource(),
         MemoryPromptSource(),
+        MinecraftMissionPromptSource(),
     ]
 
     sections: list[PromptSection] = []

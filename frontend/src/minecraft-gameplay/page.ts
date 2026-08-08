@@ -1,7 +1,11 @@
 import { MINECRAFT_GAMEPLAY_LAYOUT, resolveMinecraftGameplayMode, toCssVariables } from './layout'
+import { isStageIOView, type EvidenceRefView, type StageIOView } from '@/types/minecraft-stage'
+
+export type { StageIOView } from '@/types/minecraft-stage'
 
 export interface MinecraftGameplayShellHandle {
   readonly element: HTMLElement
+  updateWalkthrough(stages: readonly StageIOView[]): void
   dispose(): void
 }
 
@@ -12,6 +16,23 @@ const PREVIEW_DANMAKU = [
 ] as const
 
 const BINDING_STATES = new Set(['disabled', 'waiting', 'attaching', 'following', 'degraded'])
+
+const SHOWCASE_STAGES = [
+  ['scenario-setup', '场景布置'],
+  ['capture-readiness', '观战与采集'],
+  ['dialogue', '自然语言'],
+  ['mission-admission', '任务接纳'],
+  ['combat', '怪物交互'],
+  ['construction', '建造验证'],
+  ['autonomous-exploration', '自主探索'],
+  ['discovery-acquisition', '新物品获取'],
+  ['skill-learning-validation', '技能学习与验证'],
+  ['skill-reuse', '可信技能复用'],
+  ['progress-projection', '进度投影'],
+  ['final-summary', '证据总结'],
+] as const
+
+const SHOWCASE_STAGE_IDS: ReadonlySet<string> = new Set(SHOWCASE_STAGES.map(([id]) => id))
 
 function parseMouthTimeline(raw: string | null): number[] | null {
   if (!raw) return null
@@ -72,6 +93,176 @@ function createPreviewWorld(document: Document): HTMLElement {
   return world
 }
 
+function safeEvidenceIdentity(raw: string | null, fallback: string): string {
+  return raw && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(raw) ? raw : fallback
+}
+
+function parseStageIO(raw: string | null): StageIOView[] {
+  if (!raw || raw.length > 120_000) return []
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (!Array.isArray(value) || value.length > SHOWCASE_STAGES.length) return []
+    return value.filter(
+      (item): item is StageIOView => isStageIOView(item) && SHOWCASE_STAGE_IDS.has(item.stage_id),
+    )
+  } catch {
+    return []
+  }
+}
+
+function compactValue(value: unknown): string {
+  const serialized = JSON.stringify(value)
+  if (serialized === undefined) return '—'
+  return serialized.length > 180 ? `${serialized.slice(0, 177)}…` : serialized
+}
+
+function formatRef(ref: EvidenceRefView): string {
+  return `${ref.artifact_id}#${ref.json_pointer}`
+}
+
+function appendStageDetail(
+  document: Document,
+  parent: HTMLElement,
+  label: string,
+  values: readonly string[],
+): void {
+  if (values.length === 0) return
+  const row = createElement(document, 'div', 'showcase-stage-detail')
+  row.append(
+    createElement(document, 'span', 'showcase-stage-detail-label', label),
+    createElement(document, 'span', 'showcase-stage-detail-value', values.join('；')),
+  )
+  parent.append(row)
+}
+
+function appendProjectedStageDetails(
+  document: Document,
+  item: HTMLElement,
+  stage: StageIOView,
+): void {
+  const details = createElement(document, 'div', 'showcase-stage-details')
+  const started = stage.started_at_ms ?? '—'
+  const finished = stage.finished_at_ms ?? '—'
+  appendStageDetail(document, details, '状态 / 时间', [
+    `${stage.lifecycle} · ${started} → ${finished} ms`,
+    stage.gameplay_evidence_eligible ? '任务内证据' : '任务外布置',
+  ])
+  appendStageDetail(document, details, '实际输入', (stage.input_refs ?? []).map(formatRef))
+  appendStageDetail(
+    document,
+    details,
+    '决策',
+    [
+      [stage.decision_source, stage.reason_code, stage.selected_strategy, stage.selected_capability]
+        .filter((value): value is string => Boolean(value))
+        .join(' · '),
+    ].filter(Boolean),
+  )
+  if (stage.budget_ref) appendStageDetail(document, details, '预算', [formatRef(stage.budget_ref)])
+  appendStageDetail(document, details, '实际输出', (stage.output_refs ?? []).map(formatRef))
+  appendStageDetail(
+    document,
+    details,
+    '状态变化',
+    (stage.state_deltas ?? []).map(
+      (delta) => `${delta.path}: ${compactValue(delta.before)} → ${compactValue(delta.after)}`,
+    ),
+  )
+  appendStageDetail(
+    document,
+    details,
+    '验证',
+    (stage.predicates ?? []).map(
+      (predicate) =>
+        `${stage.verifier ?? predicate.predicate_id} · ${predicate.status} · actual=${compactValue(predicate.actual)}`,
+    ),
+  )
+  appendStageDetail(document, details, '证据', (stage.evidence_refs ?? []).map(formatRef))
+  appendStageDetail(
+    document,
+    details,
+    '媒体',
+    (stage.media ?? []).map(
+      (media) => `${formatRef(media.evidence_ref)} @ ${media.captured_at_ms} ms`,
+    ),
+  )
+  appendStageDetail(
+    document,
+    details,
+    '检查点',
+    (stage.checkpoints ?? []).map(
+      (checkpoint) =>
+        `${checkpoint.checkpoint_id} · ${checkpoint.lifecycle}${checkpoint.verifier ? ` · ${checkpoint.verifier}` : ''}`,
+    ),
+  )
+  if (stage.failure) {
+    appendStageDetail(document, details, '失败', [
+      `${stage.failure.layer}/${stage.failure.code} · ${stage.failure.operator_action}`,
+    ])
+  }
+  item.append(details)
+}
+
+interface ShowcaseTimelineHandle {
+  readonly element: HTMLElement
+  update(stages: readonly StageIOView[]): void
+}
+
+function createShowcaseTimeline(
+  document: Document,
+  search: URLSearchParams,
+): ShowcaseTimelineHandle {
+  const timeline = createElement(document, 'aside', 'showcase-timeline')
+  timeline.setAttribute('aria-label', '任务证据时间线')
+  const runId = safeEvidenceIdentity(search.get('runId'), 'run-pending')
+  const missionId = safeEvidenceIdentity(search.get('missionId'), 'mission-pending')
+  const requestedStage = search.get('stage')
+  const currentStage =
+    requestedStage && SHOWCASE_STAGE_IDS.has(requestedStage) ? requestedStage : 'scenario-setup'
+  const completed = new Set(
+    (search.get('completed') ?? '').split(',').filter((stageId) => SHOWCASE_STAGE_IDS.has(stageId)),
+  )
+
+  const heading = createElement(document, 'header', 'showcase-timeline-header')
+  heading.append(
+    createElement(document, 'strong', 'showcase-timeline-title', '证据时间线'),
+    createElement(document, 'span', 'showcase-setup-boundary', '场景布置不计入任务成绩'),
+    createElement(document, 'span', 'showcase-identity', runId),
+    createElement(document, 'span', 'showcase-identity', missionId),
+  )
+
+  const list = createElement(document, 'ol', 'showcase-stage-list')
+  const render = (stages: readonly StageIOView[]): void => {
+    const projected = new Map(stages.map((stage) => [stage.stage_id, stage]))
+    list.replaceChildren()
+    for (const [index, [stageId, label]] of SHOWCASE_STAGES.entries()) {
+      const item = createElement(document, 'li', 'showcase-stage')
+      const stage = projected.get(stageId)
+      const state = stage
+        ? stage.lifecycle
+        : completed.has(stageId)
+          ? 'completed'
+          : stageId === currentStage
+            ? 'current'
+            : 'pending'
+      item.dataset.stageId = stageId
+      item.dataset.stageState = state
+      if (stageId === currentStage) item.setAttribute('aria-current', 'step')
+      const summary = createElement(document, 'div', 'showcase-stage-summary')
+      summary.append(
+        createElement(document, 'span', 'showcase-stage-index', String(index + 1).padStart(2, '0')),
+        createElement(document, 'span', 'showcase-stage-label', label),
+      )
+      item.append(summary)
+      if (stage) appendProjectedStageDetails(document, item, stage)
+      list.append(item)
+    }
+  }
+  render(parseStageIO(search.get('stageIO')))
+  timeline.append(heading, list)
+  return { element: timeline, update: render }
+}
+
 export function mountMinecraftGameplayShell(
   document: Document,
   search: URLSearchParams,
@@ -79,6 +270,7 @@ export function mountMinecraftGameplayShell(
   const mode = resolveMinecraftGameplayMode(search)
   const root = createElement(document, 'main', 'minecraft-gameplay')
   root.dataset.mode = mode
+  root.dataset.timeline = String(search.get('timeline') === '1')
   for (const [name, value] of Object.entries(toCssVariables(MINECRAFT_GAMEPLAY_LAYOUT))) {
     root.style.setProperty(name, value)
   }
@@ -140,6 +332,8 @@ export function mountMinecraftGameplayShell(
   avatar.append(canvas, modelState)
 
   root.append(ambient, television, status, danmaku, subtitle, avatar)
+  const timeline = search.get('timeline') === '1' ? createShowcaseTimeline(document, search) : null
+  if (timeline) root.append(timeline.element)
   const audioUrl = parseLoopbackAudio(search.get('audio'))
   const mouthTimeline = parseMouthTimeline(search.get('mouthTimeline'))
   if (search.get('review') === '1' && audioUrl && mouthTimeline) {
@@ -160,6 +354,9 @@ export function mountMinecraftGameplayShell(
   let disposed = false
   return {
     element: root,
+    updateWalkthrough(stages: readonly StageIOView[]): void {
+      timeline?.update(stages)
+    },
     dispose(): void {
       if (disposed) return
       disposed = true

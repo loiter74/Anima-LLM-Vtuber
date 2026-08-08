@@ -35,6 +35,7 @@ class OllamaLLM(LLMInterface):
         base_url: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        max_history_messages: int = 20,
         **kwargs,
     ):
         """
@@ -52,6 +53,7 @@ class OllamaLLM(LLMInterface):
         self.base_url = base_url or "http://localhost:11434"
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.max_history_messages = max_history_messages
 
         # Conversation history
         self.history: list[dict[str, str]] = []
@@ -87,6 +89,7 @@ class OllamaLLM(LLMInterface):
             base_url=config.base_url,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
+            max_history_messages=getattr(config, "max_history_messages", 20),
         )
 
     def _build_messages(self, user_input: str) -> list[dict[str, str]]:
@@ -149,6 +152,7 @@ class OllamaLLM(LLMInterface):
             # Update history
             self.history.append({"role": "user", "content": user_input})
             self.history.append({"role": "assistant", "content": assistant_message})
+            self.history = self._trim_history(self.history, self.max_history_messages)
 
             logger.debug(f"Ollama response: {assistant_message[:100]}...")
             return assistant_message
@@ -200,6 +204,7 @@ class OllamaLLM(LLMInterface):
             # Update history
             self.history.append({"role": "user", "content": user_input})
             self.history.append({"role": "assistant", "content": full_response})
+            self.history = self._trim_history(self.history, self.max_history_messages)
 
         except Exception as e:
             logger.error(f"Ollama streaming chat error: {e}")

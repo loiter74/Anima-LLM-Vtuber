@@ -47,7 +47,7 @@ class ReviewServer(Protocol):
     async def stop(self) -> None: ...
 
 
-CommandRunner = Callable[[list[str], dict[str, str]], Awaitable[None]]
+CommandRunner = Callable[[list[str], dict[str, str]], Awaitable[str | None]]
 ReadinessProbe = Callable[[], Awaitable[bool]]
 Sleeper = Callable[[float], Awaitable[None]]
 
@@ -80,7 +80,7 @@ async def _read_varint(reader: asyncio.StreamReader) -> int:
     raise ValueError("varint_too_large")
 
 
-async def _run_command(args: list[str], env: dict[str, str]) -> None:
+async def _run_command(args: list[str], env: dict[str, str]) -> str:
     process = await asyncio.create_subprocess_exec(
         *args,
         env={**os.environ, **env},
@@ -91,6 +91,7 @@ async def _run_command(args: list[str], env: dict[str, str]) -> None:
     if process.returncode != 0:
         output = (stderr or stdout).decode("utf-8", errors="replace")[-2_000:]
         raise MinecraftReviewError(f"compose_failed:{output}")
+    return stdout.decode("utf-8", errors="replace").strip()
 
 
 async def _probe_review_server() -> bool:
@@ -131,6 +132,19 @@ def _offline_player_uuid(username: str) -> str:
     return str(UUID(bytes=bytes(digest)))
 
 
+def _runtime_copy_path(path: Path) -> str | Path:
+    """Allow a copied runtime tree to contain paths beyond legacy MAX_PATH."""
+
+    if os.name != "nt":
+        return path
+    raw = str(path.resolve())
+    if raw.startswith("\\\\?\\"):
+        return raw
+    if raw.startswith("\\\\"):
+        return f"\\\\?\\UNC\\{raw[2:]}"
+    return f"\\\\?\\{raw}"
+
+
 class MinecraftReviewServerLease:
     """Own an isolated Compose project and disposable bind-mounted world."""
 
@@ -153,6 +167,7 @@ class MinecraftReviewServerLease:
         *,
         repository_dir: Path,
         world_dir: Path,
+        world_seed: int = -1_334_312_645,
         runtime_seed_dir: Path | None = None,
         run_command: CommandRunner = _run_command,
         readiness_probe: ReadinessProbe = _probe_review_server,
@@ -166,6 +181,7 @@ class MinecraftReviewServerLease:
             raise ValueError("readiness_interval_seconds must be positive")
         self.repository_dir = repository_dir.resolve()
         self.world_dir = world_dir.resolve()
+        self.world_seed = world_seed
         canonical_repository = (
             self.repository_dir.parent.parent
             if self.repository_dir.parent.name == ".worktrees"
@@ -202,7 +218,19 @@ class MinecraftReviewServerLease:
         return {
             "ANIMETTA_MC_REVIEW_PORT": "25566",
             "ANIMETTA_MC_REVIEW_WORLD_DIR": str(self.world_dir),
+            "ANIMETTA_MC_REVIEW_SEED": str(self.world_seed),
         }
+
+    async def execute_rcon(self, command: str) -> str:
+        """Execute one pre-authorized setup command against the owned server."""
+
+        if not self._started or self._closed:
+            raise MinecraftReviewError("server_not_ready")
+        response = await self._run_command(
+            self._compose("exec", "-T", "minecraft", "rcon-cli", command),
+            self._environment(),
+        )
+        return str(response or "").strip()
 
     async def start(self) -> None:
         if self._started:
@@ -256,8 +284,8 @@ class MinecraftReviewServerLease:
             source = self.runtime_seed_dir / relative_name
             if source.is_dir():
                 shutil.copytree(
-                    source,
-                    self.world_dir / relative_name,
+                    _runtime_copy_path(source),
+                    _runtime_copy_path(self.world_dir / relative_name),
                     dirs_exist_ok=True,
                 )
 

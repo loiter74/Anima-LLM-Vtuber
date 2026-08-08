@@ -71,6 +71,7 @@ class PromptContext:
     base_system_prompt_warnings: list[str] = field(default_factory=list)
     scene_guidance: SceneGuidance | None = None
     scene_guidance_warnings: list[str] = field(default_factory=list)
+    available_tool_names: frozenset[str] = frozenset()
 
 
 class PromptSource(Protocol):

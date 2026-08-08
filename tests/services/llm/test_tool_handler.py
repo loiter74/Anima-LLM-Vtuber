@@ -215,6 +215,63 @@ class TestOpenAIToolHandler:
         assert result["tool_calls"][0]["args"] == {"city": "Paris"}
 
     @patch("animetta.services.llm.tool_handler.logger")
+    async def test_invalid_tool_arguments_are_preserved_for_schema_repair(
+        self, mock_logger, handler, mock_openai_llm
+    ):
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_invalid"
+        mock_tool_call.function.name = "mc_execute"
+        mock_tool_call.function.arguments = '{"request":{"kind":"mission"'
+        mock_choice = MagicMock()
+        mock_choice.finish_reason = "length"
+        mock_choice.message.content = ""
+        mock_choice.message.tool_calls = [mock_tool_call]
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        result = await handler.chat_with_tools(
+            user_input="run mission",
+            tools=[fake_weather],
+            langchain_history=[],
+        )
+
+        assert result["tool_calls"][0]["args"] == {
+            "__invalid_json__": '{"request":{"kind":"mission"'
+        }
+        assert result["finish_reason"] == "length"
+
+    @patch("animetta.services.llm.tool_handler.logger")
+    async def test_one_extra_trailing_brace_is_repaired_and_audited(
+        self, mock_logger, handler, mock_openai_llm
+    ):
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_trailing_brace"
+        mock_tool_call.function.name = "mc_execute"
+        mock_tool_call.function.arguments = (
+            '{"contract_version":"2","kind":"mission","request_id":"mission-1","mission":{}}}'
+        )
+        mock_choice = MagicMock()
+        mock_choice.finish_reason = "tool_calls"
+        mock_choice.message.content = ""
+        mock_choice.message.tool_calls = [mock_tool_call]
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_openai_llm.client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        result = await handler.chat_with_tools(
+            user_input="run mission",
+            tools=[fake_weather],
+            langchain_history=[],
+        )
+
+        call = result["tool_calls"][0]
+        assert call["args"]["kind"] == "mission"
+        assert call["arguments_repaired"] is True
+        assert call["arguments_repair"] == "removed_one_trailing_brace"
+        assert len(call["raw_arguments_sha256"]) == 64
+
+    @patch("animetta.services.llm.tool_handler.logger")
     async def test_chat_with_tools_error(self, mock_logger, handler, mock_openai_llm):
         """chat_with_tools should raise on API error after recording it."""
         mock_openai_llm.client.chat.completions.create = AsyncMock(

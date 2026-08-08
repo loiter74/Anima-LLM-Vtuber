@@ -7,6 +7,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import ValidationError
+
+from .v2 import AdvancementObservedEvent
+
 logger = logging.getLogger(__name__)
 
 # All event types emitted by the current JSON-line protocol.
@@ -20,6 +24,7 @@ KNOWN_EVENT_TYPES: frozenset[str] = frozenset(
         "viewer_joined",
         "viewer_left",
         "client_viewer_status",
+        "advancement_observed",
     }
 )
 
@@ -61,4 +66,9 @@ def parse_event_from_response_line(line: str) -> GameBotEvent | None:
 
     # Extract payload — everything in result except 'type'
     payload = {k: v for k, v in result.items() if k != "type"}
+    if event_type == "advancement_observed":
+        try:
+            payload = AdvancementObservedEvent.model_validate(payload).model_dump(mode="json")
+        except ValidationError:
+            return None
     return GameBotEvent(type=event_type, payload=payload)

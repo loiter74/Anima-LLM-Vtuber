@@ -40,6 +40,7 @@ class OpenAILLM(LLMInterface):
         max_tokens: int = 1000,
         extra_body: dict | None = None,
         provider_identity: str = "openai",
+        max_history_messages: int = 20,
         **kwargs,
     ):
         """
@@ -64,6 +65,7 @@ class OpenAILLM(LLMInterface):
         self.max_tokens = max_tokens
         self.extra_body = extra_body or {}
         self._provider_identity = provider_identity
+        self.max_history_messages = max_history_messages
 
         # Conversation history
         self.history: list[dict[str, str]] = []
@@ -138,6 +140,7 @@ class OpenAILLM(LLMInterface):
             max_tokens=max_tokens,
             extra_body=extra_body,
             provider_identity=getattr(config, "type", "openai"),
+            max_history_messages=getattr(config, "max_history_messages", 20),
         )
 
     @property
@@ -212,8 +215,7 @@ class OpenAILLM(LLMInterface):
             self._record_usage(response, 0.0)
 
             # Update history
-            self.history.append({"role": "user", "content": user_input})
-            self.history.append({"role": "assistant", "content": assistant_message})
+            self._append_history_turn(user_input, assistant_message)
 
             logger.debug(f"OpenAI response: {assistant_message[:100]}...")
             return assistant_message
@@ -288,6 +290,12 @@ class OpenAILLM(LLMInterface):
         """Get conversation history"""
         return self.history.copy()
 
+    def _append_history_turn(self, user_input: str, assistant_message: str) -> None:
+        """Append one complete turn and enforce the configured history bound."""
+        self.history.append({"role": "user", "content": user_input})
+        self.history.append({"role": "assistant", "content": assistant_message})
+        self.history = self._trim_history(self.history, self.max_history_messages)
+
     def clear_history(self) -> None:
         """Clear conversation history"""
         self.history.clear()
@@ -329,6 +337,7 @@ class OpenAILLM(LLMInterface):
             self.history.append(
                 {"role": "system", "content": "[user interrupted the conversation]"}
             )
+            self.history = self._trim_history(self.history, self.max_history_messages)
 
         logger.info(
             f"Conversation interrupted, partial response saved: {heard_response[:50] if heard_response else '(empty)'}..."

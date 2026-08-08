@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -223,6 +226,30 @@ fallbacks:
     assert len(first.manifest_hash) == 64
 
 
+def test_repository_manifest_hash_is_stable_across_processes() -> None:
+    script = (
+        "from tooling.quality.manifest import load_catalog; "
+        "import sys; "
+        "print(load_catalog(sys.argv[1]).manifest_hash)"
+    )
+    hashes: set[str] = set()
+
+    for seed in ("1", "2", "4", "7"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = seed
+        completed = subprocess.run(
+            [sys.executable, "-c", script, str(ROOT / "tooling" / "quality.yml")],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        hashes.add(completed.stdout.strip())
+
+    assert len(hashes) == 1
+
+
 def test_repository_catalog_covers_runtime_environments() -> None:
     loaded = load_catalog(ROOT / "tooling" / "quality.yml")
 
@@ -304,6 +331,30 @@ def test_repository_catalog_has_a_dedicated_acceptance_audition_gate() -> None:
     assert "backend-acceptance-unit" in catalog.groups["backend-full"].covers
     assert "scripts/README.md" in catalog.components["documentation"].paths
     assert ".gitignore" in catalog.components["repository-governance"].paths
+
+
+def test_repository_catalog_has_minecraft_control_plane_components() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+
+    expected = {
+        "minecraft-gamebot-contract": "minecraft-contract-unit",
+        "minecraft-voyager-control-plane": "minecraft-voyager-unit",
+        "minecraft-skill-domain": "minecraft-domain-unit",
+        "minecraft-runtime-adapter": "minecraft-runtime-unit",
+    }
+    for component_id, focused_group in expected.items():
+        component = catalog.components[component_id]
+        assert {
+            focused_group,
+            "minecraft-architecture-audit",
+            "python-format",
+            "backend-static",
+            "backend-typecheck",
+        }.issubset(component.direct_groups)
+
+    assert catalog.groups["minecraft-architecture-audit"].runner.value == "python"
+    assert catalog.groups["minecraft-architecture-audit"].args == ("--report",)
+    assert set(expected.values()).issubset(catalog.groups["backend-full"].covers)
 
 
 def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:

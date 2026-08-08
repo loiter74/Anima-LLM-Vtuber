@@ -14,5 +14,13 @@ export const MINECRAFT_GAMEPLAY_REVIEW_DEFINITION = {
       readyTexts: ['已附身 LUN077 → AnimettaBot'],
       timeline: [],
     },
+    {
+      id: 'adaptive-mission',
+      title: 'Minecraft 自适应任务证据时间线',
+      observe:
+        '确认 LUN077 已真实附身 AnimettaBot，右侧证据轨按同一 run/mission 推进，场景布置与 bot 自主获得的结果明确分隔。',
+      readyTexts: ['已附身 LUN077 → AnimettaBot', '场景布置不计入任务成绩'],
+      timeline: [],
+    },
   ],
-} as const satisfies ReviewDefinition<'survival-iron', never>
+} as const satisfies ReviewDefinition<'survival-iron' | 'adaptive-mission', never>

@@ -1,91 +1,34 @@
-# Minecraft Bot Module — Guide for AI Agents
+# Minecraft module agent guide
 
-## Module Overview
+## Ownership
 
-This module provides the Minecraft gameplay integration for Animetta. It bridges Python (LangGraph/LangChain) with a Node.js Mineflayer bot for real-time Minecraft interaction.
+All world mutations follow:
 
-## Architecture
+`mc_execute -> VoyagerGateway -> journal/scheduler -> UnifiedVoyagerController -> CommandExecutor -> GameBot v2 adapter`.
 
-```
-Python (LangGraph) ←→ MinecraftBridge ←→ Node.js (Mineflayer) ←→ Minecraft Server
-```
+Only `core/adapter.py` may call the bridge for GameBot v2 transport operations,
+and only `voyager/command_executor.py` may invoke a state-changing runtime
+capability. Strategies are finite and side-effect-free.
 
-- **Python layer**: LangChain @tool functions, survival state machine, skill library, autonomous behavior
-- **Bridge**: JSON-line IPC over stdin/stdout subprocess
-- **Node.js layer**: Mineflayer bot with pathfinding, combat, auto-eat behaviors
+## Public API
 
-## Key Files
+The complete public tool set is exactly `mc_execute`, `mc_status`, and `mc_stop`.
+Caller scope is injected outside model arguments. Do not restore fine-grained
+tools, raw Socket.IO command execution, long-lived mode sessions, or config-level
+`mode`/`autonomous` fields.
 
-### Core
-- `bridge.py` — MinecraftBridge class, subprocess lifecycle, JSON-line protocol
-- `tools.py` — 13 LangChain @tool definitions (mc_goto, mc_collect, mc_craft, mc_smelt, mc_status, mc_survival_iron, etc.)
-- `config.py` — Pydantic config models
+## Domains
 
-### Survival Iron Run
-- `survival_models.py` — SurvivalPhase enum, PhaseResult, RunReport, InventoryGoal
-- `survival_inventory.py` — Item alias normalization, goal satisfaction, missing-material calculation
-- `survival_recovery.py` — Failure-to-recovery mapping, safety checks (health/food/hostiles)
-- `survival_runner.py` — SurvivalIronRunner — the deterministic wood-to-iron-gear state machine
-- `survival_benchmark.py` — Run summaries, markdown reports, multi-run comparison
-- `survival/SKILLS.md` — 完整生存技能流程总结（技术树、关键点、已知问题）
+- `core/`: transport adapter, assembly, configuration, and public tools.
+- `voyager/`: goals, budgets, journal, scheduler, controller, executor, recovery,
+  events, gateway, and bounded strategies.
+- `skill/`: declarative Skill IR, immutable revisions, environment trust, and
+  additive migration. Legacy code bodies are data only and remain untrusted.
+- `survival/`: typed deterministic workflows; no runtime calls.
+- `tech_tree/`: the only canonical technology graph and evidence model.
 
-### Skills and Learning
-- `skill_library.py` — Facade for SkillLibrary
-- `skill_models.py`, `skill_conditions.py`, `skill_executor.py`, `skill_store.py`, `skill_catalog.py`
-- `skill_extractor.py` — LLM-based skill extraction
-- `skill_validator.py` — Skill validation and simulation
-- `predefined_skills.py` — Built-in skill definitions
+## Verification
 
-### Autonomous Behavior
-- `autonomous.py` — AutonomousLoop, idle behavior, learning loop
-- `planner.py` — Plan generation
-- `rules_engine.py` — Rules-based decisions
-- `world_state.py` — World state tracker
-
-### Benchmarking and Tech Tree
-- `benchmark.py` / `benchmark_runner.py` / `benchmark_*.py`
-- `tech_tree.py` / `tech_tree_runner.py` / `tech_tree_*.py`
-
-### Node.js Bot
-- `bot/index.js` — Main bot process with hardened action handlers
-- `bot/behaviors/autoEat.js` — Auto-eat when food low
-- `bot/behaviors/combat.js` — Auto-attack hostiles
-- `bot/behaviors/planExecutor.js` — Multi-step plan execution
-- `bot/scripts/` — Manual smoke, debug, collection, crafting, and workflow scripts grouped by purpose
-
-## Bridge Protocol
-
-Request:  {"id": N, "action": "<name>", "params": {...}}
-Response: {"id": N, "status": "success"|"error", "result": <string|dict>}
-Event:    {"id": null, "status": "event", "result": {"type": "<kind>", ...}}
-
-### Hardened Command Responses (Phase 4)
-
-- **collect/mine**: On partial failure, throws with .code, .collected, .explored, .reason
-- **craft**: On missing materials, throws with .code, .missing (list), .needsTable
-- **smelt**: On no furnace, throws with .code='SMELT_NO_FURNACE'
-- **status**: Returns dict with position, health, food, inventory, equipment, nearby_entities, deaths
-
-## Public Tool Functions
-
-| Tool | Purpose |
-|------|---------|
-| mc_goto | Pathfind to coordinates |
-| mc_mine | Mine blocks within 10 blocks |
-| mc_build | Place a block |
-| mc_attack | Attack entity |
-| mc_chat | Send chat message |
-| mc_status | Full world state query |
-| mc_goal | Set autonomous idle goal |
-| mc_stop | Emergency stop |
-| mc_collect | Find+approach+mine+pickup |
-| mc_craft | Craft from inventory |
-| mc_smelt | Smelt in furnace |
-| mc_recipes | Query crafting recipes |
-| mc_survival_iron | Deterministic wood-to-iron-gear run |
-
-## Testing
-
-```
-PYTHONPATH=src python -m pytest tests/tools/minecraft/ -q
-```
+Use Python 3.13 and the repository-selected quality groups. The architecture gate
+`py -3.13 scripts/check_minecraft_architecture.py --check` must report zero
+violations. Real runtime startup and Docker verification must run in a sub-agent.
