@@ -100,3 +100,46 @@ def test_rag_cli_rejects_an_empty_experiment_group(tmp_path) -> None:
     )
 
     assert exit_code == 1
+
+
+def test_eval_config_defaults_match_production_weights() -> None:
+    """Harness defaults MUST match production (store.py 0.55/0.25)."""
+    config = EvalConfig(name="defaults")
+    assert config.vector_weight == 0.55
+    assert config.keyword_weight == 0.25
+
+
+def test_rag_cli_weight_flags_override_yaml(tmp_path) -> None:
+    """--vector-weight / --keyword-weight override both defaults and YAML."""
+    captured: list[EvalConfig] = []
+
+    def recording_factory(workspace, eval_config: EvalConfig):
+        captured.append(eval_config)
+        return FakeSearchBackend()
+
+    config = tmp_path / "configs.yaml"
+    config.write_text(
+        "experiments:\n  baseline:\n    one:\n      vector_weight: 0.7\n      keyword_weight: 0.3\n",
+        encoding="utf-8",
+    )
+    dataset = tmp_path / "dataset.jsonl"
+    dataset.write_text("", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--config",
+            str(config),
+            "--dataset",
+            str(dataset),
+            "--vector-weight",
+            "0.9",
+            "--keyword-weight",
+            "0.1",
+        ],
+        manager_factory=recording_factory,
+    )
+
+    assert exit_code == 0
+    assert captured
+    assert captured[0].vector_weight == 0.9
+    assert captured[0].keyword_weight == 0.1

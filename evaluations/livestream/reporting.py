@@ -477,6 +477,7 @@ def write_report(
     scores_path: Path | None = None,
     safety_assessment_path: Path | None = None,
     seed: int = 20260716,
+    judge_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate JSON, Markdown, and a scoring template from one evidence bundle."""
     run_dir = Path(run_dir)
@@ -524,6 +525,15 @@ def write_report(
         "safety_assessment_file": str(safety_file),
         "automated_content_audit_file": str(audit_path),
     }
+    if judge_report is not None:
+        judge_path = run_dir / "automated_judge_scores.json"
+        judge_path.write_text(
+            json.dumps(judge_report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        report["automated_judge"] = judge_report
+        report["automated_judge_scores_file"] = str(judge_path)
     (run_dir / "report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

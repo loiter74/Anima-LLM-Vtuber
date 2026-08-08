@@ -89,6 +89,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="post-run reviewed safety JSON; defaults to the run directory template",
     )
     report.add_argument("--seed", type=int, default=20260716)
+    report.add_argument("--judge", action="store_true")
+    report.add_argument("--config", type=Path, default=Path("config/animetta.yaml"))
+    report.add_argument("--llm-profile", default="production")
+    report.add_argument("--persona-name", default=None)
+
+    demo = subparsers.add_parser(
+        "demo", help="one-command hermetic evaluation: build dataset, replay, report"
+    )
+    demo.add_argument("--output", type=Path, default=Path("artifacts/livestream-eval/demo"))
+    demo.add_argument(
+        "--judge",
+        action="store_true",
+        help="opt in to remote LLM-as-judge scoring (the default demo stays hermetic)",
+    )
+    demo.add_argument("--config", type=Path, default=Path("config/animetta.yaml"))
+    demo.add_argument("--llm-profile", default="production")
+    demo.add_argument("--persona-name", default=None)
+    demo.add_argument("--seed", type=int, default=20260716)
     return parser
 
 
@@ -233,13 +251,109 @@ def replay_dataset(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def report_run(args: argparse.Namespace) -> dict[str, Any]:
+    judge_summary: dict[str, Any] | None = None
+    if getattr(args, "judge", False):
+        from .judge import create_judge
+
+        judge = create_judge(args.config, profile=args.llm_profile, persona_name=args.persona_name)
+        judge_report = asyncio.run(_run_and_close_judge(args.run_dir, judge))
+        judge_summary = judge_report.to_dict()
     report = write_report(
         args.run_dir,
         scores_path=args.scores,
         safety_assessment_path=args.safety_assessment,
         seed=args.seed,
+        judge_report=judge_summary,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    return report
+
+
+async def _run_and_close_judge(run_dir: Path, judge: Any) -> Any:
+    """Run scoring and close its async client on the same event loop."""
+    from .judge import run_judge
+
+    try:
+        return await run_judge(run_dir, judge)
+    finally:
+        await judge.close()
+
+
+def _build_demo_dataset(output_dir: Path) -> Path:
+    from animetta.services.bilibili import LivestreamEvent, LivestreamEventType
+
+    from .dataset import DatasetWriter, HeatTier
+
+    dataset_path = output_dir / "demo-dataset"
+    writer = DatasetWriter(dataset_path, dataset_id="demo", heat_tier=HeatTier.LOW)
+    for event in [
+        LivestreamEvent(0, 0, LivestreamEventType.ENTER, "Alice", payload={"user_id": 1}),
+        LivestreamEvent(1, 500, LivestreamEventType.DANMAKU, "Alice", "你好呀", {"user_id": 1}),
+        LivestreamEvent(
+            2, 1500, LivestreamEventType.DANMAKU, "Bob", "今天玩什么游戏？", {"user_id": 2}
+        ),
+        LivestreamEvent(3, 3000, LivestreamEventType.GIFT, "Carol", payload={"user_id": 3}),
+        LivestreamEvent(
+            4, 4500, LivestreamEventType.DANMAKU, "Dave", "哈哈哈太搞笑了", {"user_id": 4}
+        ),
+    ]:
+        writer.write(event)
+    writer.finalize(duration_ms=60_000)
+    return dataset_path
+
+
+def run_demo(args: argparse.Namespace) -> dict[str, Any]:
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    dataset = _build_demo_dataset(output)
+    result = asyncio.run(EvaluationRunner(dataset, output, mode="transport", speed=1000).run())
+
+    judge_summary: dict[str, Any] | None = None
+    if args.judge:
+        try:
+            from .judge import create_judge
+
+            judge = create_judge(
+                args.config, profile=args.llm_profile, persona_name=args.persona_name
+            )
+            judge_report = asyncio.run(_run_and_close_judge(output, judge))
+            judge_summary = judge_report.to_dict()
+        except Exception as exc:
+            print(
+                f"livestream-eval demo: judge skipped ({type(exc).__name__}: {exc})",
+                file=sys.stderr,
+            )
+
+    report = write_report(output, seed=args.seed, judge_report=judge_summary)
+
+    reply = result.get("reply", {})
+    replay = result.get("replay", {})
+    success = reply.get("reply_success", 0)
+    failure = reply.get("reply_failure", 0)
+    total = success + failure
+    success_rate = (success / total) if total else 0.0
+    style_pass = judge_summary.get("persona_consistency_pass_rate") if judge_summary else None
+    violation_rate = judge_summary.get("safety_violation_rate") if judge_summary else None
+    lines = [
+        "═" * 60,
+        "  LIVESTREAM-EVAL DEMO — 5-INDICATOR SUMMARY",
+        "═" * 60,
+        f"  success rate        : {success_rate:.1%} ({success}/{total} replies)",
+        f"  P95 scheduling lag  : {replay.get('scheduling_lag_p95_ms', 'N/A')} ms",
+        "  tool failure rate   : N/A (transport mode; run full-stack for tool metrics)",
+    ]
+    lines.append(
+        f"  style pass rate     : {style_pass:.1%}"
+        if style_pass is not None
+        else "  style pass rate     : skipped"
+    )
+    lines.append(
+        f"  violation rate      : {violation_rate:.1%}"
+        if violation_rate is not None
+        else "  violation rate      : skipped"
+    )
+    lines += ["─" * 60, f"  full report : {output / 'report.md'}", "═" * 60]
+    print("\n" + "\n".join(lines))
     return report
 
 
@@ -254,6 +368,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             validate_dataset(args)
         elif args.command == "replay":
             replay_dataset(args)
+        elif args.command == "demo":
+            run_demo(args)
         else:
             report_run(args)
     except (OSError, RuntimeError, ValueError) as exc:

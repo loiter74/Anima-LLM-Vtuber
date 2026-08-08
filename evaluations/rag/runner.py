@@ -62,8 +62,8 @@ class EvalConfig:
     """Single experiment configuration — mirrors MemoryConfig parameters."""
 
     name: str
-    vector_weight: float = 0.7
-    keyword_weight: float = 0.3
+    vector_weight: float = 0.55
+    keyword_weight: float = 0.25
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     target_tokens: int = 400
     overlap_tokens: int = 80
@@ -411,6 +411,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Output directory for result files (default: evaluations/rag/results/)",
     )
     parser.add_argument(
+        "--vector-weight",
+        type=float,
+        default=None,
+        help="Override vector weight (default: 0.55, matches production)",
+    )
+    parser.add_argument(
+        "--keyword-weight",
+        type=float,
+        default=None,
+        help="Override keyword weight (default: 0.25, matches production)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -513,6 +525,10 @@ def main(
 
         # Merge defaults + experiment params
         merged = {**defaults, **exp_params}
+        if args.vector_weight is not None:
+            merged["vector_weight"] = args.vector_weight
+        if args.keyword_weight is not None:
+            merged["keyword_weight"] = args.keyword_weight
         eval_config = EvalConfig(name=exp_name, **merged)
 
         # Create isolated workspace
