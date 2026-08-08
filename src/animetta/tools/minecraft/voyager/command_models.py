@@ -7,8 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .budget import BudgetUsage, ExecutionBudget, RequestedBudget
-from .goal_models import AtomicAction, GoalSpec
+from .budget import BudgetUsage
 
 
 class CommandState(StrEnum):
@@ -132,22 +131,6 @@ class ControlPlaneError(_FrozenModel):
     caller_may_resubmit: bool
     operator_action: str
     details: dict[str, Any] = Field(default_factory=dict)
-
-
-class VoyagerCommand(_FrozenModel):
-    command_id: str
-    caller_scope: str
-    request_id: str
-    request_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    queue_sequence: int = Field(gt=0)
-    mode: str
-    goal: GoalSpec | None = None
-    action: AtomicAction | None = None
-    requested_budget: RequestedBudget
-    effective_budget: ExecutionBudget
-    state: CommandState = CommandState.ACCEPTED
-    version: int = Field(default=0, ge=0)
-    cancellation: CancellationFact | None = None
 
 
 class CommandResult(_FrozenModel):

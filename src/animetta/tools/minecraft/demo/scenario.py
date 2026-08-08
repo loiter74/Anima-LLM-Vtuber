@@ -93,9 +93,5 @@ async def run_demo_workflow(runtime: ScriptedCapabilityRuntime) -> DemoReport:
     )
 
 
-def build_phase_traces(report: DemoReport) -> list[DemoStep]:
-    return list(report.steps)
-
-
 def count_recoveries(traces: list[DemoStep] | tuple[DemoStep, ...]) -> int:
     return sum(step.recovered for step in traces)
