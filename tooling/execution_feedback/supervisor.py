@@ -75,6 +75,27 @@ async def _cancel_task[T](task: asyncio.Task[T]) -> None:
         await task
 
 
+async def _wait_for_task_or_clock[T](
+    task: asyncio.Task[T],
+    *,
+    seconds: float,
+    clock: Clock,
+) -> bool:
+    """Return as soon as the work completes or the clock reaches the boundary."""
+    sleeper = asyncio.create_task(clock.sleep(seconds))
+    try:
+        done, _ = await asyncio.wait(
+            (task, sleeper),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if task in done:
+            return True
+        sleeper.result()
+        return task.done()
+    finally:
+        await _cancel_task(sleeper)
+
+
 async def _run_phase[T](
     awaitable: Coroutine[Any, Any, T],
     *,
@@ -85,9 +106,13 @@ async def _run_phase[T](
     await asyncio.sleep(0)
     if task.done():
         return True, task.result()
-    await clock.sleep(budget_seconds)
+    completed = await _wait_for_task_or_clock(
+        task,
+        seconds=budget_seconds,
+        clock=clock,
+    )
     await asyncio.sleep(0)
-    if task.done():
+    if completed or task.done():
         return True, task.result()
     await _cancel_task(task)
     return False, None
@@ -137,8 +162,14 @@ async def supervise_feedback_window(
     while not action_task.done() and active_clock.monotonic() - started_monotonic < action_deadline:
         elapsed = active_clock.monotonic() - started_monotonic
         wake_at = min(next_heartbeat, action_deadline)
-        await active_clock.sleep(max(0, wake_at - elapsed))
+        action_completed = await _wait_for_task_or_clock(
+            action_task,
+            seconds=max(0, wake_at - elapsed),
+            clock=active_clock,
+        )
         await asyncio.sleep(0)
+        if action_completed:
+            break
         elapsed = active_clock.monotonic() - started_monotonic
         if elapsed >= next_heartbeat:
             store.write_event(

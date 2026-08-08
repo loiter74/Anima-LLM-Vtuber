@@ -110,6 +110,36 @@ async def test_started_event_is_persisted_before_action_is_invoked(tmp_path) -> 
     assert result.status is FeedbackStatus.PASSED
 
 
+async def test_threaded_short_action_does_not_wait_for_first_heartbeat(tmp_path) -> None:
+    store = IterationPlanStore(tmp_path)
+
+    async def action(_context) -> ActionResult:
+        return await asyncio.to_thread(
+            ActionResult.passed,
+            progress_summary="threaded command complete",
+        )
+
+    result = await asyncio.wait_for(
+        supervise_feedback_window(
+            run_id="threaded-short",
+            step=_step(),
+            window_sequence=1,
+            store=store,
+            action=action,
+        ),
+        timeout=2,
+    )
+    events = store.list_events(
+        run_id="threaded-short",
+        step_id="bounded-step",
+        window_sequence=1,
+    )
+
+    assert result.status is FeedbackStatus.PASSED
+    assert result.elapsed_seconds < 2
+    assert [event.kind for event in events] == [FeedbackEventKind.STARTED]
+
+
 async def test_hanging_action_and_cleanup_publish_by_300_simulated_seconds(tmp_path) -> None:
     store = IterationPlanStore(tmp_path)
     never = asyncio.Event()
