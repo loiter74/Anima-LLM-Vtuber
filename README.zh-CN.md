@@ -88,17 +88,16 @@ python -m animetta.core.socketio_server
 cd frontend && pnpm dev
 ```
 
-### Docker Compose
+### 构建并启动个人版本（推荐）
 
 ```bash
-# GPU 模式
-docker compose up -d --build
-
-# CPU 模式
-docker compose -f docker-compose.cpu.yml up -d --build
+# 自动启动/复用宿主机 Qwen，并构建、启动 Animetta
+py -3.13 scripts/runtime_lifecycle.py anima-up
 ```
 
-启动后前端由 nginx 提供在 **80 端口**，后端健康检查 `http://localhost:12394/health`。
+这是唯一面向日常个人使用的构建入口。CI 和内部验收仅通过 `ANIMETTA_PROFILE` 切换 `smoke` 或 `selftest`，仍复用同一份 Compose 文件。
+
+启动后前端由 nginx 提供在 **80 端口**，后端健康检查为 `http://localhost/health`。停止应用使用 `py -3.13 scripts/runtime_lifecycle.py anima-down`；该命令会保留已加载的 Qwen 进程，方便下次快速启动。
 
 > 详细部署：[Docker 部署](docs/deployment/docker.md) · [Zeabur 部署](docs/deployment/zeabur.md)
 

@@ -180,7 +180,7 @@ def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
 
     assert {
         "Dockerfile",
-        "requirements-core.txt",
+        "requirements.txt",
         "frontend/**",
         "src/animetta/**",
         "config/**",
@@ -189,8 +189,6 @@ def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
         "docker/nginx.conf",
         ".env.example",
         "docker-compose.yml",
-        "docker-compose.cpu.yml",
-        "docker-compose.core.yml",
     }.issubset(animetta)
     assert "docker/**" not in animetta
 

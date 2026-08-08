@@ -131,18 +131,16 @@ cd frontend && pnpm dev
 
 The frontend dev server runs on `http://localhost:3000`; the backend on `http://localhost:12394`.
 
-### Docker Compose
+### Build and run the personal edition (recommended)
 
 ```bash
-# Start or reuse host-local Qwen on 127.0.0.1:8767
-py -3.13 scripts/runtime_lifecycle.py host-tts-up
-
-# Validate host Qwen, then build/start the Animetta container
+# Start or reuse host-local Qwen, then build and start Animetta
 py -3.13 scripts/runtime_lifecycle.py anima-up
-
-# CPU mode (no GPU)
-docker compose -f docker-compose.cpu.yml up -d --build
 ```
+
+This is the single build entrypoint for routine personal use. CI and acceptance
+runs select `smoke` or `selftest` through `ANIMETTA_PROFILE` while reusing the
+same Compose file.
 
 Routine `py -3.13 scripts/runtime_lifecycle.py anima-down` leaves the host Qwen
 process and its loaded model running. Use `host-tts-stop` only when GPU memory must

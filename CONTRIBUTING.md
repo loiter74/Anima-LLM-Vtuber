@@ -11,12 +11,8 @@ cd animetta
 cp .env.example .env
 # Edit .env with your API keys
 
-# Docker (Recommended)
-py -3.13 scripts/runtime_lifecycle.py host-tts-up  # start/reuse host Qwen
-py -3.13 scripts/runtime_lifecycle.py anima-up     # build/start app; preserves Qwen
-
-# Or CPU-only
-docker compose -f docker-compose.cpu.yml up -d --build
+# Personal build (recommended): starts/reuses host Qwen, then builds Animetta
+py -3.13 scripts/runtime_lifecycle.py anima-up
 
 # Check health
 curl -s http://localhost/health
@@ -109,10 +105,7 @@ When working with Codex or ZCode, read [AGENTS.md](AGENTS.md) first — it is th
 ## Docker Development
 
 ```bash
-# Start or reuse host-local Qwen
-py -3.13 scripts/runtime_lifecycle.py host-tts-up
-
-# Routine build and startup (host Qwen remains resident)
+# Routine personal build and startup (starts/reuses host Qwen)
 py -3.13 scripts/runtime_lifecycle.py anima-up
 
 # View logs
@@ -133,9 +126,11 @@ py -3.13 scripts/runtime_lifecycle.py anima-down
 # Release Qwen GPU memory by stopping the host process explicitly
 py -3.13 scripts/runtime_lifecycle.py host-tts-stop
 
-# CPU-only mode
-docker compose -f docker-compose.cpu.yml up -d --build
 ```
+
+CI, fallback, and acceptance runs select `smoke` or `selftest` through
+`ANIMETTA_PROFILE` while reusing `docker-compose.yml`. Contributors should use
+`anima-up` unless they are working on those profiles explicitly.
 
 ### Container Structure
 

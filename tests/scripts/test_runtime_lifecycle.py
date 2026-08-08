@@ -6,9 +6,13 @@ from scripts import runtime_lifecycle
 
 
 def test_animetta_up_requires_host_tts_before_build(monkeypatch) -> None:
-    commands: list[list[str]] = []
+    commands: list[tuple[list[str], dict[str, str] | None]] = []
     host_calls: list[bool] = []
-    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_run",
+        lambda command, *, environment=None: commands.append((command, environment)),
+    )
     monkeypatch.setattr(
         runtime_lifecycle,
         "_host_tts_up",
@@ -18,23 +22,23 @@ def test_animetta_up_requires_host_tts_before_build(monkeypatch) -> None:
     runtime_lifecycle.run_operation("anima-up")
 
     assert host_calls == [False]
-    assert commands[0][-1] == "scripts/qwen_preflight.py"
-    assert commands[1] == ["docker", "compose", "build", "animetta"]
-    assert commands[2] == [
-        "docker",
-        "compose",
-        "up",
-        "-d",
-        "--no-build",
-        "animetta",
-    ]
-    assert all("docker-compose.qwen.yml" not in command for command in commands)
+    assert commands[0][0][-1] == "scripts/qwen_preflight.py"
+    assert commands[1] == (["docker", "compose", "build", "animetta"], None)
+    assert commands[2] == (
+        ["docker", "compose", "up", "-d", "--no-build", "animetta"],
+        None,
+    )
+    assert all("docker-compose.qwen.yml" not in command for command, _ in commands)
 
 
-def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypatch) -> None:
-    commands: list[list[str]] = []
+def test_animetta_selftest_up_waits_for_qwen_and_uses_profile_environment(monkeypatch) -> None:
+    commands: list[tuple[list[str], dict[str, str] | None]] = []
     host_calls: list[bool] = []
-    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_run",
+        lambda command, *, environment=None: commands.append((command, environment)),
+    )
     monkeypatch.setattr(
         runtime_lifecycle,
         "_host_tts_up",
@@ -44,24 +48,17 @@ def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypa
     runtime_lifecycle.run_operation("anima-selftest-up")
 
     assert host_calls == [False]
-    assert commands[0][-2:] == ["scripts/qwen_preflight.py", "--wait"]
-    compose_prefix = [
-        "docker",
-        "compose",
-        "-f",
-        "docker-compose.yml",
-        "-f",
-        "docker-compose.selftest.yml",
-    ]
-    assert commands[1] == [*compose_prefix, "build", "animetta"]
-    assert commands[2] == [
-        *compose_prefix,
-        "up",
-        "-d",
-        "--no-build",
-        "animetta",
-    ]
-    assert all("--force-recreate" not in command for command in commands)
+    assert commands[0][0][-2:] == ["scripts/qwen_preflight.py", "--wait"]
+    selftest_environment = {"ANIMETTA_PROFILE": "selftest"}
+    assert commands[1] == (
+        ["docker", "compose", "build", "animetta"],
+        selftest_environment,
+    )
+    assert commands[2] == (
+        ["docker", "compose", "up", "-d", "--no-build", "animetta"],
+        selftest_environment,
+    )
+    assert all("--force-recreate" not in command for command, _ in commands)
 
 
 def test_animetta_cleanup_is_scoped_and_non_destructive(monkeypatch) -> None:

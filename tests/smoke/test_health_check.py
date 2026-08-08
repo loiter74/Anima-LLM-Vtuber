@@ -18,17 +18,25 @@ def _clear_python_dependency_probe_cache() -> Iterator[None]:
     health_check._python_has_health_dependencies.cache_clear()
 
 
-def test_requirements_entrypoint_includes_core_and_dev() -> None:
-    requirements = (health_check.ROOT / "requirements.txt").read_text(encoding="utf-8")
+def test_requirements_entrypoints_have_one_way_dependency_layers() -> None:
+    runtime = (health_check.ROOT / "requirements.txt").read_text(encoding="utf-8")
+    dev = (health_check.ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    local_ai = (health_check.ROOT / "requirements-local-ai.txt").read_text(encoding="utf-8")
+    runtime_entries = [
+        line.strip()
+        for line in runtime.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
-    assert "-r requirements-core.txt" in requirements
-    assert "-r requirements-dev.txt" in requirements
+    assert "starlette" in runtime
+    assert not any(line.startswith("-r ") for line in runtime_entries)
+    assert "-r requirements.txt" in dev
+    assert "-r requirements.txt" in local_ai
 
 
 def test_requirement_files_are_ascii_for_windows_pip() -> None:
     for name in (
         "requirements.txt",
-        "requirements-core.txt",
         "requirements-dev.txt",
         "requirements-local-ai.txt",
     ):
@@ -46,6 +54,7 @@ def test_dev_requirements_include_socketio_websocket_transport() -> None:
 
     assert any(line.startswith("websocket-client") for line in requirement_lines)
     assert any(line.startswith("pytest-cov") for line in requirement_lines)
+    assert any(line.startswith("bilibili-api-python") for line in requirement_lines)
 
 
 def test_build_gates_includes_required_health_domains() -> None:
@@ -80,8 +89,7 @@ def test_build_gates_exposes_quick_affected_full_and_docker_profiles() -> None:
         "frontend:build",
     }.isdisjoint(full_ids)
     assert {
-        "docker:compose-gpu-config",
-        "docker:compose-cpu-config",
+        "docker:compose-config",
         "docker:health-endpoint",
         "docker:frontend-endpoint",
         "docker:logs-clean",

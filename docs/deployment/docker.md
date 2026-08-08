@@ -17,10 +17,7 @@ Copy `.env.example` to `.env`, then set at least the selected provider keys and
 ## Start
 
 ```powershell
-# Start or reuse the host-local Qwen process and verify exact readiness.
-py -3.13 scripts/runtime_lifecycle.py host-tts-up
-
-# Build and start only the Animetta application container.
+# Start or reuse host-local Qwen, verify it, then build and start Animetta.
 py -3.13 scripts/runtime_lifecycle.py anima-up
 ```
 
@@ -28,17 +25,15 @@ The application container reaches Qwen at `http://host.docker.internal:8767`.
 The lifecycle fails closed if host Qwen health, authentication, or model identity
 does not match before the Animetta build starts.
 
+`anima-up` is the sole build entrypoint for the personal deployment. CI,
+fallback, and acceptance runs select another `ANIMETTA_PROFILE` while reusing
+the same `docker-compose.yml`.
+
 Once ready:
 
 - Frontend: `http://localhost`
 - Backend health: `http://localhost/health`
 - Backend direct port: `http://localhost:12394`
-
-CPU/smoke mode does not select local Qwen:
-
-```powershell
-docker compose -f docker-compose.cpu.yml up -d --build
-```
 
 ## Lifecycle
 

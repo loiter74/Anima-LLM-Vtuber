@@ -61,7 +61,7 @@ def test_missing_capture_dependency_has_actionable_install_command() -> None:
     def missing(_name: str):
         raise ModuleNotFoundError
 
-    with pytest.raises(CaptureDependencyError, match="requirements-livestream-eval.txt"):
+    with pytest.raises(CaptureDependencyError, match="requirements-dev.txt"):
         require_capture_dependencies(import_module=missing)
 
 

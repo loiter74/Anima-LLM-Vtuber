@@ -109,7 +109,7 @@ def _catalog_with_acceleration() -> dict:
         "animetta": {
             "service": "animetta",
             "compose_file": "docker-compose.yml",
-            "paths": ["Dockerfile", "requirements-core.txt", "src/animetta/**"],
+            "paths": ["Dockerfile", "requirements.txt", "src/animetta/**"],
             "environment_identity_fields": ["ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"],
         },
     }
@@ -383,36 +383,13 @@ def test_python_source_boundary_rejects_ungated_javascript() -> None:
     assert component.direct_groups == ("operational-source-contract",)
 
 
-def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
+def test_single_compose_has_one_canonical_contract_gate() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
     expected = {
         "docker-compose-contract": (
             "compose",
             "-f",
             "docker-compose.yml",
-            "config",
-            "--quiet",
-        ),
-        "docker-compose-cpu-contract": (
-            "compose",
-            "-f",
-            "docker-compose.cpu.yml",
-            "config",
-            "--quiet",
-        ),
-        "docker-compose-core-contract": (
-            "compose",
-            "-f",
-            "docker-compose.core.yml",
-            "config",
-            "--quiet",
-        ),
-        "docker-compose-selftest-contract": (
-            "compose",
-            "-f",
-            "docker-compose.yml",
-            "-f",
-            "docker-compose.selftest.yml",
             "config",
             "--quiet",
         ),
@@ -425,6 +402,11 @@ def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
         assert group.include_in_full is True
 
     assert set(expected).issubset(catalog.components["docker-infrastructure"].direct_groups)
+    assert not {
+        "docker-compose-cpu-contract",
+        "docker-compose-core-contract",
+        "docker-compose-selftest-contract",
+    } & set(catalog.groups)
 
 
 def test_repository_catalog_has_dead_code_and_duplication_gates() -> None:

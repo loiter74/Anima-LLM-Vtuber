@@ -4,8 +4,8 @@
 # Minimal image for remote/mock provider deployments.
 # No CUDA, no local AI inference packages.
 #
-# Build:  docker build -t animetta:core .
-# Run:    docker compose -f docker-compose.core.yml up -d
+# Build and run the personal edition:
+#   py -3.13 scripts/runtime_lifecycle.py anima-up
 #
 # GPU inference runs in the host-local Qwen runtime on port 8767.
 # ============================================================================
@@ -57,9 +57,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_TRUSTED_HOST=mirrors.aliyun.com
 
-COPY requirements-core.txt .
+COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --user -r requirements-core.txt
+    pip install --user -r requirements.txt
 
 # ---------------------------------------------------------------------------
 # Stage 3: Runtime

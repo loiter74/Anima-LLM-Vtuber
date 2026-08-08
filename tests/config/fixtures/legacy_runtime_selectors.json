@@ -85,8 +85,6 @@
       "scope": "deployment",
       "roots": [
         "docker-compose.yml",
-        "docker-compose.cpu.yml",
-        "docker-compose.core.yml",
         "fly.toml",
         "zeabur.json",
         "Dockerfile",

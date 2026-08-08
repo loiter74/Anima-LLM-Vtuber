@@ -98,8 +98,7 @@ Repository policy:
 
 Docker:
 
-- `docker:compose-gpu-config`
-- `docker:compose-cpu-config`
+- `docker:compose-config`
 - `docker:health-endpoint`
 - `docker:frontend-endpoint`
 - `docker:logs-clean`

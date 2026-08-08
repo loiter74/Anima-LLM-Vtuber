@@ -1,4 +1,6 @@
-# Development tools -- run: pip install -r requirements-dev.txt
+# Runtime plus development, test, and evaluation tools.
+-r requirements.txt
+
 ruff>=0.4.0
 mypy>=1.10.0
 vulture>=2.11
@@ -11,3 +13,8 @@ pytest-timeout>=2.3.0
 websocket-client>=1.8.0
 pydub>=0.25.1
 audioop-lts>=0.2.1; python_version >= "3.13"
+
+# Livestream capture and replay evaluation
+bilibili-api-python==17.4.1
+aiohttp==3.13.3
+psutil==7.2.2

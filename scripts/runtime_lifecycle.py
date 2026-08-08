@@ -39,14 +39,6 @@ HOST_TTS_IDENTITY = {
     "sample_rate": 24000,
 }
 
-SELFTEST_COMPOSE = [
-    "docker",
-    "compose",
-    "-f",
-    "docker-compose.yml",
-    "-f",
-    "docker-compose.selftest.yml",
-]
 OPERATIONS = (
     "host-tts-up",
     "host-tts-status",
@@ -57,8 +49,15 @@ OPERATIONS = (
 )
 
 
-def _run(command: list[str]) -> None:
-    subprocess.run(command, cwd=ROOT, check=True)
+def _run(
+    command: list[str],
+    *,
+    environment: dict[str, str] | None = None,
+) -> None:
+    process_environment = os.environ.copy()
+    if environment:
+        process_environment.update(environment)
+    subprocess.run(command, cwd=ROOT, check=True, env=process_environment)
 
 
 def _read_host_pid() -> int | None:
@@ -285,8 +284,15 @@ def run_operation(operation: str) -> None:
     elif operation == "anima-selftest-up":
         _host_tts_up(best_effort=False)
         _run(_preflight(wait=True))
-        _run([*SELFTEST_COMPOSE, "build", "animetta"])
-        _run([*SELFTEST_COMPOSE, "up", "-d", "--no-build", "animetta"])
+        selftest_environment = {"ANIMETTA_PROFILE": "selftest"}
+        _run(
+            ["docker", "compose", "build", "animetta"],
+            environment=selftest_environment,
+        )
+        _run(
+            ["docker", "compose", "up", "-d", "--no-build", "animetta"],
+            environment=selftest_environment,
+        )
     elif operation == "anima-down":
         _run(["docker", "compose", "down", "--remove-orphans"])
     else:

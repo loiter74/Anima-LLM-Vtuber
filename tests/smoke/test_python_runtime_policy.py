@@ -32,7 +32,7 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
             "FROM python:3.13-slim-bookworm AS python-builder",
             "FROM python:3.13-slim-bookworm AS runtime",
         ),
-        "docker-compose.cpu.yml": ("dockerfile: Dockerfile",),
+        "docker-compose.yml": ("dockerfile: Dockerfile",),
         "observability/Dockerfile.notifier": ("FROM python:3.13-slim-bookworm",),
         "scripts/health_check.py": ("CANONICAL_PYTHON = (3, 13)",),
         "README.md": ("python-3.13",),
@@ -67,7 +67,7 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
         ".github/workflows/test.yml": ("3.11", "3.12"),
         ".github/workflows/deploy-zeabur.yml": ("python-version:",),
         "Dockerfile": ("python:3.11", "python:3.12"),
-        "docker-compose.cpu.yml": ("python:3.11", "python:3.12"),
+        "docker-compose.yml": ("python:3.11", "python:3.12"),
         "observability/Dockerfile.notifier": ("python:3.11", "python:3.12"),
         "scripts/health_check.py": (
             "ACCEPTED_LOCAL_PYTHON_MIN",

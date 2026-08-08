@@ -1,4 +1,0 @@
-services:
-  animetta:
-    environment:
-      - ANIMETTA_PROFILE=selftest

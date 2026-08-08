@@ -41,7 +41,9 @@ def _make_target(name: str) -> str:
 def test_main_image_installs_only_core_runtime_dependencies() -> None:
     dockerfile = _text("Dockerfile")
 
-    assert "requirements-core.txt" in dockerfile
+    assert "requirements.txt" in dockerfile
+    assert "requirements-core.txt" not in dockerfile
+    assert "requirements-dev.txt" not in dockerfile
     assert "requirements-local-ai.txt" not in dockerfile
     assert "requirements-qwen-tts.txt" not in dockerfile
     assert "Dockerfile.cuda" not in dockerfile
@@ -72,7 +74,7 @@ def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     assert set(compose["services"]) == {"animetta"}
     app = compose["services"]["animetta"]
     assert app["build"]["dockerfile"] == "Dockerfile"
-    assert "ANIMETTA_PROFILE=production" in app["environment"]
+    assert "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}" in app["environment"]
     assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
     assert "QWEN_HOST_TTS_URL=http://host.docker.internal:8767" in app["environment"]
     assert "depends_on" not in app
@@ -95,25 +97,6 @@ def test_manifest_has_one_host_qwen_runtime_contract() -> None:
     assert production["runtime"]["tts_timeout_seconds"] == 20.0
 
 
-def test_selftest_compose_selects_local_qwen_without_overriding_production() -> None:
-    manifest = yaml.safe_load(_text("config/animetta.yaml"))
-    production = manifest["profiles"]["production"]
-    selftest = manifest["profiles"]["selftest"]
-    base = _compose("docker-compose.yml")["services"]["animetta"]
-    override = _compose("docker-compose.selftest.yml")["services"]["animetta"]
-
-    assert production["services"]["tts"] == "dashscope-local-failover"
-    assert selftest["services"] == {
-        "llm": "deepseek",
-        "asr": "mimo-asr",
-        "tts": "qwen-host",
-        "vad": "mimo-vad",
-    }
-    assert selftest["runtime"]["tts_timeout_seconds"] == 120.0
-    assert "ANIMETTA_PROFILE=production" in base["environment"]
-    assert override["environment"] == ["ANIMETTA_PROFILE=selftest"]
-
-
 def test_release_browser_smoke_allows_a_slow_local_qwen_audio_budget() -> None:
     smoke = _text("frontend/smoke-test.mjs")
 
@@ -132,42 +115,25 @@ def test_release_browser_smoke_observes_audio_end_before_application_cleanup() -
     assert "releaseAcceptance.audio.ended >= 1" in smoke
 
 
-def test_cpu_and_core_compose_choose_only_supported_profiles() -> None:
-    cpu = yaml.safe_load(_text("docker-compose.cpu.yml"))["services"]
-    core = yaml.safe_load(_text("docker-compose.core.yml"))["services"]
-
-    assert set(cpu) == {"animetta"}
-    assert "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-smoke}" in cpu["animetta"]["environment"]
-    assert cpu["animetta"]["build"]["dockerfile"] == "Dockerfile"
-    assert "ANIMETTA_PROFILE=test" in core["animetta"]["environment"]
-    assert core["animetta"]["build"]["dockerfile"] == "Dockerfile"
-
-
 def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> None:
-    for path in (
-        "docker-compose.yml",
-        "docker-compose.cpu.yml",
-        "docker-compose.core.yml",
-    ):
-        app = _compose(path)["services"]["animetta"]
-        assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
+    app = _compose("docker-compose.yml")["services"]["animetta"]
+    assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
 
 
 def test_compose_services_inject_only_explicit_least_privilege_environment() -> None:
-    production = _compose("docker-compose.yml")["services"]
-    cpu = _compose("docker-compose.cpu.yml")["services"]
-    core = _compose("docker-compose.core.yml")["services"]
+    services = _compose("docker-compose.yml")["services"]
+    app = services["animetta"]
 
-    for service in (*production.values(), *cpu.values(), *core.values()):
-        assert "env_file" not in service
-
-    assert set(cpu["animetta"]["environment"]) == {
-        "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-smoke}",
+    assert "env_file" not in app
+    assert set(app["environment"]) == {
+        "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}",
         "ANIMETTA_HOST=0.0.0.0",
         "ANIMETTA_PORT=12394",
         "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}",
         "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}",
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
+        "QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}",
+        "QWEN_HOST_TTS_URL=http://host.docker.internal:8767",
     }
 
 
@@ -176,8 +142,6 @@ def test_deployment_descriptors_do_not_select_business_providers() -> None:
         _text(path)
         for path in (
             "docker-compose.yml",
-            "docker-compose.cpu.yml",
-            "docker-compose.core.yml",
             "docker/entrypoint.sh",
             "fly.toml",
             "zeabur.json",
@@ -248,6 +212,12 @@ def test_removed_legacy_manifests_and_combined_cuda_image_are_absent() -> None:
         "Dockerfile.cuda",
         "Dockerfile.qwen-tts",
         "docker-compose.qwen.yml",
+        "docker-compose.cpu.yml",
+        "docker-compose.core.yml",
+        "docker-compose.selftest.yml",
         "requirements-qwen-tts.txt",
+        "requirements-core.txt",
+        "requirements-host-tts.txt",
+        "requirements-livestream-eval.txt",
     ):
         assert not (ROOT / path).exists(), path

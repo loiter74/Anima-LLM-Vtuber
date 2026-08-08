@@ -102,12 +102,9 @@ docker_scopes:
       - Dockerfile
       - .dockerignore
       - docker-compose.yml
-      - docker-compose.cpu.yml
-      - docker-compose.core.yml
-      - docker-compose.selftest.yml
       - docker/entrypoint.sh
       - docker/nginx.conf
-      - requirements-core.txt
+      - requirements.txt
       - frontend/**
       - src/animetta/**
       - config/**
@@ -696,52 +693,6 @@ groups:
     resource_class: exclusive
     resource_weight: 8
 
-  docker-compose-cpu-contract:
-    domain: repository
-    kind: smoke
-    runner: docker
-    isolation: hermetic
-    args: [compose, -f, docker-compose.cpu.yml, config, --quiet]
-    capabilities: [docker]
-    timeout_seconds: 180
-    include_in_full: true
-    include_in_nightly: true
-    resource_class: exclusive
-    resource_weight: 8
-
-  docker-compose-core-contract:
-    domain: repository
-    kind: smoke
-    runner: docker
-    isolation: hermetic
-    args: [compose, -f, docker-compose.core.yml, config, --quiet]
-    capabilities: [docker]
-    timeout_seconds: 180
-    include_in_full: true
-    include_in_nightly: true
-    resource_class: exclusive
-    resource_weight: 8
-
-  docker-compose-selftest-contract:
-    domain: repository
-    kind: smoke
-    runner: docker
-    isolation: hermetic
-    args:
-      - compose
-      - -f
-      - docker-compose.yml
-      - -f
-      - docker-compose.selftest.yml
-      - config
-      - --quiet
-    capabilities: [docker]
-    timeout_seconds: 180
-    include_in_full: true
-    include_in_nightly: true
-    resource_class: exclusive
-    resource_weight: 8
-
   operational-source-contract:
     domain: repository
     kind: contract
@@ -1148,9 +1099,6 @@ components:
     direct_groups:
       - runtime-lifecycle-unit
       - docker-compose-contract
-      - docker-compose-cpu-contract
-      - docker-compose-core-contract
-      - docker-compose-selftest-contract
     impacts: []
     risk: normal
 
@@ -1244,6 +1192,4 @@ fallbacks:
     - frontend-typecheck
     - frontend-build
     - docker-compose-contract
-    - docker-compose-cpu-contract
-    - docker-compose-core-contract
     - operational-source-contract

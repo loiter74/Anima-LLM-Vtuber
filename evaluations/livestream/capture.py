@@ -41,7 +41,7 @@ def require_capture_dependencies(
     except (ImportError, ModuleNotFoundError) as exc:
         raise CaptureDependencyError(
             "Live capture dependencies are unavailable. "
-            "Install them with: pip install -r requirements-livestream-eval.txt",
+            "Install them with: pip install -r requirements-dev.txt",
         ) from exc
 
 

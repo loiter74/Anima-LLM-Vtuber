@@ -508,25 +508,11 @@ def build_gates(profile: str | None = "full") -> list[Gate]:
             timeout_s=180,
         ),
         Gate(
-            "docker:compose-gpu-config",
-            "Docker compose GPU config validation",
+            "docker:compose-config",
+            "Docker compose config validation",
             ("docker", "compose", "config", "--quiet"),
             profiles=("docker",),
             remediation="Fix docker-compose.yml syntax or unavailable compose configuration.",
-        ),
-        Gate(
-            "docker:compose-cpu-config",
-            "Docker compose CPU config validation",
-            (
-                "docker",
-                "compose",
-                "-f",
-                "docker-compose.cpu.yml",
-                "config",
-                "--quiet",
-            ),
-            profiles=("docker",),
-            remediation="Fix docker-compose.cpu.yml syntax or unavailable compose configuration.",
         ),
         Gate(
             "docker:health-endpoint",

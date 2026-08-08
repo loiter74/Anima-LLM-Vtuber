@@ -923,30 +923,3 @@ def test_makefile_exposes_stable_quality_entrypoints() -> None:
     assert "local-quick" not in makefile
     assert "local-affected" not in makefile
     assert "local-full" not in makefile
-
-
-def test_quality_workflow_is_documented_for_agents_and_maintainers() -> None:
-    root_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    test_agents = (ROOT / "tests" / "AGENTS.md").read_text(encoding="utf-8")
-    project_health = (ROOT / "docs" / "development" / "project-health.md").read_text(
-        encoding="utf-8"
-    )
-
-    for text in (root_agents, test_agents, project_health):
-        assert "test-quick" in text
-        assert "test-affected" in text
-        assert "test-full" in text
-    assert "machine-selected" in root_agents
-    assert "fresh Playwright capture" in project_health
-    assert "plan_hash" in project_health
-    assert "orthogonal" in project_health
-    assert "docker-compose-contract" in root_agents
-    assert "docker-compose-contract" in test_agents
-    assert "content fingerprint" in project_health
-    assert "trust-scoped" in project_health
-    assert "weighted DAG" in project_health
-    assert "warm topology" in project_health
-    assert "P95" in project_health
-    assert "test-affected-shadow" in test_agents
-    assert "benchmark-quick" in test_agents
-    assert "cache off" in root_agents

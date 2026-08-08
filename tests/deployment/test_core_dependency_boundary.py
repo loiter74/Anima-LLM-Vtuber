@@ -22,10 +22,10 @@ PROHIBITED_PACKAGES = (
 )
 
 
-def test_core_requirements_exclude_local_model_runtimes() -> None:
+def test_runtime_requirements_exclude_local_model_runtimes() -> None:
     core = "\n".join(
         line.split("#", 1)[0].strip().lower()
-        for line in (ROOT / "requirements-core.txt").read_text(encoding="utf-8").splitlines()
+        for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
         if line.split("#", 1)[0].strip()
     )
     local = (ROOT / "requirements-local-ai.txt").read_text(encoding="utf-8").lower()

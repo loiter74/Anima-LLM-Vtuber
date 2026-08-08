@@ -2,11 +2,12 @@
 # Animetta -- Local AI Inference Dependencies
 # ============================================================================
 # Heavy packages for local model inference. Install on top of core:
-#   pip install -r requirements-core.txt
 #   pip install -r requirements-local-ai.txt
 #
 # Requires: CUDA-capable GPU, NVIDIA Container Toolkit (for Docker)
 # ============================================================================
+
+-r requirements.txt
 
 # --- PyTorch ---
 torch>=2.0.0

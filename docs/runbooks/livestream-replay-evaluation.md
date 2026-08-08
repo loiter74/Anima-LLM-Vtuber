@@ -5,7 +5,7 @@ This runbook operates only on public Bilibili virtual-streamer or chat rooms, fo
 ## 1. Install the isolated capture stack
 
 ```powershell
-py -3.13 -m pip install -r requirements-livestream-eval.txt
+py -3.13 -m pip install -r requirements-dev.txt
 $env:PYTHONPATH = "src"
 ```
 
