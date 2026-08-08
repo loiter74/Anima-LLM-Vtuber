@@ -119,7 +119,7 @@ class RemoteTTS(TTSInterface):
             response_format=config.response_format,
             language=config.language,
             timeout_seconds=config.timeout_seconds,
-            revision=config.revision or (config.worker.revision if config.worker else None),
+            revision=config.revision,
             quantization=config.quantization,
             runtime_commit=config.runtime_commit,
             http_client=kwargs.get("http_client"),

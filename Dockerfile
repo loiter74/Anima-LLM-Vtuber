@@ -7,7 +7,7 @@
 # Build:  docker build -t animetta:core .
 # Run:    docker compose -f docker-compose.core.yml up -d
 #
-# GPU inference is isolated in Dockerfile.qwen-tts.
+# GPU inference runs in the host-local Qwen runtime on port 8767.
 # ============================================================================
 
 # ---------------------------------------------------------------------------

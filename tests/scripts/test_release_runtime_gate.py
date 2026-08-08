@@ -152,23 +152,15 @@ def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "--qwen-compose-file" in completed.stdout
+    assert "--qwen-compose-file" not in completed.stdout
 
 
-def test_release_environment_requires_dashscope_and_persistent_rollback_mounts(
-    tmp_path: Path,
-) -> None:
-    cache = tmp_path / "hf"
-    audio = tmp_path / "alice.wav"
-    cache.mkdir()
-    audio.write_bytes(b"RIFF")
+def test_release_environment_requires_provider_credentials() -> None:
     environment = {
         "DASHSCOPE_API_KEY": "dashscope-secret",
         "DEEPSEEK_API_KEY": "deepseek-secret",
         "MIMO_API_KEY": "mimo-secret",
         "QWEN_TTS_API_KEY": "qwen-secret",
-        "HF_CACHE_DIR": str(cache),
-        "ALICE_REF_AUDIO": str(audio),
     }
 
     assert validate_release_environment(environment) == tuple(sorted(environment))
@@ -291,23 +283,17 @@ def test_failed_command_reports_both_stdout_and_stderr(
     assert "provider import warning" in message
 
 
-def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
+def test_release_gate_uses_host_qwen_and_rebuilds_only_animetta(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cache = tmp_path / "hf"
-    audio = tmp_path / "alice.wav"
     plan = tmp_path / "plan.json"
-    cache.mkdir()
-    audio.write_bytes(b"RIFF")
     plan.write_text("{}\n", encoding="utf-8")
     for name, value in {
         "DASHSCOPE_API_KEY": "dashscope-secret",
         "DEEPSEEK_API_KEY": "deepseek-secret",
         "MIMO_API_KEY": "mimo-secret",
         "QWEN_TTS_API_KEY": "qwen-secret",
-        "HF_CACHE_DIR": str(cache),
-        "ALICE_REF_AUDIO": str(audio),
     }.items():
         monkeypatch.setenv(name, value)
 
@@ -316,23 +302,7 @@ def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
     def fake_run(argv, **_kwargs):
         command = tuple(str(part) for part in argv)
         commands.append(command)
-        if "ps" in command and "qwen-tts" in command:
-            stdout = "stable-qwen-container\n"
-        elif "inspect" in command:
-            stdout = json.dumps(
-                [
-                    {
-                        "Id": "stable-qwen-container",
-                        "Image": "sha256:qwen-image",
-                        "State": {"StartedAt": "2026-07-16T00:00:00Z"},
-                        "RestartCount": 0,
-                    }
-                ]
-            )
-        elif "logs" in command:
-            stdout = "all services ready\nerror_count=0\n"
-        else:
-            stdout = ""
+        stdout = "all services ready\nerror_count=0\n" if "logs" in command else ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
     def fake_wait(_url, _predicate, *, description, **_kwargs):
@@ -354,7 +324,6 @@ def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
     evidence = gate.run_release_gate(
         plan=plan,
         compose_file=tmp_path / "docker-compose.yml",
-        qwen_compose_file=tmp_path / "docker-compose.qwen.yml",
         evidence_root=tmp_path / "evidence",
         attempts=2,
         interval_seconds=0,
@@ -363,15 +332,9 @@ def test_release_gate_preserves_qwen_and_rebuilds_only_animetta(
     flattened = [" ".join(command) for command in commands]
     assert evidence["status"] == "passed"
     assert evidence["readiness"]["components"]["tts"]["primary"]["identity"] == TTS_IDENTITY
-    assert evidence["persistent_qwen"]["preserved"] is True
-    assert evidence["persistent_qwen"]["before"] == evidence["persistent_qwen"]["after"]
-    assert evidence["persistent_qwen"]["build_actions"] == 0
-    assert evidence["persistent_qwen"]["recreate_actions"] == 0
-    assert any("runtime_lifecycle.py qwen-up" in command for command in flattened)
+    assert evidence["host_qwen"] == {"status": "passed", "identity": {"ready": True}}
+    assert any("runtime_lifecycle.py host-tts-up" in command for command in flattened)
     assert any("runtime_lifecycle.py anima-down" in command for command in flattened)
     assert any("runtime_lifecycle.py anima-up" in command for command in flattened)
-    assert not any("qwen-deploy" in command for command in flattened)
-    assert not any("qwen-build" in command for command in flattened)
-    assert not any("qwen-stop" in command for command in flattened)
-    assert not any("qwen-destroy" in command for command in flattened)
+    assert not any("docker-compose.qwen.yml" in command for command in flattened)
     assert not any("--force-recreate" in command for command in flattened)

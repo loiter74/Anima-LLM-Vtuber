@@ -1,162 +1,90 @@
 # Docker Deployment Guide
 
-Animetta uses two independent Compose projects: the application container (nginx,
-frontend, and Python backend) and a persistent GPU Qwen TTS worker. Routine
-application rebuilds do not rebuild, recreate, or unload Qwen.
+Animetta uses one Compose project for the application container. Qwen3-TTS is a
+Windows-host service on `127.0.0.1:8767`; it is not built, started, or stopped by
+Docker.
 
 ## Prerequisites
 
-- **Docker** 24.0+ with Docker Compose v2
-- **NVIDIA Container Toolkit** (for GPU inference)
+- Docker 24.0+ with Docker Compose v2
+- Python 3.13 available through `py -3.13`
+- The configured host Qwen runtime and model files
+- API keys required by the selected Animetta profile
 
-### Install NVIDIA Container Toolkit
+Copy `.env.example` to `.env`, then set at least the selected provider keys and
+`QWEN_TTS_API_KEY`.
 
-```bash
-# Ubuntu/Debian
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+## Start
+
+```powershell
+# Start or reuse the host-local Qwen process and verify exact readiness.
+py -3.13 scripts/runtime_lifecycle.py host-tts-up
+
+# Build and start only the Animetta application container.
+py -3.13 scripts/runtime_lifecycle.py anima-up
 ```
 
-Verify: `docker run --rm --gpus all nvidia/cuda:12.8.2-base-ubuntu24.04 nvidia-smi`
+The application container reaches Qwen at `http://host.docker.internal:8767`.
+The lifecycle fails closed if host Qwen health, authentication, or model identity
+does not match before the Animetta build starts.
 
-## Quick Start
+Once ready:
 
-```bash
-# 1. Clone and configure
-git clone https://github.com/loiter74/animetta.git && cd animetta
-cp .env.example .env
-# Edit .env with your API keys. Do not commit real credentials.
+- Frontend: `http://localhost`
+- Backend health: `http://localhost/health`
+- Backend direct port: `http://localhost:12394`
 
-# 2. Deploy Qwen once (also use after an intentional Qwen image/model change)
-python scripts/runtime_lifecycle.py qwen-deploy
+CPU/smoke mode does not select local Qwen:
 
-# 3. Build and start Animetta
-python scripts/runtime_lifecycle.py anima-up
-
-# 4. Open http://localhost
-```
-
-The container exposes:
-- **Port 80** — nginx (frontend + API proxy)
-- **Port 12394** — backend direct access (optional)
-
-## GPU vs CPU Deployment
-
-| | GPU (`docker-compose.yml`) | CPU (`docker-compose.cpu.yml`) |
-|---|---|---|
-| Profile | `production` | `smoke` |
-| LLM | DeepSeek remote API | DeepSeek remote API |
-| TTS | Isolated Qwen3 Alice GPU service | MiMo remote API |
-| ASR / VAD | MiMo remote API | MiMo remote API |
-| Command | `python scripts/runtime_lifecycle.py anima-up` (after one `qwen-deploy`) | `docker compose -f docker-compose.cpu.yml up -d` |
-
-```bash
-# GPU (default)
-python scripts/runtime_lifecycle.py qwen-deploy  # first deployment only
-python scripts/runtime_lifecycle.py anima-up
-
-# CPU-only
+```powershell
 docker compose -f docker-compose.cpu.yml up -d --build
 ```
 
-## Volume Mounts
+## Lifecycle
 
-| Volume | Container Path | Purpose |
-|---|---|---|
-| `animetta-memory-db` | `/app/memory_db` | Wiki memory, Chroma vector DB, SQLite |
-| `animetta-data` | `/app/data` | Downloaded models, stats |
-| `.env` (Compose interpolation) | not mounted | Supplies only explicitly listed profile secrets/endpoints |
+```powershell
+# Stop only Animetta; preserve the loaded host Qwen model.
+py -3.13 scripts/runtime_lifecycle.py anima-down
 
-Named volumes persist across container rebuilds. The `anima-down` lifecycle
-operation does not stop Qwen. To reset application data:
+# Inspect the host service.
+py -3.13 scripts/runtime_lifecycle.py host-tts-status
 
-```bash
-docker compose down -v   # WARNING: deletes all memory and model data
+# Explicitly release host Qwen GPU memory.
+py -3.13 scripts/runtime_lifecycle.py host-tts-stop
+
+# Application logs.
+docker compose logs -f animetta
 ```
 
-## Environment Variables
+There is no Qwen Dockerfile, Qwen Compose project, or Qwen container lifecycle
+command. Changing host Qwen code or models requires restarting the host service,
+not rebuilding the application image.
 
-Set in `.env` or pass via `docker compose`:
+## Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `MIMO_API_KEY` | — | Mimo provider API key |
-| `DEEPSEEK_API_KEY` | — | DeepSeek LLM API key |
-| `DASHSCOPE_API_KEY` | — | DashScope realtime TTS API key used by production Seren |
-| `QWEN_TTS_API_KEY` | — | Shared authentication for the isolated Qwen TTS service |
-| `QWEN_TTS_URL` | profile/Compose value | Qwen TTS service endpoint |
-| `ANIMETTA_PROFILE` | required | `test`, `smoke`, or `production` |
-| `ANIMETTA_HOST` / `ANIMETTA_PORT` | required | Core bind endpoint |
+| Variable | Purpose |
+|---|---|
+| `DEEPSEEK_API_KEY` | Production LLM credential |
+| `DASHSCOPE_API_KEY` | Production primary TTS credential |
+| `MIMO_API_KEY` | Smoke or fallback provider credential |
+| `QWEN_TTS_API_KEY` | Bearer token shared with the host Qwen service |
+| `QWEN_HOST_TTS_URL` | Host endpoint; local default is `http://127.0.0.1:8767` |
 
-Provider names, models, and voices are selected only in `config/animetta.yaml`; deployment environment variables cannot override them.
+Provider selection remains in `config/animetta.yaml`. Compose supplies the
+container-visible Qwen endpoint as `http://host.docker.internal:8767`.
 
 ## Troubleshooting
 
-### Container won't start
+If `host-tts-up` fails, run `host-tts-status` and inspect the log path printed by
+the command. Verify that port 8767 is free, the bearer token matches, and the
+reported runtime/model/voice identity is exact.
 
-```bash
-docker compose logs -f animetta   # Check startup logs
+If Animetta fails after Qwen is ready:
+
+```powershell
+docker compose ps
+docker compose logs --no-color animetta
+curl.exe -sS http://localhost/health
 ```
 
-### GPU not detected
-
-```bash
-# Verify NVIDIA runtime
-docker run --rm --gpus all nvidia/cuda:12.8.2-base-ubuntu24.04 nvidia-smi
-
-# Check inside container
-docker compose -f docker-compose.qwen.yml exec qwen-tts python -c "import torch; print(torch.cuda.is_available())"
-```
-
-### Health check failing
-
-```bash
-# Wait 2 minutes (model loading), then:
-curl http://localhost/health
-# Expected: {"status": "ok", ...}
-```
-
-### Qwen model or Alice prompt is unavailable
-
-The production worker is intentionally offline and never downloads weights during
-readiness. Set `HF_CACHE_DIR` to a populated Hugging Face cache and
-`ALICE_REF_AUDIO` to the Alice reference WAV, then run
-`python scripts/runtime_lifecycle.py qwen-deploy`. The `qwen-up` operation is
-strictly no-build/no-recreate and fails with an
-actionable message when the image, service, model revision, or voice is stale.
-
-### Frontend not loading
-
-```bash
-# Rebuild frontend
-docker compose build --no-cache animetta
-docker compose up -d
-```
-
-### Permission errors on volumes
-
-```bash
-# Fix ownership
-docker compose exec animetta chown -R root:root /app/memory_db /app/data
-```
-
-## Building Locally
-
-```bash
-# Rebuild Animetta only (routine)
-docker compose build --no-cache animetta
-
-# Intentionally rebuild and recreate Qwen
-python scripts/runtime_lifecycle.py qwen-deploy
-
-# Rebuild only frontend
-docker build --target frontend-builder -t animetta-frontend .
-
-# Check image size
-docker images animetta
-```
+Normal application rebuilds must not stop or restart the host Qwen process.

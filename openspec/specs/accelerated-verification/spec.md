@@ -84,27 +84,24 @@ The planner SHALL prune a selected group only when another selected group explic
 - **THEN** catalog validation SHALL fail before planning or execution
 
 ### Requirement: Selective Docker build planning
-The quality system SHALL compute independent build-input fingerprints for the Animetta core image and Qwen TTS image and SHALL select only the Docker build targets invalidated by the current change. Unknown or shared Docker inputs MUST conservatively select both targets.
+The quality system SHALL compute the build-input fingerprint for the Animetta application image and SHALL select that Docker target only when its declared inputs are invalidated. Host Qwen inputs SHALL NOT create a Docker build target.
 
 #### Scenario: No Docker build input changes
-- **WHEN** only files outside both Docker build scopes change during quick or affected verification
-- **THEN** the plan SHALL run the static Compose contract without rebuilding either image
+- **WHEN** only files outside the Animetta Docker build scope change during quick or affected verification
+- **THEN** the plan SHALL run the static Compose contract without rebuilding the application image
 
 #### Scenario: Core-only build input changes
-- **WHEN** an Animetta core Dockerfile, dependency, copied source, frontend, or relevant configuration input changes without changing Qwen inputs
-- **THEN** the affected Docker action SHALL build `animetta` and SHALL NOT build `qwen-tts`
+- **WHEN** an Animetta core Dockerfile, dependency, copied source, frontend, or relevant configuration input changes
+- **THEN** the affected Docker action SHALL build `animetta`
 
-#### Scenario: Qwen-only build input changes
-- **WHEN** a Qwen Dockerfile, dependency, worker source, TTS boundary, or relevant configuration input changes without changing core inputs
-- **THEN** the affected Docker action SHALL build `qwen-tts` and SHALL NOT build `animetta`
-
-#### Scenario: Shared or unknown Docker input changes
-- **WHEN** a changed Docker build input is shared by both scopes or cannot be assigned safely
-- **THEN** both image targets SHALL be selected and the fallback reason SHALL be recorded
+#### Scenario: Host-Qwen-only input changes
+- **WHEN** only host Qwen source, model, or host lifecycle inputs change
+- **THEN** the Docker plan SHALL NOT build an image for Qwen
+- **AND** host readiness SHALL be verified separately before application runtime acceptance
 
 #### Scenario: Release verification runs
 - **WHEN** the release or nightly cold-Docker gate is selected
-- **THEN** both images SHALL be freshly built and the full Docker startup protocol SHALL run regardless of warm cache state
+- **THEN** the Animetta image SHALL be freshly built and the full host-Qwen plus application startup protocol SHALL run regardless of warm cache state
 
 ### Requirement: Fail-closed warm topology reuse
 The quality system MAY keep an existing Docker topology warm, but SHALL accept it for a new runtime smoke only after fresh preflight proves exact image, configuration, environment, lifecycle, and readiness identity. Runtime observations, logs, fault recovery, and browser captures MUST be acquired freshly for the current invocation.
@@ -121,9 +118,9 @@ The quality system MAY keep an existing Docker topology warm, but SHALL accept i
 - **WHEN** Playwright acceptance is selected after a matching warm preflight
 - **THEN** it SHALL open a new page/context, collect new console/network/page-error data, and create new screenshots rather than reusing earlier browser evidence
 
-#### Scenario: Remote TTS failure and recovery is required
-- **WHEN** production fault recovery is part of the selected gate
-- **THEN** the verifier SHALL inject a new Qwen outage, observe sanitized application degradation within its budget, restore Qwen, and observe recovery on the same Animetta container
+#### Scenario: Host TTS readiness is required
+- **WHEN** production runtime acceptance is selected
+- **THEN** the verifier SHALL acquire fresh authenticated host-Qwen readiness and exact identity evidence before accepting the Animetta container
 
 ### Requirement: Explainable acceleration evidence
 Every verification invocation SHALL persist cache decisions, fingerprints, dominance decisions, scheduling durations, selected Docker actions, and aggregate status under its frozen plan identity. Acceleration MUST NOT turn a required group into an unexplained omission.
@@ -158,4 +155,3 @@ The accelerated pipeline SHALL meet documented warm-loop latency targets without
 #### Scenario: Cold release validation is required
 - **WHEN** the release/nightly gate runs without reusable build or service state
 - **THEN** correctness SHALL take precedence over the warm latency targets and the complete cold verification SHALL still be required
-

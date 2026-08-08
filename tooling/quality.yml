@@ -83,7 +83,6 @@ docker_watch_paths:
   - frontend/src/**
   - frontend/public/**
   - src/animetta/**
-  - src/animetta_qwen_tts/**
   - config/**
 
 docker_scopes:
@@ -98,7 +97,7 @@ docker_scopes:
       - DASHSCOPE_API_KEY
       - MIMO_API_KEY
       - QWEN_TTS_API_KEY
-      - QWEN_TTS_URL
+      - QWEN_HOST_TTS_URL
     paths:
       - Dockerfile
       - .dockerignore
@@ -114,32 +113,6 @@ docker_scopes:
       - config/**
       - scripts/**
       - .env.example
-  qwen-tts:
-    service: qwen-tts
-    compose_file: docker-compose.qwen.yml
-    environment_identity_fields:
-      - QWEN_TTS_API_KEY
-      - QWEN_TTS_URL
-      - QWEN_TTS_BIND_HOST
-      - QWEN_TTS_BIND_PORT
-      - HF_HUB_OFFLINE
-      - TRANSFORMERS_OFFLINE
-      - HF_HOME
-    paths:
-      - Dockerfile.qwen-tts
-      - .dockerignore
-      - docker-compose.qwen.yml
-      - requirements-qwen-tts.txt
-      - src/animetta_qwen_tts/**
-      - src/animetta/__init__.py
-      - src/animetta/config/**
-      - src/animetta/services/__init__.py
-      - src/animetta/services/tts/__init__.py
-      - src/animetta/services/tts/audio_validation.py
-      - src/animetta/services/tts/interface.py
-      - src/animetta/services/tts/qwen3_tts.py
-      - config/**
-
 groups:
   python-format:
     domain: repository
@@ -769,26 +742,6 @@ groups:
     resource_class: exclusive
     resource_weight: 8
 
-  docker-compose-qwen-contract:
-    domain: repository
-    kind: smoke
-    runner: docker
-    isolation: hermetic
-    args:
-      - compose
-      - --env-file
-      - .env.example
-      - -f
-      - docker-compose.qwen.yml
-      - config
-      - --quiet
-    capabilities: [docker]
-    timeout_seconds: 180
-    include_in_full: true
-    include_in_nightly: true
-    resource_class: exclusive
-    resource_weight: 8
-
   operational-source-contract:
     domain: repository
     kind: contract
@@ -1198,7 +1151,6 @@ components:
       - docker-compose-cpu-contract
       - docker-compose-core-contract
       - docker-compose-selftest-contract
-      - docker-compose-qwen-contract
     impacts: []
     risk: normal
 
@@ -1296,5 +1248,4 @@ fallbacks:
     - docker-compose-contract
     - docker-compose-cpu-contract
     - docker-compose-core-contract
-    - docker-compose-qwen-contract
     - operational-source-contract

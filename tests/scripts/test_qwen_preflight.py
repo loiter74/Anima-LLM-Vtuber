@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -17,10 +16,10 @@ def test_qwen_preflight_entrypoint_exists() -> None:
 EXPECTED_IDENTITY = {
     "service": "qwen-tts",
     "api_version": "v1",
-    "provider": "qwen3",
-    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-    "voice": "alice",
+    "provider": "qwen3-tts-gguf-host",
+    "model": "Qwen3-TTS-1.7B-Base",
+    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+    "voice": "tosaka-rin-cn",
 }
 
 
@@ -31,7 +30,7 @@ def test_exact_ready_identity_is_accepted() -> None:
 
 
 @pytest.mark.parametrize("field", ["provider", "model", "revision", "voice"])
-def test_stale_ready_identity_fails_with_explicit_deploy_remediation(field: str) -> None:
+def test_stale_ready_identity_fails_with_explicit_host_restart_remediation(field: str) -> None:
     payload = {"ready": True, **EXPECTED_IDENTITY}
     payload[field] = "stale"
 
@@ -39,7 +38,7 @@ def test_stale_ready_identity_fails_with_explicit_deploy_remediation(field: str)
         preflight.validate_ready_identity(payload, EXPECTED_IDENTITY)
 
     assert exc_info.value.category == "identity_mismatch"
-    assert "qwen-deploy" in str(exc_info.value)
+    assert "host-tts-stop" in str(exc_info.value)
 
 
 def test_preflight_reads_health_then_authenticated_ready_without_mutation() -> None:
@@ -52,7 +51,7 @@ def test_preflight_reads_health_then_authenticated_ready_without_mutation() -> N
         return {"ready": True, **EXPECTED_IDENTITY}
 
     evidence = preflight.run_preflight(
-        base_url="http://127.0.0.1:8766",
+        base_url="http://127.0.0.1:8767",
         api_key="secret",
         expected_identity=EXPECTED_IDENTITY,
         request_json=request_json,
@@ -63,8 +62,8 @@ def test_preflight_reads_health_then_authenticated_ready_without_mutation() -> N
     assert evidence["status"] == "passed"
     assert evidence["identity"] == {"ready": True, **EXPECTED_IDENTITY}
     assert calls == [
-        ("http://127.0.0.1:8766/health", None),
-        ("http://127.0.0.1:8766/ready", "Bearer secret"),
+        ("http://127.0.0.1:8767/health", None),
+        ("http://127.0.0.1:8767/ready", "Bearer secret"),
     ]
 
 
@@ -78,7 +77,7 @@ def test_unavailable_service_fails_with_start_remediation_after_bounded_retries(
 
     with pytest.raises(preflight.QwenPreflightError) as exc_info:
         preflight.run_preflight(
-            base_url="http://127.0.0.1:8766",
+            base_url="http://127.0.0.1:8767",
             api_key="secret",
             expected_identity=EXPECTED_IDENTITY,
             request_json=request_json,
@@ -88,7 +87,7 @@ def test_unavailable_service_fails_with_start_remediation_after_bounded_retries(
 
     assert calls == 3
     assert exc_info.value.category == "unavailable"
-    assert "qwen-up" in str(exc_info.value)
+    assert "host-tts-up" in str(exc_info.value)
 
 
 def test_missing_api_key_fails_before_any_request() -> None:
@@ -101,7 +100,7 @@ def test_missing_api_key_fails_before_any_request() -> None:
 
     with pytest.raises(preflight.QwenPreflightError) as exc_info:
         preflight.run_preflight(
-            base_url="http://127.0.0.1:8766",
+            base_url="http://127.0.0.1:8767",
             api_key="",
             expected_identity=EXPECTED_IDENTITY,
             request_json=request_json,
@@ -112,46 +111,15 @@ def test_missing_api_key_fails_before_any_request() -> None:
     assert "QWEN_TTS_API_KEY" in str(exc_info.value)
 
 
-def test_expected_settings_resolve_when_host_worker_url_is_unset(
+def test_expected_settings_resolve_host_identity_from_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("QWEN_TTS_API_KEY", "secret")
-    monkeypatch.delenv("QWEN_TTS_URL", raising=False)
 
-    api_key, identity = preflight.load_expected_settings(
-        fallback_base_url="http://127.0.0.1:8766",
-    )
+    api_key, identity = preflight.load_expected_settings()
 
     assert api_key == "secret"
     assert identity == EXPECTED_IDENTITY
-    assert "QWEN_TTS_URL" not in os.environ
-
-
-HOST_TTS_IDENTITY = {
-    "service": "qwen-tts",
-    "api_version": "v1",
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "tosaka-rin-cn",
-}
-
-
-def test_host_tts_mode_returns_local_gguf_identity_without_manifest_worker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Host-tts mode resolves the local gguf identity from QWEN_TTS_API_KEY alone.
-
-    The local gguf-host runtime (port 8767) does not declare a production remote
-    worker in the manifest, so preflight must resolve its identity directly from
-    the runtime lifecycle HOST_TTS_IDENTITY, not from load_remote_tts_worker_config.
-    """
-    monkeypatch.setenv("QWEN_TTS_API_KEY", "host-secret")
-
-    api_key, identity = preflight.load_expected_settings(mode="host-tts")
-
-    assert api_key == "host-secret"
-    assert identity == HOST_TTS_IDENTITY
 
 
 def test_host_tts_mode_runs_against_8767_and_accepts_local_identity() -> None:
@@ -163,12 +131,12 @@ def test_host_tts_mode_runs_against_8767_and_accepts_local_identity() -> None:
         calls.append((url, authorization))
         if url.endswith("/health"):
             return {"status": "ok", "service": "qwen-tts", "api_version": "v1"}
-        return {"ready": True, **HOST_TTS_IDENTITY, "sample_rate": 24000}
+        return {"ready": True, **EXPECTED_IDENTITY, "sample_rate": 24000}
 
     evidence = preflight.run_preflight(
         base_url="http://127.0.0.1:8767",
         api_key="host-secret",
-        expected_identity=HOST_TTS_IDENTITY,
+        expected_identity=EXPECTED_IDENTITY,
         request_json=request_json,
         attempts=1,
         interval_seconds=0,

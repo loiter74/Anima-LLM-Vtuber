@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production Docker release gate for DashScope streaming TTS."""
+"""Production release gate for host-local Qwen fallback and Animetta."""
 
 from __future__ import annotations
 
@@ -28,10 +28,8 @@ from scripts.qwen_preflight import load_expected_settings as load_qwen_expected_
 from scripts.qwen_preflight import run_preflight as run_qwen_preflight
 
 REQUIRED_ENVIRONMENT = (
-    "ALICE_REF_AUDIO",
     "DASHSCOPE_API_KEY",
     "DEEPSEEK_API_KEY",
-    "HF_CACHE_DIR",
     "MIMO_API_KEY",
     "QWEN_TTS_API_KEY",
 )
@@ -56,13 +54,10 @@ class ReleaseGateError(RuntimeError):
 
 
 def validate_release_environment(environment: Mapping[str, str]) -> tuple[str, ...]:
-    """Validate production secrets and persistent rollback mounts."""
+    """Validate production provider and host-local TTS credentials."""
     missing = [name for name in REQUIRED_ENVIRONMENT if not environment.get(name, "").strip()]
     if missing:
         raise ReleaseGateError("Missing release environment fields: " + ", ".join(sorted(missing)))
-    for name in ("HF_CACHE_DIR", "ALICE_REF_AUDIO"):
-        if not Path(environment[name]).exists():
-            raise ReleaseGateError(f"Release mount path does not exist: {name}")
     return tuple(sorted(REQUIRED_ENVIRONMENT))
 
 
@@ -293,28 +288,10 @@ def _frontend_probe(url: str) -> dict[str, Any]:
     return {"status": status, "bytes": len(body)}
 
 
-def _container_metadata(compose_file: Path, service: str) -> dict[str, Any]:
-    container_id = _run(_compose(compose_file, "ps", "-q", service)).stdout.strip()
-    if not container_id:
-        raise ReleaseGateError(f"No running container found for {service}")
-    completed = _run(["docker", "inspect", container_id])
-    try:
-        current = json.loads(completed.stdout)[0]
-        state = current["State"]
-        return {
-            "container_id": str(current.get("Id", container_id)),
-            "image_id": str(current["Image"]),
-            "started_at": str(state["StartedAt"]),
-            "restart_count": int(current.get("RestartCount", 0)),
-        }
-    except (json.JSONDecodeError, IndexError, KeyError, TypeError, ValueError) as exc:
-        raise ReleaseGateError(f"Invalid Docker metadata for {service}") from exc
-
-
 def _preflight_qwen(*, attempts: int, interval_seconds: float) -> dict[str, Any]:
     api_key, expected_identity = load_qwen_expected_settings()
     return run_qwen_preflight(
-        base_url="http://127.0.0.1:8766",
+        base_url="http://127.0.0.1:8767",
         api_key=api_key,
         expected_identity=expected_identity,
         attempts=attempts,
@@ -402,24 +379,19 @@ def run_release_gate(
     *,
     plan: Path,
     compose_file: Path,
-    qwen_compose_file: Path,
     evidence_root: Path,
     attempts: int,
     interval_seconds: float,
 ) -> dict[str, Any]:
-    """Run the persistent-Qwen, Animetta-only rebuild, and fresh acceptance protocol."""
+    """Run host-Qwen readiness, Animetta rebuild, and fresh acceptance."""
     environment_fields = validate_release_environment(os.environ)
     if not plan.exists():
         raise ReleaseGateError(f"Frozen quality plan does not exist: {plan}")
     started_at = datetime.now(UTC)
     evidence_root.mkdir(parents=True, exist_ok=True)
 
-    qwen_before = _container_metadata(qwen_compose_file, "qwen-tts")
-    _run([sys.executable, "scripts/runtime_lifecycle.py", "qwen-up"])
+    _run([sys.executable, "scripts/runtime_lifecycle.py", "host-tts-up"])
     qwen_ready = _preflight_qwen(attempts=attempts, interval_seconds=interval_seconds)
-    qwen_after_preflight = _container_metadata(qwen_compose_file, "qwen-tts")
-    if qwen_after_preflight != qwen_before:
-        raise ReleaseGateError("Routine Qwen preflight mutated the persistent rollback container")
 
     _run([sys.executable, "scripts/runtime_lifecycle.py", "anima-down"])
     _run([sys.executable, "scripts/runtime_lifecycle.py", "anima-up"])
@@ -447,17 +419,8 @@ def run_release_gate(
     animetta_logs = _run(
         _compose(compose_file, "logs", "--no-color", "--since", started_at.isoformat())
     ).stdout
-    qwen_logs = _run(
-        _compose(qwen_compose_file, "logs", "--no-color", "--since", started_at.isoformat())
-    ).stdout
     (evidence_root / "animetta-docker.log").write_text(animetta_logs, encoding="utf-8")
-    (evidence_root / "qwen-docker.log").write_text(qwen_logs, encoding="utf-8")
     assert_clean_logs(animetta_logs)
-    assert_clean_logs(qwen_logs)
-
-    qwen_after = _container_metadata(qwen_compose_file, "qwen-tts")
-    if qwen_after != qwen_before:
-        raise ReleaseGateError("Animetta release protocol mutated the persistent Qwen container")
 
     return {
         "schema_version": 2,
@@ -466,17 +429,8 @@ def run_release_gate(
         "finished_at": datetime.now(UTC).isoformat(),
         "plan": str(plan),
         "main_compose_file": str(compose_file),
-        "qwen_compose_file": str(qwen_compose_file),
         "environment_fields": environment_fields,
-        "qwen_ready": qwen_ready,
-        "persistent_qwen": {
-            "preserved": True,
-            "before": qwen_before,
-            "after_preflight": qwen_after_preflight,
-            "after": qwen_after,
-            "build_actions": 0,
-            "recreate_actions": 0,
-        },
+        "host_qwen": qwen_ready,
         "health": health,
         "readiness": readiness,
         "frontend_before": frontend_before,
@@ -492,11 +446,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--compose-file", type=Path, default=ROOT / "docker-compose.yml")
     parser.add_argument(
-        "--qwen-compose-file",
-        type=Path,
-        default=ROOT / "docker-compose.qwen.yml",
-    )
-    parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / "artifacts" / "test-impact" / "release-runtime" / "evidence.json",
@@ -510,7 +459,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence = run_release_gate(
             plan=args.plan.resolve(),
             compose_file=args.compose_file.resolve(),
-            qwen_compose_file=args.qwen_compose_file.resolve(),
             evidence_root=args.output.parent.resolve(),
             attempts=args.attempts,
             interval_seconds=args.interval_seconds,

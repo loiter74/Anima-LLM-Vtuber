@@ -32,10 +32,6 @@ def test_active_python_version_configuration_matches_canonical_pin() -> None:
             "FROM python:3.13-slim-bookworm AS python-builder",
             "FROM python:3.13-slim-bookworm AS runtime",
         ),
-        "Dockerfile.qwen-tts": (
-            "FROM python:3.13-slim-bookworm AS python-builder",
-            "nvidia/cuda:12.8.2-runtime-ubuntu24.04@sha256:deba835fb9667364adda8791883ad4d099715a9afc354d2f0352116ba43f6d40",
-        ),
         "docker-compose.cpu.yml": ("dockerfile: Dockerfile",),
         "observability/Dockerfile.notifier": ("FROM python:3.13-slim-bookworm",),
         "scripts/health_check.py": ("CANONICAL_PYTHON = (3, 13)",),

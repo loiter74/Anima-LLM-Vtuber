@@ -457,56 +457,13 @@ class QwenTTSService:
             await asyncio.gather(*tuple(self._background_synthesis), return_exceptions=True)
 
 
-def _default_service() -> QwenTTSService:
-    """Build the worker lazily from the production manifest."""
-    from animetta.config.manifest import load_remote_tts_worker_config
-    from animetta.config.providers.tts.remote import RemoteTTSConfig
-    from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
-
-    remote = load_remote_tts_worker_config()
-    if not isinstance(remote, RemoteTTSConfig) or remote.worker is None:
-        raise RuntimeError("Production TTS must declare a remote worker configuration")
-    worker = remote.worker
-    engine = Qwen3TTSTTS(
-        model=remote.model,
-        revision=worker.revision,
-        speaker=remote.voice,
-        device=worker.device,
-        dtype=worker.dtype,
-        language=worker.language,
-        max_new_tokens=worker.max_new_tokens,
-        top_p=worker.top_p,
-        temperature=worker.temperature,
-        repetition_penalty=worker.repetition_penalty,
-        use_flash_attn=worker.use_flash_attn,
-        ref_audio_path=worker.ref_audio_path,
-        ref_text=worker.ref_text,
-        x_vector_only=worker.x_vector_only,
-    )
-    return QwenTTSService(
-        QwenServiceSettings(
-            api_key=remote.api_key or "",
-            provider=remote.provider,
-            model=remote.model,
-            revision=worker.revision,
-            voice=remote.voice,
-            language=worker.language,
-            response_format=remote.response_format,
-            synthesis_timeout_seconds=remote.timeout_seconds,
-            max_new_tokens=worker.max_new_tokens,
-            warmup_max_new_tokens=worker.warmup_max_new_tokens,
-        ),
-        engine,
-    )
-
-
 def create_app(
     *,
-    service: QwenTTSService | None = None,
+    service: QwenTTSService,
     preload_on_startup: bool = True,
 ) -> Starlette:
     """Create the standalone ASGI service without loading a model on import."""
-    active_service = service or _default_service()
+    active_service = service
 
     @asynccontextmanager
     async def lifespan(app: Starlette):

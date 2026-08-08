@@ -8,40 +8,11 @@ from typing import Any
 import httpx
 import pytest
 
-from animetta.config.providers.tts.remote import RemoteTTSConfig
 from animetta_qwen_tts.app import (
     QwenServiceSettings,
     QwenTTSService,
-    _default_service,
     create_app,
 )
-
-
-def test_worker_manifest_loader_needs_only_qwen_secret_and_endpoint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from animetta.config.manifest import load_remote_tts_worker_config
-
-    for name in (
-        "ANIMETTA_CONFIG",
-        "ANIMETTA_LLM",
-        "ANIMETTA_ASR",
-        "ANIMETTA_TTS",
-        "ANIMETTA_VAD",
-        "ANIMETTA_LOCAL_LLM",
-        "DEEPSEEK_API_KEY",
-        "MIMO_API_KEY",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("QWEN_TTS_API_KEY", "worker-only-secret")
-    monkeypatch.setenv("QWEN_TTS_URL", "http://qwen-tts:8766")
-
-    config = load_remote_tts_worker_config("config/animetta.yaml")
-
-    assert config.provider == "qwen3"
-    assert config.voice == "alice"
-    assert config.worker is not None
-
 
 pytestmark = pytest.mark.provider_contract
 
@@ -100,66 +71,13 @@ class FakeQwenEngine:
         self.closed = True
 
 
-def test_default_service_keeps_warmup_budget_out_of_interactive_synthesis(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    remote = RemoteTTSConfig.model_validate(
-        {
-            "type": "remote",
-            "api_key": "worker-secret",
-            "base_url": "http://qwen-tts:8766",
-            "provider": "qwen3",
-            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "voice": "alice",
-            "response_format": "wav",
-            "timeout_seconds": 120.0,
-            "worker": {
-                "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-                "device": "cuda",
-                "dtype": "bfloat16",
-                "language": "Chinese",
-                "use_flash_attn": False,
-                "max_new_tokens": 512,
-                "warmup_max_new_tokens": 48,
-                "temperature": 0.9,
-                "top_p": 1.0,
-                "repetition_penalty": 1.05,
-                "ref_audio_path": "/models/alice/alice_ref.wav",
-                "ref_text": "Alice reference text",
-                "x_vector_only": False,
-            },
-        }
-    )
-    engine_kwargs: dict[str, Any] = {}
-
-    class CapturingEngine(FakeQwenEngine):
-        def __init__(self, **kwargs: Any) -> None:
-            super().__init__()
-            engine_kwargs.update(kwargs)
-
-    monkeypatch.setattr(
-        "animetta.config.manifest.load_remote_tts_worker_config",
-        lambda: remote,
-    )
-    monkeypatch.setattr(
-        "animetta.services.tts.qwen3_tts.Qwen3TTSTTS",
-        CapturingEngine,
-    )
-
-    service = _default_service()
-
-    assert engine_kwargs["max_new_tokens"] == 512
-    assert service.settings.max_new_tokens == 512
-    assert service.settings.warmup_max_new_tokens == 48
-
-
 def settings(**overrides: Any) -> QwenServiceSettings:
     values: dict[str, Any] = {
         "api_key": "worker-secret",
-        "provider": "qwen3",
-        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-        "voice": "alice",
+        "provider": "qwen3-tts-gguf-host",
+        "model": "Qwen3-TTS-1.7B-Base",
+        "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+        "voice": "tosaka-rin-cn",
         "language": "Chinese",
         "response_format": "wav",
         "sample_rate": 24000,
@@ -194,8 +112,8 @@ async def request(app: Any, method: str, path: str, **kwargs: Any) -> httpx.Resp
 
 def speech_payload(**overrides: Any) -> dict[str, Any]:
     payload = {
-        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "voice": "alice",
+        "model": "Qwen3-TTS-1.7B-Base",
+        "voice": "tosaka-rin-cn",
         "input": "你好，爱丽丝",
         "response_format": "wav",
         "language": "Chinese",
@@ -251,10 +169,10 @@ async def test_preload_publishes_exact_ready_and_identity_contracts() -> None:
         "ready": True,
         "service": "qwen-tts",
         "api_version": "v1",
-        "provider": "qwen3",
-        "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-        "voice": "alice",
+        "provider": "qwen3-tts-gguf-host",
+        "model": "Qwen3-TTS-1.7B-Base",
+        "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+        "voice": "tosaka-rin-cn",
         "sample_rate": 24000,
     }
     assert ready.status_code == 200
@@ -345,9 +263,9 @@ async def test_valid_speech_returns_audio_and_correlated_identity_headers() -> N
     assert response.status_code == 200
     assert response.content == VALID_WAV
     assert response.headers["content-type"] == "audio/wav"
-    assert response.headers["x-animetta-provider"] == "qwen3"
+    assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "alice"
+    assert response.headers["x-animetta-voice"] == "tosaka-rin-cn"
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_calls == [
         {
@@ -377,9 +295,9 @@ async def test_streaming_speech_returns_ordered_pcm16_chunks_and_identity_header
     assert response.headers["x-animetta-audio-format"] == "pcm_s16le"
     assert response.headers["x-animetta-sample-rate"] == "24000"
     assert response.headers["x-animetta-channels"] == "1"
-    assert response.headers["x-animetta-provider"] == "qwen3"
+    assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "alice"
+    assert response.headers["x-animetta-voice"] == "tosaka-rin-cn"
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_stream_calls == [
         {

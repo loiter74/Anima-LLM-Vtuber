@@ -42,7 +42,6 @@ def _stamp() -> WarmTopologyStamp:
         semantic_hash="semantic-v1",
         services={
             "animetta": _service("animetta", "core-v1"),
-            "qwen-tts": _service("qwen-tts", "qwen-v1"),
         },
     )
 
@@ -63,7 +62,6 @@ def _desired(stamp: WarmTopologyStamp) -> dict[str, str]:
 def _allowlists() -> dict[str, tuple[str, ...]]:
     return {
         "animetta": ("ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"),
-        "qwen-tts": ("QWEN_TTS_API_KEY", "QWEN_TTS_URL"),
     }
 
 
@@ -73,7 +71,7 @@ def test_exact_warm_topology_match_allows_reuse_but_requires_fresh_evidence() ->
 
     decision = evaluate_warm_topology(
         stamp,
-        current_build_fingerprints={"animetta": "core-v1", "qwen-tts": "qwen-v1"},
+        current_build_fingerprints={"animetta": "core-v1"},
         current_compose_identity="compose-v1",
         desired_environment_identities=_desired(stamp),
         observed_services=observed,
@@ -115,13 +113,13 @@ def test_every_identity_lifecycle_or_readiness_mismatch_fails_closed(
     expected_fragment: str,
 ) -> None:
     stamp = _stamp()
-    builds = {"animetta": "core-v1", "qwen-tts": "qwen-v1"}
+    builds = {"animetta": "core-v1"}
     compose = "compose-v1"
     readiness = _readiness()
     observed = {name: _observed(service) for name, service in stamp.services.items()}
     desired = _desired(stamp)
     if mutation == "service-set":
-        observed.pop("qwen-tts")
+        observed.pop("animetta")
     elif mutation == "current-build":
         builds["animetta"] = "core-v2"
     elif mutation == "compose":
@@ -266,16 +264,6 @@ def test_desired_environment_identity_comes_from_each_scope_compose_config() -> 
                 }
             }
         },
-        "docker-compose.qwen.yml": {
-            "services": {
-                "qwen-tts": {
-                    "environment": {
-                        "QWEN_TTS_API_KEY": "tts-secret",
-                        "QWEN_TTS_URL": "http://qwen-tts:8766",
-                    }
-                }
-            }
-        },
     }
 
     def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
@@ -288,11 +276,10 @@ def test_desired_environment_identity_comes_from_each_scope_compose_config() -> 
         )
 
     identities = collect_desired_environment_identities(
-        ("animetta", "qwen-tts"),
+        ("animetta",),
         environment_allowlists=_allowlists(),
         compose_files={
             "animetta": "docker-compose.yml",
-            "qwen-tts": "docker-compose.qwen.yml",
         },
         command_runner=run,
     )

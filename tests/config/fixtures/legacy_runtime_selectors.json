@@ -24,7 +24,7 @@
       "ANIMETTA_HOST",
       "ANIMETTA_PORT",
       "ANIMETTA_BACKEND_URL",
-      "QWEN_TTS_URL"
+      "QWEN_HOST_TTS_URL"
     ],
     "secrets": [
       "DEEPSEEK_API_KEY",
@@ -90,7 +90,6 @@
         "fly.toml",
         "zeabur.json",
         "Dockerfile",
-        "Dockerfile.qwen-tts",
         "docker"
       ],
       "forbidden_patterns": [

@@ -112,16 +112,6 @@ def _catalog_with_acceleration() -> dict:
             "paths": ["Dockerfile", "requirements-core.txt", "src/animetta/**"],
             "environment_identity_fields": ["ANIMETTA_PROFILE", "DEEPSEEK_API_KEY"],
         },
-        "qwen-tts": {
-            "service": "qwen-tts",
-            "compose_file": "docker-compose.qwen.yml",
-            "paths": [
-                "Dockerfile.qwen-tts",
-                "requirements-qwen-tts.txt",
-                "src/animetta_qwen_tts/**",
-            ],
-            "environment_identity_fields": ["QWEN_TTS_API_KEY", "QWEN_TTS_URL"],
-        },
     }
     return data
 
@@ -426,15 +416,6 @@ def test_every_compose_variant_has_a_canonical_contract_gate() -> None:
             "config",
             "--quiet",
         ),
-        "docker-compose-qwen-contract": (
-            "compose",
-            "--env-file",
-            ".env.example",
-            "-f",
-            "docker-compose.qwen.yml",
-            "config",
-            "--quiet",
-        ),
     }
 
     for group_id, expected_args in expected.items():
@@ -507,17 +488,13 @@ def test_catalog_accepts_valid_acceleration_metadata() -> None:
     assert catalog.groups["backend-unit"].cacheable is True
     assert catalog.groups["backend-unit"].resource_class.value == "cpu"
     assert catalog.groups["repository-full"].covers == ("backend-unit",)
-    assert catalog.docker_scopes["qwen-tts"].service == "qwen-tts"
-    assert catalog.docker_scopes["qwen-tts"].compose_file == "docker-compose.qwen.yml"
-    assert catalog.docker_scopes["qwen-tts"].environment_identity_fields == (
-        "QWEN_TTS_API_KEY",
-        "QWEN_TTS_URL",
-    )
+    assert catalog.docker_scopes["animetta"].service == "animetta"
+    assert catalog.docker_scopes["animetta"].compose_file == "docker-compose.yml"
 
 
 def test_catalog_rejects_docker_scope_compose_file_outside_repository() -> None:
     data = _catalog_with_acceleration()
-    data["docker_scopes"]["qwen-tts"]["compose_file"] = "../docker-compose.yml"
+    data["docker_scopes"]["animetta"]["compose_file"] = "../docker-compose.yml"
 
     with pytest.raises(ValidationError, match="repository-relative"):
         Catalog.model_validate(data)
@@ -647,6 +624,6 @@ def test_catalog_rejects_secret_or_escaping_fingerprint_inputs() -> None:
         Catalog.model_validate(secret)
 
     escaping = _catalog_with_acceleration()
-    escaping["docker_scopes"]["qwen-tts"]["paths"] = ["../outside"]
+    escaping["docker_scopes"]["animetta"]["paths"] = ["../outside"]
     with pytest.raises(ValidationError, match="repository-relative"):
         Catalog.model_validate(escaping)

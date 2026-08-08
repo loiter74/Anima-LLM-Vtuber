@@ -1,6 +1,6 @@
 # Zeabur Deployment
 
-Animetta's hosted descriptor builds the lightweight core image from `Dockerfile` and runs the canonical `production` profile. Local Qwen inference is a separate GPU service and is not bundled into the hosted core image.
+Animetta's hosted descriptor builds the lightweight core image from `Dockerfile` and runs the canonical `production` profile. Qwen inference is never bundled into that image; it must be supplied by a separately reachable host service when the production failover selects it.
 
 ## Required inputs
 
@@ -15,7 +15,7 @@ Configure these in Zeabur's secret/environment settings:
 | `MIMO_API_KEY` | Remote ASR/VAD authentication |
 | `DASHSCOPE_API_KEY` | Beijing DashScope realtime TTS authentication for production Seren |
 
-`QWEN_TTS_URL` and `QWEN_TTS_API_KEY` are needed only when manually rolling back to the local Qwen provider.
+Set `QWEN_HOST_TTS_URL` to a Qwen endpoint reachable from Zeabur and provide `QWEN_TTS_API_KEY` when the production failover includes Qwen. The desktop default `127.0.0.1:8767` and Docker Desktop name `host.docker.internal` are not valid hosted endpoints.
 
 Provider names, models, and voices are not environment settings. Change them only in `config/animetta.yaml`, then redeploy.
 

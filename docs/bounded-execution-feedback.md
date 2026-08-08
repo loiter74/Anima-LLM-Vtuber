@@ -30,6 +30,6 @@ Display a fifth-failure reflection:
 py -3.13 -m tooling.execution_feedback --root artifacts/iteration-plans reflection --fingerprint <sha256>
 ```
 
-Cancellation revalidates the PID/container ID and its creation token before acting. Name-based, port-based, broad project, or pattern-based cleanup is forbidden. Protected external resources—including an existing Minecraft client, Minecraft server, persistent Qwen container, and unrelated user processes—are observation-only and must never be stopped, restarted, recreated, attached to, or otherwise controlled by the bounded execution system.
+Cancellation revalidates the PID/container ID and its creation token before acting. Name-based, port-based, broad project, or pattern-based cleanup is forbidden. Protected external resources—including an existing Minecraft client, Minecraft server, host Qwen process, and unrelated user processes—are observation-only and must never be stopped, restarted, recreated, attached to, or otherwise controlled by the bounded execution system unless the current plan owns their exact creation token.
 
 Lifecycle, impact-aware quality, R7, and R8 entrypoints use bounded feedback by default. Retain the printed run ID for resumption; there is no monolithic silent-wait switch.

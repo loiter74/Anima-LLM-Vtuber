@@ -735,7 +735,7 @@ def test_docker_build_command_executes_only_frozen_selected_service(
                 "--tier",
                 "affected",
                 "--paths",
-                "src/animetta_qwen_tts/app.py",
+                "src/animetta/core/service_pool.py",
                 "--output",
                 str(plan_path),
             ]
@@ -772,13 +772,12 @@ def test_docker_build_command_executes_only_frozen_selected_service(
         "docker",
         "compose",
         "-f",
-        str(ROOT / "docker-compose.qwen.yml"),
+        str(ROOT / "docker-compose.yml"),
         "build",
         "--no-cache",
-        "qwen-tts",
+        "animetta",
     ]
-    assert "animetta" not in calls[0][0]
-    assert calls[0][1]["QWEN_TTS_BUILD_FINGERPRINT"] == payload["actions"][0]["input_fingerprint"]
+    assert calls[0][1]["ANIMETTA_BUILD_FINGERPRINT"] == payload["actions"][0]["input_fingerprint"]
     assert decoder_options == [("utf-8", "replace")]
 
 

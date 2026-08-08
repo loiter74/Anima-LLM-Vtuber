@@ -61,13 +61,13 @@ Do not promote a dataset if `evidence.json → hard_gates.passed` is false. The 
 
 For every canonical low/medium/high run, execute the host-local Qwen protocol from a dedicated service-start agent. Never build a Qwen Docker image. Use the exclusive acceptance port so an open browser on the normal port cannot contend for the single-capacity Qwen TTS worker:
 
-1. Only when the managed dependency fingerprint is missing/stale, run `py -3.13 scripts/runtime_lifecycle.py qwen-local-install`; otherwise do not install.
-2. Run `py -3.13 scripts/runtime_lifecycle.py qwen-local-up` and record its PID, creation time, configuration fingerprint, and exact readiness identity.
+1. Run `py -3.13 scripts/runtime_lifecycle.py host-tts-up`; reuse an already-ready exact host process instead of installing or loading a second worker.
+2. Record the host process PID, creation time, configuration fingerprint, and exact readiness identity.
 3. `py -3.13 scripts/runtime_lifecycle.py anima-down`.
 4. Set `ANIMETTA_HTTP_PORT=19080` and `ANIMETTA_PORT=13395` in the service agent process.
 5. `py -3.13 scripts/runtime_lifecycle.py anima-up`.
 6. Poll `http://localhost:19080/health` until HTTP 200 and `{"status":"ok"}`.
-7. Poll `http://localhost:19080/ready` until HTTP 200 and the configured/resolved TTS identity is exactly `remote/qwen3/Qwen/Qwen3-TTS-12Hz-0.6B-Base/alice`.
+7. Poll `http://localhost:19080/ready` until HTTP 200 and the configured/resolved TTS identity is exactly `remote/qwen3-tts-gguf-host/Qwen3-TTS-1.7B-Base/tosaka-rin-cn`.
 8. Poll `http://localhost:19080` until HTTP 200, and confirm the normal port is not serving Animetta during the acceptance window.
 9. Check Animetta Docker logs and the local Qwen runtime log for `Traceback` or `ERROR`; either is a failure.
 10. Require the complete install/reuse + worker readiness + Animetta build/start/readiness/frontend sequence to finish within 300 seconds (target 180 seconds), and verify the Qwen process identity did not change.

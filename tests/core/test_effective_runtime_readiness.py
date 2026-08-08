@@ -83,7 +83,7 @@ def effective_config(monkeypatch: pytest.MonkeyPatch) -> callable:
     monkeypatch.setenv("DASHSCOPE_API_KEY", "readiness-dashscope-secret")
     monkeypatch.setenv("MIMO_API_KEY", "readiness-mimo-secret")
     monkeypatch.setenv("QWEN_TTS_API_KEY", "readiness-qwen-secret")
-    monkeypatch.setenv("QWEN_TTS_URL", "http://qwen-tts.internal:8001")
+    monkeypatch.setenv("QWEN_HOST_TTS_URL", "http://qwen-host.internal:8767")
     monkeypatch.setenv("QWEN_HOST_TTS_URL", "http://host.docker.internal:8767")
 
     def _load(profile: str) -> EffectiveConfig:

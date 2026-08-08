@@ -81,16 +81,15 @@ The scene director SHALL support `off`, `shadow`, and `active` modes and SHALL n
 - **WHEN** mode is `off`
 - **THEN** the runtime SHALL not schedule LLM reflections and SHALL not attach scene guidance
 
-### Requirement: Local-Qwen Docker acceptance isolation
-The repository SHALL provide a dedicated self-test runtime selection that uses the persistent local Qwen TTS worker without changing the production provider identity.
+### Requirement: Host-Qwen acceptance isolation
+The repository SHALL provide a dedicated self-test runtime selection that uses the persistent host-local Qwen TTS worker without changing the production provider identity.
 
 #### Scenario: Self-test startup
-- **WHEN** the local Docker acceptance lifecycle starts Animetta in self-test mode
-- **THEN** the effective profile SHALL select `qwen-alice` as TTS
+- **WHEN** the acceptance lifecycle starts Animetta in self-test mode
+- **THEN** the effective profile SHALL select `qwen-host` as TTS
 - **THEN** the Qwen worker SHALL pass its authenticated preflight before Animetta starts
 
 #### Scenario: Production startup remains unchanged
 - **WHEN** the normal production lifecycle starts Animetta
 - **THEN** the effective production profile SHALL continue to select `dashscope-seren`
 - **THEN** a self-test acceptance result SHALL NOT be represented as production-provider acceptance
-

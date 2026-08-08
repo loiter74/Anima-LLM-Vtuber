@@ -67,68 +67,29 @@ def test_build_context_excludes_local_frontend_package_cache() -> None:
     assert "frontend/.pnpm-store/" in dockerignore.splitlines()
 
 
-def test_qwen_image_owns_gpu_dependencies_and_standalone_entrypoint() -> None:
-    dockerfile = _text("Dockerfile.qwen-tts")
-
-    assert "requirements-qwen-tts.txt" in dockerfile
-    assert "python -m animetta_qwen_tts" in dockerfile
-    assert "nvidia/cuda" in dockerfile
-    assert "frontend" not in dockerfile.lower()
-    assert "gcc" in dockerfile
-    assert "libc6-dev" in dockerfile
-    assert "ENV CC=/usr/bin/gcc" in dockerfile
-    assert "https://deb.debian.org" in dockerfile
-    assert "Acquire::Retries=5" in dockerfile
-    assert "COPY src/ src/" not in dockerfile
-    assert "COPY src/animetta_qwen_tts/ src/animetta_qwen_tts/" in dockerfile
-
-
-def test_production_compose_owns_only_animetta_and_joins_external_inference_network() -> None:
+def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     compose = _compose("docker-compose.yml")
     assert set(compose["services"]) == {"animetta"}
     app = compose["services"]["animetta"]
     assert app["build"]["dockerfile"] == "Dockerfile"
     assert "ANIMETTA_PROFILE=production" in app["environment"]
     assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
-    assert "QWEN_TTS_URL=http://qwen-tts:8766" in app["environment"]
+    assert "QWEN_HOST_TTS_URL=http://host.docker.internal:8767" in app["environment"]
     assert "depends_on" not in app
-    assert app["networks"] == ["inference"]
-    assert compose["networks"]["inference"] == {
-        "external": True,
-        "name": "animetta-inference",
-    }
+    assert "networks" not in app
+    assert "networks" not in compose
     assert app["healthcheck"]["start_period"] == "360s"
 
 
-def test_qwen_compose_owns_persistent_single_model_gpu_worker() -> None:
-    compose = _compose("docker-compose.qwen.yml")
-    assert compose["name"] == "animetta-qwen"
-    assert set(compose["services"]) == {"qwen-tts"}
-    qwen = compose["services"]["qwen-tts"]
-
-    assert qwen["build"]["dockerfile"] == "Dockerfile.qwen-tts"
-    assert qwen["image"] == "animetta/qwen-tts:local"
-    assert qwen["deploy"]["resources"]["reservations"]["devices"][0]["capabilities"] == ["gpu"]
-    assert qwen["healthcheck"]["start_period"] == "360s"
-    assert qwen["restart"] == "unless-stopped"
-    assert qwen["ports"] == ["127.0.0.1:8766:8766"]
-    assert qwen["networks"] == ["inference"]
-    assert compose["networks"]["inference"]["name"] == "animetta-inference"
-    assert compose["networks"]["inference"].get("external") is not True
-    assert "${HF_CACHE_DIR:?" in "\n".join(qwen["volumes"])
-    assert "${ALICE_REF_AUDIO:?" in "\n".join(qwen["volumes"])
-
-
-def test_manual_qwen_rollback_keeps_its_distinct_generation_and_warmup_budgets() -> None:
+def test_manifest_has_one_host_qwen_runtime_contract() -> None:
     manifest = yaml.safe_load(_text("config/animetta.yaml"))
-    qwen = manifest["providers"]["tts"]["qwen-alice"]
-    worker = qwen["worker"]
+    qwen = manifest["providers"]["tts"]["qwen-host"]
     production = manifest["profiles"]["production"]
 
-    assert worker["max_new_tokens"] == 512
-    assert worker["warmup_max_new_tokens"] == 48
-    assert worker["temperature"] == 0.9
-    assert worker["top_p"] == 1.0
+    assert qwen["base_url"] == "${QWEN_HOST_TTS_URL}"
+    assert qwen["provider"] == "qwen3-tts-gguf-host"
+    assert qwen["model"] == "Qwen3-TTS-1.7B-Base"
+    assert qwen["voice"] == "tosaka-rin-cn"
     assert qwen["timeout_seconds"] == 120.0
     assert production["services"]["tts"] == "dashscope-local-failover"
     assert production["runtime"]["tts_timeout_seconds"] == 20.0
@@ -145,7 +106,7 @@ def test_selftest_compose_selects_local_qwen_without_overriding_production() -> 
     assert selftest["services"] == {
         "llm": "deepseek",
         "asr": "mimo-asr",
-        "tts": "qwen-alice",
+        "tts": "qwen-host",
         "vad": "mimo-vad",
     }
     assert selftest["runtime"]["tts_timeout_seconds"] == 120.0
@@ -194,11 +155,10 @@ def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> 
 
 def test_compose_services_inject_only_explicit_least_privilege_environment() -> None:
     production = _compose("docker-compose.yml")["services"]
-    qwen = _compose("docker-compose.qwen.yml")["services"]
     cpu = _compose("docker-compose.cpu.yml")["services"]
     core = _compose("docker-compose.core.yml")["services"]
 
-    for service in (*production.values(), *qwen.values(), *cpu.values(), *core.values()):
+    for service in (*production.values(), *cpu.values(), *core.values()):
         assert "env_file" not in service
 
     assert set(cpu["animetta"]["environment"]) == {
@@ -209,10 +169,6 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}",
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
     }
-    assert not any(
-        item.startswith(("DEEPSEEK_API_KEY=", "MIMO_API_KEY="))
-        for item in qwen["qwen-tts"]["environment"]
-    )
 
 
 def test_deployment_descriptors_do_not_select_business_providers() -> None:
@@ -220,7 +176,6 @@ def test_deployment_descriptors_do_not_select_business_providers() -> None:
         _text(path)
         for path in (
             "docker-compose.yml",
-            "docker-compose.qwen.yml",
             "docker-compose.cpu.yml",
             "docker-compose.core.yml",
             "docker/entrypoint.sh",
@@ -236,28 +191,18 @@ def test_deployment_descriptors_do_not_select_business_providers() -> None:
 
 
 def test_make_targets_delegate_to_cross_platform_lifecycle_entrypoint() -> None:
-    target = _make_target("qwen-up")
+    target = _make_target("host-tts-up")
 
-    assert "scripts/runtime_lifecycle.py qwen-up" in target
+    assert "scripts/runtime_lifecycle.py host-tts-up" in target
     assert " build" not in target
     assert "--build" not in target
     for operation in (
-        "qwen-build",
-        "qwen-deploy",
-        "qwen-stop",
-        "qwen-destroy",
+        "host-tts-status",
+        "host-tts-stop",
         "anima-up",
         "anima-down",
     ):
         assert f"scripts/runtime_lifecycle.py {operation}" in _make_target(operation)
-
-
-def test_qwen_build_and_deploy_are_explicit_targets() -> None:
-    build = _make_target("qwen-build")
-    deploy = _make_target("qwen-deploy")
-
-    assert "runtime_lifecycle.py qwen-build" in build
-    assert "runtime_lifecycle.py qwen-deploy" in deploy
 
 
 def test_animetta_lifecycle_targets_never_reference_qwen_compose() -> None:
@@ -272,25 +217,14 @@ def test_animetta_lifecycle_targets_never_reference_qwen_compose() -> None:
     assert "runtime_lifecycle.py anima-down" in down
 
 
-def test_qwen_stop_preserves_container_and_destroy_is_explicitly_destructive() -> None:
-    stop = _make_target("qwen-stop")
-    destroy = _make_target("qwen-destroy")
-
-    assert "runtime_lifecycle.py qwen-stop" in stop
-    assert " down" not in stop
-    assert " rm" not in stop
-    assert "runtime_lifecycle.py qwen-destroy" in destroy
-    assert "--volumes" not in destroy
-    assert "--rmi" not in destroy
-
-
-def test_qwen_deploy_waits_for_readiness_and_animetta_preflights_before_build() -> None:
+def test_animetta_starts_and_preflights_host_tts_before_build() -> None:
     lifecycle = _text("scripts/runtime_lifecycle.py")
 
-    assert 'operation == "qwen-deploy"' in lifecycle
-    assert "_preflight(wait=True)" in lifecycle
     assert 'operation == "anima-up"' in lifecycle
-    assert lifecycle.index('_run(_preflight(wait=False, mode="host-tts"))') < lifecycle.index(
+    assert lifecycle.index("_host_tts_up(best_effort=False)") < lifecycle.index(
+        "_run(_preflight(wait=False))"
+    )
+    assert lifecycle.index("_run(_preflight(wait=False))") < lifecycle.index(
         '_run(["docker", "compose", "build", "animetta"])'
     )
 
@@ -312,5 +246,8 @@ def test_removed_legacy_manifests_and_combined_cuda_image_are_absent() -> None:
         "config/config.golden.yaml",
         "config/services.yaml",
         "Dockerfile.cuda",
+        "Dockerfile.qwen-tts",
+        "docker-compose.qwen.yml",
+        "requirements-qwen-tts.txt",
     ):
         assert not (ROOT / path).exists(), path

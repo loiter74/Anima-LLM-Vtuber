@@ -347,13 +347,13 @@ def test_nightly_extends_full_with_service_groups() -> None:
 
 def test_frozen_plan_records_selective_docker_actions() -> None:
     changes = from_paths(
-        ["src/animetta_qwen_tts/app.py"],
+        ["src/animetta/core/service_pool.py"],
         repo_root=ROOT,
     )
 
     plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
 
-    assert [action.service for action in plan.docker_actions] == ["qwen-tts"]
+    assert [action.service for action in plan.docker_actions] == ["animetta"]
     assert len(plan.docker_actions[0].input_fingerprint) == 64
 
 
@@ -378,12 +378,12 @@ def test_unknown_backend_path_falls_back_to_backend_full() -> None:
 
 
 def test_unknown_fallback_path_is_bound_to_selected_group_fingerprints() -> None:
-    changes = from_paths(["scripts/smoke_qwen_alice.py"], repo_root=ROOT)
+    changes = from_paths(["scripts/unknown_helper.py"], repo_root=ROOT)
 
     plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
     backend_full = next(group for group in plan.groups if group.id == "backend-full")
 
-    assert "scripts/smoke_qwen_alice.py" in backend_full.input_patterns
+    assert "scripts/unknown_helper.py" in backend_full.input_patterns
     assert backend_full.cacheable is True
 
 

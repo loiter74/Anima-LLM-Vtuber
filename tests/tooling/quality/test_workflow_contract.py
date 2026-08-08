@@ -70,16 +70,7 @@ def test_quality_workflow_maps_events_to_tiers_and_group_id_matrices() -> None:
 
     assert workflow["jobs"]["service"]["env"] == {
         "ANIMETTA_PROFILE": "test",
-        "HF_CACHE_DIR": "/tmp/animetta-ci-hf",
-        "ALICE_REF_AUDIO": "/tmp/animetta-ci-alice.wav",
     }
-    service_commands = "\n".join(
-        step.get("run", "")
-        for step in workflow["jobs"]["service"]["steps"]
-        if isinstance(step, dict)
-    )
-    assert "mkdir -p /tmp/animetta-ci-hf" in service_commands
-    assert "touch /tmp/animetta-ci-alice.wav" in service_commands
 
 
 def test_quality_workflow_scopes_cache_by_trust_and_keeps_release_cold() -> None:
@@ -143,15 +134,12 @@ def test_quality_workflow_scopes_cache_by_trust_and_keeps_release_cold() -> None
     assert "scripts/release_runtime_gate.py" in release_commands
     assert "playwright install chromium" in release_commands
     assert "docker compose down --remove-orphans" in release_commands
-    assert "docker compose -f docker-compose.qwen.yml logs --no-color" in release_commands
-    assert "docker compose -f docker-compose.qwen.yml down --remove-orphans" not in release_commands
+    assert "docker-compose.qwen.yml" not in release_commands
     assert set(release_job["env"]) == {
         "DASHSCOPE_API_KEY",
         "DEEPSEEK_API_KEY",
         "MIMO_API_KEY",
         "QWEN_TTS_API_KEY",
-        "HF_CACHE_DIR",
-        "ALICE_REF_AUDIO",
     }
 
 

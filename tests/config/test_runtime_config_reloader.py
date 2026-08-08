@@ -162,7 +162,7 @@ def test_reload_allows_lightweight_llm_fields_but_preserves_engine_identity(
     ("mutate", "expected_path"),
     [
         (
-            lambda data: data["profiles"]["smoke"]["services"].update({"tts": "qwen-alice"}),
+            lambda data: data["profiles"]["smoke"]["services"].update({"tts": "qwen-host"}),
             "services.tts",
         ),
         (

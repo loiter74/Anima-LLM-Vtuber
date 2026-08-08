@@ -111,32 +111,19 @@ providers:
       base_url: https://api.xiaomimimo.com/v1
       voice: mimo_default
       response_format: wav
-    qwen-alice:
+    qwen-host:
       type: remote
       api_key: ${QWEN_TTS_API_KEY}
-      base_url: ${QWEN_TTS_URL}
-      provider: qwen3
-      model: Qwen/Qwen3-TTS-12Hz-0.6B-Base
-      voice: alice
+      base_url: ${QWEN_HOST_TTS_URL}
+      provider: qwen3-tts-gguf-host
+      model: Qwen3-TTS-1.7B-Base
+      revision: 0eb32e283ee46b86820c67843abb04cf12bc58d7
+      quantization: talker=Q5_K,predictor=Q8_0,onnx=FP16
+      runtime_commit: 0eb32e283ee46b86820c67843abb04cf12bc58d7
+      voice: tosaka-rin-cn
       response_format: wav
+      language: Chinese
       timeout_seconds: 120.0
-      worker:
-        revision: 5d83992436eae1d760afd27aff78a71d676296fc
-        device: cuda
-        dtype: bfloat16
-        language: Chinese
-        use_flash_attn: false
-        # Interactive ceiling; the worker scales each request from text length.
-        max_new_tokens: 512
-        # Keep startup acceptance fast without truncating real conversations.
-        warmup_max_new_tokens: 48
-        # Match the pinned model's official generation configuration.
-        temperature: 0.9
-        top_p: 1.0
-        repetition_penalty: 1.05
-        ref_audio_path: /models/alice/alice_ref.wav
-        ref_text: 私まで呼ばれるなんて、他の魔術師の工房を見…
-        x_vector_only: false
 
   vad:
     mock:
@@ -196,7 +183,7 @@ profiles:
     services:
       llm: deepseek
       asr: mimo-asr
-      tts: qwen-alice
+      tts: qwen-host
       vad: mimo-vad
     policy:
       allow_mock: false

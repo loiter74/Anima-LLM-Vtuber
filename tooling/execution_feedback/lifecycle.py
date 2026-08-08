@@ -5,11 +5,10 @@ import json
 import os
 import subprocess
 import sys
-import uuid
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Protocol
 
 from pydantic import Field, model_validator
 
@@ -28,7 +27,6 @@ from .models import (
     ResourceLease,
     ResourceObservation,
     ResourceOwnership,
-    validate_identifier,
 )
 
 
@@ -37,19 +35,6 @@ class LifecycleStepKind(StrEnum):
     BUILD = "build"
     HTTP_CHECK = "http-check"
     LOG_CHECK = "log-check"
-    CAPTURE_QWEN = "capture-qwen"
-    VERIFY_QWEN = "verify-qwen"
-
-
-class ContainerIdentity(FrozenModel):
-    container_id: str = Field(min_length=1)
-    image_id: str = Field(min_length=1)
-    started_at: str = Field(min_length=1)
-
-    @property
-    def evidence_reference(self) -> str:
-        material = f"{self.container_id}:{self.image_id}:{self.started_at}".encode()
-        return f"qwen-identity:{hashlib.sha256(material).hexdigest()}"
 
 
 class LifecycleStepContract(FrozenModel):
@@ -59,7 +44,6 @@ class LifecycleStepContract(FrozenModel):
     command: tuple[str, ...] = ()
     target: str | None = None
     budget: FeedbackBudget = FeedbackBudget()
-    protects_qwen: bool = False
 
     @model_validator(mode="after")
     def validate_payload(self) -> LifecycleStepContract:
@@ -129,14 +113,21 @@ def _process_creation_token(pid: int) -> str | None:
 
 
 class LeasedSubprocessBuildDriver:
-    def __init__(self, *, root: Path, receipt_path: Path) -> None:
-        self._root = root.resolve()
+    def __init__(
+        self,
+        *,
+        workspace_root: Path,
+        artifacts_root: Path,
+        receipt_path: Path,
+    ) -> None:
+        self._workspace_root = workspace_root.resolve()
+        self._artifacts_root = artifacts_root.resolve()
         self._receipt_path = receipt_path.resolve()
-        self._receipt_path.relative_to(self._root)
+        self._receipt_path.relative_to(self._artifacts_root)
 
     def launch(self, command: tuple[str, ...], *, log_path: str) -> BuildProcessLaunch:
-        destination = (self._root / log_path).resolve()
-        destination.relative_to(self._root)
+        destination = (self._artifacts_root / log_path).resolve()
+        destination.relative_to(self._artifacts_root)
         destination.parent.mkdir(parents=True, exist_ok=True)
         self._receipt_path.parent.mkdir(parents=True, exist_ok=True)
         self._receipt_path.unlink(missing_ok=True)
@@ -152,7 +143,7 @@ class LeasedSubprocessBuildDriver:
         environment = dict(os.environ)
         existing = environment.get("PYTHONPATH", "")
         environment["PYTHONPATH"] = os.pathsep.join(
-            item for item in (str(self._root), existing) if item
+            item for item in (str(self._workspace_root), existing) if item
         )
         creationflags = 0
         start_new_session = False
@@ -163,7 +154,7 @@ class LeasedSubprocessBuildDriver:
         with destination.open("a", encoding="utf-8", newline="\n") as log:
             process = subprocess.Popen(
                 helper,
-                cwd=self._root,
+                cwd=self._workspace_root,
                 env=environment,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
@@ -182,7 +173,7 @@ class LeasedSubprocessBuildDriver:
                 resource_id=str(process.pid),
                 creation_token=creation_token,
             ),
-            log_path=destination.relative_to(self._root).as_posix(),
+            log_path=destination.relative_to(self._artifacts_root).as_posix(),
         )
 
     def inspect(self, identity: ResourceIdentity) -> ResourceObservation:
@@ -238,81 +229,15 @@ class LifecycleDriver(Protocol):
         timeout_seconds: float,
     ) -> LifecycleDriverObservation: ...
 
-    def capture_qwen_identity(self) -> ContainerIdentity: ...
-
-
-class QwenIdentityGuard:
-    def __init__(self, before: ContainerIdentity) -> None:
-        self.before = before
-
-    def verify(self, after: ContainerIdentity) -> ActionResult:
-        evidence = (self.before.evidence_reference, after.evidence_reference)
-        if after == self.before:
-            return ActionResult(
-                status=FeedbackStatus.PASSED,
-                progress_summary="Qwen identity remained unchanged",
-                evidence_refs=evidence,
-                next_action="continue lifecycle plan",
-            )
-        return ActionResult(
-            status=FeedbackStatus.BLOCKED,
-            progress_summary="Qwen container ID, image, or StartedAt changed",
-            evidence_refs=evidence,
-            failure_fingerprint=hashlib.sha256(
-                f"qwen-identity-drift:{self.before}:{after}".encode()
-            ).hexdigest(),
-            next_action="stop lifecycle plan and inspect Qwen identity drift",
-        )
-
-
-class QwenIdentityStore:
-    def __init__(self, root: Path) -> None:
-        self.root = root.resolve()
-
-    def write(
-        self,
-        run_id: str,
-        phase: Literal["before", "after"],
-        identity: ContainerIdentity,
-    ) -> Path:
-        validate_identifier(run_id)
-        path = self.root / run_id / f"qwen-identity-{phase}.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(f".json.{uuid.uuid4().hex}.tmp")
-        try:
-            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
-                json.dump(identity.model_dump(mode="json"), handle, indent=2, sort_keys=True)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-        return path
-
-    def read(
-        self,
-        run_id: str,
-        phase: Literal["before", "after"],
-    ) -> ContainerIdentity:
-        validate_identifier(run_id)
-        path = self.root / run_id / f"qwen-identity-{phase}.json"
-        return ContainerIdentity.model_validate_json(path.read_text(encoding="utf-8"))
-
 
 class LifecycleStepExecutor:
     def __init__(
         self,
         *,
         driver: LifecycleDriver,
-        qwen_store: QwenIdentityStore,
-        run_id: str,
         build_controller: BuildStepController | None = None,
     ) -> None:
-        validate_identifier(run_id)
         self._driver = driver
-        self._qwen_store = qwen_store
-        self._run_id = run_id
         self._build_controller = build_controller
 
     def run(self, step: LifecycleStepContract, *, now: datetime) -> ActionResult:
@@ -320,26 +245,6 @@ class LifecycleStepExecutor:
             if self._build_controller is None:
                 raise RuntimeError("build lifecycle step requires a BuildStepController")
             return self._build_controller.run(now=now)
-        if step.kind is LifecycleStepKind.CAPTURE_QWEN:
-            identity = self._driver.capture_qwen_identity()
-            path = self._qwen_store.write(self._run_id, "before", identity)
-            return ActionResult(
-                status=FeedbackStatus.PASSED,
-                progress_summary="Qwen identity captured before protected lifecycle steps",
-                evidence_refs=(path.resolve().as_posix(), identity.evidence_reference),
-                next_action="continue protected lifecycle steps",
-            )
-        if step.kind is LifecycleStepKind.VERIFY_QWEN:
-            before = self._qwen_store.read(self._run_id, "before")
-            after = self._driver.capture_qwen_identity()
-            path = self._qwen_store.write(self._run_id, "after", after)
-            result = QwenIdentityGuard(before).verify(after)
-            return ActionResult.model_validate(
-                {
-                    **result.model_dump(mode="python"),
-                    "evidence_refs": (*result.evidence_refs, path.resolve().as_posix()),
-                }
-            )
         if step.kind is LifecycleStepKind.HTTP_CHECK:
             assert step.target is not None
             observation = self._driver.check_http(
@@ -481,9 +386,13 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
     ]
     if operation == "anima-up":
         definitions = (
-            ("qwen-preflight", LifecycleStepKind.COMMAND, ("qwen-preflight",), None),
-            ("qwen-identity-before", LifecycleStepKind.CAPTURE_QWEN, (), None),
-            ("host-tts-readiness", LifecycleStepKind.COMMAND, ("host-tts-ready",), None),
+            ("host-tts-start", LifecycleStepKind.COMMAND, ("host-tts-start",), None),
+            (
+                "host-tts-preflight",
+                LifecycleStepKind.COMMAND,
+                ("host-tts-preflight",),
+                None,
+            ),
             (
                 "animetta-build",
                 LifecycleStepKind.BUILD,
@@ -504,45 +413,30 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
                 ("docker", "compose", "logs", "animetta"),
                 None,
             ),
-            (
-                "qwen-log-check",
-                LifecycleStepKind.LOG_CHECK,
-                ("docker", "compose", "-f", "docker-compose.qwen.yml", "logs", "qwen-tts"),
-                None,
-            ),
-            ("qwen-identity-after", LifecycleStepKind.VERIFY_QWEN, (), None),
         )
     elif operation == "anima-down":
         definitions = (
-            ("qwen-identity-before", LifecycleStepKind.CAPTURE_QWEN, (), None),
             (
                 "animetta-cleanup",
                 LifecycleStepKind.COMMAND,
                 ("docker", "compose", "down", "--remove-orphans"),
                 None,
             ),
-            ("qwen-identity-after", LifecycleStepKind.VERIFY_QWEN, (), None),
         )
-    elif operation == "qwen-up":
+    elif operation == "host-tts-up":
         definitions = (
+            ("host-tts-start", LifecycleStepKind.COMMAND, ("host-tts-start",), None),
             (
-                "qwen-start",
+                "host-tts-preflight",
                 LifecycleStepKind.COMMAND,
-                (
-                    "docker",
-                    "compose",
-                    "-f",
-                    "docker-compose.qwen.yml",
-                    "up",
-                    "-d",
-                    "--no-build",
-                    "--no-recreate",
-                    "qwen-tts",
-                ),
+                ("host-tts-preflight",),
                 None,
             ),
-            ("qwen-preflight", LifecycleStepKind.COMMAND, ("qwen-preflight",), None),
         )
+    elif operation == "host-tts-status":
+        definitions = (("host-tts-status", LifecycleStepKind.COMMAND, ("host-tts-status",), None),)
+    elif operation == "host-tts-stop":
+        definitions = (("host-tts-stop", LifecycleStepKind.COMMAND, ("host-tts-stop",), None),)
     else:
         raise ValueError(f"operation does not have a bounded lifecycle plan: {operation}")
 
@@ -555,7 +449,6 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
                 depends_on=() if index == 0 else (definitions[index - 1][0],),
                 command=command,
                 target=target,
-                protects_qwen=step_id.startswith("qwen-identity"),
             )
         )
     return tuple(steps)

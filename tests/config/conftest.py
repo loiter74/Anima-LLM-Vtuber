@@ -33,7 +33,6 @@ def isolated_manifest_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch
         "ANIMETTA_HOST",
         "ANIMETTA_PORT",
         "ANIMETTA_BACKEND_URL",
-        "QWEN_TTS_URL",
         "QWEN_TTS_API_KEY",
         "QWEN_HOST_TTS_URL",
         "DASHSCOPE_API_KEY",
@@ -81,13 +80,17 @@ def manifest_data() -> dict[str, Any]:
                     "base_url": "https://api.xiaomimimo.com/v1",
                     "voice": "mimo_default",
                 },
-                "qwen-alice": {
+                "qwen-host": {
                     "type": "remote",
                     "api_key": "${QWEN_TTS_API_KEY}",
-                    "base_url": "${QWEN_TTS_URL}",
-                    "provider": "qwen3",
-                    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-                    "voice": "alice",
+                    "base_url": "${QWEN_HOST_TTS_URL}",
+                    "provider": "qwen3-tts-gguf-host",
+                    "model": "Qwen3-TTS-1.7B-Base",
+                    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+                    "quantization": "talker=Q5_K,predictor=Q8_0,onnx=FP16",
+                    "runtime_commit": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+                    "voice": "tosaka-rin-cn",
+                    "language": "Chinese",
                 },
             },
             "vad": {
@@ -120,7 +123,7 @@ def manifest_data() -> dict[str, Any]:
                 "services": {
                     "llm": "deepseek",
                     "asr": "mimo-asr",
-                    "tts": "qwen-alice",
+                    "tts": "qwen-host",
                     "vad": "mimo-vad",
                 },
                 "policy": {"allow_mock": False, "require_remote_identity": True},
@@ -130,7 +133,7 @@ def manifest_data() -> dict[str, Any]:
                 "services": {
                     "llm": "deepseek",
                     "asr": "mimo-asr",
-                    "tts": "qwen-alice",
+                    "tts": "qwen-host",
                     "vad": "mimo-vad",
                 },
                 "policy": {"allow_mock": False, "require_remote_identity": True},
@@ -163,7 +166,6 @@ def manifest_secrets(isolated_manifest_env: pytest.MonkeyPatch) -> pytest.Monkey
         "QWEN_HOST_TTS_URL",
         "http://host.docker.internal:8767",
     )
-    isolated_manifest_env.setenv("QWEN_TTS_URL", "http://qwen-tts.test:8001")
     isolated_manifest_env.setenv("DASHSCOPE_API_KEY", "test-dashscope-secret")
     return isolated_manifest_env
 

@@ -5,66 +5,7 @@ from pathlib import Path
 from scripts import runtime_lifecycle
 
 
-def test_qwen_up_never_builds_or_recreates(monkeypatch) -> None:
-    commands: list[list[str]] = []
-    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
-
-    runtime_lifecycle.run_operation("qwen-up")
-
-    assert commands[0] == [
-        "docker",
-        "compose",
-        "-f",
-        "docker-compose.qwen.yml",
-        "up",
-        "-d",
-        "--no-build",
-        "--no-recreate",
-        "qwen-tts",
-    ]
-    assert commands[1][-4:] == ["scripts/qwen_preflight.py", "--mode", "remote", "--wait"]
-    assert all("build" not in command for command in commands)
-
-
-def test_qwen_deploy_is_the_only_build_and_recreate_path(monkeypatch) -> None:
-    commands: list[list[str]] = []
-    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
-    monkeypatch.setattr(runtime_lifecycle, "_qwen_build_fingerprint", lambda: "fingerprint-1")
-
-    runtime_lifecycle.run_operation("qwen-deploy")
-
-    assert commands[0][-3:] == [
-        "--build-arg",
-        "QWEN_TTS_BUILD_FINGERPRINT=fingerprint-1",
-        "qwen-tts",
-    ]
-    assert "--force-recreate" in commands[1]
-    assert "--no-build" in commands[1]
-    assert commands[2][-4:] == ["scripts/qwen_preflight.py", "--mode", "remote", "--wait"]
-
-
-def test_qwen_build_uses_quality_catalog_content_fingerprint(monkeypatch) -> None:
-    commands: list[list[str]] = []
-    monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
-    monkeypatch.setattr(runtime_lifecycle, "_qwen_build_fingerprint", lambda: "fingerprint-2")
-
-    runtime_lifecycle.run_operation("qwen-build")
-
-    assert commands == [
-        [
-            "docker",
-            "compose",
-            "-f",
-            "docker-compose.qwen.yml",
-            "build",
-            "--build-arg",
-            "QWEN_TTS_BUILD_FINGERPRINT=fingerprint-2",
-            "qwen-tts",
-        ]
-    ]
-
-
-def test_animetta_up_preflights_before_build_and_never_manages_qwen(monkeypatch) -> None:
+def test_animetta_up_requires_host_tts_before_build(monkeypatch) -> None:
     commands: list[list[str]] = []
     host_calls: list[bool] = []
     monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
@@ -76,8 +17,8 @@ def test_animetta_up_preflights_before_build_and_never_manages_qwen(monkeypatch)
 
     runtime_lifecycle.run_operation("anima-up")
 
-    assert host_calls == [True]
-    assert commands[0][-3:] == ["scripts/qwen_preflight.py", "--mode", "host-tts"]
+    assert host_calls == [False]
+    assert commands[0][-1] == "scripts/qwen_preflight.py"
     assert commands[1] == ["docker", "compose", "build", "animetta"]
     assert commands[2] == [
         "docker",
@@ -87,16 +28,23 @@ def test_animetta_up_preflights_before_build_and_never_manages_qwen(monkeypatch)
         "--no-build",
         "animetta",
     ]
-    assert all("docker-compose.qwen.yml" not in command for command in commands[1:])
+    assert all("docker-compose.qwen.yml" not in command for command in commands)
 
 
 def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypatch) -> None:
     commands: list[list[str]] = []
+    host_calls: list[bool] = []
     monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_host_tts_up",
+        lambda *, best_effort: host_calls.append(best_effort),
+    )
 
     runtime_lifecycle.run_operation("anima-selftest-up")
 
-    assert commands[0][-4:] == ["scripts/qwen_preflight.py", "--mode", "host-tts", "--wait"]
+    assert host_calls == [False]
+    assert commands[0][-2:] == ["scripts/qwen_preflight.py", "--wait"]
     compose_prefix = [
         "docker",
         "compose",
@@ -116,17 +64,13 @@ def test_animetta_selftest_up_waits_for_qwen_and_uses_explicit_override(monkeypa
     assert all("--force-recreate" not in command for command in commands)
 
 
-def test_cleanup_operations_are_scoped_and_non_destructive(monkeypatch) -> None:
+def test_animetta_cleanup_is_scoped_and_non_destructive(monkeypatch) -> None:
     commands: list[list[str]] = []
     monkeypatch.setattr(runtime_lifecycle, "_run", lambda command: commands.append(command))
 
     runtime_lifecycle.run_operation("anima-down")
-    runtime_lifecycle.run_operation("qwen-stop")
-    runtime_lifecycle.run_operation("qwen-destroy")
 
-    assert commands[0] == ["docker", "compose", "down", "--remove-orphans"]
-    assert commands[1][-2:] == ["stop", "qwen-tts"]
-    assert commands[2][-2:] == ["down", "--remove-orphans"]
+    assert commands == [["docker", "compose", "down", "--remove-orphans"]]
     assert all("--volumes" not in command and "--rmi" not in command for command in commands)
 
 
@@ -175,3 +119,13 @@ def test_host_pid_file_rejects_invalid_or_non_positive_pid(
 
 def test_cross_platform_entrypoint_exists() -> None:
     assert (Path(__file__).parents[2] / "scripts" / "runtime_lifecycle.py").is_file()
+
+
+def test_container_qwen_operations_are_not_public() -> None:
+    assert not set(runtime_lifecycle.OPERATIONS) & {
+        "qwen-build",
+        "qwen-up",
+        "qwen-deploy",
+        "qwen-stop",
+        "qwen-destroy",
+    }

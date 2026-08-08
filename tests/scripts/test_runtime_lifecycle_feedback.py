@@ -15,12 +15,10 @@ from tooling.execution_feedback import (
 from tooling.execution_feedback.lifecycle import (
     BuildProcessLaunch,
     BuildStepController,
-    ContainerIdentity,
+    LeasedSubprocessBuildDriver,
     LifecycleDriverObservation,
     LifecycleStepExecutor,
     LifecycleStepKind,
-    QwenIdentityGuard,
-    QwenIdentityStore,
     freeze_lifecycle_plan,
 )
 
@@ -58,11 +56,6 @@ class FakeLifecycleDriver:
         self.commands: list[tuple[str, ...]] = []
         self.http_targets: list[str] = []
         self.log_commands: list[tuple[str, ...]] = []
-        self.qwen_identity = ContainerIdentity(
-            container_id="qwen-1",
-            image_id="sha256:image-1",
-            started_at="2026-08-08T09:00:00Z",
-        )
 
     def run_command(self, command: tuple[str, ...], *, timeout_seconds: float):
         assert timeout_seconds <= 240
@@ -94,36 +87,27 @@ class FakeLifecycleDriver:
             exit_code=0,
         )
 
-    def capture_qwen_identity(self) -> ContainerIdentity:
-        return self.qwen_identity
-
 
 def test_anima_feedback_plan_contains_every_protocol_stage_under_its_own_step() -> None:
     lifecycle = freeze_lifecycle_plan("anima-up", input_fingerprint="a" * 64)
 
     assert tuple(step.id for step in lifecycle.steps) == (
-        "qwen-preflight",
-        "qwen-identity-before",
-        "host-tts-readiness",
+        "host-tts-start",
+        "host-tts-preflight",
         "animetta-build",
         "animetta-start",
         "animetta-health",
         "frontend-readiness",
         "default-log-check",
-        "qwen-log-check",
-        "qwen-identity-after",
     )
     assert tuple(step.kind for step in lifecycle.steps) == (
         LifecycleStepKind.COMMAND,
-        LifecycleStepKind.CAPTURE_QWEN,
         LifecycleStepKind.COMMAND,
         LifecycleStepKind.BUILD,
         LifecycleStepKind.COMMAND,
         LifecycleStepKind.HTTP_CHECK,
         LifecycleStepKind.HTTP_CHECK,
         LifecycleStepKind.LOG_CHECK,
-        LifecycleStepKind.LOG_CHECK,
-        LifecycleStepKind.VERIFY_QWEN,
     )
     assert all(step.budget.deadline_seconds <= 300 for step in lifecycle.plan.steps)
     assert all(
@@ -132,28 +116,36 @@ def test_anima_feedback_plan_contains_every_protocol_stage_under_its_own_step() 
     )
 
 
-def test_cleanup_is_bounded_and_qwen_identity_wraps_the_animetta_action() -> None:
+def test_cleanup_is_one_bounded_animetta_action() -> None:
     lifecycle = freeze_lifecycle_plan("anima-down", input_fingerprint="a" * 64)
 
-    assert tuple(step.id for step in lifecycle.steps) == (
-        "qwen-identity-before",
-        "animetta-cleanup",
-        "qwen-identity-after",
-    )
-    cleanup = lifecycle.steps[1]
+    assert tuple(step.id for step in lifecycle.steps) == ("animetta-cleanup",)
+    cleanup = lifecycle.steps[0]
     assert cleanup.command == ("docker", "compose", "down", "--remove-orphans")
     assert cleanup.budget.action_seconds == 240
 
 
-def test_injected_lifecycle_executor_checks_start_http_and_both_log_projects(
+def test_host_tts_operations_have_bounded_plans() -> None:
+    expected_steps = {
+        "host-tts-up": ("host-tts-start", "host-tts-preflight"),
+        "host-tts-status": ("host-tts-status",),
+        "host-tts-stop": ("host-tts-stop",),
+    }
+
+    for operation, step_ids in expected_steps.items():
+        lifecycle = freeze_lifecycle_plan(operation, input_fingerprint="a" * 64)
+
+        assert tuple(step.id for step in lifecycle.steps) == step_ids
+        assert all(step.budget.deadline_seconds <= 300 for step in lifecycle.plan.steps)
+
+
+def test_injected_lifecycle_executor_checks_start_http_and_app_logs(
     tmp_path,
 ) -> None:
     lifecycle = freeze_lifecycle_plan("anima-up", input_fingerprint="a" * 64)
     driver = FakeLifecycleDriver()
     executor = LifecycleStepExecutor(
         driver=driver,
-        qwen_store=QwenIdentityStore(tmp_path),
-        run_id="run-lifecycle",
     )
 
     results = [
@@ -165,50 +157,7 @@ def test_injected_lifecycle_executor_checks_start_http_and_both_log_projects(
     assert all(result.status is FeedbackStatus.PASSED for result in results)
     assert ("docker", "compose", "up", "-d", "--no-build", "animetta") in driver.commands
     assert driver.http_targets == ["http://localhost/health", "http://localhost"]
-    assert len(driver.log_commands) == 2
-    assert any("docker-compose.qwen.yml" in command for command in driver.log_commands)
-
-
-def test_qwen_identity_guard_blocks_downstream_on_any_identity_drift() -> None:
-    before = ContainerIdentity(
-        container_id="qwen-1",
-        image_id="sha256:image-1",
-        started_at="2026-08-08T09:00:00Z",
-    )
-    guard = QwenIdentityGuard(before)
-
-    unchanged = guard.verify(before)
-    changed = guard.verify(
-        ContainerIdentity(
-            container_id="qwen-1",
-            image_id="sha256:image-1",
-            started_at="2026-08-08T09:01:00Z",
-        )
-    )
-
-    assert unchanged.status is FeedbackStatus.PASSED
-    assert changed.status is FeedbackStatus.BLOCKED
-    assert changed.next_action == "stop lifecycle plan and inspect Qwen identity drift"
-
-
-def test_qwen_identity_is_atomically_persisted_before_and_after_protected_steps(
-    tmp_path,
-) -> None:
-    store = QwenIdentityStore(tmp_path)
-    before = ContainerIdentity(
-        container_id="qwen-1",
-        image_id="sha256:image-1",
-        started_at="2026-08-08T09:00:00Z",
-    )
-
-    before_path = store.write("run-build", "before", before)
-    after_path = store.write("run-build", "after", before)
-
-    assert store.read("run-build", "before") == before
-    assert store.read("run-build", "after") == before
-    assert before_path.name == "qwen-identity-before.json"
-    assert after_path.name == "qwen-identity-after.json"
-    assert not tuple(tmp_path.rglob("*.tmp"))
+    assert driver.log_commands == [("docker", "compose", "logs", "animetta")]
 
 
 def test_buildkit_work_is_resumed_from_exact_process_lease_without_duplicate_launch(
@@ -297,14 +246,14 @@ def test_default_command_routes_to_resumable_bounded_operation(
     assert calls == [("anima-up", "run-lifecycle")]
 
 
-def test_system_lifecycle_qwen_preflight_targets_persistent_container(
+def test_system_lifecycle_preflight_targets_host_runtime(
     monkeypatch,
     tmp_path,
 ) -> None:
-    preflight_calls: list[tuple[bool, str]] = []
+    preflight_calls: list[bool] = []
 
-    def fake_preflight(*, wait: bool, mode: str) -> list[str]:
-        preflight_calls.append((wait, mode))
+    def fake_preflight(*, wait: bool) -> list[str]:
+        preflight_calls.append(wait)
         return ["qwen-probe"]
 
     def fake_run(command, **kwargs):
@@ -316,7 +265,47 @@ def test_system_lifecycle_qwen_preflight_targets_persistent_container(
     monkeypatch.setattr(runtime_lifecycle.subprocess, "run", fake_run)
     driver = runtime_lifecycle._SystemLifecycleDriver(evidence_root=tmp_path)
 
-    result = driver.run_command(("qwen-preflight",), timeout_seconds=240)
+    result = driver.run_command(("host-tts-preflight",), timeout_seconds=240)
 
     assert result.succeeded is True
-    assert preflight_calls == [(False, "remote")]
+    assert preflight_calls == [False]
+
+
+def test_build_helper_runs_from_workspace_with_workspace_on_pythonpath(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    artifacts = tmp_path / "artifacts"
+    workspace.mkdir()
+    artifacts.mkdir()
+    captured: dict[str, object] = {}
+
+    class FakeProcess:
+        pid = 4242
+
+        def terminate(self) -> None:
+            raise AssertionError("creation token should be available")
+
+    def fake_popen(command, **kwargs):
+        captured.update(command=command, **kwargs)
+        return FakeProcess()
+
+    monkeypatch.setattr("tooling.execution_feedback.lifecycle.subprocess.Popen", fake_popen)
+    monkeypatch.setattr(
+        "tooling.execution_feedback.lifecycle._process_creation_token",
+        lambda _pid: "creation-token",
+    )
+    driver = LeasedSubprocessBuildDriver(
+        workspace_root=workspace,
+        artifacts_root=artifacts,
+        receipt_path=artifacts / "receipt.json",
+    )
+
+    launched = driver.launch(("docker", "compose", "build"), log_path="run/build.log")
+
+    assert captured["cwd"] == workspace
+    assert str(captured["env"]["PYTHONPATH"]).split(runtime_lifecycle.os.pathsep)[0] == str(
+        workspace
+    )
+    assert launched.log_path == "run/build.log"

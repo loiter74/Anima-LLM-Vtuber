@@ -117,31 +117,31 @@ AI virtual companion / VTuber framework. Python backend (**Starlette + LangGraph
 
 | 步骤 | 操作 | 判定标准 |
 |------|------|----------|
-| **1. Qwen 预检** | 日常运行 `python scripts/runtime_lifecycle.py qwen-up`；仅首次部署或 Qwen 镜像/模型契约变化时运行 `qwen-deploy` 操作 | `/health`、鉴权 `/ready` 与精确模型身份通过；日常操作不 build/recreate |
-| **2. 清理 Animetta** | 运行 `python scripts/runtime_lifecycle.py anima-down` | Animetta 已清理，Qwen 容器仍运行且 ID/启动时间不变 |
-| **3. 构建并启动 Animetta** | 运行 `python scripts/runtime_lifecycle.py anima-up`；CPU 模式仍使用 `docker compose -f docker-compose.cpu.yml up -d --build` | 仅应用镜像构建成功，容器启动成功 |
+| **1. 宿主机 Qwen 预检** | 运行 `py -3.13 scripts/runtime_lifecycle.py host-tts-up` | 宿主机 `127.0.0.1:8767` 的 `/health`、鉴权 `/ready` 与精确模型身份通过；复用已就绪进程 |
+| **2. 清理 Animetta** | 运行 `py -3.13 scripts/runtime_lifecycle.py anima-down` | Animetta 已清理，宿主机 Qwen 进程仍就绪且未被重启 |
+| **3. 构建并启动 Animetta** | 运行 `py -3.13 scripts/runtime_lifecycle.py anima-up`；CPU 模式仍使用 `docker compose -f docker-compose.cpu.yml up -d --build` | 仅应用镜像构建成功，容器启动成功 |
 | **4. 轮询健康** | `curl -s http://localhost/health` 每 5 秒一次，最多 24 次（120 秒） | HTTP 200 + 响应体含 `"status":"ok"` |
 | **5. 验证前端** | `curl -s http://localhost` 每 5 秒一次，最多 12 次（60 秒） | HTTP 200 |
-| **6. 检查双项目日志** | 分别检查默认项目与 `docker-compose.qwen.yml` | 均无 Traceback 或 ERROR 级别日志 |
-| **7. 报告成功** | 子 agent 输出 `[OK] Qwen persistent, Docker container healthy, frontend accessible on port 80` | 服务完全就绪 |
+| **6. 检查日志** | 检查默认 Compose 项目日志，并保留本次宿主机 Qwen 预检证据 | 无 Traceback 或 ERROR 级别日志 |
+| **7. 报告成功** | 子 agent 输出 `[OK] Host Qwen ready, Docker container healthy, frontend accessible on port 80` | 服务完全就绪 |
 
 **关键约束**：
 - 每步失败即停，不得跳过轮询直接假设成功
 - 启动后 **必须用 curl 轮询健康检查**，不能只检查容器状态（服务可能还没就绪）
 - 前端通过 nginx 反向代理在 80 端口提供服务
-- 日志中不允许出现任何 Traceback 或 ERROR 级别日志（使用 `docker compose logs` 与 `docker compose -f docker-compose.qwen.yml logs` 检查）
+- 日志中不允许出现任何 Traceback 或 ERROR 级别日志（使用 `docker compose logs` 检查应用容器；Qwen 用本次宿主机预检和本地日志确认）
 - 代码变更后 **必须完整走一遍 Docker 启动协议**，确保服务可用
-- 日常协议禁止隐式构建、重建或销毁 Qwen；`anima-down` 操作必须保留 Qwen 常驻
+- Qwen 仅允许作为宿主机服务运行在 `127.0.0.1:8767`；仓库不得恢复 Qwen Dockerfile、Compose 项目或容器生命周期命令
+- `anima-down` 必须保留宿主机 Qwen 常驻；仅显式运行 `host-tts-stop` 才释放本地模型进程
 
 **Docker 模式选择**：
-- **GPU 模式**（默认）：首次运行 Python 生命周期入口的 `qwen-deploy`，日常运行 `anima-up` — 需要 NVIDIA GPU + nvidia-container-toolkit
-- **CPU 模式**：`docker compose -f docker-compose.cpu.yml up -d --build` — 无 GPU 环境
+- **默认模式**：Qwen 使用 Windows 宿主机 GPU；Docker 只构建并运行 Animetta 应用
+- **CPU 模式**：`docker compose -f docker-compose.cpu.yml up -d --build` — 使用 `smoke` 配置和远程 TTS，不选择本地 Qwen
 
 **常用 Docker 命令**：
 ```bash
 # 查看日志
 docker compose logs -f animetta
-docker compose -f docker-compose.qwen.yml logs -f qwen-tts
 
 # 进入容器
 docker compose exec animetta bash
@@ -150,8 +150,8 @@ docker compose exec animetta bash
 docker compose restart animetta
 
 # 停止服务
-python scripts/runtime_lifecycle.py anima-down  # 保留 Qwen 常驻
-python scripts/runtime_lifecycle.py qwen-stop   # 仅需释放 GPU 显存时
+py -3.13 scripts/runtime_lifecycle.py anima-down   # 保留宿主机 Qwen 常驻
+py -3.13 scripts/runtime_lifecycle.py host-tts-stop  # 显式释放本地模型进程
 ```
 
 ## ANTI-PATTERNS (THIS PROJECT)
@@ -178,10 +178,10 @@ python scripts/runtime_lifecycle.py qwen-stop   # 仅需释放 GPU 显存时
 
 ```bash
 # Docker (recommended)
-python scripts/runtime_lifecycle.py qwen-deploy  # GPU Qwen: first deploy / intentional upgrade
-python scripts/runtime_lifecycle.py anima-up     # GPU routine start; preserves Qwen
+py -3.13 scripts/runtime_lifecycle.py host-tts-up  # start/reuse host Qwen on 8767
+py -3.13 scripts/runtime_lifecycle.py anima-up     # build/start app; preserves host Qwen
 docker compose -f docker-compose.cpu.yml up -d --build  # CPU mode
-python scripts/runtime_lifecycle.py anima-down   # Stop app, preserve Qwen
+py -3.13 scripts/runtime_lifecycle.py anima-down   # Stop app, preserve host Qwen
 docker compose logs -f animetta           # Logs
 
 # Backend only (local)
@@ -328,7 +328,7 @@ When the user says "add a `<NewSomething>` component":
    `colors_and_type.css` AND `frontend/uno.config.ts → theme.colors`. Document
    the role in the appropriate spec file.
 5. 启动测试步骤时，要使用 `qa-testing-playwright` skill 进行页面捕获；测试前不得使用上一次 Playwright 的结果，必须重新获取测试数据
-6. 启动服务需要单开子agent 使用上文持久 Qwen Docker 协议；日常只构建/启动 Animetta，并保证两个 Compose 项目日志都无报错
+6. 启动服务需要单开子agent 使用上文宿主机 Qwen + 单一 Animetta Compose 协议，并保证宿主机预检与应用日志都无报错
 7. 要及时定期检查子agent是否卡住，如果卡住要自行解决。
 
 

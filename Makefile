@@ -1,4 +1,4 @@
-.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint qwen-build qwen-up qwen-deploy qwen-stop qwen-destroy anima-up anima-down install-hooks hooks
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint host-tts-up host-tts-status host-tts-stop anima-up anima-down install-hooks hooks
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -87,20 +87,14 @@ hooks:
 
 # ── Docker targets ───────────────────────────────────────────────────────
 
-qwen-build:
-	$(PYTHON) scripts/runtime_lifecycle.py qwen-build
+host-tts-up:
+	$(PYTHON) scripts/runtime_lifecycle.py host-tts-up
 
-qwen-up:
-	$(PYTHON) scripts/runtime_lifecycle.py qwen-up
+host-tts-status:
+	$(PYTHON) scripts/runtime_lifecycle.py host-tts-status
 
-qwen-deploy:
-	$(PYTHON) scripts/runtime_lifecycle.py qwen-deploy
-
-qwen-stop:
-	$(PYTHON) scripts/runtime_lifecycle.py qwen-stop
-
-qwen-destroy:
-	$(PYTHON) scripts/runtime_lifecycle.py qwen-destroy
+host-tts-stop:
+	$(PYTHON) scripts/runtime_lifecycle.py host-tts-stop
 
 anima-up:
 	$(PYTHON) scripts/runtime_lifecycle.py anima-up
@@ -119,4 +113,3 @@ docker-test:
 
 docker-typecheck:
 	docker compose exec animetta bash -c "pip install mypy --break-system-packages -q && PYTHONPATH=src mypy src/animetta --ignore-missing-imports"
-

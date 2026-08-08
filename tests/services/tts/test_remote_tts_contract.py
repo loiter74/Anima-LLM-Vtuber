@@ -9,10 +9,9 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from pydantic import ValidationError
 
 from animetta.config.core.registry import ProviderRegistry
-from animetta.config.providers.tts.remote import RemoteTTSConfig, RemoteTTSWorkerConfig
+from animetta.config.providers.tts.remote import RemoteTTSConfig
 from animetta.services.tts.factory import TTSFactory
 from animetta.services.tts.remote_tts import (
     RemoteTTS,
@@ -30,10 +29,10 @@ EXPECTED_IDENTITY = {
     "ready": True,
     "service": "qwen-tts",
     "api_version": "v1",
-    "provider": "qwen3",
-    "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
-    "voice": "alice",
+    "provider": "qwen3-tts-gguf-host",
+    "model": "Qwen3-TTS-1.7B-Base",
+    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
+    "voice": "tosaka-rin-cn",
     "sample_rate": 24000,
 }
 
@@ -55,46 +54,16 @@ def remote_config(**overrides: Any) -> RemoteTTSConfig:
     values: dict[str, Any] = {
         "type": "remote",
         "api_key": "test-secret",
-        "base_url": "http://qwen-tts:8766",
-        "provider": "qwen3",
+        "base_url": "http://127.0.0.1:8767",
+        "provider": "qwen3-tts-gguf-host",
         "model": EXPECTED_IDENTITY["model"],
-        "voice": "alice",
+        "revision": EXPECTED_IDENTITY["revision"],
+        "voice": "tosaka-rin-cn",
         "response_format": "wav",
         "timeout_seconds": 0.25,
-        "worker": {
-            "revision": EXPECTED_IDENTITY["revision"],
-            "device": "cuda",
-            "dtype": "bfloat16",
-            "language": "Chinese",
-            "use_flash_attn": False,
-            "max_new_tokens": 512,
-            "warmup_max_new_tokens": 48,
-            "temperature": 0.9,
-            "top_p": 1.0,
-            "repetition_penalty": 1.05,
-            "ref_audio_path": "/models/alice/alice_ref.wav",
-            "ref_text": "Alice reference text",
-            "x_vector_only": False,
-        },
     }
     values.update(overrides)
     return RemoteTTSConfig.model_validate(values)
-
-
-def test_worker_separates_production_and_warmup_codec_budgets() -> None:
-    worker = remote_config().worker
-    assert worker is not None
-    values = worker.model_dump()
-    values.pop("max_new_tokens")
-    values.pop("warmup_max_new_tokens")
-
-    defaults = RemoteTTSWorkerConfig.model_validate(values)
-    assert defaults.max_new_tokens == 512
-    assert defaults.warmup_max_new_tokens == 48
-    with pytest.raises(ValidationError, match="max_new_tokens"):
-        RemoteTTSWorkerConfig.model_validate({**values, "max_new_tokens": 513})
-    with pytest.raises(ValidationError, match="warmup_max_new_tokens"):
-        RemoteTTSWorkerConfig.model_validate({**values, "warmup_max_new_tokens": 65})
 
 
 def client_for(handler: Any) -> httpx.AsyncClient:
@@ -104,9 +73,9 @@ def client_for(handler: Any) -> httpx.AsyncClient:
 def identity_headers(*, request_id: str = "req-1", **overrides: str) -> dict[str, str]:
     headers = {
         "content-type": "audio/wav",
-        "x-animetta-provider": "qwen3",
+        "x-animetta-provider": "qwen3-tts-gguf-host",
         "x-animetta-model": str(EXPECTED_IDENTITY["model"]),
-        "x-animetta-voice": "alice",
+        "x-animetta-voice": "tosaka-rin-cn",
         "x-request-id": request_id,
     }
     headers.update(overrides)
@@ -116,6 +85,12 @@ def identity_headers(*, request_id: str = "req-1", **overrides: str) -> dict[str
 def test_remote_config_and_service_are_registered() -> None:
     assert ProviderRegistry.get_config("tts", "remote") is RemoteTTSConfig
     assert ProviderRegistry.get_service_class("tts", "remote") is RemoteTTS
+
+
+def test_remote_config_without_revision_constructs_service() -> None:
+    service = RemoteTTS.from_config(remote_config(revision=None))
+
+    assert service.revision is None
 
 
 def test_factory_keeps_remote_type_separate_from_worker_provider() -> None:
@@ -129,7 +104,7 @@ def test_factory_keeps_remote_type_separate_from_worker_provider() -> None:
 
     target = object.__getattribute__(tts, "_target")
     assert isinstance(target, RemoteTTS)
-    assert target.provider == "qwen3"
+    assert target.provider == "qwen3-tts-gguf-host"
     assert target.language is None
 
 
@@ -146,10 +121,10 @@ async def test_matching_readiness_publishes_configured_and_resolved_identity() -
 
     assert resolved == EXPECTED_IDENTITY
     assert tts.configured_identity == {
-        "provider": "qwen3",
+        "provider": "qwen3-tts-gguf-host",
         "model": EXPECTED_IDENTITY["model"],
         "revision": EXPECTED_IDENTITY["revision"],
-        "voice": "alice",
+        "voice": "tosaka-rin-cn",
     }
     assert tts.resolved_identity == EXPECTED_IDENTITY
     await tts.close()
@@ -238,7 +213,7 @@ async def test_synthesize_validates_request_and_response_identity(tmp_path: Path
 
     client = client_for(handler)
     tts = RemoteTTS.from_config(remote_config(), http_client=client)
-    output_path = tmp_path / "alice.wav"
+    output_path = tmp_path / "host.wav"
 
     result = await tts.synthesize(
         "你好，世界",
@@ -250,8 +225,8 @@ async def test_synthesize_validates_request_and_response_identity(tmp_path: Path
     assert result == str(output_path)
     assert output_path.read_bytes() == VALID_WAV
     assert seen["path"] == "/v1/audio/speech"
-    assert '"model":"Qwen/Qwen3-TTS-12Hz-0.6B-Base"' in seen["payload"]
-    assert '"voice":"alice"' in seen["payload"]
+    assert '"model":"Qwen3-TTS-1.7B-Base"' in seen["payload"]
+    assert '"voice":"tosaka-rin-cn"' in seen["payload"]
     assert '"input":"你好，世界"' in seen["payload"]
     assert seen["authorization"] == "Bearer test-secret"
     await tts.close()

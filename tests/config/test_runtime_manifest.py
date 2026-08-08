@@ -25,7 +25,6 @@ from animetta.config.manifest import (
     _resolve_selected_declaration,
     _validate_environment_locations,
     load_effective_config,
-    load_remote_tts_worker_config,
 )
 from animetta.config.providers.asr import MimoASRConfig, MockASRConfig
 from animetta.config.providers.llm import DeepSeekLLMConfig, MockLLMConfig
@@ -94,7 +93,7 @@ def test_application_snapshot_json_is_validated_and_canonicalized() -> None:
             {
                 "llm": "deepseek",
                 "asr": "mimo-asr",
-                "tts": "qwen-alice",
+                "tts": "qwen-host",
                 "vad": "mimo-vad",
             },
             False,
@@ -104,7 +103,7 @@ def test_application_snapshot_json_is_validated_and_canonicalized() -> None:
             {
                 "llm": "deepseek",
                 "asr": "mimo-asr",
-                "tts": "qwen-alice",
+                "tts": "qwen-host",
                 "vad": "mimo-vad",
             },
             False,
@@ -261,7 +260,9 @@ def test_cfg_007_only_selected_endpoints_and_secrets_are_expanded(
     assert effective.providers["llm"].declaration["api_key"] == "test-deepseek-secret"
     assert effective.providers["asr"].declaration["api_key"] == "test-mimo-secret"
     assert effective.providers["tts"].declaration["api_key"] == "test-qwen-secret"
-    assert effective.providers["tts"].declaration["base_url"] == "http://qwen-tts.test:8001"
+    assert effective.providers["tts"].declaration["base_url"] == (
+        "http://host.docker.internal:8767"
+    )
 
 
 def test_cfg_007_unselected_real_provider_secrets_are_not_required(
@@ -282,7 +283,7 @@ def test_cfg_007_unselected_real_provider_secrets_are_not_required(
     [
         (("application", "persona"), "${ANIMETTA_PERSONA}"),
         (("providers", "llm", "deepseek", "model"), "${DEEPSEEK_MODEL}"),
-        (("providers", "tts", "qwen-alice", "voice"), "${QWEN_VOICE}"),
+        (("providers", "tts", "qwen-host", "voice"), "${QWEN_VOICE}"),
         (("profiles", "smoke", "runtime", "tts_timeout_seconds"), "${TTS_TIMEOUT}"),
     ],
 )
@@ -316,14 +317,14 @@ def test_cfg_008_required_selected_secret_must_be_present(
     assert "test-mimo-secret" not in str(exc_info.value)
 
 
-def test_cfg_008_required_endpoint_must_be_present(
+def test_cfg_008_required_host_endpoint_must_be_present(
     manifest_data: dict[str, Any],
     write_manifest,
     manifest_secrets: pytest.MonkeyPatch,
 ) -> None:
-    manifest_secrets.delenv("QWEN_TTS_URL")
+    manifest_secrets.delenv("QWEN_HOST_TTS_URL")
 
-    with pytest.raises(EnvironmentResolutionError, match="QWEN_TTS_URL"):
+    with pytest.raises(EnvironmentResolutionError, match="QWEN_HOST_TTS_URL"):
         load_effective_config(write_manifest(manifest_data), profile="production")
 
 
@@ -420,7 +421,7 @@ def test_cfg_011_semantic_hash_excludes_endpoints_but_effective_hash_includes_th
 
     manifest_secrets.setenv("ANIMETTA_HOST", "0.0.0.0")
     manifest_secrets.setenv("ANIMETTA_PORT", "22394")
-    manifest_secrets.setenv("QWEN_TTS_URL", "http://qwen-tts.other:9001")
+    manifest_secrets.setenv("QWEN_HOST_TTS_URL", "http://qwen-host.other:9001")
     moved = load_effective_config(path, profile="production")
 
     assert moved.semantic_hash == first.semantic_hash
@@ -451,11 +452,7 @@ def test_cfg_012_public_status_is_sanitized_and_separates_provider_identities(
     manifest_secrets: pytest.MonkeyPatch,
 ) -> None:
     data = deepcopy(manifest_data)
-    data["providers"]["tts"]["qwen-alice"]["worker"] = {
-        "revision": "pinned-revision",
-        "ref_audio_path": "C:/Users/private/models/alice/reference.wav",
-        "ref_text": "private reference prompt",
-    }
+    data["providers"]["tts"]["qwen-host"]["base_url"] = "C:/Users/private/host"
     effective = load_effective_config(write_manifest(data), profile="production")
 
     public = effective.to_public_dict(
@@ -476,11 +473,11 @@ def test_cfg_012_public_status_is_sanitized_and_separates_provider_identities(
     assert public["providers"]["asr"]["configured"]["type"] == "mimo"
     assert public["providers"]["tts"] == {
         "configured": {
-            "name": "qwen-alice",
+            "name": "qwen-host",
             "type": "remote",
-            "provider": "qwen3",
-            "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-            "voice": "alice",
+            "provider": "qwen3-tts-gguf-host",
+            "model": "Qwen3-TTS-1.7B-Base",
+            "voice": "tosaka-rin-cn",
         },
         "resolved": {
             "type": "mimo",
@@ -716,22 +713,19 @@ def test_default_manifest_entrypoints_are_independent_of_current_working_directo
     monkeypatch.chdir(tmp_path)
 
     effective = load_effective_config(profile="test")
-    worker = load_remote_tts_worker_config()
     reloader = RuntimeConfigReloader(effective)
 
     assert DEFAULT_MANIFEST_PATH.is_absolute()
     assert effective.persona == "anima.v0.1"
-    assert worker.type == "remote"
     assert reloader.config_path == DEFAULT_MANIFEST_PATH
 
 
-def test_default_production_selects_approved_dashscope_voice_and_keeps_qwen_rollback(
+def test_default_production_selects_dashscope_with_host_qwen_fallback(
     manifest_secrets: pytest.MonkeyPatch,
 ) -> None:
     effective = load_effective_config(profile="production")
     selected = effective.providers["tts"]
     typed = effective.typed_provider("tts")
-    rollback = load_remote_tts_worker_config()
 
     assert selected.name == "dashscope-local-failover"
     assert selected.public_identity() == {
@@ -748,10 +742,6 @@ def test_default_production_selects_approved_dashscope_voice_and_keeps_qwen_roll
     assert typed.fallback.model == "Qwen3-TTS-1.7B-Base"
     assert typed.fallback.voice == "tosaka-rin-cn"
     assert typed.fallback.base_url == "http://host.docker.internal:8767"
-    assert rollback.type == "remote"
-    assert rollback.provider == "qwen3"
-    assert rollback.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-    assert rollback.voice == "alice"
 
 
 def test_repository_selftest_uses_local_qwen_without_changing_production(
@@ -761,11 +751,11 @@ def test_repository_selftest_uses_local_qwen_without_changing_production(
     production = load_effective_config(profile="production")
 
     assert selftest.profile == "selftest"
-    assert selftest.services.tts == "qwen-alice"
+    assert selftest.services.tts == "qwen-host"
     assert selftest.tts.type == "remote"
-    assert selftest.tts.provider == "qwen3"
-    assert selftest.tts.model == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-    assert selftest.tts.voice == "alice"
+    assert selftest.tts.provider == "qwen3-tts-gguf-host"
+    assert selftest.tts.model == "Qwen3-TTS-1.7B-Base"
+    assert selftest.tts.voice == "tosaka-rin-cn"
     assert selftest.system.tts_timeout_seconds == 120.0
     assert production.services.tts == "dashscope-local-failover"
 
@@ -815,7 +805,7 @@ def test_typed_provider_instances_cannot_mutate_effective_config(
     first = effective.typed_provider("tts")
     first.voice = "tampered"
 
-    assert effective.typed_provider("tts").voice == "alice"
+    assert effective.typed_provider("tts").voice == "tosaka-rin-cn"
 
 
 @pytest.mark.parametrize("port", ["not-a-port", "70000"])
@@ -904,39 +894,3 @@ def test_selected_declaration_resolver_preserves_literal_list_values() -> None:
         {"values": ["literal"]},
         ("providers", "llm", "example"),
     ) == {"values": ["literal"]}
-
-
-def test_worker_loader_rejects_undeclared_production_tts_reference(
-    manifest_data: dict[str, Any],
-    write_manifest,
-    manifest_secrets: pytest.MonkeyPatch,
-) -> None:
-    data = deepcopy(manifest_data)
-    data["profiles"]["production"]["services"]["tts"] = "missing-worker"
-
-    with pytest.raises(ManifestValidationError, match="is not declared"):
-        load_remote_tts_worker_config(write_manifest(data))
-
-
-def test_worker_loader_resolves_only_production_tts_declaration(
-    manifest_data: dict[str, Any],
-    write_manifest,
-    manifest_secrets: pytest.MonkeyPatch,
-) -> None:
-    worker = load_remote_tts_worker_config(write_manifest(manifest_data))
-
-    assert worker.type == "remote"
-    assert worker.provider == "qwen3"
-    assert worker.voice == "alice"
-
-
-def test_worker_loader_rejects_mock_production_tts(
-    manifest_data: dict[str, Any],
-    write_manifest,
-    manifest_secrets: pytest.MonkeyPatch,
-) -> None:
-    data = deepcopy(manifest_data)
-    data["profiles"]["production"]["services"]["tts"] = "mock"
-
-    with pytest.raises(ProviderPolicyError, match="non-Mock"):
-        load_remote_tts_worker_config(write_manifest(data))

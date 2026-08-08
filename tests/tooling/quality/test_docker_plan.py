@@ -30,11 +30,11 @@ def _changes(
         ("src/animetta/core/service_pool.py", {"animetta"}),
         ("src/animetta/services/tts/remote_tts.py", {"animetta"}),
         ("frontend/src/App.vue", {"animetta"}),
-        ("src/animetta_qwen_tts/app.py", {"qwen-tts"}),
-        ("Dockerfile.qwen-tts", {"qwen-tts"}),
-        ("src/animetta/config/loader.py", {"animetta", "qwen-tts"}),
+        ("src/animetta_qwen_tts/app.py", set()),
+        ("Dockerfile.qwen-tts", {"animetta"}),
+        ("src/animetta/config/loader.py", {"animetta"}),
         ("docker-compose.yml", {"animetta"}),
-        ("docker-compose.qwen.yml", {"qwen-tts"}),
+        ("docker-compose.qwen.yml", {"animetta"}),
         ("docs/architecture.md", set()),
     ],
 )
@@ -67,8 +67,8 @@ def test_deleted_and_renamed_paths_consider_old_and_new_inputs() -> None:
         Tier.AFFECTED,
     )
 
-    assert {item.scope_id for item in deleted} == {"qwen-tts"}
-    assert {item.scope_id for item in renamed} == {"animetta", "qwen-tts"}
+    assert deleted == ()
+    assert {item.scope_id for item in renamed} == {"animetta"}
 
 
 def test_unknown_watched_docker_input_fails_closed_to_all_scopes() -> None:
@@ -80,7 +80,7 @@ def test_unknown_watched_docker_input_fails_closed_to_all_scopes() -> None:
         Tier.AFFECTED,
     )
 
-    assert {item.scope_id for item in selection} == {"animetta", "qwen-tts"}
+    assert {item.scope_id for item in selection} == {"animetta"}
     assert all("unknown Docker input" in reason for item in selection for reason in item.reasons)
 
 
@@ -102,7 +102,7 @@ def test_full_and_nightly_always_select_all_scopes() -> None:
 
     for tier in (Tier.FULL, Tier.NIGHTLY):
         selection = select_docker_scopes(catalog, irrelevant, tier)
-        assert {item.scope_id for item in selection} == {"animetta", "qwen-tts"}
+        assert {item.scope_id for item in selection} == {"animetta"}
 
 
 def test_scope_fingerprint_changes_only_for_relevant_content(tmp_path: Path) -> None:
@@ -177,7 +177,6 @@ docker_scopes:
 def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
     catalog = load_catalog(ROOT / "tooling/quality.yml").catalog
     animetta = set(catalog.docker_scopes["animetta"].paths)
-    qwen = set(catalog.docker_scopes["qwen-tts"].paths)
 
     assert {
         "Dockerfile",
@@ -194,43 +193,21 @@ def test_catalogued_scopes_cover_actual_dockerfile_copy_inputs() -> None:
         "docker-compose.core.yml",
     }.issubset(animetta)
     assert "docker/**" not in animetta
-    assert {
-        "Dockerfile.qwen-tts",
-        "requirements-qwen-tts.txt",
-        "src/animetta_qwen_tts/**",
-        "src/animetta/config/**",
-        "src/animetta/services/tts/__init__.py",
-        "src/animetta/services/tts/audio_validation.py",
-        "src/animetta/services/tts/interface.py",
-        "src/animetta/services/tts/qwen3_tts.py",
-        "config/**",
-        "docker-compose.qwen.yml",
-    }.issubset(qwen)
-    assert "src/animetta/services/tts/**" not in qwen
 
 
-def test_dependency_layers_precede_source_and_core_excludes_qwen_source() -> None:
+def test_core_image_excludes_host_qwen_source() -> None:
     core_dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    qwen_dockerfile = (ROOT / "Dockerfile.qwen-tts").read_text(encoding="utf-8")
 
     assert "COPY src/animetta/ src/animetta/" in core_dockerfile
     assert "COPY src/ src/" not in core_dockerfile
-    requirements_copy = qwen_dockerfile.index("COPY requirements-qwen-tts.txt")
-    dependency_install = qwen_dockerfile.index("pip install --user")
-    source_copy = qwen_dockerfile.index("COPY src/animetta_qwen_tts/")
-    assert requirements_copy < dependency_install < source_copy
+    assert "src/animetta_qwen_tts" not in core_dockerfile
 
 
-def test_images_publish_plan_build_fingerprints_through_compose_args_and_labels() -> None:
+def test_image_publishes_plan_build_fingerprint_through_compose_args_and_label() -> None:
     core_dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    qwen_dockerfile = (ROOT / "Dockerfile.qwen-tts").read_text(encoding="utf-8")
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    qwen_compose = (ROOT / "docker-compose.qwen.yml").read_text(encoding="utf-8")
 
     assert "ARG ANIMETTA_BUILD_FINGERPRINT" in core_dockerfile
     assert 'LABEL org.animetta.build-fingerprint="${ANIMETTA_BUILD_FINGERPRINT}"' in core_dockerfile
-    assert "ARG QWEN_TTS_BUILD_FINGERPRINT" in qwen_dockerfile
-    assert 'LABEL org.animetta.build-fingerprint="${QWEN_TTS_BUILD_FINGERPRINT}"' in qwen_dockerfile
     assert "ANIMETTA_BUILD_FINGERPRINT" in compose
     assert "QWEN_TTS_BUILD_FINGERPRINT" not in compose
-    assert "QWEN_TTS_BUILD_FINGERPRINT" in qwen_compose

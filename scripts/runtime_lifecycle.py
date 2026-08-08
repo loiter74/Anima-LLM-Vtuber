@@ -1,4 +1,4 @@
-"""Cross-platform lifecycle operations for persistent Qwen and Animetta."""
+"""Cross-platform lifecycle operations for host-local Qwen TTS and Animetta."""
 
 from __future__ import annotations
 
@@ -39,7 +39,6 @@ HOST_TTS_IDENTITY = {
     "sample_rate": 24000,
 }
 
-QWEN_COMPOSE = ["docker", "compose", "-f", "docker-compose.qwen.yml"]
 SELFTEST_COMPOSE = [
     "docker",
     "compose",
@@ -49,11 +48,6 @@ SELFTEST_COMPOSE = [
     "docker-compose.selftest.yml",
 ]
 OPERATIONS = (
-    "qwen-build",
-    "qwen-up",
-    "qwen-deploy",
-    "qwen-stop",
-    "qwen-destroy",
     "host-tts-up",
     "host-tts-status",
     "host-tts-stop",
@@ -268,78 +262,29 @@ def _host_tts_stop() -> None:
     _remove_host_pid_file()
 
 
-def _preflight(*, wait: bool, mode: str = "remote") -> list[str]:
-    command = [sys.executable, "scripts/qwen_preflight.py", "--mode", mode]
+def _preflight(*, wait: bool) -> list[str]:
+    command = [sys.executable, "scripts/qwen_preflight.py"]
     if wait:
         command.append("--wait")
     return command
 
 
-def _qwen_build_fingerprint() -> str:
-    from tooling.quality.docker_plan import fingerprint_docker_scopes
-    from tooling.quality.fingerprint import FingerprintContext
-    from tooling.quality.manifest import load_catalog
-
-    loaded = load_catalog(ROOT / "tooling" / "quality.yml")
-    return fingerprint_docker_scopes(loaded.catalog, FingerprintContext(ROOT))["qwen-tts"]
-
-
-def _qwen_build_command() -> list[str]:
-    return [
-        *QWEN_COMPOSE,
-        "build",
-        "--build-arg",
-        f"QWEN_TTS_BUILD_FINGERPRINT={_qwen_build_fingerprint()}",
-        "qwen-tts",
-    ]
-
-
 def run_operation(operation: str) -> None:
     """Execute one explicit lifecycle operation."""
-    if operation == "qwen-build":
-        _run(_qwen_build_command())
-    elif operation == "qwen-up":
-        _run(
-            [
-                *QWEN_COMPOSE,
-                "up",
-                "-d",
-                "--no-build",
-                "--no-recreate",
-                "qwen-tts",
-            ]
-        )
-        _run(_preflight(wait=True))
-    elif operation == "qwen-deploy":
-        _run(_qwen_build_command())
-        _run(
-            [
-                *QWEN_COMPOSE,
-                "up",
-                "-d",
-                "--no-build",
-                "--force-recreate",
-                "qwen-tts",
-            ]
-        )
-        _run(_preflight(wait=True))
-    elif operation == "qwen-stop":
-        _run([*QWEN_COMPOSE, "stop", "qwen-tts"])
-    elif operation == "qwen-destroy":
-        _run([*QWEN_COMPOSE, "down", "--remove-orphans"])
-    elif operation == "host-tts-up":
+    if operation == "host-tts-up":
         _host_tts_up(best_effort=False)
     elif operation == "host-tts-status":
         print(json.dumps(_host_tts_status(), sort_keys=True))
     elif operation == "host-tts-stop":
         _host_tts_stop()
     elif operation == "anima-up":
-        _host_tts_up(best_effort=True)
-        _run(_preflight(wait=False, mode="host-tts"))
+        _host_tts_up(best_effort=False)
+        _run(_preflight(wait=False))
         _run(["docker", "compose", "build", "animetta"])
         _run(["docker", "compose", "up", "-d", "--no-build", "animetta"])
     elif operation == "anima-selftest-up":
-        _run(_preflight(wait=True, mode="host-tts"))
+        _host_tts_up(best_effort=False)
+        _run(_preflight(wait=True))
         _run([*SELFTEST_COMPOSE, "build", "animetta"])
         _run([*SELFTEST_COMPOSE, "up", "-d", "--no-build", "animetta"])
     elif operation == "anima-down":
@@ -362,20 +307,36 @@ class _SystemLifecycleDriver:
         return path.resolve().as_posix()
 
     def run_command(self, command: tuple[str, ...], *, timeout_seconds: float):
-        if command == ("qwen-preflight",):
-            command = tuple(_preflight(wait=False, mode="remote"))
-        elif command == ("host-tts-ready",):
-            ready = _host_tts_up(best_effort=True)
+        if command == ("host-tts-start",):
+            ready = _host_tts_up(best_effort=False)
             return self._observation_type(
-                succeeded=True,
-                summary=(
-                    "Host TTS is ready"
-                    if ready
-                    else "Host TTS unavailable; cloud fallback remains enabled"
-                ),
+                succeeded=ready,
+                summary="Host TTS is ready",
                 evidence_refs=(self._evidence("host-tts-readiness", f"ready={ready}\n"),),
                 exit_code=0,
             )
+        if command == ("host-tts-status",):
+            status = _host_tts_status()
+            payload = json.dumps(status, sort_keys=True)
+            return self._observation_type(
+                succeeded=True,
+                summary=payload,
+                evidence_refs=(self._evidence("host-tts-status", f"{payload}\n"),),
+                exit_code=0,
+            )
+        if command == ("host-tts-stop",):
+            _host_tts_stop()
+            status = _host_tts_status()
+            stopped = status.get("running") is False
+            payload = json.dumps(status, sort_keys=True)
+            return self._observation_type(
+                succeeded=stopped,
+                summary="Host TTS stopped" if stopped else "Host TTS is still running",
+                evidence_refs=(self._evidence("host-tts-stop", f"{payload}\n"),),
+                exit_code=0 if stopped else 1,
+            )
+        if command == ("host-tts-preflight",):
+            command = tuple(_preflight(wait=False))
         try:
             completed = subprocess.run(
                 command,
@@ -454,41 +415,6 @@ class _SystemLifecycleDriver:
             exit_code=observation.exit_code,
         )
 
-    def capture_qwen_identity(self):
-        from tooling.execution_feedback.lifecycle import ContainerIdentity
-
-        container = subprocess.run(
-            [*QWEN_COMPOSE, "ps", "-q", "qwen-tts"],
-            cwd=ROOT,
-            capture_output=True,
-            check=True,
-            text=True,
-            timeout=15,
-        ).stdout.strip()
-        if not container:
-            raise RuntimeError("Qwen container is not running")
-        payload = json.loads(
-            subprocess.run(
-                ["docker", "inspect", container],
-                cwd=ROOT,
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=15,
-            ).stdout
-        )
-        if not isinstance(payload, list) or len(payload) != 1 or not isinstance(payload[0], dict):
-            raise RuntimeError("Docker returned an invalid Qwen identity payload")
-        item = payload[0]
-        state = item.get("State")
-        if not isinstance(state, dict):
-            raise RuntimeError("Docker omitted Qwen State identity")
-        return ContainerIdentity(
-            container_id=str(item.get("Id", "")),
-            image_id=str(item.get("Image", "")),
-            started_at=str(state.get("StartedAt", "")),
-        )
-
 
 def _bounded_input_fingerprint(operation: str) -> str:
     material = b"\0".join(
@@ -521,7 +447,6 @@ async def run_bounded_operation(
         LeasedSubprocessBuildDriver,
         LifecycleStepContract,
         LifecycleStepExecutor,
-        QwenIdentityStore,
         freeze_lifecycle_plan,
     )
 
@@ -535,7 +460,8 @@ async def run_bounded_operation(
     run_root = artifacts_root.resolve() / run_id
     build_log = f"{run_id}/animetta-build.log"
     build_driver = LeasedSubprocessBuildDriver(
-        root=artifacts_root.resolve(),
+        workspace_root=ROOT,
+        artifacts_root=artifacts_root.resolve(),
         receipt_path=run_root / "animetta-build-receipt.json",
     )
     build_controller = BuildStepController(
@@ -550,8 +476,6 @@ async def run_bounded_operation(
     )
     executor = LifecycleStepExecutor(
         driver=_SystemLifecycleDriver(evidence_root=run_root / "evidence"),
-        qwen_store=QwenIdentityStore(artifacts_root.resolve()),
-        run_id=run_id,
         build_controller=build_controller,
     )
 

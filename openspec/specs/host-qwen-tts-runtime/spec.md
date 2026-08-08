@@ -47,4 +47,4 @@ Lifecycle commands SHALL start, inspect, and explicitly stop the host service wh
 #### Scenario: Animetta stops
 - **WHEN** `anima-down` is invoked
 - **THEN** the host TTS process SHALL remain running
-- **AND** the existing Qwen Docker service SHALL remain unchanged
+- **AND** no Qwen Docker image, Compose project, or container lifecycle SHALL exist

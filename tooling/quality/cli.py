@@ -1045,7 +1045,6 @@ def _command_docker_build(args: argparse.Namespace) -> int:
     environment = dict(os.environ)
     variable_by_scope = {
         "animetta": "ANIMETTA_BUILD_FINGERPRINT",
-        "qwen-tts": "QWEN_TTS_BUILD_FINGERPRINT",
     }
     for action in actions:
         variable = variable_by_scope.get(action.scope_id)

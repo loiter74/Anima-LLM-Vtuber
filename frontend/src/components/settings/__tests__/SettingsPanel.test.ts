@@ -66,17 +66,17 @@ describe('SettingsPanel runtime status', () => {
               ready: true,
               reason: null,
               configured: {
-                name: 'qwen-alice',
+                name: 'qwen-host',
                 type: 'remote',
-                provider: 'qwen3',
-                model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base',
-                voice: 'alice',
+                provider: 'qwen3-tts-gguf-host',
+                model: 'Qwen3-TTS-1.7B-Base',
+                voice: 'tosaka-rin-cn',
               },
               resolved: {
                 type: 'remote',
-                provider: 'qwen3',
-                model: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base',
-                voice: 'alice',
+                provider: 'qwen3-tts-gguf-host',
+                model: 'Qwen3-TTS-1.7B-Base',
+                voice: 'tosaka-rin-cn',
               },
             },
             vad: {
@@ -109,8 +109,8 @@ describe('SettingsPanel runtime status', () => {
     expect(asr).toContain('配置')
     expect(asr).toContain('实际')
     expect(asr).toContain('mimo-v2.5-asr')
-    expect(tts).toContain('Qwen/Qwen3-TTS-12Hz-0.6B-Base')
-    expect(tts).toContain('alice')
+    expect(tts).toContain('Qwen3-TTS-1.7B-Base')
+    expect(tts).toContain('tosaka-rin-cn')
     expect(asr).not.toEqual(tts)
   })
 })
