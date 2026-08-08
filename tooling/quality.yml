@@ -6,6 +6,7 @@ input_sets:
   quality-engine:
     paths:
       - tooling/quality/**
+      - tooling/execution_feedback/**
       - tooling/quality.yml
   python-toolchain:
     paths:
@@ -195,7 +196,24 @@ groups:
     domain: repository
     kind: unit
     runner: pytest
-    targets: [tests/tooling/quality]
+    targets: [tests/tooling/quality, tests/tooling/execution_feedback]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 240
+    include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  runtime-lifecycle-unit:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets:
+      - tests/scripts/test_runtime_lifecycle.py
+      - tests/scripts/test_runtime_lifecycle_feedback.py
+      - tests/scripts/test_qwen_preflight.py
+      - tests/scripts/test_release_runtime_gate.py
     args: [-q, -o, addopts=]
     timeout_seconds: 240
     include_in_full: true
@@ -811,7 +829,7 @@ components:
       - python-format
       - backend-deadcode
     impacts: []
-    risk: high
+    risk: normal
 
   minecraft-gamebot-contract:
     domain: backend
@@ -921,21 +939,32 @@ components:
     domain: repository
     paths:
       - scripts/minecraft_adaptive_showcase.py
+      - scripts/minecraft_adaptive_micro_gate.py
       - scripts/minecraft_real_model_contract.py
       - src/animetta/tools/minecraft/showcase/**
       - tests/tools/minecraft/showcase/**
     direct_groups:
       - minecraft-adaptive-mission-unit
       - minecraft-architecture-audit
-      - minecraft-real-conversation
-      - minecraft-real-showcase
       - minecraft-presentation-artifacts
       - python-format
       - backend-static
       - backend-support-typecheck
       - backend-deadcode
     impacts: []
-    risk: high
+    risk: normal
+
+  backend-core-tests:
+    domain: backend
+    paths: [tests/core/**]
+    direct_groups:
+      - backend-core-unit
+      - python-format
+      - backend-static
+      - backend-support-typecheck
+      - backend-deadcode
+    impacts: []
+    risk: normal
 
   backend-core:
     domain: backend
@@ -1161,15 +1190,17 @@ components:
       - tests/deployment/**
       - tests/scripts/test_qwen_preflight.py
       - tests/scripts/test_runtime_lifecycle.py
+      - tests/scripts/test_runtime_lifecycle_feedback.py
       - tests/scripts/test_release_runtime_gate.py
     direct_groups:
+      - runtime-lifecycle-unit
       - docker-compose-contract
       - docker-compose-cpu-contract
       - docker-compose-core-contract
       - docker-compose-selftest-contract
       - docker-compose-qwen-contract
     impacts: []
-    risk: high
+    risk: normal
 
   operational-source-standards:
     domain: repository

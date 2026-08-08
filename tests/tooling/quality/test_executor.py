@@ -291,6 +291,75 @@ def test_run_group_executes_real_python_process_and_writes_result(tmp_path: Path
     assert payload["status"] == "passed"
 
 
+def test_run_group_can_override_arguments_for_a_feedback_shard(tmp_path: Path) -> None:
+    script = tmp_path / "args.py"
+    script.write_text(
+        "import sys\nprint('|'.join(sys.argv[1:]))\n",
+        encoding="utf-8",
+    )
+    loaded = load_catalog(_write_python_catalog(tmp_path, script.name, timeout=5))
+
+    result = run_group(
+        loaded,
+        "python-check",
+        plan_hash="b" * 64,
+        repo_root=tmp_path,
+        available_capabilities=frozenset(),
+        args_override=("feedback", "shard"),
+    )
+
+    assert result.status is ResultStatus.PASSED
+    assert "feedback|shard" in result.output
+
+
+def test_run_group_preserves_escaped_pytest_node_ids(tmp_path: Path) -> None:
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_unicode.py").write_text(
+        "import pytest\n\n"
+        "@pytest.mark.parametrize('value', ['晚'])\n"
+        "def test_unicode(value):\n"
+        "    assert value == '晚'\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "quality.yml"
+    manifest.write_text(
+        """
+schema_version: 1
+groups:
+  unicode-tests:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets: [tests/test_unicode.py]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 5
+components:
+  source:
+    domain: repository
+    paths: [tests/**]
+    direct_groups: [unicode-tests]
+fallbacks:
+  backend: [unicode-tests]
+  frontend: [unicode-tests]
+  repository: [unicode-tests]
+""".strip(),
+        encoding="utf-8",
+    )
+    loaded = load_catalog(manifest)
+
+    result = run_group(
+        loaded,
+        "unicode-tests",
+        plan_hash="b" * 64,
+        repo_root=tmp_path,
+        available_capabilities=frozenset(),
+        targets_override=(r"tests/test_unicode.py::test_unicode[\u665a]",),
+    )
+
+    assert result.status is ResultStatus.PASSED
+
+
 def test_run_group_records_declared_artifacts_in_structured_result(
     tmp_path: Path,
 ) -> None:
@@ -413,6 +482,27 @@ def test_run_group_reports_timeout_from_real_process(tmp_path: Path, monkeypatch
     assert result.exit_code is None
     assert secret not in result.output
     assert "<redacted:QUALITY_TEST_TOKEN>" in result.output
+
+
+def test_run_group_reports_progress_while_process_is_active(tmp_path: Path) -> None:
+    script = tmp_path / "progress.py"
+    script.write_text("import time\ntime.sleep(0.35)\n", encoding="utf-8")
+    loaded = load_catalog(_write_python_catalog(tmp_path, script.name, timeout=5))
+    heartbeats: list[float] = []
+
+    result = run_group(
+        loaded,
+        "python-check",
+        plan_hash="c" * 64,
+        repo_root=tmp_path,
+        available_capabilities=frozenset(),
+        progress_callback=heartbeats.append,
+        progress_interval_seconds=0.1,
+    )
+
+    assert result.status is ResultStatus.PASSED
+    assert len(heartbeats) >= 2
+    assert heartbeats == sorted(heartbeats)
 
 
 def test_run_group_cancels_real_child_process_promptly(tmp_path: Path) -> None:

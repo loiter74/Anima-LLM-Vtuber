@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -191,10 +192,30 @@ def run_group(
     repo_root: str | Path,
     available_capabilities: frozenset[Capability] | None = None,
     cancellation_event: threading.Event | None = None,
+    targets_override: tuple[str, ...] | None = None,
+    args_override: tuple[str, ...] | None = None,
+    timeout_seconds_override: int | None = None,
+    progress_callback: Callable[[float], None] | None = None,
+    progress_interval_seconds: float = 60.0,
 ) -> VerificationResult:
+    if progress_interval_seconds <= 0:
+        raise ValueError("progress interval must be positive")
     if group_id not in loaded.catalog.groups:
         raise KeyError(f"unknown verification group: {group_id}")
-    group = loaded.catalog.groups[group_id]
+    source_group = loaded.catalog.groups[group_id]
+    updates: dict[str, object] = {}
+    if targets_override is not None:
+        updates["targets"] = targets_override
+    if args_override is not None:
+        updates["args"] = args_override
+    if timeout_seconds_override is not None:
+        if timeout_seconds_override < 1 or timeout_seconds_override > 240:
+            raise ValueError("bounded group timeout must be in [1, 240]")
+        updates["timeout_seconds"] = timeout_seconds_override
+    # The catalog has already validated repository paths. Runtime pytest node IDs are
+    # opaque selectors and may legitimately contain escaped backslashes (for example
+    # ``\\u4f60``); re-running repository-path normalization would corrupt them.
+    group = source_group.model_copy(update=updates)
     root = Path(repo_root).resolve()
     available = (
         detect_capabilities(root) if available_capabilities is None else available_capabilities
@@ -245,6 +266,7 @@ def run_group(
             **popen_kwargs,
         )
         deadline = started + group.timeout_seconds
+        next_progress = started + progress_interval_seconds
         stdout = ""
         stderr = ""
         while True:
@@ -266,7 +288,33 @@ def run_group(
                     output=_joined_output(stdout, stderr, redaction_env),
                     remediation="Cancelled during execution",
                 )
-            remaining = deadline - time.perf_counter()
+            now = time.perf_counter()
+            if progress_callback is not None and now >= next_progress:
+                try:
+                    progress_callback(now - started)
+                except Exception as exc:  # noqa: BLE001 - converted to evidence
+                    _terminate_process_tree(process)
+                    stdout, stderr = process.communicate()
+                    duration = time.perf_counter() - started
+                    return VerificationResult(
+                        group_id=group_id,
+                        required=group.required,
+                        status=ResultStatus.FAILED,
+                        exit_code=None,
+                        duration_seconds=duration,
+                        run_seconds=duration,
+                        failure_kind="feedback-publication",
+                        artifacts=_existing_artifacts(root, group),
+                        plan_hash=plan_hash,
+                        manifest_hash=loaded.manifest_hash,
+                        output=_joined_output(stdout, stderr, redaction_env),
+                        remediation=(
+                            f"Unable to persist progress feedback: {type(exc).__name__}: {exc}"
+                        ),
+                    )
+                while next_progress <= now:
+                    next_progress += progress_interval_seconds
+            remaining = deadline - now
             if remaining <= 0:
                 _terminate_process_tree(process)
                 stdout, stderr = process.communicate()
@@ -330,6 +378,70 @@ def run_group(
             plan_hash=plan_hash,
             manifest_hash=loaded.manifest_hash,
         )
+
+
+def collect_pytest_test_ids(
+    loaded: LoadedCatalog,
+    group_id: str,
+    *,
+    repo_root: str | Path,
+    timeout_seconds: int = 120,
+) -> tuple[str, ...]:
+    if group_id not in loaded.catalog.groups:
+        raise KeyError(f"unknown verification group: {group_id}")
+    source_group = loaded.catalog.groups[group_id]
+    collection_args: list[str] = []
+    skip_next = False
+    for arg in source_group.args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in {"--cov", "--cov-report", "--cov-fail-under", "--cov-config"}:
+            skip_next = True
+            continue
+        if arg.startswith(("--cov=", "--cov-report=", "--cov-fail-under=", "--cov-config=")):
+            continue
+        collection_args.append(arg)
+    group = VerificationGroup.model_validate(
+        {
+            **source_group.model_dump(mode="python"),
+            "args": tuple(collection_args),
+        }
+    )
+    if group.runner is not Runner.PYTEST:
+        return ()
+    root = Path(repo_root).resolve()
+    command_env = _command_environment(root)
+    argv = build_argv(group, python_executable=sys.executable)
+    argv.append("--collect-only")
+    if not any(argument == "--quiet" or argument.startswith("-q") for argument in group.args):
+        argv.append("-q")
+    completed = subprocess.run(
+        argv,
+        cwd=root / group.cwd,
+        env=command_env,
+        capture_output=True,
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout_seconds,
+    )
+    if completed.returncode != 0:
+        output = _joined_output(
+            completed.stdout,
+            completed.stderr,
+            _redaction_environment(root, command_env),
+        )
+        raise RuntimeError(f"pytest collection failed for {group_id}: {output}")
+    node_ids = tuple(
+        line.strip()
+        for line in completed.stdout.splitlines()
+        if "::" in line and not line.lstrip().startswith(("=", "<"))
+    )
+    if not node_ids:
+        raise RuntimeError(f"pytest collection returned no test IDs for {group_id}")
+    return tuple(dict.fromkeys(node_ids))
 
 
 def write_result(result: VerificationResult, path: str | Path) -> None:
