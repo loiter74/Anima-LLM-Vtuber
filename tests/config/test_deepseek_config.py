@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from animetta.config.providers.llm.deepseek import DeepSeekLLMConfig
+from animetta.config.providers.llm.openai import OpenAILLMConfig
+from animetta.services.llm.openai_llm import OpenAILLM
 
 # ── Config validation ────────────────────────────────────────
 
@@ -40,27 +44,26 @@ def test_thinking_invalid_rejected():
 # ── extra_body passthrough ───────────────────────────────────
 
 
-def test_from_config_disabled_produces_extra_body():
-    from animetta.services.llm.openai_llm import OpenAILLM
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (
+            DeepSeekLLMConfig(api_key="test", thinking="disabled"),
+            {"thinking": {"type": "disabled"}},
+        ),
+        (
+            DeepSeekLLMConfig(api_key="test", thinking="enabled"),
+            {"thinking": {"type": "enabled"}},
+        ),
+        (OpenAILLMConfig(api_key="test"), {}),
+    ],
+    ids=["deepseek-disabled", "deepseek-enabled", "openai"],
+)
+def test_from_config_produces_provider_extra_body(config, expected):
+    with (
+        patch("httpx.AsyncClient"),
+        patch("animetta.services.llm.openai_llm.AsyncOpenAI"),
+    ):
+        llm = OpenAILLM.from_config(config)
 
-    cfg = DeepSeekLLMConfig(api_key="test", thinking="disabled")
-    llm = OpenAILLM.from_config(cfg)
-    assert llm.extra_body == {"thinking": {"type": "disabled"}}
-
-
-def test_from_config_enabled_produces_extra_body():
-    from animetta.services.llm.openai_llm import OpenAILLM
-
-    cfg = DeepSeekLLMConfig(api_key="test", thinking="enabled")
-    llm = OpenAILLM.from_config(cfg)
-    assert llm.extra_body == {"thinking": {"type": "enabled"}}
-
-
-def test_openai_config_no_extra_body():
-    """Standard OpenAI config should not produce extra_body."""
-    from animetta.config.providers.llm.openai import OpenAILLMConfig
-    from animetta.services.llm.openai_llm import OpenAILLM
-
-    cfg = OpenAILLMConfig(api_key="test")
-    llm = OpenAILLM.from_config(cfg)
-    assert llm.extra_body == {}
+    assert llm.extra_body == expected

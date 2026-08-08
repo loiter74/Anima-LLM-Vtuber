@@ -196,6 +196,11 @@ class TestLLMInterface:
 class TestMockLLM:
     """Tests for the MockLLM provider."""
 
+    @pytest.fixture(autouse=True)
+    def _disable_simulated_processing_delay(self):
+        with patch("asyncio.sleep", new=AsyncMock()):
+            yield
+
     def test_from_config_returns_instance(self, mock_llm_config):
         """from_config should return a MockLLM instance."""
         instance = MockLLM.from_config(mock_llm_config, system_prompt="Hello")
@@ -302,6 +307,11 @@ class TestMockLLM:
 )
 class TestOpenAILLM:
     """Tests for the OpenAILLM provider (all external calls mocked)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_http_client_construction(self):
+        with patch("httpx.AsyncClient"):
+            yield
 
     def test_from_config_returns_instance(self, openai_llm_config):
         """from_config should return an OpenAILLM instance with correct config."""

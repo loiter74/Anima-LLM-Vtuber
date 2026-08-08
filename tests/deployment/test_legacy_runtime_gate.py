@@ -22,6 +22,7 @@ TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
+IGNORED_DIRECTORIES = {".git", ".venv", "dist", "node_modules"}
 
 
 def _contract() -> dict:
@@ -34,17 +35,19 @@ def _source_files(root_name: str) -> list[Path]:
         return [root]
     if not root.exists():
         return []
-    return [
-        path
-        for path in root.rglob("*")
-        if path.is_file()
-        and (
-            path.suffix.lower() in TEXT_SUFFIXES
-            or path.name.startswith("Dockerfile")
-            or path.name.startswith(".env.")
-        )
-        and not any(part in {"node_modules", "dist", ".git"} for part in path.parts)
-    ]
+
+    source_files: list[Path] = []
+    for directory, directory_names, file_names in root.walk():
+        directory_names[:] = [name for name in directory_names if name not in IGNORED_DIRECTORIES]
+        for file_name in file_names:
+            path = directory / file_name
+            if (
+                path.suffix.lower() in TEXT_SUFFIXES
+                or path.name.startswith("Dockerfile")
+                or path.name.startswith(".env.")
+            ):
+                source_files.append(path)
+    return source_files
 
 
 def test_forbidden_runtime_manifests_are_absent() -> None:

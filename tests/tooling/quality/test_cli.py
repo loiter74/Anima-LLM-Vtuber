@@ -35,6 +35,32 @@ def test_machine_json_is_ascii_safe_for_windows_console_encodings() -> None:
     assert json.loads(rendered) == {"output": "✓ 构建完成"}
 
 
+def test_pytest_feedback_shards_strip_nested_xdist_workers() -> None:
+    args = (
+        "-q",
+        "-n",
+        "8",
+        "--dist=loadscope",
+        "--numprocesses",
+        "4",
+        "--max-worker-restart=2",
+        "--tx",
+        "popen//python=py -3.13",
+        "--cov=src/animetta",
+        "--cov-report=term-missing",
+        "--cov-fail-under",
+        "67",
+    )
+
+    assert quality_cli._pytest_feedback_args(args, append_coverage=True) == (
+        "-q",
+        "--cov=src/animetta",
+        "--cov-report=",
+        "--cov-fail-under=0",
+        "--cov-append",
+    )
+
+
 def _write_cli_fixture(tmp_path: Path) -> tuple[Path, Path]:
     script = tmp_path / "pass.py"
     script.write_text("print('cli-pass')\n", encoding="utf-8")

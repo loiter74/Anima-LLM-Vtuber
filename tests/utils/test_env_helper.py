@@ -7,8 +7,6 @@ from animetta.utils.env_helper import EnvHelper, Environment, detect_env, get_da
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestEnvHelperDetection:
     """Environment detection tests."""
@@ -57,16 +55,12 @@ class TestEnvHelperDetection:
             assert env == Environment.WSL
 
 
-import sys
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperPathConversion:
     """Windows-WSL path conversion tests."""
 
     def test_convert_windows_to_wsl(self):
-        result = EnvHelper.convert_windows_to_wsl("E:/anima_data/models")
-        assert result == "/mnt/e/anima_data/models"
+        result = EnvHelper.convert_windows_to_wsl("E:/animetta_data/models")
+        assert result == "/mnt/e/animetta_data/models"
 
     def test_convert_windows_to_wsl_backward_slash(self):
         result = EnvHelper.convert_windows_to_wsl("C:\\Users\\test\\data")
@@ -77,8 +71,8 @@ class TestEnvHelperPathConversion:
         assert result == "/absolute/path"
 
     def test_convert_wsl_to_windows(self):
-        result = EnvHelper.convert_wsl_to_windows("/mnt/e/anima_data/models")
-        assert result == "E:/anima_data/models"
+        result = EnvHelper.convert_wsl_to_windows("/mnt/e/animetta_data/models")
+        assert result == "E:/animetta_data/models"
 
     def test_convert_wsl_to_windows_not_mnt(self):
         result = EnvHelper.convert_wsl_to_windows("/home/user/data")
@@ -86,13 +80,9 @@ class TestEnvHelperPathConversion:
 
     def test_convert_wsl_to_windows_short_path(self):
         result = EnvHelper.convert_wsl_to_windows("/mnt/c")
-        assert result == "C:"
+        assert result == "C:/"
 
 
-import sys as _sys
-
-
-@pytest.mark.skipif(_sys.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperResolvePath:
     """Cross-environment path resolution tests."""
 
@@ -109,16 +99,16 @@ class TestEnvHelperResolvePath:
             patch("os.path.expandvars", side_effect=lambda x: x),
             patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS),
         ):
-            result = EnvHelper.resolve_model_path("E:/anima_data", env=Environment.WSL)
-            assert result == "/mnt/e/anima_data"
+            result = EnvHelper.resolve_model_path("E:/animetta_data", env=Environment.WSL)
+            assert result == "/mnt/e/animetta_data"
 
     def test_resolve_wsl_to_windows(self):
         with (
             patch("os.path.expandvars", side_effect=lambda x: x),
             patch.object(EnvHelper, "detect_environment", return_value=Environment.WSL),
         ):
-            result = EnvHelper.resolve_model_path("/mnt/e/anima_data", env=Environment.WINDOWS)
-            assert result == "E:/anima_data"
+            result = EnvHelper.resolve_model_path("/mnt/e/animetta_data", env=Environment.WINDOWS)
+            assert result == "E:/animetta_data"
 
     def test_resolve_expand_vars(self):
         with (
@@ -129,10 +119,6 @@ class TestEnvHelperResolvePath:
             assert result == "/home/user/data"
 
 
-import sys as _sys2
-
-
-@pytest.mark.skipif(_sys2.platform != "linux", reason="WSL tests only run on Linux")
 class TestEnvHelperGetDataDir:
     """Data directory detection tests."""
 
@@ -140,8 +126,7 @@ class TestEnvHelperGetDataDir:
     def test_get_data_dir_windows(self, mock_exists):
         with patch.object(EnvHelper, "detect_environment", return_value=Environment.WINDOWS):
             data_dir = EnvHelper.get_data_dir()
-            # Should pick up E:/anima_data since it "exists"
-            assert "anima_data" in str(data_dir)
+            assert data_dir == Path("E:/animetta_data")
 
     @patch("pathlib.Path.exists", return_value=False)
     def test_get_data_dir_windows_fallback(self, mock_exists):
@@ -150,12 +135,12 @@ class TestEnvHelperGetDataDir:
             patch("pathlib.Path.home", return_value=Path("/home/user")),
         ):
             data_dir = EnvHelper.get_data_dir()
-            assert "anima_data" in str(data_dir)
+            assert data_dir == Path("/home/user") / "animetta_data"
 
     def test_get_data_dir_from_env(self):
         with patch("os.getenv", return_value="/custom/data/dir"):
             data_dir = EnvHelper.get_data_dir()
-            assert str(data_dir) == "/custom/data/dir"
+            assert data_dir == Path("/custom/data/dir")
 
 
 class TestDefaultModelConfig:

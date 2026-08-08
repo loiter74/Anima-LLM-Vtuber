@@ -84,15 +84,14 @@ class EnvHelper:
             >>> EnvHelper.convert_windows_to_wsl("E:/animetta_data/models")
             "/mnt/e/animetta_data/models"
         """
-        path = Path(windows_path)
+        normalized = windows_path.replace("\\", "/")
 
-        # Handle Windows drive letter
-        if len(path.parts) >= 1 and len(path.parts[0]) == 2 and path.parts[0][1] == ":":
-            drive = path.parts[0][0].lower()
-            rest = path.as_posix()[3:]  # Strip "X:/"
-            return f"/mnt/{drive}/{rest}"
+        if len(normalized) >= 2 and normalized[0].isalpha() and normalized[1] == ":":
+            drive = normalized[0].lower()
+            rest = normalized[2:].lstrip("/")
+            return f"/mnt/{drive}/{rest}" if rest else f"/mnt/{drive}"
 
-        return path.as_posix()
+        return normalized
 
     @staticmethod
     def convert_wsl_to_windows(wsl_path: str) -> str:

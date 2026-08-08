@@ -119,7 +119,6 @@ class TestRulesEngineLoading:
 class TestRulesEngineValidation:
     """RulesEngine validation logic tests."""
 
-    @pytest.mark.skip(reason="Needs rules.md file")
     def test_validation_no_priorities(self):
         """Empty priorities should not override defaults."""
 

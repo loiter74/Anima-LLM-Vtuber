@@ -279,8 +279,10 @@ class TestMCPManagerAdvanced:
         assert len(mgr.tools) == 0
 
     @pytest.mark.asyncio
-    async def test_load_sse_transport_without_mcp(self):
-        """Loading SSE config without mcp package should degrade gracefully."""
+    async def test_load_skips_transports_without_mcp(self, monkeypatch):
+        """Missing optional MCP support must not attempt a network connection."""
+
+        monkeypatch.setattr("animetta.tools.mcp_bridge.MCP_AVAILABLE", False)
 
         mgr = MCPManager()
         configs = [
@@ -291,7 +293,8 @@ class TestMCPManagerAdvanced:
             }
         ]
         tools = await mgr.load(configs)
-        assert isinstance(tools, list)
+        assert tools == []
+        assert mgr.clients == []
 
     def test_parse_type_all_types(self):
 

@@ -153,4 +153,4 @@ class TestAtomStoreEdgeCases:
         )
         await store.create(atom)
         results = await store.hybrid_search("咖啡", 10)
-        assert len(results) >= 0  # Should not error
+        assert [result.id for result in results] == ["cjk"]

@@ -516,12 +516,25 @@ def _pytest_feedback_args(
     *,
     append_coverage: bool,
 ) -> tuple[str, ...]:
+    value_options_to_remove = {
+        "-n",
+        "--dist",
+        "--max-worker-restart",
+        "--numprocesses",
+        "--tx",
+    }
+    prefixes_to_remove = tuple(f"{option}=" for option in value_options_to_remove)
     filtered: list[str] = []
     skip_next = False
     coverage_enabled = False
     for arg in args:
         if skip_next:
             skip_next = False
+            continue
+        if arg in value_options_to_remove:
+            skip_next = True
+            continue
+        if arg.startswith(prefixes_to_remove):
             continue
         if arg == "--cov":
             coverage_enabled = True

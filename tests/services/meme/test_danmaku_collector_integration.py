@@ -53,8 +53,6 @@ class TestCollectorWithDanmakuBuffer:
             llm_client=mock_llm,
             danmaku_buffer=mock_danmaku_buffer,
         )
-        phrases = c._fetch_danmaku_phrases()
-        # Should be awaitable (coroutine)
         import asyncio
 
         phrases = asyncio.run(c._fetch_danmaku_phrases())
@@ -98,9 +96,10 @@ class TestCollectorWithDanmakuBuffer:
 
             candidates = asyncio.run(c.collect())
 
-            # Check that LLM was called (danmaku data should be in context)
-            if candidates:
-                assert len(candidates) > 0
+        assert [candidate.text for candidate in candidates] == ["绝绝子"]
+        mock_llm.chat_messages.assert_awaited_once()
+        prompt = mock_llm.chat_messages.await_args.kwargs["messages"][1]["content"]
+        assert "绝绝子" in prompt
 
     def test_heuristic_identify_includes_danmaku_strategy(self, mock_llm):
         """Heuristic identification should use danmaku phrases as strategy 4."""
@@ -115,9 +114,8 @@ class TestCollectorWithDanmakuBuffer:
 
         candidates = c._heuristic_identify(videos, comments, danmaku)
 
-        # Should find at least some candidates from danmaku
         danmaku_candidates = [cc for cc in candidates if "danmaku" in (cc.tags or [])]
-        assert len(danmaku_candidates) >= 0  # Not guaranteed to find, but shouldn't crash
+        assert danmaku_candidates
 
     def test_heuristic_danmaku_only_returns_candidates(self, mock_llm):
         """When only danmaku data is available, should still return candidates."""

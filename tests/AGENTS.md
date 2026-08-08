@@ -100,6 +100,10 @@ cd frontend && pnpm test:run && pnpm test:coverage
 - ❌ Never manually decorate async tests with `@pytest.mark.asyncio` — asyncio_mode=auto handles it
 - ❌ Never bypass `tests/conftest.py` fixtures by constructing real LLM/TTS/ASR services in unit tests
 - ❌ Never assume `fail_under` enforces coverage — it's set to 0; coverage is advisory only
+- ❌ Never keep `pass`-only tests or tests that only assert behavior configured on their own mock
+- ❌ Never use live network timeouts or production rate-limit sleeps in unit tests; isolate the boundary and set injected delays to zero
+- ❌ Never permanently skip or xfail a deterministic path because an optional dependency or host OS is absent; simulate that boundary or move the scenario to a marked integration test
+- ❌ Never carry pytest-xdist worker flags into quality feedback shards; the quality scheduler already owns sharding and concurrency
 
 ## NOTES
 

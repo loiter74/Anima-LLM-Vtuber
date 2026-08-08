@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-import animetta.tools.custom_tools as custom_tools
 from animetta.tools.custom_tools import (
     CUSTOM_TOOLS,
     get_custom_tools,
@@ -17,10 +16,6 @@ from animetta.tools.custom_tools import (
 class TestCustomToolsModule:
     """Module-level tests for custom_tools."""
 
-    def test_module_import(self):
-        """Verify custom_tools module imports without error."""
-        assert custom_tools is not None
-
     def test_tool_list_export(self):
         """CUSTOM_TOOLS contains expected tools and get_custom_tools returns a copy."""
 
@@ -32,54 +27,35 @@ class TestCustomToolsModule:
 class TestToolSchemas:
     """Validate tool name, description, and argument schemas."""
 
-    def test_url_preview_schema(self):
-        assert url_preview.name == "url_preview"
-        assert isinstance(url_preview.description, str)
-        assert len(url_preview.description) > 0
-        assert "url" in url_preview.args
-        assert url_preview.args["url"]["type"] == "string"
-
-    def test_send_email_schema(self):
-        assert send_email.name == "send_email"
-        assert isinstance(send_email.description, str)
-        assert len(send_email.description) > 0
-        for arg in ("to", "subject", "body"):
-            assert arg in send_email.args
-            assert send_email.args[arg]["type"] == "string"
-
-    def test_image_gen_schema(self):
-        assert image_gen.name == "image_gen"
-        assert isinstance(image_gen.description, str)
-        assert len(image_gen.description) > 0
-        assert "prompt" in image_gen.args
-        assert "size" in image_gen.args
+    @pytest.mark.parametrize(
+        ("tool", "name", "arguments"),
+        [
+            (url_preview, "url_preview", ("url",)),
+            (send_email, "send_email", ("to", "subject", "body")),
+            (image_gen, "image_gen", ("prompt", "size")),
+        ],
+    )
+    def test_schema(self, tool, name, arguments):
+        assert tool.name == name
+        assert tool.description
+        assert all(tool.args[argument]["type"] == "string" for argument in arguments)
 
 
 class TestUrlPreview:
     """Tests for url_preview tool using invalid URLs (no network needed)."""
 
-    @pytest.mark.asyncio
-    async def test_invalid_url_format(self):
-        result = await url_preview.coroutine("not-a-url")
-        assert "Invalid URL" in result
-
-    @pytest.mark.asyncio
-    async def test_empty_string_url(self):
-        result = await url_preview.coroutine("")
-        assert "Invalid URL" in result
-
-    @pytest.mark.asyncio
-    async def test_url_without_scheme(self):
-        result = await url_preview.coroutine("example.com/path")
+    @pytest.mark.parametrize("url", ["not-a-url", "", "example.com/path"])
+    async def test_invalid_url(self, url):
+        result = await url_preview.coroutine(url)
         assert "Invalid URL" in result
 
 
 class TestSendEmail:
-    """Tests for send_email — skipped; requires SMTP credentials."""
+    """Tests for send_email without touching SMTP."""
 
-    @pytest.mark.skip(reason="Requires SMTP_USER and SMTP_PASSWORD environment variables")
-    @pytest.mark.asyncio
-    async def test_send_email_unconfigured(self):
+    async def test_send_email_unconfigured(self, monkeypatch):
+        monkeypatch.delenv("SMTP_USER", raising=False)
+        monkeypatch.delenv("SMTP_PASSWORD", raising=False)
         result = await send_email.coroutine(
             to="test@example.com",
             subject="Test",
@@ -89,10 +65,10 @@ class TestSendEmail:
 
 
 class TestImageGen:
-    """Tests for image_gen — skipped; requires API keys."""
+    """Tests for image_gen without touching provider APIs."""
 
-    @pytest.mark.skip(reason="Requires OPENAI_API_KEY or REPLICATE_API_TOKEN")
-    @pytest.mark.asyncio
-    async def test_image_gen_unconfigured(self):
+    async def test_image_gen_unconfigured(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("REPLICATE_API_TOKEN", raising=False)
         result = await image_gen.coroutine(prompt="a cat")
         assert "unavailable" in result

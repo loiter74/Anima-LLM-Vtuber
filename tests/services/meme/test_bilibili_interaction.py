@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Tests for BilibiliInteractionLearner — danmaku processing, pattern analysis."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -90,23 +89,36 @@ class TestBilibiliInteractionLearner:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_learn_patterns_insufficient_samples(self, mock_llm, mock_wiki):
-        """If a room has < min_samples, it is skipped."""
+    @pytest.mark.parametrize(
+        "collection_result",
+        [[], RuntimeError("collection failed")],
+        ids=["insufficient-samples", "collection-error"],
+    )
+    async def test_learn_patterns_skips_unusable_collections(
+        self,
+        mock_llm,
+        mock_wiki,
+        collection_result,
+    ):
+        """Insufficient samples and collection failures both skip the room."""
 
         learner = InteractionLearner(
             llm_client=mock_llm,
             wiki_manager=mock_wiki,
-            config={"room_ids": [123], "min_samples_per_room": 100},
+            config={"room_ids": [123], "min_samples_per_room": 100, "request_delay": 0},
         )
 
         with patch.object(learner, "_collect_danmaku") as mock_collect:
-            mock_collect.return_value = []  # 0 samples < 100
+            if isinstance(collection_result, Exception):
+                mock_collect.side_effect = collection_result
+            else:
+                mock_collect.return_value = collection_result
             result = await learner.learn_patterns()
             assert result == []
 
     @pytest.mark.asyncio
-    async def test_learn_patterns_sufficient_samples(self, mock_llm, mock_wiki):
-        """Sufficient samples should trigger LLM analysis."""
+    async def test_learn_patterns_analyzes_and_stores_sufficient_samples(self, mock_llm, mock_wiki):
+        """Sufficient samples are analyzed once and stored once."""
 
         mock_llm.chat_messages.return_value = {
             "content": (
@@ -119,7 +131,7 @@ class TestBilibiliInteractionLearner:
         learner = InteractionLearner(
             llm_client=mock_llm,
             wiki_manager=mock_wiki,
-            config={"room_ids": [123], "min_samples_per_room": 5},
+            config={"room_ids": [123], "min_samples_per_room": 5, "request_delay": 0},
         )
 
         with patch.object(learner, "_collect_danmaku") as mock_collect:
@@ -128,54 +140,24 @@ class TestBilibiliInteractionLearner:
             assert len(result) == 1
             assert result[0].trigger_condition == "弹幕多"
             assert result[0].priority == "high"
-
-    @pytest.mark.asyncio
-    async def test_learn_patterns_stores_to_wiki(self, mock_llm, mock_wiki):
-        """Strategies should be stored to Wiki via write_page."""
-
-        mock_llm.chat_messages.return_value = {
-            "content": (
-                '{"patterns": [], "strategies": ['
-                '{"trigger_condition": "冷场", "suggested_behavior": "讲梗", '
-                '"expected_effect": "活跃气氛", "priority": "medium"}], "summary": ""}'
-            )
-        }
-
-        learner = InteractionLearner(
-            llm_client=mock_llm,
-            wiki_manager=mock_wiki,
-            config={"room_ids": [123], "min_samples_per_room": 2},
-        )
-
-        with patch.object(learner, "_collect_danmaku") as mock_collect:
-            mock_collect.return_value = [DanmakuMessage(text="hi") for _ in range(5)]
-            await learner.learn_patterns()
             mock_wiki.write_page.assert_called_once()
 
     # ── _collect_danmaku ─────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_collect_danmaku_no_bilibili_api(self, mock_llm):
-        """If bilibili_api is not importable, returns empty list."""
-
-        InteractionLearner(llm_client=mock_llm)
-
-        import sys
-
-        with patch.dict(sys.modules, {"bilibili_api": None}):
-            pass  # can't remove, but test handles gracefully
-
-    @pytest.mark.asyncio
-    async def test_collect_danmaku_handles_exception(self, mock_llm):
-        """Exception during collection returns empty list."""
+    async def test_collect_danmaku_maps_shared_api_texts(self, mock_llm):
+        """The learner maps text returned by the shared Bilibili API."""
 
         learner = InteractionLearner(llm_client=mock_llm)
 
-        # Mock run_in_executor to raise
-        loop = asyncio.get_event_loop()
-        with patch.object(loop, "run_in_executor", side_effect=Exception("timeout")):
-            result = await learner._collect_danmaku(room_id=123)
-            assert result == []
+        with patch(
+            "animetta.services.bilibili.interaction_learner.api.fetch_live_danmaku",
+            new=AsyncMock(return_value=["first", "second"]),
+        ) as fetch:
+            samples = await learner._collect_danmaku(room_id=123)
+
+        assert [sample.text for sample in samples] == ["first", "second"]
+        fetch.assert_awaited_once_with(123, limit=100)
 
     # ── _analyze_patterns ────────────────────────────────────────────
 

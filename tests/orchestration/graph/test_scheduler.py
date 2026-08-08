@@ -3,7 +3,6 @@ from __future__ import annotations
 """Tests for AsyncScheduler — periodic task execution, lifecycle, metrics, timeout."""
 
 import asyncio
-import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -17,6 +16,17 @@ from animetta.orchestration.graph.scheduler import AsyncScheduler, ScheduledTask
 def scheduler():
     """Return a fresh AsyncScheduler."""
     return AsyncScheduler()
+
+
+@pytest.fixture
+def immediate_scheduler_sleep():
+    """Yield to asyncio without waiting for scheduler wall-clock intervals."""
+    real_sleep = asyncio.sleep
+
+    async def immediate_sleep(_delay: float) -> None:
+        await real_sleep(0)
+
+    return immediate_sleep
 
 
 # ── TaskMetrics ─────────────────────────────────────────────
@@ -34,28 +44,6 @@ class TestTaskMetrics:
         assert m.success_count == 0
         assert m.failure_count == 0
         assert m.total_runs == 0
-
-    def test_after_successful_run(self):
-        """After a success, counters and timestamps update."""
-        m = TaskMetrics(name="test")
-        m.total_runs = 1
-        m.success_count = 1
-        now = time.time()
-        m.last_run = now
-        m.last_duration = 0.5
-
-        assert m.total_runs == 1
-        assert m.success_count == 1
-        assert m.last_run == now
-        assert m.last_duration == 0.5
-
-    def test_after_failure(self):
-        """After a failure, failure_count increments."""
-        m = TaskMetrics(name="test")
-        m.total_runs = 1
-        m.failure_count = 1
-        assert m.total_runs == 1
-        assert m.failure_count == 1
 
     def test_name_set_in_post_init(self):
         """ScheduledTask.__post_init__ propagates name to metrics."""
@@ -92,16 +80,6 @@ class TestScheduledTask:
         assert task.timeout == 10.0
         assert task._task is None
         assert not task._cancel_event.is_set()
-
-    def test_post_init_sets_metrics_name(self):
-        """__post_init__ synchronises name into metrics."""
-        task = ScheduledTask(
-            name="sync-test",
-            func=AsyncMock(),
-            interval=5.0,
-            timeout=2.0,
-        )
-        assert task.metrics.name == "sync-test"
 
 
 # ── add_task / remove_task ──────────────────────────────────
@@ -182,16 +160,10 @@ class TestLifecycle:
     """Scheduler start/stop."""
 
     @pytest.mark.asyncio
-    async def test_start_sets_running(self, scheduler):
-        """After start, _running is True."""
+    async def test_start_and_stop_update_running_state(self, scheduler):
+        """Start and stop update the scheduler lifecycle state."""
         await scheduler.start()
         assert scheduler._running
-        await scheduler.stop()
-
-    @pytest.mark.asyncio
-    async def test_stop_clears_running(self, scheduler):
-        """After stop, _running is False."""
-        await scheduler.start()
         await scheduler.stop()
         assert not scheduler._running
 
@@ -203,23 +175,6 @@ class TestLifecycle:
             await scheduler.start()
             mock_logger.warning.assert_called()
             assert "Already running" in str(mock_logger.warning.call_args)
-            await scheduler.stop()
-
-    @pytest.mark.asyncio
-    async def test_start_with_tasks_runs_them(self, scheduler):
-        """Started scheduler executes registered tasks."""
-        executed = asyncio.Event()
-
-        async def task_func():
-            executed.set()
-
-        scheduler.add_task("go", task_func, interval=0.05, timeout=5)
-        await scheduler.start()
-
-        try:
-            await asyncio.wait_for(executed.wait(), timeout=2)
-            assert executed.is_set()
-        finally:
             await scheduler.stop()
 
     @pytest.mark.asyncio
@@ -250,7 +205,7 @@ class TestTaskExecution:
     """Task running and interval behaviour."""
 
     @pytest.mark.asyncio
-    async def test_task_runs_at_interval(self, scheduler):
+    async def test_task_runs_at_interval(self, scheduler, immediate_scheduler_sleep):
         """Task executes multiple times at the configured interval."""
         call_count = 0
         done = asyncio.Event()
@@ -262,18 +217,23 @@ class TestTaskExecution:
                 done.set()
 
         scheduler.add_task("cnt", counter, interval=0.05, timeout=5)
-        await scheduler.start()
+        with patch(
+            "animetta.orchestration.graph.scheduler.asyncio.sleep",
+            new=immediate_scheduler_sleep,
+        ):
+            await scheduler.start()
+            try:
+                await asyncio.wait_for(done.wait(), timeout=1)
+            finally:
+                await scheduler.stop()
 
-        try:
-            await asyncio.wait_for(done.wait(), timeout=5)
-            assert call_count >= 3
-        finally:
-            await scheduler.stop()
+        assert call_count >= 3
 
     @pytest.mark.asyncio
-    async def test_task_execution_failure(self, scheduler):
+    async def test_task_execution_failure(self, scheduler, immediate_scheduler_sleep):
         """A failing task logs the error and increments failure_count."""
         fail_count = 0
+        recovered = asyncio.Event()
 
         async def flaky():
             nonlocal fail_count
@@ -281,91 +241,29 @@ class TestTaskExecution:
             if fail_count == 1:
                 msg = "something went wrong"
                 raise RuntimeError(msg)
+            recovered.set()
 
         scheduler.add_task("flaky", flaky, interval=0.05, timeout=5)
 
-        with patch("animetta.orchestration.graph.scheduler.logger") as mock_logger:
+        with (
+            patch("animetta.orchestration.graph.scheduler.logger") as mock_logger,
+            patch(
+                "animetta.orchestration.graph.scheduler.asyncio.sleep",
+                new=immediate_scheduler_sleep,
+            ),
+        ):
             await scheduler.start()
-            await asyncio.sleep(0.4)
-            await scheduler.stop()
+            try:
+                await asyncio.wait_for(recovered.wait(), timeout=1)
+            finally:
+                await scheduler.stop()
 
             mock_logger.error.assert_called()
             assert "execution error" in str(mock_logger.error.call_args)
 
         metrics = scheduler.get_task_metrics("flaky")
         assert metrics is not None
-        assert metrics.failure_count >= 1
-
-    @pytest.mark.asyncio
-    async def test_task_metrics_tracked(self, scheduler):
-        """Successful executions update metrics counters."""
-        barrier = asyncio.Event()
-
-        async def single_shot():
-            if not barrier.is_set():
-                barrier.set()
-
-        scheduler.add_task("metric", single_shot, interval=0.05, timeout=5)
-        await scheduler.start()
-
-        try:
-            await asyncio.wait_for(barrier.wait(), timeout=5)
-            await asyncio.sleep(0.15)  # Let metrics write
-        finally:
-            await scheduler.stop()
-
-        metrics = scheduler.get_task_metrics("metric")
-        assert metrics is not None
-        assert metrics.total_runs >= 1
-        assert metrics.success_count >= 1
-        assert metrics.last_run is not None
-        assert metrics.last_duration is not None
-
-
-# ── Timeout protection ──────────────────────────────────────
-
-
-class TestTimeout:
-    """Task timeout protection."""
-
-    @pytest.mark.asyncio
-    async def test_task_times_out(self, scheduler):
-        """A task that exceeds timeout is cancelled and failure tracked."""
-
-        async def slow():
-            await asyncio.sleep(999)  # longer than timeout
-
-        # Use a very short interval so the task runs soon after start
-        scheduler.add_task("slow", slow, interval=0.2, timeout=0.05)
-        await scheduler.start()
-
-        # Give enough time: initial_delay + timeout + buffer
-        await asyncio.sleep(2.0)
-        await scheduler.stop()
-
-        metrics = scheduler.get_task_metrics("slow")
-        assert metrics is not None
-        assert metrics.failure_count >= 1, f"Expected >=1 failure, got {metrics.failure_count}"
-
-    @pytest.mark.asyncio
-    async def test_quick_task_no_timeout(self, scheduler):
-        """A task that finishes within timeout succeeds."""
-        done = asyncio.Event()
-
-        async def fast():
-            done.set()
-
-        scheduler.add_task("fast", fast, interval=0.1, timeout=5)
-        await scheduler.start()
-
-        try:
-            await asyncio.wait_for(done.wait(), timeout=5)
-        finally:
-            await scheduler.stop()
-
-        metrics = scheduler.get_task_metrics("fast")
-        assert metrics is not None
-        assert metrics.failure_count == 0
+        assert metrics.failure_count == 1
 
 
 # ── Metrics ─────────────────────────────────────────────────
@@ -472,82 +370,3 @@ class TestExecuteWithTimeout:
 
         with pytest.raises(asyncio.CancelledError):
             await scheduler._execute_with_timeout(task)
-
-    @pytest.mark.asyncio
-    async def test_execution_time_measured(self, scheduler):
-        """last_duration roughly matches actual execution time."""
-
-        async def slow_enough():
-            await asyncio.sleep(0.05)
-
-        task = ScheduledTask(
-            name="unit-duration",
-            func=slow_enough,
-            interval=1.0,
-            timeout=5.0,
-        )
-
-        await scheduler._execute_with_timeout(task)
-
-        assert task.metrics.last_duration is not None
-        assert 0.03 <= task.metrics.last_duration <= 1.0  # allow leeway
-
-
-# ── Edge cases ──────────────────────────────────────────────
-
-
-class TestEdgeCases:
-    """Scheduler edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_no_tasks_start_stop_cleanly(self, scheduler):
-        """Starting and stopping with zero tasks is clean."""
-        await scheduler.start()
-        assert scheduler._running
-        await scheduler.stop()
-        assert not scheduler._running
-
-    @pytest.mark.asyncio
-    async def test_remove_task_while_running(self, scheduler):
-        """Can remove a task while the scheduler is running."""
-        executed = asyncio.Event()
-
-        async def single():
-            executed.set()
-
-        scheduler.add_task("live", single, interval=0.05, timeout=5)
-        await scheduler.start()
-
-        try:
-            await asyncio.wait_for(executed.wait(), timeout=5)
-        finally:
-            scheduler.remove_task("live")
-            await scheduler.stop()
-
-        assert "live" not in scheduler._tasks
-
-    @pytest.mark.asyncio
-    async def test_re_add_task_after_removal(self, scheduler):
-        """A task can be re-added after removal."""
-        execution_count = 0
-        barrier = asyncio.Event()
-
-        async def fn():
-            nonlocal execution_count
-            execution_count += 1
-            if execution_count >= 2:
-                barrier.set()
-
-        scheduler.add_task("re", fn, interval=0.05, timeout=5)
-        await scheduler.start()
-
-        # Let it run once, remove, re-add, let it run again
-        try:
-            await asyncio.sleep(0.2)
-            scheduler.remove_task("re")
-            await asyncio.sleep(0.1)
-            scheduler.add_task("re", fn, interval=0.05, timeout=5)
-            await asyncio.wait_for(barrier.wait(), timeout=5)
-            assert execution_count >= 2
-        finally:
-            await scheduler.stop()

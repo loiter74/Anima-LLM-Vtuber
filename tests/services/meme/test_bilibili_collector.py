@@ -259,12 +259,38 @@ class TestBilibiliMemeCollector:
     # ── _fetch_trending_videos ───────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_fetch_trending_videos_no_bilibili_api(self, mock_llm):
-        """If bilibili-api is not installed, returns empty list."""
+    async def test_fetch_trending_videos_maps_shared_api_response(self, mock_llm):
+        raw_items = [
+            {
+                "bvid": "BV1xx",
+                "title": '<em class="keyword">热门</em>视频',
+                "desc": "描述",
+                "tag": "棗类,搞笑",
+                "stat": {"view": 100, "danmaku": 20, "reply": 3},
+            },
+            {"title": "缺少 bvid 的结果"},
+        ]
+        collector = MemeCollector(
+            llm_client=mock_llm,
+            config={"max_videos": 2, "search_keyword": "搞笑"},
+        )
 
-        MemeCollector(llm_client=mock_llm)
-        with patch.dict("sys.modules", {"bilibili_api": None}):
-            pass  # can't actually remove it cleanly, but test gracefully handles
+        with patch(
+            "animetta.services.bilibili.meme_collector.fetch_trending_videos",
+            new_callable=AsyncMock,
+            return_value=raw_items,
+        ) as fetch:
+            videos = await collector._fetch_trending_videos()
+
+        fetch.assert_awaited_once_with(max_videos=2, search_keyword="搞笑")
+        assert [video.bvid for video in videos] == ["BV1xx"]
+        assert videos[0].title == "热门视频"
+        assert videos[0].tags == ["棗类", "搞笑"]
+        assert (
+            videos[0].view_count,
+            videos[0].danmaku_count,
+            videos[0].reply_count,
+        ) == (100, 20, 3)
 
     # ── _identify_meme_candidates ───────────────────────────────────
 

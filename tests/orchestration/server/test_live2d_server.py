@@ -92,8 +92,7 @@ class TestEnqueueProcessLifecycle:
         )
         assert result["ok"] is True
 
-        # Wait for the action to be picked up and executed
-        await asyncio.sleep(0.15)
+        await live2d_manager.action_queue._process_task
 
         # Callback should have been called at least once
         assert callback.call_count >= 1
@@ -106,7 +105,7 @@ class TestEnqueueProcessLifecycle:
     async def test_enqueue_multiple_actions_sequential(self, live2d_manager):
         """Multiple enqueued actions are all processed in order."""
         # Init queue first, then set callback so it propagates to the queue
-        _ = live2d_manager.action_queue
+        live2d_manager.action_queue.mutex.cooldown_ms = 0
 
         executed = []
 
@@ -121,16 +120,18 @@ class TestEnqueueProcessLifecycle:
                 action_id=f"action_{i}",
                 duration=0.01,
             )
+            if i == 0:
+                await asyncio.sleep(0)
 
-        # Mutex has 250ms cooldown between actions; need ~800ms for 3 actions
-        await asyncio.sleep(1.0)
+        process_task = live2d_manager.action_queue._process_task
+        await process_task
         assert len(executed) == 3
         assert executed == ["action_0", "action_1", "action_2"]
 
     @pytest.mark.asyncio
     async def test_enqueue_while_processing(self, live2d_manager):
         """Actions enqueued while processing are handled by the queue."""
-        _ = live2d_manager.action_queue
+        live2d_manager.action_queue.mutex.cooldown_ms = 0
 
         callback = AsyncMock()
         live2d_manager.set_execute_callback(callback)
@@ -141,6 +142,8 @@ class TestEnqueueProcessLifecycle:
             action_id="first",
             duration=0.02,
         )
+        await asyncio.sleep(0)
+        process_task = live2d_manager.action_queue._process_task
         # Enqueue second while first is (potentially) processing
         await live2d_manager.enqueue_action(
             action_data={"type": "test"},
@@ -148,7 +151,7 @@ class TestEnqueueProcessLifecycle:
             duration=0.01,
         )
 
-        await asyncio.sleep(0.8)
+        await process_task
         # Both should have been executed
         assert callback.call_count >= 2
 
@@ -186,7 +189,7 @@ class TestStopClearLifecycle:
     @pytest.mark.asyncio
     async def test_stop_then_enqueue_restarts_processing(self, live2d_manager):
         """After stopping the queue, new enqueues restart processing."""
-        _ = live2d_manager.action_queue
+        live2d_manager.action_queue.mutex.cooldown_ms = 0
 
         callback = AsyncMock()
         live2d_manager.set_execute_callback(callback)
@@ -197,7 +200,7 @@ class TestStopClearLifecycle:
             action_id="before_stop",
             duration=0.01,
         )
-        await asyncio.sleep(0.05)
+        await live2d_manager.action_queue._process_task
         await live2d_manager.action_queue.stop()
 
         # Verify stopped
@@ -210,11 +213,11 @@ class TestStopClearLifecycle:
             action_id="after_stop",
             duration=0.01,
         )
-        await asyncio.sleep(0.1)
+        await live2d_manager.action_queue._process_task
 
         # Both actions should have been processed
         called_ids = [c.args[0].action_id for c in callback.call_args_list]
-        assert "before_stop" in called_ids or "after_stop" in called_ids
+        assert called_ids == ["before_stop", "after_stop"]
 
     @pytest.mark.asyncio
     async def test_clear_empties_queue(self, live2d_manager):
@@ -379,4 +382,4 @@ class TestEdgeCases:
         )
         assert "queue_size" in result
         assert isinstance(result["queue_size"], int)
-        await asyncio.sleep(0.1)
+        await live2d_manager.action_queue._process_task

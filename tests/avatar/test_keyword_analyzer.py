@@ -237,15 +237,18 @@ class TestKeywordAnalyzerKeywordManagement:
         analyzer.remove_keywords("happy", ["兴高采烈"])
         assert "兴高采烈" not in analyzer.keywords["happy"]
 
-    def test_remove_keywords_nonexistent_emotion(self):
-        """remove_keywords on nonexistent emotion should not raise."""
+    @pytest.mark.parametrize(
+        ("emotion", "words"),
+        [("nonexistent", ["word"]), ("happy", ["nonexistent_word"])],
+    )
+    def test_remove_keywords_ignores_unknown_values(self, emotion, words):
+        """Unknown emotions and words leave the keyword catalog unchanged."""
         analyzer = KeywordAnalyzer()
-        analyzer.remove_keywords("nonexistent", ["word"])  # should not raise
+        before = {name: list(keywords) for name, keywords in analyzer.keywords.items()}
 
-    def test_remove_keywords_nonexistent_word(self):
-        """remove_keywords on nonexistent word should not raise."""
-        analyzer = KeywordAnalyzer()
-        analyzer.remove_keywords("happy", ["nonexistent_word"])  # should not raise
+        analyzer.remove_keywords(emotion, words)
+
+        assert analyzer.keywords == before
 
 
 # ============================================================

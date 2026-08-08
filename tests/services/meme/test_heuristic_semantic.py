@@ -90,20 +90,14 @@ class TestExtractSemanticPhrases:
         videos = [CollectedVideo(bvid="BV1xx", title="测试")]
         danmaku = ["绝绝子", "绝绝子", "绝绝子", "笑死", "yyds"]
 
-        candidates = c._heuristic_identify(videos, {}, danmaku)
+        with patch(
+            "animetta.services.bilibili.meme_collector.extract_semantic_phrases",
+            return_value=[("绝绝子", 3)],
+        ) as extract:
+            candidates = c._heuristic_identify(videos, {}, danmaku)
 
-        # Should include danmaku-derived candidates
-        # At least attempt extraction (may or may not find depending on content)
-        assert len(candidates) >= 0
-
-    def test_semantic_extraction_skips_stopwords(self):
-        """Stopwords should be filtered out from results."""
-
-        texts = ["的的的的的的", "了的了的了"]
-        phrases = Collector._extract_semantic_phrases(texts, top_k=10)
-
-        # Stopword-only texts should produce minimal results
-        for phrase, score in phrases:
-            # If jieba splits them, short common phrases may appear
-            # but they should have very low scores
-            pass  # Just verify no crash
+        extract.assert_called_once_with(danmaku, top_k=20)
+        assert [(candidate.text, candidate.frequency) for candidate in candidates] == [
+            ("绝绝子", 3)
+        ]
+        assert candidates[0].tags == ["bilibili", "danmaku", "hot"]

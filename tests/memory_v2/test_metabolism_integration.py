@@ -123,32 +123,3 @@ class TestMetabolismIntegration:
         assert system._metabolism_task.done()
 
         await system.shutdown()
-
-    async def test_compile_triggers_on_enough_atoms(self):
-        system = LivingMemorySystem(db_path=":memory:")
-        await system.initialize()
-
-        # Create 5 RAW atoms (enough to trigger EPISODIC compile)
-        import uuid
-
-        for i in range(5):
-            await system.store.create(
-                MemoryAtom(
-                    id=f"raw-{uuid.uuid4().hex[:8]}",
-                    layer=Layer.RAW,
-                    content=f"用户第{i}次对话",
-                    occurred_at=datetime.now(UTC),
-                    confidence=0.7,
-                    salience=0.7,
-                )
-            )
-
-        # Run metabolism tick
-        await system.run_metabolism_tick()
-
-        # Check if any EPISODIC atoms were created
-        all_atoms = await system.store.get_all_active()
-        episodics = [a for a in all_atoms if a.layer == Layer.EPISODIC]
-        assert len(episodics) >= 0  # May or may not compile depending on timing
-
-        await system.shutdown()

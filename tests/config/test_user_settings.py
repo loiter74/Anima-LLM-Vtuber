@@ -1,18 +1,11 @@
-from __future__ import annotations
-
-from animetta.config.user import UserSettings
-
 """Tests for UserSettings (config.user.py)"""
 
-import sys
+from __future__ import annotations
+
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
-# Ensure src/ is on the Python path
-_src_path = str(Path(__file__).resolve().parent.parent.parent / "src")
-if _src_path not in sys.path:
-    sys.path.insert(0, _src_path)
-
+from animetta.config.user import UserSettings
 
 # ═══════════════════════════════════════════════════════════════
 # Test UserSettings
@@ -139,14 +132,16 @@ class TestUserSettingsSave:
 
     @patch("builtins.open", side_effect=OSError("disk full"))
     @patch("yaml.safe_dump")
-    def test_handles_write_error(self, mock_safe_dump, mock_file):
+    @patch("animetta.config.user.logger.error")
+    def test_handles_write_error(self, log_error, mock_safe_dump, mock_file):
         """save does not raise when writing fails (logs error)"""
         settings = UserSettings.__new__(UserSettings)
         settings.config_file = Path("/fake/.user_settings.yaml")
         settings.settings = {"log_level": "DEBUG"}
 
-        # Should not raise
         settings.save()
+
+        log_error.assert_called_once_with("Failed to save user configuration: disk full")
 
 
 class TestUserSettingsGetLogLevel:
@@ -193,16 +188,6 @@ class TestUserSettingsSetLogLevel:
 
         assert settings.settings["log_level"] == "ERROR"
         mock_save.assert_called_once()
-
-    @patch("animetta.config.user.UserSettings.save")
-    def test_save_called_after_update(self, mock_save):
-        """save is called exactly once after setting log level"""
-        settings = UserSettings.__new__(UserSettings)
-        settings.settings = {"log_level": "INFO"}
-
-        settings.set_log_level("DEBUG")
-
-        assert mock_save.call_count == 1
 
     @patch("animetta.config.user.UserSettings.save")
     def test_round_trip(self, mock_save):

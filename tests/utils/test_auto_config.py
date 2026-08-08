@@ -3,7 +3,6 @@ from __future__ import annotations
 """Tests for AutoConfig — environment detection, config generation."""
 
 import os
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,8 +13,20 @@ from animetta.utils.auto_config import AutoConfig
 
 @pytest.fixture
 def auto_config():
-
-    return AutoConfig()
+    config = AutoConfig.__new__(AutoConfig)
+    config.project_root = Path.cwd()
+    config.env_info = {
+        "platform": "windows",
+        "python_version": "3.13",
+        "python_executable": "py -3.13",
+        "gpu_available": False,
+        "cuda_version": None,
+        "data_dir_exists": False,
+        "models_exist": False,
+    }
+    config.issues = []
+    config.warnings = []
+    return config
 
 
 class TestAutoConfig:
@@ -54,14 +65,6 @@ class TestAutoConfig:
 
     # ── _check_gpu ───────────────────────────────────────────────────
 
-    @pytest.mark.skip(reason="Only runs on CUDA-capable machines")
-    def test_check_gpu_available(self, auto_config):
-        assert auto_config._check_gpu() is True
-
-    def test_check_gpu_not_available(self, auto_config):
-        with patch.dict("sys.modules", {"torch": None}):
-            pass  # can't actually unload torch
-
     def test_check_gpu_import_error(self, auto_config):
         """If torch can't be imported, GPU check returns False."""
         import builtins
@@ -83,47 +86,27 @@ class TestAutoConfig:
         with patch.dict(os.environ, {"ANIMETTA_DATA_DIR": "/custom/path"}, clear=True):
             assert auto_config.get_data_dir() == Path("/custom/path")
 
-    @pytest.mark.xfail(reason="patch.object on dict.__getitem__ is not supported", strict=False)
     def test_get_data_dir_windows_default(self, auto_config):
-        """Windows fallback: E:/anima_data or home/anima_data."""
-        with (
-            patch("platform.system", return_value="Windows"),
-            patch.object(auto_config.env_info, "__getitem__", return_value="windows"),
-            patch("pathlib.Path.exists", return_value=False),
-        ):
+        """Windows fallback: E:/animetta_data or home/animetta_data."""
+        auto_config.env_info["platform"] = "windows"
+        with patch("pathlib.Path.exists", return_value=False):
             result = auto_config.get_data_dir()
-            assert "anima_data" in str(result)
+        assert result == Path.home() / "animetta_data"
 
-    @pytest.mark.xfail(reason="patch.object on dict.__getitem__ is not supported", strict=False)
     def test_get_data_dir_windows_e_drive(self, auto_config):
-        """On Windows, E:/anima_data takes priority if it exists."""
-        with (
-            patch.object(auto_config.env_info, "__getitem__", return_value="windows"),
-            patch("pathlib.Path.exists", return_value=True),
-        ):
+        """On Windows, E:/animetta_data takes priority if it exists."""
+        auto_config.env_info["platform"] = "windows"
+        with patch("pathlib.Path.exists", return_value=True):
             result = auto_config.get_data_dir()
-            assert "E:" in str(result) or "anima_data" in str(result)
+        assert result == Path("E:/animetta_data")
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Linux-specific path format")
     def test_get_data_dir_linux_default(self, auto_config):
-        """Linux/macOS fallback: ~/anima_data."""
-        with patch.object(auto_config.env_info, "__getitem__", return_value="linux"):
-            result = auto_config.get_data_dir()
-            assert result == Path.home() / "anima_data"
+        """Linux/macOS fallback: ~/animetta_data."""
+        auto_config.env_info["platform"] = "linux"
+        result = auto_config.get_data_dir()
+        assert result == Path.home() / "animetta_data"
 
     # ── check_dependencies ───────────────────────────────────────────
-
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="Linux-specific test (shutil.which path format)"
-    )
-    def test_check_dependencies_all_installed(self, auto_config):
-        """Returns {"python": True, "pip": True, "git": True} when all found."""
-        with (
-            patch("shutil.which", return_value="/usr/bin/python"),
-            patch.dict(os.environ, {"CONDA_DEFAULT_ENV": "anima"}, clear=True),
-        ):
-            result = auto_config.diagnose()
-            assert isinstance(result, bool)
 
     def test_diagnose_missing_deps(self, auto_config):
         """Missing dependencies should make diagnose return False."""

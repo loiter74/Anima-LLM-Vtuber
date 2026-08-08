@@ -51,6 +51,11 @@ class TestTrimHistoryUtility:
 
 
 class TestMockLLMHistoryTrimming:
+    @pytest.fixture(autouse=True)
+    def _disable_simulated_processing_delay(self):
+        with patch("asyncio.sleep", new=AsyncMock()):
+            yield
+
     @pytest.mark.asyncio
     async def test_history_trims_to_max_after_many_turns(self) -> None:
         llm = MockLLM(max_history_messages=6)
@@ -106,6 +111,14 @@ def _make_mock_openai_response(content: str = "ok") -> MagicMock:
 
 
 class TestOpenAILLMHistoryTrimming:
+    @pytest.fixture(autouse=True)
+    def _isolate_client_construction(self):
+        with (
+            patch("httpx.AsyncClient"),
+            patch("animetta.services.llm.openai_llm.AsyncOpenAI"),
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_chat_trims_history_to_max(self) -> None:
         llm = OpenAILLM(api_key="test-key", max_history_messages=6)
