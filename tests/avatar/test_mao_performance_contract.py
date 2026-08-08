@@ -9,27 +9,28 @@ from animetta.avatar.mappers.emotion_param_mapper import (
 )
 
 ROOT = Path(__file__).parents[2]
-HIYORI_DIR = ROOT / "frontend" / "public" / "live2d" / "hiyori"
+MAO_DIR = ROOT / "frontend" / "public" / "live2d" / "mao"
 
 
-def test_hiyori_idle_contains_only_calm_m01_and_tap_body_is_unchanged() -> None:
-    manifest = json.loads((HIYORI_DIR / "Hiyori.model3.json").read_text(encoding="utf-8"))
-    motions = manifest["FileReferences"]["Motions"]
+def test_mao_manifest_declares_native_lip_sync_and_blink_parameters() -> None:
+    manifest = json.loads((MAO_DIR / "Mao.model3.json").read_text(encoding="utf-8"))
+    groups = {group["Name"]: group["Ids"] for group in manifest["Groups"]}
 
-    assert [motion["File"] for motion in motions["Idle"]] == ["motions/Hiyori_m01.motion3.json"]
-    assert [motion["File"] for motion in motions["TapBody"]] == ["motions/Hiyori_m04.motion3.json"]
+    assert groups["LipSync"] == ["ParamA"]
+    assert groups["EyeBlink"] == ["ParamEyeLOpen", "ParamEyeROpen"]
 
 
-def test_legacy_mapper_uses_real_hiyori_parameters_without_mouth_open() -> None:
-    display = json.loads((HIYORI_DIR / "Hiyori.cdi3.json").read_text(encoding="utf-8"))
+def test_legacy_mapper_parameters_are_native_or_use_the_mouth_shape_alias() -> None:
+    display = json.loads((MAO_DIR / "Mao.cdi3.json").read_text(encoding="utf-8"))
     parameter_ids = {parameter["Id"] for parameter in display["Parameters"]}
     mapped_ids = {
         parameter_id for mapping in DEFAULT_EMOTION_MAPPINGS.values() for parameter_id in mapping
     }
 
-    assert "ParamMouthOpenY" not in mapped_ids
+    assert "ParamA" not in mapped_ids
     assert not {name for name in mapped_ids if name.startswith("ParamEyebrow")}
-    assert mapped_ids <= parameter_ids
+    assert mapped_ids - {"ParamMouthForm"} <= parameter_ids
+    assert {"ParamMouthUp", "ParamMouthDown"} <= parameter_ids
 
 
 def test_legacy_mapper_is_deterministic() -> None:

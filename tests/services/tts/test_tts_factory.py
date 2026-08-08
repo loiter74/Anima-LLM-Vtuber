@@ -53,7 +53,7 @@ class TestTTSFactory:
                 "base_url": "http://host.docker.internal:8767",
                 "provider": "qwen3-tts-gguf-host",
                 "model": "Qwen3-TTS-1.7B-Base",
-                "voice": "tosaka-rin-cn",
+                "voice": "vivian-synthetic-zh",
                 "response_format": "wav",
                 "language": "Chinese",
                 "timeout_seconds": 120,

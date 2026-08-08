@@ -77,7 +77,7 @@ def settings(**overrides: Any) -> QwenServiceSettings:
         "provider": "qwen3-tts-gguf-host",
         "model": "Qwen3-TTS-1.7B-Base",
         "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "language": "Chinese",
         "response_format": "wav",
         "sample_rate": 24000,
@@ -113,7 +113,7 @@ async def request(app: Any, method: str, path: str, **kwargs: Any) -> httpx.Resp
 def speech_payload(**overrides: Any) -> dict[str, Any]:
     payload = {
         "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "input": "你好，爱丽丝",
         "response_format": "wav",
         "language": "Chinese",
@@ -172,7 +172,7 @@ async def test_preload_publishes_exact_ready_and_identity_contracts() -> None:
         "provider": "qwen3-tts-gguf-host",
         "model": "Qwen3-TTS-1.7B-Base",
         "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "sample_rate": 24000,
     }
     assert ready.status_code == 200
@@ -190,7 +190,7 @@ async def test_identity_includes_fixed_host_runtime_metadata_when_configured() -
             provider="qwen3-tts-gguf-host",
             model="Qwen3-TTS-1.7B-Base",
             revision="0eb32e283ee46b86820c67843abb04cf12bc58d7",
-            voice="tosaka-rin-cn",
+            voice="vivian-synthetic-zh",
             quantization="talker=Q5_K,predictor=Q8_0,onnx=FP16",
             runtime_commit="0eb32e283ee46b86820c67843abb04cf12bc58d7",
         ),
@@ -265,7 +265,7 @@ async def test_valid_speech_returns_audio_and_correlated_identity_headers() -> N
     assert response.headers["content-type"] == "audio/wav"
     assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "tosaka-rin-cn"
+    assert response.headers["x-animetta-voice"] == "vivian-synthetic-zh"
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_calls == [
         {
@@ -297,7 +297,7 @@ async def test_streaming_speech_returns_ordered_pcm16_chunks_and_identity_header
     assert response.headers["x-animetta-channels"] == "1"
     assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "tosaka-rin-cn"
+    assert response.headers["x-animetta-voice"] == "vivian-synthetic-zh"
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_stream_calls == [
         {

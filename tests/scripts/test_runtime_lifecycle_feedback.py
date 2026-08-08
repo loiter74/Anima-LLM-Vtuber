@@ -188,6 +188,15 @@ def test_buildkit_work_is_resumed_from_exact_process_lease_without_duplicate_lau
     assert lease.log_path.endswith("animetta-build.log")
 
 
+def test_buildkit_lease_id_is_unique_to_each_lifecycle_run() -> None:
+    first = runtime_lifecycle._build_lease_id("anima-up-first")
+    second = runtime_lifecycle._build_lease_id("anima-up-second")
+
+    assert first == "anima-up-first-animetta-build"
+    assert second == "anima-up-second-animetta-build"
+    assert first != second
+
+
 def test_completed_build_lease_becomes_terminal_evidence(tmp_path) -> None:
     driver = FakeBuildDriver()
     store = IterationPlanStore(tmp_path)

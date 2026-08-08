@@ -324,7 +324,7 @@ export function mountMinecraftGameplayShell(
   subtitle.setAttribute('aria-label', '直播字幕')
 
   const avatar = createElement(document, 'section', 'game-avatar')
-  avatar.setAttribute('aria-label', 'Hiyori 主播')
+  avatar.setAttribute('aria-label', '虹色 Mao 主播')
   const canvas = createElement(document, 'canvas', 'game-avatar-canvas')
   canvas.id = 'live2dCanvas'
   const modelState = createElement(document, 'span', 'visually-hidden', 'Live2D 加载中')

@@ -67,7 +67,7 @@ For every canonical low/medium/high run, execute the host-local Qwen protocol fr
 4. Set `ANIMETTA_HTTP_PORT=19080` and `ANIMETTA_PORT=13395` in the service agent process.
 5. `py -3.13 scripts/runtime_lifecycle.py anima-up`.
 6. Poll `http://localhost:19080/health` until HTTP 200 and `{"status":"ok"}`.
-7. Poll `http://localhost:19080/ready` until HTTP 200 and the configured/resolved TTS identity is exactly `remote/qwen3-tts-gguf-host/Qwen3-TTS-1.7B-Base/tosaka-rin-cn`.
+7. Poll `http://localhost:19080/ready` until HTTP 200 and the configured/resolved TTS identity is exactly `remote/qwen3-tts-gguf-host/Qwen3-TTS-1.7B-Base/vivian-synthetic-zh`.
 8. Poll `http://localhost:19080` until HTTP 200, and confirm the normal port is not serving Animetta during the acceptance window.
 9. Check Animetta Docker logs and the local Qwen runtime log for `Traceback` or `ERROR`; either is a failure.
 10. Require the complete install/reuse + worker readiness + Animetta build/start/readiness/frontend sequence to finish within 300 seconds (target 180 seconds), and verify the Qwen process identity did not change.

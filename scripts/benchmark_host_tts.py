@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEXT = "你好，今天也请多关照。我们一起把这件事情做好吧。"
 HOST_MODEL = "Qwen3-TTS-1.7B-Base"
-HOST_VOICE = "tosaka-rin-cn"
+HOST_VOICE = "vivian-synthetic-zh"
 
 
 def _synthesize_once(

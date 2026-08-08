@@ -25,7 +25,7 @@ export const LIVE2D_PERFORMANCE_REVIEW_DEFINITION = {
   scenes: [
     {
       id: 'semantic-catalog',
-      title: 'Hiyori 三种关键表情',
+      title: '虹色 Mao 三种关键表情',
       observe:
         '确认日常、吐槽和惊讶三种关键表情与对应中文语音同步，口型始终可见且每轮结束回到平静。',
       readyTexts: ['服务已连接', '弹幕直播中', 'Live2D 已加载'],

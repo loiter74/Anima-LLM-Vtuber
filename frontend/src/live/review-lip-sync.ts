@@ -2,7 +2,7 @@ const FRAME_INTERVAL_SECONDS = 0.02
 const REVIEW_MOUTH_LEAD_SECONDS = 0.06
 const REVIEW_MOUTH_VISIBILITY_EXPONENT = 0.65
 const MAX_TIMELINE_FRAMES = 3_000
-const MOUTH_PARAMETERS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
+const MOUTH_PARAMETERS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN', 'ParamA']
 
 interface ReviewInternalModel {
   coreModel: {

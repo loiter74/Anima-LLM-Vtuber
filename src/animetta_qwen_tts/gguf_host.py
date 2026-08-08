@@ -16,7 +16,16 @@ import numpy as np
 
 _STREAM_END = object()
 _RUNTIME_COMMIT = "0eb32e283ee46b86820c67843abb04cf12bc58d7"
-_REFERENCE_SHA256 = "46F6CFEDC05B9E6AC5F2C1BDE232BC61173821DD9A020AD615D561BB9C264245"
+_REFERENCE_AUDIO = (
+    Path(__file__).resolve().parents[2]
+    / "config"
+    / "personas"
+    / "voices"
+    / "animetta-vivian-reference.wav"
+)
+_REFERENCE_SHA256 = "A2BBFF2BB0E33C72027DC0BB24565FA288BDF81FD147172861A3BC8831412E73"
+_REFERENCE_TEXT = "你好，我是千问，你今天过得好吗？"
+_VOICE = "vivian-synthetic-zh"
 
 
 class GGUFHostEngine:
@@ -226,10 +235,7 @@ def build_host_service_from_env(
     reference_audio = Path(
         os.environ.get(
             "QWEN_HOST_TTS_REFERENCE_AUDIO",
-            (
-                r"D:\AnimaModelAuditions\qwen3-tts-1.7b-streaming-20260726"
-                r"\ref\tosaka-rin-cn-reference.wav"
-            ),
+            str(_REFERENCE_AUDIO),
         )
     )
     expected_hash = os.environ.get(
@@ -248,7 +254,7 @@ def build_host_service_from_env(
         reference_audio=reference_audio,
         reference_text=os.environ.get(
             "QWEN_HOST_TTS_REFERENCE_TEXT",
-            "秉持优雅。胜利是理所当然的。不要过于松懈。为下一次出发做准备吧。",
+            _REFERENCE_TEXT,
         ),
         engine_factory=engine_factory,
     )
@@ -257,7 +263,7 @@ def build_host_service_from_env(
         provider="qwen3-tts-gguf-host",
         model="Qwen3-TTS-1.7B-Base",
         revision=_RUNTIME_COMMIT,
-        voice="tosaka-rin-cn",
+        voice=_VOICE,
         quantization="talker=Q5_K,predictor=Q8_0,onnx=FP16",
         runtime_commit=_RUNTIME_COMMIT,
         language="Chinese",

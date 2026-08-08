@@ -30,8 +30,17 @@ const currentParams = new Map<
 export function setParam(name: string, value: number): void {
   const model = getModel()
   if (!model?.internalModel?.coreModel) return
-  const idx = model.internalModel.coreModel.getParameterIndex(name)
-  if (idx >= 0) model.internalModel.coreModel.setParameterValueByIndex(idx, value)
+  const coreModel = model.internalModel.coreModel
+  const write = (parameterName: string, parameterValue: number): boolean => {
+    const index = coreModel.getParameterIndex(parameterName)
+    if (index < 0) return false
+    coreModel.setParameterValueByIndex(index, parameterValue)
+    return true
+  }
+
+  if (write(name, value) || name !== 'ParamMouthForm') return
+  write('ParamMouthUp', Math.max(0, value))
+  write('ParamMouthDown', Math.max(0, -value))
 }
 
 // ===== Timeline =====

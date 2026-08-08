@@ -55,7 +55,7 @@ class _StaticFailoverTTS:
                     "type": "remote",
                     "provider": "qwen3-tts",
                     "model": "Qwen3-TTS-12Hz-1.7B-Base",
-                    "voice": "tosaka-rin-cn",
+                    "voice": "vivian-synthetic-zh",
                 },
             },
             "circuit": {

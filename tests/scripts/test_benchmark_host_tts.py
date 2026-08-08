@@ -48,7 +48,7 @@ def test_benchmark_uses_the_versioned_host_identity_contract() -> None:
     assert client.request is not None
     assert client.request["json"] == {
         "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "input": "你好",
         "language": "Chinese",
         "response_format": "wav",

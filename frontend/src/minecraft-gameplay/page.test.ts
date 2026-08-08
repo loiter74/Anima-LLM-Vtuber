@@ -12,7 +12,7 @@ describe('minecraft gameplay preview shell', () => {
     expect(document.querySelector('[aria-label="Minecraft 游戏画面"]')).not.toBeNull()
     expect(document.querySelector('[aria-label="实时弹幕"]')).not.toBeNull()
     expect(document.querySelector('[aria-label="直播字幕"]')).not.toBeNull()
-    expect(document.querySelector('[aria-label="Hiyori 主播"]')).not.toBeNull()
+    expect(document.querySelector('[aria-label="虹色 Mao 主播"]')).not.toBeNull()
     expect(document.querySelector('[aria-label="附身状态"]')?.textContent).toContain('等待 LUN077')
     expect(document.body.textContent).not.toContain('BotDashboard')
     expect(document.body.textContent).not.toContain('表情调试')

@@ -2,7 +2,7 @@ import { getModel } from './useLive2DModel'
 
 // ===== Mouth Parameter Candidates (Cubism 3/4) =====
 
-const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN']
+const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN', 'ParamA']
 
 // ===== LipSync State =====
 

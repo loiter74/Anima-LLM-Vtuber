@@ -32,7 +32,7 @@ EXPECTED_IDENTITY = {
     "provider": "qwen3-tts-gguf-host",
     "model": "Qwen3-TTS-1.7B-Base",
     "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "tosaka-rin-cn",
+    "voice": "vivian-synthetic-zh",
     "sample_rate": 24000,
 }
 
@@ -58,7 +58,7 @@ def remote_config(**overrides: Any) -> RemoteTTSConfig:
         "provider": "qwen3-tts-gguf-host",
         "model": EXPECTED_IDENTITY["model"],
         "revision": EXPECTED_IDENTITY["revision"],
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "response_format": "wav",
         "timeout_seconds": 0.25,
     }
@@ -75,7 +75,7 @@ def identity_headers(*, request_id: str = "req-1", **overrides: str) -> dict[str
         "content-type": "audio/wav",
         "x-animetta-provider": "qwen3-tts-gguf-host",
         "x-animetta-model": str(EXPECTED_IDENTITY["model"]),
-        "x-animetta-voice": "tosaka-rin-cn",
+        "x-animetta-voice": "vivian-synthetic-zh",
         "x-request-id": request_id,
     }
     headers.update(overrides)
@@ -124,7 +124,7 @@ async def test_matching_readiness_publishes_configured_and_resolved_identity() -
         "provider": "qwen3-tts-gguf-host",
         "model": EXPECTED_IDENTITY["model"],
         "revision": EXPECTED_IDENTITY["revision"],
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
     }
     assert tts.resolved_identity == EXPECTED_IDENTITY
     await tts.close()
@@ -226,7 +226,7 @@ async def test_synthesize_validates_request_and_response_identity(tmp_path: Path
     assert output_path.read_bytes() == VALID_WAV
     assert seen["path"] == "/v1/audio/speech"
     assert '"model":"Qwen3-TTS-1.7B-Base"' in seen["payload"]
-    assert '"voice":"tosaka-rin-cn"' in seen["payload"]
+    assert '"voice":"vivian-synthetic-zh"' in seen["payload"]
     assert '"input":"你好，世界"' in seen["payload"]
     assert seen["authorization"] == "Bearer test-secret"
     await tts.close()

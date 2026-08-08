@@ -3,7 +3,7 @@ import {
   normalizeLive2DPerformancePlan,
   type Live2DPerformancePlanV1,
 } from './live2dPerformanceContract'
-import { HIYORI_PERFORMANCE_PROFILE } from './hiyoriPerformanceProfile'
+import { MAO_PERFORMANCE_PROFILE } from './maoPerformanceProfile'
 import type { Live2DParameterAdapter, Live2DPerformanceProfile } from './live2dPerformanceProfile'
 import {
   dispatchLive2DPerformanceObservation,
@@ -39,7 +39,7 @@ export class Live2DPerformanceController {
   constructor(options: Live2DPerformanceControllerOptions) {
     this.read = options.read ?? (() => 0)
     this.write = options.write
-    this.profile = options.profile ?? HIYORI_PERFORMANCE_PROFILE
+    this.profile = options.profile ?? MAO_PERFORMANCE_PROFILE
     this.now = options.now ?? (() => performance.now())
     this.observe = options.observe ?? dispatchLive2DPerformanceObservation
   }

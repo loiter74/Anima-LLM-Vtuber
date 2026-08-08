@@ -39,8 +39,8 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: [--maxkb=1024]
-        # Allow legitimately large fixtures checked in under artifacts/.
-        exclude: ^artifacts/
+        # Allow versioned review fixtures and Live2D binary model assets.
+        exclude: ^(artifacts/|frontend/public/live2d/)
       - id: check-merge-conflict
 
   # ── Python: ruff lint + format-check (system interpreter) ──────────────

@@ -178,7 +178,7 @@ async def test_harness_disables_fallback_with_non_24khz_resolved_identity(
     fallback.resolved_identity = {
         "provider": "qwen3-tts-gguf-host",
         "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "tosaka-rin-cn",
+        "voice": "vivian-synthetic-zh",
         "sample_rate": 16000,
     }
     harness, _fallback = make_harness(tmp_path, fallback)

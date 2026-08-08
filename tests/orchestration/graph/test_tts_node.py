@@ -212,12 +212,12 @@ class TestTTSNode:
         configured = SimpleNamespace(
             type="remote",
             model="Qwen3-TTS-1.7B-Base",
-            voice="tosaka-rin-cn",
+            voice="vivian-synthetic-zh",
             public_identity=lambda: {
                 "type": "remote",
                 "provider": "qwen3-tts-gguf-host",
                 "model": "Qwen3-TTS-1.7B-Base",
-                "voice": "tosaka-rin-cn",
+                "voice": "vivian-synthetic-zh",
             },
         )
         return SimpleNamespace(
@@ -238,7 +238,7 @@ class TestTTSNode:
             base_url="http://127.0.0.1:8767",
             provider="qwen3-tts-gguf-host",
             model="Qwen3-TTS-1.7B-Base",
-            voice="tosaka-rin-cn",
+            voice="vivian-synthetic-zh",
             response_format="wav",
             language="Chinese",
             timeout_seconds=20.0,

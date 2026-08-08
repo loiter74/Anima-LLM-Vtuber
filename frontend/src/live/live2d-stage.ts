@@ -70,7 +70,7 @@ export function createLive2DStage(
         app = null
       })
 
-      const model = await Live2DModel.from('/live2d/hiyori/Hiyori.model3.json', {
+      const model = await Live2DModel.from('/live2d/mao/Mao.model3.json', {
         autoInteract: false,
       })
       if (disposed || !app) {

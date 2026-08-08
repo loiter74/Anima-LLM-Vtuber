@@ -91,7 +91,7 @@ def test_manifest_has_one_host_qwen_runtime_contract() -> None:
     assert qwen["base_url"] == "${QWEN_HOST_TTS_URL}"
     assert qwen["provider"] == "qwen3-tts-gguf-host"
     assert qwen["model"] == "Qwen3-TTS-1.7B-Base"
-    assert qwen["voice"] == "tosaka-rin-cn"
+    assert qwen["voice"] == "vivian-synthetic-zh"
     assert qwen["timeout_seconds"] == 120.0
     assert production["services"]["tts"] == "dashscope-local-failover"
     assert production["runtime"]["tts_timeout_seconds"] == 20.0

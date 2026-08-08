@@ -103,7 +103,7 @@ describe('OBS review lip sync', () => {
   it('writes the latest mouth value after motion updates and before model commit', () => {
     const beforeModelUpdates: Array<() => void> = []
     const coreModel = {
-      getParameterIndex: vi.fn(() => 12),
+      getParameterIndex: vi.fn((name: string) => (name === 'ParamA' ? 12 : -1)),
       setParameterValueByIndex: vi.fn(),
     }
     const internalModel = {
@@ -120,6 +120,7 @@ describe('OBS review lip sync', () => {
     expect(coreModel.setParameterValueByIndex).not.toHaveBeenCalled()
 
     beforeModelUpdates[0]?.()
+    expect(coreModel.getParameterIndex).toHaveBeenCalledWith('ParamA')
     expect(coreModel.setParameterValueByIndex).toHaveBeenLastCalledWith(12, 0.8)
     expect(onApplied).toHaveBeenCalledOnce()
 

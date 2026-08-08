@@ -115,7 +115,7 @@ class QwenTTSService:
         self._background_synthesis: set[asyncio.Task[bytes | str]] = set()
 
     async def preload(self) -> None:
-        """Preload the model and Alice prompt exactly once before readiness."""
+        """Preload the model and synthetic reference prompt once before readiness."""
         async with self._preload_lock:
             if self._ready:
                 return

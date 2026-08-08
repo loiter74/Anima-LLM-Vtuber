@@ -32,7 +32,7 @@ const mockLive2DState = {
 
 vi.mock('@/components/live2d/useLive2D', () => ({
   useLive2D: () => mockLive2DState,
-  MODEL_PATH: 'live2d/hiyori/Hiyori.model3.json',
+  MODEL_PATH: 'live2d/mao/Mao.model3.json',
 }))
 
 vi.mock('@/composables/useMobile', () => ({
@@ -72,7 +72,7 @@ describe('Live2DRenderer', () => {
     await flushPromises()
 
     expect(mockLive2DState.init).toHaveBeenCalledTimes(1)
-    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/hiyori/Hiyori.model3.json')
+    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/mao/Mao.model3.json')
   })
 
   it('initializes Live2D by default on mobile', async () => {
@@ -85,7 +85,7 @@ describe('Live2DRenderer', () => {
     expect(wrapper.text()).toContain('Live2D ON')
     expect(wrapper.text()).not.toContain('Live2D 已暂停')
     expect(mockLive2DState.init).toHaveBeenCalledTimes(1)
-    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/hiyori/Hiyori.model3.json')
+    expect(mockLive2DState.loadModel).toHaveBeenCalledWith('live2d/mao/Mao.model3.json')
   })
 
   it('can pause Live2D on mobile without showing a load error', async () => {

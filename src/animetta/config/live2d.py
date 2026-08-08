@@ -13,9 +13,7 @@ from .core.base import BaseConfig
 class Live2DModelConfig(BaseModel):
     """Live2D model configuration"""
 
-    path: str = Field(
-        default="/live2d/haru/haru_greeter_t03.model3.json", description="Model file path"
-    )
+    path: str = Field(default="/live2d/mao/Mao.model3.json", description="Model file path")
     scale: float = Field(default=0.5, description="Model scale ratio")
     position: dict[str, float] = Field(
         default_factory=lambda: {"x": 0.0, "y": 0.0}, description="Model position (x, y)"

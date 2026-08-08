@@ -19,7 +19,7 @@ EXPECTED_IDENTITY = {
     "provider": "qwen3-tts-gguf-host",
     "model": "Qwen3-TTS-1.7B-Base",
     "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "tosaka-rin-cn",
+    "voice": "vivian-synthetic-zh",
 }
 
 

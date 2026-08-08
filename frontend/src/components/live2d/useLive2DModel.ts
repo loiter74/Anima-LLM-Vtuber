@@ -4,7 +4,7 @@ import { isLoaded, isLoading, loadError, updateModelInfo } from './useInteractio
 
 // ===== Model Configuration (edit these to change model) =====
 
-export const MODEL_PATH = 'live2d/hiyori/Hiyori.model3.json'
+export const MODEL_PATH = 'live2d/mao/Mao.model3.json'
 // Position is computed as a fraction of canvas dimensions at load time,
 // so the model appears at the same relative position on any screen size.
 const POS_X_RATIO = 0.741 // 800/1080 = 0.741 (74.1% from left)
@@ -91,14 +91,10 @@ export async function loadModel(modelPath: string): Promise<void> {
       ),
     ])) as Live2DModel<Cubism4InternalModel>
 
-    // The manifest exposes only Hiyori_m01 in Idle, so the model's normal
-    // idle scheduler can safely keep the gentle sway running without chance.
+    // Reset scheduler state left by a previously loaded model before Mao's
+    // authored idle scheduler begins.
     try {
       model.internalModel?.motionManager?.stopAllMotions()
-    } catch {}
-    // Start the calm motion immediately; the one-item Idle group repeats it.
-    try {
-      model.motion('Idle', 0)
     } catch {}
     model.anchor.set(0.5, 0.5)
     // Will be overridden after applyScale below to user's preferred position

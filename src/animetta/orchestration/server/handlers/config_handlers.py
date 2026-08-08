@@ -104,7 +104,7 @@ class ConfigHandlers(BaseSocketHandler):
             live2d_model_path = live2d_cfg.model.path
         except Exception as e:
             logger.warning(f"[ConfigHandlers] Failed to load Live2D config, using fallback: {e}")
-            live2d_model_path = "/live2d/haru/haru_greeter_t03.model3.json"
+            live2d_model_path = "/live2d/mao/Mao.model3.json"
 
         # Build safe config (NO api keys, NO secrets)
         config_data = {

@@ -1,4 +1,4 @@
-"""Independent Qwen3 Alice TTS service package."""
+"""Independent Qwen3 synthetic-reference TTS service package."""
 
 from .app import QwenServiceSettings, QwenTTSService, create_app
 

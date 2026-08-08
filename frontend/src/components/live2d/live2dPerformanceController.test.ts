@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Live2DPerformancePlanV1 } from '@/types/socket-events'
 import {
-  HIYORI_PERFORMANCE_OWNED_PARAMETERS,
-  resolveHiyoriPerformanceParameters,
-} from './hiyoriPerformanceProfile'
+  MAO_PERFORMANCE_OWNED_PARAMETERS,
+  resolveMaoPerformanceParameters,
+} from './maoPerformanceProfile'
 import { Live2DPerformanceController } from './live2dPerformanceController'
 
 const ANNOYED: Live2DPerformancePlanV1 = {
@@ -135,7 +135,7 @@ describe('Live2DPerformanceController', () => {
     let now = 0
     const write = vi.fn()
     const controller = new Live2DPerformanceController({
-      read: (name) => (name === 'ParamMouthForm' ? 0.2 : 0),
+      read: (name) => (name === 'ParamMouthDown' ? 0.2 : 0),
       write,
       now: () => now,
     })
@@ -145,7 +145,7 @@ describe('Live2DPerformanceController', () => {
     now = 250
     controller.tick()
 
-    expect(write).toHaveBeenCalledWith('ParamMouthForm', 0.04000000000000001)
+    expect(write).toHaveBeenCalledWith('ParamMouthDown', 0.42000000000000004)
     expect(write.mock.calls.some(([name]) => name === 'ParamEyeBallY')).toBe(false)
   })
 
@@ -210,30 +210,30 @@ describe('Live2DPerformanceController', () => {
   })
 })
 
-describe('Hiyori performance profile', () => {
+describe('Mao performance profile', () => {
   it('never owns mouth opening and resolves deterministically without randomness', () => {
     const random = vi.spyOn(Math, 'random')
-    const first = resolveHiyoriPerformanceParameters(ANNOYED, 1)
-    const second = resolveHiyoriPerformanceParameters(ANNOYED, 1)
+    const first = resolveMaoPerformanceParameters(ANNOYED, 1)
+    const second = resolveMaoPerformanceParameters(ANNOYED, 1)
 
-    expect(HIYORI_PERFORMANCE_OWNED_PARAMETERS).not.toContain('ParamMouthOpenY')
+    expect(MAO_PERFORMANCE_OWNED_PARAMETERS).not.toContain('ParamA')
     expect(first).toEqual(second)
     expect(random).not.toHaveBeenCalled()
     random.mockRestore()
   })
 
   it('keeps every resolved offset within its declared parameter span', () => {
-    const values = resolveHiyoriPerformanceParameters(ANNOYED, 1)
+    const values = resolveMaoPerformanceParameters(ANNOYED, 1)
 
     for (const parameter of values) {
       expect(Math.abs(parameter.offset)).toBeLessThanOrEqual(parameter.max - parameter.min)
     }
   })
 
-  it('references only parameters declared by Hiyori', async () => {
-    const display = await import('../../../public/live2d/hiyori/Hiyori.cdi3.json')
+  it('references only parameters declared by Mao', async () => {
+    const display = await import('../../../public/live2d/mao/Mao.cdi3.json')
     const available = new Set(display.default.Parameters.map((parameter) => parameter.Id))
 
-    expect(HIYORI_PERFORMANCE_OWNED_PARAMETERS.every((name) => available.has(name))).toBe(true)
+    expect(MAO_PERFORMANCE_OWNED_PARAMETERS.every((name) => available.has(name))).toBe(true)
   })
 })

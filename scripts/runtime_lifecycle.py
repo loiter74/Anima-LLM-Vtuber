@@ -34,7 +34,7 @@ HOST_TTS_IDENTITY = {
     "provider": "qwen3-tts-gguf-host",
     "model": "Qwen3-TTS-1.7B-Base",
     "quantization": "talker=Q5_K,predictor=Q8_0,onnx=FP16",
-    "voice": "tosaka-rin-cn",
+    "voice": "vivian-synthetic-zh",
     "runtime_commit": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
     "sample_rate": 24000,
 }
@@ -433,6 +433,12 @@ def _bounded_input_fingerprint(operation: str) -> str:
     return hashlib.sha256(material).hexdigest()
 
 
+def _build_lease_id(run_id: str) -> str:
+    """Scope the BuildKit lease to one resumable lifecycle run."""
+
+    return f"{run_id}-animetta-build"
+
+
 async def run_bounded_operation(
     operation: str,
     *,
@@ -475,7 +481,7 @@ async def run_bounded_operation(
         driver=build_driver,
         run_id=run_id,
         owner="lifecycle-worker",
-        lease_id="animetta-build",
+        lease_id=_build_lease_id(run_id),
         command=("docker", "compose", "build", "animetta"),
         command_digest=hashlib.sha256(b"docker compose build animetta").hexdigest(),
         log_path=build_log,

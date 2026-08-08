@@ -477,7 +477,7 @@ def test_cfg_012_public_status_is_sanitized_and_separates_provider_identities(
             "type": "remote",
             "provider": "qwen3-tts-gguf-host",
             "model": "Qwen3-TTS-1.7B-Base",
-            "voice": "tosaka-rin-cn",
+            "voice": "vivian-synthetic-zh",
         },
         "resolved": {
             "type": "mimo",
@@ -740,7 +740,7 @@ def test_default_production_selects_dashscope_with_host_qwen_fallback(
     assert typed.primary.model == "qwen3-tts-instruct-flash-realtime"
     assert typed.primary.voice == "Seren"
     assert typed.fallback.model == "Qwen3-TTS-1.7B-Base"
-    assert typed.fallback.voice == "tosaka-rin-cn"
+    assert typed.fallback.voice == "vivian-synthetic-zh"
     assert typed.fallback.base_url == "http://host.docker.internal:8767"
 
 
@@ -755,7 +755,7 @@ def test_repository_selftest_uses_local_qwen_without_changing_production(
     assert selftest.tts.type == "remote"
     assert selftest.tts.provider == "qwen3-tts-gguf-host"
     assert selftest.tts.model == "Qwen3-TTS-1.7B-Base"
-    assert selftest.tts.voice == "tosaka-rin-cn"
+    assert selftest.tts.voice == "vivian-synthetic-zh"
     assert selftest.system.tts_timeout_seconds == 120.0
     assert production.services.tts == "dashscope-local-failover"
 
@@ -805,7 +805,7 @@ def test_typed_provider_instances_cannot_mutate_effective_config(
     first = effective.typed_provider("tts")
     first.voice = "tampered"
 
-    assert effective.typed_provider("tts").voice == "tosaka-rin-cn"
+    assert effective.typed_provider("tts").voice == "vivian-synthetic-zh"
 
 
 @pytest.mark.parametrize("port", ["not-a-port", "70000"])

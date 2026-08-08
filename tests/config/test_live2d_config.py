@@ -72,7 +72,7 @@ class TestLive2DModelConfig:
 
     def test_default_path(self):
         config = Live2DModelConfig()
-        assert config.path == "/live2d/haru/haru_greeter_t03.model3.json"
+        assert config.path == "/live2d/mao/Mao.model3.json"
 
     def test_default_scale(self):
         config = Live2DModelConfig()

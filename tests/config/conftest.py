@@ -89,7 +89,7 @@ def manifest_data() -> dict[str, Any]:
                     "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
                     "quantization": "talker=Q5_K,predictor=Q8_0,onnx=FP16",
                     "runtime_commit": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-                    "voice": "tosaka-rin-cn",
+                    "voice": "vivian-synthetic-zh",
                     "language": "Chinese",
                 },
             },

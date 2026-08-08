@@ -53,7 +53,7 @@ class FailoverTTS(TTSInterface):
     supports_streaming = True
     provider_identity = "failover"
     model = "dashscope+qwen3-tts-1.7b"
-    voice = "Seren+tosaka-rin-cn"
+    voice = "Seren+vivian-synthetic-zh"
 
     def __init__(
         self,

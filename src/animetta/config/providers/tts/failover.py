@@ -16,7 +16,7 @@ class FailoverTTSConfig(TTSBaseConfig):
 
     type: Literal["failover"] = "failover"
     model: str = "dashscope+qwen3-tts-1.7b"
-    voice: str = "Seren+tosaka-rin-cn"
+    voice: str = "Seren+vivian-synthetic-zh"
     primary: DashScopeTTSConfig
     fallback: RemoteTTSConfig
     cooldown_seconds: float = Field(default=300.0, gt=0)
