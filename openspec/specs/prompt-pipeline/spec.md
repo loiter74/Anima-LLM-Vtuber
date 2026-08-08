@@ -80,27 +80,32 @@ The prompt pipeline SHALL preserve the LLM call path when optional prompt contri
 - **THEN** the compiled prompt SHALL include a warning about the missing persona prompt
 
 ### Requirement: Live improvisation control layer
-The prompt pipeline SHALL include a concise live improvisation control layer for realtime Anima chat replies without modifying the accepted persona config.
+The prompt pipeline SHALL include one concise live response-control layer for realtime Anima chat replies without modifying the accepted persona config. Valid active scene guidance SHALL replace the generic improvisation section for that turn; otherwise the generic section SHALL remain the fallback.
 
-#### Scenario: Live improvisation section is included
-- **WHEN** the prompt pipeline compiles a prompt for realtime chat
-- **THEN** the compiled prompt SHALL include a stable live improvisation section
+#### Scenario: Generic live improvisation section is included
+- **WHEN** the prompt pipeline compiles a realtime chat prompt without active scene guidance
+- **THEN** the compiled prompt SHALL include the stable generic live improvisation section
 - **THEN** the section metadata SHALL expose its stable section name
 
-#### Scenario: Persona config remains the source of identity
-- **WHEN** the live improvisation section is added
-- **THEN** the persona section SHALL remain included as the base identity source
-- **THEN** the live improvisation section SHALL NOT require editing persona YAML content
+#### Scenario: Scene guidance replaces generic improvisation
+- **WHEN** validated active `SceneGuidance` is present in turn metadata
+- **THEN** the compiled prompt SHALL include a bounded scene-guidance section
+- **THEN** the compiled prompt SHALL omit the generic live improvisation section
 
-#### Scenario: Live improvisation sharpens reply style
-- **WHEN** the live improvisation section is rendered
+#### Scenario: Persona config remains the source of identity
+- **WHEN** either live response-control section is added
+- **THEN** the persona section SHALL remain included as the base identity source
+- **THEN** the response-control section SHALL NOT require editing persona YAML content or override persona and safety constraints
+
+#### Scenario: Generic improvisation sharpens reply style
+- **WHEN** the generic live improvisation section is rendered
 - **THEN** it SHALL instruct the model to produce short live-chat replies in Anima voice
 - **THEN** it SHALL discourage customer-service phrasing, meta explanations, and rigid advice formatting
 
-#### Scenario: Live improvisation precedes memory context
-- **WHEN** live improvisation and memory sections are both present
-- **THEN** the live improvisation section SHALL appear before the memory section
-- **THEN** memory context SHALL NOT be the final style-setting instruction
+#### Scenario: Live response control precedes memory context
+- **WHEN** a live response-control section and memory sections are both present
+- **THEN** the live response-control section SHALL appear before memory context
+- **THEN** memory context SHALL NOT become a conflicting style-setting instruction
 
 ### Requirement: Base persona prompt is derived from active config
 The prompt pipeline SHALL derive the base persona prompt from the active runtime configuration when a service context is available, using state-provided prompt text only as a compatibility fallback.
@@ -135,4 +140,16 @@ The prompt pipeline SHALL expose the runtime config version used to compile each
 - **WHEN** runtime reload succeeds and a subsequent conversation turn compiles a prompt
 - **THEN** the compiled prompt metadata SHALL include the new runtime config version
 - **THEN** the persona prompt content SHALL come from the reloaded persona data
+
+### Requirement: Scene guidance prompt validation and containment
+The prompt pipeline SHALL consume scene guidance only after contract validation and SHALL contain source failures without blocking the LLM call.
+
+#### Scenario: Malformed scene guidance metadata
+- **WHEN** scene guidance metadata is malformed, expired, or schema-incompatible
+- **THEN** the prompt pipeline SHALL omit it, include a safe warning, and retain generic improvisation behavior
+
+#### Scenario: Scene guidance is rendered
+- **WHEN** active guidance is valid
+- **THEN** the rendered section SHALL contain only the current scene summary, response objective, scope, tone, selected technique, meme policy, and explicit avoid/must-address constraints
+- **THEN** it SHALL NOT render raw analyzer output or retrieval candidate documents
 

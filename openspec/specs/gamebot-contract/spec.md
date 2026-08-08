@@ -2,16 +2,16 @@
 Define the transport-independent command, response, event, and status contracts shared by Anima game-bot adapters and external runtimes.
 ## Requirements
 ### Requirement: Game bot commands use a stable contract
-The system SHALL represent bot commands using a transport-independent request schema with an id, action, params, and timeout in milliseconds.
+The v2 system SHALL represent each runtime step with a transport-independent request containing transport ID, command ID, step ID, correlation ID, bound runtime instance ID, capability, canonical parameters, remaining budget, and deadline.
 
 #### Scenario: Command request serializes for stdio transport
-- **WHEN** Anima sends a game-bot command through the stdio transport
-- **THEN** the serialized JSON line SHALL include `id`, `action`, `params`, and `timeout_ms`
-- **THEN** the action and params SHALL match the validated command request
+- **WHEN** Anima sends a v2 game-bot step through stdio
+- **THEN** the serialized JSON line SHALL validate against the canonical request schema
+- **THEN** all execution identity and budget fields SHALL match the controller-approved step
 
 #### Scenario: Command timeout unit is stable
-- **WHEN** a caller sends a command with a timeout in seconds through a compatibility adapter
-- **THEN** the command contract SHALL expose the timeout to the runtime in milliseconds
+- **WHEN** Python serializes a v2 deadline or compatibility timeout
+- **THEN** the contract SHALL use its declared unit and SHALL NOT ambiguously mix seconds and milliseconds
 
 ### Requirement: Game bot responses use a stable contract
 The system SHALL represent bot command results using a response schema with id, status, and result fields.
@@ -45,37 +45,79 @@ The system SHALL represent status snapshots using generic fields for position, h
 - **THEN** Minecraft-specific details SHALL be carried in metadata when no generic field exists
 
 ### Requirement: Versioned capability manifest
-Every game-bot runtime SHALL expose a structured manifest containing protocol version, runtime identity, capability names, risk classifications, and parameter schemas.
+Every production runtime SHALL expose a v2 manifest containing protocol and runtime-instance identity, Minecraft and stable environment profile fields, capability risk and parameter schemas, receipt schema versions, and explicit support flags for single-flight, correlation idempotency, cooperative cancellation, per-action budget enforcement, and receipt chains.
 
 #### Scenario: Controller connects to runtime
 - **WHEN** the game-bot client establishes a connection
-- **THEN** it SHALL retrieve and validate the capability manifest before allowing production actions
+- **THEN** it SHALL retrieve and validate the v2 manifest before readiness
+- **THEN** missing required guarantees SHALL reject production execution
 
 ### Requirement: Structured observation contract
-The game-bot contract SHALL expose observations with correlation metadata, position, health, food, inventory, equipment, environment context, and runtime identity without using administrator state mutation.
+The v2 observation SHALL contain correlation metadata, capture time/tick, content hash, runtime-instance identity, stable environment profile, position, health, food, inventory, equipment, and environment state without administrator mutation.
 
-#### Scenario: Learning requests world state
-- **WHEN** a learning session calls `observe`
-- **THEN** the runtime SHALL return a schema-valid observation attributable to the connected bot and runtime instance
+#### Scenario: Executor requests fresh world state
+- **WHEN** the command executor requests an observation after an action
+- **THEN** the runtime SHALL return a schema-valid observation attributable to the bound runtime instance
+- **THEN** its capture marker SHALL allow the controller to prove whether it follows the relevant receipt
 
 ### Requirement: Structured action receipts
-Every executed action SHALL return a structured receipt with session, task, correlation, capability, normalized parameters, timing, outcome, structured error, runtime identity, and before/after observation references.
+Every executed v2 capability SHALL return an ordered, hash-linked receipt containing command, step, correlation, capability, canonical parameter hash, action sequence, timing/ticks, outcome, structured error, runtime-instance identity, before/after observation references, explained mutations, and budget usage.
 
 #### Scenario: Action succeeds
 - **WHEN** a survival-safe action completes
-- **THEN** its receipt SHALL contain enough information to attribute resulting inventory and state changes to that action
+- **THEN** its receipt SHALL contain enough attributable evidence to verify goal predicates and charge budget
 
 #### Scenario: Action fails
-- **WHEN** an action times out or fails
-- **THEN** its receipt SHALL contain a machine-readable error code and MUST NOT rely on natural-language parsing for recovery decisions
+- **WHEN** an action times out, fails, or has unknown outcome
+- **THEN** its receipt or structured transport error SHALL use a machine-readable code and explicit outcome-known/world-may-have-changed fields
 
-#### Scenario: Generated skill invokes multiple capabilities
-- **WHEN** `eval_skill` invokes more than one authorized safe wrapper
-- **THEN** the runtime SHALL return a `SkillExecutionResult` containing every wrapper ActionReceipt in execution order as one verifiable chain
+#### Scenario: Skill IR executes multiple steps
+- **WHEN** the controller interprets a Skill IR program containing multiple action steps
+- **THEN** each runtime call SHALL return its own receipt linked to the same parent command in execution order
+- **THEN** the runtime SHALL NOT execute the complete Skill IR as arbitrary code
 
 ### Requirement: Action cancellation
-The game-bot contract SHALL allow the controller to cancel the active action and obtain a fresh observation after cleanup.
+The v2 contract SHALL allow idempotent cooperative cancellation of the active correlation, and a cancellation acknowledgment SHALL mean only that the runtime accepted the signal rather than that all effects safely stopped.
 
-#### Scenario: Controller cancels timed-out action
+#### Scenario: Controller cancels active action
 - **WHEN** the controller invokes cancellation
-- **THEN** the runtime SHALL stop pathfinding, combat, digging, and other active action resources before acknowledging cancellation
+- **THEN** the runtime SHALL signal pathfinding, combat, digging, and other active resources to stop
+- **THEN** the controller SHALL require a final receipt, idle health, and a fresh observation before declaring cancellation reconciled
+
+### Requirement: Runtime correlation is idempotent within an instance
+The v2 runtime SHALL maintain an instance-scoped correlation ledger so a repeated correlation with identical canonical content does not execute twice.
+
+#### Scenario: Identical correlation is retried in the same runtime instance
+- **WHEN** the runtime receives the same correlation ID and canonical request hash again
+- **THEN** it SHALL return the recorded current or final result without repeating the action
+
+#### Scenario: Correlation content conflicts
+- **WHEN** the runtime receives an existing correlation ID with different canonical content
+- **THEN** it SHALL return `CORRELATION_CONFLICT` without executing
+
+### Requirement: Runtime correlation state is inspectable without execution
+The v2 runtime SHALL allow Python to inspect an existing correlation as `not_found`, `accepted`, `running`, or `terminal` without starting or retrying an action, and a terminal inspection SHALL return the original receipt.
+
+#### Scenario: Action response is lost after completion
+- **WHEN** Python loses the execute response and inspects the same correlation in the same runtime instance
+- **THEN** the runtime SHALL return its recorded terminal receipt without executing the capability again
+
+#### Scenario: Correlation is absent in the same retained instance
+- **WHEN** inspection returns `not_found` while the same runtime instance and ledger-retention guarantee remain valid
+- **THEN** recovery MAY conclude that the runtime never accepted that correlation
+
+#### Scenario: Runtime instance changed
+- **WHEN** Python inspects using a correlation bound to a previous runtime instance
+- **THEN** the runtime SHALL return an instance mismatch rather than treating a new-instance absence as proof of no effect
+
+### Requirement: Runtime enforces single-flight and action budgets
+The v2 runtime SHALL reject concurrent state-changing actions and SHALL enforce the controller-provided remaining action budget inside Mineflayer capability wrappers.
+
+#### Scenario: Concurrent action bypass is attempted
+- **WHEN** a second state-changing request arrives while one is active
+- **THEN** the runtime SHALL reject it without starting another world mutation
+
+#### Scenario: Capability reaches budget
+- **WHEN** an active wrapper reaches its remaining distance, damage, block-change, resource, or time limit
+- **THEN** it SHALL stop further action and return attributable budget usage and outcome
+
