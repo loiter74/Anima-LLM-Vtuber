@@ -90,18 +90,17 @@ See [Testing Guide](docs/development/testing.md) for detailed test conventions.
 
 `tooling/quality.yml` is the sole component-to-test and Docker-scope mapping. Cache reuse is limited to successful hermetic results in the same repository and trust scope. Browser, live-service, and Docker-runtime acceptance always records fresh evidence.
 
-## Pull Request Process
+## Change Integration
 
-1. Create a feature branch from `main`
-2. Install the local gate once: `make install-hooks` (see [Git Hooks](#git-hooks-one-time-setup) above)
-3. Write tests first (TDD preferred)
-4. Ensure CI passes:
-   - **preflight** (sub-minute, PR-only): ruff + format + scoped mypy on changed files
+1. Install the local gate once: `make install-hooks` (see [Git Hooks](#git-hooks-one-time-setup) above)
+2. Write tests first (TDD preferred)
+3. Ensure the relevant local and CI checks pass:
+   - **preflight**: ruff + format + scoped mypy on changed files
    - **Quality** matrix: `tooling/quality` impact-selected tests, then `quality-gate` aggregates
-5. Update docs if changing public interfaces (and tick the impact checklist in the PR template)
-6. Open PR against `main`
+4. Update docs when changing public interfaces.
+5. Maintainers may commit and push directly to `main`; use a feature branch and PR when review or collaboration is useful.
 
-> **Branch protection (manual, one-time):** in GitHub Settings → Branches → `main`, enable "Require status checks to pass before merging" and add `preflight` + `quality-gate` as required checks. Enable "Require review from code owners" (see `.github/CODEOWNERS`).
+Do not enable GitHub's "Require a pull request before merging" rule for `main`.
 
 ## Change Tracking (openspec)
 
