@@ -199,8 +199,7 @@ animetta/
 ├── config/                # YAML config files (personas, services, tools)
 ├── design-system/         # Visual design spec (HTML spec sheets)
 ├── docs/                  # Architecture, ADRs, deployment, references
-├── tests/                 # pytest (backend) + vitest (frontend)
-└── openspec/              # Spec-driven change tracking
+└── tests/                 # pytest (backend) + vitest (frontend)
 ```
 
 ---
@@ -227,7 +226,7 @@ class MyLLMAgent(AgentInterface):
 
 **Add a tool** — use the `@tool` decorator in [`src/animetta/tools/`](src/animetta/tools/).
 
-> Agent conventions (for ZCode / Claude Code / Cursor): see [AGENTS.md](AGENTS.md).
+> Agent conventions (for Codex / ZCode): see [AGENTS.md](AGENTS.md).
 
 ---
 
@@ -247,7 +246,7 @@ class MyLLMAgent(AgentInterface):
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and test commands. New changes are tracked via the [openspec](openspec/) spec-driven system — run `/opsx-propose` to start a change.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and test commands.
 
 ---
 

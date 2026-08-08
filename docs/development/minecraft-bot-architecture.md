@@ -107,7 +107,7 @@ groups. Every layer below must be current for the content under acceptance.
 
 | Layer | Proves | Required evidence |
 |---|---|---|
-| R0 architecture | three tools, downward dependencies, one scheduler/executor, no legacy mutation path | architecture AST audit and OpenSpec strict validation |
+| R0 architecture | three tools, downward dependencies, one scheduler/executor, no legacy mutation path | architecture AST audit and repository quality validation |
 | R1 contracts | mission DAGs, proposals, budgets, facts, blueprints, GameBot schemas and stable hashes | Python model/golden tests and generated contract digests |
 | R2 pure domains | admission, novelty, applicability, selection, compilation and independent verification | deterministic unit/property tests without services |
 | R3 durability | idempotency, transactions, state transitions, restart, stop and parent/child budget settlement | in-memory and SQLite repository/state-machine tests |

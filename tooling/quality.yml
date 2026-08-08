@@ -1183,8 +1183,6 @@ components:
       - Makefile
       - docs/development/project-health.md
       - .agents/skills/**
-      - openspec/changes/add-impact-aware-quality-pipeline/**
-      - openspec/changes/accelerate-impact-aware-verification/**
     direct_groups: [backend-tooling-quality, docs-contract]
     impacts: []
     risk: normal

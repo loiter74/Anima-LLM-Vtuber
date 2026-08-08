@@ -8,7 +8,7 @@ import MemoryCards from './MemoryCards.vue'
 // Default to collapsed on every page load. This frees the left side and lets
 // the central stage + global background image fill the visible area. The user
 // can expand the drawer via the expand-btn, but the choice is not persisted
-// (refreshing returns to collapsed). See openspec/changes/live2d-bg-layout.
+// (refreshing returns to collapsed).
 const isCollapsed = ref(true)
 
 function toggleDrawer() {

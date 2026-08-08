@@ -67,9 +67,6 @@ frontend-legacy/
 # User settings
 .user_settings.yaml
 
-# Claude Code skills (user-specific)
-.claude/skills/
-
 # Memory system (OpenClaw-style)
 # Keep directory structure, ignore generated files
 memory_db/*.sqlite
@@ -82,7 +79,6 @@ memory_db/MEMORY.md
 training_data/datasets/raw/
 # Runtime data directories
 data/
-.gstack/
 
 # Coverage
 .coverage
@@ -99,12 +95,9 @@ Users30262Projectrtk-ai/
 nul
 C:tmp_pip/
 
-# AI agent artifacts
-.opencode/
-.sisyphus/
+# Local agent artifacts
 .zcode/
 .worktrees/
-.claude/settings.local.json
 
 # Testing artifacts
 .pytest_cache/
@@ -149,17 +142,9 @@ memory_db/wiki/index.md
 # Keep only structural files
 !memory_db/wiki/WIKI_RULES.md
 
-# OpenSpec change workspaces are local unless explicitly whitelisted.
-openspec/changes/*
-!openspec/changes/add-livestream-scene-director/
-!openspec/changes/add-livestream-scene-director/**
 memory_db/chroma_v2/
 .codegraph/
-.understand-anything/
 smoke_test_result.json
-
-# OpenWolf runtime/session state (local agent artifacts)
-.wolf/
 
 # Temporary files
 tmp/

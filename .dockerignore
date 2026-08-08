@@ -9,17 +9,12 @@ __pycache__
 docs/
 tests/
 node_modules/
-openspec/
 memory_db/
 *.db
 .gitkeep
 .github/
-.claude/
-.gstack/
-.opencode/
 .pytest_cache/
 .ruff_cache/
-.sisyphus/
 .vscode/
 test-results/
 design-system/

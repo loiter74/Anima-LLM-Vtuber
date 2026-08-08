@@ -104,7 +104,7 @@ function handlePopoutClosed(): void {
   /* Transparent so the global background layer in App.vue (z-index: 0) shows
      through. The decorative radial-gradient washes are kept as overlays, but
      the solid --c-bg base is dropped — otherwise it occludes the background
-     image. See openspec/changes/live2d-bg-layout. */
+     image. */
   background:
     radial-gradient(ellipse at 80% 20%, rgba(232, 121, 168, 0.08) 0%, transparent 50%),
     radial-gradient(ellipse at 20% 80%, rgba(124, 140, 245, 0.06) 0%, transparent 50%);

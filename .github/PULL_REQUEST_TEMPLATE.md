@@ -5,8 +5,8 @@ Lines in HTML comments are guidance — they won't render in the posted PR.
 
 ## Summary
 
-<!-- 1-3 sentences: what does this PR change and why? Reference the openspec
-change if there is one (e.g. "implements add-livestream-scene-director"). -->
+<!-- 1-3 sentences: what does this PR change and why? Link the relevant issue,
+task, or architecture decision when one exists. -->
 
 ## Verification
 

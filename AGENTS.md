@@ -7,6 +7,12 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 - 后端：[src/animetta](src/animetta/AGENTS.md)、[核心](src/animetta/core/AGENTS.md)、[编排](src/animetta/orchestration/AGENTS.md)、[状态图](src/animetta/orchestration/graph/AGENTS.md)、[服务](src/animetta/services/AGENTS.md)、[记忆](src/animetta/memory/AGENTS.md)、[配置](src/animetta/config/AGENTS.md)、[工具](src/animetta/tools/AGENTS.md)、[Minecraft](src/animetta/tools/minecraft/AGENTS.md)、[虚拟形象](src/animetta/avatar/AGENTS.md)、[巡检](src/animetta/inspection/AGENTS.md)
 - 其他区域：[前端](frontend/AGENTS.md)、[测试](tests/AGENTS.md)、[评估](evaluations/AGENTS.md)、[架构决策记录](docs/adrs/AGENTS.md)
 
+## 智能体配置
+
+- 仓库只保留 Codex 与 ZCode 共用的根目录/分目录 `AGENTS.md`，以及 Codex 使用的 `.agents/skills/`；不得新增 `CLAUDE.md`、`.claude/`、`.opencode/`、`.wolf/`、`.understand-anything/` 或其他智能体专用配置。
+- Codex 按作用域读取最近的 `AGENTS.md`。ZCode 先读取根目录 `AGENTS.md`，修改具体目录前还必须主动读取距离目标文件最近的分目录 `AGENTS.md`，确保两者遵循同一套规则。
+- `.zcode/` 只保存本地计划和会话数据，不纳入版本控制，也不作为项目规则来源。
+
 ## 修改位置
 
 | 任务 | 主要位置 |
@@ -19,7 +25,7 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 | Live2D | `src/animetta/avatar/`、`frontend/src/components/live2d/` |
 | 歌唱 | `src/animetta/services/singing/` |
 | Minecraft 机器人 | `src/animetta/tools/minecraft/`（Python 目录中的 Node.js 项目） |
-| 规格与架构决策 | `openspec/`、`docs/adrs/` |
+| 架构决策 | `docs/adrs/` |
 
 ## 不可违反的约定
 

@@ -119,7 +119,6 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
         // This is a known limitation of the pixi-live2d-display rendering
         // pipeline. Mitigation: reduce ticker FPS if warnings are excessive:
         //   app.ticker.maxFPS = 30
-        // See: .gstack/qa-reports/qa-report-localhost-3000-2026-06-02.md (ISSUE-008)
         app.ticker.add(tickPerformanceThenLipSync, undefined, -50)
         setupSocketListeners()
       }

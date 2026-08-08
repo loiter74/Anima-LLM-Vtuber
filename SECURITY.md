@@ -5,7 +5,7 @@
 - Store real provider credentials in `.env`, local environment variables, or a deployment secret manager.
 - Keep tracked config files on placeholders such as `${MIMO_API_KEY}` or `your_api_key_here`.
 - Run `python scripts/check_secrets.py` before sharing changes that touch `config/*.yaml` or `.env.example`.
-- Do not paste API keys, tokens, passwords, or signed URLs into issues, logs, screenshots, or OpenSpec artifacts.
+- Do not paste API keys, tokens, passwords, or signed URLs into issues, logs, screenshots, or planning artifacts.
 
 ## Credential Rotation
 

@@ -54,10 +54,6 @@
 | [demo/interview-demo.md](demo/interview-demo.md) | Interview demo walkthrough |
 | [demo/interview-qa.md](demo/interview-qa.md) | Interview Q&A prep |
 
-## Change Tracking
-
-New changes go through the [openspec](../openspec/) spec-driven system — run `/opsx-propose` to start a change.
-
 ## Minecraft
 
 | Document | Description |

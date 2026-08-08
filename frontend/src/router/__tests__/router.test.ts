@@ -1,6 +1,4 @@
-// Regression: ISSUE-009 — 0 frontend tests
-// Found by /qa on 2026-06-02
-// Report: .gstack/qa-reports/qa-report-localhost-3000-2026-06-02.md
+// 回归测试：ISSUE-009——此前前端没有测试。
 
 import { describe, it, expect } from 'vitest'
 import router from '@/router'
