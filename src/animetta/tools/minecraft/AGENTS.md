@@ -4,7 +4,7 @@
 
 All world mutations follow:
 
-`mc_execute -> VoyagerGateway -> journal/scheduler -> UnifiedVoyagerController -> CommandExecutor -> GameBot v2 adapter`.
+`mc_operate_bot.execute -> VoyagerGateway -> journal/scheduler -> UnifiedVoyagerController -> CommandExecutor -> GameBot v2 MCP adapter`.
 
 Only `core/adapter.py` may call the bridge for GameBot v2 transport operations,
 and only `voyager/command_executor.py` may invoke a state-changing runtime
@@ -12,10 +12,15 @@ capability. Strategies are finite and side-effect-free.
 
 ## Public API
 
-The complete public tool set is exactly `mc_execute`, `mc_status`, and `mc_stop`.
+The complete public tool set is exactly `mc_connection` and `mc_operate_bot`.
 Caller scope is injected outside model arguments. Do not restore fine-grained
 tools, raw Socket.IO command execution, long-lived mode sessions, or config-level
 `mode`/`autonomous` fields.
+
+Minecraft server, bot, viewer attachment, retry, permission and GameBot runtime
+lifecycle belong to the independent `mc-mcp` service. Anima may configure only its
+URL, CLI name, profile, authentication environment key and timeouts. Never add a
+sibling repository path, Node entrypoint or Minecraft Compose command here.
 
 ## Domains
 

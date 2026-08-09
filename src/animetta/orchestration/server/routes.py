@@ -288,14 +288,20 @@ class RouteHandlers:
 
     # ── Minecraft bot control events ───────────────────────────────────
 
-    async def on_minecraft_start(self, sid: str, data: dict) -> None:
-        return await self.minecraft.on_minecraft_start(sid, data)
+    async def on_minecraft_connect(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_connect(sid, data)
 
-    async def on_minecraft_stop(self, sid: str, data: dict) -> None:
-        return await self.minecraft.on_minecraft_stop(sid, data)
+    async def on_minecraft_status(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_status(sid, data)
 
-    async def on_minecraft_spectate(self, sid: str, data: dict) -> None:
-        return await self.minecraft.on_minecraft_spectate(sid, data)
+    async def on_minecraft_disconnect(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_disconnect(sid, data)
+
+    async def on_minecraft_shutdown(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_shutdown(sid, data)
+
+    async def on_minecraft_reattach_viewer(self, sid: str, data: dict) -> None:
+        return await self.minecraft.on_minecraft_reattach_viewer(sid, data)
 
     # ── Persona events ────────────────────────────────────────────────
 
@@ -442,9 +448,11 @@ def register_routes(
     sio.on(event_name("bilibili", "update_room"), handlers.on_bilibili_update_room)
 
     # Minecraft bot control events
-    sio.on(event_name("minecraft", "start"), handlers.on_minecraft_start)
-    sio.on(event_name("minecraft", "stop"), handlers.on_minecraft_stop)
-    sio.on(event_name("minecraft", "spectate"), handlers.on_minecraft_spectate)
+    sio.on(event_name("minecraft", "connect"), handlers.on_minecraft_connect)
+    sio.on(event_name("minecraft", "status"), handlers.on_minecraft_status)
+    sio.on(event_name("minecraft", "disconnect"), handlers.on_minecraft_disconnect)
+    sio.on(event_name("minecraft", "shutdown"), handlers.on_minecraft_shutdown)
+    sio.on(event_name("minecraft", "reattach_viewer"), handlers.on_minecraft_reattach_viewer)
 
     # Translation configuration events
     sio.on(event_name("translation", "configure"), handlers.on_translation_configure)

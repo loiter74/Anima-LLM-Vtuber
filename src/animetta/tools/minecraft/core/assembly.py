@@ -80,7 +80,7 @@ from animetta.tools.minecraft.voyager.strategies.live import LiveStrategy
 from animetta.tools.minecraft.voyager.strategies.mission import MissionStrategy
 
 from .adapter import MinecraftGameBotV2Adapter
-from .bridge import MinecraftBridge
+from .bridge import MinecraftMcpBridge
 from .config import MinecraftConfig
 
 
@@ -215,7 +215,7 @@ class MinecraftControlPlane:
 
 
 async def assemble_control_plane(
-    bridge: MinecraftBridge,
+    bridge: MinecraftMcpBridge,
     config: MinecraftConfig,
     *,
     event_emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
@@ -258,6 +258,8 @@ async def assemble_control_plane(
     )
     mission_events = ProjectionEventPublisher(emit=event_emit) if event_emit is not None else None
     startup_recovery = await repository.recover_startup(occurred_at_ms=_now_ms())
+    if not startup_recovery.quarantined:
+        await repository.begin_session(occurred_at_ms=_now_ms())
     event_publisher = (
         TransitionEventPublisher(repository=repository, emit=event_emit)
         if event_emit is not None

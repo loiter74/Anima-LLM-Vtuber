@@ -153,7 +153,12 @@ class OpenAIToolHandler:
                     }
                 )
 
-        messages.append({"role": "user", "content": user_input})
+        last_history_message = langchain_history[-1] if langchain_history else None
+        if not isinstance(last_history_message, ToolMessage) and not (
+            isinstance(last_history_message, HumanMessage)
+            and last_history_message.content == user_input
+        ):
+            messages.append({"role": "user", "content": user_input})
         return messages
 
     async def chat_with_tools(

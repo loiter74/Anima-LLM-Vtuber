@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -15,9 +14,7 @@ from animetta.acceptance.minecraft_gameplay_review import (
     DEFAULT_VIEWER_WAIT_SECONDS,
     MinecraftGameplayReviewHarness,
     MinecraftReviewError,
-    MinecraftReviewServerLease,
     create_review_app,
-    resolve_external_runtime_dir,
 )
 
 
@@ -28,8 +25,8 @@ def test_real_review_allows_a_bounded_manual_viewer_join_window() -> None:
 class FakeBridge:
     def __init__(self, report: dict | None = None) -> None:
         self.callback = None
-        self.start = AsyncMock(return_value=True)
-        self.stop = AsyncMock()
+        self.start = AsyncMock(return_value={"state": "ready"})
+        self.shutdown_runtime = AsyncMock(return_value={"state": "stopped"})
         self.send_command = AsyncMock(
             return_value={
                 "status": "success",
@@ -66,21 +63,13 @@ class FakeBridge:
         self.callback = callback
 
 
-class FakeServer:
-    def __init__(self) -> None:
-        self.start = AsyncMock()
-        self.stop = AsyncMock()
-
-
 async def test_harness_requires_authenticated_confirmed_attachment_and_writes_safe_report(
     tmp_path: Path,
 ) -> None:
     bridge = FakeBridge()
-    server = FakeServer()
     harness = MinecraftGameplayReviewHarness(
         token="review-token",
         artifact_dir=tmp_path,
-        server=server,
         bridge=bridge,
         viewer_timeout_seconds=0.1,
     )
@@ -118,15 +107,13 @@ async def test_harness_requires_authenticated_confirmed_attachment_and_writes_sa
 
     await harness.close()
     await harness.close()
-    bridge.stop.assert_awaited_once()
-    server.stop.assert_awaited_once()
+    bridge.shutdown_runtime.assert_awaited_once()
 
 
 async def test_harness_rejects_bad_auth_and_unconfirmed_viewer(tmp_path: Path) -> None:
     harness = MinecraftGameplayReviewHarness(
         token="review-token",
         artifact_dir=tmp_path,
-        server=FakeServer(),
         bridge=FakeBridge(),
         viewer_timeout_seconds=0.01,
     )
@@ -167,7 +154,6 @@ async def test_incomplete_run_exposes_only_bounded_material_counts(tmp_path: Pat
     harness = MinecraftGameplayReviewHarness(
         token="review-token",
         artifact_dir=tmp_path,
-        server=FakeServer(),
         bridge=bridge,
         viewer_timeout_seconds=0.1,
     )
@@ -195,160 +181,11 @@ async def test_incomplete_run_exposes_only_bounded_material_counts(tmp_path: Pat
     await harness.close()
 
 
-async def test_disposable_server_uses_isolated_project_port_and_world(tmp_path: Path) -> None:
-    calls: list[tuple[list[str], dict[str, str]]] = []
-
-    async def run_command(args: list[str], env: dict[str, str]) -> str:
-        calls.append((args, env))
-        return "Gamerule doMobSpawning is now set to: false"
-
-    lease = MinecraftReviewServerLease(
-        repository_dir=tmp_path,
-        world_dir=tmp_path / "world",
-        world_seed=8_675_309,
-        run_command=run_command,
-        readiness_probe=AsyncMock(return_value=True),
-    )
-
-    await lease.start()
-    response = await lease.execute_rcon("gamerule doMobSpawning false")
-    assert response == "Gamerule doMobSpawning is now set to: false"
-    ops = json.loads((tmp_path / "world" / "ops.json").read_text(encoding="utf-8"))
-    assert ops == [
-        {
-            "uuid": "4a820eea-2c37-36b6-aa2b-1669cb1fbe12",
-            "name": "AnimettaBot",
-            "level": 4,
-            "bypassesPlayerLimit": True,
-        }
-    ]
-    await lease.stop()
-    await lease.stop()
-
-    assert calls[0][0][:4] == ["docker", "compose", "-p", "animetta-mc-review"]
-    assert calls[0][0][-2:] == ["up", "-d"]
-    assert calls[0][1]["ANIMETTA_MC_REVIEW_PORT"] == "25566"
-    assert calls[0][1]["ANIMETTA_MC_REVIEW_WORLD_DIR"] == str((tmp_path / "world").resolve())
-    assert calls[0][1]["ANIMETTA_MC_REVIEW_SEED"] == "8675309"
-    assert calls[1][0][-4:] == [
-        "-T",
-        "minecraft",
-        "rcon-cli",
-        "gamerule spawnRadius 0",
-    ]
-    assert calls[2][0][-4:] == [
-        "-T",
-        "minecraft",
-        "rcon-cli",
-        "gamerule doMobSpawning false",
-    ]
-    assert calls[3][0][-3:] == ["down", "--volumes", "--remove-orphans"]
-
-
-async def test_disposable_server_allows_slow_cold_start_beyond_two_minutes(
-    tmp_path: Path,
-) -> None:
-    calls: list[tuple[list[str], dict[str, str]]] = []
-
-    async def run_command(args: list[str], env: dict[str, str]) -> None:
-        calls.append((args, env))
-
-    readiness_probe = AsyncMock(side_effect=[False] * 60 + [True])
-    sleep = AsyncMock()
-    lease = MinecraftReviewServerLease(
-        repository_dir=tmp_path,
-        world_dir=tmp_path / "world",
-        run_command=run_command,
-        readiness_probe=readiness_probe,
-        readiness_attempts=150,
-        readiness_interval_seconds=2,
-        sleep=sleep,
-    )
-
-    await lease.start()
-    await lease.stop()
-
-    assert readiness_probe.await_count == 61
-    assert sleep.await_count == 60
-    sleep.assert_awaited_with(2)
-    assert calls[1][0][-4:] == [
-        "-T",
-        "minecraft",
-        "rcon-cli",
-        "gamerule spawnRadius 0",
-    ]
-
-
-async def test_disposable_server_seeds_verified_runtime_without_copying_world(
-    tmp_path: Path,
-) -> None:
-    seed = tmp_path / "seed"
-    (seed / "cache").mkdir(parents=True)
-    (seed / "plugins").mkdir()
-    (seed / "world").mkdir()
-    (seed / "paper-1.21-130.jar").write_bytes(b"paper")
-    (seed / "cache" / "mojang_1.21.jar").write_bytes(b"mojang")
-    (seed / "plugins" / "spectatorplus-paper-1.2.1.jar").write_bytes(b"plugin")
-    (seed / "world" / "level.dat").write_bytes(b"old-world")
-
-    async def run_command(_args: list[str], _env: dict[str, str]) -> None:
-        return None
-
-    lease = MinecraftReviewServerLease(
-        repository_dir=tmp_path,
-        world_dir=tmp_path / "review-world",
-        runtime_seed_dir=seed,
-        run_command=run_command,
-        readiness_probe=AsyncMock(return_value=True),
-    )
-
-    await lease.start()
-
-    assert (lease.world_dir / "paper-1.21-130.jar").read_bytes() == b"paper"
-    assert (lease.world_dir / "cache" / "mojang_1.21.jar").read_bytes() == b"mojang"
-    assert (lease.world_dir / "plugins" / "spectatorplus-paper-1.2.1.jar").read_bytes() == b"plugin"
-    assert not (lease.world_dir / "world").exists()
-    await lease.stop()
-
-
-async def test_disposable_server_uses_extended_windows_paths_for_runtime_trees(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seed = tmp_path / "seed"
-    (seed / "libraries").mkdir(parents=True)
-    copytree = Mock()
-    monkeypatch.setattr(
-        "animetta.acceptance.minecraft_gameplay_review.shutil.copytree",
-        copytree,
-    )
-
-    lease = MinecraftReviewServerLease(
-        repository_dir=tmp_path,
-        world_dir=tmp_path / "review-world",
-        runtime_seed_dir=seed,
-        run_command=AsyncMock(),
-        readiness_probe=AsyncMock(return_value=True),
-    )
-
-    await lease.start()
-
-    source, target = copytree.call_args.args
-    if os.name == "nt":
-        assert str(source).startswith("\\\\?\\")
-        assert str(target).startswith("\\\\?\\")
-    else:
-        assert Path(source) == seed / "libraries"
-        assert Path(target) == lease.world_dir / "libraries"
-    await lease.stop()
-
-
 async def test_loopback_app_authenticates_readiness_run_and_artifacts(tmp_path: Path) -> None:
     bridge = FakeBridge()
     harness = MinecraftGameplayReviewHarness(
         token="review-token",
         artifact_dir=tmp_path,
-        server=FakeServer(),
         bridge=bridge,
         viewer_timeout_seconds=0.1,
     )
@@ -382,11 +219,3 @@ async def test_loopback_app_authenticates_readiness_run_and_artifacts(tmp_path: 
         assert artifact.json()["completed"] is True
 
     await harness.close()
-
-
-def test_external_runtime_resolution_handles_git_worktrees(tmp_path: Path) -> None:
-    canonical = tmp_path / "Anima"
-    worktree = canonical / ".worktrees" / "minecraft-review"
-
-    assert resolve_external_runtime_dir(worktree) == tmp_path / "voyager-mc-bot"
-    assert resolve_external_runtime_dir(canonical) == tmp_path / "voyager-mc-bot"

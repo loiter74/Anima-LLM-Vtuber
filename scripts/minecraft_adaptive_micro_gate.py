@@ -12,22 +12,13 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from animetta.acceptance.minecraft_gameplay_review import (
-    MinecraftReviewServerLease,
-    resolve_external_runtime_dir,
-)
-from animetta.tools.minecraft.core.bridge import MinecraftBridge
-from animetta.tools.minecraft.core.config import (
-    MinecraftBotConfig,
-    MinecraftClientViewerConfig,
-    MinecraftConfig,
-    MinecraftRuntimeConfig,
-)
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
+from animetta.tools.minecraft.core.config import MinecraftConfig, MinecraftMcpConfig
 from animetta.tools.minecraft.core.tools import (
     bind_minecraft_caller_scope,
     cleanup_bridge,
     configure_voyager_control_plane,
-    mc_execute,
+    mc_operate_bot,
 )
 from animetta.tools.minecraft.mission.adaptive import ExplorationFrontier
 from animetta.tools.minecraft.mission.models import MissionSpec
@@ -174,12 +165,15 @@ async def _execute_mission(
     | None = None,
 ) -> dict[str, Any]:
     with bind_minecraft_caller_scope(caller_scope):
-        raw_handle = await mc_execute.ainvoke(
+        raw_handle = await mc_operate_bot.ainvoke(
             {
-                "contract_version": "2",
-                "kind": "mission",
-                "request_id": f"request-{mission.mission_id}",
-                "mission": mission.model_dump(mode="python"),
+                "operation": "execute",
+                "execute": {
+                    "contract_version": "2",
+                    "kind": "mission",
+                    "request_id": f"request-{mission.mission_id}",
+                    "mission": mission.model_dump(mode="python"),
+                },
             }
         )
     handle = json.loads(raw_handle)
@@ -311,47 +305,22 @@ async def run(
     run_root.mkdir(parents=True, exist_ok=False)
     artifact_path = run_root / "micro-gate.json"
     feedback_journal = _FeedbackJournal(run_root / "feedback")
-    external_runtime = resolve_external_runtime_dir(repository_dir)
-    server = MinecraftReviewServerLease(
-        repository_dir=repository_dir,
-        world_dir=runtime_root / "_world",
-        world_seed=scenario.world_seed,
-    )
     config = MinecraftConfig(
         enabled=True,
         journal_path=str(runtime_root / "stores" / "mission.sqlite3"),
         skill_path=str(runtime_root / "stores" / "skill.sqlite3"),
         max_tool_wait_seconds=60,
-        bot=MinecraftBotConfig(
-            host="127.0.0.1",
-            port=25566,
-            username=scenario.bot_username,
-            version="1.21",
-        ),
-        client_viewer=MinecraftClientViewerConfig(
-            enabled=True,
-            username=scenario.viewer_username,
-            auto_spectate=True,
-            poll_interval=2,
-            spectate_timeout=8,
-        ),
-        runtime=MinecraftRuntimeConfig(
-            runtime_path=str(external_runtime),
-            entrypoint="src/index.js",
-            package_manager="npm",
-            use_embedded_fallback=False,
-        ),
+        mcp=MinecraftMcpConfig(default_profile="managed-review"),
     )
-    bridge = MinecraftBridge(config)
+    bridge = MinecraftMcpBridge(config)
     viewer = _ViewerTracker()
     bridge.set_viewer_callback(viewer.receive)
     environment = ReviewScenarioEnvironment(
         runtime_root=runtime_root,
-        server=server,
         bridge=bridge,
     )
     preparer = ScenarioPreparer(
-        executor=ReviewRconSetupExecutor(server),
+        executor=ReviewRconSetupExecutor(bridge),
         environment=environment,
         now_ms=lambda: time.time_ns() // 1_000_000,
     )
@@ -524,9 +493,9 @@ async def run(
         persist()
         raise
     finally:
+        if bridge.is_running:
+            await bridge.shutdown_runtime(request_id=f"micro-gate-shutdown-{run_id}")
         await cleanup_bridge()
-        await bridge.stop()
-        await server.stop()
 
 
 def main() -> int:

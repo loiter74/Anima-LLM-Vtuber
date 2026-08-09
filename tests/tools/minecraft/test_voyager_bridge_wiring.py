@@ -7,16 +7,17 @@ import inspect
 import pytest
 from pydantic import ValidationError
 
-from animetta.tools.minecraft.core.bridge import MinecraftBridge
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
 from animetta.tools.minecraft.core.config import MinecraftConfig
 
 
 def test_bridge_is_transport_only_and_has_no_voyager_mode_authority() -> None:
-    source = inspect.getsource(MinecraftBridge)
+    source = inspect.getsource(MinecraftMcpBridge)
 
     assert "self_evolution" not in source
-    assert not hasattr(MinecraftBridge, "_launch_learning_loop")
-    assert not hasattr(MinecraftBridge, "set_voyager_mode")
+    assert not hasattr(MinecraftMcpBridge, "_launch_learning_loop")
+    assert not hasattr(MinecraftMcpBridge, "set_voyager_mode")
+    assert "create_subprocess_exec" not in inspect.getsource(MinecraftMcpBridge.start)
 
 
 @pytest.mark.parametrize("field", ["mode", "autonomous"])

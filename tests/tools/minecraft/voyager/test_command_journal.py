@@ -455,3 +455,25 @@ async def test_existing_blocked_unknown_keeps_restart_quarantined() -> None:
 
     assert recovery.quarantined is True
     assert recovery.blocked_command_ids == (command.command_id,)
+
+
+async def test_explicit_new_session_reopens_admission_without_losing_history(tmp_path) -> None:
+    repository = SQLiteCommandJournal(tmp_path / "new-session.db")
+    await repository.connect()
+    try:
+        first, _ = await repository.create_command(draft("first", "a" * 64))
+        await repository.begin_shutdown(occurred_at_ms=200)
+        with pytest.raises(RuntimeError, match="CONTROLLER_NOT_ACCEPTING_EXECUTE"):
+            await repository.create_command(draft("blocked", "b" * 64))
+
+        await repository.begin_session(occurred_at_ms=300)
+        second, _ = await repository.create_command(draft("second", "c" * 64))
+        projection = await repository.read_projection("principal:a")
+    finally:
+        await repository.close()
+
+    assert first.command_id != second.command_id
+    assert {item.command_id for item in projection.commands} == {
+        first.command_id,
+        second.command_id,
+    }

@@ -818,6 +818,7 @@ components:
     paths:
       - src/animetta/tools/gamebot/**
       - contracts/gamebot/**
+      - scripts/generate_gamebot_v2_contracts.py
       - tests/tools/gamebot/**
       - tests/tools/minecraft/core/test_gamebot_v2_adapter.py
     direct_groups:
@@ -869,11 +870,13 @@ components:
   minecraft-runtime-adapter:
     domain: backend
     paths:
-      - src/animetta/tools/minecraft/core/bridge.py
-      - src/animetta/tools/minecraft/core/config.py
-      - src/animetta/tools/minecraft/core/tools.py
+      - src/animetta/tools/mcp_bridge.py
+      - src/animetta/tools/minecraft/core/**
       - src/animetta/orchestration/server/handlers/minecraft_handlers.py
+      - tests/tools/test_mcp_bridge.py
       - tests/tools/minecraft/core/**
+      - tests/tools/minecraft/test_spectator.py
+      - tests/tools/minecraft/test_voyager_bridge_wiring.py
       - tests/orchestration/server/handlers/test_minecraft_voyager_wiring.py
     direct_groups:
       - minecraft-runtime-unit
@@ -923,7 +926,9 @@ components:
       - scripts/minecraft_adaptive_showcase.py
       - scripts/minecraft_adaptive_micro_gate.py
       - scripts/minecraft_real_model_contract.py
+      - src/animetta/acceptance/minecraft_gameplay_review.py
       - src/animetta/tools/minecraft/showcase/**
+      - tests/acceptance/test_minecraft_gameplay_review.py
       - tests/tools/minecraft/showcase/**
     direct_groups:
       - minecraft-adaptive-mission-unit
@@ -996,6 +1001,7 @@ components:
     domain: backend
     paths:
       - src/animetta/orchestration/graph/**
+      - src/animetta/orchestration/prompting/**
       - tests/orchestration/graph/**
     direct_groups:
       - backend-graph-unit
@@ -1236,6 +1242,7 @@ components:
     domain: repository
     paths:
       - AGENTS.md
+      - src/**/AGENTS.md
       - frontend/AGENTS.md
       - tests/AGENTS.md
       - .agents/skills/**/*.md

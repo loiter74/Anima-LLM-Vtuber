@@ -7,7 +7,7 @@
 
 ## OVERVIEW
 
-LLM tool calling system with built-in tools (calculator, web search, file I/O), MCP protocol bridge for external tool servers, and Minecraft bot integration. The Minecraft action bot now runs as the external Node.js project `C:/Users/30262/Project/voyager-mc-bot`; Anima owns the Python bridge, Minecraft adapters, and generic game-bot contracts.
+LLM tool calling system with built-in tools, MCP protocol bridges, and Minecraft control-plane integration. The independent `mc-mcp` service owns Minecraft runtime resources; Anima owns mission planning, durable projections and the typed MCP adapter.
 
 ## STRUCTURE
 
@@ -21,12 +21,11 @@ tools/
 ├── config.py                # Tool configuration loader (from config/tools.yaml)
 ├── gamebot/                 # Generic game-bot contracts, client, and stdio transport
 └── minecraft/               # Minecraft-specific Python adapters and orchestration
-    ├── core/bridge.py       #   Python ↔ external Node.js runtime IPC bridge
-    ├── core/tools.py        #   Minecraft tool definitions (mine, build, navigate, etc.)
-    ├── autonomous/          #   Autonomous agent controller
-    ├── skill/               #   Voyager-style skill models and execution
-    ├── survival/            #   Iron-survival runner
-    └── tech_tree/           #   Tech-tree progression runner
+    ├── core/bridge.py       #   Streamable HTTP mc-mcp client
+    ├── core/tools.py        #   mc_connection + mc_operate_bot
+    ├── skill/               #   Voyager-style Skill IR and trust
+    ├── survival/            #   Typed deterministic workflows
+    └── tech_tree/           #   Evidence-backed technology graph
 ```
 
 ## WHERE TO LOOK
@@ -36,15 +35,15 @@ tools/
 | Add built-in tool | `base.py` | Use `@tool` decorator, add to config/tools.yaml |
 | Add custom tool | `custom_tools.py` | User-defined, registered at runtime |
 | Connect MCP server | `mcp_bridge.py` | Configure in config/tools.yaml under mcp_servers |
-| Minecraft bot logic | `C:/Users/30262/Project/voyager-mc-bot/src/index.js` | JavaScript runtime — cross-language IPC via `minecraft/core/bridge.py` |
-| Minecraft tool defs | `minecraft/tools.py` | Python-side tool definitions for LLM |
+| Minecraft MCP adapter | `minecraft/core/bridge.py` | Loopback Streamable HTTP only |
+| Minecraft tool defs | `minecraft/core/tools.py` | Exact two-capability public surface |
 | Tool configuration | `config.py` + `config/tools.yaml` | Enable/disable tools, MCP servers, settings |
 
 ## KEY PATTERNS
 
 - **@tool decorator**: LangChain `@tool` for built-in tools — auto-discovered by tool_manager
 - **MCP bridge**: stdio transport to external MCP servers, tools exposed via mcp_bridge
-- **Cross-language Minecraft**: Python `minecraft/core/bridge.py` spawns the configured external Node.js process and communicates via JSON over stdin/stdout
+- **Cross-language Minecraft**: Python connects to the independently managed `mc-mcp` Streamable HTTP service
 - **Tool config**: config/tools.yaml → tool_config.py → ToolManager in orchestration/graph/
 
 ## ANTI-PATTERNS
@@ -55,7 +54,7 @@ tools/
 
 ## NOTES
 
-- Minecraft bot is a Mineflayer (Node.js) runtime in `C:/Users/30262/Project/voyager-mc-bot`; Anima launches it through `config/tools.yaml` runtime settings
-- MCP bridge supports stdio transport only; HTTP/SSE not yet implemented
+- Anima never launches Minecraft Node or Compose directly; mc-mcp profiles own those policies
+- MCP bridge supports stdio, SSE and Streamable HTTP transports
 - Tool execution timeout: 30s (configurable in tools.yaml)
 - Max 5 tool calls per LLM turn

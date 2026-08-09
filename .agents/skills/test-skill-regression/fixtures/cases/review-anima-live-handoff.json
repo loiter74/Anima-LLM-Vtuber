@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "review-anima-live-handoff",
+  "skill": "review-anima-live",
+  "task": "使用 $review-anima-live 读取 request.md，只生成 result/plan.md，不启动浏览器、OBS、直播或运行时服务。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/review-anima-live-handoff",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": [
+        "顺序: operate-anima-runtime -> Anima 后台动作 -> review-anima-live",
+        "入口: pnpm --silent -C frontend run review -- --feature live --base-url http://localhost --print-url",
+        "约束: 只使用 feature definition 的规范 URL"
+      ],
+      "not_contains": ["/live-stream", "Vue Router", "第二套直播"]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import contextlib
 from contextlib import AsyncExitStack
 from typing import Any
 
+import httpx
 from loguru import logger
 
 try:
@@ -62,8 +63,13 @@ class MCPClient:
                 )
 
             elif self.transport == "streamable_http":
+                http_client = httpx.AsyncClient(
+                    headers=self._config.get("headers"),
+                    timeout=self._config.get("timeout", 30),
+                )
+                await self._exit_stack.enter_async_context(http_client)
                 streams = await self._exit_stack.enter_async_context(
-                    streamable_http_client(url=self._config["url"])
+                    streamable_http_client(url=self._config["url"], http_client=http_client)
                 )
                 read, write = streams[0], streams[1]
 

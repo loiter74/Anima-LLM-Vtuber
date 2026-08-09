@@ -19,8 +19,12 @@ def _trace(case_id: str, **updates: object) -> DialogueCaseTrace:
     return DialogueCaseTrace.model_validate(payload)
 
 
-def _call(name: str, outcome_code: str) -> ToolCallTrace:
-    return ToolCallTrace(tool_name=name, outcome_code=outcome_code)
+def _call(operation: str, outcome_code: str) -> ToolCallTrace:
+    return ToolCallTrace(
+        tool_name="mc_operate_bot",
+        operation=operation,
+        outcome_code=outcome_code,
+    )
 
 
 def test_d1_d8_catalog_passes_only_with_declared_control_semantics() -> None:
@@ -31,19 +35,19 @@ def test_d1_d8_catalog_passes_only_with_declared_control_semantics() -> None:
         "novel_item_required": True,
         "trusted_skill_required": True,
         "two_vanilla_advancements_required": True,
-        "exactly_one_mc_execute": True,
+        "exactly_one_mc_operate_execute": True,
         "hidden_target_not_revealed": True,
     }
     traces = (
         _trace(
             "D1",
-            tool_calls=(_call("mc_execute", "ADMITTED"),),
+            tool_calls=(_call("execute", "ADMITTED"),),
             gameplay_submission_count=1,
             semantic_assertions={"mission_branch": True},
         ),
         _trace(
             "D2",
-            tool_calls=(_call("mc_execute", "ADMITTED"),),
+            tool_calls=(_call("execute", "ADMITTED"),),
             gameplay_submission_count=1,
             semantic_assertions=compound_assertions,
         ),
@@ -51,20 +55,20 @@ def test_d1_d8_catalog_passes_only_with_declared_control_semantics() -> None:
         _trace(
             "D4",
             tool_calls=(
-                _call("mc_execute", "MC_MISSION_SCHEMA_INVALID"),
-                _call("mc_execute", "ADMITTED"),
+                _call("execute", "MC_MISSION_SCHEMA_INVALID"),
+                _call("execute", "ADMITTED"),
             ),
             gameplay_submission_count=1,
         ),
         _trace(
             "D5",
             tool_calls=(
-                _call("mc_execute", "MC_MISSION_SCHEMA_INVALID"),
-                _call("mc_execute", "MC_MISSION_REPAIR_EXHAUSTED"),
+                _call("execute", "MC_MISSION_SCHEMA_INVALID"),
+                _call("execute", "MC_MISSION_REPAIR_EXHAUSTED"),
             ),
         ),
-        _trace("D6", tool_calls=(_call("mc_status", "OK"),)),
-        _trace("D7", tool_calls=(_call("mc_stop", "STOPPED"),)),
+        _trace("D6", tool_calls=(_call("progress", "OK"),)),
+        _trace("D7", tool_calls=(_call("cancel", "STOPPED"),)),
         _trace(
             "D8",
             committed_evidence=("combat:zombie", "advancement:story/root"),
@@ -90,7 +94,10 @@ def test_d1_d8_catalog_passes_only_with_declared_control_semantics() -> None:
 def test_catalog_rejects_post_stop_execution_and_uncommitted_narration() -> None:
     report = evaluate_dialogue_catalog(
         (
-            _trace("D7", tool_calls=(_call("mc_stop", "STOPPED"), _call("mc_execute", "ADMITTED"))),
+            _trace(
+                "D7",
+                tool_calls=(_call("cancel", "STOPPED"), _call("execute", "ADMITTED")),
+            ),
             _trace(
                 "D8",
                 committed_evidence=("combat:zombie",),

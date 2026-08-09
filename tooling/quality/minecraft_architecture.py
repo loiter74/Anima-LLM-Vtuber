@@ -17,7 +17,7 @@ class ArchitectureViolation:
     message: str
 
 
-_ALLOWED_PUBLIC_TOOLS = frozenset({"mc_execute", "mc_status", "mc_stop"})
+_ALLOWED_PUBLIC_TOOLS = frozenset({"mc_connection", "mc_operate_bot"})
 _DIRECT_RUNTIME_METHODS = frozenset({"execute_action"})
 _DIRECT_BRIDGE_METHODS = frozenset({"send_command"})
 _ALLOWED_BRIDGE_PATHS = frozenset(
@@ -41,6 +41,14 @@ _FORBIDDEN_DOMAIN_IMPORTS = (
     "animetta.tools.minecraft.voyager.control_plane",
     "animetta.tools.minecraft.voyager.gateway",
     "animetta.tools.minecraft.voyager.scheduler",
+)
+_FORBIDDEN_RUNTIME_COUPLING = (
+    "MinecraftBridge",
+    "MinecraftReviewServerLease",
+    "MinecraftRuntimeConfig",
+    "resolve_external_runtime_dir",
+    "runtime_path",
+    "voyager-mc-bot",
 )
 
 
@@ -164,7 +172,7 @@ class _AuditVisitor(ast.NodeVisitor):
             self._report(
                 node,
                 "OLD_PUBLIC_TOOL",
-                f"public Minecraft tool {node.name!r} must migrate to the three-tool gateway",
+                f"public Minecraft tool {node.name!r} must migrate to the two-capability gateway",
             )
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -260,6 +268,32 @@ def audit_repository(root: Path) -> tuple[ArchitectureViolation, ...]:
     for disk_path in sorted(source_root.rglob("*.py")):
         relative = PurePosixPath(disk_path.relative_to(root).as_posix())
         violations.extend(audit_source(relative, disk_path.read_text(encoding="utf-8")))
+    coupling_paths = (
+        root / "src" / "animetta" / "acceptance" / "minecraft_gameplay_review.py",
+        root / "config" / "tools.yaml",
+        *sorted((root / "scripts").glob("minecraft_*.py")),
+        root / "scripts" / "voyager_real_e2e.py",
+    )
+    for disk_path in coupling_paths:
+        if not disk_path.is_file():
+            continue
+        relative_path = disk_path.relative_to(root).as_posix()
+        for line_number, line in enumerate(
+            disk_path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            token = next(
+                (item for item in _FORBIDDEN_RUNTIME_COUPLING if item in line),
+                None,
+            )
+            if token is not None:
+                violations.append(
+                    ArchitectureViolation(
+                        path=relative_path,
+                        line=line_number,
+                        code="ANIMA_MC_RUNTIME_COUPLING",
+                        message=f"Anima must reach Minecraft runtime only through mc-mcp: {token}",
+                    )
+                )
     return tuple(sorted(violations, key=lambda item: (item.path, item.line, item.code)))
 
 

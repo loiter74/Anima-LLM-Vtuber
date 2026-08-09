@@ -77,6 +77,8 @@ def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     assert "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}" in app["environment"]
     assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
     assert "QWEN_HOST_TTS_URL=http://host.docker.internal:8767" in app["environment"]
+    assert "MC_MCP_URL=${MC_MCP_URL:-http://host.docker.internal:8768/mcp}" in app["environment"]
+    assert "MC_MCP_AUTH_TOKEN=${MC_MCP_AUTH_TOKEN:-}" in app["environment"]
     assert "depends_on" not in app
     assert "networks" not in app
     assert "networks" not in compose
@@ -120,6 +122,14 @@ def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> 
     assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
 
 
+def test_production_redirects_legacy_live_stream_to_canonical_obs_surface() -> None:
+    nginx = _text("docker/nginx.conf")
+
+    assert "location = /live-stream" in nginx
+    assert "absolute_redirect off;" in nginx
+    assert "return 308 /live.html$is_args$args;" in nginx
+
+
 def test_compose_services_inject_only_explicit_least_privilege_environment() -> None:
     services = _compose("docker-compose.yml")["services"]
     app = services["animetta"]
@@ -134,6 +144,8 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
         "QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}",
         "QWEN_HOST_TTS_URL=http://host.docker.internal:8767",
+        "MC_MCP_URL=${MC_MCP_URL:-http://host.docker.internal:8768/mcp}",
+        "MC_MCP_AUTH_TOKEN=${MC_MCP_AUTH_TOKEN:-}",
     }
 
 
@@ -189,7 +201,7 @@ def test_animetta_starts_and_preflights_host_tts_before_build() -> None:
         "_run(_preflight(wait=False))"
     )
     assert lifecycle.index("_run(_preflight(wait=False))") < lifecycle.index(
-        '_run(["docker", "compose", "build", "animetta"])'
+        '["docker", "compose", "build", "animetta"]'
     )
 
 

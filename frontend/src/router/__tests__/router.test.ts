@@ -24,7 +24,12 @@ describe('Router', () => {
     expect(route.name).toBe('music')
   })
 
-  it('has at least 5 routes', () => {
-    expect(router.getRoutes().length).toBeGreaterThanOrEqual(5)
+  it('registers only application routes', () => {
+    expect(
+      router
+        .getRoutes()
+        .map(({ name }) => name)
+        .sort(),
+    ).toEqual(['chat', 'dashboard', 'meme-review', 'music'])
   })
 })

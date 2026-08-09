@@ -14,6 +14,7 @@ describe('review CLI options', () => {
       obsUrl: 'ws://127.0.0.1:4455',
       obsSceneName: 'Animetta Review',
       obsSourceName: 'Animetta Live Browser',
+      printUrl: false,
       verdict: null,
     })
   })
@@ -33,6 +34,16 @@ describe('review CLI options', () => {
       expect.objectContaining({
         interactive: false,
         headed: false,
+      }),
+    )
+  })
+
+  it('accepts URL-only resolution without changing review capabilities', () => {
+    expect(parseReviewOptions(['--print-url'], {})).toEqual(
+      expect.objectContaining({
+        printUrl: true,
+        requireObs: true,
+        interactive: false,
       }),
     )
   })

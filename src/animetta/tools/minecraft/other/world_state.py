@@ -1,7 +1,7 @@
 """
 World State - Encapsulates Minecraft bot state and provides analysis tools
 
-Takes mc_status() output and enriches it with:
+Takes mc_operate_bot progress output and enriches it with:
 - Threat assessment (hostile entities nearby)
 - Time/weather categorization
 - Material gap analysis (inventory vs building targets)
@@ -26,7 +26,7 @@ class Entity:
 
 @dataclass
 class WorldState:
-    """Snapshotted bot state from mc_status()"""
+    """Snapshotted bot state from mc_operate_bot progress."""
 
     # Position
     x: float = 0.0
@@ -65,7 +65,7 @@ class WorldState:
 
     @classmethod
     def from_status(cls, status_result: dict) -> "WorldState":
-        """Parse mc_status() result dict into WorldState"""
+        """Parse mc_operate_bot progress output into WorldState."""
         payload = status_result.get("result", {})
         if not isinstance(payload, dict):
             return cls()

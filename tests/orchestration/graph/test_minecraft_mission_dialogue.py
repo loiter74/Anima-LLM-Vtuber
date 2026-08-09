@@ -5,7 +5,7 @@ import json
 from animetta.orchestration.graph.state import create_initial_state
 from animetta.orchestration.graph.tool_node import tool_node
 from animetta.orchestration.prompting.pipeline import compile as compile_prompt
-from animetta.tools.minecraft.core.tools import MinecraftExecuteToolInput, get_minecraft_tools
+from animetta.tools.minecraft.core.tools import MinecraftExecuteRequest, get_minecraft_tools
 from tests.tools.minecraft.mission.test_coordinator import _fixed_mission
 
 
@@ -22,7 +22,7 @@ async def test_compiled_prompt_routes_fixed_and_compound_requests_to_typed_missi
     )
 
     assert "Minecraft typed mission contract" in compiled.system_prompt
-    assert "contract_version=2" in compiled.system_prompt
+    assert "{contract_version, kind, request_id, mission}" in compiled.system_prompt
     assert "Never select learn, live, or fallback" in compiled.system_prompt
     assert "never use the atomic branch for an ordinary user request" in compiled.system_prompt
     assert "each combat goal actions=4, attempts=2" in compiled.system_prompt
@@ -31,7 +31,7 @@ async def test_compiled_prompt_routes_fixed_and_compound_requests_to_typed_missi
     assert "minecraft_mission" in compiled.section_names
 
     fixed = _fixed_mission().model_copy(update={"objectives": (_fixed_mission().objectives[0],)})
-    fixed_input = MinecraftExecuteToolInput.model_validate(
+    fixed_input = MinecraftExecuteRequest.model_validate(
         {
             "contract_version": "2",
             "kind": "mission",
@@ -39,7 +39,7 @@ async def test_compiled_prompt_routes_fixed_and_compound_requests_to_typed_missi
             "mission": fixed.model_dump(mode="json"),
         }
     )
-    compound_input = MinecraftExecuteToolInput.model_validate(
+    compound_input = MinecraftExecuteRequest.model_validate(
         {
             "contract_version": "2",
             "kind": "mission",
@@ -55,21 +55,24 @@ async def test_compiled_prompt_routes_fixed_and_compound_requests_to_typed_missi
 
 
 async def test_invalid_mission_gets_one_repair_then_execution_is_blocked() -> None:
-    from animetta.tools.minecraft.core.tools import mc_execute
+    from animetta.tools.minecraft.core.tools import mc_operate_bot
 
     invalid_call = {
         "id": "call-invalid-1",
-        "name": "mc_execute",
+        "name": "mc_operate_bot",
         "args": {
-            "contract_version": "2",
-            "kind": "mission",
-            "request_id": "dialogue-invalid-1",
-            "mission": {"schema_version": "1", "objectives": []},
+            "operation": "execute",
+            "execute": {
+                "contract_version": "2",
+                "kind": "mission",
+                "request_id": "dialogue-invalid-1",
+                "mission": {"schema_version": "1", "objectives": []},
+            },
         },
     }
     state = create_initial_state("session-repair", user_text="去完成任务")
     state["tool_calls"] = [invalid_call]
-    config = {"configurable": {"tools_map": {"mc_execute": mc_execute}}}
+    config = {"configurable": {"tools_map": {"mc_operate_bot": mc_operate_bot}}}
 
     first = await tool_node(state, config)
     first_problem = json.loads(first["messages"][0].content)
@@ -94,7 +97,7 @@ async def test_invalid_mission_gets_one_repair_then_execution_is_blocked() -> No
     state["tool_calls"] = [{**invalid_call, "id": "call-invalid-3"}]
     third = await tool_node(
         state,
-        {"configurable": {"tools_map": {"mc_execute": blocked_tool}}},
+        {"configurable": {"tools_map": {"mc_operate_bot": blocked_tool}}},
     )
 
     assert blocked_tool.calls == 0
@@ -110,7 +113,7 @@ async def test_final_narration_instruction_requires_committed_status_evidence() 
         {"configurable": {"tools_map": {item.name: item for item in get_minecraft_tools()}}},
     )
 
-    assert "Call mc_status" in compiled.system_prompt
+    assert "Call mc_operate_bot progress" in compiled.system_prompt
     assert "Never claim an objective, discovery, skill, or advancement" in (compiled.system_prompt)
 
 
@@ -125,11 +128,17 @@ async def test_tool_node_injects_conversation_scope_for_minecraft_tools() -> Non
         "session-scope",
         conversation_id="conversation-001",
     )
-    state["tool_calls"] = [{"id": "status-1", "name": "mc_status", "args": {}}]
+    state["tool_calls"] = [
+        {
+            "id": "status-1",
+            "name": "mc_operate_bot",
+            "args": {"operation": "progress"},
+        }
+    ]
 
     result = await tool_node(
         state,
-        {"configurable": {"tools_map": {"mc_status": ScopedStatus()}}},
+        {"configurable": {"tools_map": {"mc_operate_bot": ScopedStatus()}}},
     )
 
     assert result["tool_results"][0]["result"] == "conversation:conversation-001"

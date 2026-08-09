@@ -15,7 +15,7 @@ import {
   type ReviewSummaryV2,
 } from '../scripts/review/evidence'
 import { comparePngRegion } from '../scripts/review/image-compare'
-import { exitCodeForSummary } from '../scripts/review/cli'
+import { exitCodeForSummary, runReviewCli } from '../scripts/review/cli'
 import { automaticDecision, interactiveDecision } from '../scripts/review/policies'
 
 function summary(overrides: Partial<ReviewSummaryV2> = {}): ReviewSummaryV2 {
@@ -270,6 +270,28 @@ describe('Chrome and OBS synchronization', () => {
 })
 
 describe('review CLI result', () => {
+  it('resolves the canonical feature URL without inferring a router path', async () => {
+    await expect(
+      runReviewCli(['--feature', 'live', '--base-url', 'http://localhost', '--print-url']),
+    ).resolves.toBe('http://localhost/live.html')
+    await expect(runReviewCli(['--feature', 'unknown', '--print-url'])).rejects.toThrow(
+      /Unknown review feature/,
+    )
+  })
+
+  it('returns a URL before capability checks or review side effects', async () => {
+    await expect(
+      runReviewCli([
+        '--feature',
+        'live2d-performance',
+        '--base-url',
+        'http://localhost:8080/base/',
+        '--no-obs',
+        '--print-url',
+      ]),
+    ).resolves.toBe('http://localhost:8080/live.html')
+  })
+
   it('returns a failing process status when any scene fails', () => {
     expect(exitCodeForSummary({ all_pass: true })).toBe(0)
     expect(exitCodeForSummary({ all_pass: false })).toBe(1)

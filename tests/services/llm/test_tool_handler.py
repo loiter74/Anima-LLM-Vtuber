@@ -148,6 +148,7 @@ class TestOpenAIToolHandler:
         ai_msgs = [m for m in result if m["role"] == "assistant"]
         assert len(ai_msgs) >= 1
         assert "tool_calls" in ai_msgs[-1]
+        assert result[-1]["role"] == "tool"
 
     def test_build_langchain_messages_toolmessage(self, handler):
         """_build_langchain_messages should convert ToolMessage correctly."""
@@ -157,12 +158,11 @@ class TestOpenAIToolHandler:
             system_prompt="Be helpful.",
             user_input="Done?",
         )
-        assert len(result) == 3
+        assert len(result) == 2
         assert result[0]["role"] == "system"
         assert result[1]["role"] == "tool"
         assert result[1]["tool_call_id"] == "tc_1"
         assert result[1]["content"] == "result data"
-        assert result[2]["role"] == "user"
 
     @patch("animetta.services.llm.tool_handler.logger")
     async def test_chat_with_tools_success(self, mock_logger, handler, mock_openai_llm):
@@ -220,8 +220,8 @@ class TestOpenAIToolHandler:
     ):
         mock_tool_call = MagicMock()
         mock_tool_call.id = "call_invalid"
-        mock_tool_call.function.name = "mc_execute"
-        mock_tool_call.function.arguments = '{"request":{"kind":"mission"'
+        mock_tool_call.function.name = "mc_operate_bot"
+        mock_tool_call.function.arguments = '{"operation":"execute","execute":{"kind":"mission"'
         mock_choice = MagicMock()
         mock_choice.finish_reason = "length"
         mock_choice.message.content = ""
@@ -237,7 +237,7 @@ class TestOpenAIToolHandler:
         )
 
         assert result["tool_calls"][0]["args"] == {
-            "__invalid_json__": '{"request":{"kind":"mission"'
+            "__invalid_json__": '{"operation":"execute","execute":{"kind":"mission"'
         }
         assert result["finish_reason"] == "length"
 
@@ -247,9 +247,10 @@ class TestOpenAIToolHandler:
     ):
         mock_tool_call = MagicMock()
         mock_tool_call.id = "call_trailing_brace"
-        mock_tool_call.function.name = "mc_execute"
+        mock_tool_call.function.name = "mc_operate_bot"
         mock_tool_call.function.arguments = (
-            '{"contract_version":"2","kind":"mission","request_id":"mission-1","mission":{}}}'
+            '{"operation":"execute","execute":{"contract_version":"2","kind":"mission",'
+            '"request_id":"mission-1","mission":{}}}}'
         )
         mock_choice = MagicMock()
         mock_choice.finish_reason = "tool_calls"
@@ -266,7 +267,8 @@ class TestOpenAIToolHandler:
         )
 
         call = result["tool_calls"][0]
-        assert call["args"]["kind"] == "mission"
+        assert call["args"]["operation"] == "execute"
+        assert call["args"]["execute"]["kind"] == "mission"
         assert call["arguments_repaired"] is True
         assert call["arguments_repair"] == "removed_one_trailing_brace"
         assert len(call["raw_arguments_sha256"]) == 64

@@ -5,15 +5,30 @@ import { Events } from '@/constants/socket-events'
 import { isStageIOView, type StageIOView } from '@/types/minecraft-stage'
 
 export interface MinecraftStatus {
-  connected: boolean
-  username?: string
+  schema_version?: '1'
+  generation_id?: number
+  state?:
+    | 'stopped'
+    | 'starting_server'
+    | 'probing_server'
+    | 'connecting_bot'
+    | 'ready'
+    | 'disconnecting'
+    | 'shutting_down'
+    | 'error'
+  mode?: 'managed' | 'external' | null
+  profile?: string | null
+  server?: { state?: string; owned?: boolean; host?: string | null; port?: number | null }
+  bot?: { state?: string; username?: string | null }
+  viewer?: MinecraftViewerStatus
   error?: string
 }
 
 export interface MinecraftViewerStatus {
-  status: 'waiting' | 'joined' | 'left' | 'error'
+  status?: 'waiting' | 'joined' | 'left' | 'error'
+  state?: 'disabled' | 'waiting' | 'attached' | 'disconnected' | 'degraded'
   schema_version?: 2
-  username?: string
+  username?: string | null
   error?: string
   mode?: 'spectator'
   binding_state?: 'disabled' | 'waiting' | 'attaching' | 'following' | 'degraded'
@@ -63,6 +78,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
   const isConnecting = ref(false)
   const username = ref('')
   const error = ref('')
+  const lifecycleState = ref<MinecraftStatus['state']>('stopped')
+  const connectionMode = ref<MinecraftStatus['mode']>(null)
+  const connectionProfile = ref('')
+  const serverState = ref('stopped')
+  const botLifecycleState = ref('stopped')
+  const serverOwned = ref(false)
   const missionProjections = ref<Record<string, Record<string, unknown>>>({})
   const objectiveProjections = ref<Record<string, Record<string, unknown>>>({})
   const proposalProjections = ref<Record<string, Record<string, unknown>>>({})
@@ -179,20 +200,49 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     if (!socket) return
 
     const statusHandler = (data: MinecraftStatus) => {
-      connected.value = data.connected
-      isConnecting.value = false
-      if (data.username) username.value = data.username
+      lifecycleState.value = data.state ?? 'error'
+      connected.value = data.state === 'ready'
+      isConnecting.value = ['starting_server', 'probing_server', 'connecting_bot'].includes(
+        data.state ?? '',
+      )
+      connectionMode.value = data.mode ?? null
+      connectionProfile.value = data.profile ?? ''
+      serverState.value = data.server?.state ?? 'stopped'
+      botLifecycleState.value = data.bot?.state ?? 'stopped'
+      serverOwned.value = data.server?.owned === true
+      if (data.bot?.username) username.value = data.bot.username
       if (data.error) error.value = data.error
-      else if (data.connected) error.value = ''
+      else if (data.state === 'ready' || data.state === 'stopped') error.value = ''
+      if (data.viewer) viewerHandler(data.viewer)
     }
 
     const viewerHandler = (data: MinecraftViewerStatus) => {
-      if (data.binding_state) viewerBindingState.value = data.binding_state
+      const bindingState =
+        data.binding_state ??
+        (
+          {
+            disabled: 'disabled',
+            waiting: 'waiting',
+            attached: 'following',
+            disconnected: 'disabled',
+            degraded: 'degraded',
+          } as const
+        )[data.state ?? 'disabled']
+      viewerBindingState.value = bindingState
       if (data.confirmed !== undefined) viewerConfirmed.value = data.confirmed
       if (data.target !== undefined) viewerTarget.value = data.target
       if (data.attempt !== undefined) viewerAttempt.value = data.attempt
       if (data.retry_in_ms !== undefined) viewerRetryInMs.value = data.retry_in_ms
       if (data.reason !== undefined) viewerReason.value = data.reason
+      if (!data.status) {
+        viewerStatus.value = {
+          disabled: 'idle',
+          waiting: 'waiting',
+          attaching: 'waiting',
+          following: 'joined',
+          degraded: 'error',
+        }[bindingState] as 'idle' | 'waiting' | 'joined' | 'error'
+      }
       if (data.status === 'waiting') {
         viewerStatus.value = 'waiting'
         viewerUsername.value = data.username || ''
@@ -243,6 +293,7 @@ export const useMinecraftStore = defineStore('minecraft', () => {
       Events.MINECRAFT.STAGE_PROJECTION,
     ]
     for (const eventName of projectionEvents) socket.on(eventName, applyProjectionEvent)
+    refreshStatus()
     cleanup = () => {
       socket.off(Events.MINECRAFT.STATUS, statusHandler)
       socket.off(Events.MINECRAFT.VIEWER_STATUS, viewerHandler)
@@ -255,19 +306,26 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     cleanup?.()
   }
 
-  function start(): void {
+  function requestId(operation: string): string {
+    return `ui:${operation}:${crypto.randomUUID()}`
+  }
+
+  function connect(profile?: string): void {
     const socket = getSocket()
     if (!socket) return
     isConnecting.value = true
     error.value = ''
     viewerStatus.value = 'idle'
-    socket.emit(Events.MINECRAFT.START, {})
+    socket.emit(Events.MINECRAFT.CONNECT, {
+      request_id: requestId('connect'),
+      ...(profile ? { profile } : {}),
+    })
   }
 
-  function stop(): void {
+  function disconnect(): void {
     const socket = getSocket()
     if (!socket) return
-    socket.emit(Events.MINECRAFT.STOP)
+    socket.emit(Events.MINECRAFT.DISCONNECT, { request_id: requestId('disconnect') })
     viewerStatus.value = 'idle'
     viewerUsername.value = ''
     viewerBindingState.value = 'disabled'
@@ -278,10 +336,22 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     viewerReason.value = ''
   }
 
-  function spectate(): void {
+  function shutdown(): void {
     const socket = getSocket()
     if (!socket) return
-    socket.emit(Events.MINECRAFT.SPECTATE, {})
+    socket.emit(Events.MINECRAFT.SHUTDOWN, { request_id: requestId('shutdown') })
+  }
+
+  function refreshStatus(): void {
+    const socket = getSocket()
+    if (!socket) return
+    socket.emit(Events.MINECRAFT.STATUS, { request_id: requestId('status') })
+  }
+
+  function reattachViewer(): void {
+    const socket = getSocket()
+    if (!socket) return
+    socket.emit(Events.MINECRAFT.REATTACH_VIEWER, { request_id: requestId('reattach') })
   }
 
   return {
@@ -289,6 +359,12 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     isConnecting,
     username,
     error,
+    lifecycleState,
+    connectionMode,
+    connectionProfile,
+    serverState,
+    botLifecycleState,
+    serverOwned,
     viewerStatus,
     viewerUsername,
     viewerBindingState,
@@ -310,8 +386,10 @@ export const useMinecraftStore = defineStore('minecraft', () => {
     rehydrateMissionStatus,
     setupListener,
     teardownListener,
-    start,
-    stop,
-    spectate,
+    connect,
+    disconnect,
+    shutdown,
+    refreshStatus,
+    reattachViewer,
   }
 })

@@ -279,8 +279,15 @@ def run_operation(operation: str) -> None:
     elif operation == "anima-up":
         _host_tts_up(best_effort=False)
         _run(_preflight(wait=False))
-        _run(["docker", "compose", "build", "animetta"])
-        _run(["docker", "compose", "up", "-d", "--no-build", "animetta"])
+        runtime_environment = {"ANIMETTA_PROFILE": os.getenv("ANIMETTA_PROFILE") or "production"}
+        _run(
+            ["docker", "compose", "build", "animetta"],
+            environment=runtime_environment,
+        )
+        _run(
+            ["docker", "compose", "up", "-d", "--no-build", "animetta"],
+            environment=runtime_environment,
+        )
     elif operation == "anima-selftest-up":
         _host_tts_up(best_effort=False)
         _run(_preflight(wait=True))

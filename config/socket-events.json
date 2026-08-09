@@ -1174,26 +1174,44 @@
     }
   },
   "minecraft": {
-    "start": {
-      "name": "minecraft:start",
-      "payload": {}
-    },
-    "stop": {
-      "name": "minecraft:stop",
-      "payload": {}
+    "connect": {
+      "name": "minecraft:connect",
+      "payload": {
+        "request_id": "string",
+        "profile?": "string"
+      }
     },
     "status": {
       "name": "minecraft:status",
       "payload": {
-        "connected": "boolean",
-        "username?": "string",
+        "request_id?": "string",
+        "schema_version?": "string",
+        "generation_id?": "number",
+        "state?": "string",
+        "mode?": "string|null",
+        "profile?": "string|null",
+        "server?": "object",
+        "bot?": "object",
+        "viewer?": "object",
         "error?": "string"
       }
     },
-    "spectate": {
-      "name": "minecraft:spectate",
+    "disconnect": {
+      "name": "minecraft:disconnect",
       "payload": {
-        "username?": "string"
+        "request_id": "string"
+      }
+    },
+    "shutdown": {
+      "name": "minecraft:shutdown",
+      "payload": {
+        "request_id": "string"
+      }
+    },
+    "reattach_viewer": {
+      "name": "minecraft:reattach_viewer",
+      "payload": {
+        "request_id": "string"
       }
     },
     "viewer_status": {

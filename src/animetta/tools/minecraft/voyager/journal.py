@@ -105,6 +105,8 @@ class StepRecord(_JournalModel):
 
 
 class CommandJournal(Protocol):
+    async def begin_session(self, *, occurred_at_ms: int) -> None: ...
+
     async def create_command(self, draft: CommandDraft) -> tuple[JournalCommand, bool]: ...
 
     async def get_command(self, command_id: str) -> JournalCommand | None: ...
@@ -157,6 +159,11 @@ class InMemoryCommandJournal:
         del occurred_at_ms
         async with self._lock:
             self._accepting_execute = False
+
+    async def begin_session(self, *, occurred_at_ms: int) -> None:
+        del occurred_at_ms
+        async with self._lock:
+            self._accepting_execute = True
 
     async def create_command(self, draft: CommandDraft) -> tuple[JournalCommand, bool]:
         async with self._lock:

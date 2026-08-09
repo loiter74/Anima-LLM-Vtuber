@@ -99,8 +99,8 @@ class TestOrchestratorInit:
 
         assert "tool_manager" in signature(LangGraphOrchestrator).parameters
         prebuilt = MagicMock()
-        prebuilt.tools = [MagicMock(name="mc_execute")]
-        prebuilt.tools_map = {"mc_execute": prebuilt.tools[0]}
+        prebuilt.tools = [MagicMock(name="mc_operate_bot")]
+        prebuilt.tools_map = {"mc_operate_bot": prebuilt.tools[0]}
         prebuilt.is_loaded.return_value = True
         graph = AsyncMock()
         create_graph = MagicMock(return_value=graph)

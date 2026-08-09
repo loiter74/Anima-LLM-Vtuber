@@ -19,16 +19,37 @@ def test_animetta_up_requires_host_tts_before_build(monkeypatch) -> None:
         lambda *, best_effort: host_calls.append(best_effort),
     )
 
+    monkeypatch.delenv("ANIMETTA_PROFILE", raising=False)
     runtime_lifecycle.run_operation("anima-up")
 
     assert host_calls == [False]
     assert commands[0][0][-1] == "scripts/qwen_preflight.py"
-    assert commands[1] == (["docker", "compose", "build", "animetta"], None)
+    production_environment = {"ANIMETTA_PROFILE": "production"}
+    assert commands[1] == (
+        ["docker", "compose", "build", "animetta"],
+        production_environment,
+    )
     assert commands[2] == (
         ["docker", "compose", "up", "-d", "--no-build", "animetta"],
-        None,
+        production_environment,
     )
     assert all("docker-compose.qwen.yml" not in command for command, _ in commands)
+
+
+def test_animetta_up_preserves_an_explicit_runtime_profile(monkeypatch) -> None:
+    commands: list[tuple[list[str], dict[str, str] | None]] = []
+    monkeypatch.setenv("ANIMETTA_PROFILE", "smoke")
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_run",
+        lambda command, *, environment=None: commands.append((command, environment)),
+    )
+    monkeypatch.setattr(runtime_lifecycle, "_host_tts_up", lambda *, best_effort: None)
+
+    runtime_lifecycle.run_operation("anima-up")
+
+    assert commands[1][1] == {"ANIMETTA_PROFILE": "smoke"}
+    assert commands[2][1] == {"ANIMETTA_PROFILE": "smoke"}
 
 
 def test_animetta_selftest_up_waits_for_qwen_and_uses_profile_environment(monkeypatch) -> None:

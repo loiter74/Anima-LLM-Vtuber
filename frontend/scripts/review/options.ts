@@ -7,6 +7,7 @@ export interface ReviewCliOptions {
   obsUrl: string
   obsSceneName: string
   obsSourceName: string
+  printUrl: boolean
   verdict: string | null
 }
 
@@ -23,6 +24,7 @@ export function parseReviewOptions(
     obsUrl: _environment.OBS_WEBSOCKET_URL ?? 'ws://127.0.0.1:4455',
     obsSceneName: _environment.OBS_SCENE_NAME ?? 'Animetta Review',
     obsSourceName: _environment.OBS_SOURCE_NAME ?? 'Animetta Live Browser',
+    printUrl: false,
     verdict: null,
   }
   const valueFlags: Record<string, keyof ReviewCliOptions> = {
@@ -52,6 +54,10 @@ export function parseReviewOptions(
     }
     if (argument === '--no-obs') {
       options.requireObs = false
+      continue
+    }
+    if (argument === '--print-url') {
+      options.printUrl = true
       continue
     }
     const key = valueFlags[argument]

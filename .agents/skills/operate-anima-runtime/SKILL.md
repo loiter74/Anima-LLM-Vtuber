@@ -1,6 +1,6 @@
 ---
 name: operate-anima-runtime
-description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS 与 Docker Compose 生命周期。用户要求启动、停止、重启、查看状态、冒烟运行、健康检查、发布门禁或排查运行时失败时使用。
+description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS 与 Docker Compose 生命周期，只负责服务启动、停止、恢复和健康状态，不负责选择或打开直播页面。用户要求启动、停止、重启、查看状态、冒烟运行、健康检查、发布门禁或排查运行时失败时使用。
 ---
 
 # 操作 Animetta 运行时
@@ -16,6 +16,7 @@ description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS 与 D
 5. 命令返回 `status=in_progress` 时，从输出读取 `run_id`，以相同 profile 和相同 run ID 续跑；不得创建第二个 run。
 6. 任一步终态失败立即停止，保留宿主机 Qwen，并报告失败证据和最小恢复动作。
 7. 只有协议全部通过后才报告运行时健康结论。
+8. 请求还包含打开或显示直播页面时，运行时 ready 后把页面解析与打开交给 `$review-anima-live`；组合顺序固定为运行时就绪、用户要求的 Anima 后台动作、直播页面交接。
 
 ## 约束
 
@@ -25,6 +26,7 @@ description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS 与 D
 - 不恢复 Qwen 容器；宿主服务只允许 `host-tts-stop` 释放。
 - 不因代码修改自动启动 Docker；只有显式运行需求或相应高风险边界才触发。
 - 不自动重试终态失败，也不同时运行多个生命周期智能体。
+- 不读取 Vue Router、选择直播 URL、启动浏览器或配置 OBS。
 
 ## 报告
 

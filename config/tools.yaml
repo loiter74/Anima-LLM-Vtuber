@@ -60,31 +60,23 @@ mcp_servers:
 # Minecraft 游戏控制
 # ========================================
 minecraft:
-  enabled: true                 # 已启用，AI 控制 Mineflayer Bot 自动连接
+  enabled: true                 # Anima 通过独立 mc-mcp 管理连接与操作
   queue_capacity: 100           # all gameplay uses one bounded FIFO consumer
   max_tool_wait_seconds: 10     # caller wait only; does not cancel queued/running work
   journal_path: data/minecraft_commands.db
   skill_path: data/mc_skills.db
-  bot:
-    host: "localhost"
-    port: 25565
-    username: "AnimettaBot"
-    version: "1.21"              # Match SpectatorPlus paper-1.2.1 / Fabric mc1.21
   safety:
     no_griefing: true           # 不破坏玩家建筑
     auto_heal: true             # 自动回血
     max_distance: 500           # 最大活动半径
-  client_viewer:
-    enabled: true
-    username: "LUN077"          # 真实客户端：进入服务器 / bot 重连后自动 spectate 附身
-    auto_spectate: true
-    poll_interval: 20
-    spectate_timeout: 8
-  runtime:
-    runtime_path: "C:/Users/30262/Project/voyager-mc-bot"   # 外部 voyager-mc-bot 项目
-    entrypoint: "src/index.js"
-    package_manager: "npm"
-    use_embedded_fallback: false   # embedded runtime 已移除
+  mcp:
+    url: "http://127.0.0.1:8768/mcp"
+    cli_command: "mc-mcp"
+    default_profile: "managed-local"
+    startup_timeout_seconds: 10
+    request_timeout_seconds: 60
+    event_poll_seconds: 0.5
+    auth_token_env: "MC_MCP_AUTH_TOKEN"
 
 # ========================================
 # 工具调用设置

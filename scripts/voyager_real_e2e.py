@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from animetta.tools.minecraft.core.assembly import assemble_control_plane
-from animetta.tools.minecraft.core.bridge import MinecraftBridge
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
 from animetta.tools.minecraft.core.config import MinecraftConfig
 from animetta.tools.minecraft.voyager.command_models import (
     TERMINAL_COMMAND_STATES,
@@ -28,16 +28,17 @@ async def start_bridge_with_retry(
     *,
     attempts: int = 3,
     retry_delay_seconds: float = 2.0,
-    bridge_factory: Callable[[MinecraftConfig], MinecraftBridge] = MinecraftBridge,
+    bridge_factory: Callable[[MinecraftConfig], MinecraftMcpBridge] = MinecraftMcpBridge,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-) -> MinecraftBridge:
+) -> MinecraftMcpBridge:
     """Bound replacement login retries while the server releases the prior identity."""
 
     for attempt in range(attempts):
         bridge = bridge_factory(config)
-        if await bridge.start():
+        result = await bridge.start(profile=None, request_id=f"real-e2e-connect-{attempt}")
+        if result.get("state") == "ready":
             return bridge
-        await bridge.stop()
+        await bridge.close()
         if attempt + 1 < attempts:
             await sleep(retry_delay_seconds * (attempt + 1))
     raise RuntimeError("replacement Minecraft bridge failed readiness")
@@ -68,8 +69,9 @@ async def run_real_acceptance(
     *,
     deliberate_disconnect: bool,
 ) -> dict:
-    bridge = MinecraftBridge(config)
-    if not await bridge.start():
+    bridge = MinecraftMcpBridge(config)
+    started = await bridge.start(profile=None, request_id="real-e2e-connect")
+    if started.get("state") != "ready":
         raise RuntimeError("Minecraft bridge failed readiness")
     plane = None
     try:
@@ -118,12 +120,12 @@ async def run_real_acceptance(
                 "stop_state": stop_command.state.value,
             }
 
-        await bridge.stop()
+        await bridge.disconnect_runtime(request_id="real-e2e-disconnect")
         terminal = await wait_for_state(plane.gateway, handle.command_id, timeout=30)
     finally:
         if plane is not None:
             await plane.close()
-        await bridge.stop()
+        await bridge.close()
 
     replacement = None
     recovered = None
@@ -159,7 +161,8 @@ async def run_real_acceptance(
         if recovered is not None:
             await recovered.close()
         if replacement is not None:
-            await replacement.stop()
+            await replacement.shutdown_runtime(request_id="real-e2e-shutdown")
+            await replacement.close()
 
 
 def load_config(path: Path, artifact_dir: Path) -> MinecraftConfig:

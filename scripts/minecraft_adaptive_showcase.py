@@ -11,17 +11,8 @@ import time
 import uuid
 from pathlib import Path
 
-from animetta.acceptance.minecraft_gameplay_review import (
-    MinecraftReviewServerLease,
-    resolve_external_runtime_dir,
-)
-from animetta.tools.minecraft.core.bridge import MinecraftBridge
-from animetta.tools.minecraft.core.config import (
-    MinecraftBotConfig,
-    MinecraftClientViewerConfig,
-    MinecraftConfig,
-    MinecraftRuntimeConfig,
-)
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
+from animetta.tools.minecraft.core.config import MinecraftConfig, MinecraftMcpConfig
 from animetta.tools.minecraft.mission.events import ProjectionEventPublisher
 from animetta.tools.minecraft.showcase.live import (
     ConfiguredModelEvidenceNarrator,
@@ -43,10 +34,7 @@ from animetta.tools.minecraft.showcase.runner import (
     ShowcaseRunner,
     ShowcaseRunResult,
 )
-from animetta.tools.minecraft.showcase.scenario import (
-    ScenarioPreparer,
-    default_showcase_scenario,
-)
+from animetta.tools.minecraft.showcase.scenario import ScenarioPreparer
 
 
 class _MissionFeedbackWriter:
@@ -202,49 +190,23 @@ async def run(
     ledger_path: Path,
 ) -> Path:
     _require_r8_start(ledger_path)
-    scenario = default_showcase_scenario()
     runtime_root = (scratch_root / "runtime" / run_id).resolve()
     capture_root = (scratch_root / "capture" / run_id).resolve()
-    external_runtime = resolve_external_runtime_dir(repository_dir)
-    server = MinecraftReviewServerLease(
-        repository_dir=repository_dir,
-        world_dir=runtime_root / "_world",
-        world_seed=scenario.world_seed,
-    )
     config = MinecraftConfig(
         enabled=True,
         journal_path=str(runtime_root / "stores" / "mission.sqlite3"),
         skill_path=str(runtime_root / "stores" / "skill.sqlite3"),
         max_tool_wait_seconds=60,
-        bot=MinecraftBotConfig(
-            host="127.0.0.1",
-            port=25566,
-            username=scenario.bot_username,
-            version="1.21",
-        ),
-        client_viewer=MinecraftClientViewerConfig(
-            enabled=True,
-            username=scenario.viewer_username,
-            auto_spectate=True,
-            poll_interval=2,
-            spectate_timeout=8,
-        ),
-        runtime=MinecraftRuntimeConfig(
-            runtime_path=str(external_runtime),
-            entrypoint="src/index.js",
-            package_manager="npm",
-            use_embedded_fallback=False,
-        ),
+        mcp=MinecraftMcpConfig(default_profile="managed-review"),
     )
-    bridge = MinecraftBridge(config)
+    bridge = MinecraftMcpBridge(config)
     capture = DesktopShowcaseCapture(working_root=capture_root)
     environment = ReviewScenarioEnvironment(
         runtime_root=runtime_root,
-        server=server,
         bridge=bridge,
     )
     preparer = ScenarioPreparer(
-        executor=ReviewRconSetupExecutor(server),
+        executor=ReviewRconSetupExecutor(bridge),
         environment=environment,
         now_ms=lambda: time.time_ns() // 1_000_000,
     )
@@ -301,10 +263,7 @@ async def run(
                 if llm is not None:
                     await llm.close()
         finally:
-            try:
-                await server.stop()
-            finally:
-                await projection_server.close()
+            await projection_server.close()
 
 
 def main() -> int:

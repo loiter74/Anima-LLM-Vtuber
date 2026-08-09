@@ -1,4 +1,4 @@
 interface:
   display_name: "运行 Animetta"
   short_description: "安全操作 Animetta、宿主 TTS 与容器生命周期"
-  default_prompt: "使用 $operate-anima-runtime 执行并验证当前需要的 Animetta 运行时操作。"
+  default_prompt: "使用 $operate-anima-runtime 执行并验证 Animetta 运行时操作；需要展示直播页面时交接给直播评审能力。"

@@ -23,11 +23,6 @@ const router = createRouter({
       name: 'music',
       component: () => import('../views/MusicPage.vue'),
     },
-    {
-      path: '/live-stream',
-      name: 'live-stream',
-      component: () => import('../views/LiveStreamPage.vue'),
-    },
   ],
 })
 

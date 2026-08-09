@@ -7,6 +7,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import RunnableConfig
 
 from animetta.memory.v2.context import MemoryContext
@@ -691,6 +692,48 @@ class TestLLMNodeWithTools:
         assert len(result["tool_calls"]) == 1
         assert result["tool_calls"][0]["name"] == "web_search"
         assert result["tool_calls"][0]["args"]["query"] == "weather"
+        assert isinstance(result["messages"][0], HumanMessage)
+        assert isinstance(result["messages"][1], AIMessage)
+
+    @pytest.mark.asyncio
+    async def test_completed_connection_call_forces_a_final_text_response(
+        self, mock_service_context
+    ):
+        mock_chat_model = MagicMock()
+        bound_tool = MagicMock(name="mc_connection")
+        mock_chat_model.bound_tools = [bound_tool]
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={"content": "连接状态正常。"}
+        )
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="检查连接状态",
+        )
+        state["messages"] = [
+            HumanMessage(content="检查连接状态"),
+            AIMessage(
+                content="正在检查。",
+                tool_calls=[
+                    {
+                        "id": "call-status-1",
+                        "name": "mc_connection",
+                        "args": {"operation": "status", "request_id": "status-1"},
+                    }
+                ],
+            ),
+            ToolMessage(content='{"state":"ready"}', tool_call_id="call-status-1"),
+        ]
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["tool_calls"] is None
+        assert result["response_text"] == "连接状态正常。"
+        assert mock_service_context.llm_engine.chat_with_tools.await_args.kwargs["tools"] == []
 
     @pytest.mark.asyncio
     async def test_tool_call_keeps_raw_performance_marker_for_next_graph_pass(

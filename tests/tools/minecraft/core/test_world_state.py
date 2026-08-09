@@ -12,7 +12,7 @@ import pytest
 
 
 def _make_status(overrides: dict = None) -> dict:
-    """Helper to create a sample mc_status() result."""
+    """Helper to create a sample progress result."""
     base = {
         "status": "success",
         "result": {

@@ -35,6 +35,6 @@ def to_bridge_response(error: GameBotError) -> dict[str, Any]:
     """Convert a GameBotError to the bridge-style response dict.
 
     Preserves the existing `{"status": "error", "result": "<message>"}`
-    shape expected by all current MinecraftBridge callers.
+    shape expected by all current GameBot transport callers.
     """
     return {"status": "error", "result": error.message}

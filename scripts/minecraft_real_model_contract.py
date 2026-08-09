@@ -25,7 +25,8 @@ from animetta.tools.minecraft.blueprint import (
     starter_shelter_blueprint,
 )
 from animetta.tools.minecraft.core.tools import (
-    MinecraftExecuteToolInput,
+    MinecraftExecuteRequest,
+    MinecraftOperateToolInput,
     get_minecraft_tools,
 )
 from animetta.tools.minecraft.mission.models import (
@@ -70,7 +71,7 @@ def _starter_shelter_budget_admissible(mission: Any) -> bool:
     )
 
 
-def _semantic_assertions(validated: MinecraftExecuteToolInput) -> dict[str, bool]:
+def _semantic_assertions(validated: MinecraftExecuteRequest) -> dict[str, bool]:
     request = validated.request
     if request.kind != "mission":
         return {"mission_branch": False}
@@ -137,7 +138,7 @@ def _semantic_assertions(validated: MinecraftExecuteToolInput) -> dict[str, bool
             isinstance(predicate, VanillaAdvancementsAddedAtLeast) and predicate.count >= 2
             for predicate in completion
         ),
-        "exactly_one_mc_execute": True,
+        "exactly_one_mc_operate_execute": True,
         "hidden_target_not_revealed": "copper" not in serialized_mission,
         "production_budget_admissible": all(
             getattr(mission.budget, field) <= limit for field, limit in production_limits.items()
@@ -146,13 +147,21 @@ def _semantic_assertions(validated: MinecraftExecuteToolInput) -> dict[str, bool
 
 
 def _validate_response(response: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    calls = [call for call in response.get("tool_calls") or [] if call.get("name") == "mc_execute"]
+    calls = [
+        call for call in response.get("tool_calls") or [] if call.get("name") == "mc_operate_bot"
+    ]
     if len(calls) != 1:
-        return {"valid": False, "semantic_assertions": {}}, "expected one mc_execute call"
+        return (
+            {"valid": False, "semantic_assertions": {}},
+            "expected one mc_operate_bot execute call",
+        )
     try:
-        validated = MinecraftExecuteToolInput.model_validate(
+        operate = MinecraftOperateToolInput.model_validate(
             _normalize_model_execute_args(calls[0].get("args", {}))
         )
+        if operate.operation != "execute" or operate.execute is None:
+            raise ValueError("expected execute operation")
+        validated = operate.execute
     except ValidationError as exc:
         return {"valid": False, "semantic_assertions": {}}, str(exc)
     assertions = _semantic_assertions(validated)
@@ -186,17 +195,39 @@ async def _collect_independent_calls(
                 USER_TEXT
                 if attempt == 1
                 else (
-                    "修复上一条 mc_execute 调用。请重新输出完整 mission，严格满足工具 schema 和用户要求；"
+                    "修复上一条 mc_operate_bot execute 调用。请重新输出完整 mission，"
+                    "严格满足工具 schema 和用户要求；"
                     f"校验错误：{error}"
                 )
             )
-            response = await invoke(user_text, history)
+            preflight_tool_calls: list[dict[str, Any]] = []
+            for _ in range(2):
+                response = await invoke(user_text, history)
+                if not _is_connection_status_call(response):
+                    break
+                preflight_tool_calls.extend(response.get("tool_calls") or [])
+                _extend_tool_history(
+                    history,
+                    user_text=user_text,
+                    response=response,
+                    tool_result=lambda _call: {
+                        "state": "ready",
+                        "server": {"state": "available"},
+                        "bot": {"state": "ready"},
+                        "viewer": {"state": "attached", "confirmed": True},
+                    },
+                )
+                user_text = (
+                    "连接状态已确认 ready。现在直接调用 mc_operate_bot execute，"
+                    "提交满足原始用户要求的完整 typed mission。"
+                )
             validation, error = validate(response)
             attempts.append(
                 {
                     "attempt": attempt,
                     "user_text": user_text,
                     "visible_response": response.get("content", ""),
+                    "preflight_tool_calls": preflight_tool_calls,
                     "tool_calls": response.get("tool_calls") or [],
                     "finish_reason": response.get("finish_reason"),
                     "validation": validation,
@@ -205,30 +236,16 @@ async def _collect_independent_calls(
             )
             if validation.get("valid"):
                 break
-            response_calls = response.get("tool_calls") or []
-            history.extend(
-                [
-                    HumanMessage(content=user_text),
-                    AIMessage(
-                        content=str(response.get("content", "")),
-                        tool_calls=response_calls,
-                    ),
-                    *(
-                        ToolMessage(
-                            content=json.dumps(
-                                {
-                                    "ok": False,
-                                    "error": error,
-                                    "repair_remaining": attempt < 2,
-                                    "gameplay_submitted": False,
-                                },
-                                ensure_ascii=False,
-                            ),
-                            tool_call_id=str(call.get("id", "")),
-                        )
-                        for call in response_calls
-                    ),
-                ]
+            _extend_tool_history(
+                history,
+                user_text=user_text,
+                response=response,
+                tool_result=lambda _call: {
+                    "ok": False,
+                    "error": error,
+                    "repair_remaining": attempt < 2,
+                    "gameplay_submitted": False,
+                },
             )
         calls.append(
             {
@@ -239,6 +256,49 @@ async def _collect_independent_calls(
             }
         )
     return calls
+
+
+def _is_connection_status_call(response: dict[str, Any]) -> bool:
+    calls = response.get("tool_calls") or []
+    return (
+        len(calls) == 1
+        and calls[0].get("name") == "mc_connection"
+        and calls[0].get("args", {}).get("operation") == "status"
+    )
+
+
+def _extend_tool_history(
+    history: list[Any],
+    *,
+    user_text: str,
+    response: dict[str, Any],
+    tool_result: Callable[[dict[str, Any]], dict[str, Any]],
+) -> None:
+    history_calls = [
+        {
+            "name": str(call.get("name", "")),
+            "args": call.get("args") if isinstance(call.get("args"), dict) else {},
+            "id": str(call.get("id", "")),
+            "type": "tool_call",
+        }
+        for call in response.get("tool_calls") or []
+    ]
+    history.extend(
+        [
+            HumanMessage(content=user_text),
+            AIMessage(
+                content=str(response.get("content", "")),
+                tool_calls=history_calls,
+            ),
+            *(
+                ToolMessage(
+                    content=json.dumps(tool_result(call), ensure_ascii=False),
+                    tool_call_id=call["id"],
+                )
+                for call in history_calls
+            ),
+        ]
+    )
 
 
 async def run(output_root: Path, *, independent_calls: int = 3) -> Path:

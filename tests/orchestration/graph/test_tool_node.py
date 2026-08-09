@@ -118,13 +118,16 @@ class TestToolNode:
         state["tool_calls"] = [
             {
                 "id": "call-mission-001",
-                "name": "mc_execute",
-                "args": {"request_id": "request-001", "kind": "mission"},
+                "name": "mc_operate_bot",
+                "args": {
+                    "operation": "execute",
+                    "execute": {"request_id": "request-001", "kind": "mission"},
+                },
             }
         ]
         config = RunnableConfig(
             configurable={
-                "tools_map": {"mc_execute": ObservedTool()},
+                "tools_map": {"mc_operate_bot": ObservedTool()},
                 "tool_invocation_observer": Observer(),
             }
         )
@@ -137,12 +140,21 @@ class TestToolNode:
                 "before",
                 (
                     "call-mission-001",
-                    "mc_execute",
-                    {"request_id": "request-001", "kind": "mission"},
+                    "mc_operate_bot",
+                    {
+                        "operation": "execute",
+                        "execute": {"request_id": "request-001", "kind": "mission"},
+                    },
                     "conversation-001",
                 ),
             ),
-            ("tool", {"request_id": "request-001", "kind": "mission"}),
+            (
+                "tool",
+                {
+                    "operation": "execute",
+                    "execute": {"request_id": "request-001", "kind": "mission"},
+                },
+            ),
             (
                 "after",
                 (
@@ -172,13 +184,16 @@ class TestToolNode:
         state["tool_calls"] = [
             {
                 "id": "call-committed",
-                "name": "mc_execute",
-                "args": {"request_id": "request-committed", "kind": "mission"},
+                "name": "mc_operate_bot",
+                "args": {
+                    "operation": "execute",
+                    "execute": {"request_id": "request-committed", "kind": "mission"},
+                },
             }
         ]
         config = RunnableConfig(
             configurable={
-                "tools_map": {"mc_execute": ObservedTool()},
+                "tools_map": {"mc_operate_bot": ObservedTool()},
                 "tool_invocation_observer": Observer(),
             }
         )
@@ -187,8 +202,11 @@ class TestToolNode:
 
         assert result["tool_results"] == [
             {
-                "tool": "mc_execute",
-                "args": {"request_id": "request-committed", "kind": "mission"},
+                "tool": "mc_operate_bot",
+                "args": {
+                    "operation": "execute",
+                    "execute": {"request_id": "request-committed", "kind": "mission"},
+                },
                 "result": {"mission_id": "mission-committed"},
             }
         ]

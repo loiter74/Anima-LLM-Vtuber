@@ -1,4 +1,4 @@
-"""Cross-runtime JSON fixtures must validate identically in Python and Node."""
+"""Anima's local GameBot contract fixtures validate consistently."""
 
 from __future__ import annotations
 
@@ -47,17 +47,3 @@ def test_v1_fixture_cannot_be_used_as_a_v2_readiness_manifest() -> None:
 
     with pytest.raises(ValidationError):
         RuntimeManifest.model_validate(fixture["incompatible_manifest"])
-
-
-def test_local_fixture_matches_sibling_node_runtime_when_present() -> None:
-    node_fixture = (
-        Path(__file__).resolve().parents[3].parent
-        / "voyager-mc-bot"
-        / "tests"
-        / "fixtures"
-        / FIXTURE.name
-    )
-    if not node_fixture.exists():
-        return
-
-    assert json.loads(node_fixture.read_text(encoding="utf-8")) == _fixture()

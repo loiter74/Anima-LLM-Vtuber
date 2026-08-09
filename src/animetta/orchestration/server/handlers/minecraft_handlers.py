@@ -1,19 +1,19 @@
 """
 Minecraft bot control handlers.
 
-Manages the MinecraftBridge lifecycle (start/stop) via Socket.IO events.
+Manages the mc-mcp lifecycle via Socket.IO events.
 Follows the same pattern as BilibiliHandlers: frontend emits events,
 backend starts/stops the service and reports status back.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
 
 from ....tools.minecraft.core import tools as mc_tools
-from ....tools.minecraft.core.bridge import MinecraftBridge, get_bridge
+from ....tools.minecraft.core.bridge import MinecraftMcpBridge, get_bridge
 from ....tools.minecraft.core.config import MinecraftConfig
-from ....tools.minecraft.core.tools import cleanup_bridge, init_bridge
+from ....tools.minecraft.core.tools import init_bridge
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -112,27 +112,20 @@ class MinecraftHandlers:
     def __init__(self, sio: "AsyncServer"):
         self.sio = sio
 
-    async def _configure_voyager(self, bridge: MinecraftBridge) -> bool:
-        """Validate GameBot v2 and attach the unified Python control plane."""
+    async def _emit_transition(self, payload: dict[str, Any]) -> None:
+        event_key = {
+            "minecraft.skill.trust": "skill_trust",
+            "minecraft.mission.projection": "mission_projection",
+            "minecraft.objective.projection": "objective_projection",
+            "minecraft.proposal.projection": "proposal_projection",
+            "minecraft.discovery.projection": "discovery_projection",
+            "minecraft.skill_validation.projection": "skill_validation",
+            "minecraft.advancement.projection": "advancement_projection",
+            "minecraft.stage.projection": "stage_projection",
+        }.get(str(payload.get("event")), "command_transition")
+        await self.sio.emit(EVENTS["minecraft"][event_key]["name"], payload)
 
-        async def emit_transition(payload: dict[str, Any]) -> None:
-            event_key = {
-                "minecraft.skill.trust": "skill_trust",
-                "minecraft.mission.projection": "mission_projection",
-                "minecraft.objective.projection": "objective_projection",
-                "minecraft.proposal.projection": "proposal_projection",
-                "minecraft.discovery.projection": "discovery_projection",
-                "minecraft.skill_validation.projection": "skill_validation",
-                "minecraft.advancement.projection": "advancement_projection",
-                "minecraft.stage.projection": "stage_projection",
-            }.get(str(payload.get("event")), "command_transition")
-            await self.sio.emit(EVENTS["minecraft"][event_key]["name"], payload)
-
-        await mc_tools.configure_voyager_control_plane(bridge, event_emit=emit_transition)
-        logger.info("[Minecraft] Python Voyager control plane configured")
-        return True
-
-    def _setup_viewer_callback(self, bridge: MinecraftBridge) -> None:
+    def _setup_viewer_callback(self, bridge: MinecraftMcpBridge) -> None:
         """Register callback to forward viewer join/leave events to frontend."""
 
         def on_viewer_event(event_type: str, payload: dict[str, Any] | object) -> None:
@@ -152,14 +145,9 @@ class MinecraftHandlers:
 
         bridge.set_viewer_callback(on_viewer_event)
 
-    async def on_minecraft_start(self, sid: str, data: dict) -> None:
-        """Handle frontend request to start the Minecraft bot.
-
-        Spawns the Mineflayer subprocess and registers Minecraft tools.
-        Emits minecraft.status on success or failure.
-        """
+    async def on_minecraft_connect(self, sid: str, data: dict) -> None:
+        """Connect the configured mc-mcp profile and assemble the Anima control plane."""
         try:
-            # Load full minecraft config from tools.yaml (includes runtime path/entrypoint)
             from pathlib import Path
 
             import yaml
@@ -172,135 +160,74 @@ class MinecraftHandlers:
                 with open(config_path, encoding="utf-8") as f:
                     tools_yaml = yaml.safe_load(f) or {}
                 mc_cfg_dict = tools_yaml.get("minecraft", {}) or {}
-            # Force enabled=True (frontend explicitly requested start)
             mc_cfg_dict["enabled"] = True
             config = MinecraftConfig(**mc_cfg_dict)
-            logger.info(
-                f"[Minecraft] Frontend requested start "
-                f"(runtime={config.runtime.runtime_path or 'default'}, "
-                f"entrypoint={config.runtime.entrypoint})"
-            )
-
-            # Init bridge (creates the singleton if not exists) and start
             init_bridge(config.model_dump())
-
             bridge = get_bridge()
             if bridge is None:
-                await self.sio.emit(
-                    EVENTS["minecraft"]["status"]["name"],
-                    {"connected": False, "error": "Bridge initialization failed"},
-                    to=sid,
-                )
-                return
-
-            # Register viewer callback before starting
+                raise RuntimeError("Minecraft MCP client initialization failed")
             self._setup_viewer_callback(bridge)
-
-            # Start the bot (init_bridge only creates, doesn't start)
-            await bridge.start()
-            logger.info("[Minecraft] Bot started successfully")
-            await self._configure_voyager(bridge)
-
-            await self.sio.emit(
-                EVENTS["minecraft"]["status"]["name"],
-                {"connected": True, "username": config.bot.username},
-                to=sid,
+            payload = data if isinstance(data, dict) else {}
+            result = await mc_tools.manage_minecraft_connection(
+                "connect",
+                request_id=str(payload.get("request_id") or f"socket:{sid}:connect"),
+                profile=payload.get("profile"),
+                event_emit=self._emit_transition,
             )
-
-            # If viewer is configured, emit initial waiting status
-            if config.client_viewer.enabled:
-                await self.sio.emit(
-                    EVENTS["minecraft"]["viewer_status"]["name"],
-                    project_viewer_status(
-                        "client_viewer_status",
-                        {
-                            "binding_state": "waiting",
-                            "confirmed": False,
-                            "username": config.client_viewer.username,
-                            "target": config.bot.username,
-                            "attempt": 0,
-                            "reason": "viewer_offline",
-                        },
-                    ),
-                    to=sid,
-                )
-
+            await self.sio.emit(EVENTS["minecraft"]["status"]["name"], result, to=sid)
         except Exception as e:
-            logger.error(f"[Minecraft] Failed to start: {e}")
+            logger.error(f"[Minecraft] Failed to connect: {e}")
             await self.sio.emit(
                 EVENTS["minecraft"]["status"]["name"],
-                {"connected": False, "error": str(e)},
+                {"state": "error", "error": str(e)},
                 to=sid,
             )
 
-    async def on_minecraft_stop(self, sid: str, data: dict) -> None:
-        """Handle frontend request to stop the Minecraft bot.
+    async def on_minecraft_status(self, sid: str, data: dict) -> None:
+        await self._connection_action(sid, data, "status")
 
-        Terminates the Mineflayer subprocess and cleans up the bridge.
-        """
+    async def on_minecraft_disconnect(self, sid: str, data: dict) -> None:
+        await self._connection_action(sid, data, "disconnect")
+
+    async def on_minecraft_shutdown(self, sid: str, data: dict) -> None:
+        await self._connection_action(sid, data, "shutdown")
+
+    async def _connection_action(
+        self,
+        sid: str,
+        data: dict,
+        operation: Literal["status", "disconnect", "shutdown"],
+    ) -> None:
         try:
-            logger.info("[Minecraft] Frontend requested stop")
-
-            bridge = get_bridge()
-            if bridge is not None:
-                await bridge.stop()
-            await cleanup_bridge()
-
-            logger.info("[Minecraft] Bot stopped")
-            await self.sio.emit(
-                EVENTS["minecraft"]["status"]["name"],
-                {"connected": False},
-                to=sid,
+            payload = data if isinstance(data, dict) else {}
+            result = await mc_tools.manage_minecraft_connection(
+                operation,
+                request_id=str(payload.get("request_id") or f"socket:{sid}:{operation}"),
             )
-        except ImportError:
-            logger.warning("[Minecraft] Minecraft tools not installed")
-            await self.sio.emit(
-                EVENTS["minecraft"]["status"]["name"],
-                {"connected": False, "error": "Minecraft tools not installed"},
-                to=sid,
-            )
+            await self.sio.emit(EVENTS["minecraft"]["status"]["name"], result, to=sid)
         except Exception as e:
-            logger.error(f"[Minecraft] Failed to stop: {e}")
+            logger.error(f"[Minecraft] {operation} failed: {e}")
             await self.sio.emit(
                 EVENTS["minecraft"]["status"]["name"],
-                {"connected": False, "error": str(e)},
+                {"state": "error", "error": str(e)},
                 to=sid,
             )
 
-    async def on_minecraft_spectate(self, sid: str, data: dict) -> None:
-        """Handle frontend request to manually re-spectate the viewer.
-
-        Sends spectate command to the bot, which executes /gamemode + /spectate.
-        """
+    async def on_minecraft_reattach_viewer(self, sid: str, data: dict) -> None:
+        """Ask mc-mcp's viewer controller to retry automatic attachment."""
         try:
-            bridge = get_bridge()
-            if bridge is None or not bridge.is_running:
-                await self.sio.emit(
-                    EVENTS["minecraft"]["viewer_status"]["name"],
-                    {"status": "error", "error": "Bot not running"},
-                    to=sid,
-                )
-                return
-
-            username = data.get("username") if isinstance(data, dict) else None
-            result = await bridge.spectate_viewer(username)
-            logger.info(f"[Minecraft] Spectate result: {result}")
-
-            if result.get("status") == "success":
-                await self.sio.emit(
-                    EVENTS["minecraft"]["viewer_status"]["name"],
-                    {"status": "joined", "username": username or ""},
-                    to=sid,
-                )
-            else:
-                await self.sio.emit(
-                    EVENTS["minecraft"]["viewer_status"]["name"],
-                    {"status": "error", "error": str(result.get("result", "Unknown error"))},
-                    to=sid,
-                )
-
+            payload = data if isinstance(data, dict) else {}
+            result = await mc_tools.manage_minecraft_connection(
+                "reattach_viewer",
+                request_id=str(payload.get("request_id") or f"socket:{sid}:reattach"),
+            )
+            await self.sio.emit(
+                EVENTS["minecraft"]["viewer_status"]["name"],
+                project_viewer_status("client_viewer_status", result.get("viewer", {})),
+                to=sid,
+            )
         except Exception as e:
-            logger.error(f"[Minecraft] Spectate failed: {e}")
+            logger.error(f"[Minecraft] Viewer reattach failed: {e}")
             await self.sio.emit(
                 EVENTS["minecraft"]["viewer_status"]["name"],
                 {"status": "error", "error": str(e)},

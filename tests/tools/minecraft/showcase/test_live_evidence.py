@@ -10,7 +10,7 @@ from animetta.orchestration.graph.tool_observation import (
     ToolInvocationCompletion,
 )
 from animetta.services.llm.mock_llm import MockLLM
-from animetta.tools.minecraft.core.tools import MinecraftExecuteToolInput
+from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
 from animetta.tools.minecraft.showcase import live as live_module
 from animetta.tools.minecraft.showcase.live import (
     _adaptive_acquisition_stage_spans,
@@ -70,12 +70,15 @@ async def test_ordinary_conversation_submission_starts_boundary_before_real_tool
         async def process_text(self, **kwargs):
             invocation = ToolInvocation(
                 tool_call_id="call-ordinary-001",
-                tool_name="mc_execute",
+                tool_name="mc_operate_bot",
                 arguments={
-                    "contract_version": "2",
-                    "kind": "mission",
-                    "request_id": "request-ordinary-001",
-                    "mission": mission.model_dump(mode="json"),
+                    "operation": "execute",
+                    "execute": {
+                        "contract_version": "2",
+                        "kind": "mission",
+                        "request_id": "request-ordinary-001",
+                        "mission": mission.model_dump(mode="json"),
+                    },
                 },
                 session_id="showcase-run-001",
                 conversation_id=kwargs["conversation_id"],
@@ -123,7 +126,7 @@ async def test_ordinary_conversation_submission_starts_boundary_before_real_tool
     assert admitted.mission_boundary.mission_id == mission.mission_id
 
 
-async def test_ordinary_conversation_rejects_multiple_mc_execute_before_mutation() -> None:
+async def test_ordinary_conversation_rejects_multiple_execute_calls_before_mutation() -> None:
     events: list[str] = []
     mission = _fixed_mission().model_copy(update={"mission_id": "ordinary-showcase-002"})
 
@@ -133,12 +136,15 @@ async def test_ordinary_conversation_rejects_multiple_mc_execute_before_mutation
             invocations = tuple(
                 ToolInvocation(
                     tool_call_id=f"call-{index}",
-                    tool_name="mc_execute",
+                    tool_name="mc_operate_bot",
                     arguments={
-                        "contract_version": "2",
-                        "kind": "mission",
-                        "request_id": f"request-{index}",
-                        "mission": mission.model_dump(mode="json"),
+                        "operation": "execute",
+                        "execute": {
+                            "contract_version": "2",
+                            "kind": "mission",
+                            "request_id": f"request-{index}",
+                            "mission": mission.model_dump(mode="json"),
+                        },
                     },
                     session_id="showcase-run-002",
                     conversation_id=kwargs["conversation_id"],
@@ -160,7 +166,7 @@ async def test_ordinary_conversation_rejects_multiple_mc_execute_before_mutation
         semantic_validator=lambda _tool_input: {"test_contract": True},
     )
 
-    with pytest.raises(RuntimeError, match="SHOWCASE_REQUIRES_EXACTLY_ONE_MC_EXECUTE"):
+    with pytest.raises(RuntimeError, match="SHOWCASE_REQUIRES_EXACTLY_ONE_MC_OPERATE_EXECUTE"):
         await submitter.submit_user_text(
             run_id="showcase-run-002",
             user_text="重复调用不应触发世界变更",
@@ -178,8 +184,8 @@ async def test_ordinary_conversation_rejects_invalid_mission_before_mutation() -
             observer = kwargs["tool_invocation_observer"]
             invocation = ToolInvocation(
                 tool_call_id="call-invalid",
-                tool_name="mc_execute",
-                arguments={"contract_version": "2", "kind": "mission"},
+                tool_name="mc_operate_bot",
+                arguments={"operation": "execute", "execute": {"kind": "mission"}},
                 session_id="showcase-run-invalid",
                 conversation_id=kwargs["conversation_id"],
             )
@@ -227,7 +233,8 @@ async def test_live_backend_delegates_admission_and_closes_owned_runtime(
         def set_viewer_callback(self, _callback) -> None:
             return None
 
-        async def stop(self) -> None:
+        async def shutdown_runtime(self, *, request_id: str) -> None:
+            del request_id
             self.stop_calls += 1
 
     class Submitter:
@@ -242,7 +249,7 @@ async def test_live_backend_delegates_admission_and_closes_owned_runtime(
                 dialogue=live_module.DialogueSubmission(
                     exact_user_text=kwargs["user_text"],
                     visible_response="收到，开始执行。",
-                    tool_name="mc_execute",
+                    tool_name="mc_operate_bot",
                     tool_call_id="call-003",
                     mission_id=mission.mission_id,
                     mission_payload=mission,
@@ -300,7 +307,7 @@ async def test_live_backend_delegates_admission_and_closes_owned_runtime(
 async def test_create_submitter_reuses_public_tools_in_ordinary_orchestrator(
     monkeypatch,
 ) -> None:
-    public_tools = [object(), object(), object()]
+    public_tools = [object(), object()]
     conversation = SimpleNamespace(stop=lambda: None)
     calls: dict[str, object] = {}
 
@@ -349,22 +356,18 @@ async def test_full_ordinary_graph_admits_the_observed_public_tool_call(
     mission = _fixed_mission().model_copy(update={"mission_id": "ordinary-showcase-004"})
     events: list[str] = []
 
-    @tool("mc_execute", args_schema=MinecraftExecuteToolInput)
-    async def fake_mc_execute(**_kwargs) -> str:
+    @tool("mc_operate_bot", args_schema=MinecraftOperateToolInput)
+    async def fake_mc_operate_bot(**_kwargs) -> str:
         """Submit one typed test mission."""
 
         events.append("real-tool")
         return json.dumps({"mission_id": mission.mission_id})
 
-    @tool("mc_status")
-    async def fake_mc_status() -> str:
-        """Read test status."""
+    @tool("mc_connection")
+    async def fake_mc_connection(operation: str, request_id: str) -> str:
+        """Manage the test runtime connection."""
 
-        return "{}"
-
-    @tool("mc_stop")
-    async def fake_mc_stop() -> str:
-        """Stop the test runtime."""
+        del operation, request_id
 
         return "{}"
 
@@ -381,12 +384,15 @@ async def test_full_ordinary_graph_admits_the_observed_public_tool_call(
                     "tool_calls": [
                         {
                             "id": "call-full-graph-004",
-                            "name": "mc_execute",
+                            "name": "mc_operate_bot",
                             "args": {
-                                "contract_version": "2",
-                                "kind": "mission",
-                                "request_id": "request-full-graph-004",
-                                "mission": mission.model_dump(mode="json"),
+                                "operation": "execute",
+                                "execute": {
+                                    "contract_version": "2",
+                                    "kind": "mission",
+                                    "request_id": "request-full-graph-004",
+                                    "mission": mission.model_dump(mode="json"),
+                                },
                             },
                         }
                     ],
@@ -396,7 +402,7 @@ async def test_full_ordinary_graph_admits_the_observed_public_tool_call(
     monkeypatch.setattr(
         live_module,
         "get_minecraft_tools",
-        lambda: [fake_mc_execute, fake_mc_status, fake_mc_stop],
+        lambda: [fake_mc_connection, fake_mc_operate_bot],
     )
     submitter = await live_module.create_ordinary_showcase_submitter(
         llm=ScriptedLLM(),

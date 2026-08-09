@@ -32,7 +32,7 @@ class GameBotRuntimeError(RuntimeError):
 
 
 class MinecraftGameBotV2Adapter:
-    """Validate and bind MinecraftBridge messages to one GameBot v2 instance."""
+    """Validate and bind mc-mcp messages to one GameBot v2 instance."""
 
     def __init__(self, bridge: Any) -> None:
         self._bridge = bridge

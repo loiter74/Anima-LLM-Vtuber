@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -379,19 +378,6 @@ def _typescript_declarations(schema: dict[str, Any], digest: str) -> str:
     return "\n".join(lines)
 
 
-def _sync_external(contract_root: Path, external_root: Path) -> None:
-    target = external_root / "contracts" / "gamebot" / "v2"
-    target.mkdir(parents=True, exist_ok=True)
-    (target / "fixtures").mkdir(parents=True, exist_ok=True)
-    for relative in (
-        Path("schema.json"),
-        Path("schema.sha256"),
-        Path("types.d.ts"),
-        Path("fixtures") / "golden.json",
-    ):
-        shutil.copy2(contract_root / relative, target / relative)
-
-
 def main() -> int:
     contract_root = ROOT / "contracts" / "gamebot" / "v2"
     fixture_root = contract_root / "fixtures"
@@ -415,9 +401,6 @@ def main() -> int:
         json.dumps(fixture, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    external_root = ROOT.parent / "voyager-mc-bot"
-    if external_root.is_dir():
-        _sync_external(contract_root, external_root)
     return 0
 
 

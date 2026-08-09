@@ -16,7 +16,7 @@ _D2_ASSERTIONS = frozenset(
         "novel_item_required",
         "trusted_skill_required",
         "two_vanilla_advancements_required",
-        "exactly_one_mc_execute",
+        "exactly_one_mc_operate_execute",
         "hidden_target_not_revealed",
     }
 )
@@ -27,7 +27,17 @@ class _FrozenModel(BaseModel):
 
 
 class ToolCallTrace(_FrozenModel):
-    tool_name: Literal["mc_execute", "mc_status", "mc_stop"]
+    tool_name: Literal["mc_connection", "mc_operate_bot"]
+    operation: Literal[
+        "connect",
+        "status",
+        "disconnect",
+        "shutdown",
+        "reattach_viewer",
+        "execute",
+        "progress",
+        "cancel",
+    ]
     outcome_code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
 
 
@@ -60,18 +70,23 @@ def _tool_names(trace: DialogueCaseTrace) -> tuple[str, ...]:
     return tuple(call.tool_name for call in trace.tool_calls)
 
 
+def _operations(trace: DialogueCaseTrace) -> tuple[str, ...]:
+    return tuple(call.operation for call in trace.tool_calls)
+
+
 def _evaluate(trace: DialogueCaseTrace) -> DialogueCaseResult:
     names = _tool_names(trace)
+    operations = _operations(trace)
     outcomes = tuple(call.outcome_code for call in trace.tool_calls)
     reasons: list[str] = []
 
     if trace.case_id == "D1":
-        if names != ("mc_execute",) or trace.gameplay_submission_count != 1:
+        if operations != ("execute",) or trace.gameplay_submission_count != 1:
             reasons.append("FIXED_INTENT_NOT_SUBMITTED_ONCE")
         if trace.semantic_assertions.get("mission_branch") is not True:
             reasons.append("FIXED_INTENT_NOT_TYPED_MISSION")
     elif trace.case_id == "D2":
-        if names != ("mc_execute",) or trace.gameplay_submission_count != 1:
+        if operations != ("execute",) or trace.gameplay_submission_count != 1:
             reasons.append("COMPOUND_INTENT_NOT_SUBMITTED_ONCE")
         if any(trace.semantic_assertions.get(name) is not True for name in _D2_ASSERTIONS):
             reasons.append("COMPOUND_SEMANTICS_INCOMPLETE")
@@ -81,7 +96,7 @@ def _evaluate(trace: DialogueCaseTrace) -> DialogueCaseResult:
         if not trace.visible_response.strip():
             reasons.append("CLARIFICATION_NOT_VISIBLE")
     elif trace.case_id == "D4":
-        if names != ("mc_execute", "mc_execute") or outcomes != (
+        if operations != ("execute", "execute") or outcomes != (
             "MC_MISSION_SCHEMA_INVALID",
             "ADMITTED",
         ):
@@ -89,7 +104,7 @@ def _evaluate(trace: DialogueCaseTrace) -> DialogueCaseResult:
         if trace.gameplay_submission_count != 1:
             reasons.append("REPAIR_DID_NOT_SUBMIT_EXACTLY_ONCE")
     elif trace.case_id == "D5":
-        if names != ("mc_execute", "mc_execute") or outcomes != (
+        if operations != ("execute", "execute") or outcomes != (
             "MC_MISSION_SCHEMA_INVALID",
             "MC_MISSION_REPAIR_EXHAUSTED",
         ):
@@ -99,10 +114,10 @@ def _evaluate(trace: DialogueCaseTrace) -> DialogueCaseResult:
         if not trace.visible_response.strip():
             reasons.append("REPAIR_FAILURE_NOT_VISIBLE")
     elif trace.case_id == "D6":
-        if names != ("mc_status",) or trace.gameplay_submission_count != 0:
+        if operations != ("progress",) or trace.gameplay_submission_count != 0:
             reasons.append("PROGRESS_DID_NOT_USE_STATUS_ONLY")
     elif trace.case_id == "D7":
-        if not names or names[0] != "mc_stop":
+        if not operations or operations[0] != "cancel":
             reasons.append("STOP_NOT_REQUESTED")
         elif len(names) != 1:
             reasons.append("POST_STOP_TOOL_CALL")
@@ -111,7 +126,7 @@ def _evaluate(trace: DialogueCaseTrace) -> DialogueCaseResult:
     elif trace.case_id == "D8":
         if not set(trace.claimed_evidence).issubset(trace.committed_evidence):
             reasons.append("UNCOMMITTED_EVIDENCE_CLAIM")
-        if "mc_execute" in names:
+        if "execute" in operations:
             reasons.append("FINAL_NARRATION_SUBMITTED_GAMEPLAY")
         if not trace.visible_response.strip():
             reasons.append("FINAL_NARRATION_NOT_VISIBLE")

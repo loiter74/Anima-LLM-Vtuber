@@ -14,12 +14,14 @@ MAX_MISSION_ATTEMPTS = 2
 
 
 def is_mission_call(tool_name: str, tool_args: object) -> bool:
-    if tool_name != "mc_execute" or not isinstance(tool_args, dict):
+    if tool_name != "mc_operate_bot" or not isinstance(tool_args, dict):
         return False
-    request = tool_args.get("request")
-    if isinstance(request, dict):
-        return request.get("kind") == "mission"
-    return tool_args.get("kind") == "mission"
+    execute = tool_args.get("execute")
+    return (
+        tool_args.get("operation") == "execute"
+        and isinstance(execute, dict)
+        and execute.get("kind") == "mission"
+    )
 
 
 def mission_failure_count(messages: Sequence[BaseMessage]) -> int:
@@ -46,9 +48,9 @@ def mission_problem(
         code = "MC_MISSION_SCHEMA_INVALID"
         message = str(error or "invalid Minecraft mission")[:2_000]
         instruction = (
-            "Correct the complete mission schema once and call mc_execute again."
+            "Correct the complete mission schema once and call mc_operate_bot execute again."
             if attempt < MAX_MISSION_ATTEMPTS
-            else "Do not call mc_execute again; explain the structured error visibly."
+            else "Do not call mc_operate_bot execute again; explain the structured error visibly."
         )
     payload = {
         "ok": False,

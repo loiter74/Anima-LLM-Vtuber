@@ -12,7 +12,7 @@ from scripts.voyager_real_e2e import load_config, start_bridge_with_retry
 def test_harness_loads_isolated_v2_control_plane_paths(tmp_path: Path) -> None:
     config_file = tmp_path / "tools.yaml"
     config_file.write_text(
-        yaml.safe_dump({"minecraft": {"runtime": {"entrypoint": "src/index.js"}}}),
+        yaml.safe_dump({"minecraft": {"mcp": {"default_profile": "external-local"}}}),
         encoding="utf-8",
     )
 
@@ -29,7 +29,7 @@ async def test_replacement_bridge_retries_after_server_releases_identity(tmp_pat
     config_file = tmp_path / "tools.yaml"
     config_file.write_text("minecraft: {}\n", encoding="utf-8")
     config = load_config(config_file, tmp_path / "evidence")
-    outcomes = iter((False, True))
+    outcomes = iter(({"state": "error"}, {"state": "ready"}))
     bridges = []
     delays = []
 
@@ -38,10 +38,11 @@ async def test_replacement_bridge_retries_after_server_releases_identity(tmp_pat
             self.stopped = False
             bridges.append(self)
 
-        async def start(self) -> bool:
+        async def start(self, *, profile, request_id) -> dict:
+            del profile, request_id
             return next(outcomes)
 
-        async def stop(self) -> None:
+        async def close(self) -> None:
             self.stopped = True
 
     async def record_sleep(delay: float) -> None:

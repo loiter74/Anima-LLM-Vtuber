@@ -353,7 +353,7 @@ onUnmounted(() => {
           Minecraft 机器人
         </h3>
         <p class="text-10px text-c-text-muted mb-3">
-          启动 AI 控制的 Minecraft 角色，可执行挖掘、建造、战斗等操作
+          通过 mc-mcp 管理服务端、Bot 和观察账号，并执行挖掘、建造与战斗任务
         </p>
 
         <!-- Connection status -->
@@ -370,25 +370,30 @@ onUnmounted(() => {
             class="text-xs"
             :class="minecraftStore.connected ? 'text-c-success' : 'text-c-error'"
           >
-            {{ minecraftStore.connected ? `已连接 (${minecraftStore.username})` : '已断开' }}
+            {{
+              minecraftStore.connected
+                ? `Bot 已连接 (${minecraftStore.username})`
+                : `连接状态: ${minecraftStore.lifecycleState}`
+            }}
           </span>
           <span v-if="minecraftStore.error" class="text-10px text-c-error ml-1">
             {{ minecraftStore.error }}
           </span>
         </div>
 
-        <!-- Action button -->
+        <div class="mb-3 grid grid-cols-2 gap-2 text-10px text-c-text-muted">
+          <span>Server: {{ minecraftStore.serverState }}</span>
+          <span>Bot: {{ minecraftStore.botLifecycleState }}</span>
+          <span>Mode: {{ minecraftStore.connectionMode || '—' }}</span>
+          <span>{{ minecraftStore.serverOwned ? 'mc-mcp 托管' : '外部/未托管' }}</span>
+        </div>
+
         <button
-          class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-          :class="
-            minecraftStore.isConnecting
-              ? 'bg-c-accent/20 text-c-accent pointer-events-none animate-pulse'
-              : minecraftStore.connected
-                ? 'bg-c-error/15 text-c-error hover:bg-c-error/25'
-                : 'bg-c-accent/15 text-c-accent hover:bg-c-accent/25'
-          "
+          v-if="!minecraftStore.connected"
+          class="w-full px-3 py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 bg-c-accent/15 text-c-accent hover:bg-c-accent/25"
+          :class="{ 'pointer-events-none animate-pulse': minecraftStore.isConnecting }"
           :disabled="minecraftStore.isConnecting"
-          @click="minecraftStore.connected ? minecraftStore.stop() : minecraftStore.start()"
+          @click="minecraftStore.connect()"
         >
           <template v-if="minecraftStore.isConnecting">
             <span
@@ -396,10 +401,27 @@ onUnmounted(() => {
             />
             启动中...
           </template>
-          <template v-else>
-            {{ minecraftStore.connected ? '⏹ 停止' : '▶ 启动' }}
-          </template>
+          <template v-else> ▶ 连接 </template>
         </button>
+        <div
+          v-else
+          class="grid gap-2"
+          :class="minecraftStore.serverOwned ? 'grid-cols-2' : 'grid-cols-1'"
+        >
+          <button
+            class="px-3 py-2 rounded-xl text-xs font-medium bg-c-card/50 text-c-text hover:bg-c-card transition-colors"
+            @click="minecraftStore.disconnect()"
+          >
+            断开 Bot
+          </button>
+          <button
+            v-if="minecraftStore.serverOwned"
+            class="px-3 py-2 rounded-xl text-xs font-medium bg-c-error/15 text-c-error hover:bg-c-error/25 transition-colors"
+            @click="minecraftStore.shutdown()"
+          >
+            关闭托管栈
+          </button>
+        </div>
 
         <!-- Viewer spectator section -->
         <div v-if="minecraftStore.connected" class="mt-3 space-y-2">
@@ -457,9 +479,9 @@ onUnmounted(() => {
               minecraftStore.viewerStatus !== 'left' &&
               minecraftStore.viewerStatus !== 'error'
             "
-            @click="minecraftStore.spectate()"
+            @click="minecraftStore.reattachViewer()"
           >
-            👁 Spectate
+            👁 重新附身
           </button>
         </div>
       </div>

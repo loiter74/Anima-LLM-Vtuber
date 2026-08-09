@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from tooling.quality.minecraft_architecture import audit_source
+from tooling.quality.minecraft_architecture import audit_repository, audit_source
 
 
 def _codes(path: str, source: str) -> set[str]:
@@ -84,7 +84,7 @@ async def mc_goto():
     return None
 
 @tool
-async def mc_execute():
+async def mc_connection():
     return None
 """,
     )
@@ -102,27 +102,19 @@ def test_audit_requires_exact_public_tool_surface() -> None:
         "src/animetta/tools/minecraft/core/tools.py",
         """
 @tool
-async def mc_execute():
-    return None
-
-@tool
-async def mc_status():
+async def mc_connection():
     return None
 """,
     )
     exact_codes = _codes(
         "src/animetta/tools/minecraft/core/tools.py",
         """
-@tool(args_schema=ExecuteSchema)
-async def mc_execute():
+@tool(args_schema=ConnectionSchema)
+async def mc_connection():
     return None
 
-@tool
-async def mc_status():
-    return None
-
-@tool
-async def mc_stop():
+@tool(args_schema=OperateSchema)
+async def mc_operate_bot():
     return None
 """,
     )
@@ -171,6 +163,16 @@ def test_audit_reports_mission_and_discovery_runtime_calls() -> None:
 
     assert "DIRECT_GAMEPLAY_CALL" in mission_codes
     assert "DIRECT_GAMEPLAY_CALL" in discovery_codes
+
+
+def test_repository_audit_rejects_sibling_runtime_paths(tmp_path: Path) -> None:
+    target = tmp_path / "scripts" / "minecraft_probe.py"
+    target.parent.mkdir(parents=True)
+    target.write_text('runtime_path = "../voyager-mc-bot"\n', encoding="utf-8")
+
+    violations = audit_repository(tmp_path)
+
+    assert {item.code for item in violations} == {"ANIMA_MC_RUNTIME_COUPLING"}
 
 
 def test_report_cli_runs_from_the_repository_root() -> None:

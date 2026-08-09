@@ -39,12 +39,15 @@ class TestToolManager:
         ):
             mock_load.return_value = (mock_tools, mock_tools_map)
 
-            result = await tool_manager.load_tools({"builtin": "tools"})
+            result = await tool_manager.load_tools(
+                {"builtin": "tools", "tool_settings": {"max_tool_calls_per_turn": 5}}
+            )
 
         assert result is True
         assert len(tool_manager.tools) == 2
         assert tool_manager.tools_map == mock_tools_map
         assert tool_manager.chat_model == "bound_model"
+        assert tool_manager.get_config()["max_tool_calls_per_turn"] == 5
         mock_chat_model.bind_tools.assert_called_once_with(mock_tools)
 
     @pytest.mark.asyncio
@@ -134,11 +137,9 @@ class TestToolManager:
         """A runtime-owned control plane can reuse the ordinary graph without reinitializing it."""
 
         first = MagicMock()
-        first.name = "mc_execute"
+        first.name = "mc_connection"
         second = MagicMock()
-        second.name = "mc_status"
-        third = MagicMock()
-        third.name = "mc_stop"
+        second.name = "mc_operate_bot"
         chat_model = MagicMock()
         bound_model = MagicMock()
         chat_model.bind_tools.return_value = bound_model
@@ -152,28 +153,25 @@ class TestToolManager:
                 AsyncMock(return_value=chat_model),
             ),
         ):
-            result = await tool_manager.load_prebuilt_tools([first, second, third])
+            result = await tool_manager.load_prebuilt_tools([first, second])
 
         assert result is True
-        assert tool_manager.tools == [first, second, third]
+        assert tool_manager.tools == [first, second]
         assert tool_manager.tools_map == {
-            "mc_execute": first,
-            "mc_status": second,
-            "mc_stop": third,
+            "mc_connection": first,
+            "mc_operate_bot": second,
         }
         assert tool_manager.chat_model is bound_model
         loader.assert_not_called()
-        chat_model.bind_tools.assert_called_once_with([first, second, third])
+        chat_model.bind_tools.assert_called_once_with([first, second])
 
     @pytest.mark.asyncio
     async def test_cleanup_does_not_stop_runtime_owned_by_prebuilt_tools(self, tool_manager):
         tool = MagicMock()
-        tool.name = "mc_execute"
+        tool.name = "mc_operate_bot"
         chat_model = MagicMock()
         chat_model.bind_tools.return_value = chat_model
-        bridge = MagicMock()
-        bridge.is_running = True
-        bridge.stop = AsyncMock()
+        cleanup = AsyncMock()
 
         with (
             patch.object(
@@ -182,14 +180,14 @@ class TestToolManager:
                 AsyncMock(return_value=chat_model),
             ),
             patch(
-                "animetta.orchestration.graph.tool_manager.get_bridge",
-                return_value=bridge,
+                "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+                cleanup,
             ),
         ):
             assert await tool_manager.load_prebuilt_tools([tool]) is True
             await tool_manager.cleanup()
 
-        bridge.stop.assert_not_awaited()
+        cleanup.assert_not_awaited()
 
     # ── _create_chat_model ────────────────────────────────────────
 
@@ -271,61 +269,60 @@ class TestToolManager:
         mock_mcp.close_all = AsyncMock()
         tool_manager._mcp_manager = mock_mcp
 
-        with patch("animetta.orchestration.graph.tool_manager.get_bridge") as mock_get_bridge:
-            mock_bridge = MagicMock()
-            mock_bridge.is_running = False
-            mock_get_bridge.return_value = mock_bridge
-
+        with patch(
+            "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+            new_callable=AsyncMock,
+        ) as cleanup:
             await tool_manager.cleanup()
 
         mock_mcp.close_all.assert_awaited_once()
+        cleanup.assert_awaited_once()
         assert tool_manager._mcp_manager is None
 
     @pytest.mark.asyncio
     async def test_cleanup_without_mcp_manager(self, tool_manager):
         """cleanup works when no MCP manager was created."""
-        with patch("animetta.orchestration.graph.tool_manager.get_bridge") as mock_get_bridge:
-            mock_bridge = MagicMock()
-            mock_bridge.is_running = False
-            mock_get_bridge.return_value = mock_bridge
-
+        with patch(
+            "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+            new_callable=AsyncMock,
+        ) as cleanup:
             await tool_manager.cleanup()
 
         # no crash is the assertion
         assert tool_manager._mcp_manager is None
+        cleanup.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_cleanup_stops_minecraft_bridge(self, tool_manager):
-        """cleanup stops the Minecraft bridge if it is running."""
-        with patch("animetta.orchestration.graph.tool_manager.get_bridge") as mock_get_bridge:
-            mock_bridge = MagicMock()
-            mock_bridge.is_running = True
-            mock_bridge.stop = AsyncMock()
-            mock_get_bridge.return_value = mock_bridge
-
+    async def test_cleanup_closes_minecraft_mcp_session(self, tool_manager):
+        """cleanup closes only Anima-owned Minecraft state and MCP transport."""
+        with patch(
+            "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+            new_callable=AsyncMock,
+        ) as cleanup:
             await tool_manager.cleanup()
 
-        mock_bridge.stop.assert_awaited_once()
+        cleanup.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_cleanup_handles_minecraft_import_error(self, tool_manager):
         """cleanup handles ImportError when Minecraft tools not installed."""
-        with patch("animetta.orchestration.graph.tool_manager.get_bridge") as mock_get_bridge:
-            mock_get_bridge.side_effect = ImportError("not installed")
-
+        with patch(
+            "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+            new_callable=AsyncMock,
+            side_effect=ImportError("not installed"),
+        ):
             await tool_manager.cleanup()  # should not raise
 
         # no exception is the assertion
 
     @pytest.mark.asyncio
-    async def test_cleanup_handles_minecraft_stop_exception(self, tool_manager):
-        """cleanup warns but does not crash when Minecraft bridge.stop raises."""
-        with patch("animetta.orchestration.graph.tool_manager.get_bridge") as mock_get_bridge:
-            mock_bridge = MagicMock()
-            mock_bridge.is_running = True
-            mock_bridge.stop = AsyncMock(side_effect=RuntimeError("stop failed"))
-            mock_get_bridge.return_value = mock_bridge
-
+    async def test_cleanup_handles_minecraft_close_exception(self, tool_manager):
+        """cleanup warns but does not crash when Minecraft session close raises."""
+        with patch(
+            "animetta.orchestration.graph.tool_manager.cleanup_bridge",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("close failed"),
+        ):
             await tool_manager.cleanup()  # should not raise
 
     # ── Constructor ───────────────────────────────────────────────

@@ -65,6 +65,21 @@ def _apply_context_budget(
     return trimmed
 
 
+def _completed_connection_call(messages: list[Any]) -> bool:
+    """A successful lifecycle operation is terminal for the current user turn."""
+
+    if len(messages) < 2 or not isinstance(messages[-1], ToolMessage):
+        return False
+    tool_result = messages[-1]
+    assistant = messages[-2]
+    if not isinstance(assistant, AIMessage) or str(tool_result.content).startswith("Error:"):
+        return False
+    return any(
+        call.get("id") == tool_result.tool_call_id and call.get("name") == "mc_connection"
+        for call in assistant.tool_calls
+    )
+
+
 # Regex for emotion tags like [happy], [neutral], [sad]. Does NOT match
 # ``[affinity:N]`` — affinity marker stripping is handled exclusively by
 # ``_extract_and_update_affinity`` (which respects the 【debug】 visibility
@@ -591,6 +606,10 @@ async def _llm_with_tools(
     )
 
     bound_tools = getattr(chat_model, "bound_tools", []) or getattr(chat_model, "tools", [])
+    completed_tool_calls = sum(isinstance(message, ToolMessage) for message in messages)
+    max_tool_calls = int(_get_config_value(config, "max_tool_calls_per_turn", 5) or 5)
+    if completed_tool_calls >= max_tool_calls or _completed_connection_call(messages):
+        bound_tools = []
 
     history_for_llm = [
         msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))
@@ -624,10 +643,13 @@ async def _llm_with_tools(
                 # after_llm_call notification (non-blocking)
                 _notify_middleware_after(session_id, user_text, visible_content, config)
 
+                response_messages: list[Any] = [ai_message]
+                if not messages or not isinstance(messages[-1], ToolMessage):
+                    response_messages.insert(0, HumanMessage(content=user_text))
                 return {
                     "response_text": visible_content,
                     "response_chunks": [raw_content],
-                    "messages": [ai_message],
+                    "messages": response_messages,
                     "tool_calls": formatted_tool_calls,
                 }
             else:

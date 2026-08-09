@@ -18,3 +18,17 @@ it('uses the live page as the only TTS failover visual surface', async () => {
     code: 'ENOENT',
   })
 })
+
+it('uses live.html as the only runtime live surface', async () => {
+  const electronMain = await readFile(resolve(process.cwd(), 'electron/main.cjs'), 'utf8')
+  const router = await readFile(resolve(process.cwd(), 'src/router/index.ts'), 'utf8')
+
+  expect(electronMain).toContain("mainWindow.loadURL('http://localhost:3000/live.html')")
+  expect(electronMain).not.toContain('/live-stream')
+  expect(router).not.toContain('/live-stream')
+  await expect(
+    access(resolve(process.cwd(), 'src/views/LiveStreamPage.vue')),
+  ).rejects.toMatchObject({
+    code: 'ENOENT',
+  })
+})

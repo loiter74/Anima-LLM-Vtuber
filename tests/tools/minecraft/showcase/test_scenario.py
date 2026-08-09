@@ -274,11 +274,12 @@ async def test_mission_start_boundary_forbids_every_later_admin_mutation() -> No
 
 
 async def test_live_setup_rejects_rcon_textual_failure_even_when_process_exits_zero() -> None:
-    class _Server:
-        async def execute_rcon(self, _command: str) -> str:
-            return "No player was found"
+    class _Bridge:
+        async def run_managed_setup(self, _command: str, *, request_id: str) -> dict:
+            del request_id
+            return {"outcome": "success", "output": "No player was found"}
 
-    executor = ReviewRconSetupExecutor(_Server())  # type: ignore[arg-type]
+    executor = ReviewRconSetupExecutor(_Bridge())  # type: ignore[arg-type]
     operation = next(
         item
         for item in compile_setup_operations(default_showcase_scenario())

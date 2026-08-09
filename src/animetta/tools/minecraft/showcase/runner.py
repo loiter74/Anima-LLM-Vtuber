@@ -62,7 +62,8 @@ class ViewerReadiness(_FrozenModel):
 class DialogueSubmission(_FrozenModel):
     exact_user_text: str = Field(min_length=1, max_length=4_000)
     visible_response: str = Field(max_length=4_000)
-    tool_name: Literal["mc_execute"]
+    tool_name: Literal["mc_operate_bot"]
+    operation: Literal["execute"] = "execute"
     tool_call_id: str = Field(min_length=1, max_length=256)
     mission_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,127}$")
     mission_payload: MissionSpec
@@ -368,14 +369,22 @@ class ShowcaseRunner:
                 input_refs=(dialogue_input_ref,),
                 decision_source="configured-model",
                 reason_code="MISSION_TOOL_CALL_EMITTED",
-                selected_capability="mc_execute",
+                selected_capability="mc_operate_bot",
                 output_refs=(dialogue_output_ref,),
                 verifier="DialogueSemanticVerifier",
                 predicates=(
                     VerificationPredicate(
-                        predicate_id="exactly-one-mc-execute",
-                        expected={"tool_name": "mc_execute", "count": 1},
-                        actual={"tool_name": dialogue.tool_name, "count": 1},
+                        predicate_id="exactly-one-mc-operate-execute",
+                        expected={
+                            "tool_name": "mc_operate_bot",
+                            "operation": "execute",
+                            "count": 1,
+                        },
+                        actual={
+                            "tool_name": dialogue.tool_name,
+                            "operation": dialogue.operation,
+                            "count": 1,
+                        },
                         status="pass",
                     ),
                 ),

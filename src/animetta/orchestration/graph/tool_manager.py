@@ -10,7 +10,7 @@ from loguru import logger
 from animetta.services.llm.langchain_adapter import create_chat_model_from_service
 from animetta.tools import load_tools_from_config
 from animetta.tools.mcp_bridge import MCPManager
-from animetta.tools.minecraft import get_bridge
+from animetta.tools.minecraft.core.tools import cleanup_bridge
 
 
 class ToolManager:
@@ -22,6 +22,7 @@ class ToolManager:
         self.tools: list[Any] = []
         self.tools_map: dict[str, Any] = {}
         self.chat_model: Any | None = None
+        self.max_tool_calls_per_turn = 5
         self._mcp_manager: Any | None = None
         self._owns_tool_lifecycle = True
 
@@ -29,6 +30,11 @@ class ToolManager:
         """Load tools and create ChatModel"""
         try:
             self._owns_tool_lifecycle = True
+            self.max_tool_calls_per_turn = int(
+                tools_config.get("tool_settings", {}).get("max_tool_calls_per_turn", 5)
+            )
+            if not 1 <= self.max_tool_calls_per_turn <= 20:
+                raise ValueError("max_tool_calls_per_turn must be between 1 and 20")
             logger.info(f"[{self.session_id}] [ToolManager] Starting tool loading...")
 
             # 1. Load built-in/LangChain/custom tools (sync)
@@ -102,6 +108,7 @@ class ToolManager:
             "tools_map": self.tools_map,
             "chat_model": self.chat_model,
             "enable_tools": True,
+            "max_tool_calls_per_turn": self.max_tool_calls_per_turn,
         }
 
     def is_loaded(self) -> bool:
@@ -116,12 +123,9 @@ class ToolManager:
         if not self._owns_tool_lifecycle:
             return
 
-        # Cleanup Minecraft bridge
         try:
-            bridge = get_bridge()
-            if bridge and bridge.is_running:
-                await bridge.stop()
-                logger.info(f"[{self.session_id}] [ToolManager] Minecraft bridge stopped")
+            await cleanup_bridge()
+            logger.info(f"[{self.session_id}] [ToolManager] Minecraft MCP session closed")
         except ImportError:
             pass  # Minecraft tools not installed
         except Exception as e:

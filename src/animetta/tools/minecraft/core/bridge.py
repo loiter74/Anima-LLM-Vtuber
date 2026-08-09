@@ -1,491 +1,270 @@
-"""
-Minecraft Bridge — Manages Mineflayer bot subprocess lifecycle and communication
+"""Streamable HTTP MCP client for the independently owned Minecraft runtime."""
 
-Architecture:
-  Anima startup → MinecraftBridge.start() → spawns Node.js subprocess via StdioGameBotTransport
-  LLM tool call → bridge.send_command(action, params) → JSON to stdin → wait response
-  Bot idle → sends heartbeat events → Python tracks state
-  Anima shutdown → MinecraftBridge.stop() → kill subprocess
-
-Protocol:
-  Request:  {"id": 1, "action": "goto", "params": {"x": 100, "y": 64, "z": 200}}
-  Response: {"id": 1, "status": "success", "result": "Arrived at (100, 64, 200)"}
-  Event:    {"id": null, "status": "event", "result": {"type": "heartbeat", ...}}
-"""
+from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
 import os
-from typing import TYPE_CHECKING, Any
+import shutil
+from collections.abc import Callable
+from typing import Any
 
 from loguru import logger
 
-from animetta.utils.service_availability import is_service_available
+from animetta.tools.mcp_bridge import MCPClient
 
-from ...gamebot.stdio_transport import StdioGameBotTransport
 from .config import MinecraftConfig
 
-if TYPE_CHECKING:
-    pass  # ServicePool is accessed as a class, not imported for type checking
+_bridge: MinecraftMcpBridge | None = None
+
+_RUNTIME_TOOLS = {
+    "gamebot_v2_manifest": "gamebot_manifest",
+    "gamebot_v2_observe": "gamebot_observe",
+    "gamebot_v2_execute_action": "gamebot_execute_action",
+    "gamebot_v2_inspect_region": "gamebot_inspect_region",
+    "gamebot_v2_inspect_action": "gamebot_inspect_action",
+    "gamebot_v2_cancel_action": "gamebot_cancel_action",
+    "gamebot_v2_health": "gamebot_health",
+    "survival_iron": "review_survival_iron",
+}
 
 
-class MinecraftBridge:
-    """Transport-only owner of the Mineflayer subprocess lifecycle."""
+class MinecraftMcpError(RuntimeError):
+    """Raised when mc-mcp is unavailable or returns an invalid result."""
 
-    def __init__(
-        self,
-        config: MinecraftConfig,
-    ):
+
+class MinecraftMcpBridge:
+    """Own only the MCP client session; mc-mcp owns every external process."""
+
+    def __init__(self, config: MinecraftConfig) -> None:
         self.config = config
-        self._process: asyncio.subprocess.Process | None = None
-        self._pending: dict[int, asyncio.Future] = {}
-        self._next_id = 1
-        self._lock = asyncio.Lock()
+        self._client: MCPClient | None = None
         self._running = False
-        self._reader_task: asyncio.Task | None = None
-        self._bot_ready = asyncio.Event()
+        self._event_callbacks: list[Callable[[dict[str, Any]], None]] = []
+        self._viewer_callback: Callable[..., Any] | None = None
+        self._event_cursor = 0
+        self._event_task: asyncio.Task[None] | None = None
+        self._connect_lock = asyncio.Lock()
 
-        # Generic transport layer (Phase 13: delegates subprocess lifecycle)
-        self._transport: StdioGameBotTransport | None = None
+    async def start(self, *, profile: str | None = None, request_id: str) -> dict[str, Any]:
+        """Ensure mc-mcp, connect the selected profile, and start event projection."""
 
-        # Viewer callback for forwarding viewer_joined/viewer_left events
-        self._viewer_callback: Any | None = None
-        self._runtime_event_callbacks: list[Any] = []
-
-    async def start(self) -> bool:
-        """Start the Mineflayer bot subprocess"""
-        if self._running:
-            return True
-
-        if not is_service_available("node"):
-            logger.info("[MinecraftBridge] Skipped — Node.js not available in this environment")
-            return False
-
-        # Phase 15: resolve runtime path — prefer configured external path, fall back to embedded
-        bot_dir = self._resolve_bot_dir()
-        bot_script = os.path.join(bot_dir, self.config.runtime.entrypoint)
-
-        if not os.path.exists(bot_script):
-            logger.error(f"[MinecraftBridge] Bot script not found: {bot_script}")
-            return False
-
-        if not os.path.exists(os.path.join(bot_dir, "node_modules")):
-            logger.error(
-                f"[MinecraftBridge] node_modules not found, run 'npm install' in {bot_dir}"
-            )
-            return False
-
-        try:
-            self._bot_ready.clear()
-            # Build environment with viewer config
-            env = os.environ.copy()
-            # GameBot v2 is the sole mutation owner. Keep the external runtime's
-            # legacy auto-combat/eat/swim/planner loops passive even if a parent
-            # process exported a conflicting standalone-mode value.
-            env["GAMEBOT_CONTROL_PLANE_MODE"] = "true"
-            if self.config.viewer.username:
-                env["MC_VIEWER_USERNAME"] = self.config.viewer.username
-                env["MC_AUTO_SPECTATE"] = "true" if self.config.viewer.auto_spectate else "false"
-
-            # Export client-viewer (real Minecraft client capture) settings
-            cv = self.config.client_viewer
-            if cv.enabled:
-                env["MC_CLIENT_VIEWER_ENABLED"] = "true"
-                env["MC_CLIENT_VIEWER_USERNAME"] = cv.username
-                env["MC_CLIENT_VIEWER_MODE"] = cv.mode
-                env["MC_CLIENT_VIEWER_AUTO_SPECTATE"] = "true" if cv.auto_spectate else "false"
-                env["MC_CLIENT_VIEWER_POLL_INTERVAL"] = str(cv.poll_interval)
-                env["MC_CLIENT_VIEWER_SPECTATE_TIMEOUT"] = str(cv.spectate_timeout)
-
-            bot_args = [
-                self.config.bot.host,
-                str(self.config.bot.port),
-                self.config.bot.username,
-            ]
-            if self.config.bot.version:
-                bot_args.append(self.config.bot.version)
-
-            self._transport = StdioGameBotTransport(
-                argv=["node", bot_script, *bot_args],
-                cwd=bot_dir,
-                env=env,
-            )
-            self._transport.on_event(self._handle_runtime_event)
-            await self._transport.start(login_timeout=15.0)
-
-            # Expose process for backward compatibility
-            self._process = self._transport._process
-            self._running = True
-
-            logger.info(
-                f"[MinecraftBridge] Bot process started (PID: {self._process.pid}, "
-                f"server={self.config.bot.host}:{self.config.bot.port}, "
-                f"cwd={bot_dir})"
-            )
-
-            # Wait for bot to log in (transport routes runtime events into _handle_runtime_event)
-            try:
-                await asyncio.wait_for(self._bot_ready.wait(), timeout=15.0)
-                logger.info("[MinecraftBridge] Bot logged in successfully")
-            except TimeoutError:
-                logger.error("[MinecraftBridge] Bot login timeout; stopping unready runtime")
-                await self.stop()
-                return False
-
-            return True
-
-        except Exception as e:
-            logger.error(f"[MinecraftBridge] Failed to start: {e}")
-            return False
-
-    def _resolve_bot_dir(self) -> str:
-        """Resolve the bot runtime directory.
-
-        When ``config.runtime.runtime_path`` is set, use that path. When it is
-        unset, prefer the sibling external ``voyager-mc-bot`` project. The old
-        embedded runtime is only considered when explicitly enabled for rollback.
-        """
-        rt = self.config.runtime
-        if rt.runtime_path:
-            external = os.path.abspath(rt.runtime_path)
-            if os.path.isdir(external):
-                return external
-            logger.warning(f"[MinecraftBridge] External runtime path not found: {external}")
-            return external
-
-        # Default: external voyager-mc-bot project
-        default = os.path.normpath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "..", "..", "..", "voyager-mc-bot"
-            )
+        await self._ensure_client()
+        result = await self.call_tool(
+            "minecraft_connect",
+            {
+                "profile": profile or self.config.mcp.default_profile,
+                "request_id": request_id,
+            },
         )
-        if os.path.isdir(default):
-            return default
+        if result.get("state") != "ready":
+            raise MinecraftMcpError(f"MC_MCP_NOT_READY:{result.get('state')}")
+        self._running = True
+        await self._stop_event_task()
+        self._event_task = asyncio.create_task(self._poll_events())
+        return result
 
-        use_embedded = getattr(rt, "use_embedded_fallback", False)
-        if use_embedded is True:
-            embedded = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "bot"))
-            if os.path.isdir(embedded):
-                return embedded
+    async def connection_status(self) -> dict[str, Any]:
+        await self._ensure_client()
+        return await self.call_tool("minecraft_connection_status", {})
 
-        # Absolute fallback for development
-        return "C:/Users/30262/Project/voyager-mc-bot"
+    async def disconnect_runtime(self, *, request_id: str) -> dict[str, Any]:
+        await self._ensure_client()
+        result = await self.call_tool("minecraft_disconnect", {"request_id": request_id})
+        self._running = False
+        await self._stop_event_task()
+        return result
+
+    async def shutdown_runtime(self, *, request_id: str) -> dict[str, Any]:
+        await self._ensure_client()
+        result = await self.call_tool("minecraft_shutdown", {"request_id": request_id})
+        self._running = False
+        await self._stop_event_task()
+        return result
+
+    async def reattach_viewer(self, *, request_id: str) -> dict[str, Any]:
+        await self._ensure_client()
+        return await self.call_tool("minecraft_reattach_viewer", {"request_id": request_id})
+
+    async def run_managed_setup(self, command: str, *, request_id: str) -> dict[str, Any]:
+        await self._ensure_client()
+        return await self.call_tool(
+            "minecraft_managed_setup",
+            {"command": command, "request_id": request_id},
+        )
 
     async def send_command(
-        self, action: str, params: dict | None = None, timeout: float = 60.0
-    ) -> dict:
-        """Send a command to the bot and wait for response
+        self, action: str, params: dict[str, Any] | None = None, timeout: float = 60
+    ) -> dict[str, Any]:
+        """Adapt the internal GameBot v2 transport protocol to mc-mcp tools."""
 
-        Args:
-            action: Bot action name (goto, mine, place, attack, chat, status, etc.)
-            params: Action parameters
-            timeout: Max wait time in seconds (default 60)
-
-        Returns:
-            Dict with status and result keys
-        """
-        if not self._running or not self._process:
-            return {"status": "error", "result": "Bridge not running"}
-
-        if self._process.returncode is not None:
-            self._running = False
-            return {"status": "error", "result": "Bot process has exited"}
-
-        if self._transport:
-            logger.debug(f"[MinecraftBridge] Sending via transport: {action}")
-            command_params = {**(params or {}), "timeout": int(timeout * 1000)}
-            result = await self._transport.send_command(action, command_params, timeout=timeout)
-            if result.get("status") == "error" and "timed out" in str(result.get("result", "")):
-                logger.warning(f"[MinecraftBridge] Command '{action}' timeout after {timeout}s")
-                if action in {"collect", "mine_shaft", "branch_mine"}:
-                    await self._restart_after_command_timeout(action)
-            return result
-
-        async with self._lock:
-            cmd_id = self._next_id
-            self._next_id += 1
-            future = asyncio.get_event_loop().create_future()
-            self._pending[cmd_id] = future
-
-        command = json.dumps(
-            {
-                "id": cmd_id,
-                "action": action,
-                "params": {**(params or {}), "timeout": int(timeout * 1000)},
+        tool_name = _RUNTIME_TOOLS.get(action)
+        if tool_name is None:
+            return {
+                "status": "error",
+                "result": {
+                    "code": "UNSUPPORTED_MCP_RUNTIME_ACTION",
+                    "message": f"Unsupported runtime action: {action}",
+                },
             }
-        )
-        logger.debug(f"[MinecraftBridge] Sending: {action} (id={cmd_id})")
-
         try:
-            self._process.stdin.write((command + "\n").encode("utf-8"))
-            await self._process.stdin.drain()
-
-            result = await asyncio.wait_for(future, timeout=timeout)
-            return result
-
-        except TimeoutError:
-            logger.warning(f"[MinecraftBridge] Command '{action}' timeout after {timeout}s")
-            if action in {"collect", "mine_shaft", "branch_mine"}:
-                await self._restart_after_command_timeout(action)
-            return {"status": "error", "result": f"Command timed out after {timeout}s"}
-        except Exception as e:
-            logger.error(f"[MinecraftBridge] Command '{action}' failed: {e}")
-            return {"status": "error", "result": str(e)}
-        finally:
-            self._pending.pop(cmd_id, None)
-
-    def _handle_runtime_event(self, result: dict[str, Any]) -> None:
-        """Handle async runtime events emitted by the generic gamebot transport."""
-        for callback in tuple(self._runtime_event_callbacks):
-            try:
-                callback(dict(result))
-            except Exception as exc:
-                logger.error(f"[MinecraftBridge] Runtime event callback error: {exc}")
-        if result.get("type") == "heartbeat":
-            logger.debug(f"[MinecraftBridge] Heartbeat: {result}")
-        elif result.get("type") == "login":
-            logger.info(f"[MinecraftBridge] Bot logged in: {result.get('username')}")
-            self._bot_ready.set()
-        elif result.get("type") == "spawn":
-            logger.info("[MinecraftBridge] Bot spawned in world")
-        elif result.get("type") in ("viewer_joined", "viewer_left"):
-            event_type = result["type"]
-            event_username = result.get("username", "")
-            logger.info(f"[MinecraftBridge] {event_type}: {event_username}")
-            if self._viewer_callback:
-                try:
-                    self._viewer_callback(event_type, event_username)
-                except Exception as e:
-                    logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
-        elif result.get("type") == "client_viewer_status":
-            logger.info(
-                "[MinecraftBridge] client_viewer_status: "
-                f"{result.get('state', '')} {result.get('username', '')}"
+            result = await asyncio.wait_for(
+                self.call_tool(tool_name, {"payload": params or {}}),
+                timeout=timeout,
             )
-            if self._viewer_callback:
-                try:
-                    self._viewer_callback("client_viewer_status", result)
-                except Exception as e:
-                    logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
+        except TimeoutError:
+            return {
+                "status": "error",
+                "result": {"code": "RUNTIME_TIMEOUT", "message": f"{action} timed out"},
+            }
+        return {"status": "success", "result": result}
 
-    async def _restart_after_command_timeout(self, action: str) -> None:
-        """Recover from a long-running Node action that outlived Python's timeout."""
-        logger.warning(f"[MinecraftBridge] Restarting bot after timed-out action: {action}")
-        for future in list(self._pending.values()):
-            if not future.done():
-                future.cancel()
-        self._pending.clear()
-        await self.stop()
-        started = await self.start()
-        if not started:
-            logger.error("[MinecraftBridge] Bot restart after timeout failed")
+    async def close(self) -> None:
+        """Close only Anima's MCP session; never mutate MC lifecycle here."""
 
-    async def _read_stdout(self):
-        """Read JSON responses from bot stdout"""
-        try:
-            _connection_refused_logged = False
-            while self._running and self._process and self._process.stdout:
-                line = await self._process.stdout.readline()
-                if not line:
-                    logger.info(
-                        f"[MinecraftBridge] Bot stdout closed (returncode={self._process.returncode})"
-                    )
-                    break
+        self._running = False
+        await self._stop_event_task()
+        if self._client is not None:
+            await self._client.disconnect()
+            self._client = None
 
-                line = line.decode("utf-8").strip()
-                if not line:
-                    continue
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self._client is None or self._client.session is None:
+            raise MinecraftMcpError("MC_MCP_NOT_CONNECTED")
+        failed_client = self._client
+        response = await failed_client.call_tool(name, arguments)
+        if response is None:
+            await self._reconnect_client(failed_client)
+            assert self._client is not None
+            response = await self._client.call_tool(name, arguments)
+            if response is None:
+                raise MinecraftMcpError(f"MC_MCP_CALL_FAILED:{name}")
+        is_error = bool(getattr(response, "isError", False))
+        structured = getattr(response, "structuredContent", None)
+        if not isinstance(structured, dict):
+            content = getattr(response, "content", ())
+            text = next(
+                (str(item.text) for item in content if hasattr(item, "text")),
+                "{}",
+            )
+            try:
+                structured = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise MinecraftMcpError(f"MC_MCP_INVALID_RESPONSE:{name}") from exc
+        if is_error:
+            error = structured.get("error", structured)
+            code = error.get("code", "MC_MCP_ERROR") if isinstance(error, dict) else "MC_MCP_ERROR"
+            message = error.get("message", error) if isinstance(error, dict) else error
+            raise MinecraftMcpError(f"{code}:{message}")
+        return structured
 
-                try:
-                    response = json.loads(line)
-                except json.JSONDecodeError:
-                    # Suppress noisy individual line warnings when connection is refused
-                    if "ECONNREFUSED" in line:
-                        if not _connection_refused_logged:
-                            logger.info(
-                                "[MinecraftBridge] Minecraft server not available on localhost:25565"
-                            )
-                            _connection_refused_logged = True
-                    else:
-                        logger.debug(f"[MinecraftBridge] Non-JSON from bot: {line[:100]}")
-                    continue
-
-                resp_id = response.get("id")
-                status = response.get("status")
-                result = response.get("result")
-
-                if resp_id == "system" or (resp_id is None and status == "event"):
-                    # Handle events
-                    if isinstance(result, dict):
-                        for callback in tuple(self._runtime_event_callbacks):
-                            try:
-                                callback(dict(result))
-                            except Exception as exc:
-                                logger.error(
-                                    f"[MinecraftBridge] Runtime event callback error: {exc}"
-                                )
-                    if isinstance(result, dict) and result.get("type") == "heartbeat":
-                        logger.debug(f"[MinecraftBridge] Heartbeat: {result}")
-                    elif isinstance(result, dict) and result.get("type") == "login":
-                        logger.info(f"[MinecraftBridge] Bot logged in: {result.get('username')}")
-                        self._bot_ready.set()
-                    elif isinstance(result, dict) and result.get("type") == "spawn":
-                        logger.info("[MinecraftBridge] Bot spawned in world")
-                    elif isinstance(result, dict) and result.get("type") in (
-                        "viewer_joined",
-                        "viewer_left",
-                    ):
-                        event_type = result["type"]
-                        event_username = result.get("username", "")
-                        logger.info(f"[MinecraftBridge] {event_type}: {event_username}")
-                        if self._viewer_callback:
-                            try:
-                                self._viewer_callback(event_type, event_username)
-                            except Exception as e:
-                                logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
-                    elif isinstance(result, dict) and result.get("type") == "client_viewer_status":
-                        logger.info(
-                            "[MinecraftBridge] client_viewer_status: "
-                            f"{result.get('state', '')} {result.get('username', '')}"
-                        )
-                        if self._viewer_callback:
-                            try:
-                                self._viewer_callback("client_viewer_status", result)
-                            except Exception as e:
-                                logger.error(f"[MinecraftBridge] Viewer callback error: {e}")
-                    continue
-
-                if resp_id is not None and resp_id in self._pending:
-                    pending = self._pending[resp_id]
-                    if not pending.done():
-                        pending.set_result({"status": status, "result": result})
-                else:
-                    logger.debug(f"[MinecraftBridge] Unhandled response id={resp_id}")
-
-        except asyncio.CancelledError:
-            logger.debug("[MinecraftBridge] stdout reader cancelled")
-        except Exception as e:
-            logger.error(f"[MinecraftBridge] stdout reader error: {e}")
-        finally:
-            self._running = False
-
-    async def _read_stderr(self):
-        """Log bot stderr output"""
-        try:
-            while self._process and self._process.stderr:
-                line = await self._process.stderr.readline()
-                if not line:
-                    break
-                msg = line.decode("utf-8").strip()
-                if msg:
-                    logger.warning(f"[MinecraftBot] {msg}")
-        except Exception as e:
-            logger.debug(f"[MinecraftBridge] stderr reader stopped: {e}")
-
-    # ── Mode Commands (for planner integration) ──
-
-    async def set_planner_mode(self, plan_steps: list) -> dict:
-        """Switch bot to planner mode with a plan"""
-        return await self.send_command(
-            "set_mode",
-            {
-                "mode": "planner",
-                "plan": plan_steps,
-            },
-            timeout=10.0,
-        )
-
-    async def set_rule_mode(self) -> dict:
-        """Switch bot to rule mode (Python-driven)"""
-        return await self.send_command(
-            "set_mode",
-            {
-                "mode": "rule",
-            },
-            timeout=10.0,
-        )
-
-    async def get_plan_status(self) -> dict:
-        """Get current plan execution status"""
-        return await self.send_command("plan_status", {}, timeout=5.0)
-
-    async def spectate_viewer(self, username: str | None = None) -> dict:
-        """Send spectate command to attach viewer to bot's perspective.
-
-        Args:
-            username: Viewer's MC username. If None, uses config.viewer.username.
-
-        Returns:
-            Dict with status and result keys.
-        """
-        params = {}
-        if username:
-            params["username"] = username
-        return await self.send_command("spectate", params, timeout=10.0)
-
-    def set_viewer_callback(self, callback: Any) -> None:
-        """Set callback for viewer join/leave events.
-
-        The callback receives: (event_type: str, username: str)
-        where event_type is 'viewer_joined' or 'viewer_left'.
-        """
+    def set_viewer_callback(self, callback: Callable[..., Any]) -> None:
         self._viewer_callback = callback
 
-    def add_runtime_event_callback(self, callback: Any) -> None:
-        """Subscribe to validated transport events without replacing viewer wiring."""
-
-        self._runtime_event_callbacks.append(callback)
-
-    async def stop(self) -> None:
-        """Stop the bot subprocess and resolve pending commands."""
-        self._running = False
-
-        if self._reader_task:
-            self._reader_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._reader_task
-            self._reader_task = None
-
-        # Phase 13: delegate process termination to generic transport when available.
-        # Fall back to direct process termination for backward compatibility (tests, hand-set process).
-        if self._transport:
-            await self._transport.stop()
-            self._transport = None
-        elif self._process:
-            try:
-                self._process.terminate()
-                await asyncio.wait_for(self._process.wait(), timeout=5.0)
-                logger.info("[MinecraftBridge] Bot process terminated")
-            except TimeoutError:
-                try:
-                    self._process.kill()
-                    await self._process.wait()
-                    logger.warning("[MinecraftBridge] Bot process killed (timeout)")
-                except ProcessLookupError:
-                    pass
-            except ProcessLookupError:
-                pass
-
-        self._process = None
-
-        # Resolve all pending futures with error
-        for future in self._pending.values():
-            if not future.done():
-                future.set_result({"status": "error", "result": "Bridge stopped"})
-        self._pending.clear()
-
-        logger.info("[MinecraftBridge] Bridge stopped")
+    def add_runtime_event_callback(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        self._event_callbacks.append(callback)
 
     @property
     def is_running(self) -> bool:
         return self._running
 
+    async def _ensure_client(self) -> None:
+        async with self._connect_lock:
+            if self._client is not None and self._client.session is not None:
+                return
+            await self._connect_client()
 
-# Module-level singleton
-_bridge: MinecraftBridge | None = None
+    async def _reconnect_client(self, failed_client: MCPClient) -> None:
+        async with self._connect_lock:
+            if self._client is not failed_client and self._client is not None:
+                return
+            await failed_client.disconnect()
+            self._client = None
+            await self._connect_client()
+
+    async def _connect_client(self) -> None:
+        descriptor = await self._ensure_service()
+        token = str(descriptor.get("token", ""))
+        if not token:
+            raise MinecraftMcpError("MC_MCP_AUTH_TOKEN_MISSING")
+        self._client = MCPClient(
+            name="minecraft",
+            transport="streamable_http",
+            url=str(descriptor.get("url") or self.config.mcp.url),
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=self.config.mcp.request_timeout_seconds,
+        )
+        if not await self._client.connect():
+            self._client = None
+            raise MinecraftMcpError("MC_MCP_CONNECTION_FAILED")
+
+    async def _ensure_service(self) -> dict[str, Any]:
+        configured_token = os.getenv(self.config.mcp.auth_token_env)
+        if configured_token:
+            return {
+                "url": os.getenv("MC_MCP_URL") or self.config.mcp.url,
+                "token": configured_token,
+            }
+        executable = shutil.which(self.config.mcp.cli_command)
+        if executable is None:
+            raise MinecraftMcpError(f"MC_MCP_CLI_NOT_FOUND:{self.config.mcp.cli_command}")
+        process = await asyncio.create_subprocess_exec(
+            executable,
+            "service",
+            "ensure",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=self.config.mcp.startup_timeout_seconds
+            )
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            raise MinecraftMcpError("MC_MCP_SERVICE_START_TIMEOUT") from None
+        if process.returncode != 0:
+            message = stderr.decode("utf-8", errors="replace").strip()
+            raise MinecraftMcpError(f"MC_MCP_SERVICE_START_FAILED:{message}")
+        try:
+            descriptor = json.loads(stdout.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise MinecraftMcpError("MC_MCP_DESCRIPTOR_INVALID") from exc
+        logger.info("[MinecraftMCP] Local service is ready")
+        return descriptor
+
+    async def _poll_events(self) -> None:
+        while self._running:
+            try:
+                page = await self.call_tool(
+                    "gamebot_events_since",
+                    {"cursor": self._event_cursor, "limit": 100},
+                )
+                if page.get("overflowed"):
+                    logger.warning("[MinecraftMCP] Runtime event cursor overflowed")
+                self._event_cursor = int(page.get("next_cursor", self._event_cursor))
+                for record in page.get("events", ()):
+                    event = record.get("event", {})
+                    self._dispatch_event(event)
+            except (MinecraftMcpError, TypeError, ValueError) as exc:
+                logger.warning(f"[MinecraftMCP] Event polling failed: {exc}")
+            await asyncio.sleep(self.config.mcp.event_poll_seconds)
+
+    def _dispatch_event(self, event: dict[str, Any]) -> None:
+        for callback in tuple(self._event_callbacks):
+            callback(dict(event))
+        if event.get("type") == "client_viewer_status" and self._viewer_callback:
+            self._viewer_callback("client_viewer_status", dict(event))
+
+    async def _stop_event_task(self) -> None:
+        if self._event_task is None:
+            return
+        self._event_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._event_task
+        self._event_task = None
 
 
-def get_bridge() -> MinecraftBridge | None:
-    """Get the global bridge instance"""
+def get_bridge() -> MinecraftMcpBridge | None:
     return _bridge

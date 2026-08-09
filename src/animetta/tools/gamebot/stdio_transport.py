@@ -16,7 +16,7 @@ class StdioGameBotTransport:
     """Transport that communicates with a game bot via newline-delimited JSON over stdio.
 
     Spawns a subprocess and speaks the same JSON-line protocol currently used by
-    MinecraftBridge, but without Minecraft-specific knowledge.
+    a generic process bridge, without Minecraft-specific knowledge.
     """
 
     def __init__(

@@ -1,20 +1,28 @@
 ---
 name: review-anima-live
-description: 评审 Animetta 直播页面、Live2D 性能、TTS 故障转移和 OBS 呈现，并采集新鲜浏览器与运行证据。用户要求检查直播界面、视觉回归、OBS 场景、Live2D 表现、音频故障转移或真实 Bilibili 直播数据时使用。
+description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser Source、Live2D 性能、TTS 故障转移和真实 Bilibili 数据，并采集需要的新鲜证据。用户要求打开真实直播、显示 OBS 页面或场景、检查直播界面、视觉回归、Live2D 表现或音频故障转移时使用。
 ---
 
 # 评审 Animetta 直播
 
-复用统一 review CLI 和通用 Playwright 规则，保持直播评审证据可重复。
+复用统一 review CLI 声明的 feature 路由和通用 Playwright 规则，不从 Vue Router 推断直播入口。
+
+## 模式
+
+- **display**：用户只要求打开、显示或获取直播页面时，运行
+  `pnpm --silent -C frontend run review -- --feature <id> --base-url <当前前端源> --print-url`，再用用户指定或当前浏览器打开其唯一输出。不得启动 OBS、评审浏览器或写评审证据。
+- **review**：用户要求检查、截图、OBS、视觉、音频或性能证据时，执行下述完整评审流程。
 
 ## 流程
 
-1. 读取 `frontend/AGENTS.md`，并在需要浏览器证据时加载 `$qa-testing-playwright`。
-2. 按 [features.md](references/features.md) 选择唯一 review feature；不要为同一场景启动重复浏览器。
-3. 使用 `pnpm -C frontend run review -- --feature <id>` 采集当前页面、控制台、请求、截图和摘要。
-4. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
-5. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
-6. 只根据本轮新证据判断通过、调整或重做。
+1. 读取 `frontend/AGENTS.md`，并按 [features.md](references/features.md) 选择唯一 feature。
+2. 请求还包含启动、停止或恢复 Animetta 时，先使用 `$operate-anima-runtime`；等待运行时 ready，完成用户要求的 Anima 后台动作，再进入 display 或 review 模式。
+3. display 模式只解析并打开 CLI 返回的 URL；不得读取前端路由器或使用兼容重定向入口。
+4. review 模式在需要浏览器证据时加载 `$qa-testing-playwright`。
+5. 使用 `pnpm -C frontend run review -- --feature <id>` 采集当前页面、控制台、请求、截图和摘要；不要为同一场景启动重复浏览器。
+6. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
+7. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
+8. 只根据本轮新证据判断通过、调整或重做。
 
 ## 不变量
 

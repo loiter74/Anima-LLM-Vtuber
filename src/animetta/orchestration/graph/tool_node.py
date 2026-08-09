@@ -238,7 +238,7 @@ async def _notify_observer_before_batch(
 
 
 def _trusted_tool_scope(tool_name: str, state: AgentState):
-    if tool_name not in {"mc_execute", "mc_status", "mc_stop"}:
+    if tool_name not in {"mc_connection", "mc_operate_bot"}:
         return nullcontext()
     from animetta.tools.minecraft.core.tools import bind_minecraft_caller_scope
 

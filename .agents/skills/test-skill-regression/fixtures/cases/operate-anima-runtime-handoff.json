@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "operate-anima-runtime-handoff",
+  "skill": "operate-anima-runtime",
+  "task": "使用 $operate-anima-runtime 读取 request.md，只生成 result/plan.md，不启动浏览器、OBS、直播或运行时服务。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/operate-anima-runtime-handoff",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": [
+        "职责: operate-anima-runtime 仅管理生命周期",
+        "交接: 运行时 ready 后使用 review-anima-live",
+        "禁止: 自行选择直播 URL, 启动浏览器, 启动 OBS"
+      ],
+      "not_contains": ["/live-stream", "Vue Router", "第二套直播"]
+    }
+  ]
+}

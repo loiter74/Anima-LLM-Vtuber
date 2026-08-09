@@ -29,7 +29,7 @@ root with `PYTHONPATH=src`.
 ## Minecraft acceptance & contract generation
 
 Gameplay workflows are submitted through the durable single-consumer control
-plane (`mc_execute` / `mc_status` / `mc_stop`), not launched directly.
+plane (`mc_connection` / `mc_operate_bot`), through mc-mcp rather than direct launch.
 
 | Script | Purpose |
 |--------|---------|

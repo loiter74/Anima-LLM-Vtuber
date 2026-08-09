@@ -19,7 +19,6 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from PIL import ImageGrab
 
-from animetta.acceptance.minecraft_gameplay_review import MinecraftReviewServerLease
 from animetta.config.providers.llm.deepseek import DeepSeekLLMConfig
 from animetta.core.service_context import ServiceContext
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
@@ -38,14 +37,15 @@ from animetta.tools.minecraft.blueprint import (
     BlueprintCompiler,
     starter_shelter_blueprint,
 )
-from animetta.tools.minecraft.core.bridge import MinecraftBridge
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
 from animetta.tools.minecraft.core.tools import (
-    MinecraftExecuteToolInput,
+    MinecraftExecuteRequest,
+    MinecraftOperateToolInput,
     bind_minecraft_caller_scope,
     cleanup_bridge,
     configure_voyager_control_plane,
     get_minecraft_tools,
-    mc_status,
+    mc_operate_bot,
 )
 from animetta.tools.minecraft.mission.adaptive import ExplorationFrontier
 from animetta.tools.minecraft.mission.models import (
@@ -108,8 +108,15 @@ def _normalize_model_execute_args(args: object) -> object:
 
     if not isinstance(args, dict):
         return args
-    if "kind" not in args and isinstance(args.get("mission"), dict) and args.get("action") is None:
-        return {**args, "kind": "mission"}
+    execute = args.get("execute")
+    if (
+        args.get("operation") == "execute"
+        and isinstance(execute, dict)
+        and "kind" not in execute
+        and isinstance(execute.get("mission"), dict)
+        and execute.get("action") is None
+    ):
+        return {**args, "execute": {**execute, "kind": "mission"}}
     return args
 
 
@@ -199,7 +206,7 @@ async def _mission_world_facts(
     return tuple(facts_by_id[fact_id] for fact_id in sorted(facts_by_id))
 
 
-def _semantic_assertions(validated: MinecraftExecuteToolInput) -> dict[str, bool]:
+def _semantic_assertions(validated: MinecraftExecuteRequest) -> dict[str, bool]:
     request = validated.request
     if request.kind != "mission":
         return {"mission_branch": False}
@@ -272,7 +279,7 @@ def _semantic_assertions(validated: MinecraftExecuteToolInput) -> dict[str, bool
 @dataclass(frozen=True, slots=True)
 class InterpretedMission:
     dialogue: DialogueSubmission
-    tool_input: MinecraftExecuteToolInput
+    tool_input: MinecraftExecuteRequest
     validation: dict[str, bool]
 
 
@@ -301,7 +308,7 @@ class ConfiguredModelEvidenceNarrator:
 
     async def narrate(self, evidence: dict[str, Any]) -> str:
         return await self._llm.chat(
-            "请以 Anima 的口吻简洁总结本次 Minecraft 任务。只能陈述下面 mc_status 与已提交证据中"
+            "请以 Anima 的口吻简洁总结本次 Minecraft 任务。只能陈述下面 progress 与已提交证据中"
             "明确存在的结果；失败或缺失必须直说。\n"
             + json.dumps(evidence, ensure_ascii=False, sort_keys=True),
             system_prompt="You are Anima. Never claim gameplay without committed evidence.",
@@ -337,7 +344,10 @@ class ConfiguredModelMissionInterpreter(ConfiguredModelEvidenceNarrator):
             prompt = (
                 user_text
                 if attempt == 1
-                else ("修复上一条 mc_execute 调用，重新输出完整 mission；校验错误：" + error)
+                else (
+                    "修复上一条 mc_operate_bot execute 调用，重新输出完整 mission；校验错误："
+                    + error
+                )
             )
             response = await self._llm.chat_with_tools(
                 prompt,
@@ -348,15 +358,18 @@ class ConfiguredModelMissionInterpreter(ConfiguredModelEvidenceNarrator):
             calls = [
                 call
                 for call in response.get("tool_calls") or []
-                if call.get("name") == "mc_execute"
+                if call.get("name") == "mc_operate_bot"
             ]
-            validated: MinecraftExecuteToolInput | None = None
+            validated: MinecraftExecuteRequest | None = None
             semantics: dict[str, bool] = {}
             if len(calls) == 1:
                 try:
-                    validated = MinecraftExecuteToolInput.model_validate(
+                    operate = MinecraftOperateToolInput.model_validate(
                         _normalize_model_execute_args(calls[0].get("args", {}))
                     )
+                    if operate.operation != "execute" or operate.execute is None:
+                        raise ValueError("expected mc_operate_bot execute")
+                    validated = operate.execute
                     semantics = _semantic_assertions(validated)
                     if not all(semantics.values()):
                         error = "semantic assertions failed: " + json.dumps(
@@ -366,7 +379,7 @@ class ConfiguredModelMissionInterpreter(ConfiguredModelEvidenceNarrator):
                 except Exception as exc:
                     error = str(exc)
             else:
-                error = "expected exactly one mc_execute call"
+                error = "expected exactly one mc_operate_bot execute call"
             if validated is not None and validated.request.kind == "mission":
                 call = calls[0]
                 mission = validated.request.mission
@@ -374,7 +387,7 @@ class ConfiguredModelMissionInterpreter(ConfiguredModelEvidenceNarrator):
                     dialogue=DialogueSubmission(
                         exact_user_text=user_text,
                         visible_response=str(response.get("content", "")),
-                        tool_name="mc_execute",
+                        tool_name="mc_operate_bot",
                         tool_call_id=str(call.get("id", "model-tool-call")),
                         mission_id=mission.mission_id,
                         mission_payload=mission,
@@ -446,31 +459,40 @@ class _MissionInvocationObserver:
         self,
         *,
         start_mission: Callable[[str], MissionStartBoundary],
-        semantic_validator: Callable[[MinecraftExecuteToolInput], dict[str, bool]],
+        semantic_validator: Callable[[MinecraftExecuteRequest], dict[str, bool]],
     ) -> None:
         self._start_mission = start_mission
         self._semantic_validator = semantic_validator
         self.attempt_count = 0
         self.invocation: ToolInvocation | None = None
-        self.tool_input: MinecraftExecuteToolInput | None = None
+        self.tool_input: MinecraftExecuteRequest | None = None
         self.validation: dict[str, bool] = {}
         self.boundary: MissionStartBoundary | None = None
         self.completion: ToolInvocationCompletion | None = None
 
     async def before_batch(self, invocations: tuple[ToolInvocation, ...]) -> None:
         mission_calls = tuple(
-            invocation for invocation in invocations if invocation.tool_name == "mc_execute"
+            invocation
+            for invocation in invocations
+            if invocation.tool_name == "mc_operate_bot"
+            and invocation.arguments.get("operation") == "execute"
         )
         if len(mission_calls) != 1:
-            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_EXECUTE")
+            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_OPERATE_EXECUTE")
 
     async def before_invoke(self, invocation: ToolInvocation) -> None:
-        if invocation.tool_name != "mc_execute":
+        if (
+            invocation.tool_name != "mc_operate_bot"
+            or invocation.arguments.get("operation") != "execute"
+        ):
             return
         self.attempt_count += 1
         if self.attempt_count != 1:
-            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_EXECUTE")
-        validated = MinecraftExecuteToolInput.model_validate(invocation.arguments)
+            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_OPERATE_EXECUTE")
+        operate = MinecraftOperateToolInput.model_validate(invocation.arguments)
+        if operate.execute is None:
+            raise RuntimeError("SHOWCASE_REQUIRES_MISSION_BRANCH")
+        validated = operate.execute
         if validated.request.kind != "mission":
             raise RuntimeError("SHOWCASE_REQUIRES_MISSION_BRANCH")
         validation = self._semantic_validator(validated)
@@ -486,18 +508,21 @@ class _MissionInvocationObserver:
         self.boundary = self._start_mission(mission.mission_id)
 
     async def after_invoke(self, completion: ToolInvocationCompletion) -> None:
-        if completion.invocation.tool_name == "mc_execute":
+        if (
+            completion.invocation.tool_name == "mc_operate_bot"
+            and completion.invocation.arguments.get("operation") == "execute"
+        ):
             self.completion = completion
 
 
 class OrdinaryConversationMissionSubmitter:
-    """Observe one ordinary graph turn and retain its real mc_execute call."""
+    """Observe one ordinary graph turn and retain its real bot execute call."""
 
     def __init__(
         self,
         *,
         conversation: OrdinaryConversationPort,
-        semantic_validator: Callable[[MinecraftExecuteToolInput], dict[str, bool]] = (
+        semantic_validator: Callable[[MinecraftExecuteRequest], dict[str, bool]] = (
             _semantic_assertions
         ),
         now_ms: Callable[[], int] = _now_ms,
@@ -530,16 +555,16 @@ class OrdinaryConversationMissionSubmitter:
         if result.get("error"):
             raise RuntimeError(f"SHOWCASE_CONVERSATION_FAILED:{result['error']}")
         if observer.attempt_count != 1:
-            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_EXECUTE")
+            raise RuntimeError("SHOWCASE_REQUIRES_EXACTLY_ONE_MC_OPERATE_EXECUTE")
         if (
             observer.invocation is None
             or observer.tool_input is None
             or observer.boundary is None
             or observer.completion is None
         ):
-            raise RuntimeError("SHOWCASE_MC_EXECUTE_NOT_COMPLETED")
+            raise RuntimeError("SHOWCASE_MC_OPERATE_EXECUTE_NOT_COMPLETED")
         if observer.completion.error is not None:
-            raise RuntimeError(f"SHOWCASE_MC_EXECUTE_FAILED:{observer.completion.error}")
+            raise RuntimeError(f"SHOWCASE_MC_OPERATE_EXECUTE_FAILED:{observer.completion.error}")
         raw_handle = observer.completion.result
         handle = json.loads(raw_handle) if isinstance(raw_handle, str) else raw_handle
         mission = observer.tool_input.request.mission
@@ -552,7 +577,7 @@ class OrdinaryConversationMissionSubmitter:
             dialogue=DialogueSubmission(
                 exact_user_text=user_text,
                 visible_response=visible_response,
-                tool_name="mc_execute",
+                tool_name="mc_operate_bot",
                 tool_call_id=observer.invocation.tool_call_id,
                 mission_id=mission.mission_id,
                 mission_payload=mission,
@@ -577,7 +602,7 @@ async def create_ordinary_showcase_submitter(
     *,
     llm: LLMInterface,
     socketio: Any | None = None,
-    semantic_validator: Callable[[MinecraftExecuteToolInput], dict[str, bool]] = (
+    semantic_validator: Callable[[MinecraftExecuteRequest], dict[str, bool]] = (
         _semantic_assertions
     ),
 ) -> OrdinaryConversationMissionSubmitter:
@@ -620,11 +645,15 @@ class ReviewRconSetupExecutor:
         "unknown or incomplete command",
     )
 
-    def __init__(self, server: MinecraftReviewServerLease) -> None:
-        self._server = server
+    def __init__(self, bridge: MinecraftMcpBridge) -> None:
+        self._bridge = bridge
 
     async def execute(self, operation: SetupOperation) -> SetupExecutionResult:
-        response = await self._server.execute_rcon(render_rcon_command(operation))
+        result = await self._bridge.run_managed_setup(
+            render_rcon_command(operation),
+            request_id=f"showcase-setup-{operation.operation_id}",
+        )
+        response = str(result.get("output", ""))
         normalized = response.casefold()
         if not normalized or any(marker in normalized for marker in self._FAILURE_MARKERS):
             raise RuntimeError(f"SCENARIO_SETUP_RCON_FAILED:{operation.operation_id}")
@@ -642,24 +671,24 @@ class ReviewScenarioEnvironment:
         self,
         *,
         runtime_root: Path,
-        server: MinecraftReviewServerLease,
-        bridge: MinecraftBridge,
+        bridge: MinecraftMcpBridge,
+        profile: str = "managed-review",
     ) -> None:
         self.runtime_root = runtime_root.resolve()
-        self.server = server
         self.bridge = bridge
+        self.profile = profile
         self._run_id: str | None = None
 
     async def prepare_disposable_world(self, scenario: ScenarioSpec, run_id: str) -> str:
         if self._run_id is not None:
             raise RuntimeError("showcase runtime already prepared")
-        if self.server.world_seed != scenario.world_seed:
-            raise RuntimeError("SCENARIO_SEED_MISMATCH")
         self.runtime_root.mkdir(parents=True, exist_ok=False)
         self._run_id = run_id
-        await self.server.start()
-        if not await self.bridge.start():
-            await self.server.stop()
+        result = await self.bridge.start(
+            profile=self.profile,
+            request_id=f"showcase-connect-{run_id}",
+        )
+        if result.get("state") != "ready":
             raise RuntimeError("MINECRAFT_BRIDGE_START_FAILED")
         return "_world"
 
@@ -684,7 +713,7 @@ class LiveShowcaseBackend:
     def __init__(
         self,
         *,
-        bridge: MinecraftBridge,
+        bridge: MinecraftMcpBridge,
         submitter: MissionSubmitter,
         narrator: EvidenceNarrator,
         capture_probe_path: Path,
@@ -877,10 +906,12 @@ class LiveShowcaseBackend:
         skills = tuple(skill_records)
         with bind_minecraft_caller_scope(self._caller_scope):
             final_status = json.loads(
-                await mc_status.ainvoke({"projection_kind": "missions", "limit": 20})
+                await mc_operate_bot.ainvoke(
+                    {"operation": "progress", "projection_kind": "missions", "limit": 20}
+                )
             )
         evidence_summary = {
-            "mc_status": final_status,
+            "progress": final_status,
             "mission_status": snapshot.mission.status.value,
             "objective_states": [item.status.value for item in snapshot.objectives],
             "receipt_count": len(receipts),
@@ -1243,10 +1274,14 @@ class LiveShowcaseBackend:
                 await self._narrator.close()
             finally:
                 try:
-                    await cleanup_bridge()
-                finally:
                     if self._bridge.is_running:
-                        await self._bridge.stop()
+                        await self._bridge.shutdown_runtime(
+                            request_id=(
+                                f"showcase-shutdown-{uuid5(NAMESPACE_URL, str(time.time_ns()))}"
+                            )
+                        )
+                finally:
+                    await cleanup_bridge()
 
 
 class DesktopShowcaseCapture:

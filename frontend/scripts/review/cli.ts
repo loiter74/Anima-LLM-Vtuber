@@ -52,6 +52,10 @@ function relativePath(root: string, filePath: string): string {
   return relative(root, filePath).replaceAll('\\', '/')
 }
 
+function canonicalReviewUrl(featureId: string, baseUrl: string): string {
+  return new URL(getReviewPlugin(featureId).definition.route, baseUrl).href
+}
+
 async function hostTtsConfigured(): Promise<boolean> {
   if (process.env.QWEN_TTS_API_KEY?.trim()) return true
   try {
@@ -89,8 +93,11 @@ async function promptVerdict(terminal: Interface, title: string, observe: string
   }
 }
 
-export async function runReviewCli(args = process.argv.slice(2)): Promise<ReviewSummaryV2> {
+export async function runReviewCli(
+  args = process.argv.slice(2),
+): Promise<ReviewSummaryV2 | string> {
   const options = parseReviewOptions(args)
+  if (options.printUrl) return canonicalReviewUrl(options.featureId, options.baseUrl)
   const plugin = getReviewPlugin(options.featureId)
   validateReviewCapabilities(plugin, {
     requireObs: options.requireObs,
@@ -379,6 +386,7 @@ Options:
   --obs-url <url>      OBS WebSocket URL
   --obs-scene <name>   Dedicated OBS scene
   --obs-source <name>  Dedicated OBS Browser Source
+  --print-url          Print the feature URL without starting review services
   --help               Show this help`
 }
 
@@ -392,8 +400,12 @@ if (isEntrypoint) {
     stdout.write(`${help()}\n`)
   } else {
     runReviewCli()
-      .then((summary) => {
-        process.exitCode = exitCodeForSummary(summary)
+      .then((result) => {
+        if (typeof result === 'string') {
+          stdout.write(`${result}\n`)
+          return
+        }
+        process.exitCode = exitCodeForSummary(result)
       })
       .catch((error) => {
         console.error(error)

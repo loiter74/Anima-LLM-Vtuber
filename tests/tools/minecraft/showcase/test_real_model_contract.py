@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
-from animetta.tools.minecraft.core.tools import MinecraftExecuteToolInput
+from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
 from animetta.tools.minecraft.mission.schema import build_golden_fixture
 from animetta.tools.minecraft.showcase.live import (
     _added_advancement_ids,
@@ -36,6 +37,90 @@ async def test_real_model_gate_uses_three_fresh_independent_conversations() -> N
     assert len(calls) == 3
     assert history_lengths == [0, 0, 0]
     assert all(call["final_validation"]["valid"] for call in calls)
+
+
+async def test_real_model_gate_strips_internal_tool_call_diagnostics_from_history() -> None:
+    invocations = 0
+
+    async def invoke(_user_text, history):
+        nonlocal invocations
+        invocations += 1
+        if invocations == 2:
+            history_call = history[1].tool_calls[0]
+            assert history_call == {
+                "name": "mc_operate_bot",
+                "args": {"operation": "execute"},
+                "id": "call-1",
+                "type": "tool_call",
+            }
+            return {"content": "fixed", "tool_calls": []}
+        return {
+            "content": "repair me",
+            "tool_calls": [
+                {
+                    "name": "mc_operate_bot",
+                    "args": {"operation": "execute"},
+                    "id": "call-1",
+                    "type": "tool_call",
+                    "arguments_repaired": True,
+                }
+            ],
+        }
+
+    def validate(response):
+        valid = response.get("content") == "fixed"
+        return {"valid": valid}, None if valid else "repair"
+
+    calls = await _collect_independent_calls(
+        invoke=invoke,
+        validate=validate,
+        independent_calls=1,
+    )
+
+    assert calls[0]["final_validation"]["valid"] is True
+
+
+async def test_real_model_gate_answers_connection_preflight_before_execute() -> None:
+    invocations = 0
+
+    async def invoke(_user_text, history):
+        nonlocal invocations
+        invocations += 1
+        if invocations == 1:
+            return {
+                "content": "checking",
+                "tool_calls": [
+                    {
+                        "name": "mc_connection",
+                        "args": {"operation": "status", "request_id": "status-1"},
+                        "id": "status-call-1",
+                    }
+                ],
+            }
+        assert json.loads(history[-1].content)["state"] == "ready"
+        return {
+            "content": "submitting",
+            "tool_calls": [
+                {
+                    "name": "mc_operate_bot",
+                    "args": {"operation": "execute"},
+                    "id": "execute-call-1",
+                }
+            ],
+        }
+
+    def validate(response):
+        valid = response["tool_calls"][0]["name"] == "mc_operate_bot"
+        return {"valid": valid}, None if valid else "wrong tool"
+
+    calls = await _collect_independent_calls(
+        invoke=invoke,
+        validate=validate,
+        independent_calls=1,
+    )
+
+    assert calls[0]["final_validation"]["valid"] is True
+    assert calls[0]["attempts"][0]["preflight_tool_calls"][0]["name"] == "mc_connection"
 
 
 def test_real_model_gate_rejects_shelter_budget_below_compiled_cost() -> None:
@@ -78,23 +163,33 @@ def test_real_model_gate_rejects_shelter_budget_below_compiled_cost() -> None:
 
 def test_real_model_gate_recovers_unambiguous_missing_mission_discriminator() -> None:
     args = {
-        "request_id": "survival-showcase-v1",
-        "mission": build_golden_fixture()["mission_spec"],
+        "operation": "execute",
+        "execute": {
+            "request_id": "survival-showcase-v1",
+            "mission": build_golden_fixture()["mission_spec"],
+        },
     }
 
     normalized = _normalize_model_execute_args(args)
-    validated = MinecraftExecuteToolInput.model_validate(normalized)
+    validated = MinecraftOperateToolInput.model_validate(normalized)
 
     assert normalized is not args
-    assert normalized["kind"] == "mission"
-    assert validated.request.kind == "mission"
+    assert normalized["execute"]["kind"] == "mission"
+    assert validated.execute is not None
+    assert validated.execute.request.kind == "mission"
 
 
 def test_real_model_gate_does_not_rewrite_ambiguous_or_atomic_input() -> None:
     mission = build_golden_fixture()["mission_spec"]
 
-    ambiguous = {"request_id": "ambiguous-v1", "mission": mission, "action": {}}
-    atomic = {"request_id": "atomic-v1", "action": {"kind": "observe"}}
+    ambiguous = {
+        "operation": "execute",
+        "execute": {"request_id": "ambiguous-v1", "mission": mission, "action": {}},
+    }
+    atomic = {
+        "operation": "execute",
+        "execute": {"request_id": "atomic-v1", "action": {"kind": "observe"}},
+    }
 
     assert _normalize_model_execute_args(ambiguous) == ambiguous
     assert _normalize_model_execute_args(atomic) == atomic

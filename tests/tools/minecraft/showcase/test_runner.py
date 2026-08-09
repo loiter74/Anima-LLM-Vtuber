@@ -88,7 +88,7 @@ class _Backend:
         dialogue = DialogueSubmission(
             exact_user_text=user_text,
             visible_response="好，我会按证据执行。",
-            tool_name="mc_execute",
+            tool_name="mc_operate_bot",
             tool_call_id="call-real-model-001",
             mission_id="adaptive-showcase-001",
             mission_payload=_fixed_mission().model_copy(
@@ -290,7 +290,7 @@ async def test_runner_uses_only_natural_language_then_packages_all_evidence(tmp_
     }
 
 
-async def test_runner_starts_boundary_inside_ordinary_mc_execute_call(tmp_path) -> None:
+async def test_runner_starts_boundary_inside_ordinary_execute_call(tmp_path) -> None:
     """Scenario setup closes immediately before the conversation tool mutates the world."""
 
     executor = _Executor()

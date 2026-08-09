@@ -345,6 +345,37 @@ def test_focused_operational_changes_do_not_expand_to_repository_fallback(
 
 
 @pytest.mark.parametrize(
+    ("path", "required_group"),
+    [
+        ("src/animetta/AGENTS.md", "docs-contract"),
+        ("src/animetta/orchestration/prompting/sources.py", "backend-graph-unit"),
+        ("tests/tools/minecraft/test_spectator.py", "minecraft-runtime-unit"),
+        (
+            "tests/tools/minecraft/test_voyager_bridge_wiring.py",
+            "minecraft-runtime-unit",
+        ),
+        ("scripts/generate_gamebot_v2_contracts.py", "minecraft-contract-unit"),
+    ],
+)
+def test_minecraft_decoupling_paths_have_explicit_component_ownership(
+    path: str,
+    required_group: str,
+) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+    selected_or_covered = {
+        *_group_ids(plan),
+        *(item.id for item in plan.dominated_groups),
+    }
+
+    assert required_group in selected_or_covered
+    assert not any("unknown" in fallback for fallback in plan.fallbacks)
+
+
+@pytest.mark.parametrize(
     "case",
     ["backend", "frontend", "mixed", "high-risk", "global", "rename", "unknown"],
 )

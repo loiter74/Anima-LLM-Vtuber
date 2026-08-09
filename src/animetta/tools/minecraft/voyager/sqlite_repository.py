@@ -210,6 +210,19 @@ class SQLiteCommandJournal:
         )
         await self._require_db().commit()
 
+    async def begin_session(self, *, occurred_at_ms: int) -> None:
+        db = self._require_db()
+        blocked = await db.execute("SELECT 1 FROM commands WHERE state='blocked_unknown' LIMIT 1")
+        if await blocked.fetchone():
+            raise RuntimeError("CONTROLLER_QUARANTINED")
+        await db.execute(
+            """UPDATE controller_state SET state='idle',accepting_execute=1,
+            stop_barrier_id=NULL,projection_version=projection_version+1,updated_at_ms=?
+            WHERE singleton_id=1 AND accepting_execute=0""",
+            (occurred_at_ms,),
+        )
+        await db.commit()
+
     def _require_db(self) -> Any:
         if self._db is None:
             raise RuntimeError("journal is not connected")

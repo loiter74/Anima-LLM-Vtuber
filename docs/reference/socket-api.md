@@ -54,7 +54,11 @@ Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，
 | `error` | `system:error` | 错误事件 |
 | `sing:process` | `sing:process` | (不变) |
 | `bilibili.connect` | `bilibili:connect` | (不变) |
-| `minecraft.start` | `minecraft:start` | (不变) |
+| `minecraft.connect` | `minecraft:connect` | 连接 mc-mcp profile |
+| `minecraft.status` | `minecraft:status` | 读取 server/bot/viewer 状态 |
+| `minecraft.disconnect` | `minecraft:disconnect` | 只断开 Bot |
+| `minecraft.shutdown` | `minecraft:shutdown` | 关闭 mc-mcp 自有托管资源 |
+| `minecraft.reattach_viewer` | `minecraft:reattach_viewer` | 请求 MC 侧重新附身 |
 
 ---
 

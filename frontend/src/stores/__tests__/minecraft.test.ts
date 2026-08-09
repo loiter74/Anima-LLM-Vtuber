@@ -67,13 +67,52 @@ describe('useMinecraftStore', () => {
   it('emits minecraft control events', () => {
     const store = useMinecraftStore()
 
-    store.start()
-    store.spectate()
-    store.stop()
+    store.connect()
+    store.reattachViewer()
+    store.disconnect()
+    store.shutdown()
+    store.refreshStatus()
 
-    expect(socket.emit).toHaveBeenCalledWith(Events.MINECRAFT.START, {})
-    expect(socket.emit).toHaveBeenCalledWith(Events.MINECRAFT.SPECTATE, {})
-    expect(socket.emit).toHaveBeenCalledWith(Events.MINECRAFT.STOP)
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MINECRAFT.CONNECT,
+      expect.objectContaining({ request_id: expect.stringContaining('ui:connect:') }),
+    )
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MINECRAFT.REATTACH_VIEWER,
+      expect.objectContaining({ request_id: expect.stringContaining('ui:reattach:') }),
+    )
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MINECRAFT.DISCONNECT,
+      expect.objectContaining({ request_id: expect.stringContaining('ui:disconnect:') }),
+    )
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MINECRAFT.SHUTDOWN,
+      expect.objectContaining({ request_id: expect.stringContaining('ui:shutdown:') }),
+    )
+  })
+
+  it('projects server bot and viewer lifecycle layers', () => {
+    const store = useMinecraftStore()
+    store.setupListener()
+    const statusHandler = registeredHandler(Events.MINECRAFT.STATUS)
+
+    statusHandler?.({
+      state: 'ready',
+      mode: 'managed',
+      profile: 'managed-local',
+      server: { state: 'available', owned: true },
+      bot: { state: 'ready', username: 'AnimettaBot' },
+      viewer: {
+        state: 'attached',
+        confirmed: true,
+        username: 'LUN077',
+      },
+    })
+
+    expect(store.serverState).toBe('available')
+    expect(store.botLifecycleState).toBe('ready')
+    expect(store.viewerStatus).toBe('joined')
+    expect(store.viewerBindingState).toBe('following')
   })
 
   it('deduplicates mission-domain projections and rejects stale versions', () => {
@@ -105,7 +144,7 @@ describe('useMinecraftStore', () => {
     expect(store.acceptedProjectionEventCount).toBe(1)
   })
 
-  it('rehydrates mission objective and proposal state from mc_status projection', () => {
+  it('rehydrates mission objective and proposal state from progress projection', () => {
     const store = useMinecraftStore()
 
     store.rehydrateMissionStatus({

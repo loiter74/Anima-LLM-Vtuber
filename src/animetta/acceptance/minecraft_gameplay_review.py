@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import hmac
 import json
-import os
-import shutil
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Protocol
-from uuid import UUID
+from uuid import uuid4
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -30,9 +27,9 @@ class MinecraftReviewError(RuntimeError):
 
 
 class ReviewBridge(Protocol):
-    async def start(self) -> bool: ...
+    async def start(self, *, profile: str | None, request_id: str) -> dict[str, Any]: ...
 
-    async def stop(self) -> None: ...
+    async def shutdown_runtime(self, *, request_id: str) -> dict[str, Any]: ...
 
     async def send_command(
         self, action: str, params: dict[str, Any] | None = None, timeout: float = 60.0
@@ -41,265 +38,9 @@ class ReviewBridge(Protocol):
     def set_viewer_callback(self, callback: Callable[[str, object], None]) -> None: ...
 
 
-class ReviewServer(Protocol):
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
-
-
-CommandRunner = Callable[[list[str], dict[str, str]], Awaitable[str | None]]
-ReadinessProbe = Callable[[], Awaitable[bool]]
-Sleeper = Callable[[float], Awaitable[None]]
-
-SERVER_READINESS_ATTEMPTS = 240
-SERVER_READINESS_INTERVAL_SECONDS = 2.0
 DEFAULT_VIEWER_WAIT_SECONDS = 10 * 60
 IRON_RUN_TIMEOUT_SECONDS = 35 * 60
 IRON_RUN_COMMAND_GRACE_SECONDS = 30
-
-
-def _encode_varint(value: int) -> bytes:
-    encoded = bytearray()
-    while True:
-        byte = value & 0x7F
-        value >>= 7
-        if value:
-            byte |= 0x80
-        encoded.append(byte)
-        if not value:
-            return bytes(encoded)
-
-
-async def _read_varint(reader: asyncio.StreamReader) -> int:
-    value = 0
-    for shift in range(0, 35, 7):
-        byte = (await reader.readexactly(1))[0]
-        value |= (byte & 0x7F) << shift
-        if not byte & 0x80:
-            return value
-    raise ValueError("varint_too_large")
-
-
-async def _run_command(args: list[str], env: dict[str, str]) -> str:
-    process = await asyncio.create_subprocess_exec(
-        *args,
-        env={**os.environ, **env},
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-    if process.returncode != 0:
-        output = (stderr or stdout).decode("utf-8", errors="replace")[-2_000:]
-        raise MinecraftReviewError(f"compose_failed:{output}")
-    return stdout.decode("utf-8", errors="replace").strip()
-
-
-async def _probe_review_server() -> bool:
-    writer: asyncio.StreamWriter | None = None
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 25566), timeout=1.0
-        )
-        host = b"127.0.0.1"
-        handshake = (
-            b"\x00"
-            + _encode_varint(767)
-            + _encode_varint(len(host))
-            + host
-            + (25566).to_bytes(2, "big")
-            + b"\x01"
-        )
-        writer.write(_encode_varint(len(handshake)) + handshake + b"\x01\x00")
-        await writer.drain()
-        packet_length = await asyncio.wait_for(_read_varint(reader), timeout=1.0)
-        if packet_length <= 1:
-            return False
-        packet_id = await asyncio.wait_for(_read_varint(reader), timeout=1.0)
-        return packet_id == 0
-    except (OSError, TimeoutError, asyncio.IncompleteReadError, ValueError):
-        return False
-    finally:
-        if writer is not None:
-            writer.close()
-            with contextlib.suppress(OSError):
-                await writer.wait_closed()
-
-
-def _offline_player_uuid(username: str) -> str:
-    digest = bytearray(hashlib.md5(f"OfflinePlayer:{username}".encode()).digest())
-    digest[6] = (digest[6] & 0x0F) | 0x30
-    digest[8] = (digest[8] & 0x3F) | 0x80
-    return str(UUID(bytes=bytes(digest)))
-
-
-def _runtime_copy_path(path: Path) -> str | Path:
-    """Allow a copied runtime tree to contain paths beyond legacy MAX_PATH."""
-
-    if os.name != "nt":
-        return path
-    raw = str(path.resolve())
-    if raw.startswith("\\\\?\\"):
-        return raw
-    if raw.startswith("\\\\"):
-        return f"\\\\?\\UNC\\{raw[2:]}"
-    return f"\\\\?\\{raw}"
-
-
-class MinecraftReviewServerLease:
-    """Own an isolated Compose project and disposable bind-mounted world."""
-
-    _RUNTIME_SEED_FILES = (
-        "paper-1.21-130.jar",
-        ".paper.env",
-        ".papermc-manifest.json",
-        ".modrinth-manifest.json",
-        "cache/mojang_1.21.jar",
-        "plugins/spectatorplus-paper-1.2.1.jar",
-        "config/paper-global.yml",
-        "config/paper-world-defaults.yml",
-        "bukkit.yml",
-        "spigot.yml",
-    )
-    _RUNTIME_SEED_DIRECTORIES = ("libraries", "versions")
-
-    def __init__(
-        self,
-        *,
-        repository_dir: Path,
-        world_dir: Path,
-        world_seed: int = -1_334_312_645,
-        runtime_seed_dir: Path | None = None,
-        run_command: CommandRunner = _run_command,
-        readiness_probe: ReadinessProbe = _probe_review_server,
-        readiness_attempts: int = SERVER_READINESS_ATTEMPTS,
-        readiness_interval_seconds: float = SERVER_READINESS_INTERVAL_SECONDS,
-        sleep: Sleeper = asyncio.sleep,
-    ) -> None:
-        if readiness_attempts < 1:
-            raise ValueError("readiness_attempts must be positive")
-        if readiness_interval_seconds <= 0:
-            raise ValueError("readiness_interval_seconds must be positive")
-        self.repository_dir = repository_dir.resolve()
-        self.world_dir = world_dir.resolve()
-        self.world_seed = world_seed
-        canonical_repository = (
-            self.repository_dir.parent.parent
-            if self.repository_dir.parent.name == ".worktrees"
-            else self.repository_dir
-        )
-        self.runtime_seed_dir = (
-            runtime_seed_dir.resolve()
-            if runtime_seed_dir is not None
-            else canonical_repository / "docker" / "minecraft-server" / "data"
-        )
-        self._run_command = run_command
-        self._readiness_probe = readiness_probe
-        self._readiness_attempts = readiness_attempts
-        self._readiness_interval_seconds = readiness_interval_seconds
-        self._sleep = sleep
-        self._started = False
-        self._closed = False
-        self._compose_file = (
-            self.repository_dir / "docker" / "minecraft-server" / "docker-compose.review.yml"
-        )
-
-    def _compose(self, *args: str) -> list[str]:
-        return [
-            "docker",
-            "compose",
-            "-p",
-            "animetta-mc-review",
-            "-f",
-            str(self._compose_file),
-            *args,
-        ]
-
-    def _environment(self) -> dict[str, str]:
-        return {
-            "ANIMETTA_MC_REVIEW_PORT": "25566",
-            "ANIMETTA_MC_REVIEW_WORLD_DIR": str(self.world_dir),
-            "ANIMETTA_MC_REVIEW_SEED": str(self.world_seed),
-        }
-
-    async def execute_rcon(self, command: str) -> str:
-        """Execute one pre-authorized setup command against the owned server."""
-
-        if not self._started or self._closed:
-            raise MinecraftReviewError("server_not_ready")
-        response = await self._run_command(
-            self._compose("exec", "-T", "minecraft", "rcon-cli", command),
-            self._environment(),
-        )
-        return str(response or "").strip()
-
-    async def start(self) -> None:
-        if self._started:
-            return
-        self.world_dir.mkdir(parents=True, exist_ok=True)
-        self._seed_runtime()
-        (self.world_dir / "ops.json").write_text(
-            json.dumps(
-                [
-                    {
-                        "uuid": _offline_player_uuid("AnimettaBot"),
-                        "name": "AnimettaBot",
-                        "level": 4,
-                        "bypassesPlayerLimit": True,
-                    }
-                ],
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        await self._run_command(self._compose("up", "-d"), self._environment())
-        self._started = True
-        for _ in range(self._readiness_attempts):
-            if await self._readiness_probe():
-                await self._run_command(
-                    self._compose(
-                        "exec",
-                        "-T",
-                        "minecraft",
-                        "rcon-cli",
-                        "gamerule spawnRadius 0",
-                    ),
-                    self._environment(),
-                )
-                return
-            await self._sleep(self._readiness_interval_seconds)
-        await self.stop()
-        raise MinecraftReviewError("server_timeout")
-
-    def _seed_runtime(self) -> None:
-        if not self.runtime_seed_dir.is_dir():
-            return
-        for relative_name in self._RUNTIME_SEED_FILES:
-            source = self.runtime_seed_dir / relative_name
-            if not source.is_file():
-                continue
-            target = self.world_dir / relative_name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-        for relative_name in self._RUNTIME_SEED_DIRECTORIES:
-            source = self.runtime_seed_dir / relative_name
-            if source.is_dir():
-                shutil.copytree(
-                    _runtime_copy_path(source),
-                    _runtime_copy_path(self.world_dir / relative_name),
-                    dirs_exist_ok=True,
-                )
-
-    async def stop(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        if self._started:
-            await self._run_command(
-                self._compose("down", "--volumes", "--remove-orphans"),
-                self._environment(),
-            )
-        self._started = False
-        shutil.rmtree(self.world_dir, ignore_errors=True)
 
 
 class MinecraftGameplayReviewHarness:
@@ -310,14 +51,14 @@ class MinecraftGameplayReviewHarness:
         *,
         token: str,
         artifact_dir: Path,
-        server: ReviewServer,
         bridge: ReviewBridge,
+        profile: str = "managed-review",
         viewer_timeout_seconds: float = DEFAULT_VIEWER_WAIT_SECONDS,
     ) -> None:
         self._token = token
         self._artifact_dir = artifact_dir.resolve()
-        self._server = server
         self._bridge = bridge
+        self._profile = profile
         self._viewer_timeout_seconds = viewer_timeout_seconds
         self._prepared = False
         self._closed = False
@@ -384,10 +125,12 @@ class MinecraftGameplayReviewHarness:
         if self._prepared:
             return
         self._artifact_dir.mkdir(parents=True, exist_ok=True)
-        await self._server.start()
         self._bridge.set_viewer_callback(self._on_viewer_event)
-        if not await self._bridge.start():
-            await self._server.stop()
+        result = await self._bridge.start(
+            profile=self._profile,
+            request_id=f"review-connect-{uuid4().hex}",
+        )
+        if result.get("state") != "ready":
             raise MinecraftReviewError("bridge_start_failed")
         self._prepared = True
 
@@ -543,20 +286,9 @@ class MinecraftGameplayReviewHarness:
         self._closed = True
         try:
             if self._prepared:
-                await self._bridge.stop()
+                await self._bridge.shutdown_runtime(request_id=f"review-shutdown-{uuid4().hex}")
         finally:
             self._prepared = False
-            await self._server.stop()
-
-
-def resolve_external_runtime_dir(repository_dir: Path) -> Path:
-    repository_dir = repository_dir.resolve()
-    canonical_repository = (
-        repository_dir.parent.parent
-        if repository_dir.parent.name == ".worktrees"
-        else repository_dir
-    )
-    return canonical_repository.parent / "voyager-mc-bot"
 
 
 def create_real_harness(
@@ -566,50 +298,17 @@ def create_real_harness(
     artifact_dir: Path,
     viewer_timeout_seconds: float = DEFAULT_VIEWER_WAIT_SECONDS,
 ) -> MinecraftGameplayReviewHarness:
-    """Create the Windows/Docker/Desktop real-runtime harness."""
-    from animetta.tools.minecraft.core.bridge import MinecraftBridge
-    from animetta.tools.minecraft.core.config import (
-        MinecraftBotConfig,
-        MinecraftClientViewerConfig,
-        MinecraftConfig,
-        MinecraftRuntimeConfig,
-    )
+    """Create a review harness that delegates all runtime ownership to mc-mcp."""
+    from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
+    from animetta.tools.minecraft.core.config import MinecraftConfig
 
-    repository_dir = repository_dir.resolve()
-    runtime_dir = resolve_external_runtime_dir(repository_dir)
-    server = MinecraftReviewServerLease(
-        repository_dir=repository_dir,
-        world_dir=artifact_dir / "_world",
-    )
-    bridge = MinecraftBridge(
-        MinecraftConfig(
-            enabled=True,
-            bot=MinecraftBotConfig(
-                host="127.0.0.1",
-                port=25566,
-                username="AnimettaBot",
-                version="1.21",
-            ),
-            client_viewer=MinecraftClientViewerConfig(
-                enabled=True,
-                username="LUN077",
-                auto_spectate=True,
-                poll_interval=20,
-                spectate_timeout=8,
-            ),
-            runtime=MinecraftRuntimeConfig(
-                runtime_path=str(runtime_dir),
-                entrypoint="src/index.js",
-                package_manager="npm",
-                use_embedded_fallback=False,
-            ),
-        )
-    )
+    del repository_dir
+    bridge = MinecraftMcpBridge(MinecraftConfig(enabled=True))
     return MinecraftGameplayReviewHarness(
         token=token,
         artifact_dir=artifact_dir,
-        server=server,
         bridge=bridge,
+        profile="managed-review",
         viewer_timeout_seconds=viewer_timeout_seconds,
     )
 
@@ -621,7 +320,6 @@ def _error_response(exc: MinecraftReviewError) -> JSONResponse:
         "busy": 409,
         "viewer_timeout": 408,
         "not_ready": 503,
-        "server_timeout": 503,
         "bridge_start_failed": 503,
         "iron_run_failed": 502,
         "iron_run_incomplete": 422,
@@ -634,7 +332,6 @@ def _error_response(exc: MinecraftReviewError) -> JSONResponse:
             "busy",
             "viewer_timeout",
             "not_ready",
-            "server_timeout",
             "bridge_start_failed",
             "iron_run_failed",
             "iron_run_incomplete",

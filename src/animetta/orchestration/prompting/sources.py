@@ -37,7 +37,7 @@ class MinecraftMissionPromptSource:
     name = "minecraft_mission"
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
-        if "mc_execute" not in ctx.available_tool_names:
+        if "mc_operate_bot" not in ctx.available_tool_names:
             content = ""
         else:
             from animetta.tools.minecraft.blueprint import starter_shelter_blueprint
@@ -45,9 +45,11 @@ class MinecraftMissionPromptSource:
             shelter = starter_shelter_blueprint()
             content = (
                 "## Minecraft typed mission contract\n\n"
-                "For any ordinary user request to act in Minecraft, call mc_execute with "
-                "root kind=mission and contract_version=2; do not add an outer request object. "
-                "The exact root shape is {contract_version, kind, request_id, mission}. Omit "
+                "Before acting, ensure mc_connection reports ready; use its connect operation "
+                "when the user explicitly asks to connect. For any ordinary user request to act "
+                "in Minecraft, call mc_operate_bot with operation=execute and place the typed "
+                "mission under execute. The nested execute shape is "
+                "{contract_version, kind, request_id, mission}. Omit "
                 "wait_seconds when it is zero. A fixed request is still a "
                 "one-objective MissionSpec. Compound requests use typed objectives, explicit "
                 "DAG dependencies, independently verifiable success predicates, one parent "
@@ -83,8 +85,9 @@ class MinecraftMissionPromptSource:
                 "hidden atomic action plan. Atomic is reserved for trusted internal/operator "
                 "probes.\n\n"
                 "If mission validation fails, repair the complete schema at most once. If the "
-                "repaired call fails, do not call mc_execute again: explain the structured "
-                "error visibly. Call mc_status before progress or final narration and only "
+                "repaired call fails, do not call mc_operate_bot execute again: explain the "
+                "structured error visibly. Call mc_operate_bot progress before progress or final "
+                "narration and only "
                 "report committed typed status/evidence. Never claim an objective, discovery, "
                 "skill, or advancement from prose or intent alone."
             )

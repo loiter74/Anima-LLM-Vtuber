@@ -329,6 +329,7 @@ def test_agent_guidance_uses_the_fast_documentation_gate() -> None:
 
     assert component.paths == (
         "AGENTS.md",
+        "src/**/AGENTS.md",
         "frontend/AGENTS.md",
         "tests/AGENTS.md",
         ".agents/skills/**/*.md",

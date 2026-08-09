@@ -36,7 +36,7 @@ function createWindow() {
 
   // Always load from Vite dev server in development
   // The concurrent script ensures Vite is running first
-  mainWindow.loadURL('http://localhost:3000/live-stream')
+  mainWindow.loadURL('http://localhost:3000/live.html')
 
   // Open DevTools for debugging
   mainWindow.webContents.openDevTools({ mode: 'detach' })
