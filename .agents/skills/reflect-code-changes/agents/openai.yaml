@@ -1,7 +1,0 @@
-interface:
-  display_name: "复查代码改动"
-  short_description: "从复用性、有效性与可理解性角度复查并整理本次代码改动"
-  default_prompt: "使用 $reflect-code-changes 在交付前整理并评估当前代码改动。"
-
-policy:
-  allow_implicit_invocation: true

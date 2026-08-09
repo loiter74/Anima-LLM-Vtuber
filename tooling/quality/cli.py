@@ -1264,7 +1264,7 @@ def _command_benchmark(args: argparse.Namespace) -> int:
         )
     wall_times = [run.wall_seconds for run in warm_runs]
     hit_ratio = sum(run.cache_hit_ratio for run in warm_runs) / len(warm_runs)
-    target_p95 = 120.0 if selected_tier is Tier.QUICK else 300.0
+    target_p95 = 120.0 if selected_tier in {Tier.QUICK, Tier.AFFECTED} else 300.0
     p95 = percentile(wall_times, 0.95)
     evidence = BenchmarkEvidence(
         tier=selected_tier,
@@ -1280,6 +1280,7 @@ def _command_benchmark(args: argparse.Namespace) -> int:
         target_planning_seconds=5.0,
         targets_met=(
             p95 <= target_p95
+            and priming.wall_seconds <= target_p95
             and planning_seconds <= 5.0
             and hit_ratio == 1.0
             and all(run.status is not AggregateStatus.FAILED for run in warm_runs)

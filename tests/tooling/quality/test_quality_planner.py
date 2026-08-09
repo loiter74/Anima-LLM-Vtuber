@@ -136,7 +136,8 @@ def test_quick_always_includes_catalogued_required_smoke() -> None:
         "AGENTS.md",
         "frontend/AGENTS.md",
         "tests/AGENTS.md",
-        ".agents/skills/reflect-code-changes/SKILL.md",
+        ".agents/skills/simplify/SKILL.md",
+        ".agents/skills/test-skill-regression/SKILL.md",
     ],
 )
 def test_agent_guidance_affected_plan_stays_on_fast_docs_path(path: str) -> None:
@@ -145,6 +146,53 @@ def test_agent_guidance_affected_plan_stays_on_fast_docs_path(path: str) -> None
     plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
 
     assert _group_ids(plan) == ["backend-route-smoke", "docs-contract"]
+
+
+def test_agent_skill_runtime_avoids_repository_and_docker_fallbacks() -> None:
+    changes = from_paths(
+        [".agents/skills/test-skill-regression/scripts/compare_runs.py"],
+        repo_root=ROOT,
+    )
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert set(_group_ids(plan)) == {
+        "agent-skill-format",
+        "agent-skill-regression",
+        "agent-skill-static",
+        "backend-route-smoke",
+    }
+    assert plan.fallbacks == ()
+    assert plan.docker_actions == ()
+
+
+def test_common_change_corpus_keeps_nine_of_ten_off_full_fallback() -> None:
+    paths = (
+        "AGENTS.md",
+        ".agents/skills/simplify/SKILL.md",
+        ".agents/skills/test-skill-regression/scripts/compare_runs.py",
+        "docs/sync-mechanism.md",
+        "src/animetta/services/vad/detector.py",
+        "src/animetta/config/live2d.py",
+        "src/animetta/avatar/performance.py",
+        "tests/avatar/test_performance_plan.py",
+        "frontend/src/live/review-socket.ts",
+        "frontend/src/live/styles.css",
+    )
+
+    plans = [
+        plan_verification(
+            _catalog(),
+            from_paths([path], repo_root=ROOT),
+            Tier.AFFECTED,
+        )
+        for path in paths
+    ]
+    daily_feedback_plans = [
+        plan for plan in plans if "backend-full" not in _group_ids(plan) and not plan.fallbacks
+    ]
+
+    assert len(daily_feedback_plans) >= 9
 
 
 def test_affected_expands_declared_component_impacts() -> None:
@@ -398,10 +446,11 @@ def test_unknown_fallback_path_is_bound_to_selected_group_fingerprints() -> None
     changes = from_paths(["scripts/unknown_helper.py"], repo_root=ROOT)
 
     plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
-    backend_full = next(group for group in plan.groups if group.id == "backend-full")
+    backend_static = next(group for group in plan.groups if group.id == "backend-static")
 
-    assert "scripts/unknown_helper.py" in backend_full.input_patterns
-    assert backend_full.cacheable is True
+    assert "backend-full" not in _group_ids(plan)
+    assert "scripts/unknown_helper.py" in backend_static.input_patterns
+    assert backend_static.cacheable is True
 
 
 def test_acceptance_audition_paths_use_dedicated_gate_without_unknown_fallback() -> None:

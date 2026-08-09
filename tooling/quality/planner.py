@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 from collections import deque
 from pathlib import Path
 
@@ -25,10 +24,7 @@ from .models import (
     Tier,
     VerificationPlan,
 )
-
-
-def _matches(path: str, pattern: str) -> bool:
-    return fnmatch.fnmatchcase(path, pattern)
+from .path_matching import matches_repository_path
 
 
 def matching_components(loaded: LoadedCatalog, path: str) -> tuple[str, ...]:
@@ -37,7 +33,7 @@ def matching_components(loaded: LoadedCatalog, path: str) -> tuple[str, ...]:
         sorted(
             component_id
             for component_id, component in loaded.catalog.components.items()
-            if any(_matches(normalized, pattern) for pattern in component.paths)
+            if any(matches_repository_path(normalized, pattern) for pattern in component.paths)
         )
     )
 
@@ -143,6 +139,9 @@ def plan_verification(
             cache_disabled_groups.update(reasons)
         else:
             add_fallback(Domain.REPOSITORY, reason, disable_cache=True)
+            if "backend-full" in catalog.groups:
+                add_group("backend-full", reason)
+                cache_disabled_groups.add("backend-full")
     elif selected_tier in {Tier.FULL, Tier.NIGHTLY}:
         add_full_policy()
     else:
@@ -152,7 +151,7 @@ def plan_verification(
             for path in _change_paths(change):
                 matched_for_path: set[str] = set()
                 for component_id, component in catalog.components.items():
-                    if any(_matches(path, pattern) for pattern in component.paths):
+                    if any(matches_repository_path(path, pattern) for pattern in component.paths):
                         matched_for_path.add(component_id)
                 if not matched_for_path:
                     domain = _infer_domain(path)

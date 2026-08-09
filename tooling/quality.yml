@@ -23,6 +23,10 @@ input_sets:
       - scripts/**/*.py
       - evaluations/**/*.py
       - tests/**/*.py
+  agent-skills:
+    paths:
+      - .agents/skills/**
+      - tests/agent_skills/**
   frontend-toolchain:
     paths:
       - frontend/package.json
@@ -174,6 +178,41 @@ groups:
     resource_class: cpu
     resource_weight: 2
     input_sets: [python-toolchain]
+
+  agent-skill-format:
+    domain: repository
+    kind: lint
+    runner: ruff-format
+    targets: [.agents/skills, tests/agent_skills]
+    args: [--check]
+    timeout_seconds: 60
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, agent-skills]
+
+  agent-skill-static:
+    domain: repository
+    kind: lint
+    runner: ruff
+    targets: [.agents/skills, tests/agent_skills]
+    timeout_seconds: 60
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, agent-skills]
+
+  agent-skill-regression:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets: [tests/agent_skills]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 60
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, agent-skills]
 
   runtime-lifecycle-unit:
     domain: repository
@@ -1131,6 +1170,19 @@ components:
     impacts: []
     risk: normal
 
+  agent-skill-runtime:
+    domain: repository
+    paths:
+      - .agents/skills/**/scripts/**
+      - .agents/skills/**/fixtures/**
+      - tests/agent_skills/**
+    direct_groups:
+      - agent-skill-format
+      - agent-skill-static
+      - agent-skill-regression
+    impacts: []
+    risk: normal
+
   repository-governance:
     domain: repository
     paths:
@@ -1190,7 +1242,6 @@ fallbacks:
     - backend-events-contract
     - docs-contract
     - security-secrets
-    - backend-full
     - frontend-tests
     - frontend-lint
     - frontend-format

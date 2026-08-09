@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "simplify-redundant-workflow",
+  "skill": "simplify",
+  "task": "使用 $simplify 简化 workflow.md。必须保留“发布前必须通过测试”和“只允许推送 main”两项约束，只修改 workflow.md。",
+  "baseline": "../baselines/simplify-redundant-workflow",
+  "run_count": 3,
+  "allowed_paths": [
+    "workflow.md"
+  ],
+  "require_content_identical": false,
+  "invariants": [
+    {
+      "path": "workflow.md",
+      "contains": [
+        "发布前必须通过测试",
+        "只允许推送 main"
+      ]
+    }
+  ]
+}

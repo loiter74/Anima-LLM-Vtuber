@@ -143,7 +143,7 @@ def test_plan_command_writes_frozen_plan_and_github_matrices(
             "--repo-root",
             str(tmp_path),
             "--tier",
-            "quick",
+            "affected",
             "--paths",
             "src/example.py",
             "--output",
@@ -814,7 +814,10 @@ def test_benchmark_command_primes_then_records_warm_latency_and_hits(
     assert len(payload["warm_runs"]) == 2
     assert payload["cache_hit_ratio"] == 1
     assert payload["planning_seconds"] <= 5
+    assert payload["priming_wall_seconds"] <= 120
+    assert payload["target_p95_seconds"] == 120
     assert payload["warm_p95_seconds"] >= 0
+    assert payload["targets_met"] is True
 
 
 def test_benchmark_stops_before_warm_runs_when_priming_fails(

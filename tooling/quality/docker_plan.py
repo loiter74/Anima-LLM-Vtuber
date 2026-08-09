@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import json
-from pathlib import PurePosixPath
 
 from .fingerprint import FingerprintContext, fingerprint_patterns
 from .models import (
@@ -15,19 +13,12 @@ from .models import (
     Runner,
     Tier,
 )
+from .path_matching import matches_repository_path
 
 
 class SelectedDockerScope(FrozenModel):
     scope_id: str
     reasons: tuple[str, ...]
-
-
-def _matches(path: str, pattern: str) -> bool:
-    normalized = path.replace("\\", "/")
-    if not any(marker in pattern for marker in "*?["):
-        return normalized == pattern or normalized.startswith(pattern.rstrip("/") + "/")
-    path_object = PurePosixPath(normalized)
-    return path_object.match(pattern) or fnmatch.fnmatchcase(normalized, pattern)
 
 
 def _change_paths(change: Change) -> tuple[str, ...]:
@@ -52,11 +43,13 @@ def select_docker_scopes(
                 matched_scopes = {
                     scope_id
                     for scope_id, scope in catalog.docker_scopes.items()
-                    if any(_matches(path, pattern) for pattern in scope.paths)
+                    if any(matches_repository_path(path, pattern) for pattern in scope.paths)
                 }
                 for scope_id in matched_scopes:
                     reasons.setdefault(scope_id, set()).add(f"Docker input changed: {path}")
-                watched = any(_matches(path, pattern) for pattern in catalog.docker_watch_paths)
+                watched = any(
+                    matches_repository_path(path, pattern) for pattern in catalog.docker_watch_paths
+                )
                 if watched and not matched_scopes:
                     for scope_id in catalog.docker_scopes:
                         reasons.setdefault(scope_id, set()).add(

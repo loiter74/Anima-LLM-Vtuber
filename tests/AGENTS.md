@@ -61,10 +61,18 @@ All use `MagicMock` + `AsyncMock`; each exposes `.close = AsyncMock()`. Prefer t
 ```powershell
 # Windows canonical entrypoints; validate Python once before the first command
 py -3.13 -c "import sys; assert sys.version_info >= (3, 13)"
+
+# Default daily gate: pass the exact current-task paths and run once
+py -3.13 -m tooling.quality verify --tier affected --paths <task-paths...> --cache read-write
+
+# Only after changing the quality catalog, models, or test directory structure
 py -3.13 -m tooling.quality validate
+
+# Diagnosis only; do not chain quick into affected after the same frozen diff
 py -3.13 -m tooling.quality verify --tier quick --worktree --cache read-write
-py -3.13 -m tooling.quality verify --tier affected --worktree --cache read-write
 py -3.13 -m tooling.quality verify --tier affected --worktree --shadow-sequential --cache off
+
+# Benchmarks only
 py -3.13 -m tooling.quality benchmark --tier quick --worktree --iterations 5 --output artifacts/test-impact/benchmark-quick.json
 py -3.13 -m tooling.quality benchmark --tier affected --worktree --iterations 5 --output artifacts/test-impact/benchmark-affected.json
 
@@ -85,7 +93,7 @@ pnpm --dir frontend test:run
 pnpm --dir frontend test:coverage
 ```
 
-POSIX 环境可使用 `make quality-validate`、`make test-quick`、`make test-affected`、`make test-full`、`make test-affected-shadow`、`make benchmark-quick` 和 `make benchmark-affected`。Windows 不得先尝试 `make`，也不得用裸 `python`；`conftest.py` 会注入 `src/`，因此上面的 Windows pytest 命令无需拼接临时环境变量。
+以上命令按触发条件互斥，不是需要顺序执行的清单。POSIX 环境可使用对应的 `make` 入口；Windows 不得先尝试 `make`，也不得用裸 `python`。`conftest.py` 会注入 `src/`，因此上面的 Windows pytest 命令无需拼接临时环境变量。
 
 `quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. Both use exact content fingerprints, a bounded weighted scheduler, and trust-scoped reuse of successful cacheable hermetic results. `full` is a cold release gate (`cache off`) and executes `backend-full` once with coverage. `test-affected-shadow` disables dominance and cache for sequential comparison. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path or Docker-scope map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups always collect fresh evidence when selected and when their declared capabilities are present.
 

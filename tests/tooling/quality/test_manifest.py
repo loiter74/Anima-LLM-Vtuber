@@ -336,6 +336,22 @@ def test_agent_guidance_uses_the_fast_documentation_gate() -> None:
     assert component.direct_groups == ("docs-contract",)
 
 
+def test_agent_skill_runtime_uses_focused_groups() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["agent-skill-runtime"]
+
+    assert component.paths == (
+        ".agents/skills/**/scripts/**",
+        ".agents/skills/**/fixtures/**",
+        "tests/agent_skills/**",
+    )
+    assert component.direct_groups == (
+        "agent-skill-format",
+        "agent-skill-static",
+        "agent-skill-regression",
+    )
+
+
 def test_repository_catalog_has_minecraft_control_plane_components() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
 

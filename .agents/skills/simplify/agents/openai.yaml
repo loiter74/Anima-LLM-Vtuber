@@ -1,0 +1,4 @@
+interface:
+  display_name: "简化当前成果"
+  short_description: "删除重复结构、状态与步骤，同时保持目标、行为和必要约束不变"
+  default_prompt: "使用 $simplify 简化当前成果并保持必要行为与约束。"

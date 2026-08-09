@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import importlib.metadata
 import json
@@ -16,6 +15,7 @@ from typing import Literal
 from pydantic import Field
 
 from .models import Catalog, Change, FrozenModel, Runner
+from .path_matching import matches_repository_path
 
 FINGERPRINT_SCHEMA_VERSION: Literal[1] = 1
 _CHUNK_SIZE = 1024 * 1024
@@ -88,22 +88,6 @@ def is_safe_fingerprint_pattern(pattern: str) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _matches(path: str, pattern: str) -> bool:
-    if not any(marker in pattern for marker in _GLOB_MARKERS):
-        return path == pattern or path.startswith(pattern.rstrip("/") + "/")
-    if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
-        return True
-    path_object = PurePosixPath(path)
-    if path_object.match(pattern) or fnmatch.fnmatchcase(path, pattern):
-        return True
-    reduced = pattern
-    while "/**/" in reduced:
-        reduced = reduced.replace("/**/", "/", 1)
-        if path_object.match(reduced) or fnmatch.fnmatchcase(path, reduced):
-            return True
-    return False
 
 
 def _stream_hash(path: Path) -> str:
@@ -313,7 +297,7 @@ class FingerprintContext:
             return tuple(
                 self.root.joinpath(*PurePosixPath(path).parts)
                 for path in sorted(self._git_paths)
-                if _matches(path, pattern)
+                if matches_repository_path(path, pattern)
             )
 
         parts = PurePosixPath(pattern).parts
@@ -341,12 +325,12 @@ class FingerprintContext:
             return tuple(
                 candidate
                 for candidate in base.iterdir()
-                if _matches(candidate.relative_to(self.root).as_posix(), pattern)
+                if matches_repository_path(candidate.relative_to(self.root).as_posix(), pattern)
             )
         return tuple(
             candidate
             for candidate in self._walk_directory(base)
-            if _matches(candidate.relative_to(self.root).as_posix(), pattern)
+            if matches_repository_path(candidate.relative_to(self.root).as_posix(), pattern)
         )
 
     def entries_for_pattern(self, pattern: str) -> tuple[FileFingerprint, ...]:
