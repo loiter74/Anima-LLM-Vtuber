@@ -117,22 +117,17 @@ class ServiceContext:
         system = getattr(config, "system", None) if config is not None else None
         return getattr(system, "runtime_profile", None) == "golden"
 
-    @staticmethod
-    def _unwrap_tracing_proxy(engine: Any) -> Any:
-        """Return the concrete service hidden behind any tracing wrappers."""
-        return unwrap_tracing_proxy(engine)
-
     @classmethod
     def _is_mock_llm(cls, engine: Any) -> bool:
         from animetta.services.llm.mock_llm import MockLLM
 
-        return isinstance(cls._unwrap_tracing_proxy(engine), MockLLM)
+        return isinstance(unwrap_tracing_proxy(engine), MockLLM)
 
     @classmethod
     def _is_mock_tts(cls, engine: Any) -> bool:
         from animetta.services.tts.mock_tts import MockTTS
 
-        return isinstance(cls._unwrap_tracing_proxy(engine), MockTTS)
+        return isinstance(unwrap_tracing_proxy(engine), MockTTS)
 
     @classmethod
     def _validate_golden_cached_engines(
@@ -145,8 +140,8 @@ class ServiceContext:
         from animetta.services.llm.openai_llm import OpenAILLM
         from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
 
-        concrete_llm = cls._unwrap_tracing_proxy(llm_engine)
-        concrete_tts = cls._unwrap_tracing_proxy(tts_engine)
+        concrete_llm = unwrap_tracing_proxy(llm_engine)
+        concrete_tts = unwrap_tracing_proxy(tts_engine)
         if not isinstance(concrete_llm, OpenAILLM):
             raise RuntimeError("Golden profile requires a real LLM engine")
         try:
@@ -205,7 +200,7 @@ class ServiceContext:
         # mutating the process-wide inspection cache.
         from animetta.services.llm.openai_llm import OpenAILLM
 
-        concrete_llm = self._unwrap_tracing_proxy(self.llm_engine)
+        concrete_llm = unwrap_tracing_proxy(self.llm_engine)
         if self._is_golden_profile(config) or isinstance(concrete_llm, OpenAILLM):
             self.start_llm_connectivity_probe()
 
@@ -664,7 +659,7 @@ class ServiceContext:
         import time as time_mod
 
         self._set_llm_connectivity_status(state="loading", ready=False)
-        llm = self._unwrap_tracing_proxy(self.llm_engine)
+        llm = unwrap_tracing_proxy(self.llm_engine)
         if llm is None:
             return self._set_llm_connectivity_status(
                 state="failed",

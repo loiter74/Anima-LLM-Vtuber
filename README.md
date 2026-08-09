@@ -233,7 +233,7 @@ class MyLLMAgent(AgentInterface):
 | Topic | Location |
 |-------|----------|
 | Architecture overview | [docs/architecture/overview.md](docs/architecture/overview.md) |
-| Architecture Decision Records (13) | [docs/adrs/](docs/adrs/) |
+| Architecture Decision Records (11) | [docs/adrs/](docs/adrs/) |
 | Backend & Socket.IO API reference | [docs/reference/](docs/reference/) |
 | Testing guide | [docs/development/testing.md](docs/development/testing.md) |
 | Deployment (Docker / Zeabur) | [docs/deployment/](docs/deployment/) |

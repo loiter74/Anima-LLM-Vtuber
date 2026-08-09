@@ -31,12 +31,9 @@ from animetta.config.providers.tts import (
     RemoteTTSConfig,
     VibeVoiceTTSConfig,
 )
+from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.observability.ports import ObservationRecorder
-from animetta.observability.service_proxy import (
-    InstrumentedServiceProxy,
-    instrument_service,
-)
-from animetta.tracing.proxy import TracingProxy
+from animetta.observability.service_proxy import instrument_service
 
 from .interface import TTSInterface
 from .mimo_tts import MimoTTS  # noqa: F401 - ensure provider registration
@@ -57,13 +54,6 @@ _AVAILABLE_TTS_PROVIDERS = (
     "kokoro",
     "vibe_voice",
 )
-
-
-def _unwrap_tracing_proxy(service: object) -> object:
-    """Return the concrete service behind any nested tracing proxies."""
-    while isinstance(service, (InstrumentedServiceProxy, TracingProxy)):
-        service = object.__getattribute__(service, "_target")
-    return service
 
 
 class TTSFactory:
@@ -135,7 +125,7 @@ class TTSFactory:
             if (
                 strict
                 and provider_type != "mock"
-                and isinstance(_unwrap_tracing_proxy(svc), MockTTS)
+                and isinstance(unwrap_tracing_proxy(svc), MockTTS)
             ):
                 raise RuntimeError(
                     "Strict TTS provider creation returned MockTTS for a non-mock config"

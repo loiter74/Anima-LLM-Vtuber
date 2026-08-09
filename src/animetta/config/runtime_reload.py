@@ -16,6 +16,7 @@ from animetta.config.manifest import (
     EffectiveConfig,
     load_effective_config,
 )
+from animetta.core.readiness import unwrap_tracing_proxy
 
 _HOT_LLM_FIELDS = frozenset({"temperature", "top_p", "max_tokens", "thinking"})
 _HOT_RUNTIME_FIELDS = frozenset({"enable_subtitle_translation", "enable_active_memes"})
@@ -279,7 +280,7 @@ def apply_lightweight_llm_config(llm_engine: Any, llm_config: Any) -> None:
     """Apply lightweight LLM runtime fields to an existing engine."""
     if llm_engine is None or llm_config is None:
         return
-    target = _unwrap_service_proxy(llm_engine)
+    target = unwrap_tracing_proxy(llm_engine)
     for name in ("temperature", "top_p", "max_tokens"):
         if hasattr(llm_config, name) and hasattr(target, name):
             setattr(target, name, getattr(llm_config, name))
@@ -337,7 +338,7 @@ def apply_runtime_llm_config(
     if system_prompt is None:
         return
 
-    target = _unwrap_service_proxy(llm_engine)
+    target = unwrap_tracing_proxy(llm_engine)
     set_prompt = getattr(target, "set_system_prompt", None)
     if callable(set_prompt):
         set_prompt(system_prompt)
@@ -377,11 +378,3 @@ def apply_runtime_config_to_contexts(
         semantic_hash=getattr(config, "semantic_hash", ""),
         prompt_warnings=runtime_prompt.warnings,
     )
-
-
-def _unwrap_service_proxy(service: Any) -> Any:
-    """Return the wrapped service object when passed a tracing proxy."""
-    try:
-        return object.__getattribute__(service, "_target")
-    except AttributeError:
-        return service

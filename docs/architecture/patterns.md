@@ -52,53 +52,20 @@ Anima 项目中应用的设计模式。
 
 ---
 
-## 4. Observer Pattern（观察者模式）
+## 4. State Graph Orchestration（状态图编排）
 
 ### 定义
-定义对象间的一对多依赖关系，状态改变时通知所有依赖者。
+以 LangGraph 状态图作为唯一编排方式，节点按状态转换串联数据处理流程。
 
 ### 应用场景
-- EventBus 事件系统
-- Pipeline 和 Handler 解耦
+- `orchestration/graph/builder.py` 构建对话状态图：ASR → LLM → 情感/幽默 → TTS → 输出
+- 节点保持轻量，业务逻辑下沉到 `services/` 或对应领域模块
+- 通过 checkpointer 实现会话恢复与中断处理
 
 ### 优势
-- 解耦发布者和订阅者
-- 支持优先级
-- 异常隔离
-- 动态订阅
-
----
-
-## 5. Pipeline Pattern（管道模式）
-
-### 定义
-将数据处理流程分解为多个步骤，数据按顺序通过。
-
-### 应用场景
-- InputPipeline: ASR → 文本清洗 → 情感提取
-- OutputPipeline: 句子分割 → TTS 合成
-
-### 优势
-- 责任链
-- 可中断
-- 可复用
-- 可扩展
-
----
-
-## 6. Orchestrator Pattern（编排器模式）
-
-### 定义
-管理复杂工作流，协调多个服务的交互。
-
-### 应用场景
-- ConversationOrchestrator 编排对话流程
-
-### 优势
-- 统一管理
-- 依赖注入
-- 易于测试
-- 职责清晰
+- 统一编排入口，取代早期 EventBus / Pipeline / Orchestrator 方案（见 ADR-001）
+- 状态可检查点、可恢复
+- 节点职责清晰、易于测试
 
 ---
 
@@ -109,6 +76,4 @@ Anima 项目中应用的设计模式。
 | Factory | 封装对象创建 | ASR/TTS/LLM 服务创建 |
 | Strategy | 封装算法 | 情感分析器、时间轴策略 |
 | Provider Registry | 自动注册 | 服务商注册 |
-| Observer | 事件发布订阅 | EventBus 事件系统 |
-| Pipeline | 数据处理流程 | 输入/输出管道 |
-| Orchestrator | 工作流编排 | 对话流程编排 |
+| State Graph | 状态驱动编排 | LangGraph 对话状态图 |

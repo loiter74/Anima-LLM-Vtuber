@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
+from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.services.llm.interface import LLMInterface
 
 if TYPE_CHECKING:
@@ -42,14 +43,6 @@ _SUBTITLE_SYSTEM_PROMPT = (
     "Do NOT add new meaning, jokes, apologies, explanations, or answer the "
     "viewer. Output ONLY the translation in the target language, nothing else."
 )
-
-
-def _unwrap_service_proxy(service: object) -> object:
-    """Return the wrapped service object when a tracing proxy is supplied."""
-    try:
-        return object.__getattribute__(service, "_target")
-    except AttributeError:
-        return service
 
 
 def strip_runtime_markers(text: str) -> str:
@@ -100,7 +93,7 @@ async def translate_subtitle_text(
     # The base LLMInterface.chat_messages() default serializes to string
     # and calls chat(), which mutates history. We detect this by checking
     # if the method is overridden in the concrete class's MRO.
-    llm_target = cast(LLMInterface, _unwrap_service_proxy(llm))
+    llm_target = cast(LLMInterface, unwrap_tracing_proxy(llm))
     chat_messages_impl = getattr(type(llm_target), "chat_messages", None)
     has_native_chat_messages = (
         chat_messages_impl is not None and chat_messages_impl is not LLMInterface.chat_messages

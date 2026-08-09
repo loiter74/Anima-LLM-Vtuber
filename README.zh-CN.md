@@ -121,7 +121,7 @@ py -3.13 scripts/runtime_lifecycle.py anima-up
 | 主题 | 位置 |
 |------|------|
 | 架构总览 | [docs/architecture/](docs/architecture/) |
-| 架构决策记录 (13 个 ADR) | [docs/adrs/](docs/adrs/) |
+| 架构决策记录 (11 个 ADR) | [docs/adrs/](docs/adrs/) |
 | 后端 / Socket.IO API 参考 | [docs/reference/](docs/reference/) |
 | 测试指南 | [docs/development/testing.md](docs/development/testing.md) |
 | 部署（Docker / Zeabur） | [docs/deployment/](docs/deployment/) |

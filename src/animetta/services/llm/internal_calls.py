@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from animetta.core.readiness import unwrap_tracing_proxy
+
 from .interface import LLMInterface
 
 
@@ -13,10 +15,7 @@ class HistoryUnsafeLLMError(RuntimeError):
 
 def unwrap_service_proxy(service: object) -> object:
     """Return the wrapped service when a tracing proxy is supplied."""
-    try:
-        return object.__getattribute__(service, "_target")
-    except AttributeError:
-        return service
+    return unwrap_tracing_proxy(service)
 
 
 def has_native_chat_messages(llm: object) -> bool:

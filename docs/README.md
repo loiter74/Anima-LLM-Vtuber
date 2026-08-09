@@ -8,7 +8,7 @@
 |----------|-------------|
 | [architecture/overview.md](architecture/overview.md) | C4 diagrams, LangGraph flow, core components |
 | [architecture/patterns.md](architecture/patterns.md) | Design patterns applied in the codebase |
-| [adrs/](adrs/) | 13 Architecture Decision Records |
+| [adrs/](adrs/) | 11 Architecture Decision Records |
 
 ## Development Guides
 

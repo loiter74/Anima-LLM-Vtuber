@@ -36,7 +36,7 @@
 
 ## Step 3: Power — Plugin Architecture (2 min)
 
-**Action:** Open `services/intelligence/llm/interface.py` → `glm_llm.py` → `config/core/registry.py`
+**Action:** Open `services/llm/interface.py` → `glm_llm.py` → `config/core/registry.py`
 
 **What to show:**
 - ABC interface → implementation → `@ProviderRegistry.register_service` → factory

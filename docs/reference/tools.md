@@ -200,11 +200,11 @@ tools, tools_map = create_tool_registry(
 
 | 文件 | 功能 |
 |------|------|
-| `src/animetta/graph/nodes/llm_node.py` | LLM 推理节点，处理工具调用 |
-| `src/animetta/graph/nodes/tool_node.py` | 工具执行节点 |
-| `src/animetta/services/llm/implementations/glm_llm.py` | GLM-4 工具调用实现 |
+| `src/animetta/orchestration/graph/llm_node.py` | LLM 推理节点，处理工具调用 |
+| `src/animetta/orchestration/graph/tool_node.py` | 工具执行节点 |
+| `src/animetta/services/llm/glm_llm.py` | GLM-4 工具调用实现 |
 | `src/animetta/tools/base.py` | 内置工具定义 |
-| `src/animetta/tools/config.py` | 配置加载 |
+| `config/tools.yaml` | 工具配置加载 |
 
 ## 故障排除
 
