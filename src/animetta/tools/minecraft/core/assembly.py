@@ -413,6 +413,8 @@ async def assemble_control_plane(
         manifest: RuntimeManifest,
         output: dict[str, Any],
     ) -> None:
+        if command.mode == "atomic":
+            return
         selected_strategy = output.get("selected_strategy", command.mode)
         await evidence_collector.commit_goal(
             command.command_id,

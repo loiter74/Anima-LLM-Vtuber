@@ -62,6 +62,42 @@ async def test_assembly_validates_manifest_starts_one_worker_and_closes_it(
     assert plane.scheduler._worker is None
 
 
+async def test_atomic_completion_does_not_commit_goal_evidence(tmp_path) -> None:
+    config = MinecraftConfig(
+        enabled=True,
+        journal_path=str(tmp_path / "commands.db"),
+        skill_path=str(tmp_path / "skills.db"),
+    )
+    bridge = ManifestBridge(config)
+    plane = await assemble_control_plane(bridge, config)
+    command = JournalCommand(
+        command_id="atomic-status-command",
+        caller_scope="probe:test",
+        request_id="atomic-status-request",
+        request_hash="a" * 64,
+        kind="execute",
+        mode="atomic",
+        payload={"action": {"capability": "status", "parameters": {}}},
+        requested_budget={},
+        effective_budget={},
+        accepted_at_ms=1,
+        queue_sequence=1,
+        state=CommandState.RUNNING,
+        state_version=1,
+    )
+
+    try:
+        callback = plane.controller._on_strategy_complete
+        assert callback is not None
+        await callback(
+            command=command,
+            manifest=await plane.adapter.get_manifest(),
+            output={"selected_strategy": "atomic"},
+        )
+    finally:
+        await plane.close()
+
+
 async def test_mission_factory_restores_strict_budget_from_journal_json(tmp_path) -> None:
     config = MinecraftConfig(
         enabled=True,
