@@ -1,0 +1,4 @@
+interface:
+  display_name: "执行效率反思"
+  short_description: "收敛本轮可避免的执行浪费，并固化一项最高收益的提效改进"
+  default_prompt: "使用 $efficiency-retrospective 复盘本轮执行浪费并固化最短路径。"

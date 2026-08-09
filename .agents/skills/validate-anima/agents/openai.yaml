@@ -1,0 +1,4 @@
+interface:
+  display_name: "验证 Animetta"
+  short_description: "为 Animetta 选择并运行最小完整的影响感知验证门禁"
+  default_prompt: "使用 $validate-anima 为当前改动选择并运行最小且完整的验证。"

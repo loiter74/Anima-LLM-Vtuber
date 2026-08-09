@@ -12,6 +12,7 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 - 仓库只保留 Codex 与 ZCode 共用的根目录/分目录 `AGENTS.md`，以及 Codex 使用的 `.agents/skills/`；不得新增 `CLAUDE.md`、`.claude/`、`.opencode/`、`.wolf/`、`.understand-anything/` 或其他智能体专用配置。
 - Codex 按作用域读取最近的 `AGENTS.md`。ZCode 先读取根目录 `AGENTS.md`，修改具体目录前还必须主动读取距离目标文件最近的分目录 `AGENTS.md`，确保两者遵循同一套规则。
 - `.zcode/` 只保存本地计划和会话数据，不纳入版本控制，也不作为项目规则来源。
+- 新建或修改项目 Skill 与开发智能体 MCP 时，Skill 正文、`agents/openai.yaml`、MCP 服务说明、工具描述和用户可见消息必须使用中文；目录名、工具名、字段名和 `error_code` 等协议标识保持英文，代码符号和日志继续遵循各自目录约定。
 
 ## 修改位置
 
@@ -19,7 +20,8 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 |---|---|
 | LLM、ASR、TTS 提供方 | `src/animetta/services/{llm,asr,tts}/` |
 | LangGraph 节点或 Socket.IO 路由 | `src/animetta/orchestration/graph/`、`src/animetta/orchestration/server/routes.py` |
-| 工具或 MCP 集成 | `src/animetta/tools/` |
+| 产品内工具或 MCP 客户端 | `src/animetta/tools/` |
+| 开发智能体 MCP 服务 | `tooling/<能力>_mcp/`，不得注册到产品 `config/tools.yaml` |
 | 人格 | `config/personas/`、`src/animetta/config/persona/` |
 | 记忆行为 | `src/animetta/memory/v2/`（ADR-005） |
 | Live2D | `src/animetta/avatar/`、`frontend/src/components/live2d/` |
@@ -60,6 +62,14 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 - 遇到缺陷、失败或非预期行为时，使用 `systematic-debugging`。
 - 先稳定复现，再追踪完整调用链和数据流，检查配置与初始化顺序，必要时在边界添加诊断。修复根因，不得只处理下游症状。
 - 两次修复失败后停止叠加补丁并重新检查假设；三次失败后必须先讨论架构，再尝试下一次修改。
+
+### 执行效率反思
+
+出现重复失败、明显错误路径、重复搜索、重复验证或本轮执行明显超出预期成本时，在任务结束前调用 `efficiency-retrospective`。
+
+正常直接完成的任务不调用。
+
+反思只用于减少未来相似任务的时间和 token 消耗；不得借此扩大当前任务范围。可重复结论按性质固化到最近的 `AGENTS.md`、已有 Skill、确定性脚本或质量映射中。
 
 ### 120 秒反馈与影响感知验证
 
