@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill 回归测试"
-  short_description: "验证 Skill 的重复执行结果、目录路径一致性与任务边界"
-  default_prompt: "使用 $test-skill-regression 验证目标 Skill 的重复性、路径一致性和边界。"
+  short_description: "预检并验证 Skill 重复执行、路径边界与正反语义"
+  default_prompt: "使用 $test-skill-regression 预检固定用例，并行验证目标 Skill 的重复性、路径边界与正反语义约束。"
