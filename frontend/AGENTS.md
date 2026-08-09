@@ -1,8 +1,5 @@
 # FRONTEND — VUE 3 + ELECTRON + LIVE2D
 
-**Generated:** 2026-05-31
-**Commit:** cdd4a87
-
 > Parent: [../AGENTS.md](../AGENTS.md) — root project conventions.
 
 ## OVERVIEW
@@ -99,9 +96,16 @@ pnpm vue-tsc --noEmit        # Type check
 pnpm test:run                # Frontend tests (Vitest + happy-dom)
 ```
 
+## REVIEW PREFLIGHT
+
+- 启动评审前先查看 `scripts/review/plugins/` 中目标插件声明的 capabilities，再选择参数；不要靠失败的长任务探测依赖。
+- `live2d-performance` 要求 OBS、interactive 和 host TTS，禁止与 `--no-obs` 组合。OBS 不可用时，只能用 `pnpm live:review -- --no-obs` 做通用浏览器场景诊断，并在交付中明确 OBS 性能评审未执行。
+- 新增外部 Live2D 模型、纹理或参考音频时，在影响感知门禁前核对仓库内许可证说明、运行时清单引用、实际文件大小，并对相关文件运行 pre-commit 大文件检查；不得等到提交阶段才发现资产不合规。
+
 ## NOTES
 
 - **57 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
+- 新增、删除或重命名 `src/**/*.test.ts` 时，同批更新上一行的数量；`tests/smoke/test_frontend_agents_docs.py` 会校验该不变量。
 - Live2D model files (`.moc3`, textures) are loaded from `assets/` at runtime.
 - Bilingual subtitle feature uses LLM translation — configured in Settings panel.
 - **Dev server runs on port 3000** (Vite, not 5173). Electron builder is not configured.

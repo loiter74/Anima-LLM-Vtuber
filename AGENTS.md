@@ -30,6 +30,7 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 ## 不可违反的约定
 
 - 使用 **Python 3.13+**。在 Windows 上运行测试、质量门禁、脚本或本地后端命令时，必须使用 `py -3.13`，不得使用裸 `python`。验证前先运行 `py -3.13 -c "import sys; assert sys.version_info >= (3, 13)"`；如果不可用，立即停止。
+- Windows 命令按 PowerShell 语义执行：一次工具调用只运行一个有意义的命令；相互独立的只读检查由调用层并行，不使用 `;` 拼接。`rg` 的字面正则优先用单引号包裹，避免 PowerShell 对双引号和反斜杠进行二次解释。
 - 使用现代类型标注（`X | None`）、Pydantic V2 `ConfigDict`、异步 I/O、公共函数类型标注和英文 `loguru` 日志。
 - 保持状态图节点轻量；复用 `services/` 中的业务逻辑。提供方遵循 `interface.py` → 实现 → 工厂 → `__init__.py` 导出的结构，并使用 `@ProviderRegistry`。
 - 修改前核实接口和现有模式。业务规则不明确时先确认；优先复用现有抽象，添加有意义的测试，并分步修改。
@@ -45,7 +46,7 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 - 允许在本地使用临时任务分支，但不得把个人分支、任务分支或任何非 `main` 分支推送到远程。
 - 远程推送只能以 `origin/main` 为目标。完成任务后，先在本地把任务提交合并或快进到 `main`，确认提交范围和验证结果，再推送主干。
 - 混合工作区只能暂存当前任务的文件；切换分支、合并和推送时必须保留无关的未提交修改。
-- 自动提交前必须用 `git diff --check` 和 `git status --short` 核对范围，只暂存当前任务文件，并使用能准确描述本次修改的提交信息。若无法安全隔离当前任务、主干不是可快进状态、远程主干已前进、分支受保护或推送失败，立即停止，不得强推，并向用户报告阻塞原因。
+- 自动提交前，先用 `git diff --check -- <本次任务路径...>` 检查未暂存差异并只暂存当前任务文件；暂存后以 `git diff --cached --check`、`git diff --cached --name-status` 和 `git status --short` 为最终范围证据。全工作区检查若只命中无关用户改动，不得修改该文件来消除失败。提交信息必须准确描述本次修改。若无法安全隔离当前任务、主干不是可快进状态、远程主干已前进、分支受保护或推送失败，立即停止，不得强推，并向用户报告阻塞原因。
 - `main` 推送成功后，删除已经合并的本地临时分支。若远程已经存在任务分支，确认其提交已进入 `main` 后删除该远程分支。
 
 ### 修改后反思
@@ -62,19 +63,21 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 
 ### 质量保证与影响感知验证
 
-- 开始任何测试或质量保证阶段时，使用 `qa-testing-playwright`。浏览器或界面证据必须来自全新的页面捕获，不得复用以前的 Playwright 结果。
-- 使用 `make test-quick`、`make test-affected` 或 `make test-full`；使用 `make quality-validate` 校验测试目录。测试组细节见 `tests/AGENTS.md`。
+- 开始任何测试或质量保证阶段时，使用 `qa-testing-playwright` 规划最小充分验证。纯文档或治理规则变更不因此启动浏览器；仅在界面行为发生变化或质量规划器选择浏览器组时采集页面证据。浏览器或界面证据必须来自全新的页面捕获，不得复用以前的 Playwright 结果。
+- Windows 不得先探测或尝试 `make`：直接使用 `py -3.13 -m tooling.quality validate`、`py -3.13 -m tooling.quality verify --tier quick --worktree --cache read-write`、`py -3.13 -m tooling.quality verify --tier affected --worktree --cache read-write`。POSIX 环境可使用对应的 `make quality-validate`、`make test-quick`、`make test-affected`；完整门禁及基准命令见 `tests/AGENTS.md`。
+- 验证按成本递增：完成计划内修改并调用 `reflect-code-changes`；运行目标测试、格式/静态检查、文档不变量和 `quality validate`；只暂存本次任务文件后运行 `py -3.13 -m pre_commit run`，并核对暂存差异；最后运行一次规划器选择的 `affected`/`full` 门禁。新增外部模型、音频或其他二进制资产时，必须在昂贵门禁前完成许可证、清单引用、文件大小和大文件钩子检查。不得用 `--no-verify` 绕过失败。
+- 若廉价检查或反思导致源代码、测试、构建/运行脚本或含代码配置再次变化，从反思与廉价检查重新开始；不要在仍有已知待修问题时反复启动昂贵门禁或 Docker 构建。
 - `tooling/quality.yml` 是唯一的组件到测试映射。验证测试组必须由机器自动选择，由规划器根据改动路径、影响闭包、风险、层级和能力决定；不得手工跳过必需测试组，也不得复制选择逻辑。覆盖支配关系只有在该文件中声明时才有效，每个省略项都必须记录在冻结计划中。
 - 只有带有精确可信指纹且成功的可缓存密闭结果才允许复用。完整、夜间和发布门禁必须使用 `cache off`。
 - Playwright 和实时服务测试组始终重新采集页面、健康状态、就绪状态、请求、控制台、截图和日志证据。冻结计划与结果保存到 `artifacts/test-impact/`。
 
 ### 修改代码后的 Docker 启动协议
 
-不得在主智能体中启动后端。必须使用专用子智能体，并在任一步失败时立即停止。服务就绪以 HTTP 成功响应为准，不得以进程退出或容器状态代替。
+不得在主智能体中启动后端。必须使用专用子智能体，并在任一步进入终态失败时立即停止。子智能体应在每个协议步骤结束时汇报，长时间构建至少每 60 秒给出一次进度；主智能体不得因等待而另起一套重复生命周期。服务就绪以 HTTP 成功响应为准，不得以进程退出或容器状态代替。
 
 1. 运行 `py -3.13 scripts/runtime_lifecycle.py host-tts-up`；要求 `127.0.0.1:8767/health`、带鉴权的 `/ready` 和精确模型身份均通过。
 2. 运行 `py -3.13 scripts/runtime_lifecycle.py anima-down`；确认宿主机 Qwen 仍然就绪。
-3. 运行 `py -3.13 scripts/runtime_lifecycle.py anima-up`。CPU 或冒烟验证通过 `ANIMETTA_PROFILE=smoke` 选择配置，并复用同一个 `docker-compose.yml`。
+3. 运行 `py -3.13 scripts/runtime_lifecycle.py anima-up`。CPU 或冒烟验证通过当前 PowerShell 进程设置 `ANIMETTA_PROFILE=smoke`，并复用同一个 `docker-compose.yml`。该命令为有界续跑：若返回 `status=in_progress`（通常 exit 2），这不是失败；从输出读取 `run_id`，使用相同 profile 运行 `py -3.13 scripts/runtime_lifecycle.py --run-id <同一值> anima-up`，直到 `passed` 或 `failed`。同一租约存活时不得创建新的 `anima-up` run。
 4. 每 5 秒轮询一次 `http://localhost/health`，最多 120 秒；要求 HTTP 200 且响应包含 `"status":"ok"`。
 5. 每 5 秒轮询一次 `http://localhost`，最多 60 秒；要求 HTTP 200。
 6. 检查默认 Compose 应用日志和本次宿主机 Qwen 证据；不得出现回溯或错误级别日志。

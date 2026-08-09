@@ -1,12 +1,10 @@
 # TESTS — PYTEST + VITEST SUITE
 
-**Generated:** 2026-06-15 · **Commit:** 10735c3 · **Branch:** main
-
 > Parent: [../AGENTS.md](../AGENTS.md). Backend pytest mirrors `src/animetta/`; frontend vitest lives under `frontend/src/`.
 
 ## OVERVIEW
 
-126 backend pytest files across 15 subdirs + 20 frontend vitest files. asyncio_mode=auto, xdist-parallel by default, 30s timeout, integration/slow auto-skipped. Backend coverage ~70% (advisory — `fail_under = 0`).
+Backend pytest mirrors the application tree; frontend Vitest inventory is tracked and checked in `frontend/AGENTS.md`. asyncio_mode=auto, xdist-parallel by default, 30s timeout, integration/slow auto-skipped. Backend coverage is advisory locally (`fail_under = 0`).
 
 ## STRUCTURE
 
@@ -60,36 +58,34 @@ All use `MagicMock` + `AsyncMock`; each exposes `.close = AsyncMock()`. Prefer t
 
 ## COMMANDS
 
-```bash
-# Stable impact-aware entrypoints (preferred for agent and CI parity)
-make quality-validate
-make test-quick
-make test-affected
-make test-full
-make test-affected-shadow
-make benchmark-quick
-make benchmark-affected
+```powershell
+# Windows canonical entrypoints; validate Python once before the first command
+py -3.13 -c "import sys; assert sys.version_info >= (3, 13)"
+py -3.13 -m tooling.quality validate
+py -3.13 -m tooling.quality verify --tier quick --worktree --cache read-write
+py -3.13 -m tooling.quality verify --tier affected --worktree --cache read-write
+py -3.13 -m tooling.quality verify --tier affected --worktree --shadow-sequential --cache off
+py -3.13 -m tooling.quality benchmark --tier quick --worktree --iterations 5 --output artifacts/test-impact/benchmark-quick.json
+py -3.13 -m tooling.quality benchmark --tier affected --worktree --iterations 5 --output artifacts/test-impact/benchmark-affected.json
 
-# Default run (parallel, skip slow/integration)
-PYTHONPATH=src python -m pytest tests/
+# Full release gate: run these three commands in order, without shell chaining
+py -3.13 -m tooling.quality verify --tier full --worktree --cache off
+py -3.13 -m tooling.quality plan --tier full --worktree --output artifacts/test-impact/docker-full-plan.json
+py -3.13 scripts/release_runtime_gate.py --plan artifacts/test-impact/docker-full-plan.json --output artifacts/test-impact/release-runtime/evidence.json
 
-# With coverage (advisory — no gate)
-PYTHONPATH=src python -m pytest tests/ --cov=src/animetta --cov-report=term-missing
+# Targeted backend examples
+py -3.13 -m pytest tests/
+py -3.13 -m pytest tests/ --cov=src/animetta --cov-report=term-missing
+py -3.13 -m pytest tests/test_main_path.py::TestVADServicesRegistered::test_vad_services_registered -v
+py -3.13 -m pytest tests/orchestration/graph/ -v
+py -3.13 -m pytest tests/integration/ -m integration
 
-# Single test
-PYTHONPATH=src python -m pytest tests/test_main_path.py::TestVADServicesRegistered::test_vad_services_registered -v
-
-# By directory
-PYTHONPATH=src python -m pytest tests/orchestration/graph/ -v
-
-# Integration (requires live server on :12394)
-PYTHONPATH=src python -m pytest tests/integration/ -m integration
-
-# Frontend
-cd frontend && pnpm test:run && pnpm test:coverage
+# Frontend commands are separate invocations from the repository root
+pnpm --dir frontend test:run
+pnpm --dir frontend test:coverage
 ```
 
-> `conftest.py` auto-injects `src/` to `sys.path`, but keep `PYTHONPATH=src` prefix in docs/CI for safety.
+POSIX 环境可使用 `make quality-validate`、`make test-quick`、`make test-affected`、`make test-full`、`make test-affected-shadow`、`make benchmark-quick` 和 `make benchmark-affected`。Windows 不得先尝试 `make`，也不得用裸 `python`；`conftest.py` 会注入 `src/`，因此上面的 Windows pytest 命令无需拼接临时环境变量。
 
 `quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. Both use exact content fingerprints, a bounded weighted scheduler, and trust-scoped reuse of successful cacheable hermetic results. `full` is a cold release gate (`cache off`) and executes `backend-full` once with coverage. `test-affected-shadow` disables dominance and cache for sequential comparison. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path or Docker-scope map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups always collect fresh evidence when selected and when their declared capabilities are present.
 
