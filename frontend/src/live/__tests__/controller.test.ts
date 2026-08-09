@@ -89,6 +89,16 @@ describe('standalone live controller', () => {
     })
   })
 
+  it('uses the warm studio background when no override is provided', () => {
+    const { view } = harness()
+
+    expect(view.setBackground).toHaveBeenCalledWith({
+      file: '温馨直播室.png',
+      opacity: 0.9,
+      position: 'center',
+    })
+  })
+
   it('leaves review fixture injection to the selected socket runtime', () => {
     const normal = harness()
     const demo = harness('demo=1')

@@ -93,9 +93,6 @@ export const liveReviewNodePlugin: {
       url.searchParams.set('review', '1')
       url.searchParams.set('scene', sceneId)
       url.searchParams.set('attempt', `${runId}-${attempt}`)
-      url.searchParams.set('bg', '温馨直播室.png')
-      url.searchParams.set('bgOpacity', '0.9')
-      url.searchParams.set('bgPosition', 'center')
       return url.href
     },
     assertPage: assertLivePage,

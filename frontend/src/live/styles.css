@@ -90,7 +90,7 @@ button {
   position: absolute;
   top: var(--live-danmaku-panel-top, 108px);
   right: 28px;
-  z-index: 12;
+  z-index: 0;
   width: min(420px, calc(100vw - 56px));
   overflow: hidden;
   border: 1px solid var(--c-border);

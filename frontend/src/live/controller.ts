@@ -50,9 +50,11 @@ function isStatus(value: unknown): value is BilibiliStatusPayload {
 function backgroundFrom(search: URLSearchParams): BackgroundConfig {
   const requestedFile = search.get('bg')
   const file =
-    requestedFile && !requestedFile.includes('/') && !requestedFile.includes('\\')
-      ? requestedFile
-      : null
+    requestedFile === null
+      ? '温馨直播室.png'
+      : requestedFile && !requestedFile.includes('/') && !requestedFile.includes('\\')
+        ? requestedFile
+        : null
   const requestedOpacity = Number(search.get('bgOpacity') ?? '0.9')
   const opacity = Number.isFinite(requestedOpacity)
     ? Math.min(1, Math.max(0, requestedOpacity))

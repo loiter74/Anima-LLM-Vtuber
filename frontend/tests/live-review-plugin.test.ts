@@ -29,9 +29,7 @@ describe('livestream review plugin', () => {
         sceneId: 'sparse',
         attempt: 2,
       }),
-    ).toBe(
-      'http://127.0.0.1:3000/live.html?review=1&scene=sparse&attempt=run-1-2&bg=%E6%B8%A9%E9%A6%A8%E7%9B%B4%E6%92%AD%E5%AE%A4.png&bgOpacity=0.9&bgPosition=center',
-    )
+    ).toBe('http://127.0.0.1:3000/live.html?review=1&scene=sparse&attempt=run-1-2')
     expect(
       liveReviewNodePlugin.pageAdapter.forbiddenRequestPatterns?.some((pattern) =>
         pattern.test('http://127.0.0.1:3000/socket.io/?transport=websocket'),
