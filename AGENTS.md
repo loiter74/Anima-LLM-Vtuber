@@ -66,6 +66,7 @@ Animetta 是一个 AI 伙伴与虚拟主播框架：后端使用 Python 3.13、*
 - 开始任何测试或质量保证阶段时，使用 `qa-testing-playwright` 规划最小充分验证。纯文档或治理规则变更不因此启动浏览器；仅在界面行为发生变化或质量规划器选择浏览器组时采集页面证据。浏览器或界面证据必须来自全新的页面捕获，不得复用以前的 Playwright 结果。
 - Windows 不得先探测或尝试 `make`：直接使用 `py -3.13 -m tooling.quality validate`、`py -3.13 -m tooling.quality verify --tier quick --worktree --cache read-write`、`py -3.13 -m tooling.quality verify --tier affected --worktree --cache read-write`。POSIX 环境可使用对应的 `make quality-validate`、`make test-quick`、`make test-affected`；完整门禁及基准命令见 `tests/AGENTS.md`。
 - 验证按成本递增：完成计划内修改并调用 `reflect-code-changes`；运行目标测试、格式/静态检查、文档不变量和 `quality validate`；只暂存本次任务文件后运行 `py -3.13 -m pre_commit run`，并核对暂存差异；最后运行一次规划器选择的 `affected`/`full` 门禁。新增外部模型、音频或其他二进制资产时，必须在昂贵门禁前完成许可证、清单引用、文件大小和大文件钩子检查。不得用 `--no-verify` 绕过失败。
+- 仅修改 `AGENTS.md`、`frontend/AGENTS.md`、`tests/AGENTS.md` 或 `.agents/skills/**/*.md` 时，属于简单指导文档变更：`affected` 计划只能选择 `docs-contract` 与全局 quick 组，质量结果的 `wall_seconds` 必须低于 10 秒。超过预算或选择 `backend-tooling-quality` 视为影响映射错误，应先修正 `tooling/quality.yml`，不得跳过门禁来伪造达标。
 - 若廉价检查或反思导致源代码、测试、构建/运行脚本或含代码配置再次变化，从反思与廉价检查重新开始；不要在仍有已知待修问题时反复启动昂贵门禁或 Docker 构建。
 - `tooling/quality.yml` 是唯一的组件到测试映射。验证测试组必须由机器自动选择，由规划器根据改动路径、影响闭包、风险、层级和能力决定；不得手工跳过必需测试组，也不得复制选择逻辑。覆盖支配关系只有在该文件中声明时才有效，每个省略项都必须记录在冻结计划中。
 - 只有带有精确可信指纹且成功的可缓存密闭结果才允许复用。完整、夜间和发布门禁必须使用 `cache off`。

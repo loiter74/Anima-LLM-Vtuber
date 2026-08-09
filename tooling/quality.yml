@@ -1120,17 +1120,24 @@ components:
     impacts: []
     risk: normal
 
+  agent-guidance:
+    domain: repository
+    paths:
+      - AGENTS.md
+      - frontend/AGENTS.md
+      - tests/AGENTS.md
+      - .agents/skills/**/*.md
+    direct_groups: [docs-contract]
+    impacts: []
+    risk: normal
+
   repository-governance:
     domain: repository
     paths:
       - .gitignore
       - .github/workflows/**
-      - AGENTS.md
-      - frontend/AGENTS.md
-      - tests/AGENTS.md
       - Makefile
       - docs/development/project-health.md
-      - .agents/skills/**
     direct_groups: [backend-tooling-quality, docs-contract]
     impacts: []
     risk: normal

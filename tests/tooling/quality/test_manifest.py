@@ -323,6 +323,19 @@ def test_repository_catalog_has_a_dedicated_acceptance_audition_gate() -> None:
     assert ".gitignore" in catalog.components["repository-governance"].paths
 
 
+def test_agent_guidance_uses_the_fast_documentation_gate() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["agent-guidance"]
+
+    assert component.paths == (
+        "AGENTS.md",
+        "frontend/AGENTS.md",
+        "tests/AGENTS.md",
+        ".agents/skills/**/*.md",
+    )
+    assert component.direct_groups == ("docs-contract",)
+
+
 def test_repository_catalog_has_minecraft_control_plane_components() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
 

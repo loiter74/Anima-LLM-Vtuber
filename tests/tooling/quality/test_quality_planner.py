@@ -130,6 +130,23 @@ def test_quick_always_includes_catalogued_required_smoke() -> None:
     assert "required quick policy" in smoke.reasons
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "AGENTS.md",
+        "frontend/AGENTS.md",
+        "tests/AGENTS.md",
+        ".agents/skills/reflect-code-changes/SKILL.md",
+    ],
+)
+def test_agent_guidance_affected_plan_stays_on_fast_docs_path(path: str) -> None:
+    changes = from_paths([path], repo_root=ROOT)
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert _group_ids(plan) == ["backend-route-smoke", "docs-contract"]
+
+
 def test_affected_expands_declared_component_impacts() -> None:
     changes = from_paths(
         ["src/animetta/orchestration/server/handlers/chat_handlers.py"],
