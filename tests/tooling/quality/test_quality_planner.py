@@ -166,6 +166,47 @@ def test_agent_skill_runtime_avoids_repository_and_docker_fallbacks() -> None:
     assert plan.docker_actions == ()
 
 
+def test_bilibili_mcp_avoids_repository_and_docker_fallbacks() -> None:
+    changes = from_paths(
+        ["tooling/bilibili_mcp/server.py"],
+        repo_root=ROOT,
+    )
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert set(_group_ids(plan)) == {
+        "backend-deadcode",
+        "backend-events-contract",
+        "backend-route-smoke",
+        "backend-static",
+        "backend-support-typecheck",
+        "bilibili-mcp-unit",
+        "python-format",
+        "security-secrets",
+    }
+    assert plan.fallbacks == ()
+    assert plan.docker_actions == ()
+
+
+def test_bilibili_contract_support_paths_have_explicit_components() -> None:
+    changes = from_paths(
+        [
+            "evaluations/livestream/runner.py",
+            "tests/orchestration/server/test_bilibili_handlers.py",
+            "tests/orchestration/test_bilibili_event_contract.py",
+            "tests/services/bilibili/test_livestream_session.py",
+            "tests/services/bilibili/test_replay_session_integration.py",
+        ],
+        repo_root=ROOT,
+    )
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert plan.fallbacks == ()
+    assert "backend-full" not in _group_ids(plan)
+    assert "livestream-evaluation-unit" in _group_ids(plan)
+
+
 def test_common_change_corpus_keeps_nine_of_ten_off_full_fallback() -> None:
     paths = (
         "AGENTS.md",

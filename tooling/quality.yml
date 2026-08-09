@@ -27,6 +27,16 @@ input_sets:
     paths:
       - .agents/skills/**
       - tests/agent_skills/**
+  bilibili-mcp-runtime:
+    paths:
+      - tooling/bilibili_mcp/**
+      - tests/mcp/bilibili/**
+      - config/socket-events.json
+  livestream-evaluation-runtime:
+    paths:
+      - evaluations/livestream/**
+      - tests/evaluations/livestream/**
+      - src/animetta/services/bilibili/**
   frontend-toolchain:
     paths:
       - frontend/package.json
@@ -178,6 +188,32 @@ groups:
     resource_class: cpu
     resource_weight: 2
     input_sets: [python-toolchain]
+
+  bilibili-mcp-unit:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets: [tests/mcp/bilibili]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 60
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, bilibili-mcp-runtime]
+
+  livestream-evaluation-unit:
+    domain: repository
+    kind: unit
+    runner: pytest
+    targets: [tests/evaluations/livestream]
+    args: [-q, -o, addopts=]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain, livestream-evaluation-runtime]
 
   agent-skill-format:
     domain: repository
@@ -760,7 +796,10 @@ components:
   quality-control-plane:
     domain: repository
     paths:
-      - tooling/**
+      - tooling/quality/**
+      - tooling/execution_feedback/**
+      - tooling/quality.yml
+      - tooling/__init__.py
       - tests/tooling/**
       - scripts/health_check.py
       - scripts/check_minecraft_architecture.py
@@ -939,7 +978,10 @@ components:
 
   orchestration-server:
     domain: backend
-    paths: [src/animetta/orchestration/server/**]
+    paths:
+      - src/animetta/orchestration/server/**
+      - tests/orchestration/server/**
+      - tests/orchestration/*.py
     direct_groups:
       - backend-server-unit
       - backend-route-smoke
@@ -969,6 +1011,7 @@ components:
     paths:
       - src/animetta/services/**
       - src/animetta_qwen_tts/**
+      - tests/services/**
     direct_groups:
       - backend-services-unit
       - python-format
@@ -1099,6 +1142,36 @@ components:
       - backend-static
       - backend-deadcode
     impacts: [backend-services]
+    risk: normal
+
+  bilibili-mcp-control:
+    domain: repository
+    paths:
+      - tooling/bilibili_mcp/**
+      - tests/mcp/bilibili/**
+    direct_groups:
+      - bilibili-mcp-unit
+      - backend-events-contract
+      - python-format
+      - backend-static
+      - backend-support-typecheck
+      - backend-deadcode
+      - security-secrets
+    impacts: []
+    risk: normal
+
+  livestream-evaluation:
+    domain: repository
+    paths:
+      - evaluations/livestream/**
+      - tests/evaluations/livestream/**
+    direct_groups:
+      - livestream-evaluation-unit
+      - python-format
+      - backend-static
+      - backend-support-typecheck
+      - backend-deadcode
+    impacts: []
     risk: normal
 
   frontend-build-control:

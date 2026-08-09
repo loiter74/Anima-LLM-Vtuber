@@ -14,10 +14,12 @@ from animetta.services.bilibili import (
     DanmakuBuffer,
     DanmakuMessage,
     DanmakuReplyRuntime,
+    LivestreamEvent,
     LivestreamSession,
     ReplyCandidate,
     ReplyMetrics,
 )
+from animetta.services.bilibili.livestream_session import StaleGenerationError
 from animetta.services.scene_analysis import SceneModelGateway, SceneRuntime
 from animetta.utils.tempfiles import write_temp_bytes
 
@@ -95,6 +97,7 @@ class BilibiliHandlers:
                 session_kwargs["gateway_factory"] = gateway_factory
             session = LivestreamSession(
                 status_sink=self.emit_status_snapshot,
+                raw_event_sink=self._broadcast_live_event,
                 raw_message_sink=self._broadcast_raw_danmaku,
                 reply_runtime=reply_runtime,
                 scene_runtime=scene_runtime,
@@ -150,17 +153,24 @@ class BilibiliHandlers:
         self,
         room_id: int,
         sessdata: str | None = None,
+        *,
+        expected_generation_id: int | None = None,
     ) -> dict[str, Any]:
         """Delegate an atomic room command to the single session owner."""
         await self._prepare_scene_runtime()
         return await self.session.set_room(
             room_id,
             sessdata=self._sessdata if sessdata is None else sessdata,
+            expected_generation_id=expected_generation_id,
         )
 
-    async def stop_bilibili(self) -> dict[str, Any]:
+    async def stop_bilibili(
+        self,
+        *,
+        expected_generation_id: int | None = None,
+    ) -> dict[str, Any]:
         """Stop the shared session and cancel pending AI reply work."""
-        return await self.session.stop()
+        return await self.session.stop(expected_generation_id=expected_generation_id)
 
     # ── Status broadcast ──────────────────────────────────────────────
 
@@ -188,6 +198,22 @@ class BilibiliHandlers:
     ) -> None:
         """Broadcast every raw message independently of AI admission."""
         await self.sio.emit(EVENTS["bilibili"]["danmaku"]["name"], msg.to_dict())
+
+    async def _broadcast_live_event(
+        self,
+        event: LivestreamEvent,
+        room_id: int,
+        generation_id: int,
+    ) -> None:
+        """Broadcast the complete normalized event with its session identity."""
+        await self.sio.emit(
+            EVENTS["bilibili"]["live_event"]["name"],
+            {
+                "room_id": room_id,
+                "generation_id": generation_id,
+                **event.to_dict(),
+            },
+        )
 
     async def _process_reply_candidate(self, candidate: ReplyCandidate) -> None:
         await self._process_ai_reply(candidate.message, candidate.room_id)
@@ -465,10 +491,26 @@ class BilibiliHandlers:
         data: dict[str, object] | None = None,
     ) -> dict[str, object]:
         """Disconnect safely even when Socket.IO supplies no payload."""
-        del sid, data
+        del sid
+        try:
+            expected_generation_id = self._parse_expected_generation_id(data)
+        except ValueError:
+            return self._command_ack(
+                accepted=False,
+                error_code="invalid_generation_id",
+                message="Invalid generation ID",
+            )
         logger.info("[Bilibili] Frontend requested disconnect")
         try:
-            snapshot = await self.stop_bilibili()
+            snapshot = await self.stop_bilibili(
+                expected_generation_id=expected_generation_id,
+            )
+        except StaleGenerationError:
+            return self._command_ack(
+                accepted=False,
+                error_code="stale_generation",
+                message="Session generation changed",
+            )
         except Exception as exc:
             logger.warning(
                 "Bilibili disconnect command failed: error_type={}",
@@ -508,9 +550,27 @@ class BilibiliHandlers:
                 message="Invalid room ID",
             )
 
+        try:
+            expected_generation_id = self._parse_expected_generation_id(data)
+        except ValueError:
+            return self._command_ack(
+                accepted=False,
+                error_code="invalid_generation_id",
+                message="Invalid generation ID",
+            )
+
         logger.info("[Bilibili] {} requested for room {}", action, room_id)
         try:
-            snapshot = await self.start_bilibili(room_id)
+            snapshot = await self.start_bilibili(
+                room_id,
+                expected_generation_id=expected_generation_id,
+            )
+        except StaleGenerationError:
+            return self._command_ack(
+                accepted=False,
+                error_code="stale_generation",
+                message="Session generation changed",
+            )
         except Exception as exc:
             logger.warning(
                 "Bilibili room command failed: action={} error_type={}",
@@ -527,6 +587,17 @@ class BilibiliHandlers:
             snapshot=snapshot,
             message="Command accepted",
         )
+
+    @staticmethod
+    def _parse_expected_generation_id(
+        data: dict[str, object] | None,
+    ) -> int | None:
+        if not isinstance(data, dict) or "expected_generation_id" not in data:
+            return None
+        value = data["expected_generation_id"]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError("expected_generation_id must be a non-negative integer")
+        return value
 
     def _command_ack(
         self,

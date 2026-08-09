@@ -318,7 +318,12 @@ class EvaluationRunner:
         self._write_evidence(evidence)
         return evidence
 
-    async def _record_event(self, event: LivestreamEvent, _room_id: int) -> None:
+    async def _record_event(
+        self,
+        event: LivestreamEvent,
+        _room_id: int,
+        _generation_id: int,
+    ) -> None:
         record = ConversationRecord(
             sequence=event.sequence,
             offset_ms=event.offset_ms,

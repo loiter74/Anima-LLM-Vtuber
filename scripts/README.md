@@ -59,6 +59,10 @@ plane (`mc_execute` / `mc_status` / `mc_stop`), not launched directly.
 
 ## Danmaku collection
 
+Bilibili 进程级实时会话由开发智能体 MCP 控制：
+`py -3.13 -m tooling.bilibili_mcp`。MCP 只连接已运行的 Animetta Socket.IO
+服务，不创建第二条 Bilibili 网关连接。下列脚本只负责数据采集，不负责直播会话控制。
+
 | Script | Purpose |
 |--------|---------|
 | `collect_danmaku.py` | Builds danmaku sample datasets from trending videos via `MemeCollector` |

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "operate-anima-runtime-smoke-plan",
+  "skill": "operate-anima-runtime",
+  "task": "使用 $operate-anima-runtime 读取 request.md，只生成 result/plan.md，不启动服务。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/operate-anima-runtime-smoke-plan",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": ["执行者: 唯一专用子智能体", "复用: 相同 ANIMETTA_PROFILE 与 run_id", "失败: 任一步终态失败立即停止"]
+    }
+  ]
+}

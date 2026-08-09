@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "review-anima-live-fixed-scene-plan",
+  "skill": "review-anima-live",
+  "task": "使用 $review-anima-live 读取 request.md，只生成 result/plan.md，不启动浏览器、OBS 或直播服务。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/review-anima-live-fixed-scene-plan",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": ["feature: live", "数据: Bilibili MCP", "保留: text-boundaries, sparse", "证据: 本轮新鲜"]
+    }
+  ]
+}

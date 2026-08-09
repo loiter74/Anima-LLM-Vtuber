@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "validate-anima-daily-plan",
+  "skill": "validate-anima",
+  "task": "使用 $validate-anima 读取 request.md，只生成 result/plan.md，不执行命令。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/validate-anima-daily-plan",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": ["通道: affected", "--paths .agents/skills/demo/SKILL.md", "禁止: quick, backend-full, live-docker"]
+    }
+  ]
+}

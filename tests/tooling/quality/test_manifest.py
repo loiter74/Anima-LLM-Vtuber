@@ -352,6 +352,39 @@ def test_agent_skill_runtime_uses_focused_groups() -> None:
     )
 
 
+def test_bilibili_mcp_uses_a_focused_unit_group() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["bilibili-mcp-control"]
+
+    assert component.paths == (
+        "tooling/bilibili_mcp/**",
+        "tests/mcp/bilibili/**",
+    )
+    assert component.direct_groups == (
+        "bilibili-mcp-unit",
+        "backend-events-contract",
+        "python-format",
+        "backend-static",
+        "backend-support-typecheck",
+        "backend-deadcode",
+        "security-secrets",
+    )
+    assert catalog.groups["bilibili-mcp-unit"].targets == ("tests/mcp/bilibili",)
+
+
+def test_livestream_evaluation_uses_a_focused_unit_group() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["livestream-evaluation"]
+    group = catalog.groups["livestream-evaluation-unit"]
+
+    assert component.paths == (
+        "evaluations/livestream/**",
+        "tests/evaluations/livestream/**",
+    )
+    assert group.targets == ("tests/evaluations/livestream",)
+    assert group.input_sets == ("python-toolchain", "livestream-evaluation-runtime")
+
+
 def test_repository_catalog_has_minecraft_control_plane_components() -> None:
     catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
 

@@ -20,6 +20,7 @@ tests/
 ├── inspection/                    # health/consistency checks
 ├── integration/  (+ conftest.py)  # ⚠️ AUTO-MARKED `integration`
 ├── memory_v2/                     # atom-based memory (Chroma+SQLite+Wiki)
+├── mcp/                           # 开发智能体 MCP 服务的隔离协议与客户端测试
 ├── orchestration/{graph,server}/  # LangGraph nodes + WebSocket/REST
 ├── services/{audio,llm,meme}/     # provider + factory + pipeline tests
 ├── smoke/                         # e2e-ish (conversation, meme, singing)
@@ -34,6 +35,7 @@ tests/
 | Task | Location | Notes |
 |------|----------|-------|
 | Add backend test | `tests/<module>/test_<name>.py` | Mirror `src/animetta/<module>/` |
+| Add development MCP test | `tests/mcp/<server>/test_<name>.py` | Mock transport; no live service or network |
 | Integration test | `tests/integration/test_*.py` | Auto-marked via `pytest_collection_modifyitems` |
 | Tracing test | `tests/tracing/` ONLY | autouse fixture resets global REGISTRY — do NOT place elsewhere |
 | Mock fixtures | `tests/conftest.py` | 11 available (see CONVENTIONS) |

@@ -29,3 +29,20 @@ def test_bilibili_control_commands_declare_typed_acknowledgments() -> None:
 
     for action in ("connect", "disconnect", "update_room"):
         assert EVENTS["bilibili"][action]["ack"] == expected
+        assert EVENTS["bilibili"][action]["payload"]["expected_generation_id?"] == "number"
+
+
+def test_bilibili_live_event_catalog_preserves_normalized_event_identity() -> None:
+    assert EVENTS["bilibili"]["live_event"] == {
+        "name": "bilibili:live_event",
+        "payload": {
+            "room_id": "number",
+            "generation_id": "number",
+            "sequence": "number",
+            "offset_ms": "number",
+            "event_type": "string",
+            "actor_id": "string",
+            "text": "string",
+            "payload": "object",
+        },
+    }

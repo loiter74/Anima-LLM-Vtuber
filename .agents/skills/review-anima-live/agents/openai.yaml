@@ -1,0 +1,4 @@
+interface:
+  display_name: "评审 Animetta 直播"
+  short_description: "采集 Animetta 直播页面、Live2D 与音频新鲜证据"
+  default_prompt: "使用 $review-anima-live 评审当前直播功能并采集新的页面与运行证据。"

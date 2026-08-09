@@ -8,7 +8,8 @@ import pytest
 
 from animetta.config import ReplyPolicyConfig
 from animetta.orchestration.server.handlers.bilibili_handlers import BilibiliHandlers
-from animetta.services.bilibili import DanmakuMessage
+from animetta.services.bilibili import DanmakuMessage, LivestreamEvent, LivestreamEventType
+from animetta.services.bilibili.livestream_session import StaleGenerationError
 from animetta.services.scene_analysis.models import SceneGuidance
 
 
@@ -94,7 +95,11 @@ async def test_connect_acknowledges_acceptance_not_connection_truth(
 
     ack = await handler.on_bilibili_connect("sid-1", {"room_id": 123})
 
-    session.set_room.assert_awaited_once_with(123, sessdata="server-secret")
+    session.set_room.assert_awaited_once_with(
+        123,
+        sessdata="server-secret",
+        expected_generation_id=None,
+    )
     assert ack == {
         "accepted": True,
         "state": "connecting",
@@ -121,8 +126,74 @@ async def test_update_room_uses_same_atomic_session_command(handler_harness) -> 
 
     ack = await handler.on_bilibili_update_room("sid-1", {"room_id": 123})
 
-    session.set_room.assert_awaited_once_with(123, sessdata="server-secret")
+    session.set_room.assert_awaited_once_with(
+        123,
+        sessdata="server-secret",
+        expected_generation_id=None,
+    )
     assert ack["state"] == "connecting"
+
+
+@pytest.mark.asyncio
+async def test_generation_guard_is_forwarded_to_atomic_room_command(handler_harness) -> None:
+    handler, _, session = handler_harness
+
+    await handler.on_bilibili_update_room(
+        "sid-1",
+        {"room_id": 456, "expected_generation_id": 1},
+    )
+
+    session.set_room.assert_awaited_once_with(
+        456,
+        sessdata="server-secret",
+        expected_generation_id=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_stale_generation_returns_conflict_without_overwriting_session(
+    handler_harness,
+) -> None:
+    handler, _, session = handler_harness
+    session.set_room.side_effect = StaleGenerationError("changed")
+
+    ack = await handler.on_bilibili_connect(
+        "sid-1",
+        {"room_id": 456, "expected_generation_id": 0},
+    )
+
+    assert ack == {
+        "accepted": False,
+        "state": "stopped",
+        "error_code": "stale_generation",
+        "message": "Session generation changed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_disconnect_rejects_invalid_generation_without_stopping(handler_harness) -> None:
+    handler, _, session = handler_harness
+
+    ack = await handler.on_bilibili_disconnect(
+        "sid-1",
+        {"expected_generation_id": True},
+    )
+
+    assert ack["error_code"] == "invalid_generation_id"
+    session.stop.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_forwards_generation_guard(handler_harness) -> None:
+    handler, _, session = handler_harness
+
+    ack = await handler.on_bilibili_disconnect(
+        "sid-1",
+        {"expected_generation_id": 1},
+    )
+
+    session.stop.assert_awaited_once_with(expected_generation_id=1)
+    assert ack["accepted"] is True
 
 
 @pytest.mark.asyncio
@@ -147,6 +218,35 @@ async def test_session_status_sink_broadcasts_full_snapshot(handler_harness) -> 
     await handler.emit_status_snapshot(payload)
 
     sio.emit.assert_awaited_once_with("bilibili:danmaku_status", payload)
+
+
+@pytest.mark.asyncio
+async def test_live_event_broadcast_includes_room_and_generation(handler_harness) -> None:
+    handler, sio, _ = handler_harness
+    event = LivestreamEvent(
+        sequence=7,
+        offset_ms=1250,
+        event_type=LivestreamEventType.GIFT,
+        actor_id="viewer-42",
+        text="送出礼物",
+        payload={"user_id": 42, "gift_name": "花"},
+    )
+
+    await handler._broadcast_live_event(event, room_id=123, generation_id=4)
+
+    sio.emit.assert_awaited_once_with(
+        "bilibili:live_event",
+        {
+            "room_id": 123,
+            "generation_id": 4,
+            "sequence": 7,
+            "offset_ms": 1250,
+            "event_type": "gift",
+            "actor_id": "viewer-42",
+            "text": "送出礼物",
+            "payload": {"user_id": 42, "gift_name": "花"},
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -299,7 +399,11 @@ async def test_room_start_binds_profile_llm_before_any_reply() -> None:
     admin.get_or_create_context.assert_awaited_once_with("bilibili")
     assert scene_runtime.bound_llm is not None
     assert scene_runtime.bound_llm._llm is llm
-    session.set_room.assert_awaited_once_with(123, sessdata="")
+    session.set_room.assert_awaited_once_with(
+        123,
+        sessdata="",
+        expected_generation_id=None,
+    )
 
 
 async def test_active_scene_guidance_enters_turn_metadata_and_host_reply_feeds_back() -> None:

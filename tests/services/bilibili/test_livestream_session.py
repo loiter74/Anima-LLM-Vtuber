@@ -9,7 +9,10 @@ import pytest
 from animetta.config import ReplyPolicyConfig
 from animetta.services.bilibili.danmaku_buffer import DanmakuBuffer
 from animetta.services.bilibili.gateway import DanmakuServiceGateway
-from animetta.services.bilibili.livestream_session import LivestreamSession
+from animetta.services.bilibili.livestream_session import (
+    LivestreamSession,
+    StaleGenerationError,
+)
 from animetta.services.bilibili.livestream_state import LivestreamState
 from animetta.services.bilibili.models import (
     DanmakuMessage,
@@ -175,6 +178,63 @@ async def test_hot_switch_stops_old_gateway_and_ignores_stale_callbacks(
     await _settle_callbacks()
 
     assert raw_messages == [(current_message, 200)]
+
+
+@pytest.mark.asyncio
+async def test_expected_generation_rejects_a_stale_controller_atomically(
+    session_harness,
+) -> None:
+    session, gateways, _, _ = session_harness
+
+    results = await asyncio.gather(
+        session.set_room(100, expected_generation_id=0),
+        session.set_room(200, expected_generation_id=0),
+        return_exceptions=True,
+    )
+    accepted = [result for result in results if isinstance(result, dict)]
+    conflicts = [result for result in results if isinstance(result, StaleGenerationError)]
+
+    with pytest.raises(StaleGenerationError, match="generation changed"):
+        await session.stop(expected_generation_id=0)
+
+    assert len(accepted) == len(conflicts) == 1
+    assert accepted[0]["generation_id"] == 1
+    assert session.snapshot()["desired_room_id"] in {100, 200}
+    assert len(gateways) == 1
+
+
+@pytest.mark.asyncio
+async def test_hot_switch_drops_old_generation_events_before_the_raw_sink() -> None:
+    gateways: list[FakeGateway] = []
+    raw_events: list[tuple[str, int, int]] = []
+
+    def factory(room_id: int, sessdata: str) -> FakeGateway:
+        del sessdata
+        gateway = FakeGateway(room_id)
+        gateways.append(gateway)
+        return gateway
+
+    async def event_sink(
+        event: LivestreamEvent,
+        room_id: int,
+        generation_id: int,
+    ) -> None:
+        raw_events.append((event.text, room_id, generation_id))
+
+    session = LivestreamSession(gateway_factory=factory, raw_event_sink=event_sink)
+    await session.set_room(100)
+    old_gateway = gateways[0]
+    await session.set_room(200)
+
+    old_gateway.emit_event(
+        LivestreamEvent(1, 0, LivestreamEventType.DANMAKU, text="stale"),
+    )
+    gateways[1].emit_event(
+        LivestreamEvent(2, 10, LivestreamEventType.DANMAKU, text="current"),
+    )
+    await _settle_callbacks()
+
+    assert raw_events == [("current", 200, 2)]
 
 
 @pytest.mark.asyncio
@@ -427,11 +487,15 @@ def test_danmaku_service_gateway_adapts_existing_service_callbacks() -> None:
 @pytest.mark.asyncio
 async def test_event_metrics_count_engagement_without_entering_reply_path() -> None:
     gateway = FakeGateway(987)
-    raw_events: list[LivestreamEvent] = []
+    raw_events: list[tuple[LivestreamEvent, int, int]] = []
     raw_messages: list[DanmakuMessage] = []
 
-    async def event_sink(event: LivestreamEvent, _room_id: int) -> None:
-        raw_events.append(event)
+    async def event_sink(
+        event: LivestreamEvent,
+        room_id: int,
+        generation_id: int,
+    ) -> None:
+        raw_events.append((event, room_id, generation_id))
 
     async def message_sink(message: DanmakuMessage, _room_id: int) -> None:
         raw_messages.append(message)
@@ -460,7 +524,7 @@ async def test_event_metrics_count_engagement_without_entering_reply_path() -> N
     gateway.emit_event(danmaku)
     await _settle_callbacks()
 
-    assert raw_events == [enter, danmaku]
+    assert raw_events == [(enter, 987, 1), (danmaku, 987, 1)]
     assert [message.text for message in raw_messages] == ["你好？"]
     assert session.event_metrics.received == 2
     assert session.event_metrics.dispatched == 2

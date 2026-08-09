@@ -1088,7 +1088,8 @@
     "connect": {
       "name": "bilibili:connect",
       "payload": {
-        "room_id": "number"
+        "room_id": "number",
+        "expected_generation_id?": "number"
       },
       "ack": {
         "accepted": "boolean",
@@ -1099,7 +1100,9 @@
     },
     "disconnect": {
       "name": "bilibili:disconnect",
-      "payload": {},
+      "payload": {
+        "expected_generation_id?": "number"
+      },
       "ack": {
         "accepted": "boolean",
         "state": "string",
@@ -1110,7 +1113,8 @@
     "update_room": {
       "name": "bilibili:update_room",
       "payload": {
-        "room_id": "number"
+        "room_id": "number",
+        "expected_generation_id?": "number"
       },
       "ack": {
         "accepted": "boolean",
@@ -1143,6 +1147,19 @@
         "generation_id": "number",
         "message": "string",
         "updated_at": "number"
+      }
+    },
+    "live_event": {
+      "name": "bilibili:live_event",
+      "payload": {
+        "room_id": "number",
+        "generation_id": "number",
+        "sequence": "number",
+        "offset_ms": "number",
+        "event_type": "string",
+        "actor_id": "string",
+        "text": "string",
+        "payload": "object"
       }
     },
     "danmaku_ai_reply": {

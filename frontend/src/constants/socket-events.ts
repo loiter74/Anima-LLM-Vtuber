@@ -91,6 +91,7 @@ export const Events = {
     UPDATE_ROOM: socketEvents.bilibili.update_room.name,
     DANMAKU: socketEvents.bilibili.danmaku.name,
     DANMAKU_STATUS: socketEvents.bilibili.danmaku_status.name,
+    LIVE_EVENT: socketEvents.bilibili.live_event.name,
     DANMAKU_AI_REPLY: socketEvents.bilibili.danmaku_ai_reply.name,
   },
   MINECRAFT: {

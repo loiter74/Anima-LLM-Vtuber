@@ -21,7 +21,7 @@ from .reply_queue import DanmakuReplyRuntime, ReplyMetrics, ReplySubmissionResul
 GatewayFactory = Callable[[int, str], DanmakuGateway]
 StatusSink = Callable[[dict[str, object]], Awaitable[None]]
 RawMessageSink = Callable[[DanmakuMessage, int], Awaitable[None]]
-RawEventSink = Callable[[LivestreamEvent, int], Awaitable[None]]
+RawEventSink = Callable[[LivestreamEvent, int, int], Awaitable[None]]
 CandidateSink = Callable[[DanmakuMessage, int, int], Awaitable[None]]
 ReplyDecisionSink = Callable[
     [DanmakuMessage, ReplySubmissionResult, int],
@@ -49,7 +49,11 @@ async def _discard_message(_message: DanmakuMessage, _room_id: int) -> None:
     return None
 
 
-async def _discard_event(_event: LivestreamEvent, _room_id: int) -> None:
+async def _discard_event(
+    _event: LivestreamEvent,
+    _room_id: int,
+    _generation_id: int,
+) -> None:
     return None
 
 
@@ -67,6 +71,10 @@ async def _discard_reply_decision(
     _room_id: int,
 ) -> None:
     return None
+
+
+class StaleGenerationError(RuntimeError):
+    """Reject a control command based on an outdated session snapshot."""
 
 
 class LivestreamSession:
@@ -130,12 +138,19 @@ class LivestreamSession:
         """Return a detached, credential-free view of current state."""
         return self._snapshot.to_dict()
 
-    async def set_room(self, room_id: int, sessdata: str = "") -> dict[str, Any]:
+    async def set_room(
+        self,
+        room_id: int,
+        sessdata: str = "",
+        *,
+        expected_generation_id: int | None = None,
+    ) -> dict[str, Any]:
         """Start or hot-switch to ``room_id`` without blocking the event loop."""
         if room_id <= 0:
             raise ValueError("room_id must be a positive integer")
 
         async with self._lock:
+            self._ensure_expected_generation(expected_generation_id)
             self._loop = asyncio.get_running_loop()
             if (
                 self._gateway is not None
@@ -234,9 +249,14 @@ class LivestreamSession:
 
             return self.snapshot()
 
-    async def stop(self) -> dict[str, Any]:
+    async def stop(
+        self,
+        *,
+        expected_generation_id: int | None = None,
+    ) -> dict[str, Any]:
         """Stop the owned gateway with a bounded, non-blocking wait."""
         async with self._lock:
+            self._ensure_expected_generation(expected_generation_id)
             gateway = self._gateway
             if gateway is None and self._snapshot.state == LivestreamState.STOPPED:
                 return self.snapshot()
@@ -485,7 +505,7 @@ class LivestreamSession:
             return
         self._event_metrics.record_received(event)
         try:
-            await self._raw_event_sink(event, room_id)
+            await self._raw_event_sink(event, room_id, generation)
         except Exception as exc:
             self._event_metrics.record_callback_failure()
             logger.error(
@@ -506,6 +526,13 @@ class LivestreamSession:
             **changes,
             updated_at=self._clock(),
         )
+
+    def _ensure_expected_generation(self, expected_generation_id: int | None) -> None:
+        if (
+            expected_generation_id is not None
+            and expected_generation_id != self._snapshot.generation_id
+        ):
+            raise StaleGenerationError("livestream generation changed")
 
     async def _publish_status(self) -> None:
         try:

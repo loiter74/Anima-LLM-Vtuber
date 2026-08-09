@@ -48,7 +48,10 @@ async def test_validated_jsonl_replays_through_session_and_legacy_sink(tmp_path:
     raw_messages = []
     session = LivestreamSession(
         gateway_factory=factory,
-        raw_event_sink=lambda event, _room_id: _append_async(raw_events, event),
+        raw_event_sink=lambda event, _room_id, _generation_id: _append_async(
+            raw_events,
+            event,
+        ),
         raw_message_sink=lambda message, _room_id: _append_async(raw_messages, message),
     )
 
