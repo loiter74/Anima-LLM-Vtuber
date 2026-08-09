@@ -696,6 +696,50 @@ class TestLLMNodeWithTools:
         assert isinstance(result["messages"][1], AIMessage)
 
     @pytest.mark.asyncio
+    async def test_tool_call_audit_metadata_is_not_added_to_ai_message(self, mock_service_context):
+        mock_chat_model = MagicMock()
+        mock_chat_model.bound_tools = [MagicMock(name="mc_operate_bot")]
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={
+                "content": "正在执行。",
+                "tool_calls": [
+                    {
+                        "id": "call-mission-1",
+                        "name": "mc_operate_bot",
+                        "args": {"operation": "execute", "request_id": "mission-1"},
+                        "arguments_repaired": True,
+                        "arguments_repair": "removed_one_trailing_brace",
+                        "raw_arguments_sha256": "abc123",
+                    }
+                ],
+            }
+        )
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="向前走一步",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        expected_tool_call = {
+            "id": "call-mission-1",
+            "name": "mc_operate_bot",
+            "args": {"operation": "execute", "request_id": "mission-1"},
+        }
+        assert result["tool_calls"] == [expected_tool_call]
+        ai_message = result["messages"][1]
+        assert isinstance(ai_message, AIMessage)
+        assert ai_message.tool_calls[0]["id"] == expected_tool_call["id"]
+        assert ai_message.tool_calls[0]["name"] == expected_tool_call["name"]
+        assert ai_message.tool_calls[0]["args"] == expected_tool_call["args"]
+        assert "arguments_repaired" not in ai_message.tool_calls[0]
+
+    @pytest.mark.asyncio
     async def test_completed_connection_call_forces_a_final_text_response(
         self, mock_service_context
     ):

@@ -638,7 +638,7 @@ async def _llm_with_tools(
                     response.get("content", "") or "Calling tools..."
                 )
                 visible_content = _strip_emotion_tags(raw_content)
-                ai_message = AIMessage(content=visible_content, tool_calls=tool_calls)
+                ai_message = AIMessage(content=visible_content, tool_calls=formatted_tool_calls)
 
                 # after_llm_call notification (non-blocking)
                 _notify_middleware_after(session_id, user_text, visible_content, config)
