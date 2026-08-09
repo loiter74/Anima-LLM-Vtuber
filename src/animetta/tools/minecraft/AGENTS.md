@@ -37,3 +37,11 @@ sibling repository path, Node entrypoint or Minecraft Compose command here.
 Use Python 3.13 and the repository-selected quality groups. The architecture gate
 `py -3.13 scripts/check_minecraft_architecture.py --check` must report zero
 violations. Real runtime startup and Docker verification must run in a sub-agent.
+
+真实 GameBot v2 验收必须复用公开控制面、已有 typed builder 或持久化 request
+payload；不得在临时脚本中重新手写 GoalSpec、删减 ObservationRequest 信封，或擅自给
+workflow target 增加命名空间。提交前先用 `WorkflowRegistry.resolve` 和完整只读观察做
+纯函数门禁，确认解析出的 workflow 与首个 decision。
+
+任务终态以持久化 mission、objective 和 command 状态为准。checkpoint 已满足时允许零
+durable step 完成，此时不得额外要求 `terminal_result` 或 `selected_strategy` 必须存在。

@@ -43,7 +43,10 @@ from animetta.tools.minecraft.skill.trust import (
     stable_environment_fingerprint,
 )
 from animetta.tools.minecraft.survival.registry import WorkflowRegistry
-from animetta.tools.minecraft.survival.workflows import iron_survival_workflow
+from animetta.tools.minecraft.survival.workflows import (
+    diamond_survival_workflow,
+    iron_survival_workflow,
+)
 from animetta.tools.minecraft.tech_tree.graph import build_survival_tech_graph
 from animetta.tools.minecraft.voyager.advancement_store import (
     AdvancementEventRecorder,
@@ -95,10 +98,16 @@ def _make_id(prefix: str) -> str:
 def _budget_policy(config: MinecraftConfig) -> ModeBudgetPolicy:
     distance = float(config.safety.max_distance)
 
-    def limits(actions: int, attempts: int, travel: float, blocks: int) -> ExecutionBudget:
+    def limits(
+        actions: int,
+        attempts: int,
+        travel: float,
+        blocks: int,
+        execution_timeout_ms: int,
+    ) -> ExecutionBudget:
         return ExecutionBudget(
             queue_timeout_ms=60_000,
-            execution_timeout_ms=15 * 60_000,
+            execution_timeout_ms=execution_timeout_ms,
             max_actions=actions,
             max_strategy_attempts=attempts,
             max_travel_distance=min(distance, travel),
@@ -108,10 +117,10 @@ def _budget_policy(config: MinecraftConfig) -> ModeBudgetPolicy:
         )
 
     return ModeBudgetPolicy(
-        atomic=limits(1, 1, 256, 32),
-        live=limits(32, 4, 256, 32),
-        fallback=limits(64, 4, 384, 64),
-        learn=limits(128, 8, 512, 128),
+        atomic=limits(1, 1, 256, 32, 15 * 60_000),
+        live=limits(32, 4, 256, 32, 15 * 60_000),
+        fallback=limits(64, 4, 500, 512, 45 * 60_000),
+        learn=limits(128, 8, 512, 1_024, 60 * 60_000),
     )
 
 
@@ -137,6 +146,7 @@ def _learning_frontier(goal: GoalSpec) -> tuple[str, ...]:
         "furnace",
         "iron_ingot",
         "iron_pickaxe",
+        "diamond",
         "gold_ore",
     ):
         node = graph.get(node_id)
@@ -170,6 +180,7 @@ def _learning_proposal(node: str) -> dict:
         "furnace": ("craft", {"recipe": "furnace", "count": 1}),
         "iron_ingot": ("smelt", {"item": "raw_iron", "fuel": "coal", "count": 1}),
         "iron_pickaxe": ("craft", {"recipe": "iron_pickaxe", "count": 1}),
+        "diamond": ("collect", {"block_type": "diamond_ore", "count": 1}),
         "gold_ore": ("collect", {"block_type": "gold_ore", "count": 1}),
     }
     capability, parameters = proposals[node]
@@ -343,6 +354,7 @@ async def assemble_control_plane(
     )
     workflow_registry = WorkflowRegistry()
     workflow_registry.register(iron_survival_workflow())
+    workflow_registry.register(diamond_survival_workflow())
 
     environment_fingerprint = stable_environment_fingerprint(manifest.profile)
     live_revisions, live_trusts = await skill_store.load_live_catalog(

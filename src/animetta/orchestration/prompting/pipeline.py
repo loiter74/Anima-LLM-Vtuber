@@ -10,6 +10,7 @@ from .assembler import assemble
 from .context import build_context
 from .sources import (
     AffinityPromptSource,
+    DeveloperLivePromptSource,
     ImprovisedChatPromptSource,
     MemoryPromptSource,
     MinecraftMissionPromptSource,
@@ -49,6 +50,7 @@ async def compile(
         RuntimePersonalityPromptSource(),
         SceneGuidancePromptSource(),
         ImprovisedChatPromptSource(),
+        DeveloperLivePromptSource(),
         RoleplayGuardPromptSource(),
         MemoryPromptSource(),
         MinecraftMissionPromptSource(),

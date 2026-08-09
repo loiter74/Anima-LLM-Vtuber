@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 
 from animetta.avatar.performance import validated_performance_payload
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
-from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
 
 from .media_status import MediaStatus
 from .output_node import _compute_volumes, _public_tts_degradation_reason
@@ -17,7 +17,10 @@ from .state import AgentState, log_timing
 from .translation_state import translation_state
 
 
-def _delivery(state: AgentState, config: RunnableConfig | None) -> tuple[ChatDelivery | None, str]:
+def _delivery(
+    state: AgentState,
+    config: RunnableConfig | None,
+) -> tuple[ChatDelivery | None, str | None]:
     configurable = config.get("configurable", {}) if config else {}
     sio = configurable.get("socketio")
     if sio is None:
@@ -37,7 +40,7 @@ def _delivery(state: AgentState, config: RunnableConfig | None) -> tuple[ChatDel
         if recorder is not None
         else ChatDelivery(sio, identity, mode)
     )
-    return delivery, state.get("channel_id") or state["session_id"]
+    return delivery, resolve_delivery_target(state)
 
 
 async def conversation_start_node(

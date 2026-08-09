@@ -3,6 +3,7 @@ import type { ChatCommandPayload } from '@/types/socket-events'
 import { activateChatTask } from './chatTaskGate'
 
 export const CHAT_CONVERSATION_STORAGE_KEY = 'animetta.chat.conversation_id'
+export const DEVELOPER_CONVERSATION_STORAGE_KEY = 'animetta.developer.conversation_id'
 
 type UuidFactory = () => string
 type ChatEmitter = { emit: (event: string, payload: ChatCommandPayload) => unknown }
@@ -17,14 +18,19 @@ export function getStableConversationId(
   storage: Pick<Storage, 'getItem' | 'setItem'> = window.localStorage,
   randomUUID: UuidFactory = () => crypto.randomUUID(),
 ): string {
-  const persisted = storage.getItem(CHAT_CONVERSATION_STORAGE_KEY)
-  if (isCanonicalUuid(persisted)) return persisted
+  return getStableConversationIdForKey(CHAT_CONVERSATION_STORAGE_KEY, storage, randomUUID)
+}
 
+function getStableConversationIdForKey(
+  key: string,
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  randomUUID: UuidFactory,
+): string {
+  const persisted = storage.getItem(key)
+  if (isCanonicalUuid(persisted)) return persisted
   const generated = randomUUID()
-  if (!isCanonicalUuid(generated)) {
-    throw new Error('randomUUID returned a non-canonical UUID')
-  }
-  storage.setItem(CHAT_CONVERSATION_STORAGE_KEY, generated)
+  if (!isCanonicalUuid(generated)) throw new Error('randomUUID returned a non-canonical UUID')
+  storage.setItem(key, generated)
   return generated
 }
 
@@ -72,5 +78,26 @@ export function sendCanonicalChatText(
   const command = createCanonicalChatCommand(text, conversationId, randomUUID)
   activateChatTask(command)
   socket.emit(Events.CHAT.TEXT, command)
+  return command
+}
+
+export function sendDeveloperChatText(
+  socket: ChatEmitter,
+  text: string,
+  dependencies: {
+    storage?: Pick<Storage, 'getItem' | 'setItem'>
+    randomUUID?: UuidFactory
+  } = {},
+): ChatCommandPayload {
+  const randomUUID = dependencies.randomUUID ?? (() => crypto.randomUUID())
+  const storage = dependencies.storage ?? window.localStorage
+  const conversationId = getStableConversationIdForKey(
+    DEVELOPER_CONVERSATION_STORAGE_KEY,
+    storage,
+    randomUUID,
+  )
+  const command = createCanonicalChatCommand(text, conversationId, randomUUID)
+  activateChatTask(command)
+  socket.emit(Events.CHAT.DEVELOPER_TEXT, command)
   return command
 }

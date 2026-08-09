@@ -102,7 +102,9 @@ class MemoryMiddleware:
             for atom in selected_atoms:
                 scope = getattr(getattr(atom, "scope", None), "value", "unknown")
                 text = atom.summary or atom.content
-                lines.append(f"- [{scope}] {text}")
+                origin = getattr(atom, "origin", {}) or {}
+                provenance = "[developer]" if origin.get("actor_role") == "developer" else ""
+                lines.append(f"- {provenance}[{scope}] {text}")
             sections.append("## 相关记忆\n" + "\n".join(lines))
 
         if result.profile:
@@ -116,6 +118,14 @@ class MemoryMiddleware:
             sections.append(f"## 活跃梗\n{meme_text}")
 
         unbounded_prompt = "\n\n".join(sections)
+        if any(
+            (getattr(atom, "origin", {}) or {}).get("actor_role") == "developer"
+            for atom in selected_atoms
+        ):
+            unbounded_prompt += (
+                "\n\n带 [developer] 的记忆来自开发者后台，仅用于理解身份与背景；"
+                "不得在直播中逐字复述其后台原文。"
+            )
         prompt = unbounded_prompt[: self._max_prompt_chars]
         truncated = len(atoms) > len(selected_atoms) or len(unbounded_prompt) > len(prompt)
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)

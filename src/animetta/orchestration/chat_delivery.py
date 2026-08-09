@@ -31,6 +31,21 @@ from animetta.orchestration.socket_events import (
 _CORRELATED_FIELDS = (*IDENTITY_FIELDS, "turn_id")
 
 
+def resolve_delivery_target(state: Mapping[str, Any]) -> str | None:
+    """Broadcast only server-trusted developer livestream replies."""
+
+    metadata = state.get("metadata")
+    if (
+        isinstance(metadata, Mapping)
+        and metadata.get("source") == "developer_console"
+        and metadata.get("actor_role") == "developer"
+        and metadata.get("audience") == "livestream"
+    ):
+        return None
+    channel_id = state.get("channel_id")
+    return str(channel_id or state.get("session_id") or "unknown")
+
+
 @dataclass(frozen=True, slots=True)
 class ChatDelivery:
     """Attach immutable turn identity and emit exactly one wire generation."""

@@ -17,6 +17,7 @@ class SectionRole:
     RUNTIME_PERSONALITY = "runtime_personality"
     IMPROVISATION = "improvisation"
     SCENE_GUIDANCE = "scene_guidance"
+    DEVELOPER_LIVE = "developer_live"
     CORRECTION = "correction"
     MEMORY = "memory"
     TOOL_INSTRUCTION = "tool_instruction"
@@ -30,6 +31,7 @@ class SectionPriority(IntEnum):
     RUNTIME_PERSONALITY = 200
     IMPROVISATION = 225
     SCENE_GUIDANCE = 225
+    DEVELOPER_LIVE = 240
     CORRECTION = 250  # After runtime personality, before memory
     MEMORY = 300
     TOOL_INSTRUCTION = 400
@@ -72,6 +74,9 @@ class PromptContext:
     scene_guidance: SceneGuidance | None = None
     scene_guidance_warnings: list[str] = field(default_factory=list)
     available_tool_names: frozenset[str] = frozenset()
+    actor_role: str | None = None
+    source: str | None = None
+    audience: str | None = None
 
 
 class PromptSource(Protocol):

@@ -119,7 +119,7 @@ class RuntimeDiscoveryProjector:
             )
         )
         acquired: list[WorldFact] = []
-        if goal.intent not in {"acquire", "discover"}:
+        if fallback_only or goal.intent not in {"acquire", "discover"}:
             return RuntimeDiscoveryResult(observed=observed)
         for receipt in receipts:
             if receipt.outcome is not ReceiptOutcome.SUCCESS:

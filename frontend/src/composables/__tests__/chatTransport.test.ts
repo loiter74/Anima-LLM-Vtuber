@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Events } from '@/constants/socket-events'
 import {
   CHAT_CONVERSATION_STORAGE_KEY,
+  DEVELOPER_CONVERSATION_STORAGE_KEY,
   createCanonicalChatCommand,
   getStableConversationId,
   sendCanonicalChatText,
+  sendDeveloperChatText,
 } from '@/composables/chatTransport'
 
 const IDS = [
@@ -64,5 +66,19 @@ describe('chatTransport', () => {
     expect(socket.emit).toHaveBeenCalledOnce()
     expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.TEXT, command)
     expect(command.turn_id).toBe(command.task_id)
+  })
+
+  it('uses a separate stable identity and the trusted developer event', () => {
+    const socket = { emit: vi.fn() }
+    const values = [...IDS]
+
+    const command = sendDeveloperChatText(socket, '后台问题', {
+      storage: localStorage,
+      randomUUID: () => values.shift()!,
+    })
+
+    expect(localStorage.getItem(DEVELOPER_CONVERSATION_STORAGE_KEY)).toBe(IDS[0])
+    expect(localStorage.getItem(CHAT_CONVERSATION_STORAGE_KEY)).toBeNull()
+    expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.DEVELOPER_TEXT, command)
   })
 })

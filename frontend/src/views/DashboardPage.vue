@@ -1,1007 +1,524 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import InputBar from '@/components/chat/InputBar.vue'
+import MessageBubble from '@/components/chat/MessageBubble.vue'
+import TitleBar from '@/components/layout/TitleBar.vue'
+import { sendDeveloperChatText } from '@/composables/chatTransport'
+import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
 import {
   useDashboardStore,
-  type Trace,
-  type TraceDetail,
-  type TraceOperation,
-} from '../stores/dashboardStore'
-
-type TraceNodeStatus = 'success' | 'warning' | 'error' | 'skipped'
-
-interface TraceNodeDetail {
-  id: string
-  label: string
-  role: string
-  status: TraceNodeStatus
-  durationMs: number
-  input: string
-  output: string
-  attributes: Array<{ label: string; value: string }>
-  events: string[]
-}
+  type LiveActivity,
+  type LiveContent,
+  type LiveTurn,
+} from '@/stores/dashboardStore'
+import type { ChatMessage } from '@/types/chat'
 
 const store = useDashboardStore()
+const selectedTraceId = ref('')
+const historyLocked = ref(false)
+const pendingTurns = ref<Array<{ traceId: string; text: string; startedAt: number }>>([])
+let summaryTimer: ReturnType<typeof setInterval> | null = null
+let detailTimer: ReturnType<typeof setInterval> | null = null
 
-const selectedTraceIndex = ref(0)
-const selectedNodeId = ref('')
-const userSelectedNode = ref(false)
-const historyOpen = ref(false)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-const selectedTrace = computed(() => store.traces[selectedTraceIndex.value] ?? null)
-const selectedTraceDetail = computed(() => {
-  const traceId = selectedTrace.value?.trace_id
-  return traceId ? (store.traceDetails[traceId] ?? null) : null
-})
-const traceNodes = computed(() => buildNodeDetails(selectedTrace.value, selectedTraceDetail.value))
-const selectedNode = computed(
+const selectedTurn = computed(
+  () => store.liveTurns.find((turn) => turn.trace_id === selectedTraceId.value) ?? null,
+)
+const selectedDetail = computed(() => store.liveTurnDetails[selectedTraceId.value] ?? null)
+const metrics = computed(
   () =>
-    traceNodes.value.find((node) => node.id === selectedNodeId.value) ??
-    traceNodes.value[0] ??
-    null,
+    store.liveMetrics ?? {
+      turn_count: 0,
+      model_calls: 0,
+      tool_calls: 0,
+      tool_success_rate: 100,
+      mc_command_count: 0,
+      mc_status: 'idle',
+    },
 )
-const canGoNewer = computed(() => selectedTraceIndex.value > 0)
-const canGoOlder = computed(() => selectedTraceIndex.value < store.traces.length - 1)
-const healthTone = computed(() => {
-  if (!selectedTrace.value) return 'idle'
-  if (['failed', 'cancelled', 'aborted'].includes(selectedTrace.value.outcome ?? '')) return 'error'
-  if (selectedTrace.value.outcome === 'success') return 'success'
-  return 'warning'
-})
-const executedNodeCount = computed(
-  () => traceNodes.value.filter((node) => node.status !== 'skipped').length,
-)
-const selectedTraceTime = computed(() => formatTime(selectedTrace.value?.started_at))
-const selectedTraceTitle = computed(() => traceTitle(selectedTrace.value))
+const metricItems = computed(() => [
+  { label: '本场回合', value: String(metrics.value.turn_count) },
+  { label: '模型调用', value: String(metrics.value.model_calls) },
+  { label: '工具调用', value: String(metrics.value.tool_calls) },
+  { label: '工具成功率', value: `${metrics.value.tool_success_rate}%` },
+  { label: 'MC 指令', value: metrics.value.mc_status },
+])
 
 onMounted(async () => {
-  await store.fetchAll()
-  clampSelectedTrace()
-  await loadSelectedTraceDetail()
-  selectPreferredNode()
-  refreshTimer = setInterval(() => store.fetchAll(), 10000)
+  await refreshSummary()
+  followLatest()
+  await refreshDetail()
+  summaryTimer = setInterval(() => {
+    if (!document.hidden) void refreshSummary()
+  }, 2000)
+  detailTimer = setInterval(() => {
+    if (!document.hidden) void refreshDetail()
+  }, 1000)
+  getSocket()?.on(Events.MINECRAFT.COMMAND_TRANSITION, onMinecraftTransition)
 })
 
 onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
+  if (summaryTimer) clearInterval(summaryTimer)
+  if (detailTimer) clearInterval(detailTimer)
+  getSocket()?.off(Events.MINECRAFT.COMMAND_TRANSITION, onMinecraftTransition)
 })
 
-watch(() => store.traces.length, clampSelectedTrace)
 watch(
-  () => selectedTrace.value?.trace_id,
+  () => store.liveTurns[0]?.trace_id,
   () => {
-    userSelectedNode.value = false
-    void loadSelectedTraceDetail()
-  },
-)
-watch(
-  () => selectedTraceDetail.value?.trace_id,
-  (traceId) => {
-    if (traceId && traceId === selectedTrace.value?.trace_id) {
-      selectPreferredNode()
-    }
+    reconcilePending()
+    if (!historyLocked.value) followLatest()
   },
 )
 
-function clampSelectedTrace() {
-  if (!store.traces.length) {
-    selectedTraceIndex.value = 0
-    return
-  }
-  selectedTraceIndex.value = Math.min(selectedTraceIndex.value, store.traces.length - 1)
+watch(selectedTraceId, () => void refreshDetail())
+
+function onMinecraftTransition() {
+  void refreshDetail()
+  void refreshSummary()
 }
 
-function selectPreferredNode() {
-  if (userSelectedNode.value) return
-  const errorNode = traceNodes.value.find((node) => node.status === 'error')
-  const activeLlmNode = traceNodes.value.find(
-    (node) => node.label.toLowerCase().includes('llm') && node.status !== 'skipped',
-  )
-  const firstCapturedNode = traceNodes.value.find((node) => node.status !== 'skipped')
-  selectedNodeId.value = errorNode?.id ?? activeLlmNode?.id ?? firstCapturedNode?.id ?? ''
+async function refreshSummary() {
+  await store.fetchLive(20)
 }
 
-function goNewer() {
-  if (canGoNewer.value) selectedTraceIndex.value -= 1
+async function refreshDetail() {
+  if (selectedTraceId.value) await store.fetchLiveTurn(selectedTraceId.value)
 }
 
-function goOlder() {
-  if (canGoOlder.value) selectedTraceIndex.value += 1
+function followLatest() {
+  historyLocked.value = false
+  selectedTraceId.value = store.liveTurns[0]?.trace_id ?? ''
 }
 
-function goLatest() {
-  selectedTraceIndex.value = 0
+function selectTurn(traceId: string) {
+  selectedTraceId.value = traceId
+  historyLocked.value = traceId !== store.liveTurns[0]?.trace_id
 }
 
-function selectTrace(index: number) {
-  selectedTraceIndex.value = index
-  historyOpen.value = false
-}
-
-function selectNode(nodeId: string) {
-  userSelectedNode.value = true
-  selectedNodeId.value = nodeId
-}
-
-async function loadSelectedTraceDetail() {
-  const traceId = selectedTrace.value?.trace_id
-  if (!traceId) return
-  await store.fetchTraceDetail(traceId)
-  if (selectedTrace.value?.trace_id === traceId) {
-    await nextTick()
-    selectPreferredNode()
-  }
-}
-
-function buildNodeDetails(trace: Trace | null, detail: TraceDetail | null): TraceNodeDetail[] {
-  if (!detail) return []
-  const operations = flattenOperations(detail.operation_tree)
-  return operations.map((operation) => {
-    const events = detail.events.filter((event) => event.operation_id === operation.operation_id)
-    const isRoot = operation.parent_operation_id === null
-    const input = isRoot
-      ? contentLabel(detail.content.user, '还没有采集到用户输入。')
-      : `上游操作 · ${operation.parent_operation_id}`
-    const output =
-      operation.error_summary ||
-      events.map((event) => `${event.direction} · ${event.name} · ${event.phase}`).join('\n') ||
-      (operation.name.includes('output')
-        ? contentLabel(detail.content.assistant, '未采集响应正文。')
-        : '操作已提交，未保存业务载荷。')
-
-    return {
-      id: operation.operation_id,
-      label: operation.name,
-      role: layerRole(operation.layer),
-      status: normalizeOperationStatus(operation.status),
-      durationMs: Math.round(operation.duration_ms ?? 0),
-      input,
-      output,
-      attributes: [
-        { label: 'layer', value: operation.layer },
-        { label: 'provider', value: operation.provider ?? '-' },
-        { label: 'model', value: operation.model ?? '-' },
-        { label: 'critical', value: operation.critical_path ? 'yes' : 'no' },
-      ],
-      events: events.length
-        ? events.map((event) => `${event.direction} · ${event.name} · ${event.phase}`)
-        : ['no committed event'],
-    }
+function sendDeveloperText(text: string) {
+  const socket = getSocket()
+  if (!socket) return
+  const command = sendDeveloperChatText(socket, text)
+  pendingTurns.value.unshift({
+    traceId: command.task_id,
+    text,
+    startedAt: Date.now() / 1000,
   })
+  if (!historyLocked.value) selectedTraceId.value = command.task_id
+  void refreshSummary()
 }
 
-function flattenOperations(roots: TraceOperation[]): TraceOperation[] {
-  return roots.flatMap((operation) => [operation, ...flattenOperations(operation.children ?? [])])
+function reconcilePending() {
+  const committed = new Set(store.liveTurns.map((turn) => turn.trace_id))
+  pendingTurns.value = pendingTurns.value.filter((turn) => !committed.has(turn.traceId))
 }
 
-function layerRole(layer: TraceOperation['layer']) {
-  const roles: Record<TraceOperation['layer'], string> = {
-    transport: '传输入口',
-    workflow: '工作流节点',
-    service: '服务调用',
-    memory: '记忆处理',
-    delivery: '响应投递',
-  }
-  return roles[layer]
-}
-
-function normalizeOperationStatus(status: TraceOperation['status']): TraceNodeStatus {
-  if (status === 'success') return 'success'
-  if (status === 'skipped') return 'skipped'
-  if (status === 'degraded') return 'warning'
-  if (status === 'error' || status === 'cancelled') return 'error'
-  return 'warning'
-}
-
-function contentLabel(
-  content: TraceDetail['content']['user'] | TraceDetail['content']['assistant'],
-  fallback: string,
-) {
+function contentText(content: LiveContent, fallback: string) {
   if (content.text) return content.text
-  if (content.digest) {
-    return `已脱敏 · ${content.character_count ?? 0} chars · ${content.digest.slice(0, 12)}…`
-  }
+  if (content.digest)
+    return `已脱敏 · ${content.character_count ?? 0} 字 · ${content.digest.slice(0, 10)}…`
   return fallback
 }
 
-function traceTitle(trace: Trace | null) {
-  if (!trace) return '等待 trace'
-  const detail = store.traceDetails[trace.trace_id]
-  return detail ? contentLabel(detail.content.user, trace.trace_id) : trace.trace_id
+function sourceLabel(turn: LiveTurn) {
+  return turn.actor_role === 'developer' ? '开发者' : '弹幕'
 }
 
-function statusLabel(status: TraceNodeStatus | NonNullable<Trace['outcome']>) {
-  const labels: Record<string, string> = {
-    success: 'OK',
-    warning: 'WARN',
-    error: 'FAIL',
-    skipped: 'SKIP',
-    pending: 'RUN',
-    degraded: 'DEGRADED',
-    failed: 'FAIL',
-    cancelled: 'CANCEL',
-    aborted: 'ABORT',
+function turnMessage(turn: LiveTurn, role: 'user' | 'assistant'): ChatMessage {
+  const content = role === 'user' ? turn.content.user : turn.content.assistant
+  return {
+    id: `${turn.trace_id}:${role}`,
+    role,
+    text: contentText(content, role === 'user' ? '输入已接收' : '模型正在组织公开回答…'),
+    timestamp: turn.started_at * 1000,
+    status: role === 'assistant' && !turn.finished_at ? 'streaming' : 'complete',
+    source: 'text',
+    message_id: turn.message_id,
+    conversation_id: turn.conversation_id,
+    task_id: turn.trace_id,
+    turn_id: turn.trace_id,
   }
-  return labels[status] ?? status.toUpperCase()
 }
 
-function formatDuration(duration?: number) {
-  if (!duration) return '0 ms'
-  if (duration >= 1000) return `${(duration / 1000).toFixed(2)} s`
-  return `${Math.round(duration)} ms`
+function pendingMessage(pending: {
+  traceId: string
+  text: string
+  startedAt: number
+}): ChatMessage {
+  return {
+    id: pending.traceId,
+    role: 'user',
+    text: pending.text,
+    timestamp: pending.startedAt * 1000,
+    status: 'complete',
+    source: 'text',
+    task_id: pending.traceId,
+    turn_id: pending.traceId,
+  }
 }
 
-function formatTime(value?: number | string) {
-  if (!value) return '--:--'
-  const date = new Date(typeof value === 'number' ? value * 1000 : value)
-  if (Number.isNaN(date.getTime())) return value
+function formatTime(value?: number | null) {
+  if (!value) return '--:--:--'
   return new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  }).format(date)
+  }).format(new Date(value * 1000))
+}
+
+function formatDuration(value?: number | null) {
+  if (value == null) return '运行中'
+  return value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${Math.round(value)} ms`
+}
+
+function activityTone(activity: LiveActivity) {
+  if (activity.status === 'success') return 'border-c-success/40 bg-c-success/10 text-c-success'
+  if (activity.status === 'error' || activity.status === 'cancelled') {
+    return 'border-c-error/40 bg-c-error/10 text-c-error'
+  }
+  return 'border-c-warning/40 bg-c-warning/10 text-c-warning'
+}
+
+function activityDotTone(activity: LiveActivity) {
+  if (activity.status === 'success') return 'bg-c-success'
+  if (activity.status === 'error' || activity.status === 'cancelled') return 'bg-c-error'
+  return 'bg-c-warning'
+}
+
+function rawValue(activity: LiveActivity, key: string) {
+  const value = activity.attributes[key]
+  return typeof value === 'string' && value ? value : null
 }
 </script>
 
 <template>
-  <div class="trace-dashboard">
-    <header class="trace-hero">
-      <div>
-        <p class="eyebrow">Trace Debug Dashboard</p>
-        <h1>对话链路观测</h1>
-        <p class="summary">每次对话按节点展开，优先回答“这一次为什么坏了”，再决定是否全量重试。</p>
-      </div>
+  <div class="ops-shell flex h-full min-h-0 flex-col text-c-text" data-testid="live-ops-dashboard">
+    <TitleBar />
 
-      <div class="hero-actions">
-        <button class="icon-btn" data-testid="newer-trace" :disabled="!canGoNewer" @click="goNewer">
-          <span aria-hidden="true">←</span>
-          <span class="sr-only">上一条更新的 trace</span>
-        </button>
-        <button class="icon-btn" data-testid="older-trace" :disabled="!canGoOlder" @click="goOlder">
-          <span aria-hidden="true">→</span>
-          <span class="sr-only">上一条更旧的 trace</span>
-        </button>
-        <button class="ghost-btn" :disabled="selectedTraceIndex === 0" @click="goLatest">
-          Latest
-        </button>
-        <button class="primary-btn" @click="store.fetchAll">全量重试</button>
-      </div>
-    </header>
+    <main class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 lg:overflow-hidden">
+      <header class="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1">
+        <div class="min-w-52">
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-c-success shadow-[0_0_8px_var(--c-success)]" />
+            <h1 class="text-base font-semibold">直播执行</h1>
+          </div>
+          <p class="mt-1 text-xs text-c-text-muted">
+            开发者输入仅在后台可见，公开回答自动进入直播链路
+          </p>
+        </div>
 
-    <section class="status-strip">
-      <div class="metric">
-        <span>当前状态</span>
-        <strong :class="`tone-${healthTone}`">
-          {{ selectedTrace?.outcome ? statusLabel(selectedTrace.outcome) : 'RUN' }}
-        </strong>
-      </div>
-      <div class="metric">
-        <span>耗时</span>
-        <strong>{{ formatDuration(selectedTrace?.duration_ms ?? undefined) }}</strong>
-      </div>
-      <div class="metric">
-        <span>节点</span>
-        <strong>{{ executedNodeCount }}/{{ traceNodes.length }}</strong>
-      </div>
-      <div class="metric">
-        <span>后台任务</span>
-        <strong>
-          {{ selectedTraceDetail?.post_turn.completed ?? 0 }} done ·
-          {{ selectedTraceDetail?.post_turn.pending ?? 0 }} pending ·
-          {{ selectedTraceDetail?.post_turn.failed ?? 0 }} failed
-        </strong>
-      </div>
-      <div class="metric">
-        <span>更新时间</span>
-        <strong>{{ selectedTraceTime }}</strong>
-      </div>
-    </section>
-
-    <main class="workbench">
-      <aside class="history-panel" :class="{ collapsed: !historyOpen }" aria-label="历史 Trace">
-        <button
-          class="history-toggle"
-          data-testid="history-toggle"
-          :aria-expanded="historyOpen"
-          @click="historyOpen = !historyOpen"
-        >
-          <span class="history-toggle-main">
-            <span class="eyebrow">历史 Trace</span>
-            <strong>{{ selectedTraceTitle }}</strong>
-            <small>{{ store.traces.length }} runs · {{ selectedTraceTime }}</small>
-          </span>
-          <span class="history-toggle-action">{{ historyOpen ? '收起' : '展开' }}</span>
-        </button>
-
-        <div v-if="historyOpen" class="trace-list" data-testid="history-traces">
-          <button
-            v-for="(trace, index) in store.traces"
-            :key="trace.trace_id"
-            class="trace-row"
-            :class="{ active: index === selectedTraceIndex }"
-            @click="selectTrace(index)"
+        <dl class="flex min-w-0 flex-1 items-center justify-end overflow-x-auto">
+          <div
+            v-for="item in metricItems"
+            :key="item.label"
+            class="min-w-24 border-l border-c-border px-4 first:border-l-0"
           >
-            <span class="row-status" :class="`status-${trace.outcome ?? 'pending'}`">
-              {{ trace.outcome ? statusLabel(trace.outcome) : 'RUN' }}
-            </span>
-            <span class="row-main">
-              <strong>{{ traceTitle(trace) }}</strong>
-              <small
-                >{{ formatTime(trace.started_at) }} ·
-                {{ formatDuration(trace.duration_ms ?? undefined) }}</small
-              >
-            </span>
-          </button>
-          <div v-if="!store.traces.length" class="empty-state">
-            暂无 trace，下一次对话完成后会显示在这里。
+            <dt class="whitespace-nowrap text-10px text-c-text-muted">{{ item.label }}</dt>
+            <dd class="mt-0.5 whitespace-nowrap font-mono text-sm font-semibold uppercase">
+              {{ item.value }}
+            </dd>
           </div>
-        </div>
-      </aside>
+        </dl>
+      </header>
 
-      <section class="graph-panel">
-        <div class="graph-toolbar">
-          <div>
-            <p class="eyebrow">Flow Graph</p>
-            <h2>{{ selectedTraceTitle }}</h2>
-          </div>
-          <span class="trace-id">{{ selectedTrace?.trace_id ?? 'no-trace' }}</span>
-        </div>
-
-        <div class="flow-canvas" aria-label="对话节点流程">
-          <template v-for="(node, index) in traceNodes" :key="node.id">
-            <button
-              class="flow-node"
-              :class="[`node-${node.status}`, { selected: selectedNodeId === node.id }]"
-              :data-testid="`trace-node-${node.id}`"
-              @click="selectNode(node.id)"
-            >
-              <span class="node-topline">
-                <span>{{ node.label }}</span>
-                <small>{{ statusLabel(node.status) }}</small>
-              </span>
-              <strong>{{ node.role }}</strong>
-              <span>{{ formatDuration(node.durationMs) }}</span>
-            </button>
-            <div v-if="index < traceNodes.length - 1" class="flow-edge" aria-hidden="true">
-              <span />
-            </div>
-          </template>
-        </div>
-
-        <div class="data-flow">
-          <div>
-            <span>输入</span>
-            <p>{{ selectedNode?.input }}</p>
-          </div>
-          <div>
-            <span>输出</span>
-            <p>{{ selectedNode?.output }}</p>
-          </div>
-        </div>
-      </section>
-
-      <aside class="detail-panel" aria-label="节点详情">
-        <div class="panel-heading">
-          <p class="eyebrow">节点详情</p>
-          <span v-if="selectedNode" :class="`status-pill status-${selectedNode.status}`">
-            {{ statusLabel(selectedNode.status) }}
-          </span>
-        </div>
-
-        <template v-if="selectedNode">
-          <h2>{{ selectedNode.label }}</h2>
-          <p class="detail-role">{{ selectedNode.role }}</p>
-
-          <div class="attribute-grid">
-            <div v-for="item in selectedNode.attributes" :key="item.label">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-            </div>
+      <div class="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)]">
+        <section class="glass flex min-h-136 flex-col overflow-hidden lg:min-h-0">
+          <div
+            class="flex shrink-0 items-start justify-between gap-4 border-b border-c-border px-5 py-4"
+          >
             <div>
-              <span>duration</span>
-              <strong>{{ formatDuration(selectedNode.durationMs) }}</strong>
+              <h2 class="text-sm font-semibold">开发者对话</h2>
+              <p class="mt-1 text-xs text-c-text-muted">统一显示后台输入、弹幕回合与公开回答</p>
+            </div>
+            <span
+              class="whitespace-nowrap rounded-lg bg-c-accent-soft px-2 py-1 text-10px text-c-accent"
+            >
+              后台私密输入
+            </span>
+          </div>
+
+          <div class="ops-scroll min-h-0 flex-1 overflow-y-auto" data-testid="live-turn-list">
+            <button
+              v-for="pending in pendingTurns"
+              :key="pending.traceId"
+              class="w-full border-l-2 border-c-accent border-b border-c-border bg-c-panel/35 px-5 py-4 text-left"
+              :aria-label="`查看投递中的开发者回合 ${pending.traceId}`"
+              @click="selectTurn(pending.traceId)"
+            >
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <span class="text-xs font-medium text-c-accent">开发者 · 投递中</span>
+                <span class="font-mono text-10px text-c-text-muted">{{
+                  formatTime(pending.startedAt)
+                }}</span>
+              </div>
+              <div class="flex flex-col">
+                <MessageBubble :message="pendingMessage(pending)" />
+              </div>
+            </button>
+
+            <button
+              v-for="turn in store.liveTurns"
+              :key="turn.trace_id"
+              class="w-full border-l-2 border-b border-c-border px-5 py-4 text-left transition-colors duration-200"
+              :class="
+                turn.trace_id === selectedTraceId
+                  ? 'border-l-c-accent bg-c-panel/45'
+                  : 'border-l-transparent hover:bg-c-panel/25'
+              "
+              :data-trace-id="turn.trace_id"
+              :aria-pressed="turn.trace_id === selectedTraceId"
+              @click="selectTurn(turn.trace_id)"
+            >
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span
+                    class="rounded-lg px-2 py-1 text-10px font-medium"
+                    :class="
+                      turn.actor_role === 'developer'
+                        ? 'bg-c-accent-soft text-c-accent'
+                        : 'bg-c-blue/10 text-c-blue'
+                    "
+                  >
+                    {{ sourceLabel(turn) }}
+                  </span>
+                  <span class="truncate font-mono text-10px text-c-text-muted">
+                    {{ turn.trace_id.slice(0, 8) }}
+                  </span>
+                </div>
+                <span class="whitespace-nowrap font-mono text-10px text-c-text-muted">
+                  {{ formatTime(turn.started_at) }} · {{ formatDuration(turn.duration_ms) }}
+                </span>
+              </div>
+              <div class="flex flex-col">
+                <MessageBubble :message="turnMessage(turn, 'user')" />
+                <MessageBubble :message="turnMessage(turn, 'assistant')" />
+              </div>
+            </button>
+
+            <div
+              v-if="!pendingTurns.length && !store.liveTurns.length"
+              class="grid min-h-72 place-items-center px-6 text-center"
+            >
+              <div>
+                <p class="text-sm text-c-text-secondary">还没有直播回合</p>
+                <p class="mt-1 text-xs text-c-text-muted">从下方输入一个话题，或等待下一条弹幕</p>
+              </div>
             </div>
           </div>
 
-          <div class="event-list">
-            <span>数据流事件</span>
-            <ol>
-              <li v-for="event in selectedNode.events" :key="event">{{ event }}</li>
-            </ol>
+          <div class="shrink-0 border-t border-c-border bg-c-surface/55 px-4 pb-4 pt-3">
+            <p class="mb-2 px-1 text-10px text-c-text-muted">
+              输入不会进入字幕或语音，AI 的公开回答会自动播出
+            </p>
+            <InputBar
+              :send-text="sendDeveloperText"
+              :show-voice="false"
+              placeholder="从后台向直播中的 AI 提出话题…"
+            />
           </div>
-        </template>
-      </aside>
+        </section>
+
+        <aside class="glass flex min-h-136 flex-col overflow-hidden lg:min-h-0">
+          <div class="shrink-0 border-b border-c-border px-5 py-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h2 class="text-sm font-semibold">执行检查器</h2>
+                <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
+                  {{
+                    selectedTurn
+                      ? `${sourceLabel(selectedTurn)} · ${selectedTurn.trace_id}`
+                      : '选择一个回合查看执行阶段'
+                  }}
+                </p>
+              </div>
+              <button
+                class="shrink-0 rounded-lg border border-c-border px-2.5 py-1.5 text-10px text-c-text-secondary transition-colors duration-200 hover:border-c-border-accent hover:text-c-text"
+                data-testid="follow-latest"
+                @click="followLatest"
+              >
+                {{ historyLocked ? '回到最新' : '跟随最新' }}
+              </button>
+            </div>
+
+            <div
+              v-if="selectedTurn"
+              class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-10px"
+            >
+              <span class="text-c-text-muted">
+                来源
+                <strong class="font-medium text-c-text-secondary">{{
+                  sourceLabel(selectedTurn)
+                }}</strong>
+              </span>
+              <span class="text-c-text-muted">
+                总耗时
+                <strong class="font-mono font-medium text-c-text-secondary">{{
+                  formatDuration(selectedTurn.duration_ms)
+                }}</strong>
+              </span>
+              <span class="text-c-text-muted">
+                隐私
+                <strong class="font-mono font-medium uppercase text-c-text-secondary">{{
+                  selectedTurn.privacy_mode
+                }}</strong>
+              </span>
+            </div>
+          </div>
+
+          <ol
+            class="ops-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4"
+            data-testid="execution-timeline"
+          >
+            <li
+              v-for="(activity, index) in selectedDetail?.activities ?? []"
+              :key="activity.id"
+              class="grid grid-cols-[12px_minmax(0,1fr)] gap-3"
+            >
+              <div class="flex flex-col items-center">
+                <span
+                  class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                  :class="activityDotTone(activity)"
+                />
+                <span
+                  v-if="index < (selectedDetail?.activities.length ?? 0) - 1"
+                  class="my-1 w-px flex-1 bg-c-border"
+                />
+              </div>
+
+              <article class="min-w-0 pb-5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium">{{ activity.label }}</p>
+                    <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
+                      {{ activity.name }} · {{ activity.layer }}
+                    </p>
+                  </div>
+                  <span
+                    class="shrink-0 rounded-lg border px-2 py-1 font-mono text-9px uppercase"
+                    :class="activityTone(activity)"
+                  >
+                    {{ activity.status }}
+                  </span>
+                </div>
+
+                <div
+                  class="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-10px text-c-text-secondary"
+                >
+                  <span>{{ formatDuration(activity.duration_ms) }}</span>
+                  <span v-if="activity.provider">{{ activity.provider }}</span>
+                  <span v-if="activity.model">{{ activity.model }}</span>
+                  <span v-if="activity.attributes.tool_source"
+                    >来源 {{ activity.attributes.tool_source }}</span
+                  >
+                  <span v-if="activity.attributes.mcp_server"
+                    >MCP {{ activity.attributes.mcp_server }}</span
+                  >
+                </div>
+
+                <p v-if="activity.error" class="mt-2 text-xs text-c-error">{{ activity.error }}</p>
+
+                <div
+                  v-if="activity.minecraft"
+                  class="mt-3 border-l-2 border-c-blue bg-c-panel/35 px-3 py-2.5 text-xs"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-c-text-muted">MC 指令</span>
+                    <strong class="font-mono uppercase text-c-text">{{
+                      activity.minecraft.state
+                    }}</strong>
+                  </div>
+                  <p v-if="activity.minecraft.failure_reason" class="mt-2 text-c-error">
+                    {{ activity.minecraft.failure_reason }}
+                  </p>
+                  <ol class="mt-2 space-y-1 font-mono text-10px text-c-text-secondary">
+                    <li
+                      v-for="(transition, transitionIndex) in activity.minecraft.transitions"
+                      :key="transitionIndex"
+                    >
+                      {{ transition.from_state ?? 'accepted' }} → {{ transition.to_state }} ·
+                      {{ transition.reason_code }}
+                    </li>
+                  </ol>
+                </div>
+
+                <details
+                  v-if="
+                    selectedTurn?.privacy_mode === 'full' &&
+                    (rawValue(activity, 'arguments_text') || rawValue(activity, 'result_text'))
+                  "
+                  class="mt-3"
+                >
+                  <summary class="cursor-pointer text-xs text-c-accent">展开可见原始数据</summary>
+                  <pre
+                    v-if="rawValue(activity, 'arguments_text')"
+                    class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
+                    >{{ rawValue(activity, 'arguments_text') }}</pre>
+                  <pre
+                    v-if="rawValue(activity, 'result_text')"
+                    class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
+                    >{{ rawValue(activity, 'result_text') }}</pre>
+                </details>
+                <p
+                  v-else-if="
+                    activity.attributes.arguments_digest || activity.attributes.result_digest
+                  "
+                  class="mt-2 text-10px text-c-text-muted"
+                >
+                  原始数据已脱敏，仅保留长度与摘要
+                </p>
+              </article>
+            </li>
+
+            <li
+              v-if="!selectedDetail?.activities?.length"
+              class="grid min-h-72 place-items-center text-center"
+            >
+              <div>
+                <p class="text-sm text-c-text-secondary">
+                  {{ selectedTraceId ? '正在等待执行阶段' : '尚未选择回合' }}
+                </p>
+                <p class="mt-1 text-xs text-c-text-muted">
+                  {{
+                    selectedTraceId
+                      ? '模型、工具和 MC 状态会在这里实时更新'
+                      : '从左侧消息流选择一个回合'
+                  }}
+                </p>
+              </div>
+            </li>
+          </ol>
+        </aside>
+      </div>
+
+      <p
+        v-if="store.error"
+        class="shrink-0 rounded-lg border border-c-error/40 bg-c-error/10 px-3 py-2 text-xs text-c-error"
+        role="alert"
+      >
+        {{ store.error }}
+      </p>
     </main>
   </div>
 </template>
 
 <style scoped>
-.trace-dashboard {
-  min-height: 100%;
-  padding: 24px;
-  overflow: auto;
-  color: var(--c-text);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--c-panel) 92%, transparent),
-      color-mix(in srgb, var(--c-bg) 96%, transparent)
-    ),
-    var(--c-bg);
+.ops-scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
 }
 
-.trace-hero,
-.status-strip,
-.history-panel,
-.graph-panel,
-.detail-panel {
-  border: 1px solid var(--c-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--c-panel) 74%, transparent);
-  box-shadow: var(--shadow-glass);
-  backdrop-filter: blur(16px);
+.ops-scroll::-webkit-scrollbar {
+  width: 4px;
 }
 
-.trace-hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 22px 24px;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--c-accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-h1,
-h2,
-p {
-  margin: 0;
-}
-
-h1 {
-  color: var(--c-text);
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.summary {
-  margin-top: 8px;
-  max-width: 620px;
-  color: var(--c-text-dim);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-button {
-  border: 0;
-  color: inherit;
-  font: inherit;
-}
-
-.icon-btn,
-.ghost-btn,
-.primary-btn {
-  min-height: 34px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--c-text) 6%, transparent);
-  transition:
-    background 200ms var(--ease-out-expo),
-    border-color 200ms var(--ease-out-expo),
-    transform 200ms var(--ease-out-expo);
-}
-
-.icon-btn {
-  width: 36px;
-  font-size: 17px;
-}
-
-.ghost-btn,
-.primary-btn {
-  padding: 0 14px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.primary-btn {
-  border-color: color-mix(in srgb, var(--c-warning) 45%, transparent);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--c-warning) 24%, transparent),
-    color-mix(in srgb, var(--c-accent) 18%, transparent)
-  );
-  color: var(--c-text);
-}
-
-.icon-btn:not(:disabled):hover,
-.ghost-btn:not(:disabled):hover,
-.primary-btn:not(:disabled):hover {
-  transform: translateY(-1px);
-  border-color: var(--c-border-bright);
-  background: color-mix(in srgb, var(--c-text) 11%, transparent);
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
-
-.status-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 1px;
-  margin-top: 14px;
-  overflow: hidden;
-}
-
-.metric {
-  display: flex;
-  min-height: 72px;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--c-text) 3%, transparent);
-}
-
-.metric span,
-.panel-heading span,
-.detail-role,
-.event-list span,
-.attribute-grid span,
-.flow-node span,
-.data-flow span {
-  color: var(--c-text-muted);
-  font-size: 11px;
-}
-
-.metric strong {
-  font-size: 16px;
-}
-
-.tone-success,
-.status-success,
-.node-success .node-topline small {
-  color: var(--c-success);
-}
-
-.tone-error,
-.status-error,
-.node-error .node-topline small {
-  color: var(--c-error);
-}
-
-.tone-warning,
-.status-warning,
-.node-warning .node-topline small {
-  color: var(--c-warning);
-}
-
-.tone-idle,
-.status-skipped,
-.status-pending,
-.node-skipped .node-topline small {
-  color: var(--c-text-muted);
-}
-
-.workbench {
-  display: grid;
-  grid-template-columns: minmax(520px, 1fr) minmax(260px, 320px);
-  gap: 14px;
-  margin-top: 14px;
-  min-height: 560px;
-}
-
-.history-panel {
-  grid-column: 1 / -1;
-}
-
-.history-panel,
-.graph-panel,
-.detail-panel {
-  padding: 18px;
-}
-
-.detail-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.history-panel.collapsed {
-  padding: 12px 16px;
-}
-
-.panel-heading,
-.graph-toolbar,
-.node-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.history-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  min-height: 58px;
-  padding: 0;
+.ops-scroll::-webkit-scrollbar-track {
   background: transparent;
-  text-align: left;
 }
 
-.history-toggle-main {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.history-toggle-main .eyebrow {
-  margin-bottom: 0;
-}
-
-.history-toggle-main strong {
-  overflow: hidden;
-  color: var(--c-text);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-toggle-main small,
-.history-toggle-action {
-  color: var(--c-text-muted);
-  font-size: 11px;
-}
-
-.history-toggle-action {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--c-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--c-text) 5%, transparent);
-  font-weight: 700;
-}
-
-.trace-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  max-height: 260px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.trace-row {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--c-text) 4.5%, transparent);
-  text-align: left;
-  transition:
-    background 200ms var(--ease-out-expo),
-    border-color 200ms var(--ease-out-expo);
-}
-
-.trace-row.active,
-.trace-row:hover {
-  border-color: color-mix(in srgb, var(--c-accent) 42%, transparent);
-  background: color-mix(in srgb, var(--c-accent) 9%, transparent);
-}
-
-.row-status {
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.row-main {
-  min-width: 0;
-}
-
-.row-main strong {
-  display: block;
-  overflow: hidden;
-  color: var(--c-text);
-  font-size: 12px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row-main small {
-  display: block;
-  margin-top: 4px;
-  color: var(--c-text-muted);
-  font-size: 11px;
-}
-
-.empty-state {
-  padding: 16px;
-  border: 1px dashed var(--c-border);
-  border-radius: 12px;
-  color: var(--c-text-muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.graph-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.graph-toolbar h2 {
-  max-width: 640px;
-  overflow: hidden;
-  color: var(--c-text);
-  font-size: 17px;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.trace-id {
-  flex-shrink: 0;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--c-text) 6%, transparent);
-  color: var(--c-text-muted);
-  font-size: 11px;
-}
-
-.flow-canvas {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  min-height: 330px;
-  padding: 26px 18px;
-  border: 1px solid color-mix(in srgb, var(--c-text) 7%, transparent);
-  border-radius: 16px;
-  background:
-    linear-gradient(color-mix(in srgb, var(--c-text) 3.5%, transparent) 1px, transparent 1px),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--c-text) 3.5%, transparent) 1px,
-      transparent 1px
-    ),
-    color-mix(in srgb, var(--c-bg) 48%, transparent);
-  background-size: 28px 28px;
-}
-
-.flow-node {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex: 1 1 110px;
-  min-height: 116px;
-  min-width: 104px;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--c-panel) 92%, transparent);
-  text-align: left;
-  box-shadow: 0 18px 34px color-mix(in srgb, var(--c-bg) 72%, transparent);
-  transition:
-    transform 200ms var(--ease-out-expo),
-    border-color 200ms var(--ease-out-expo),
-    box-shadow 200ms var(--ease-out-expo);
-}
-
-.flow-node strong {
-  color: var(--c-text);
-  font-size: 14px;
-}
-
-.flow-node.selected {
-  transform: translateY(-4px);
-  border-color: color-mix(in srgb, var(--c-warning) 58%, transparent);
-  box-shadow:
-    0 22px 42px color-mix(in srgb, var(--c-bg) 76%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--c-warning) 16%, transparent);
-}
-
-.node-error {
-  border-color: color-mix(in srgb, var(--c-error) 44%, transparent);
-}
-
-.node-warning {
-  border-color: color-mix(in srgb, var(--c-warning) 34%, transparent);
-}
-
-.node-skipped {
-  opacity: 0.64;
-}
-
-.flow-edge {
-  flex: 0 0 34px;
-  position: relative;
-  height: 2px;
-  margin: 0 -3px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--c-accent) 8%, transparent),
-    color-mix(in srgb, var(--c-accent) 70%, transparent)
-  );
-}
-
-.flow-edge span {
-  position: absolute;
-  top: 50%;
-  right: -1px;
-  width: 8px;
-  height: 8px;
-  border-top: 2px solid color-mix(in srgb, var(--c-accent) 80%, transparent);
-  border-right: 2px solid color-mix(in srgb, var(--c-accent) 80%, transparent);
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.data-flow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.data-flow div,
-.attribute-grid div,
-.event-list {
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--c-text) 4.5%, transparent);
-}
-
-.data-flow div {
-  padding: 14px;
-}
-
-.data-flow p {
-  margin-top: 8px;
-  color: var(--c-text-dim);
-  font-size: 13px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-
-.detail-panel h2 {
-  color: var(--c-text);
-  font-size: 22px;
-}
-
-.status-pill {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.attribute-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
-.attribute-grid div {
-  padding: 11px 12px;
-}
-
-.attribute-grid strong {
-  display: block;
-  margin-top: 5px;
-  color: var(--c-text);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.event-list {
-  padding: 14px;
-}
-
-.event-list ol {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  color: var(--c-text-dim);
-  font-size: 12px;
-  line-height: 1.85;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (max-width: 1180px) {
-  .workbench {
-    grid-template-columns: 1fr;
-  }
-
-  .flow-canvas {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .flow-node {
-    width: 100%;
-  }
-
-  .flow-edge {
-    flex: 0 0 28px;
-    width: 2px;
-    height: 28px;
-    margin: -2px auto;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--c-accent) 8%, transparent),
-      color-mix(in srgb, var(--c-accent) 70%, transparent)
-    );
-  }
-
-  .flow-edge span {
-    top: auto;
-    right: 50%;
-    bottom: -1px;
-    transform: translateX(50%) rotate(135deg);
-  }
-}
-
-@media (max-width: 760px) {
-  .trace-dashboard {
-    padding: 14px;
-  }
-
-  .trace-hero {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .hero-actions {
-    justify-content: flex-start;
-  }
-
-  .status-strip,
-  .data-flow {
-    grid-template-columns: 1fr;
-  }
-
-  .graph-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .graph-toolbar h2 {
-    white-space: normal;
-  }
+.ops-scroll::-webkit-scrollbar-thumb {
+  border-radius: var(--r-full);
+  background: var(--c-border);
 }
 </style>

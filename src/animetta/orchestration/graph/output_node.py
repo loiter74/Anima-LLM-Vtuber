@@ -13,7 +13,7 @@ from animetta.avatar.analyzers.audio import AudioAnalyzer, trim_leading_silence
 from animetta.avatar.performance import validated_performance_payload
 from animetta.observability.context import noncritical_observation_context
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
-from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
 from animetta.utils.tempfiles import write_temp_bytes
 
 from .media_status import MediaStatus
@@ -65,7 +65,6 @@ async def output_node(
     Push text and audio to frontend via Socket.IO, store conversation in memory system
     """
     session_id = state.get("session_id", "unknown")
-    channel_id = state.get("channel_id")
 
     logger.info(f"[{session_id}] [OutputNode] Starting distribution...")
 
@@ -74,7 +73,7 @@ async def output_node(
         logger.error(f"[{session_id}] [OutputNode] Socket.IO not configured")
         return {"error": "Socket.IO not configured"}
 
-    to = channel_id or session_id
+    to = resolve_delivery_target(state)
     identity = ChatIdentity(
         message_id=state["message_id"],
         conversation_id=state["conversation_id"],
@@ -407,6 +406,13 @@ async def _store_conversation_to_memory(
             persona_id=metadata.get("persona_id"),
             channel=channel,
             connection_id=session_id,
+            actor_role=metadata.get("actor_role"),
+            source=metadata.get("source"),
+            live_session_id=metadata.get("live_session_id"),
+            message_id=state.get("message_id") or metadata.get("message_id"),
+            task_id=state.get("task_id") or metadata.get("task_id"),
+            turn_id=state.get("turn_id") or metadata.get("turn_id"),
+            audience=metadata.get("audience"),
         )
 
         # Production sessions borrow the application-scoped runtime. Database

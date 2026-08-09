@@ -34,6 +34,13 @@ class MemoryContext:
     persona_id: str | None = None
     channel: str = "unknown"
     connection_id: str | None = None
+    actor_role: str | None = None
+    source: str | None = None
+    live_session_id: str | None = None
+    message_id: str | None = None
+    task_id: str | None = None
+    turn_id: str | None = None
+    audience: str | None = None
 
     def visibility_keys(self) -> dict[str, str]:
         """Return stable keys that may participate in visibility policy."""
@@ -55,5 +62,12 @@ class MemoryContext:
             "persona_id": self.persona_id,
             "channel": self.channel,
             "connection_id": self.connection_id,
+            "actor_role": self.actor_role,
+            "source": self.source,
+            "live_session_id": self.live_session_id,
+            "message_id": self.message_id,
+            "task_id": self.task_id,
+            "turn_id": self.turn_id,
+            "audience": self.audience,
         }
         return {key: value for key, value in values.items() if value}

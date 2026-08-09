@@ -533,7 +533,10 @@ class CommandExecutor:
         try:
             receipt = await self._runtime.execute_action(
                 request,
-                timeout=max(0.001, (request.deadline_ms - now) / 1000),
+                timeout=max(
+                    0.001,
+                    (request.deadline_ms - now) / 1000 + self._reconciliation_grace_seconds,
+                ),
             )
         except Exception as exc:
             await self._repository.update_step_state(step_id, "unknown")  # type: ignore[attr-defined]

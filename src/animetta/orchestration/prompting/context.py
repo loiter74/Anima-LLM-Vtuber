@@ -55,6 +55,9 @@ def build_context(
         scene_guidance=scene_guidance,
         scene_guidance_warnings=scene_warnings,
         available_tool_names=_available_tool_names(config),
+        actor_role=metadata.get("actor_role"),
+        source=metadata.get("source"),
+        audience=metadata.get("audience"),
     )
 
 

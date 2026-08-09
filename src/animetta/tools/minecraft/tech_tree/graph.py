@@ -147,12 +147,13 @@ class FrontierScheduler:
             self._failures[blocked.id] = 0
         capability = "goto"
         params: dict[str, object] = {}
-        if blocked and blocked.id in {"cobblestone", "iron_ingot", "gold_ore"}:
+        if blocked and blocked.id in {"cobblestone", "iron_ingot", "diamond", "gold_ore"}:
             capability = "mine_shaft"
             params = {
                 "target_y": {
                     "cobblestone": 50,
                     "iron_ingot": 40,
+                    "diamond": -54,
                     "gold_ore": 20,
                 }[blocked.id],
             }
@@ -276,7 +277,7 @@ class TechEvidenceVerifier:
 
 
 def build_survival_tech_graph() -> TechGraph:
-    """Initial survival progression from empty inventory through iron tools."""
+    """Survival progression from empty inventory through the first diamond."""
 
     movement = frozenset({"observe", "status", "goto"})
     return TechGraph(
@@ -358,6 +359,16 @@ def build_survival_tech_graph() -> TechGraph:
                 allowed_capabilities=movement | {"collect", "craft", "place", "smelt"},
                 required_capabilities=("craft",),
                 postconditions={"iron_pickaxe": 1},
+            ),
+            TechNode(
+                id="diamond",
+                name="Discover and collect a diamond",
+                prerequisites=frozenset({"iron_pickaxe"}),
+                allowed_capabilities=movement | {"collect", "mine", "equip", "mine_shaft"},
+                required_capabilities=("mine_shaft", "collect"),
+                postconditions={"diamond": 1},
+                discovery_radius=128,
+                discovery_seconds=600,
             ),
             TechNode(
                 id="gold_ore",

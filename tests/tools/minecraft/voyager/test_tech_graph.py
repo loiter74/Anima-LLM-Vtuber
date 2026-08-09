@@ -161,6 +161,52 @@ def test_verifier_accepts_survival_mine_shaft_as_cobblestone_evidence() -> None:
     assert report.unlock_record is not None
 
 
+def test_verifier_requires_descent_and_collection_for_diamond() -> None:
+    tech = _tech()
+    graph = tech.build_survival_tech_graph()
+    before = _observation("diamond-before", {"iron_pickaxe": 1})
+    underground = _observation("diamond-underground", {"iron_pickaxe": 1})
+    after = _observation("diamond-after", {"iron_pickaxe": 1, "diamond": 1})
+    descent = _receipt(
+        "diamond-descent",
+        "mine_shaft",
+        before.content_hash,
+        underground.content_hash,
+    )
+    collection = _receipt(
+        "diamond-collection",
+        "collect",
+        underground.content_hash,
+        after.content_hash,
+        previous_receipt_hash=descent.content_hash,
+    )
+    progress = _progress(
+        "wood_collection",
+        "crafting_table",
+        "wooden_pickaxe",
+        "cobblestone",
+        "stone_pickaxe",
+        "furnace",
+        "iron_ingot",
+        "iron_pickaxe",
+    )
+
+    report = tech.TechEvidenceVerifier(graph).verify(
+        node_id="diamond",
+        progress=progress,
+        receipts=[descent, collection],
+        before=before,
+        after=after,
+        session_id="session-1",
+        task_id="task-1",
+        runtime_id="runtime-1",
+    )
+
+    assert graph.get("diamond").required_capabilities == ("mine_shaft", "collect")
+    assert report.valid is True
+    assert report.unlock_record is not None
+
+
 def test_verifier_rejects_item_injection_without_action_receipts() -> None:
     tech = _tech()
     graph = tech.build_survival_tech_graph()
@@ -249,7 +295,7 @@ def _progress(*node_ids: str):
     return tech.TechProgress(unlocked_nodes=frozenset(node_ids))
 
 
-def test_initial_graph_defines_survival_path_through_iron_pickaxe() -> None:
+def test_initial_graph_defines_survival_path_through_diamond() -> None:
     graph = _tech().build_survival_tech_graph()
 
     assert graph.get("crafting_table").prerequisites == {"wood_collection"}
@@ -259,6 +305,7 @@ def test_initial_graph_defines_survival_path_through_iron_pickaxe() -> None:
     assert graph.get("furnace").prerequisites == {"cobblestone", "crafting_table"}
     assert graph.get("iron_ingot").prerequisites == {"stone_pickaxe", "furnace"}
     assert graph.get("iron_pickaxe").prerequisites == {"iron_ingot", "crafting_table"}
+    assert graph.get("diamond").prerequisites == {"iron_pickaxe"}
     assert graph.get("gold_ore").prerequisites == {"iron_pickaxe"}
 
 
@@ -356,7 +403,7 @@ def test_scheduler_uses_bounded_mid_depth_discovery_for_iron() -> None:
     assert discovery.discovery.params == {"target_y": 40}
 
 
-def test_scheduler_exposes_gold_frontier_after_committed_iron_pickaxe() -> None:
+def test_scheduler_prioritizes_diamond_frontier_after_committed_iron_pickaxe() -> None:
     tech = _tech()
     graph = tech.build_survival_tech_graph()
     scheduler = tech.FrontierScheduler(graph)
@@ -369,9 +416,34 @@ def test_scheduler_exposes_gold_frontier_after_committed_iron_pickaxe() -> None:
         "furnace",
         "iron_ingot",
         "iron_pickaxe",
+        "gold_ore",
     )
 
     selection = scheduler.select(progress, _observation("obs-0", {"iron_pickaxe": 1}))
 
     assert selection.kind == "technology"
-    assert selection.node.id == "gold_ore"
+    assert selection.node.id == "diamond"
+
+
+def test_scheduler_uses_bounded_deep_discovery_for_diamond() -> None:
+    tech = _tech()
+    graph = tech.build_survival_tech_graph()
+    scheduler = tech.FrontierScheduler(graph, failure_cooldown=1)
+    progress = _progress(
+        "wood_collection",
+        "crafting_table",
+        "wooden_pickaxe",
+        "cobblestone",
+        "stone_pickaxe",
+        "furnace",
+        "iron_ingot",
+        "iron_pickaxe",
+        "gold_ore",
+    )
+    scheduler.record_failure("diamond")
+
+    discovery = scheduler.select(progress, _observation("obs-diamond", {"iron_pickaxe": 1}))
+
+    assert discovery.kind == "discovery"
+    assert discovery.discovery.capability == "mine_shaft"
+    assert discovery.discovery.params == {"target_y": -54}

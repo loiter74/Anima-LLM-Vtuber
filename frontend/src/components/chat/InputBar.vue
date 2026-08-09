@@ -4,7 +4,15 @@ import { unlockAudioPlayback } from '@/components/live2d/useAudioPlayback'
 import { useMobile } from '@/composables/useMobile'
 import VoiceButton from './VoiceButton.vue'
 
-const { sendText } = defineProps<{ sendText: (text: string) => void }>()
+const {
+  sendText,
+  placeholder = '输入消息...',
+  showVoice = true,
+} = defineProps<{
+  sendText: (text: string) => void
+  placeholder?: string
+  showVoice?: boolean
+}>()
 const { isMobile } = useMobile()
 const inputText = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -51,12 +59,12 @@ function sendMessage(): void {
       v-model="inputText"
       class="flex-1 bg-transparent border-0 outline-none text-sm text-c-text placeholder-c-text-muted resize-none min-h-10 max-h-30"
       :class="isMobile ? 'mobile-input-textarea leading-snug' : ''"
-      placeholder="输入消息..."
+      :placeholder="placeholder"
       rows="1"
       @input="handleInput"
       @keydown="handleKeydown"
     />
-    <VoiceButton :class="isMobile ? '!w-12 !h-12' : ''" />
+    <VoiceButton v-if="showVoice" :class="isMobile ? '!w-12 !h-12' : ''" />
     <button
       class="bg-c-accent hover:bg-c-accent-hover text-white rounded-lg flex items-center justify-center transition-all duration-200 disabled:bg-c-card disabled:text-c-text-muted disabled:cursor-not-allowed"
       :class="isMobile ? 'w-12 h-12' : 'w-8 h-8'"

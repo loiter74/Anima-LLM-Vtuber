@@ -15,6 +15,15 @@
       <section class="live2d-stage" aria-label="Live2D 舞台">
         <canvas id="live2dCanvas"></canvas>
       </section>
+      <section
+        class="subtitle-overlay"
+        id="subtitleOverlay"
+        aria-label="公开字幕"
+        aria-live="polite"
+        hidden
+      >
+        <p id="subtitleText"></p>
+      </section>
       <aside class="status-rail" aria-label="直播状态">
         <span class="status-pill" id="socketStatus" data-state="connecting">服务连接中</span>
         <span class="status-pill" id="livestreamStatus" data-state="stopped">直播未启动</span>

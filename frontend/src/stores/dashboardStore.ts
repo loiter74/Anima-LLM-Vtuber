@@ -100,6 +100,69 @@ export interface TraceDetail extends Trace {
   schema_version: number
 }
 
+export interface LiveContent {
+  text: string | null
+  character_count: number | null
+  byte_count: number | null
+  digest: string | null
+}
+
+export interface LiveTurn {
+  trace_id: string
+  message_id: string
+  conversation_id: string
+  actor_role: 'developer' | 'viewer'
+  source: string
+  live_session_id: string | null
+  audience: string | null
+  started_at: number
+  finished_at: number | null
+  duration_ms: number | null
+  outcome: TraceOutcome
+  privacy_mode: 'full' | 'redacted'
+  content: { user: LiveContent; assistant: LiveContent }
+  tool_calls: number
+  mc_status: string
+}
+
+export interface LiveMetrics {
+  turn_count: number
+  model_calls: number
+  tool_calls: number
+  tool_success_rate: number
+  mc_command_count: number
+  mc_status: string
+}
+
+export interface LiveActivity {
+  id: string
+  kind: 'model' | 'tool' | 'delivery' | 'stage'
+  label: string
+  name: string
+  layer: string
+  status: string
+  started_at: number
+  duration_ms: number | null
+  provider: string | null
+  model: string | null
+  error: string | null
+  attributes: Record<string, unknown>
+  minecraft?: {
+    command_id: string
+    state: string
+    failure_reason: string | null
+    transitions: Array<Record<string, unknown>>
+  } | null
+}
+
+export interface LiveTurnDetail extends Omit<
+  LiveTurn,
+  'actor_role' | 'source' | 'tool_calls' | 'mc_status'
+> {
+  activities: LiveActivity[]
+  events: TraceEvent[]
+}
+
 export const useDashboardStore = defineStore('dashboard', () => {
   const overview = ref<StatsOverview | null>(null)
   const nodeStats = ref<NodeStats[]>([])
@@ -108,6 +171,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const loading = ref(false)
   const detailLoading = ref(false)
   const error = ref<string | null>(null)
+  const liveMetrics = ref<LiveMetrics | null>(null)
+  const liveTurns = ref<LiveTurn[]>([])
+  const liveTurnDetails = ref<Record<string, LiveTurnDetail>>({})
 
   const avgLatency = computed(() => overview.value?.avg_duration_ms ?? 0)
   const totalSessions = computed(() => overview.value?.total_requests ?? 0)
@@ -174,6 +240,31 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
+  async function fetchLive(limit = 20) {
+    try {
+      const res = await fetch(`/api/stats/live?limit=${limit}`)
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`)
+      liveMetrics.value = data.metrics
+      liveTurns.value = data.turns
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
+  async function fetchLiveTurn(traceId: string): Promise<LiveTurnDetail | null> {
+    try {
+      const res = await fetch(`/api/stats/live/turns/${encodeURIComponent(traceId)}`)
+      const detail = await res.json()
+      if (!res.ok || detail.error) throw new Error(detail.error ?? `HTTP ${res.status}`)
+      liveTurnDetails.value = { ...liveTurnDetails.value, [traceId]: detail }
+      return detail
+    } catch (e) {
+      error.value = String(e)
+      return null
+    }
+  }
+
   return {
     overview,
     nodeStats,
@@ -185,10 +276,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
     avgLatency,
     totalSessions,
     errorRate,
+    liveMetrics,
+    liveTurns,
+    liveTurnDetails,
     fetchAll,
     fetchOverview,
     fetchNodeStats,
     fetchTraces,
     fetchTraceDetail,
+    fetchLive,
+    fetchLiveTurn,
   }
 })

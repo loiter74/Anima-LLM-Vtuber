@@ -18,7 +18,7 @@ describe('TitleBar', () => {
     push.mockClear()
   })
 
-  it('uses the refined trace workbench navigation labels', () => {
+  it('uses the livestream operations navigation label', () => {
     const wrapper = mount(TitleBar, {
       global: {
         plugins: [createPinia()],
@@ -27,9 +27,9 @@ describe('TitleBar', () => {
 
     expect(wrapper.text()).toContain('Chat')
     expect(wrapper.text()).toContain('Memory')
-    expect(wrapper.text()).toContain('Trace')
+    expect(wrapper.text()).toContain('直播执行')
     expect(wrapper.text()).toContain('Settings')
-    expect(wrapper.find('.nav-btn.active').text()).toBe('Trace')
+    expect(wrapper.find('.nav-btn.active').text()).toBe('直播执行')
   })
 
   it('dispatches a panel navigation event for Memory', async () => {

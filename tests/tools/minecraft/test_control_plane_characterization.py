@@ -45,6 +45,7 @@ def test_survival_graph_and_frontier_order_are_characterized() -> None:
         "furnace",
         "iron_ingot",
         "iron_pickaxe",
+        "diamond",
         "gold_ore",
     ]
     first = scheduler.select(progress, _observation())

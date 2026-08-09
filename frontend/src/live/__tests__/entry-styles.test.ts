@@ -18,4 +18,9 @@ describe('live review entry styles', () => {
     expect(liveMarkup).not.toContain('id="togglePanel"')
     expect(liveMarkup).not.toContain('aria-label="折叠弹幕"')
   })
+
+  it('provides the public subtitle surface for broadcast AI replies', () => {
+    expect(liveMarkup).toContain('id="subtitleOverlay"')
+    expect(liveMarkup).toContain('id="subtitleText"')
+  })
 })

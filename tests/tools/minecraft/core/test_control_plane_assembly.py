@@ -14,6 +14,7 @@ from animetta.tools.minecraft.core.assembly import (
     assemble_control_plane,
 )
 from animetta.tools.minecraft.core.config import MinecraftConfig
+from animetta.tools.minecraft.survival.workflows import diamond_survival_workflow
 from animetta.tools.minecraft.voyager.budget import BudgetUsage
 from animetta.tools.minecraft.voyager.command_models import CommandState
 from animetta.tools.minecraft.voyager.gateway import ExecuteMissionRequest
@@ -241,6 +242,19 @@ async def test_failed_mission_receipt_with_protected_items_is_settled(tmp_path) 
     assert snapshot.objectives[0].status == "failed"
 
 
+def test_fallback_budget_covers_bounded_diamond_progression() -> None:
+    fallback = _budget_policy(MinecraftConfig()).fallback
+    reserved = BudgetUsage()
+    for step in diamond_survival_workflow().steps:
+        reserved = reserved.plus(step.maximum_cost)
+
+    assert fallback.execution_timeout_ms == 45 * 60_000
+    assert fallback.max_blocks_changed == 512
+    assert reserved.max_actions <= fallback.max_actions
+    assert reserved.max_travel_distance <= fallback.max_travel_distance
+    assert reserved.max_blocks_changed <= fallback.max_blocks_changed
+
+
 def test_learning_frontier_supports_a_discovered_resource_acquisition_goal() -> None:
     goal = TypeAdapter(GoalSpec).validate_python(
         {
@@ -263,3 +277,26 @@ def test_learning_frontier_supports_a_discovered_resource_acquisition_goal() -> 
     assert frontier == ("acquire:raw_copper:copper_ore",)
     assert proposal["capability"] == "collect"
     assert proposal["parameters"] == {"block_type": "copper_ore", "count": 1}
+
+
+def test_learning_frontier_reaches_diamond_with_typed_collection() -> None:
+    goal = TypeAdapter(GoalSpec).validate_python(
+        {
+            "intent": "acquire",
+            "target": "diamond",
+            "success_predicates": [
+                {
+                    "kind": "inventory_at_least",
+                    "item": "diamond",
+                    "quantity": 1,
+                }
+            ],
+        }
+    )
+
+    frontier = _learning_frontier(goal)
+    proposal = _learning_proposal(frontier[-1])
+
+    assert frontier[-1] == "diamond"
+    assert proposal["capability"] == "collect"
+    assert proposal["parameters"] == {"block_type": "diamond_ore", "count": 1}

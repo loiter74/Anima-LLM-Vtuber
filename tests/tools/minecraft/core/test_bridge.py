@@ -41,6 +41,7 @@ async def test_start_uses_profile_and_never_spawns_node_directly(monkeypatch) ->
 
     assert result["state"] == "ready"
     assert client_factory.call_args.kwargs["url"] == "http://host.docker.internal:18768/mcp"
+    assert client_factory.call_args.kwargs["read_timeout"] is None
     assert client.call_tool.await_args_list[0].args == (
         "minecraft_connect",
         {"profile": "external-local", "request_id": "connect-1"},

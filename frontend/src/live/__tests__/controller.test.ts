@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Events, type BilibiliStatusPayload } from '@/constants/socket-events'
 import { createLiveController, type LiveSocket, type LiveView } from '../controller'
 
@@ -21,6 +21,7 @@ function harness(search = '') {
     setLivestreamStatus: vi.fn(),
     setCollapsed: vi.fn(),
     setBackground: vi.fn(),
+    setSubtitle: vi.fn(),
     bindToggle: vi.fn(),
   } satisfies LiveView & {
     setCollapsed: ReturnType<typeof vi.fn>
@@ -49,6 +50,8 @@ function status(state: BilibiliStatusPayload['state']): BilibiliStatusPayload {
 }
 
 describe('standalone live controller', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('uses canonical events and never emits room lifecycle commands', () => {
     const { handlers, socket } = harness()
 
@@ -113,5 +116,23 @@ describe('standalone live controller', () => {
 
     expect(view.bindToggle).not.toHaveBeenCalled()
     expect(view.setCollapsed).not.toHaveBeenCalled()
+  })
+
+  it('renders only the active public reply as a temporary subtitle', () => {
+    vi.useFakeTimers()
+    const { handlers, view } = harness()
+    const identity = {
+      message_id: 'message',
+      conversation_id: 'conversation',
+      task_id: 'task',
+      turn_id: 'task',
+    }
+
+    handlers.get(Events.CHAT.SENTENCE)!({ ...identity, seq: 0, text: '开发者刚刚在后台提到测试。' })
+    handlers.get(Events.CHAT.SENTENCE)!({ ...identity, seq: 1, text: '', is_complete: true })
+
+    expect(view.setSubtitle).toHaveBeenLastCalledWith('开发者刚刚在后台提到测试。')
+    vi.advanceTimersByTime(6000)
+    expect(view.setSubtitle).toHaveBeenLastCalledWith(null)
   })
 })

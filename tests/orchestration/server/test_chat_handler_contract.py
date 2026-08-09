@@ -54,8 +54,31 @@ def handler():
     sio = MagicMock()
     sio.emit = AsyncMock()
     admin = MagicMock()
+    admin.live_session_id = "live-session-1"
     admin._get_or_create_orchestrator = AsyncMock()
     return ChatHandlers(sio, MagicMock(), admin), sio, admin
+
+
+@pytest.mark.asyncio
+async def test_developer_event_injects_trusted_live_metadata_without_emitting_input(
+    handler,
+) -> None:
+    chat, sio, admin = handler
+    command = _command(text="去 Minecraft 看看基地")
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(return_value={})
+    admin._get_or_create_orchestrator.return_value = orchestrator
+
+    await chat.on_text_command("sid", command, developer_console=True)
+
+    kwargs = orchestrator.process_text.await_args.kwargs
+    assert kwargs["text"] == command.text
+    assert kwargs["user_id"] == "developer_console:developer"
+    assert kwargs["actor_role"] == "developer"
+    assert kwargs["source"] == "developer_console"
+    assert kwargs["live_session_id"] == "live-session-1"
+    assert kwargs["audience"] == "livestream"
+    sio.emit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

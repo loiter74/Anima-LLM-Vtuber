@@ -23,7 +23,7 @@ const statusLabels: Record<string, string> = {
 const navItems = [
   { key: 'chat', label: 'Chat', routeName: 'chat', path: '/' },
   { key: 'memory', label: 'Memory', panelTab: 'memory', path: '/' },
-  { key: 'dashboard', label: 'Trace', routeName: 'dashboard', path: '/dashboard' },
+  { key: 'dashboard', label: '直播执行', routeName: 'dashboard', path: '/dashboard' },
   { key: 'settings', label: 'Settings', panelTab: 'settings', path: '/' },
 ] as const
 

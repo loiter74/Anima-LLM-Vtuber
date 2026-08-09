@@ -15,6 +15,8 @@ export function createDomLiveView(document: Document): LiveView {
   const socketStatus = requiredElement<HTMLSpanElement>(document, 'socketStatus')
   const livestreamStatus = requiredElement<HTMLSpanElement>(document, 'livestreamStatus')
   const background = requiredElement<HTMLDivElement>(document, 'liveBackground')
+  const subtitle = requiredElement<HTMLElement>(document, 'subtitleOverlay')
+  const subtitleText = requiredElement<HTMLParagraphElement>(document, 'subtitleText')
 
   return {
     renderMessages(messages: readonly DanmakuItem[]): void {
@@ -82,6 +84,10 @@ export function createDomLiveView(document: Document): LiveView {
       background.style.backgroundImage = config.file
         ? `url("/backgrounds/${encodeURIComponent(config.file)}")`
         : 'none'
+    },
+    setSubtitle(text: string | null): void {
+      subtitleText.textContent = text ?? ''
+      subtitle.hidden = !text
     },
   }
 }

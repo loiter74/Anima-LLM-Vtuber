@@ -109,8 +109,9 @@ class MinecraftMcpBridge:
                 },
             }
         try:
-            result = await asyncio.wait_for(
-                self.call_tool(tool_name, {"payload": params or {}}),
+            result = await self.call_tool(
+                tool_name,
+                {"payload": params or {}},
                 timeout=timeout,
             )
         except TimeoutError:
@@ -129,7 +130,19 @@ class MinecraftMcpBridge:
             await self._client.disconnect()
             self._client = None
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return await asyncio.wait_for(
+            self._call_tool(name, arguments),
+            timeout=timeout or self.config.mcp.request_timeout_seconds,
+        )
+
+    async def _call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if self._client is None or self._client.session is None:
             raise MinecraftMcpError("MC_MCP_NOT_CONNECTED")
         failed_client = self._client
@@ -194,6 +207,7 @@ class MinecraftMcpBridge:
             url=str(descriptor.get("url") or self.config.mcp.url),
             headers={"Authorization": f"Bearer {token}"},
             timeout=self.config.mcp.request_timeout_seconds,
+            read_timeout=None,
         )
         if not await self._client.connect():
             self._client = None

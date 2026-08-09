@@ -1,216 +1,160 @@
 import { mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from '@/views/DashboardPage.vue'
+import { Events } from '@/constants/socket-events'
 
-const baseTrace = {
-  api_version: '2',
-  message_id: 'message-1',
-  conversation_id: 'conversation-1',
-  session_id: 'desktop',
-  input_type: 'text',
-  privacy_mode: 'redacted',
+const socket = vi.hoisted(() => ({ emit: vi.fn(), on: vi.fn(), off: vi.fn() }))
+vi.mock('@/composables/useSocket', () => ({ getSocket: () => socket }))
+
+const turn = {
+  trace_id: '00000000-0000-4000-8000-000000000003',
+  message_id: '00000000-0000-4000-8000-000000000002',
+  conversation_id: '00000000-0000-4000-8000-000000000001',
+  actor_role: 'developer',
+  source: 'developer_console',
+  live_session_id: 'live-1',
+  audience: 'livestream',
   started_at: 1_784_000_000,
   finished_at: 1_784_000_002,
   duration_ms: 2000,
-  error_type: null,
+  outcome: 'success',
+  privacy_mode: 'redacted',
+  content: {
+    user: { text: null, character_count: 18, byte_count: 36, digest: 'abcdef1234567890' },
+    assistant: { text: null, character_count: 24, byte_count: 48, digest: '123456abcdef7890' },
+  },
+  tool_calls: 1,
+  mc_status: 'success',
 } as const
 
-function operation(
-  operationId: string,
-  name: string,
-  status: 'success' | 'degraded' | 'error' = 'success',
-  children: object[] = [],
-) {
-  return {
-    operation_id: operationId,
-    trace_id: 'golden-task',
-    parent_operation_id: null,
-    layer: 'workflow',
-    name,
-    critical_path: true,
-    started_at: 1_784_000_000,
-    finished_at: 1_784_000_001,
-    duration_ms: 100,
-    status,
-    provider: null,
-    model: null,
-    error_type: null,
-    error_summary: null,
-    attributes: {},
-    children,
-  }
+const livePayload = {
+  api_version: '1',
+  metrics: {
+    turn_count: 1,
+    model_calls: 2,
+    tool_calls: 1,
+    tool_success_rate: 100,
+    mc_command_count: 1,
+    mc_status: 'success',
+  },
+  turns: [turn],
 }
 
-function detail(traceId: string, golden: boolean) {
-  const names = golden
-    ? [
-        'conversation_start',
-        'personality',
-        'reasoner',
-        'anima_composer',
-        'response_guard',
-        'reply_output',
-        'tts',
-        'emotion',
-        'performance_output',
-        'conversation_finalizer',
-      ]
-    : ['personality', 'llm', 'humor_rewrite', 'humor_validation', 'tts', 'emotion', 'output']
-  const operations = names.map((name, index) =>
-    operation(
-      `${traceId}-${name}`,
-      name,
-      golden && index === 4 ? 'degraded' : 'success',
-      name === (golden ? 'reasoner' : 'llm')
-        ? [
-            {
-              ...operation(`${traceId}-service`, 'llm.chat'),
-              trace_id: traceId,
-              parent_operation_id: `${traceId}-${name}`,
-              layer: 'service',
-              provider: 'openai',
-              model: 'gpt-test',
-            },
-          ]
-        : [],
-    ),
-  )
-  return {
-    ...baseTrace,
-    trace_id: traceId,
-    runtime_profile: golden ? 'golden' : 'development',
-    outcome: golden ? 'degraded' : 'success',
-    error_summary: null,
-    content: {
-      user: { text: null, character_count: 18, byte_count: 36, digest: 'abcdef1234567890' },
-      assistant: { text: null, character_count: 12, byte_count: 24, digest: '123456abcdef7890' },
-    },
-    attributes: {},
-    operations,
-    operation_tree: operations,
-    events: [
-      {
-        event_id: `${traceId}-delivery`,
-        trace_id: traceId,
-        operation_id: `${traceId}-performance_output`,
-        direction: 'egress',
-        name: 'chat:text',
-        phase: 'delivered',
-        occurred_at: 1_784_000_002,
-        payload_size: 12,
-        identity_valid: true,
-        attributes: {},
+const detailPayload = {
+  api_version: '1',
+  ...turn,
+  activities: [
+    {
+      id: 'tool-1',
+      kind: 'tool',
+      label: '决定并调用工具',
+      name: 'tool:mc_operate_bot',
+      layer: 'service',
+      status: 'success',
+      started_at: 1_784_000_001,
+      duration_ms: 125,
+      provider: null,
+      model: null,
+      error: null,
+      attributes: {
+        tool_source: 'mcp',
+        mcp_server: 'minecraft',
+        arguments_digest: 'args-digest',
       },
-    ],
-    post_turn: {
-      pending: golden ? 1 : 0,
-      completed: golden ? 2 : 0,
-      failed: 0,
-      operations: [],
+      minecraft: {
+        command_id: '[REDACTED]',
+        state: 'succeeded',
+        failure_reason: null,
+        transitions: [
+          { from_state: null, to_state: 'queued', reason_code: 'accepted' },
+          { from_state: 'queued', to_state: 'succeeded', reason_code: 'completed' },
+        ],
+      },
     },
-    schema_version: 2,
-  }
+  ],
+  events: [],
 }
 
-function mockStatsFetch() {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: string | URL | Request) => {
-      const url = String(input)
-      if (url.includes('/api/stats/traces/golden-task/tree')) {
-        return Promise.resolve({ json: () => Promise.resolve(detail('golden-task', true)) })
-      }
-      if (url.includes('/api/stats/traces/standard-task/tree')) {
-        return Promise.resolve({ json: () => Promise.resolve(detail('standard-task', false)) })
-      }
-      if (url.includes('/api/stats/overview')) {
-        return Promise.resolve({
-          json: () =>
-            Promise.resolve({
-              api_version: '2',
-              total_requests: 2,
-              success_count: 1,
-              degraded_count: 1,
-              failed_count: 0,
-              success_rate: 50,
-              avg_duration_ms: 1800,
-            }),
-        })
-      }
-      if (url.includes('/api/stats/nodes'))
-        return Promise.resolve({ json: () => Promise.resolve([]) })
-      return Promise.resolve({
-        json: () =>
-          Promise.resolve([
-            {
-              ...baseTrace,
-              trace_id: 'golden-task',
-              runtime_profile: 'golden',
-              outcome: 'degraded',
-            },
-            {
-              ...baseTrace,
-              trace_id: 'standard-task',
-              runtime_profile: 'development',
-              outcome: 'success',
-            },
-          ]),
-      })
-    }),
-  )
+function response(data: unknown) {
+  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) })
 }
 
 async function flushPromises() {
   for (let index = 0; index < 10; index += 1) await Promise.resolve()
 }
 
-describe('DashboardPage canonical observation tree', () => {
+describe('DashboardPage livestream operations console', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    mockStatsFetch()
+    localStorage.clear()
+    socket.emit.mockReset()
+    socket.on.mockReset()
+    socket.off.mockReset()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) =>
+        String(input).includes('/turns/') ? response(detailPayload) : response(livePayload),
+      ),
+    )
   })
 
+  afterEach(() => vi.unstubAllGlobals())
+
   async function mountDashboard() {
-    const wrapper = mount(DashboardPage, { global: { plugins: [createPinia()] } })
+    const wrapper = mount(DashboardPage, {
+      global: {
+        plugins: [createPinia()],
+        stubs: { TitleBar: { template: '<header data-testid="shared-titlebar" />' } },
+      },
+    })
     await flushPromises()
     return wrapper
   }
 
-  it('renders the actual golden topology and typed degraded outcome', async () => {
+  it('shows developer source, core metrics, deterministic tool phase and redaction', async () => {
     const wrapper = await mountDashboard()
-    expect(wrapper.text()).toContain('DEGRADED')
-    expect(wrapper.text()).toContain('conversation_start')
-    expect(wrapper.text()).toContain('reasoner')
-    expect(wrapper.text()).toContain('conversation_finalizer')
-  })
 
-  it('renders the actual standard topology after trace navigation', async () => {
-    const wrapper = await mountDashboard()
-    await wrapper.get('[data-testid="older-trace"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('humor_rewrite')
-    expect(wrapper.text()).toContain('output')
-    expect(wrapper.text()).not.toContain('conversation_finalizer')
-  })
-
-  it('shows redaction facts without exposing content', async () => {
-    const wrapper = await mountDashboard()
-    expect(wrapper.text()).toContain('已脱敏 · 18 chars · abcdef123456…')
+    expect(wrapper.get('[data-testid="shared-titlebar"]')).toBeTruthy()
+    expect(wrapper.text()).toContain('开发者对话')
+    expect(wrapper.text()).toContain('执行检查器')
+    expect(wrapper.text()).toContain('开发者')
+    expect(wrapper.text()).toContain('模型调用')
+    expect(wrapper.text()).toContain('100%')
+    expect(wrapper.text()).toContain('决定并调用工具')
+    expect(wrapper.text()).toContain('MCP minecraft')
+    expect(wrapper.text()).toContain('queued → succeeded')
+    expect(wrapper.text()).toContain('原始数据已脱敏')
     expect(wrapper.text()).not.toContain('secret prompt')
+    wrapper.unmount()
   })
 
-  it('shows provider identity and committed delivery events', async () => {
+  it('sends dashboard text only through the trusted developer event', async () => {
     const wrapper = await mountDashboard()
-    await wrapper.get('[data-testid="trace-node-golden-task-service"]').trigger('click')
-    expect(wrapper.text()).toContain('openai')
-    expect(wrapper.text()).toContain('gpt-test')
-    await wrapper.get('[data-testid="trace-node-golden-task-performance_output"]').trigger('click')
-    expect(wrapper.text()).toContain('egress · chat:text · delivered')
+    const textarea = wrapper.get('[data-testid="chat-input-bar"] textarea')
+    await textarea.setValue('去 Minecraft 看看基地')
+    await textarea.trigger('keydown', { key: 'Enter' })
+
+    expect(socket.emit).toHaveBeenCalledOnce()
+    expect(socket.emit.mock.calls[0][0]).toBe(Events.CHAT.DEVELOPER_TEXT)
+    expect(socket.emit.mock.calls[0][1]).toMatchObject({
+      text: '去 Minecraft 看看基地',
+      source: 'text',
+    })
+    expect(wrapper.text()).toContain('投递中')
+    wrapper.unmount()
   })
 
-  it('shows post-turn memory work separately from the critical path', async () => {
+  it('refreshes selected MC detail immediately on command transition', async () => {
     const wrapper = await mountDashboard()
-    expect(wrapper.text()).toContain('2 done · 1 pending · 0 failed')
+    const registration = socket.on.mock.calls.find(
+      ([event]) => event === Events.MINECRAFT.COMMAND_TRANSITION,
+    )
+    expect(registration).toBeTruthy()
+
+    await registration![1]({ command_id: 'command-1' })
+    await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/stats/live/turns/'))
+    wrapper.unmount()
   })
 })

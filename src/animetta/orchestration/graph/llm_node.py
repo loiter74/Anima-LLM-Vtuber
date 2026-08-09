@@ -423,6 +423,13 @@ def _build_memory_context(state: AgentState) -> MemoryContext:
         persona_id=persona_id,
         channel=channel or "unknown",
         connection_id=state.get("session_id"),
+        actor_role=metadata.get("actor_role"),
+        source=metadata.get("source"),
+        live_session_id=metadata.get("live_session_id"),
+        message_id=state.get("message_id") or metadata.get("message_id"),
+        task_id=state.get("task_id") or metadata.get("task_id"),
+        turn_id=state.get("turn_id") or metadata.get("turn_id"),
+        audience=metadata.get("audience"),
     )
 
 

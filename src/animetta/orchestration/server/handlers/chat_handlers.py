@@ -118,7 +118,14 @@ class ChatHandlers:
             to=sid,
         )
 
-    async def on_text_event(self, sid: str, event: str, data: dict) -> None:
+    async def on_text_event(
+        self,
+        sid: str,
+        event: str,
+        data: dict,
+        *,
+        developer_console: bool = False,
+    ) -> None:
         """Filter and normalize one canonical or catalog-declared text event."""
         if is_probe_message(data):
             logger.debug("[{}] Dropping inspection/health probe before normalization", sid)
@@ -144,31 +151,67 @@ class ChatHandlers:
                 transport_mode=transport_mode,
             )
             return
-        await self.on_text_command(sid, command)
+        await self.on_text_command(sid, command, developer_console=developer_console)
 
-    async def on_text_command(self, sid: str, command: ChatTurnCommand) -> None:
+    async def on_text_command(
+        self,
+        sid: str,
+        command: ChatTurnCommand,
+        *,
+        developer_console: bool = False,
+    ) -> None:
         """Serialize and dispatch one transport-normalized text command."""
         lock = self._conversation_locks.setdefault(
             command.conversation_id,
             asyncio.Lock(),
         )
         async with lock:
-            await self._process_text_command(sid, command)
+            await self._process_text_command(
+                sid,
+                command,
+                developer_console=developer_console,
+            )
 
-    async def _process_text_command(self, sid: str, command: ChatTurnCommand) -> None:
+    async def _process_text_command(
+        self,
+        sid: str,
+        command: ChatTurnCommand,
+        *,
+        developer_console: bool = False,
+    ) -> None:
         text = command.text
         logger.info("[{}] Received normalized text input: {}", sid, text)
         delivery = ChatDelivery(self.sio, command, command.transport_mode)
 
-        if await self._handle_explicit_meme_invocation(sid, text, delivery):
+        if not developer_console and await self._handle_explicit_meme_invocation(
+            sid, text, delivery
+        ):
             return
 
         try:
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
             channel = (
-                "bilibili" if command.is_acceptance and command.source == "livestream" else "local"
+                "developer_console"
+                if developer_console
+                else "bilibili"
+                if command.is_acceptance and command.source == "livestream"
+                else "local"
             )
-            actor_id = normalize_actor_id(command.user_id or "user", channel)
+            actor_id = normalize_actor_id(
+                "developer" if developer_console else command.user_id or "user",
+                channel,
+            )
+            trusted_metadata: dict[str, Any] = (
+                {
+                    "actor_role": "developer",
+                    "source": "developer_console",
+                    "live_session_id": self.admin.live_session_id,
+                    "stream_id": self.admin.live_session_id,
+                    "audience": "livestream",
+                }
+                if developer_console
+                else {}
+            )
             result = await orchestrator.process_text(
                 text=text,
                 user_id=actor_id,
@@ -180,6 +223,7 @@ class ChatHandlers:
                 turn_id=command.task_id,
                 transport_mode=command.transport_mode.value,
                 channel=channel,
+                **trusted_metadata,
             )
             if isinstance(result, dict) and result.get("error"):
                 await self._emit_command_error(

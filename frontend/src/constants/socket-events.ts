@@ -38,6 +38,7 @@ const socketEvents = events as SocketEventsConfig
 export const Events = {
   CHAT: {
     TEXT: socketEvents.chat.text.name,
+    DEVELOPER_TEXT: socketEvents.chat.developer_text.name,
     AUDIO: socketEvents.chat.audio.name,
     AUDIO_END: socketEvents.chat.audio_end.name,
     INTERRUPT: socketEvents.chat.interrupt.name,

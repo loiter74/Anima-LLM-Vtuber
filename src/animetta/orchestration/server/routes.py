@@ -417,6 +417,17 @@ def register_routes(
             await handlers.chat.on_text_event(sid, _event, data)
 
         sio.on(text_event, text_adapter)
+    developer_text_event = event_name("chat", "developer_text")
+
+    async def developer_text_adapter(sid: str, data: dict) -> None:
+        await handlers.chat.on_text_event(
+            sid,
+            developer_text_event,
+            data,
+            developer_console=True,
+        )
+
+    sio.on(developer_text_event, developer_text_adapter)
     sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
     sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
     sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)

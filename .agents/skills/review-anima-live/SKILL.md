@@ -20,9 +20,10 @@ description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser 
 3. display 模式只解析并打开 CLI 返回的 URL；不得读取前端路由器或使用兼容重定向入口。
 4. review 模式在需要浏览器证据时加载 `$qa-testing-playwright`。
 5. 使用 `pnpm -C frontend run review -- --feature <id>` 采集当前页面、控制台、请求、截图和摘要；不要为同一场景启动重复浏览器。
-6. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
-7. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
-8. 只根据本轮新证据判断通过、调整或重做。
+6. 修改背景、层级、缩放或位置时，进入最终门禁和运行时部署前先用 `--no-obs` 做一次目标视口浏览器诊断；同一份新证据必须同时确认背景资源已加载、Live2D 关键区域不被面板覆盖、弹幕标题与正文不被模型覆盖。任一方向失败都留在本地修正，不得先部署再补另一方向。
+7. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
+8. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
+9. 只根据本轮新证据判断通过、调整或重做。
 
 ## 不变量
 

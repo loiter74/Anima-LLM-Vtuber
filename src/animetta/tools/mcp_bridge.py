@@ -63,9 +63,13 @@ class MCPClient:
                 )
 
             elif self.transport == "streamable_http":
+                timeout = self._config.get("timeout", 30)
                 http_client = httpx.AsyncClient(
                     headers=self._config.get("headers"),
-                    timeout=self._config.get("timeout", 30),
+                    timeout=httpx.Timeout(
+                        timeout,
+                        read=self._config.get("read_timeout", timeout),
+                    ),
                 )
                 await self._exit_stack.enter_async_context(http_client)
                 streams = await self._exit_stack.enter_async_context(
@@ -164,6 +168,7 @@ def mcp_tool_to_langchain(client: MCPClient, tool_info: Any) -> Any:
         func=lambda **_kw: "",
         coroutine=execute,
         args_schema=input_model,
+        metadata={"tool_source": "mcp", "mcp_server": client.name},
     )
 
 

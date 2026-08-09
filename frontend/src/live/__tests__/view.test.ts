@@ -12,6 +12,7 @@ describe('standalone live DOM view', () => {
       <span id="socketStatus"></span>
       <span id="livestreamStatus"></span>
       <div id="liveBackground"></div>
+      <section id="subtitleOverlay" hidden><p id="subtitleText"></p></section>
     `
     return createDomLiveView(document)
   }
@@ -51,5 +52,18 @@ describe('standalone live DOM view', () => {
     expect(superChat?.querySelector('.danmaku-kind')?.textContent).toBe('醒目留言')
     expect(superChat?.textContent).toContain('测试组阿灯')
     expect(superChat?.textContent).toContain('今天的需求真的不会再改了（大概）')
+  })
+
+  it('shows and clears public subtitles without interpreting reply markup', () => {
+    const view = mountLiveView()
+    const overlay = document.getElementById('subtitleOverlay')!
+
+    view.setSubtitle('<开发者回复>')
+    expect(overlay.hidden).toBe(false)
+    expect(document.getElementById('subtitleText')?.textContent).toBe('<开发者回复>')
+
+    view.setSubtitle(null)
+    expect(overlay.hidden).toBe(true)
+    expect(document.getElementById('subtitleText')?.textContent).toBe('')
   })
 })

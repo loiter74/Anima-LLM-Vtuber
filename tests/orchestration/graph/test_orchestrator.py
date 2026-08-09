@@ -166,6 +166,7 @@ class TestOrchestratorProcessText:
         initial_state = mock_graph.ainvoke.await_args.args[0]
         run_config = mock_graph.ainvoke.await_args.kwargs["config"]
         assert run_config["configurable"]["tool_invocation_observer"] is observer
+        assert run_config["configurable"]["effective_tool_invocation_observer"] is not observer
         assert "tool_invocation_observer" not in initial_state["metadata"]
 
     @pytest.mark.asyncio

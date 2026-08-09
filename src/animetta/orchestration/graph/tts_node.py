@@ -14,7 +14,7 @@ from loguru import logger
 from animetta.avatar.performance import parse_performance_plan, validated_performance_payload
 from animetta.core.readiness import resolve_service_identity, unwrap_tracing_proxy
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
-from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
 from animetta.services.tts.emotion_instructions import build_emotion_instruction
 from animetta.services.tts.remote_tts import RemoteTTSError
 
@@ -93,7 +93,7 @@ def _resolve_provider_identity(
 def _stream_delivery(
     state: AgentState,
     config: RunnableConfig | None,
-) -> tuple[ChatDelivery | None, str]:
+) -> tuple[ChatDelivery | None, str | None]:
     configurable = config.get("configurable", {}) if config else {}
     sio = configurable.get("socketio")
     if sio is None:
@@ -113,13 +113,13 @@ def _stream_delivery(
         if recorder is not None
         else ChatDelivery(sio, identity, mode)
     )
-    return delivery, state.get("channel_id") or state["session_id"]
+    return delivery, resolve_delivery_target(state)
 
 
 async def _emit_stream_end(
     delivery: ChatDelivery,
     *,
-    to: str,
+    to: str | None,
     stream_id: str,
     final_sequence: int,
     status: str,

@@ -25,4 +25,9 @@ describe('standalone live panel styles', () => {
     expect(liveStyles).toMatch(/\.danmaku-kind--gift\s*\{[^}]*var\(--c-success\)/s)
     expect(liveStyles).toMatch(/\.danmaku-kind--super-chat\s*\{[^}]*var\(--c-accent\)/s)
   })
+
+  it('keeps the public subtitle above the model using theme tokens', () => {
+    expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*z-index:\s*20/s)
+    expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*var\(--c-panel\)/s)
+  })
 })

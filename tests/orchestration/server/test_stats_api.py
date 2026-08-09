@@ -29,6 +29,83 @@ def _build_test_app(store_mock=None):
     return app
 
 
+class TestLiveStatsEndpoints:
+    def test_live_overview_projects_source_badges_and_core_metrics(self, client, mock_store):
+        detail = dict(mock_store.trace_detail.return_value)
+        detail["attributes"] = {
+            "actor_role": "developer",
+            "source": "developer_console",
+            "live_session_id": "live-1",
+            "audience": "livestream",
+        }
+        detail["operations"] = [
+            {
+                "operation_id": "tool-1",
+                "name": "tool:search",
+                "layer": "service",
+                "status": "success",
+                "provider": None,
+                "attributes": {"tool_name": "search", "tool_source": "mcp"},
+            },
+            {
+                "operation_id": "llm-1",
+                "name": "llm.chat",
+                "layer": "service",
+                "status": "success",
+                "provider": "openai",
+                "attributes": {},
+            },
+        ]
+        mock_store.trace_detail.return_value = detail
+
+        response = client.get("/api/stats/live?limit=20")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["metrics"]["turn_count"] == 2
+        assert payload["metrics"]["tool_calls"] == 2
+        assert payload["metrics"]["tool_success_rate"] == 100.0
+        assert payload["turns"][0]["actor_role"] == "developer"
+        assert payload["turns"][0]["source"] == "developer_console"
+
+    def test_live_turn_uses_deterministic_phase_labels(self, client, mock_store):
+        detail = dict(mock_store.trace_detail.return_value)
+        detail["attributes"] = {"live_session_id": "live-1"}
+        detail["operations"] = [
+            {
+                "operation_id": "reasoner-1",
+                "name": "reasoner",
+                "layer": "workflow",
+                "status": "success",
+                "started_at": 10.0,
+                "duration_ms": 25.0,
+                "provider": None,
+                "model": None,
+                "error_summary": None,
+                "attributes": {},
+            },
+            {
+                "operation_id": "tool-1",
+                "name": "tool:search",
+                "layer": "service",
+                "status": "success",
+                "started_at": 10.1,
+                "duration_ms": 40.0,
+                "provider": None,
+                "model": None,
+                "error_summary": None,
+                "attributes": {"tool_name": "search"},
+            },
+        ]
+        mock_store.trace_detail.return_value = detail
+
+        response = client.get("/api/stats/live/turns/abc")
+
+        assert response.status_code == 200
+        activities = response.json()["activities"]
+        assert [item["label"] for item in activities] == ["模型规划", "决定并调用工具"]
+
+
 # ── Fixtures ───────────────────────────────────────────────────────
 
 

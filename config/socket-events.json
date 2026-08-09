@@ -77,6 +77,82 @@
         }
       }
     },
+    "developer_text": {
+      "name": "chat:developer_text",
+      "identity": "command",
+      "golden_path": true,
+      "payload": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "non_whitespace": true,
+          "min_length": 1,
+          "max_length": 4000
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "strict": true,
+          "format": "uuid",
+          "min_length": 36,
+          "max_length": 36
+        },
+        "user_id?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 128
+        },
+        "from_name?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "default": null,
+          "min_length": 1,
+          "max_length": 128
+        },
+        "source?": {
+          "type": "string",
+          "required": false,
+          "strict": true,
+          "enum": ["text"],
+          "default": "text",
+          "min_length": 1,
+          "max_length": 16
+        },
+        "is_inspection?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": false
+        },
+        "is_acceptance?": {
+          "type": "boolean",
+          "required": false,
+          "strict": true,
+          "default": false
+        }
+      }
+    },
     "audio": {
       "name": "chat:audio",
       "payload": {

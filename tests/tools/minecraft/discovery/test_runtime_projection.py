@@ -107,3 +107,62 @@ async def test_acquire_goal_projects_visible_fact_and_committed_inventory_delta(
         environment_fingerprint=stable_environment_fingerprint(final.profile),
     )
     assert any(fact.state == "acquired" for fact in scoped)
+
+
+async def test_fallback_goal_keeps_observations_without_promoting_acquisition() -> None:
+    store = InMemoryWorldFactStore()
+    await store.connect()
+    initial = Observation.model_validate(MESSAGES["Observation"])
+    final_payload = initial.model_dump(mode="json")
+    final_payload.update(
+        {
+            "observation_id": "observation-fallback-after",
+            "content_hash": "e" * 64,
+            "captured_at_ms": initial.captured_at_ms + 100,
+            "tick": initial.tick + 1,
+            "action_sequence": initial.action_sequence + 1,
+            "inventory": {**initial.inventory, "raw_copper": 1},
+        }
+    )
+    final = Observation.model_validate(final_payload)
+    receipt_payload = dict(MESSAGES["ActionReceipt"])
+    receipt_payload.update(
+        {
+            "receipt_id": "receipt-fallback",
+            "command_id": "mission-fallback",
+            "correlation_id": "correlation-fallback",
+            "runtime_instance_id": final.runtime_instance_id,
+            "before_observation_hash": initial.content_hash,
+            "after_observation_hash": final.content_hash,
+            "explained_mutations": [
+                {
+                    "kind": "inventory",
+                    "subject": "raw_copper",
+                    "delta": 1,
+                    "details": {"before": 0, "after": 1},
+                }
+            ],
+            "content_hash": "f" * 64,
+        }
+    )
+    receipt = ActionReceipt.model_validate(receipt_payload)
+    projector = RuntimeDiscoveryProjector(store=store)
+
+    result = await projector.project_goal(
+        goal=_acquire_goal(),
+        command_id="mission-fallback",
+        initial=initial,
+        final=final,
+        receipts=(receipt,),
+        fallback_only=True,
+    )
+
+    assert "minecraft:raw_copper" in {fact.identity.fact_key for fact in result.observed}
+    assert result.acquired == ()
+    scoped = await store.list_scope(
+        world_identity_hash=final.profile.world_identity_hash,
+        environment_fingerprint=stable_environment_fingerprint(final.profile),
+    )
+    raw_copper = next(fact for fact in scoped if fact.identity.fact_key == "minecraft:raw_copper")
+    assert raw_copper.state == "observed"
+    assert raw_copper.acquisition_receipt_ref is None

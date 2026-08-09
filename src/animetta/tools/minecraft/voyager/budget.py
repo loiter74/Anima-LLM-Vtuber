@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from animetta.tools.gamebot.contracts.v2 import BudgetVector
 
@@ -31,6 +31,13 @@ class RequestedBudget(_BudgetModel):
     max_damage_taken: float | None = Field(default=None, ge=0)
     protected_items: frozenset[str] | None = None
     resource_consumption: dict[str, int] | None = None
+
+    @field_validator("protected_items", mode="before")
+    @classmethod
+    def _normalize_json_protected_items(cls, items: object) -> object:
+        if isinstance(items, list):
+            return frozenset(items)
+        return items
 
 
 class ExecutionBudget(_BudgetModel):

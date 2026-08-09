@@ -107,6 +107,36 @@ class TestOutputNode:
         assert sentence_calls[0][0][1]["text"] == "Hello world"
 
     @pytest.mark.asyncio
+    async def test_developer_input_is_never_emitted_but_public_reply_is_broadcast(
+        self, mock_socketio, mock_service_context
+    ):
+        state = create_initial_state(
+            session_id="dashboard-sid",
+            channel_id="dashboard-sid",
+            user_text="后台原文不能播出",
+        )
+        state["response_text"] = "开发者刚刚在后台问到基地，我们去看看。"
+        state["metadata"] = {
+            "actor_role": "developer",
+            "source": "developer_console",
+            "audience": "livestream",
+        }
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        payloads = [call.args[1] for call in mock_socketio.emit.call_args_list]
+        assert all("后台原文不能播出" not in str(payload) for payload in payloads)
+        sentence = next(payload for payload in payloads if payload.get("text"))
+        assert sentence["text"] == state["response_text"]
+        assert all("to" not in call.kwargs for call in mock_socketio.emit.call_args_list)
+
+    @pytest.mark.asyncio
     async def test_pre_emitted_start_and_text_are_not_duplicated_late(
         self, mock_socketio, mock_service_context
     ):
@@ -376,6 +406,49 @@ class TestOutputNode:
         assert turn.context.stream_id == "bilibili:100"
         assert turn.context.connection_id == "socket-a"
         mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_developer_turn_memory_preserves_trusted_provenance(
+        self, mock_socketio, mock_service_context
+    ):
+        runtime = MagicMock()
+        runtime.submit_turn.return_value = True
+        mock_service_context.memory_runtime = runtime
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
+        state = create_initial_state(
+            session_id="socket-dev",
+            user_text="后台话题",
+            user_id="developer_console:developer",
+            conversation_id="22222222-2222-4222-8222-222222222223",
+            message_id="22222222-2222-4222-8222-222222222224",
+            task_id="22222222-2222-4222-8222-222222222225",
+            turn_id="22222222-2222-4222-8222-222222222225",
+        )
+        state["response_text"] = "开发者刚刚在后台问到基地，我们去看看。"
+        state["metadata"] = {
+            "dialogue_status": "composer",
+            "channel": "developer_console",
+            "actor_role": "developer",
+            "source": "developer_console",
+            "live_session_id": "live-session-1",
+            "audience": "livestream",
+        }
+        config = RunnableConfig(
+            configurable={
+                "socketio": mock_socketio,
+                "service_context": mock_service_context,
+            }
+        )
+
+        await output_node(state, config)
+
+        turn = runtime.submit_turn.call_args.args[0]
+        assert turn.context.actor_role == "developer"
+        assert turn.context.source == "developer_console"
+        assert turn.context.live_session_id == "live-session-1"
+        assert turn.context.message_id == state["message_id"]
+        assert turn.context.task_id == state["task_id"]
+        assert turn.context.audience == "livestream"
 
     @pytest.mark.asyncio
     async def test_off_policy_never_encodes_living_memory(

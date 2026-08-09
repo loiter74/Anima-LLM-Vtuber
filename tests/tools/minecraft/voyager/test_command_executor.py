@@ -82,12 +82,14 @@ class Runtime:
         self.repository = repository
         self.manifest = RuntimeManifest.model_validate(MESSAGES["RuntimeManifest"])
         self.requests = []
+        self.timeouts = []
 
     async def get_manifest(self):
         return self.manifest
 
     async def execute_action(self, request, *, timeout=60.0):
         self.requests.append(request)
+        self.timeouts.append(timeout)
         reserved = await self.repository.get_step(request.step_id)
         assert reserved is not None and reserved.state == "dispatched"
         payload = dict(MESSAGES["ActionReceipt"])
@@ -206,6 +208,7 @@ async def test_executor_reserves_before_dispatch_validates_receipt_and_observes_
         make_id=lambda prefix: f"{prefix}-1",
     )
     cmd = await command(repository)
+    cmd = cmd.model_copy(update={"execution_deadline_ms": 1_800_000_090_000})
     before = Observation.model_validate(MESSAGES["Observation"])
     step = ExecuteStep(
         capability="collect",
@@ -226,6 +229,7 @@ async def test_executor_reserves_before_dispatch_validates_receipt_and_observes_
     facts = await repository.command_facts(cmd.command_id)
     assert persisted is not None and persisted.state == "settled"
     assert facts["checkpoints"] == 1
+    assert runtime.timeouts == [100.0]
     assert result.account.remaining.max_actions == 3
     assert result.after.action_sequence >= result.receipt.action_sequence
 

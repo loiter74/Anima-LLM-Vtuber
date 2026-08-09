@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from animetta.config.live2d import get_live2d_config
 from animetta.config.manifest import EffectiveConfig
@@ -47,6 +48,7 @@ class BaseSocketHandler:
         self.session_manager = session_manager
         self.desktop_manager = desktop_manager
         self.live2d_manager = live2d_manager
+        self.live_session_id = str(uuid4())
 
         self.global_config: EffectiveConfig | None = None
         self.user_settings: UserSettings | None = None

@@ -43,6 +43,7 @@ IdentityFactory = Callable[[], str | UUID]
 # event silently disappear from validation.
 _GOLDEN_EVENT_ROLES: dict[tuple[str, str], str] = {
     ("chat", "text"): "command",
+    ("chat", "developer_text"): "command",
     ("chat", "interrupt"): "correlated",
     ("chat", "sentence"): "correlated",
     ("chat", "control"): "correlated",
@@ -570,7 +571,7 @@ def normalize_chat_command(
     """
 
     resolution = resolve_socket_event(event)
-    if (resolution.module, resolution.action) != ("chat", "text"):
+    if resolution.module != "chat" or resolution.action not in {"text", "developer_text"}:
         raise ValueError(f"Socket.IO event {event!r} does not normalize chat text")
     if not isinstance(payload, Mapping):
         raise TypeError("chat payload must be a mapping")

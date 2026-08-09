@@ -104,6 +104,12 @@ def test_effective_budget_clamps_requested_values_to_mode_maximum() -> None:
     assert effective.protected_items == frozenset({"diamond_pickaxe"})
 
 
+def test_requested_budget_accepts_json_protected_item_array() -> None:
+    requested = RequestedBudget.model_validate({"protected_items": ["diamond", "iron_pickaxe"]})
+
+    assert requested.protected_items == frozenset({"diamond", "iron_pickaxe"})
+
+
 def test_strict_execution_budget_restores_frozenset_from_journal_json() -> None:
     serialized = ExecutionBudget(
         queue_timeout_ms=1_000,

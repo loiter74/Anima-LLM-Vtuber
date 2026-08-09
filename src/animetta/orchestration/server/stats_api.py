@@ -16,6 +16,7 @@ from animetta.observability.dto import (
     TraceSummaryDTO,
     versioned_events,
 )
+from animetta.observability.live_dashboard import live_overview, live_turn_detail
 from animetta.observability.ports import ObservationQuery
 
 # ── Module-level references for health check enrichment ──────
@@ -121,6 +122,32 @@ async def stats_trace_events(request: Request) -> JSONResponse:
     except Exception as e:
         logger.error(f"[StatsAPI] trace_events failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def stats_live(request: Request) -> JSONResponse:
+    """GET /api/stats/live?limit=20 — live-console turns and headline metrics."""
+    try:
+        limit = int(request.query_params.get("limit", "20"))
+        data = await live_overview(_get_observation_query(request), limit=limit)
+        return JSONResponse(data)
+    except Exception as exc:
+        logger.error(f"[StatsAPI] live failed: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def stats_live_turn(request: Request) -> JSONResponse:
+    """GET /api/stats/live/turns/{trace_id} — deterministic public execution timeline."""
+    try:
+        data = await live_turn_detail(
+            _get_observation_query(request),
+            trace_id=request.path_params["trace_id"],
+        )
+        if data is None:
+            return JSONResponse({"error": "Turn not found"}, status_code=404)
+        return JSONResponse(data)
+    except Exception as exc:
+        logger.error(f"[StatsAPI] live_turn failed: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 async def stats_observation_health(request: Request) -> JSONResponse:
@@ -285,6 +312,8 @@ def get_stats_routes() -> list[BaseRoute]:
         Route("/api/stats/traces/{trace_id}", stats_trace_detail),
         Route("/api/stats/traces/{trace_id}/tree", stats_trace_tree),
         Route("/api/stats/traces/{trace_id}/events", stats_trace_events),
+        Route("/api/stats/live", stats_live),
+        Route("/api/stats/live/turns/{trace_id}", stats_live_turn),
         Route("/api/stats/observation-health", stats_observation_health),
         Route("/api/stats/inspection/latest", stats_inspection_latest),
     ]

@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
-from animetta.orchestration.chat_delivery import ChatDelivery
+from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
 
 
 def _identity() -> ChatIdentity:
@@ -17,6 +17,25 @@ def _identity() -> ChatIdentity:
         task_id=task_id,
         turn_id=task_id,
     )
+
+
+def test_only_trusted_developer_livestream_reply_broadcasts() -> None:
+    trusted = {
+        "session_id": "sid",
+        "channel_id": "sid",
+        "metadata": {
+            "source": "developer_console",
+            "actor_role": "developer",
+            "audience": "livestream",
+        },
+    }
+    forged_ordinary = {
+        **trusted,
+        "metadata": {"actor_role": "developer", "audience": "livestream"},
+    }
+
+    assert resolve_delivery_target(trusted) is None
+    assert resolve_delivery_target(forged_ordinary) == "sid"
 
 
 @pytest.mark.asyncio

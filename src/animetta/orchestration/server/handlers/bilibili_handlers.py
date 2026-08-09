@@ -301,6 +301,9 @@ class BilibiliHandlers:
                 transport_mode=ChatTransportMode.CANONICAL.value,
                 channel="bilibili",
                 stream_id=stream_id,
+                live_session_id=self.admin.live_session_id,
+                actor_role="viewer",
+                audience="livestream",
                 **cast(dict[str, Any], scene_metadata),
             )
 

@@ -1,5 +1,6 @@
 """Tool execution node"""
 
+import asyncio
 import json
 from contextlib import nullcontext
 from typing import Any
@@ -47,7 +48,10 @@ async def tool_node(
     logger.info(f"[{session_id}] [ToolNode] Executing {len(tool_calls)} tool calls")
 
     tools_map = _get_from_config(config, "tools_map")
-    observer: ToolInvocationObserver | None = _get_from_config(config, "tool_invocation_observer")
+    observer: ToolInvocationObserver | None = _get_from_config(
+        config,
+        "effective_tool_invocation_observer",
+    ) or _get_from_config(config, "tool_invocation_observer")
 
     if not tools_map:
         logger.error(f"[{session_id}] [ToolNode] tools_map not configured")
@@ -58,14 +62,7 @@ async def tool_node(
     prior_mission_failures = mission_failure_count(state.get("messages", ()))
 
     invocations = tuple(
-        ToolInvocation(
-            tool_call_id=str(tool_call.get("id", "unknown")),
-            tool_name=str(tool_call.get("name", "unknown")),
-            arguments=dict(tool_call.get("args", {})),
-            session_id=str(session_id),
-            conversation_id=state.get("conversation_id"),
-        )
-        for tool_call in tool_calls
+        _tool_invocation(tool_call, tools_map=tools_map, state=state) for tool_call in tool_calls
     )
     await _notify_observer_before_batch(observer, invocations)
 
@@ -129,6 +126,17 @@ async def tool_node(
                             result = await tool_fn(**tool_args)
                         else:
                             result = tool_fn(**tool_args)
+            except asyncio.CancelledError as exc:
+                await _notify_observer_after(
+                    observer,
+                    ToolInvocationCompletion(
+                        invocation=invocation,
+                        result=None,
+                        error=str(exc) or "cancelled",
+                        cancelled=True,
+                    ),
+                )
+                raise
             except Exception as exc:
                 await _notify_observer_after(
                     observer,
@@ -203,6 +211,35 @@ def _format_tool_result(result: Any) -> str:
             logger.debug(f"[ToolNode] Failed to serialize tool result as JSON: {e}")
             return str(result)
     return str(result)
+
+
+def _tool_metadata(tool_fn: Any) -> tuple[str, str | None]:
+    metadata = getattr(tool_fn, "metadata", None)
+    if isinstance(metadata, dict):
+        source = str(metadata.get("tool_source") or "builtin")
+        server = metadata.get("mcp_server")
+        return source, str(server) if server else None
+    name = str(getattr(tool_fn, "name", ""))
+    return ("minecraft", None) if name.startswith("mc_") else ("builtin", None)
+
+
+def _tool_invocation(
+    tool_call: dict[str, Any],
+    *,
+    tools_map: dict[str, Any],
+    state: AgentState,
+) -> ToolInvocation:
+    tool_name = str(tool_call.get("name", "unknown"))
+    tool_source, mcp_server = _tool_metadata(tools_map.get(tool_name))
+    return ToolInvocation(
+        tool_call_id=str(tool_call.get("id", "unknown")),
+        tool_name=tool_name,
+        arguments=dict(tool_call.get("args", {})),
+        session_id=str(state.get("session_id", "unknown")),
+        conversation_id=state.get("conversation_id"),
+        tool_source=tool_source,
+        mcp_server=mcp_server,
+    )
 
 
 async def _notify_observer_after(

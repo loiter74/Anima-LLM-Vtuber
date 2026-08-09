@@ -82,6 +82,18 @@ class ConversationObserver:
         if identity is None:
             return TurnObservation.unobserved()
         user_text = str(initial_state.get("user_text") or "")
+        metadata = initial_state.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        trace_attributes = self._policy.filter_attributes(
+            {
+                "runtime_profile": self._runtime_profile,
+                "input_type": initial_state.get("input_type"),
+                "actor_role": metadata.get("actor_role"),
+                "source": metadata.get("source"),
+                "live_session_id": metadata.get("live_session_id"),
+                "audience": metadata.get("audience"),
+            }
+        )
         await self._recorder.start_trace(
             TraceStarted(
                 identity=identity,
@@ -90,12 +102,7 @@ class ConversationObserver:
                 privacy_mode=self._policy.mode,
                 started_at=time.time(),
                 user_content=self._policy.content_facts(user_text),
-                attributes=self._policy.filter_attributes(
-                    {
-                        "runtime_profile": self._runtime_profile,
-                        "input_type": initial_state.get("input_type"),
-                    }
-                ),
+                attributes=trace_attributes,
             )
         )
         await self._recorder.record_event(
@@ -135,6 +142,7 @@ class ConversationObserver:
             token=token,
             delivery_token=delivery_token,
             recorder_token=recorder_token,
+            trace_attributes=trace_attributes,
         )
 
 
@@ -146,6 +154,7 @@ class TurnObservation:
     token: Token | None
     delivery_token: Token | None = None
     recorder_token: Token | None = None
+    trace_attributes: Mapping[str, Any] | None = None
     _finished: bool = False
 
     @classmethod
@@ -199,6 +208,7 @@ class TurnObservation:
                 ),
                 attributes=self.policy.filter_attributes(
                     {
+                        **dict(self.trace_attributes or {}),
                         "outcome": outcome.value,
                         "degradation_reason": _metadata_value(final_state, "degradation_reason"),
                     }

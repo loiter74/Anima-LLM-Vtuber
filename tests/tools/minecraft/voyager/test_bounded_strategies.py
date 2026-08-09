@@ -15,7 +15,10 @@ from animetta.tools.minecraft.skill.trust import (
     stable_environment_fingerprint,
 )
 from animetta.tools.minecraft.survival.registry import WorkflowRegistry
-from animetta.tools.minecraft.survival.workflows import iron_survival_workflow
+from animetta.tools.minecraft.survival.workflows import (
+    diamond_survival_workflow,
+    iron_survival_workflow,
+)
 from animetta.tools.minecraft.voyager.budget import BudgetUsage, ExecutionBudget
 from animetta.tools.minecraft.voyager.goal_models import AtomicAction, GoalSpec
 from animetta.tools.minecraft.voyager.strategies.atomic import AtomicStrategy
@@ -73,16 +76,83 @@ def test_atomic_strategy_proposes_exactly_one_manifest_valid_action() -> None:
 def test_fallback_registry_resolves_exact_goal_and_never_discards_it() -> None:
     registry = WorkflowRegistry()
     registry.register(iron_survival_workflow())
+    registry.register(diamond_survival_workflow())
     strategy = FallbackStrategy(registry=registry)
     state = strategy.prepare(goal())
 
     first = strategy.propose(state, Observation.model_validate(MESSAGES["Observation"]))
-    unsupported = strategy.prepare(goal("diamond"))
+    diamond = strategy.prepare(goal("diamond"))
+    unsupported = strategy.prepare(goal("emerald"))
 
     assert first.kind == "execute"
     assert state["goal_hash"] == goal().canonical_hash
     assert state["learning_evidence_eligible"] is False
+    assert diamond["workflow"].workflow_id == "survival:diamond"
+    assert diamond["workflow"].steps[-1].capability == "collect"
+    assert diamond["workflow"].steps[-1].parameters == {
+        "block_type": "diamond_ore",
+        "count": 1,
+    }
     assert unsupported["failure_code"] == "UNSUPPORTED_FALLBACK_GOAL"
+
+
+def test_diamond_fallback_resumes_from_fresh_underground_inventory_checkpoint() -> None:
+    registry = WorkflowRegistry()
+    registry.register(diamond_survival_workflow())
+    strategy = FallbackStrategy(registry=registry)
+    state = strategy.prepare(goal("diamond"))
+    observation = Observation.model_validate(
+        {
+            **MESSAGES["Observation"],
+            "position": {"x": 3, "y": 59, "z": 65},
+            "inventory": {
+                "oak_log": 6,
+                "oak_planks": 46,
+                "stick": 4,
+                "crafting_table": 1,
+                "wooden_pickaxe": 2,
+                "cobblestone": 17,
+            },
+        }
+    )
+
+    decision = strategy.propose(state, observation)
+
+    assert decision.kind == "execute"
+    assert decision.capability == "craft"
+    assert decision.parameters == {"recipe": "stone_pickaxe", "count": 1}
+    assert state["step_index"] == 6
+
+
+def test_diamond_fallback_resumes_descent_at_the_first_unreached_layer() -> None:
+    registry = WorkflowRegistry()
+    registry.register(diamond_survival_workflow())
+    strategy = FallbackStrategy(registry=registry)
+    state = strategy.prepare(goal("diamond"))
+    observation = Observation.model_validate(
+        {
+            **MESSAGES["Observation"],
+            "position": {"x": 3, "y": -16, "z": 65},
+            "inventory": {"iron_pickaxe": 1},
+        }
+    )
+
+    decision = strategy.propose(state, observation)
+
+    assert decision.kind == "execute"
+    assert decision.capability == "mine_shaft"
+    assert decision.parameters == {"target_y": -24, "minimum_cobblestone": 0}
+
+
+def test_diamond_workflow_uses_deterministic_carried_planks_instead_of_optional_coal() -> None:
+    workflow = diamond_survival_workflow()
+
+    assert not any(
+        step.capability == "collect" and step.parameters.get("block_type") == "coal_ore"
+        for step in workflow.steps
+    )
+    smelt = next(step for step in workflow.steps if step.capability == "smelt")
+    assert smelt.parameters == {"item": "raw_iron", "fuel": "oak_planks", "count": 3}
 
 
 def test_live_requires_exact_environment_trust_and_never_falls_back() -> None:

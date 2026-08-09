@@ -364,8 +364,22 @@ class LangGraphOrchestrator:
                 "configurable": dict(self._langgraph_config.get("configurable", {})),
             },
         )
-        if tool_invocation_observer is not None:
+        from .tool_observation import (
+            CompositeToolInvocationObserver,
+            LedgerToolInvocationObserver,
+        )
+
+        ledger_tool_observer = LedgerToolInvocationObserver(
+            self.observation_recorder,
+            digest_salt=self._observation_digest_salt(),
+        )
+        if tool_invocation_observer is None:
+            run_config["configurable"]["tool_invocation_observer"] = ledger_tool_observer
+        else:
             run_config["configurable"]["tool_invocation_observer"] = tool_invocation_observer
+            run_config["configurable"]["effective_tool_invocation_observer"] = (
+                CompositeToolInvocationObserver(tool_invocation_observer, ledger_tool_observer)
+            )
         callbacks = self._callbacks or get_observability().callbacks
         if callbacks:
             run_config["callbacks"] = callbacks
@@ -403,10 +417,7 @@ class LangGraphOrchestrator:
         profile = str(getattr(system, "runtime_profile", "development") or "development")
         observation = getattr(config, "observability", None)
         privacy = getattr(observation, "privacy", None)
-        salt = str(
-            getattr(privacy, "digest_salt", "animetta-local-observation")
-            or "animetta-local-observation"
-        )
+        salt = self._observation_digest_salt()
         privacy_name = str(
             getattr(privacy, profile, "")
             or getattr(
@@ -425,6 +436,15 @@ class LangGraphOrchestrator:
             runtime_profile=profile,
             digest_salt=salt,
             privacy_mode=privacy_mode,
+        )
+
+    def _observation_digest_salt(self) -> str:
+        config = getattr(self.service_context, "config", None)
+        observation = getattr(config, "observability", None)
+        privacy = getattr(observation, "privacy", None)
+        return str(
+            getattr(privacy, "digest_salt", "animetta-local-observation")
+            or "animetta-local-observation"
         )
 
     def _clean_result(self, final_state: dict[str, Any]) -> dict[str, Any]:

@@ -377,6 +377,24 @@ def get_minecraft_tools() -> list[Any]:
     return [mc_connection, mc_operate_bot]
 
 
+async def read_minecraft_command_activity(command_id: str) -> dict[str, Any] | None:
+    """Read one command and its journal transitions without opening a new writer."""
+
+    if _control_plane is None:
+        return None
+    command = await _control_plane.repository.get_command(command_id)
+    if command is None:
+        return None
+    transitions = await _control_plane.repository.transitions(command_id)
+    return {
+        "command_id": command.command_id,
+        "request_id": command.request_id,
+        "state": command.state.value,
+        "failure_reason": command.blocked_reason_code,
+        "transitions": [item.model_dump(mode="json") for item in transitions],
+    }
+
+
 def _require_bridge() -> MinecraftMcpBridge:
     if _bridge is None:
         raise RuntimeError("Minecraft MCP client is not configured")

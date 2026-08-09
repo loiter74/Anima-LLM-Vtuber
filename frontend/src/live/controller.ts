@@ -17,6 +17,7 @@ export interface LiveView {
   setSocketState(state: 'connecting' | 'connected' | 'disconnected' | 'error'): void
   setLivestreamStatus(status: BilibiliStatusPayload): void
   setBackground(config: BackgroundConfig): void
+  setSubtitle(text: string | null): void
 }
 
 export interface LiveControllerOptions {
@@ -47,6 +48,37 @@ function isStatus(value: unknown): value is BilibiliStatusPayload {
   )
 }
 
+interface LiveReplyFrame {
+  taskId: string
+  text: string
+  seq: number | null
+  isComplete: boolean
+  signal: string | null
+}
+
+function liveReplyFrame(value: unknown): LiveReplyFrame | null {
+  if (!value || typeof value !== 'object') return null
+  const frame = value as Record<string, unknown>
+  if (
+    typeof frame.task_id !== 'string' ||
+    typeof frame.turn_id !== 'string' ||
+    frame.task_id !== frame.turn_id
+  ) {
+    return null
+  }
+  return {
+    taskId: frame.task_id,
+    text: typeof frame.text === 'string' ? frame.text : '',
+    seq: typeof frame.seq === 'number' ? frame.seq : null,
+    isComplete: frame.is_complete === true,
+    signal: typeof frame.signal === 'string' ? frame.signal : null,
+  }
+}
+
+function publicReplyText(text: string): string {
+  return text.replace(/\[(happy|sad|angry|surprised|thinking|neutral)\]/g, '').trim()
+}
+
 function backgroundFrom(search: URLSearchParams): BackgroundConfig {
   const requestedFile = search.get('bg')
   const file =
@@ -70,6 +102,18 @@ export function createLiveController(options: LiveControllerOptions) {
   const search = options.search ?? new URLSearchParams(window.location.search)
   const maxMessages = options.maxMessages ?? 500
   const messages: DanmakuItem[] = []
+  let activeReplyTaskId: string | null = null
+  let accumulatedReply = ''
+  let subtitleHideTimer: ReturnType<typeof setTimeout> | null = null
+
+  const cancelSubtitleHide = (): void => {
+    if (subtitleHideTimer) clearTimeout(subtitleHideTimer)
+    subtitleHideTimer = null
+  }
+  const scheduleSubtitleHide = (): void => {
+    cancelSubtitleHide()
+    subtitleHideTimer = setTimeout(() => view.setSubtitle(null), 6000)
+  }
 
   const onConnect = (): void => view.setSocketState('connected')
   const onDisconnect = (): void => view.setSocketState('disconnected')
@@ -85,12 +129,39 @@ export function createLiveController(options: LiveControllerOptions) {
   const onStatus = (value: unknown): void => {
     if (isStatus(value)) view.setLivestreamStatus(value)
   }
+  const onSentence = (value: unknown): void => {
+    const frame = liveReplyFrame(value)
+    if (!frame) return
+    if (frame.seq === 0) {
+      activeReplyTaskId = frame.taskId
+      accumulatedReply = ''
+      cancelSubtitleHide()
+    }
+    if (frame.taskId !== activeReplyTaskId) return
+    if (frame.isComplete || frame.text === '') {
+      if (accumulatedReply) view.setSubtitle(accumulatedReply)
+      accumulatedReply = ''
+      scheduleSubtitleHide()
+      return
+    }
+    const text = publicReplyText(frame.text)
+    accumulatedReply = frame.seq === 0 ? text : accumulatedReply + text
+    if (accumulatedReply) view.setSubtitle(accumulatedReply)
+  }
+  const onControl = (value: unknown): void => {
+    const frame = liveReplyFrame(value)
+    if (frame && frame.taskId === activeReplyTaskId && frame.signal === 'conversation-end') {
+      scheduleSubtitleHide()
+    }
+  }
 
   socket.on('connect', onConnect)
   socket.on('disconnect', onDisconnect)
   socket.on('connect_error', onConnectError)
   socket.on(Events.BILIBILI.DANMAKU, onDanmaku)
   socket.on(Events.BILIBILI.DANMAKU_STATUS, onStatus)
+  socket.on(Events.CHAT.SENTENCE, onSentence)
+  socket.on(Events.CHAT.CONTROL, onControl)
   view.setSocketState('connecting')
   view.setBackground(backgroundFrom(search))
 
@@ -104,6 +175,10 @@ export function createLiveController(options: LiveControllerOptions) {
       socket.off('connect_error', onConnectError)
       socket.off(Events.BILIBILI.DANMAKU, onDanmaku)
       socket.off(Events.BILIBILI.DANMAKU_STATUS, onStatus)
+      socket.off(Events.CHAT.SENTENCE, onSentence)
+      socket.off(Events.CHAT.CONTROL, onControl)
+      cancelSubtitleHide()
+      view.setSubtitle(null)
     },
   }
 }

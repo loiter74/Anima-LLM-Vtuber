@@ -34,6 +34,12 @@ def _state() -> dict:
         "session_id": "socket-1",
         "input_type": "text",
         "user_text": "secret input",
+        "metadata": {
+            "actor_role": "developer",
+            "source": "developer_console",
+            "live_session_id": "live-1",
+            "audience": "livestream",
+        },
     }
 
 
@@ -52,9 +58,11 @@ async def test_conversation_observer_uses_task_id_verbatim_and_flushes() -> None
     assert trace.trace_id == "task-canonical"
     assert trace.privacy_mode is PrivacyMode.REDACTED
     assert trace.user_content.text is None
+    assert trace.attributes["actor_role"] == "developer"
     assert recorder.finished[0][0] == "task-canonical"
     assert recorder.finished[0][1] is TraceOutcome.SUCCESS
     assert recorder.finished[0][2]["assistant_content"].text is None
+    assert recorder.finished[0][2]["attributes"]["live_session_id"] == "live-1"
     assert recorder.events[0].direction.value == "ingress"
     assert recorder.events[0].phase == "accepted"
     assert recorder.flushes == 1
