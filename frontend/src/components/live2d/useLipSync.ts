@@ -1,16 +1,16 @@
 import { getModel } from './useLive2DModel'
-
-// ===== Mouth Parameter Candidates (Cubism 3/4) =====
-
-const MOUTH_PARAMS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN', 'ParamA']
+import { resolveMouthParameterIndex, type MouthParameterLookup } from './mouthParameter'
 
 // ===== LipSync State =====
 
 let mouthValue = 0
 let targetMouth = 0
-let mouthParam: string | null = null
+let mouthModel: MouthParameterLookup | null = null
+let mouthParameterIndex = -1
 let lipSyncCancel: (() => void) | null = null
 let _lipSyncRafActive = false // when true, PIXI ticker lip sync is disabled
+
+export type MouthTarget = (value: number) => void
 
 // ===== Mouth Target =====
 
@@ -25,30 +25,30 @@ export function tickLipSync(): void {
   if (_lipSyncRafActive) return
   const model = getModel()
   if (!model) return
+  const coreModel = model.internalModel?.coreModel
+  if (!coreModel) return
 
   const delta = Math.abs(targetMouth - mouthValue)
   const factor = 0.5 + 0.4 * Math.min(delta / 0.3, 1.0)
   mouthValue += (targetMouth - mouthValue) * factor
 
-  if (!mouthParam) {
-    for (const name of MOUTH_PARAMS) {
-      const idx = model.internalModel?.coreModel?.getParameterIndex(name)
-      if (idx >= 0) {
-        mouthParam = name
-        break
-      }
-    }
+  if (coreModel !== mouthModel) {
+    mouthModel = coreModel
+    mouthParameterIndex = resolveMouthParameterIndex(coreModel)
   }
 
-  if (mouthParam) {
-    const idx = model.internalModel.coreModel.getParameterIndex(mouthParam)
-    if (idx >= 0) model.internalModel.coreModel.setParameterValueByIndex(idx, mouthValue)
+  if (mouthParameterIndex >= 0) {
+    coreModel.setParameterValueByIndex(mouthParameterIndex, mouthValue)
   }
 }
 
 // ===== RAF-based LipSync (for audio playback) =====
 
-export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
+export function startLipSync(
+  audio: HTMLAudioElement,
+  volumes: number[],
+  setTarget: MouthTarget = setMouthTarget,
+): void {
   stopLipSync()
   _lipSyncRafActive = false
   const intervalMs = 20
@@ -63,7 +63,7 @@ export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
   // and semantic expression overlays.
   function setLipSyncParam(value: number) {
     lipSyncTarget = Math.max(0, Math.min(1, value))
-    setMouthTarget(lipSyncTarget)
+    setTarget(lipSyncTarget)
   }
 
   const tick = () => {
@@ -104,8 +104,9 @@ export function startLipSync(audio: HTMLAudioElement, volumes: number[]): void {
 }
 
 export function stopLipSync(): void {
-  lipSyncCancel?.()
+  const cancel = lipSyncCancel
   lipSyncCancel = null
   _lipSyncRafActive = false
-  setMouthTarget(0)
+  if (cancel) cancel()
+  else setMouthTarget(0)
 }

@@ -4,7 +4,7 @@ import type {
   AudioStreamStartEvent,
   ParameterTimeline,
 } from '@/types/socket-events'
-import { startLipSync, stopLipSync } from './useLipSync'
+import { startLipSync, stopLipSync, type MouthTarget } from './useLipSync'
 import { setExpression } from './useLive2DModel'
 import {
   endPcmAudioStream,
@@ -90,7 +90,11 @@ export interface AudioPlaybackLifecycle {
   onCancel?: () => void
 }
 
-export function playAudio(data: AudioPlaybackPayload, lifecycle?: AudioPlaybackLifecycle): void {
+export function playAudio(
+  data: AudioPlaybackPayload,
+  lifecycle?: AudioPlaybackLifecycle,
+  mouthTarget?: MouthTarget,
+): void {
   if (!data?.audio_data) return
   stopPcmAudioStream()
   currentLifecycle?.onCancel?.()
@@ -108,7 +112,7 @@ export function playAudio(data: AudioPlaybackPayload, lifecycle?: AudioPlaybackL
   audio.src = url
   const playbackLifecycle = currentLifecycle
 
-  if (data.volumes?.length) startLipSync(audio, data.volumes)
+  if (data.volumes?.length) startLipSync(audio, data.volumes, mouthTarget)
 
   audio.onended = () => {
     const completed = currentLifecycle
@@ -136,12 +140,13 @@ export function playAudio(data: AudioPlaybackPayload, lifecycle?: AudioPlaybackL
 export function startAudioStream(
   data: AudioStreamStartEvent,
   lifecycle?: AudioPlaybackLifecycle,
+  mouthTarget?: MouthTarget,
 ): void {
   stopLipSync()
   currentLifecycle?.onCancel?.()
   currentLifecycle = null
   cleanup()
-  startPcmAudioStream(data, lifecycle)
+  startPcmAudioStream(data, lifecycle, mouthTarget)
 }
 
 export function pushAudioStreamChunk(data: AudioStreamChunkEvent): void {

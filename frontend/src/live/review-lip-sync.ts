@@ -1,12 +1,15 @@
+import {
+  resolveMouthParameterIndex,
+  type MouthParameterLookup,
+} from '@/components/live2d/mouthParameter'
+
 const FRAME_INTERVAL_SECONDS = 0.02
 const REVIEW_MOUTH_LEAD_SECONDS = 0.06
 const REVIEW_MOUTH_VISIBILITY_EXPONENT = 0.65
 const MAX_TIMELINE_FRAMES = 3_000
-const MOUTH_PARAMETERS = ['ParamMouthOpenY', 'ParamMouthOpen', 'PARAM_MOUTH_OPEN', 'ParamA']
 
 interface ReviewInternalModel {
-  coreModel: {
-    getParameterIndex(name: string): number
+  coreModel: MouthParameterLookup & {
     setParameterValueByIndex(index: number, value: number): void
   }
   on(event: 'beforeModelUpdate', listener: () => void): void
@@ -21,10 +24,7 @@ export function bindReviewMouthAfterMotion(
   setBeforeApply(callback: (() => void) | null): void
   dispose(): void
 } {
-  const parameterIndex =
-    MOUTH_PARAMETERS.map((name) => internalModel.coreModel.getParameterIndex(name)).find(
-      (index) => index >= 0,
-    ) ?? -1
+  const parameterIndex = resolveMouthParameterIndex(internalModel.coreModel)
   let mouth = 0
   let beforeApply: (() => void) | null = null
 

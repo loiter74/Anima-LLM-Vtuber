@@ -14,6 +14,7 @@ import {
   stopAudio,
   unlockAudioPlayback,
 } from '@/components/live2d/useAudioPlayback'
+import type { MouthTarget } from '@/components/live2d/useLipSync'
 import type { LiveSocket } from './controller'
 
 export interface LiveAudioController {
@@ -23,6 +24,7 @@ export interface LiveAudioController {
 export function createLiveAudioController(
   socket: LiveSocket,
   document: Document,
+  setMouthTarget: MouthTarget,
 ): LiveAudioController {
   const status = document.getElementById('audioStatus')
   const lifecycle = (event: ChatIdentity) => ({
@@ -48,12 +50,12 @@ export function createLiveAudioController(
   const onAudio = (value: unknown): void => {
     const event = value as AudioWithExpressionEvent
     markPending(event)
-    playAudio(event, lifecycle(event))
+    playAudio(event, lifecycle(event), setMouthTarget)
   }
   const onStreamStart = (value: unknown): void => {
     const event = value as AudioStreamStartEvent
     markPending(event)
-    startAudioStream(event, lifecycle(event))
+    startAudioStream(event, lifecycle(event), setMouthTarget)
   }
   const onStreamChunk = (value: unknown): void =>
     pushAudioStreamChunk(value as AudioStreamChunkEvent)

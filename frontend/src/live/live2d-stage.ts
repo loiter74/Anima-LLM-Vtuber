@@ -19,6 +19,7 @@ import {
 
 export interface Live2DStage {
   ready: Promise<void>
+  setMouth(value: number): void
   playReviewAudio(
     notification: HTMLElement,
     volumes: readonly number[],
@@ -41,6 +42,7 @@ export function createLive2DStage(
   if (!(canvas instanceof HTMLCanvasElement) || !state) {
     return {
       ready: Promise.resolve(),
+      setMouth() {},
       playReviewAudio() {},
       cancelReviewAudio() {},
       dispose() {},
@@ -50,7 +52,7 @@ export function createLive2DStage(
   const disposers = new DisposerStack()
   let disposed = false
   let app: PIXI.Application | null = null
-  let setReviewMouth: (value: number) => void = () => {}
+  let setStageMouth: (value: number) => void = () => {}
   let setReviewMouthSampler: (callback: (() => void) | null) => void = () => {}
   let markReviewMouthApplied = (): void => {}
   let reviewLipSync: ReturnType<typeof createReviewVolumeTimelineLipSync> | null = null
@@ -83,7 +85,7 @@ export function createLive2DStage(
         model.internalModel as Parameters<typeof bindReviewMouthAfterMotion>[0],
         () => markReviewMouthApplied(),
       )
-      setReviewMouth = mouthBinding.setMouth
+      setStageMouth = mouthBinding.setMouth
       setReviewMouthSampler = mouthBinding.setBeforeApply
       disposers.add(() => mouthBinding.dispose())
       const coreModel = model.internalModel.coreModel as CubismParameterModel
@@ -132,6 +134,9 @@ export function createLive2DStage(
 
   return {
     ready,
+    setMouth(value: number): void {
+      setStageMouth(value)
+    },
     playReviewAudio(
       notification: HTMLElement,
       volumes: readonly number[],
@@ -150,7 +155,7 @@ export function createLive2DStage(
       reviewLipSync = createReviewVolumeTimelineLipSync({
         audio,
         volumes,
-        setMouth: setReviewMouth,
+        setMouth: setStageMouth,
         manualSampling: true,
       })
       const stop = (): void => {
@@ -172,7 +177,7 @@ export function createLive2DStage(
     cancelReviewAudio(): void {
       reviewLipSync?.stop()
       reviewLipSync = null
-      setReviewMouth(0)
+      setStageMouth(0)
       performanceController?.cancel()
     },
     dispose(): void {

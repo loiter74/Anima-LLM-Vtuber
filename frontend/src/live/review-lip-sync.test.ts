@@ -103,7 +103,8 @@ describe('OBS review lip sync', () => {
   it('writes the latest mouth value after motion updates and before model commit', () => {
     const beforeModelUpdates: Array<() => void> = []
     const coreModel = {
-      getParameterIndex: vi.fn((name: string) => (name === 'ParamA' ? 12 : -1)),
+      getParameterCount: vi.fn(() => 64),
+      getParameterIndex: vi.fn((name: string) => (name === 'ParamA' ? 12 : 100)),
       setParameterValueByIndex: vi.fn(),
     }
     const internalModel = {
@@ -132,6 +133,7 @@ describe('OBS review lip sync', () => {
     const beforeModelUpdates: Array<() => void> = []
     const requestFrame = vi.fn(() => 7)
     const coreModel = {
+      getParameterCount: vi.fn(() => 13),
       getParameterIndex: vi.fn(() => 12),
       setParameterValueByIndex: vi.fn(),
     }

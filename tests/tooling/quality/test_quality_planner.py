@@ -538,6 +538,7 @@ def test_unknown_backend_path_falls_back_to_backend_full() -> None:
         "backend-full",
     } == set(_group_ids(plan))
     assert any("unknown backend path" in fallback for fallback in plan.fallbacks)
+    assert plan.unmapped_paths == ("src/animetta/new_area/feature.py",)
 
 
 def test_unknown_fallback_path_is_bound_to_selected_group_fingerprints() -> None:

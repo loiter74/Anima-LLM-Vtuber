@@ -12,6 +12,7 @@ const fixtures = vi.hoisted(() => {
     position: { set: vi.fn() },
     internalModel: {
       coreModel: {
+        getParameterCount: vi.fn().mockReturnValue(2),
         getParameterIndex: vi.fn().mockReturnValue(1),
         setParameterValueByIndex,
       },
@@ -83,6 +84,19 @@ describe('createLive2DStage', () => {
     expect(fixtures.setParameterValueByIndex).toHaveBeenCalledWith(1, expect.any(Number))
     expect(notification.dataset.lipSync).toBe('observed')
     stage.dispose()
+    stage.dispose()
+  })
+
+  it('applies production mouth targets inside the Live2D model frame', async () => {
+    const { createLive2DStage } = await import('./live2d-stage')
+    const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
+    const stage = createLive2DStage(socket)
+    await stage.ready
+
+    stage.setMouth(0.8)
+    fixtures.emitBeforeModelUpdate()
+
+    expect(fixtures.setParameterValueByIndex).toHaveBeenLastCalledWith(1, 0.8)
     stage.dispose()
   })
 

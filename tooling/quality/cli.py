@@ -381,6 +381,16 @@ def _execute_plan(
     return _execute_feedback_plan(args, loaded, plan)
 
 
+def _ensure_plan_is_executable(plan: VerificationPlan) -> None:
+    if not plan.unmapped_paths:
+        return
+    paths = ", ".join(plan.unmapped_paths)
+    raise ValueError(
+        f"refusing to execute quality plan with unmapped repository paths: {paths}; "
+        "add component mappings to the quality manifest and rerun"
+    )
+
+
 def _write_feedback_model(model: BaseModel, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Keep the temporary basename short so atomic writes still work in deeply
@@ -647,6 +657,7 @@ def _execute_feedback_plan(
     loaded: LoadedCatalog,
     plan: VerificationPlan,
 ) -> tuple[AggregateStatus, AggregateSummary]:
+    _ensure_plan_is_executable(plan)
     cache_mode = _resolved_cache_mode(args, plan)
     trust_scope = _resolved_trust_scope(args, plan)
     cache = None if cache_mode is CacheMode.OFF else ResultCache(_cache_root(args), args.repo_root)

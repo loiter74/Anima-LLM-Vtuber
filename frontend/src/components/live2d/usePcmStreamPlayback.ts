@@ -3,7 +3,7 @@ import type {
   AudioStreamEndEvent,
   AudioStreamStartEvent,
 } from '@/types/socket-events'
-import { setMouthTarget } from './useLipSync'
+import { setMouthTarget, type MouthTarget } from './useLipSync'
 import type { AudioPlaybackLifecycle } from './useAudioPlayback'
 
 const INITIAL_BUFFER_SECONDS = 0.2
@@ -30,6 +30,7 @@ interface ActivePcmStream {
   lipSyncTimers: Set<ReturnType<typeof setTimeout>>
   lifecycle: AudioPlaybackLifecycle | null
   startNotified: boolean
+  setMouthTarget: MouthTarget
 }
 
 let pcmAudioContext: AudioContext | null = null
@@ -88,7 +89,7 @@ function scheduleMouthTargets(
     )
     const timer = setTimeout(() => {
       stream.lipSyncTimers.delete(timer)
-      if (activePcmStream === stream) setMouthTarget(mouthTarget)
+      if (activePcmStream === stream) stream.setMouthTarget(mouthTarget)
     }, delayMs)
     stream.lipSyncTimers.add(timer)
   }
@@ -106,7 +107,7 @@ function scheduleChunk(stream: ActivePcmStream, chunk: DecodedChunk): void {
   source.onended = () => {
     stream.sources.delete(source)
     if (stream.ended && stream.sources.size === 0 && activePcmStream === stream) {
-      setMouthTarget(0)
+      stream.setMouthTarget(0)
       activePcmStream = null
       stream.lifecycle?.onComplete?.()
     }
@@ -160,6 +161,7 @@ export function unlockPcmAudioPlayback(): void {
 export function startPcmAudioStream(
   data: AudioStreamStartEvent,
   lifecycle?: AudioPlaybackLifecycle,
+  mouthTarget: MouthTarget = setMouthTarget,
 ): void {
   stopPcmAudioStream()
   if (data.format !== 'pcm_s16le' || data.sample_rate !== 24_000 || data.channels !== 1) {
@@ -184,6 +186,7 @@ export function startPcmAudioStream(
     lipSyncTimers: new Set(),
     lifecycle: lifecycle ?? null,
     startNotified: false,
+    setMouthTarget: mouthTarget,
   }
 }
 
@@ -215,7 +218,7 @@ export function endPcmAudioStream(data: AudioStreamEndEvent): void {
   if (!stream.started && stream.ready.length > 0) flushReadyChunks(stream)
   stream.ended = true
   if (stream.sources.size === 0) {
-    setMouthTarget(0)
+    stream.setMouthTarget(0)
     activePcmStream = null
     stream.lifecycle?.onComplete?.()
     return
@@ -224,7 +227,7 @@ export function endPcmAudioStream(data: AudioStreamEndEvent): void {
   const timer = setTimeout(() => {
     stream.lipSyncTimers.delete(timer)
     if (activePcmStream === stream) {
-      setMouthTarget(0)
+      stream.setMouthTarget(0)
       activePcmStream = null
       stream.lifecycle?.onComplete?.()
     }
@@ -249,5 +252,6 @@ export function stopPcmAudioStream(): void {
     stream.sources.clear()
     stream.lifecycle?.onCancel?.()
   }
-  setMouthTarget(0)
+  const resetMouthTarget = stream?.setMouthTarget ?? setMouthTarget
+  resetMouthTarget(0)
 }

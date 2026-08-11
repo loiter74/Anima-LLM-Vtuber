@@ -16,6 +16,7 @@ vi.mock('@/components/live2d/useAudioPlayback', () => playback)
 
 function harness() {
   const handlers = new Map<string, (...args: unknown[]) => void>()
+  const setMouthTarget = vi.fn()
   const socket: LiveSocket = {
     on: vi.fn((event, handler) => {
       handlers.set(event, handler)
@@ -28,15 +29,15 @@ function harness() {
   }
   document.body.innerHTML =
     '<span id="audioStatus" data-playback-state="idle" data-playback-count="0" hidden></span>'
-  const controller = createLiveAudioController(socket, document)
-  return { controller, handlers, socket }
+  const controller = createLiveAudioController(socket, document, setMouthTarget)
+  return { controller, handlers, setMouthTarget, socket }
 }
 
 describe('standalone live audio', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('routes complete and progressive TTS events through the shared player', () => {
-    const { controller, handlers } = harness()
+    const { controller, handlers, setMouthTarget } = harness()
     const identity = {
       message_id: 'message',
       conversation_id: 'conversation',
@@ -60,8 +61,12 @@ describe('standalone live audio', () => {
     handlers.get(Events.CHAT.AUDIO_STREAM_END)!(end)
     handlers.get(Events.CHAT.STOP_AUDIO)!({})
 
-    expect(playback.playAudio).toHaveBeenCalledWith(complete, expect.any(Object))
-    expect(playback.startAudioStream).toHaveBeenCalledWith(start, expect.any(Object))
+    expect(playback.playAudio).toHaveBeenCalledWith(complete, expect.any(Object), setMouthTarget)
+    expect(playback.startAudioStream).toHaveBeenCalledWith(
+      start,
+      expect.any(Object),
+      setMouthTarget,
+    )
     expect(playback.pushAudioStreamChunk).toHaveBeenCalledWith(chunk)
     expect(playback.endAudioStream).toHaveBeenCalledWith(end)
     expect(playback.stopAudio).toHaveBeenCalledOnce()

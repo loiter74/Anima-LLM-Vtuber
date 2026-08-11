@@ -543,7 +543,7 @@ class DockerBuildAction(FrozenModel):
 
 
 class VerificationPlan(FrozenModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     fingerprint_schema_version: Literal[1] = 1
     tier: Tier
     source: Literal["paths", "worktree", "range"]
@@ -553,6 +553,7 @@ class VerificationPlan(FrozenModel):
     groups: tuple[PlannedGroup, ...]
     required_capabilities: frozenset[Capability]
     fallbacks: tuple[str, ...] = ()
+    unmapped_paths: tuple[str, ...] = ()
     dominated_groups: tuple[DominatedGroup, ...] = ()
     docker_actions: tuple[DockerBuildAction, ...] = ()
     docker_scope_fingerprints: dict[str, str] = {}

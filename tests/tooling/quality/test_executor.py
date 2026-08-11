@@ -636,7 +636,7 @@ def test_plan_result_and_summary_require_current_evidence_schema() -> None:
     )
     summary = aggregate_results(plan, [result])
 
-    assert plan.schema_version == 2
+    assert plan.schema_version == 3
     assert result.schema_version == 2
     assert summary.schema_version == 2
 

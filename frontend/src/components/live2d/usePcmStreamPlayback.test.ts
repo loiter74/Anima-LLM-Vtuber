@@ -35,6 +35,7 @@ interface PlaybackModule {
       onComplete?: () => void
       onCancel?: () => void
     },
+    mouthTarget?: (value: number) => void,
   ): void
   pushAudioStreamChunk(data: StreamChunk): void
   endAudioStream(data: StreamEnd): void
@@ -267,6 +268,24 @@ describe('progressive PCM playback', () => {
     await vi.runOnlyPendingTimersAsync()
 
     expect(setMouthTarget.mock.calls.some(([value]) => Number(value) > 0)).toBe(true)
+  })
+
+  it('routes PCM lip-sync targets to the active stage', async () => {
+    const playback = await loadPlayback()
+    const stageMouthTarget = vi.fn()
+    playback.startAudioStream(startEvent(), undefined, stageMouthTarget)
+    for (let sequence = 0; sequence < 4; sequence++) {
+      playback.pushAudioStreamChunk({
+        stream_id: 'stream-a',
+        sequence,
+        audio_data: pcmChunk(12_000),
+      })
+    }
+
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(stageMouthTarget.mock.calls.some(([value]) => Number(value) > 0)).toBe(true)
+    expect(setMouthTarget.mock.calls.some(([value]) => Number(value) > 0)).toBe(false)
   })
 
   it('stops every scheduled source on interruption and prevents overlap with legacy audio', async () => {

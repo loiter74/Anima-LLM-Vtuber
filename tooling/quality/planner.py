@@ -73,6 +73,7 @@ def verification_plan_hash(plan: VerificationPlan) -> str:
         "groups": plan.groups,
         "required_capabilities": plan.required_capabilities,
         "fallbacks": sorted(plan.fallbacks),
+        "unmapped_paths": sorted(plan.unmapped_paths),
         "dominated_groups": plan.dominated_groups,
         "docker_actions": plan.docker_actions,
         "docker_scope_fingerprints": dict(sorted(plan.docker_scope_fingerprints.items())),
@@ -95,6 +96,7 @@ def plan_verification(
     catalog = loaded.catalog
     reasons: dict[str, set[str]] = {}
     fallbacks: list[str] = []
+    unmapped_paths: set[str] = set()
     fallback_changes: dict[str, dict[tuple[str, str, str], Change]] = {}
     cache_disabled_groups: set[str] = set()
 
@@ -155,6 +157,7 @@ def plan_verification(
                         matched_for_path.add(component_id)
                 if not matched_for_path:
                     domain = _infer_domain(path)
+                    unmapped_paths.add(path)
                     add_fallback(
                         domain,
                         f"unknown {domain.value} path: {path}",
@@ -355,6 +358,7 @@ def plan_verification(
         groups=planned_groups,
         required_capabilities=capabilities,
         fallbacks=tuple(sorted(set(fallbacks))),
+        unmapped_paths=tuple(sorted(unmapped_paths)),
         dominated_groups=dominated_groups,
         docker_actions=docker_actions,
         docker_scope_fingerprints=docker_scope_fingerprints,

@@ -9,6 +9,8 @@
   </p>
 </p>
 
+<img width="1673" height="941" alt="Animetta Live2D 虚拟角色说话口型" src=".github/assets/readme-cover.webp" />
+
 > 详细文档以英文为主，本页为快速入门与概览。完整内容请参考 [docs/](docs/) 与 [English README](README.md)。
 
 ---

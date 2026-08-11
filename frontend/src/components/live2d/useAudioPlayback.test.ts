@@ -77,4 +77,17 @@ describe('useAudioPlayback', () => {
     expect(lifecycle.onComplete).toHaveBeenCalledTimes(1)
     expect(lifecycle.onCancel).not.toHaveBeenCalled()
   })
+
+  it('routes a complete-audio mouth timeline to the active stage', async () => {
+    const { playAudio } = await import('./useAudioPlayback')
+    const stageMouthTarget = vi.fn()
+
+    playAudio(
+      { audio_data: btoa('qwen wav'), format: 'wav', volumes: [0.2, 0.8] },
+      undefined,
+      stageMouthTarget,
+    )
+
+    expect(startLipSync).toHaveBeenCalledWith(MockAudio.instances[0], [0.2, 0.8], stageMouthTarget)
+  })
 })

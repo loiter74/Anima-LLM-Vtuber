@@ -71,10 +71,11 @@ input_sets:
       - "**/*.toml"
   documentation-source:
     paths:
-      - README.md
+      - README*.md
       - CONTRIBUTING.md
       - AGENTS.md
       - tests/AGENTS.md
+      - .github/assets/**
       - docs/**
 
 default_input_sets: [quality-engine]
@@ -1398,8 +1399,9 @@ components:
   documentation:
     domain: repository
     paths:
-      - README.md
+      - README*.md
       - CONTRIBUTING.md
+      - .github/assets/**
       - docs/**
       - scripts/README.md
     direct_groups: [docs-contract]

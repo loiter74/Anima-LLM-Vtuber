@@ -513,6 +513,36 @@ def test_verify_command_explains_frozen_groups_before_result(
     )
 
 
+def test_verify_command_refuses_unmapped_paths_before_execution(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest, _ = _write_cli_fixture(tmp_path)
+    results_dir = tmp_path / "results"
+
+    code = main(
+        [
+            "verify",
+            "--manifest",
+            str(manifest),
+            "--repo-root",
+            str(tmp_path),
+            "--tier",
+            "affected",
+            "--paths",
+            "unmapped/new-file.py",
+            "--results-dir",
+            str(results_dir),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert "unmapped repository paths: unmapped/new-file.py" in captured.err
+    assert "Quality result:" not in captured.out
+    assert not results_dir.exists()
+
+
 def test_worktree_discovery_failure_uses_repository_fallback(
     tmp_path: Path,
     capsys,

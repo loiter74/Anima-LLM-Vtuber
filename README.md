@@ -17,7 +17,7 @@
   </p>
 </p>
 
-<img width="2477" height="1856" alt="Animetta screenshot" src="https://github.com/user-attachments/assets/8b3cb1f7-ef61-4cb0-b702-546b3aa8e65e" />
+<img width="1673" height="941" alt="Animetta Live2D avatar speaking" src=".github/assets/readme-cover.webp" />
 
 Animetta is an open-source framework for building **AI virtual companions and VTubers** — characters that talk, listen, remember, emote through a Live2D avatar, and act in the world (chat, livestream, Minecraft). It orchestrates ASR → LLM → TTS → emotion as a single LangGraph state machine, so every turn can branch, call tools, and resume.
 
