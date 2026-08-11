@@ -72,7 +72,7 @@ minecraft:
   mcp:
     url: "http://127.0.0.1:8768/mcp"
     cli_command: "mc-mcp"
-    default_profile: "managed-local"
+    default_profile: "external-local"
     startup_timeout_seconds: 10
     request_timeout_seconds: 60
     event_poll_seconds: 0.5

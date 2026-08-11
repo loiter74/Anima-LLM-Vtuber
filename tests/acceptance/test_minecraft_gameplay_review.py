@@ -71,10 +71,16 @@ async def test_harness_requires_authenticated_confirmed_attachment_and_writes_sa
         token="review-token",
         artifact_dir=tmp_path,
         bridge=bridge,
+        allow_managed_server_create=True,
         viewer_timeout_seconds=0.1,
     )
 
     await harness.prepare()
+    bridge.start.assert_awaited_once_with(
+        profile="managed-review",
+        request_id=bridge.start.await_args.kwargs["request_id"],
+        allow_server_create=True,
+    )
     assert bridge.callback is not None
     bridge.callback(
         "client_viewer_status",

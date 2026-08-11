@@ -44,7 +44,38 @@ async def test_start_uses_profile_and_never_spawns_node_directly(monkeypatch) ->
     assert client_factory.call_args.kwargs["read_timeout"] is None
     assert client.call_tool.await_args_list[0].args == (
         "minecraft_connect",
-        {"profile": "external-local", "request_id": "connect-1"},
+        {
+            "profile": "external-local",
+            "request_id": "connect-1",
+            "allow_create": False,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_managed_creation_requires_explicit_internal_authorization() -> None:
+    client = SimpleNamespace(
+        session=object(),
+        call_tool=AsyncMock(return_value=_response({"state": "ready"})),
+        disconnect=AsyncMock(),
+    )
+    bridge = MinecraftMcpBridge(MinecraftConfig(enabled=True))
+    bridge._client = client
+
+    await bridge.start(
+        profile="managed-review",
+        request_id="connect-managed",
+        allow_server_create=True,
+    )
+    await bridge.close()
+
+    assert client.call_tool.await_args_list[0].args == (
+        "minecraft_connect",
+        {
+            "profile": "managed-review",
+            "request_id": "connect-managed",
+            "allow_create": True,
+        },
     )
 
 

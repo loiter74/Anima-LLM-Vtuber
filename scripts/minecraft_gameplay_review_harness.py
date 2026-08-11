@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True, type=int)
+    parser.add_argument("--allow-managed-server-create", action="store_true")
     return parser.parse_args()
 
 
@@ -33,6 +34,7 @@ def main() -> int:
         repository_dir=ROOT,
         token=token,
         artifact_dir=artifact_dir,
+        allow_managed_server_create=args.allow_managed_server_create,
     )
     uvicorn.run(
         create_review_app(harness),

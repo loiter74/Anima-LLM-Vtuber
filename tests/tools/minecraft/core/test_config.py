@@ -15,7 +15,7 @@ def test_mcp_config_has_path_independent_defaults() -> None:
 
     assert config.url == "http://127.0.0.1:8768/mcp"
     assert config.cli_command == "mc-mcp"
-    assert config.default_profile == "managed-local"
+    assert config.default_profile == "external-local"
 
 
 def test_minecraft_config_keeps_anima_policy_and_persistence() -> None:

@@ -673,10 +673,12 @@ class ReviewScenarioEnvironment:
         runtime_root: Path,
         bridge: MinecraftMcpBridge,
         profile: str = "managed-review",
+        allow_managed_server_create: bool = False,
     ) -> None:
         self.runtime_root = runtime_root.resolve()
         self.bridge = bridge
         self.profile = profile
+        self.allow_managed_server_create = allow_managed_server_create
         self._run_id: str | None = None
 
     async def prepare_disposable_world(self, scenario: ScenarioSpec, run_id: str) -> str:
@@ -687,6 +689,7 @@ class ReviewScenarioEnvironment:
         result = await self.bridge.start(
             profile=self.profile,
             request_id=f"showcase-connect-{run_id}",
+            allow_server_create=self.allow_managed_server_create,
         )
         if result.get("state") != "ready":
             raise RuntimeError("MINECRAFT_BRIDGE_START_FAILED")

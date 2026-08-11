@@ -22,6 +22,12 @@ lifecycle belong to the independent `mc-mcp` service. Anima may configure only i
 URL, CLI name, profile, authentication environment key and timeouts. Never add a
 sibling repository path, Node entrypoint or Minecraft Compose command here.
 
+常规运行、调试和验证必须使用 `external-local` 复用既有 `animetta-mc`，不得创建
+新的 Minecraft 容器。只有用户在当前任务中明确授权隔离世界时，受信任的内部评审
+入口才可传递 `allow_create=true`；模型可见的 `mc_connection` 不得暴露该参数。获准
+创建的 managed profile 必须在 `finally` 中调用 `shutdown`，而普通 `disconnect`、
+service stop 和 external profile 的 shutdown 必须保留 `animetta-mc`。
+
 ## Domains
 
 - `core/`: transport adapter, assembly, configuration, and public tools.

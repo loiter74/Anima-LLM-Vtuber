@@ -296,6 +296,7 @@ async def run(
     run_id: str,
     timeout_seconds: float,
     viewer_timeout_seconds: float,
+    allow_managed_server_create: bool,
 ) -> Path:
     ledger = AcceptanceLedgerStore(ledger_path).load()
     ledger.require_gate_start("R7")
@@ -318,6 +319,7 @@ async def run(
     environment = ReviewScenarioEnvironment(
         runtime_root=runtime_root,
         bridge=bridge,
+        allow_managed_server_create=allow_managed_server_create,
     )
     preparer = ScenarioPreparer(
         executor=ReviewRconSetupExecutor(bridge),
@@ -522,6 +524,7 @@ def main() -> int:
     )
     parser.add_argument("--timeout-seconds", type=float, default=900)
     parser.add_argument("--viewer-timeout-seconds", type=float, default=600)
+    parser.add_argument("--allow-managed-server-create", action="store_true")
     args = parser.parse_args()
     output = asyncio.run(
         run(
@@ -532,6 +535,7 @@ def main() -> int:
             run_id=args.run_id,
             timeout_seconds=args.timeout_seconds,
             viewer_timeout_seconds=args.viewer_timeout_seconds,
+            allow_managed_server_create=args.allow_managed_server_create,
         )
     )
     print(output.as_posix())

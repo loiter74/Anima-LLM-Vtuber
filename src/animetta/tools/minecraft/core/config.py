@@ -16,7 +16,7 @@ class MinecraftMcpConfig(BaseModel):
 
     url: str = "http://127.0.0.1:8768/mcp"
     cli_command: str = "mc-mcp"
-    default_profile: str = "managed-local"
+    default_profile: str = "external-local"
     startup_timeout_seconds: float = Field(default=10, gt=0, le=120)
     request_timeout_seconds: float = Field(default=60, gt=0, le=60)
     event_poll_seconds: float = Field(default=0.5, gt=0, le=10)

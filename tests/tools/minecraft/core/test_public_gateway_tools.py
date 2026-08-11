@@ -47,6 +47,7 @@ def test_caller_scope_is_not_model_generated_schema() -> None:
     }
 
     assert all("caller_scope" not in schema.get("properties", {}) for schema in schemas.values())
+    assert "allow_create" not in schemas["mc_connection"].get("properties", {})
     assert set(schemas["mc_connection"]["properties"]["operation"]["enum"]) == {
         "connect",
         "status",

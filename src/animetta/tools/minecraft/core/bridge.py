@@ -47,7 +47,13 @@ class MinecraftMcpBridge:
         self._event_task: asyncio.Task[None] | None = None
         self._connect_lock = asyncio.Lock()
 
-    async def start(self, *, profile: str | None = None, request_id: str) -> dict[str, Any]:
+    async def start(
+        self,
+        *,
+        profile: str | None = None,
+        request_id: str,
+        allow_server_create: bool = False,
+    ) -> dict[str, Any]:
         """Ensure mc-mcp, connect the selected profile, and start event projection."""
 
         await self._ensure_client()
@@ -56,6 +62,7 @@ class MinecraftMcpBridge:
             {
                 "profile": profile or self.config.mcp.default_profile,
                 "request_id": request_id,
+                "allow_create": allow_server_create,
             },
         )
         if result.get("state") != "ready":

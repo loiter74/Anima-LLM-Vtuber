@@ -27,7 +27,13 @@ class MinecraftReviewError(RuntimeError):
 
 
 class ReviewBridge(Protocol):
-    async def start(self, *, profile: str | None, request_id: str) -> dict[str, Any]: ...
+    async def start(
+        self,
+        *,
+        profile: str | None,
+        request_id: str,
+        allow_server_create: bool = False,
+    ) -> dict[str, Any]: ...
 
     async def shutdown_runtime(self, *, request_id: str) -> dict[str, Any]: ...
 
@@ -53,12 +59,14 @@ class MinecraftGameplayReviewHarness:
         artifact_dir: Path,
         bridge: ReviewBridge,
         profile: str = "managed-review",
+        allow_managed_server_create: bool = False,
         viewer_timeout_seconds: float = DEFAULT_VIEWER_WAIT_SECONDS,
     ) -> None:
         self._token = token
         self._artifact_dir = artifact_dir.resolve()
         self._bridge = bridge
         self._profile = profile
+        self._allow_managed_server_create = allow_managed_server_create
         self._viewer_timeout_seconds = viewer_timeout_seconds
         self._prepared = False
         self._closed = False
@@ -129,6 +137,7 @@ class MinecraftGameplayReviewHarness:
         result = await self._bridge.start(
             profile=self._profile,
             request_id=f"review-connect-{uuid4().hex}",
+            allow_server_create=self._allow_managed_server_create,
         )
         if result.get("state") != "ready":
             raise MinecraftReviewError("bridge_start_failed")
@@ -297,6 +306,7 @@ def create_real_harness(
     token: str,
     artifact_dir: Path,
     viewer_timeout_seconds: float = DEFAULT_VIEWER_WAIT_SECONDS,
+    allow_managed_server_create: bool = False,
 ) -> MinecraftGameplayReviewHarness:
     """Create a review harness that delegates all runtime ownership to mc-mcp."""
     from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
@@ -309,6 +319,7 @@ def create_real_harness(
         artifact_dir=artifact_dir,
         bridge=bridge,
         profile="managed-review",
+        allow_managed_server_create=allow_managed_server_create,
         viewer_timeout_seconds=viewer_timeout_seconds,
     )
 

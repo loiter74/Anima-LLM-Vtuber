@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from langchain_core.tools import tool
@@ -13,6 +14,7 @@ from animetta.services.llm.mock_llm import MockLLM
 from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
 from animetta.tools.minecraft.showcase import live as live_module
 from animetta.tools.minecraft.showcase.live import (
+    ReviewScenarioEnvironment,
     _adaptive_acquisition_stage_spans,
     _mission_world_facts,
 )
@@ -34,6 +36,26 @@ def test_adaptive_acquisition_partitions_learning_validation_and_reuse() -> None
     assert partition.skill_reuse == (300, 400)
     assert partition.learning_command_count == 1
     assert partition.reuse_command_count == 1
+
+
+@pytest.mark.asyncio
+async def test_review_environment_passes_only_explicit_managed_creation_authorization(
+    tmp_path,
+) -> None:
+    bridge = SimpleNamespace(start=AsyncMock(return_value={"state": "ready"}))
+    environment = ReviewScenarioEnvironment(
+        runtime_root=tmp_path / "runtime",
+        bridge=bridge,
+        allow_managed_server_create=True,
+    )
+
+    await environment.prepare_disposable_world(SimpleNamespace(), "review-run")
+
+    bridge.start.assert_awaited_once_with(
+        profile="managed-review",
+        request_id="showcase-connect-review-run",
+        allow_server_create=True,
+    )
 
 
 @pytest.mark.asyncio

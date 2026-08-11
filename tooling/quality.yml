@@ -979,6 +979,7 @@ components:
     paths:
       - scripts/minecraft_adaptive_showcase.py
       - scripts/minecraft_adaptive_micro_gate.py
+      - scripts/minecraft_gameplay_review_harness.py
       - scripts/minecraft_real_model_contract.py
       - src/animetta/acceptance/minecraft_gameplay_review.py
       - src/animetta/tools/minecraft/showcase/**

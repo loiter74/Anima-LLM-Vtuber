@@ -188,6 +188,7 @@ async def run(
     run_id: str,
     completion_timeout_seconds: float,
     ledger_path: Path,
+    allow_managed_server_create: bool,
 ) -> Path:
     _require_r8_start(ledger_path)
     runtime_root = (scratch_root / "runtime" / run_id).resolve()
@@ -204,6 +205,7 @@ async def run(
     environment = ReviewScenarioEnvironment(
         runtime_root=runtime_root,
         bridge=bridge,
+        allow_managed_server_create=allow_managed_server_create,
     )
     preparer = ScenarioPreparer(
         executor=ReviewRconSetupExecutor(bridge),
@@ -284,6 +286,7 @@ def main() -> int:
         default=f"adaptive-showcase-{time.time_ns() // 1_000_000}",
     )
     parser.add_argument("--completion-timeout-seconds", type=float, default=1_200)
+    parser.add_argument("--allow-managed-server-create", action="store_true")
     parser.add_argument(
         "--ledger-path",
         type=Path,
@@ -298,6 +301,7 @@ def main() -> int:
             run_id=args.run_id,
             completion_timeout_seconds=args.completion_timeout_seconds,
             ledger_path=args.ledger_path.resolve(),
+            allow_managed_server_create=args.allow_managed_server_create,
         )
     )
     print(output.as_posix())
