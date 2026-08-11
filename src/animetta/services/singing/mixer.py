@@ -23,14 +23,24 @@ class AudioMixer:
 
         cmd = [
             "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
             "-i",
             vocals_path,
             "-i",
             backing_path,
             "-filter_complex",
-            "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2",
-            "-ac",
-            "2",
+            (
+                "[0:a]pan=stereo|c0=c0|c1=c0,volume=0.8[v];"
+                "[1:a]aformat=channel_layouts=stereo[b];"
+                "[v][b]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,"
+                "alimiter=limit=0.95:level=false[out]"
+            ),
+            "-map",
+            "[out]",
+            "-ar",
+            "44100",
             "-y",
             str(output_path),
         ]

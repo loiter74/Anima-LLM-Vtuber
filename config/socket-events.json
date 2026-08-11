@@ -1563,7 +1563,11 @@
       "name": "sing:process",
       "payload": {
         "url?": "string",
-        "file?": "string",
+        "file_data?": "string",
+        "file_name?": "string",
+        "local_path?": "string",
+        "task_id?": "string",
+        "lyrics_text?": "string",
         "auto_confirm?": "boolean"
       }
     },
@@ -1586,18 +1590,26 @@
       "payload": {
         "stage": "string",
         "progress": "number",
-        "message": "string"
+        "message": "string",
+        "task_id": "string"
       }
     },
     "complete": {
       "name": "sing:complete",
       "payload": {
+        "task_id": "string",
         "audio_url": "string",
         "subtitle_url": "string",
         "tts_audio_url": "string",
         "vocals_url": "string",
+        "original_url": "string",
         "video_title": "string",
         "duration": "number",
+        "voice_conversion_applied": "boolean",
+        "voice_provider": "string",
+        "voice_model": "string",
+        "voice_revision": "string",
+        "voice_name": "string",
         "lyrics": "object[]",
         "volumes": "number[]"
       }
@@ -1605,6 +1617,7 @@
     "error": {
       "name": "sing:error",
       "payload": {
+        "task_id?": "string",
         "error": "string"
       }
     },

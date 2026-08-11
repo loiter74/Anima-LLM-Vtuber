@@ -94,6 +94,8 @@ def test_anima_feedback_plan_contains_every_protocol_stage_under_its_own_step() 
     assert tuple(step.id for step in lifecycle.steps) == (
         "host-tts-start",
         "host-tts-preflight",
+        "host-rvc-start",
+        "host-rvc-preflight",
         "animetta-build",
         "animetta-start",
         "animetta-health",
@@ -101,6 +103,8 @@ def test_anima_feedback_plan_contains_every_protocol_stage_under_its_own_step() 
         "default-log-check",
     )
     assert tuple(step.kind for step in lifecycle.steps) == (
+        LifecycleStepKind.COMMAND,
+        LifecycleStepKind.COMMAND,
         LifecycleStepKind.COMMAND,
         LifecycleStepKind.COMMAND,
         LifecycleStepKind.BUILD,
@@ -125,11 +129,14 @@ def test_cleanup_is_one_bounded_animetta_action() -> None:
     assert cleanup.budget.action_seconds == 240
 
 
-def test_host_tts_operations_have_bounded_plans() -> None:
+def test_host_ai_operations_have_bounded_plans() -> None:
     expected_steps = {
         "host-tts-up": ("host-tts-start", "host-tts-preflight"),
         "host-tts-status": ("host-tts-status",),
         "host-tts-stop": ("host-tts-stop",),
+        "host-rvc-up": ("host-rvc-start", "host-rvc-preflight"),
+        "host-rvc-status": ("host-rvc-status",),
+        "host-rvc-stop": ("host-rvc-stop",),
     }
 
     for operation, step_ids in expected_steps.items():

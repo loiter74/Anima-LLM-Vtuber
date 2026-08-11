@@ -19,25 +19,35 @@ singing:
     svc_endpoint: /svc
     temperature: 1.0
     text_lang: zh
+    text_split_method: cut5
     top_k: 15
     top_p: 1.0
   max_file_age_days: 7
   output_dir: ./data/singing/outputs
   rvc:
+    api_key_env: QWEN_TTS_API_KEY
+    base_url: '${RVC_HOST_URL:http://host.docker.internal:8769}'
     enabled: true
+    expected_revision: f8e22f8ca45a8855ef0deb331ebc8c9d7f19176d030beaabab4271065e791843
     f0_method: rmvpe
     f0_up_key: 0
     filter_radius: 5
-    index_path: logs/shige_utage.index
+    index_path: ''
     index_rate: 0.6
     model_name: shige_utage.pth
     protect: 0.5
     python_exe: ''
+    request_timeout_seconds: 1200.0
+    required: true
     rms_mix_rate: 0.5
-    rvc_path: ${RVC_PATH:}
+    rvc_path: '${RVC_PATH:C:/Users/30262/RVC20240604Nvidia}'
   separation:
-    engine: demucs
+    api_key_env: QWEN_TTS_API_KEY
+    base_url: '${RVC_HOST_URL:http://host.docker.internal:8769}'
+    engine: host-demucs
+    fallback_engine: ''
     model: htdemucs
     output_dir: ./data/singing/separated
+    request_timeout_seconds: 1200.0
   svc:
     output_dir: ./data/singing/converted

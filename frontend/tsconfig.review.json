@@ -6,6 +6,7 @@
   },
   "include": [
     "scripts/review/**/*.ts",
+    "scripts/live-singing-smoke.ts",
     "tests/**/*.test.ts",
     "src/review/**/*.ts",
     "src/live/review/**/*.ts",

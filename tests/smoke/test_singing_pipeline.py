@@ -7,6 +7,9 @@ network, no model loading, no heavy computation).
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 # ── Module imports ──────────────────────────────────────────────────
 
 
@@ -104,6 +107,7 @@ def test_singing_config_defaults():
     cfg = SingingConfig()
     assert cfg.rvc.enabled is False
     assert cfg.separation.engine == "demucs"
+    assert cfg.separation.fallback_engine == "ffmpeg"
     assert cfg.gpt_sovits.base_url == "http://127.0.0.1:9880"
 
 
@@ -121,6 +125,35 @@ def test_singing_config_can_disable_rvc():
 
     cfg = SingingConfig(rvc={"enabled": False})
     assert cfg.rvc.enabled is False
+
+
+def test_rvc_config_expands_environment_path(monkeypatch):
+    from animetta.config.singing import RVCConfig
+
+    monkeypatch.setenv("ANIMETTA_TEST_RVC_PATH", "C:/models/rvc")
+
+    cfg = RVCConfig(rvc_path="${ANIMETTA_TEST_RVC_PATH:}")
+
+    assert cfg.rvc_path == "C:/models/rvc"
+
+
+def test_rvc_host_config_expands_url_and_requires_positive_timeout(monkeypatch):
+    """The Docker-facing host service stays configurable without weakening identity."""
+    from animetta.config.singing import RVCConfig
+
+    monkeypatch.setenv("ANIMETTA_TEST_RVC_URL", "http://host.docker.internal:8769")
+    cfg = RVCConfig(
+        enabled=True,
+        required=True,
+        base_url="${ANIMETTA_TEST_RVC_URL:}",
+        expected_revision="revision",
+    )
+
+    assert cfg.base_url == "http://host.docker.internal:8769"
+    assert cfg.required is True
+    assert cfg.api_key_env == "QWEN_TTS_API_KEY"
+    with pytest.raises(ValidationError):
+        RVCConfig(request_timeout_seconds=0)
 
 
 # ── Real audio fixture ──────────────────────────────────────────────

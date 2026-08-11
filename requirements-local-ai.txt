@@ -45,6 +45,13 @@ silero-vad>=5.0.0
 # --- Audio Processing ---
 pydub>=0.25.0
 
+# --- Host RVC Singing Voice Conversion ---
+faiss-cpu>=1.15.0
+ffmpeg-python>=0.2.0
+praat-parselmouth>=0.4.7
+pyworld>=0.3.5
+torchcrepe>=0.0.24
+
 # --- Bilibili Live Danmaku ---
 bilibili-api-python>=17.0.0
 

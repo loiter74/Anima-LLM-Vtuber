@@ -1,0 +1,29 @@
+schema_version: 1
+
+identity:
+  provider: rvc-webui-host
+  model: shige_utage.pth
+  revision: f8e22f8ca45a8855ef0deb331ebc8c9d7f19176d030beaabab4271065e791843
+  voice: shige_utage
+  sample_rate: 40000
+
+client:
+  timeout_seconds: 1200.0
+
+separation:
+  model: htdemucs
+  python: C:\Users\30262\miniconda3\python.exe
+  device: cuda
+  timeout_seconds: 1200.0
+
+runtime:
+  root: C:\Users\30262\RVC20240604Nvidia
+  python: C:\Users\30262\RVC20240604Nvidia\runtime\Scripts\python.exe
+  model_sha256: B03F8A7E6081F78FDBF1A6E1602853481497E640017023D29EC12C41C8AAD060
+  hubert_model_dir: C:\Users\30262\RVC20240604Nvidia\assets\hubert\hubert_base
+  hubert_sha256: CC8C20F4B90A520757260197A3FF2505705A7ADBD20AD9EEAA4E1A9B38442EF5
+  hubert_repo: lj1995/VoiceConversionWebUI
+  hubert_revision: e6d0c1a17da07c33557852f9dfa2bd44cc75737d
+  rmvpe_sha256: 6D62215F4306E3CA278246188607209F09AF3DC77ED4232EFDD069798C4EC193
+  device: cuda:0
+  is_half: false

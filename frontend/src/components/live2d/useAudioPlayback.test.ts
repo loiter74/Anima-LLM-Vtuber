@@ -90,4 +90,14 @@ describe('useAudioPlayback', () => {
 
     expect(startLipSync).toHaveBeenCalledWith(MockAudio.instances[0], [0.2, 0.8], stageMouthTarget)
   })
+
+  it('plays a generated singing URL without copying it into a blob', async () => {
+    const { playAudio } = await import('./useAudioPlayback')
+
+    playAudio({ audio_url: '/api/singing/audio/song_final.wav', format: 'wav' })
+
+    expect(MockAudio.instances[0].src).toBe('/api/singing/audio/song_final.wav')
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(MockAudio.instances[0].play).toHaveBeenCalledOnce()
+  })
 })

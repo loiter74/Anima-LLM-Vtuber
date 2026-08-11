@@ -78,6 +78,7 @@ export function unlockAudioPlayback(): void {
 
 export interface AudioPlaybackPayload {
   audio_data?: string
+  audio_url?: string
   format?: string
   volumes?: number[]
   expressions?: ParameterTimeline
@@ -95,19 +96,21 @@ export function playAudio(
   lifecycle?: AudioPlaybackLifecycle,
   mouthTarget?: MouthTarget,
 ): void {
-  if (!data?.audio_data) return
+  if (!data?.audio_data && !data?.audio_url) return
   stopPcmAudioStream()
   currentLifecycle?.onCancel?.()
   currentLifecycle = lifecycle ?? null
   cleanup()
 
-  const binary = atob(data.audio_data)
-  const buffer = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i)
-
-  const blob = new Blob([buffer], { type: `audio/${data.format || 'mp3'}` })
-  const url = URL.createObjectURL(blob)
-  currentBlobUrl = url
+  let url = data.audio_url || ''
+  if (data.audio_data) {
+    const binary = atob(data.audio_data)
+    const buffer = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i)
+    const blob = new Blob([buffer], { type: `audio/${data.format || 'mp3'}` })
+    url = URL.createObjectURL(blob)
+    currentBlobUrl = url
+  }
   const audio = getAudioElement()
   audio.src = url
   const playbackLifecycle = currentLifecycle

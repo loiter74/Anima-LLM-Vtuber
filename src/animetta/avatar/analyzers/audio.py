@@ -125,6 +125,7 @@ class AudioAnalyzer:
         normalize: bool = True,
         gain: float = 1.8,
         use_peak: bool = False,
+        noise_floor: float = 0.0,
     ) -> list[float]:
         """
         Calculate the volume envelope of audio
@@ -134,6 +135,7 @@ class AudioAnalyzer:
             normalize: Whether to normalize to [0.0, 1.0]
             gain: Gain factor to boost lip-sync amplitude (default 1.8)
             use_peak: Use peak amplitude instead of RMS (more responsive)
+            noise_floor: Absolute linear amplitude below which mouth movement is suppressed
 
         Returns:
             Volume array, each value represents volume of one sample
@@ -163,7 +165,10 @@ class AudioAnalyzer:
                 if use_peak:
                     volumes.append(float(segment.max) / 32768.0)
                 else:
-                    volumes.append(segment.rms)
+                    volumes.append(float(segment.rms) / 32768.0)
+
+            if noise_floor > 0:
+                volumes = [max(0.0, volume - noise_floor) for volume in volumes]
 
             # Normalize
             if normalize and volumes:
@@ -179,7 +184,8 @@ class AudioAnalyzer:
 
             logger.debug(
                 f"[AudioAnalyzer] Calculated {len(volumes)} volume samples "
-                f"({duration_ms / 1000:.2f}s audio, {self.sample_rate} Hz, gain={gain})"
+                f"({duration_ms / 1000:.2f}s audio, {self.sample_rate} Hz, "
+                f"gain={gain}, noise_floor={noise_floor})"
             )
 
             return volumes

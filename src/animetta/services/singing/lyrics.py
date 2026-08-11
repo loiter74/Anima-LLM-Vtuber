@@ -77,6 +77,14 @@ Style: Default,Microsoft YaHei,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
+    def build_ass(self, lines: list[LyricLine]) -> str:
+        content = self._build_ass_header()
+        for line in lines:
+            start = self._sec_to_ass_time(line.start_ms / 1000)
+            end = self._sec_to_ass_time(line.end_ms / 1000)
+            content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{line.text}\n"
+        return content
+
     def _segments_to_ass(self, segments: list[Any]) -> list[str]:
         lines = []
         for seg in segments:

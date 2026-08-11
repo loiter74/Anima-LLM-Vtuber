@@ -393,6 +393,13 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
                 ("host-tts-preflight",),
                 None,
             ),
+            ("host-rvc-start", LifecycleStepKind.COMMAND, ("host-rvc-start",), None),
+            (
+                "host-rvc-preflight",
+                LifecycleStepKind.COMMAND,
+                ("host-rvc-preflight",),
+                None,
+            ),
             (
                 "animetta-build",
                 LifecycleStepKind.BUILD,
@@ -437,6 +444,20 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
         definitions = (("host-tts-status", LifecycleStepKind.COMMAND, ("host-tts-status",), None),)
     elif operation == "host-tts-stop":
         definitions = (("host-tts-stop", LifecycleStepKind.COMMAND, ("host-tts-stop",), None),)
+    elif operation == "host-rvc-up":
+        definitions = (
+            ("host-rvc-start", LifecycleStepKind.COMMAND, ("host-rvc-start",), None),
+            (
+                "host-rvc-preflight",
+                LifecycleStepKind.COMMAND,
+                ("host-rvc-preflight",),
+                None,
+            ),
+        )
+    elif operation == "host-rvc-status":
+        definitions = (("host-rvc-status", LifecycleStepKind.COMMAND, ("host-rvc-status",), None),)
+    elif operation == "host-rvc-stop":
+        definitions = (("host-rvc-stop", LifecycleStepKind.COMMAND, ("host-rvc-stop",), None),)
     else:
         raise ValueError(f"operation does not have a bounded lifecycle plan: {operation}")
 

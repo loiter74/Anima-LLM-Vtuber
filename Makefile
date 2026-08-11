@@ -1,4 +1,4 @@
-.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint host-tts-up host-tts-status host-tts-stop anima-up anima-down install-hooks hooks
+.PHONY: lint format format-check frontend-lint frontend-format-check typecheck deadcode test quality-validate test-quick test-affected test-full test-affected-shadow benchmark-quick benchmark-affected docker-build-affected health docker-health docker-test docker-lint host-tts-up host-tts-status host-tts-stop host-rvc-up host-rvc-status host-rvc-stop anima-up anima-down install-hooks hooks
 
 PYTHON ?= python
 QUALITY_DOCKER_PLAN ?= artifacts/test-impact/docker-affected-plan.json
@@ -95,6 +95,15 @@ host-tts-status:
 
 host-tts-stop:
 	$(PYTHON) scripts/runtime_lifecycle.py host-tts-stop
+
+host-rvc-up:
+	$(PYTHON) scripts/runtime_lifecycle.py host-rvc-up
+
+host-rvc-status:
+	$(PYTHON) scripts/runtime_lifecycle.py host-rvc-status
+
+host-rvc-stop:
+	$(PYTHON) scripts/runtime_lifecycle.py host-rvc-stop
 
 anima-up:
 	$(PYTHON) scripts/runtime_lifecycle.py anima-up

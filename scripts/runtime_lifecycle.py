@@ -1,4 +1,4 @@
-"""Cross-platform lifecycle operations for host-local Qwen TTS and Animetta."""
+"""Cross-platform lifecycle operations for host-local AI services and Animetta."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
+from animetta.host_rvc_contract import HOST_RVC_CONTRACT  # noqa: E402
 from animetta.host_tts_contract import HOST_TTS_CONTRACT  # noqa: E402
 
 HOST_TTS_RUNTIME_ROOT = Path(r"D:\AnimaModelAuditions\qwen3-tts-1.7b-streaming-20260726")
@@ -35,11 +36,20 @@ HOST_TTS_PID_FILE = HOST_TTS_RUNTIME_ROOT / "host-tts.pid.json"
 HOST_TTS_LOG_FILE = HOST_TTS_RUNTIME_ROOT / "log" / "host-tts.log"
 HOST_TTS_BASE_URL = "http://127.0.0.1:8767"
 HOST_TTS_IDENTITY = HOST_TTS_CONTRACT.identity()
+HOST_RVC_RUNTIME_ROOT = HOST_RVC_CONTRACT.runtime_root
+HOST_RVC_PYTHON = HOST_RVC_CONTRACT.python_executable
+HOST_RVC_PID_FILE = HOST_RVC_RUNTIME_ROOT / "host-rvc.pid.json"
+HOST_RVC_LOG_FILE = HOST_RVC_RUNTIME_ROOT / "log" / "host-rvc.log"
+HOST_RVC_BASE_URL = "http://127.0.0.1:8769"
+HOST_RVC_IDENTITY = HOST_RVC_CONTRACT.identity()
 
 OPERATIONS = (
     "host-tts-up",
     "host-tts-status",
     "host-tts-stop",
+    "host-rvc-up",
+    "host-rvc-status",
+    "host-rvc-stop",
     "anima-up",
     "anima-selftest-up",
     "anima-down",
@@ -258,8 +268,160 @@ def _host_tts_stop() -> None:
     _remove_host_pid_file()
 
 
+def _read_host_rvc_pid() -> int | None:
+    try:
+        payload = json.loads(HOST_RVC_PID_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    pid = payload.get("pid") if isinstance(payload, dict) else None
+    return pid if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 else None
+
+
+def _is_expected_host_rvc_process(pid: int) -> bool:
+    command_line = _host_process_command_line(pid)
+    if command_line is None:
+        return False
+    normalized = command_line.casefold()
+    return "animetta_rvc_host" in normalized and str(HOST_RVC_PYTHON).casefold() in normalized
+
+
+def _host_rvc_request_json(path: str, token: str = "") -> dict[str, object]:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(f"{HOST_RVC_BASE_URL}{path}", headers=headers)
+    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+        payload = json.load(response)
+    if not isinstance(payload, dict):
+        raise ValueError("Host RVC returned a non-object response")
+    return payload
+
+
+def _host_rvc_status() -> dict[str, object]:
+    pid = _read_host_rvc_pid()
+    if pid is None or not _is_expected_host_rvc_process(pid):
+        return {"running": False, "ready": False}
+    token = _host_token()
+    if not token:
+        return {"running": True, "ready": False, "error_category": "configuration"}
+    try:
+        ready = _host_rvc_request_json("/ready", token)
+    except (OSError, TimeoutError, ValueError, urllib.error.URLError):
+        return {"running": True, "ready": False, "error_category": "connection"}
+    identity_matches = all(
+        ready.get(field) == expected for field, expected in HOST_RVC_IDENTITY.items()
+    )
+    is_ready = ready.get("ready") is True and identity_matches
+    status: dict[str, object] = {
+        "running": True,
+        "ready": is_ready,
+        "identity_matches": identity_matches,
+    }
+    if not identity_matches:
+        status["error_category"] = "identity"
+    return status
+
+
+def _remove_host_rvc_pid_file() -> None:
+    with contextlib.suppress(OSError):
+        HOST_RVC_PID_FILE.unlink(missing_ok=True)
+
+
+def _terminate_host_rvc_process(pid: int) -> None:
+    if not _is_expected_host_rvc_process(pid):
+        return
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        check=False,
+        capture_output=True,
+        timeout=15,
+    )
+
+
+def _start_host_rvc_process(token: str) -> int:
+    if not HOST_RVC_PYTHON.is_file():
+        raise RuntimeError("Host RVC Python runtime is unavailable")
+    if not HOST_RVC_RUNTIME_ROOT.is_dir():
+        raise RuntimeError("Host RVC runtime directory is unavailable")
+    HOST_RVC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    existing_pythonpath = environment.get("PYTHONPATH", "")
+    python_paths = [str(ROOT / "src"), str(HOST_RVC_RUNTIME_ROOT)]
+    if existing_pythonpath:
+        python_paths.append(existing_pythonpath)
+    environment.update(
+        {
+            "PYTHONPATH": os.pathsep.join(python_paths),
+            "QWEN_TTS_API_KEY": token,
+            "RVC_HOST_BIND_HOST": "127.0.0.1",
+            "RVC_HOST_BIND_PORT": "8769",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+        }
+    )
+    creationflags = 0
+    startupinfo = None
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    with HOST_RVC_LOG_FILE.open("ab") as log_file:
+        process = subprocess.Popen(
+            [str(HOST_RVC_PYTHON), "-m", "animetta_rvc_host"],
+            cwd=HOST_RVC_RUNTIME_ROOT,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+            startupinfo=startupinfo,
+        )
+    HOST_RVC_PID_FILE.write_text(
+        json.dumps({"pid": process.pid}, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return process.pid
+
+
+def _host_rvc_up() -> bool:
+    status = _host_rvc_status()
+    if status.get("ready") is True:
+        return True
+    existing_pid = _read_host_rvc_pid()
+    if existing_pid is not None and _is_expected_host_rvc_process(existing_pid):
+        _terminate_host_rvc_process(existing_pid)
+    _remove_host_rvc_pid_file()
+    token = _host_token()
+    if not token:
+        raise RuntimeError("QWEN_TTS_API_KEY is not configured")
+    pid = _start_host_rvc_process(token)
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        status = _host_rvc_status()
+        if status.get("ready") is True:
+            return True
+        if not _is_expected_host_rvc_process(pid):
+            break
+        time.sleep(2)
+    raise RuntimeError("Host RVC did not become ready")
+
+
+def _host_rvc_stop() -> None:
+    pid = _read_host_rvc_pid()
+    if pid is not None:
+        _terminate_host_rvc_process(pid)
+    _remove_host_rvc_pid_file()
+
+
 def _preflight(*, wait: bool) -> list[str]:
     command = [sys.executable, "scripts/qwen_preflight.py"]
+    if wait:
+        command.append("--wait")
+    return command
+
+
+def _rvc_preflight(*, wait: bool) -> list[str]:
+    command = [sys.executable, "scripts/rvc_preflight.py"]
     if wait:
         command.append("--wait")
     return command
@@ -273,9 +435,17 @@ def run_operation(operation: str) -> None:
         print(json.dumps(_host_tts_status(), sort_keys=True))
     elif operation == "host-tts-stop":
         _host_tts_stop()
+    elif operation == "host-rvc-up":
+        _host_rvc_up()
+    elif operation == "host-rvc-status":
+        print(json.dumps(_host_rvc_status(), sort_keys=True))
+    elif operation == "host-rvc-stop":
+        _host_rvc_stop()
     elif operation == "anima-up":
         _host_tts_up(best_effort=False)
         _run(_preflight(wait=False))
+        _host_rvc_up()
+        _run(_rvc_preflight(wait=False))
         runtime_environment = {"ANIMETTA_PROFILE": os.getenv("ANIMETTA_PROFILE") or "production"}
         _run(
             ["docker", "compose", "build", "animetta"],
@@ -288,6 +458,8 @@ def run_operation(operation: str) -> None:
     elif operation == "anima-selftest-up":
         _host_tts_up(best_effort=False)
         _run(_preflight(wait=True))
+        _host_rvc_up()
+        _run(_rvc_preflight(wait=True))
         selftest_environment = {"ANIMETTA_PROFILE": "selftest"}
         _run(
             ["docker", "compose", "build", "animetta"],
@@ -347,6 +519,36 @@ class _SystemLifecycleDriver:
             )
         if command == ("host-tts-preflight",):
             command = tuple(_preflight(wait=False))
+        if command == ("host-rvc-start",):
+            ready = _host_rvc_up()
+            return self._observation_type(
+                succeeded=ready,
+                summary="Host RVC is ready",
+                evidence_refs=(self._evidence("host-rvc-readiness", f"ready={ready}\n"),),
+                exit_code=0,
+            )
+        if command == ("host-rvc-status",):
+            status = _host_rvc_status()
+            payload = json.dumps(status, sort_keys=True)
+            return self._observation_type(
+                succeeded=True,
+                summary=payload,
+                evidence_refs=(self._evidence("host-rvc-status", f"{payload}\n"),),
+                exit_code=0,
+            )
+        if command == ("host-rvc-stop",):
+            _host_rvc_stop()
+            status = _host_rvc_status()
+            stopped = status.get("running") is False
+            payload = json.dumps(status, sort_keys=True)
+            return self._observation_type(
+                succeeded=stopped,
+                summary="Host RVC stopped" if stopped else "Host RVC is still running",
+                evidence_refs=(self._evidence("host-rvc-stop", f"{payload}\n"),),
+                exit_code=0 if stopped else 1,
+            )
+        if command == ("host-rvc-preflight",):
+            command = tuple(_rvc_preflight(wait=False))
         try:
             completed = subprocess.run(
                 command,

@@ -6,9 +6,12 @@
 |---|---|
 | 启动或确认宿主 TTS | `scripts/runtime_lifecycle.py host-tts-up` |
 | 查询宿主 TTS | `scripts/runtime_lifecycle.py host-tts-status` |
-| 停止 Animetta，保留宿主 TTS | `scripts/runtime_lifecycle.py anima-down` |
+| 启动或确认宿主 RVC | `scripts/runtime_lifecycle.py host-rvc-up` |
+| 查询宿主 RVC | `scripts/runtime_lifecycle.py host-rvc-status` |
+| 停止 Animetta，保留宿主 TTS 与 RVC | `scripts/runtime_lifecycle.py anima-down` |
 | 启动 Animetta | `scripts/runtime_lifecycle.py anima-up` |
 | 完整停止宿主 TTS | `scripts/runtime_lifecycle.py host-tts-stop` |
+| 完整停止宿主 RVC | `scripts/runtime_lifecycle.py host-rvc-stop` |
 
 冒烟启动在当前 PowerShell 进程设置 `ANIMETTA_PROFILE=smoke`。若 `anima-up` 返回进行中，复用输出中的 run ID：
 

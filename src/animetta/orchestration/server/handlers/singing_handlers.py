@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import os
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -51,18 +52,25 @@ class SingingHandlers(BaseSocketHandler):
         file_name = data.get("file_name", "upload.mp3")
         local_path = data.get("local_path", "")
         auto_confirm = data.get("auto_confirm", False)
+        task_id = str(data.get("task_id") or uuid.uuid4())
+        lyrics_text = str(data.get("lyrics_text") or "")
 
         if not url and not file_data and not local_path:
             await self.sio.emit(
                 EVENTS["sing"]["error"]["name"],
-                {"error": "URL, file upload, or local path is required"},
+                {
+                    "task_id": task_id,
+                    "error": "URL, file upload, or local path is required",
+                },
                 to=sid,
             )
             return
 
         if self._pipeline is not None:
             await self.sio.emit(
-                EVENTS["sing"]["error"]["name"], {"error": "A pipeline is already running"}, to=sid
+                EVENTS["sing"]["error"]["name"],
+                {"task_id": task_id, "error": "A pipeline is already running"},
+                to=sid,
             )
             return
 
@@ -78,7 +86,7 @@ class SingingHandlers(BaseSocketHandler):
             self._pipeline = pipeline
 
             def _on_progress(progress: PipelineProgress) -> None:
-                asyncio.ensure_future(self._emit_progress(sid, progress))
+                asyncio.ensure_future(self._emit_progress(sid, task_id, progress))
 
             pipeline.set_progress_callback(_on_progress)
 
@@ -86,41 +94,66 @@ class SingingHandlers(BaseSocketHandler):
                 # Save uploaded file then run pipeline from local path
                 local_path = await self._save_uploaded_file(file_data, file_name)
                 asyncio.ensure_future(
-                    self._run_pipeline(sid, local_audio=local_path, auto_confirm=auto_confirm)
+                    self._run_pipeline(
+                        sid,
+                        local_audio=local_path,
+                        auto_confirm=auto_confirm,
+                        task_id=task_id,
+                        lyrics_text=lyrics_text,
+                    )
                 )
             elif local_path:
                 # Direct local file (server-side path)
                 if not os.path.isfile(local_path):
                     await self.sio.emit(
                         EVENTS["sing"]["error"]["name"],
-                        {"error": f"File not found: {local_path}"},
+                        {"task_id": task_id, "error": f"File not found: {local_path}"},
                         to=sid,
                     )
+                    await pipeline.close()
                     self._pipeline = None
                     return
                 asyncio.ensure_future(
-                    self._run_pipeline(sid, local_audio=local_path, auto_confirm=auto_confirm)
+                    self._run_pipeline(
+                        sid,
+                        local_audio=local_path,
+                        auto_confirm=auto_confirm,
+                        task_id=task_id,
+                        lyrics_text=lyrics_text,
+                    )
                 )
             else:
-                asyncio.ensure_future(self._run_pipeline(sid, url=url, auto_confirm=auto_confirm))
+                asyncio.ensure_future(
+                    self._run_pipeline(
+                        sid,
+                        url=url,
+                        auto_confirm=auto_confirm,
+                        task_id=task_id,
+                        lyrics_text=lyrics_text,
+                    )
+                )
 
         except Exception as e:
             logger.error(f"sing:process error: {e}", exc_info=True)
-            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": str(e)}, to=sid)
+            await self.sio.emit(
+                EVENTS["sing"]["error"]["name"],
+                {"task_id": task_id, "error": str(e)},
+                to=sid,
+            )
             self._pipeline = None
 
     async def _save_uploaded_file(self, file_data: str, file_name: str) -> str:
         """Save base64-encoded file to disk, return path."""
         upload_dir = Path("./data/singing/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        output_path = upload_dir / file_name
+        output_path = upload_dir / Path(file_name).name
 
         raw_bytes = base64.b64decode(file_data)
         output_path.write_bytes(raw_bytes)
         logger.info(f"Uploaded file saved: {output_path} ({len(raw_bytes)} bytes)")
         return str(output_path)
 
-    async def _emit_progress(self, sid: str, progress: PipelineProgress) -> None:
+    async def _emit_progress(self, sid: str, task_id: str, progress: PipelineProgress) -> None:
         """Emit progress event to client."""
         await self.sio.emit(
             EVENTS["sing"]["progress"]["name"],
@@ -128,6 +161,7 @@ class SingingHandlers(BaseSocketHandler):
                 "stage": progress.stage.value,
                 "progress": progress.progress,
                 "message": progress.message,
+                "task_id": task_id,
             },
             to=sid,
         )
@@ -142,7 +176,13 @@ class SingingHandlers(BaseSocketHandler):
             )
 
     async def _run_pipeline(
-        self, sid: str, url: str = "", local_audio: str = "", auto_confirm: bool = False
+        self,
+        sid: str,
+        url: str = "",
+        local_audio: str = "",
+        auto_confirm: bool = False,
+        task_id: str = "",
+        lyrics_text: str = "",
     ) -> None:
         """Run pipeline in background and emit results."""
         try:
@@ -152,7 +192,9 @@ class SingingHandlers(BaseSocketHandler):
 
             if local_audio:
                 result = await pipeline.process_from_file(
-                    local_audio, auto_confirm_lyrics=auto_confirm
+                    local_audio,
+                    auto_confirm_lyrics=auto_confirm,
+                    provided_lyrics=lyrics_text,
                 )
             else:
                 result = await pipeline.process(url, auto_confirm_lyrics=auto_confirm)
@@ -160,6 +202,7 @@ class SingingHandlers(BaseSocketHandler):
             await self.sio.emit(
                 EVENTS["sing"]["complete"]["name"],
                 {
+                    "task_id": task_id,
                     "audio_url": f"/api/singing/audio/{os.path.basename(result.audio_path)}",
                     "original_url": f"/api/singing/audio/{os.path.basename(result.original_audio_path)}",
                     "vocals_url": f"/api/singing/audio/{os.path.basename(result.vocals_path)}",
@@ -175,6 +218,11 @@ class SingingHandlers(BaseSocketHandler):
                     ),
                     "video_title": result.video_title,
                     "duration": result.duration_sec,
+                    "voice_conversion_applied": result.voice_conversion_applied,
+                    "voice_provider": result.voice_provider,
+                    "voice_model": result.voice_model,
+                    "voice_revision": result.voice_revision,
+                    "voice_name": result.voice_name,
                     "volumes": result.volumes,  # lip sync envelope from vocals track
                     "lyrics": [
                         {
@@ -186,14 +234,23 @@ class SingingHandlers(BaseSocketHandler):
                         for line in result.lyrics
                     ],
                 },
-                to=sid,
             )
         except asyncio.CancelledError:
-            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": "Cancelled"}, to=sid)
+            await self.sio.emit(
+                EVENTS["sing"]["error"]["name"],
+                {"task_id": task_id, "error": "Cancelled"},
+                to=sid,
+            )
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
-            await self.sio.emit(EVENTS["sing"]["error"]["name"], {"error": str(e)}, to=sid)
+            await self.sio.emit(
+                EVENTS["sing"]["error"]["name"],
+                {"task_id": task_id, "error": str(e)},
+                to=sid,
+            )
         finally:
+            if pipeline is not None:
+                await pipeline.close()
             self._pipeline = None
 
     async def on_sing_confirm_lyrics(self, sid: str, data: dict) -> None:

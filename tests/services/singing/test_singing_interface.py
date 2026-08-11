@@ -75,3 +75,11 @@ class TestLyricsGenerator:
         assert len(lines) == 2
         assert lines[0].text == "Hello world"
         assert lines[0].start_ms == 1000
+
+    def test_build_ass_round_trips_lyric_lines(self):
+        gen = LyricsGenerator.__new__(LyricsGenerator)
+        expected = [LyricLine(text="测试", start_ms=500, end_ms=2500)]
+
+        content = gen.build_ass(expected)
+
+        assert gen.parse_lyric_lines(content) == expected

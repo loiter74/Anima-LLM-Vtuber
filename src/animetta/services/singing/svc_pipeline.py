@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 import shutil
 from collections.abc import Callable
@@ -51,6 +52,22 @@ class SVCPipeline(SingingService):
             engine=config.separation.engine,
             model=config.separation.model,
             output_dir=config.separation.output_dir,
+            base_url=config.separation.base_url,
+            api_key=os.getenv(config.separation.api_key_env, ""),
+            request_timeout_seconds=config.separation.request_timeout_seconds,
+        )
+        self._fallback_separator = (
+            create_separator(
+                engine=config.separation.fallback_engine,
+                model=config.separation.model,
+                output_dir=config.separation.output_dir,
+                base_url=config.separation.base_url,
+                api_key=os.getenv(config.separation.api_key_env, ""),
+                request_timeout_seconds=config.separation.request_timeout_seconds,
+            )
+            if config.separation.fallback_engine
+            and config.separation.fallback_engine != config.separation.engine
+            else None
         )
         self._lyrics_gen = LyricsGenerator(
             model_size=config.asr.model_size,
@@ -71,7 +88,10 @@ class SVCPipeline(SingingService):
                 filter_radius=config.rvc.filter_radius,
                 rms_mix_rate=config.rvc.rms_mix_rate,
                 protect=config.rvc.protect,
-                manage_server=False,  # User must start Gradio server manually
+                base_url=config.rvc.base_url,
+                api_key=os.getenv(config.rvc.api_key_env, ""),
+                expected_revision=config.rvc.expected_revision,
+                request_timeout_seconds=config.rvc.request_timeout_seconds,
             )
             if config.rvc.enabled
             else None
@@ -123,7 +143,10 @@ class SVCPipeline(SingingService):
             raise
 
     async def process_from_file(
-        self, local_path: str, auto_confirm_lyrics: bool = False
+        self,
+        local_path: str,
+        auto_confirm_lyrics: bool = False,
+        provided_lyrics: str = "",
     ) -> SongResult:
         """Execute pipeline from local audio file (skip download).
 
@@ -134,9 +157,20 @@ class SVCPipeline(SingingService):
         self._cancelled = False
         self._auto_confirm = auto_confirm_lyrics
         self._init_session(str(local_path))
+        assert self._session_dir is not None
+        source = Path(local_path)
+        original_output = (
+            Path(self.config.output_dir)
+            / f"{self._session_dir.name}_original{source.suffix or '.wav'}"
+        )
+        shutil.copy2(source, original_output)
 
         try:
-            return await self._run_stages(local_path)
+            return await self._run_stages(
+                local_path,
+                original_path=str(original_output),
+                provided_lyrics=provided_lyrics,
+            )
         except asyncio.CancelledError:
             logger.info("Pipeline cancelled")
             self._stage = PipelineStage.IDLE
@@ -152,7 +186,11 @@ class SVCPipeline(SingingService):
         self._session_dir = session_output_dir
 
     async def _run_stages(
-        self, audio_path: str, video_title: str = "", original_path: str = ""
+        self,
+        audio_path: str,
+        video_title: str = "",
+        original_path: str = "",
+        provided_lyrics: str = "",
     ) -> SongResult:
         """Run stages 2-6 from an audio file."""
         session_dir = self._session_dir
@@ -162,27 +200,44 @@ class SVCPipeline(SingingService):
 
         # Stage 2: Separate
         self._update_progress(PipelineStage.SEPARATING, 0, "Separating vocals...")
-        vocals_path, backing_path = await self._separator.separate(audio_path)
+        try:
+            vocals_path, backing_path = await self._separator.separate(audio_path)
+        except RuntimeError as error:
+            if self._fallback_separator is None:
+                raise
+            logger.warning(f"Primary separation unavailable: {error}")
+            self._update_progress(
+                PipelineStage.SEPARATING,
+                25,
+                "Source separation unavailable; using compatibility audio",
+            )
+            vocals_path, backing_path = await self._fallback_separator.separate(audio_path)
         self._check_cancelled()
         self._update_progress(PipelineStage.SEPARATING, 100, "Separation complete")
 
         # Stage 2.5: Try B站 native lyrics first
         lrc = None
-        if self._source_url:
+        lyric_lines: list[LyricLine]
+        has_provided_lyrics = bool(provided_lyrics.strip())
+        if has_provided_lyrics:
+            duration = await self._mixer._get_duration(audio_path)
+            lyric_lines = self._plain_text_lyrics(provided_lyrics, duration)
+            ass_content = self._lyrics_gen.build_ass(lyric_lines)
+            self._confirmed_ass = ass_content
+            self._update_progress(PipelineStage.TRANSCRIBING, 100, "Using provided lyrics")
+        elif self._source_url:
             try:
                 lrc = await self._downloader.fetch_lyrics_lrc(self._source_url)
             except Exception as e:
                 logger.debug(f"B站 lyrics lookup failed (will use whisper): {e}")
 
-        if lrc:
+        if has_provided_lyrics:
+            pass
+        elif lrc:
             lyric_lines = LyricsGenerator.parse_lrc(lrc)
             logger.info(f"Using B站 native lyrics: {len(lyric_lines)} lines")
             # Generate .ass from LRC lines for subtitle display/compatibility
-            ass_content = self._lyrics_gen._build_ass_header()
-            for ll in lyric_lines:
-                start = self._lyrics_gen._sec_to_ass_time(ll.start_ms / 1000.0)
-                end = self._lyrics_gen._sec_to_ass_time(ll.end_ms / 1000.0)
-                ass_content += f"Dialogue: 0,{start},{end},Default,,0,0,0,,{ll.text}\n"
+            ass_content = self._lyrics_gen.build_ass(lyric_lines)
             self._confirmed_ass = ass_content
         else:
             # Stage 3: whisper transcription (fallback)
@@ -200,7 +255,7 @@ class SVCPipeline(SingingService):
         self._message = f"Lyrics saved to {ass_path}"
 
         # Stage 4: Wait for user confirmation (or auto-confirm)
-        if lrc:
+        if has_provided_lyrics or lrc:
             # B站 native lyrics — already confirmed, skip wait
             pass
         elif self._auto_confirm:
@@ -217,26 +272,13 @@ class SVCPipeline(SingingService):
             self._update_progress(PipelineStage.WAITING_LYRICS, 100, "Lyrics confirmed")
 
         # Parse lyrics (only for whisper fallback; LRC already parsed)
-        if not lrc:
+        if not has_provided_lyrics and not lrc:
             lyric_lines = self._lyrics_gen.parse_lyric_lines(self._confirmed_ass)
 
-        # Stage 5: Voice Conversion (RVC preferred, SVC/fallback)
-        self._update_progress(PipelineStage.CONVERTING, 0, "Converting vocals...")
         converted_path = session_dir / "converted.wav"
-        try:
-            if self._rvc is not None:
-                logger.info("Using RVC for voice conversion")
-                await self._rvc.convert(vocals_path, str(converted_path))
-            else:
-                await self._svc.convert(vocals_path, str(converted_path))
-            self._check_cancelled()
-            self._update_progress(PipelineStage.CONVERTING, 100, "Conversion complete")
-        except (ConnectionError, RuntimeError) as e:
-            logger.warning(f"Voice conversion skipped: {e}")
-            shutil.copy2(vocals_path, str(converted_path))
-            self._update_progress(
-                PipelineStage.CONVERTING, 100, "Voice conversion skipped — using original vocals"
-            )
+        voice_conversion_applied, voice_identity = await self._convert_voice(
+            vocals_path, converted_path
+        )
 
         # Copy converted vocals to outputs for API serving (used for lip sync)
         vocals_output = Path(self.config.output_dir) / f"{session_id}_vocals.wav"
@@ -269,11 +311,8 @@ class SVCPipeline(SingingService):
         # Compute lip sync volume envelope from vocals track
         volumes: list[float] = []
         try:
-            analyzer = AudioAnalyzer()
-            volumes = analyzer.compute_volume_envelope(
-                str(vocals_output), normalize=True, gain=3.5, use_peak=True
-            )
-            logger.info(f"Lip sync volumes computed: {len(volumes)} samples from vocals")
+            volumes = self._compute_lip_sync_volumes(vocals_path)
+            logger.info(f"Lip sync volumes computed: {len(volumes)} samples from isolated vocals")
         except Exception as e:
             logger.warning(f"Failed to compute lip sync volumes: {e}")
 
@@ -287,6 +326,54 @@ class SVCPipeline(SingingService):
             lyrics=lyric_lines,
             video_title=video_title,
             volumes=volumes,
+            voice_conversion_applied=voice_conversion_applied,
+            voice_provider=voice_identity.get("provider", ""),
+            voice_model=voice_identity.get("model", ""),
+            voice_revision=voice_identity.get("revision", ""),
+            voice_name=voice_identity.get("voice", ""),
+        )
+
+    async def _convert_voice(
+        self,
+        vocals_path: str,
+        converted_path: Path,
+    ) -> tuple[bool, dict[str, str]]:
+        """Convert vocals and preserve the exact RVC host identity on success."""
+
+        self._update_progress(PipelineStage.CONVERTING, 0, "Converting vocals...")
+        try:
+            if self._rvc is not None:
+                logger.info("Using RVC for voice conversion")
+                await self._rvc.convert(vocals_path, str(converted_path))
+                identity = self._rvc.last_identity
+            else:
+                await self._svc.convert(vocals_path, str(converted_path))
+                identity = {}
+            self._check_cancelled()
+            self._update_progress(PipelineStage.CONVERTING, 100, "Conversion complete")
+            return True, identity
+        except (ConnectionError, OSError, RuntimeError) as error:
+            if self._rvc is not None and self.config.rvc.required:
+                logger.error(f"Required RVC voice conversion failed: {error}")
+                raise RuntimeError(f"Required RVC voice conversion failed: {error}") from error
+            logger.warning(f"Voice conversion skipped: {error}")
+            shutil.copy2(vocals_path, converted_path)
+            self._update_progress(
+                PipelineStage.CONVERTING,
+                100,
+                "Voice conversion skipped — using original vocals",
+            )
+            return False, {}
+
+    @staticmethod
+    def _compute_lip_sync_volumes(vocals_path: str) -> list[float]:
+        """Drive mouth movement from isolated vocals while suppressing stem leakage."""
+        return AudioAnalyzer().compute_volume_envelope(
+            vocals_path,
+            normalize=True,
+            gain=1.8,
+            use_peak=False,
+            noise_floor=0.025,
         )
 
     async def _generate_tts_vocals(
@@ -335,7 +422,7 @@ class SVCPipeline(SingingService):
                     "temperature": tts_cfg.temperature,
                     "speed_factor": tts_cfg.speed,
                     "media_type": "wav",
-                    "text_split_method": tts_cfg.get("text_split_method", "cut5"),
+                    "text_split_method": tts_cfg.text_split_method,
                     "sample_steps": 32,
                     "seed": -1,
                 }
@@ -369,6 +456,17 @@ class SVCPipeline(SingingService):
         if self._cancelled:
             raise asyncio.CancelledError("Pipeline cancelled by user")
 
+    def _plain_text_lyrics(self, text: str, duration_sec: float) -> list[LyricLine]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return []
+        duration_ms = max(len(lines), int(duration_sec * 1000))
+        step = duration_ms / len(lines)
+        return [
+            LyricLine(text=line, start_ms=int(index * step), end_ms=int((index + 1) * step))
+            for index, line in enumerate(lines)
+        ]
+
     async def cancel(self) -> None:
         self._cancelled = True
         if self._lyrics_ready and not self._lyrics_ready.is_set():
@@ -389,6 +487,8 @@ class SVCPipeline(SingingService):
     async def close(self) -> None:
         await self._downloader.close()
         await self._separator.close()
+        if self._fallback_separator:
+            await self._fallback_separator.close()
         await self._lyrics_gen.close()
         await self._svc.close()
         if self._rvc:

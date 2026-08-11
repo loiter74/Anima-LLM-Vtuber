@@ -77,6 +77,7 @@ def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     assert "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}" in app["environment"]
     assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
     assert "QWEN_HOST_TTS_URL=http://host.docker.internal:8767" in app["environment"]
+    assert "RVC_HOST_URL=http://host.docker.internal:8769" in app["environment"]
     assert "MC_MCP_URL=${MC_MCP_URL:-http://host.docker.internal:8768/mcp}" in app["environment"]
     assert "MC_MCP_AUTH_TOKEN=${MC_MCP_AUTH_TOKEN:-}" in app["environment"]
     assert "depends_on" not in app
@@ -146,6 +147,7 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
         "QWEN_TTS_API_KEY=${QWEN_TTS_API_KEY:-}",
         "QWEN_HOST_TTS_URL=http://host.docker.internal:8767",
+        "RVC_HOST_URL=http://host.docker.internal:8769",
         "MC_MCP_URL=${MC_MCP_URL:-http://host.docker.internal:8768/mcp}",
         "MC_MCP_AUTH_TOKEN=${MC_MCP_AUTH_TOKEN:-}",
     }
@@ -177,6 +179,9 @@ def test_make_targets_delegate_to_cross_platform_lifecycle_entrypoint() -> None:
     for operation in (
         "host-tts-status",
         "host-tts-stop",
+        "host-rvc-up",
+        "host-rvc-status",
+        "host-rvc-stop",
         "anima-up",
         "anima-down",
     ):
@@ -205,6 +210,7 @@ def test_animetta_starts_and_preflights_host_tts_before_build() -> None:
     assert lifecycle.index("_run(_preflight(wait=False))") < lifecycle.index(
         '["docker", "compose", "build", "animetta"]'
     )
+    assert "_run(_rvc_preflight(wait=False))" in lifecycle
 
 
 def test_hosted_descriptors_use_core_image_and_production_profile() -> None:

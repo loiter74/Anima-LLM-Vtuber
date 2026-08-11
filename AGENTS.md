@@ -80,6 +80,8 @@ Windows 上运行项目 Python 命令必须使用：
 py -3.13
 ```
 
+读取中文 Skill、夹具或配置的独立 Python 工具子进程必须设置 `PYTHONUTF8=1`，不得修改全局编码环境。
+
 验证前先执行：
 
 ```powershell
@@ -255,6 +257,14 @@ Qwen TTS 只能作为 Windows 宿主机服务运行在：
 * Qwen Compose service；
 * Qwen 容器生命周期。
 
+RVC 唱歌声线推理只能作为 Windows 宿主机服务运行在：
+
+```text
+127.0.0.1:8769
+```
+
+不得新增 RVC Compose service 或把 GPU 推理依赖装入 Animetta 主容器。
+
 标准生命周期统一通过：
 
 ```powershell
@@ -263,9 +273,9 @@ py -3.13 scripts/runtime_lifecycle.py
 
 执行。
 
-`anima-down` 必须保留宿主机 Qwen。
+`anima-down` 必须保留宿主机 Qwen 与 RVC。
 
-只有 `host-tts-stop` 可以停止它。
+只有各自的 `host-tts-stop`、`host-rvc-stop` 可以停止它们。
 
 ## 已删除入口
 

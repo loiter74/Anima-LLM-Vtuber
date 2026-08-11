@@ -92,7 +92,7 @@ docker_watch_paths:
   - docker-compose*.yml
   - docker/entrypoint.sh
   - docker/nginx.conf
-  - requirements*.txt
+  - requirements.txt
   - frontend/package.json
   - frontend/pnpm-lock.yaml
   - frontend/src/**
@@ -113,6 +113,7 @@ docker_scopes:
       - MIMO_API_KEY
       - QWEN_TTS_API_KEY
       - QWEN_HOST_TTS_URL
+      - RVC_HOST_URL
     paths:
       - Dockerfile
       - .dockerignore
@@ -259,6 +260,7 @@ groups:
       - tests/scripts/test_runtime_lifecycle.py
       - tests/scripts/test_runtime_lifecycle_feedback.py
       - tests/scripts/test_qwen_preflight.py
+      - tests/scripts/test_rvc_preflight.py
       - tests/scripts/test_benchmark_host_tts.py
       - tests/scripts/test_release_runtime_gate.py
     args: [-q, -o, addopts=]
@@ -278,6 +280,23 @@ groups:
       - tests/services/tts/test_qwen_gguf_host_engine.py
       - tests/scripts/test_qwen_preflight.py
       - tests/scripts/test_benchmark_host_tts.py
+    args: [-q, -o, addopts=]
+    timeout_seconds: 120
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  host-rvc-contract-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/services/singing/test_rvc_host_app.py
+      - tests/services/singing/test_rvc_host_engine.py
+      - tests/services/singing/test_rvc_bridge.py
+      - tests/services/singing/test_svc_pipeline_rvc.py
+      - tests/scripts/test_rvc_preflight.py
     args: [-q, -o, addopts=]
     timeout_seconds: 120
     cacheable: true
@@ -352,7 +371,9 @@ groups:
     domain: backend
     kind: unit
     runner: pytest
-    targets: [tests/services]
+    targets:
+      - tests/services
+      - tests/smoke/test_singing_pipeline.py
     args: [-q, -o, addopts=, -m, not slow and not integration]
     timeout_seconds: 420
     cacheable: true
@@ -1009,14 +1030,11 @@ components:
       - src/animetta/config/observability.py
       - src/animetta/config/runtime_reload.py
       - src/animetta/config/scene_analysis.py
-      - src/animetta/config/singing.py
       - src/animetta/config/system.py
       - src/animetta/config/user.py
       - src/animetta/config/core/**
       - src/animetta/config/persona/**
       - config/bilibili.yaml
-      - config/singing.yaml
-      - config/socket-events.json
       - config/tools.yaml
       - config/demo/**
       - config/features/**
@@ -1030,6 +1048,34 @@ components:
       - backend-deadcode
     impacts: [backend-core]
     risk: high
+
+  singing-runtime:
+    domain: backend
+    paths:
+      - src/animetta/config/singing.py
+      - config/singing.yaml
+      - src/animetta/services/singing/**
+      - tests/services/singing/**
+      - tests/smoke/test_singing_pipeline.py
+    direct_groups:
+      - backend-config-unit
+      - backend-services-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [orchestration-server]
+    risk: normal
+
+  socket-events-contract:
+    domain: repository
+    paths: [config/socket-events.json]
+    direct_groups:
+      - backend-events-contract
+      - backend-server-unit
+      - frontend-tests
+    impacts: []
+    risk: normal
 
   backend-provider-config:
     domain: backend
@@ -1067,6 +1113,34 @@ components:
       - config/host-tts.yaml
       - src/animetta/host_tts_contract.py
     direct_groups: [host-tts-contract-unit]
+    impacts: []
+    risk: normal
+
+  host-rvc-contract:
+    domain: backend
+    paths:
+      - config/host-rvc.yaml
+      - scripts/demucs_fix.py
+      - src/animetta/host_rvc_contract.py
+      - src/animetta_rvc_host/**
+      - scripts/rvc_preflight.py
+      - tests/scripts/test_rvc_preflight.py
+    direct_groups:
+      - host-rvc-contract-unit
+      - runtime-lifecycle-unit
+      - python-format
+      - backend-static
+    impacts: [singing-runtime]
+    risk: normal
+
+  local-ai-dependencies:
+    domain: backend
+    paths: [requirements-local-ai.txt]
+    direct_groups:
+      - host-rvc-contract-unit
+      - backend-services-unit
+      - python-format
+      - backend-static
     impacts: []
     risk: normal
 
@@ -1327,11 +1401,13 @@ components:
       - docker-compose*.yml
       - docker/**
       - scripts/qwen_preflight.py
+      - scripts/rvc_preflight.py
       - scripts/benchmark_host_tts.py
       - scripts/runtime_lifecycle.py
       - scripts/release_runtime_gate.py
       - tests/deployment/**
       - tests/scripts/test_qwen_preflight.py
+      - tests/scripts/test_rvc_preflight.py
       - tests/scripts/test_benchmark_host_tts.py
       - tests/scripts/test_runtime_lifecycle.py
       - tests/scripts/test_runtime_lifecycle_feedback.py
@@ -1412,7 +1488,8 @@ components:
     domain: repository
     paths:
       - pyproject.toml
-      - requirements*.txt
+      - requirements.txt
+      - requirements-dev.txt
       - tests/conftest.py
     direct_groups: [backend-full]
     impacts: []

@@ -159,6 +159,22 @@ class TestAudioAnalyzerVolumeEnvelope:
         volumes = analyzer.compute_volume_envelope(wav, normalize=True, gain=1.0)
         assert abs(max(volumes) - 1.0) < 0.01
 
+    def test_noise_floor_is_applied_before_normalization(self, tmp_path):
+        """Quiet stem leakage must stay silent instead of being normalized into mouth motion."""
+        quiet = _create_sine_wave_wav(str(tmp_path / "quiet_leakage.wav"), max_amplitude=0.01)
+        analyzer = AudioAnalyzer(sample_rate=50)
+
+        volumes = analyzer.compute_volume_envelope(
+            quiet,
+            normalize=True,
+            gain=1.8,
+            use_peak=False,
+            noise_floor=0.025,
+        )
+
+        assert volumes
+        assert all(volume == 0.0 for volume in volumes)
+
     def test_file_not_found_returns_empty(self, tmp_path):
         """Non-existent file returns empty list."""
         analyzer = AudioAnalyzer(sample_rate=50)

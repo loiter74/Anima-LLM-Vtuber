@@ -19,6 +19,7 @@
     "review": "tsx scripts/review/cli.ts",
     "review:prune": "tsx scripts/review/prune.ts",
     "live:review": "tsx scripts/review/cli.ts --feature live",
+    "live:sing-smoke": "tsx scripts/live-singing-smoke.ts",
     "tts-failover:review": "tsx scripts/review/cli.ts --feature tts-failover --interactive",
     "live2d-performance:review": "tsx scripts/review/cli.ts --feature live2d-performance --interactive",
     "preview": "vite preview",

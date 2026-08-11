@@ -37,6 +37,11 @@ class SongResult:
     lyrics: list[LyricLine] = field(default_factory=list)
     video_title: str = ""
     volumes: list[float] = field(default_factory=list)  # lip sync envelope from vocals
+    voice_conversion_applied: bool = False
+    voice_provider: str = ""
+    voice_model: str = ""
+    voice_revision: str = ""
+    voice_name: str = ""
 
 
 @dataclass

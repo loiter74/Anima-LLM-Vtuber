@@ -159,6 +159,7 @@ export const Events = {
 } as const
 
 export interface SingCompletePayload {
+  task_id: string
   audio_url: string
   subtitle_url?: string
   tts_audio_url?: string
@@ -166,6 +167,11 @@ export interface SingCompletePayload {
   original_url?: string
   video_title?: string
   duration: number
+  voice_conversion_applied: boolean
+  voice_provider: string
+  voice_model: string
+  voice_revision: string
+  voice_name: string
   lyrics?: Array<{ text: string; translation: string; start_ms: number; end_ms: number }>
   volumes?: number[]
 }

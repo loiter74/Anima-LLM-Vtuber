@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "run-anima-live-singing-handoff",
+  "skill": "run-anima-live-singing",
+  "task": "使用 $run-anima-live-singing 读取 request.md，只生成 result/plan.md，不启动浏览器、Docker、宿主服务或真实唱歌调用。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/run-anima-live-singing-handoff",
+  "run_count": 2,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": [
+        "调用: pnpm -C frontend run live:sing-smoke",
+        "验收: task_id 一致; HTTP 200; playbackCount 递增; lastAudioKind=singing; state=playing|completed",
+        "边界: FFmpeg 兼容分离不代表 RVC 声线生效; 不启动任何服务"
+      ],
+      "not_contains": ["/live-stream", "声线已生效", "docker compose"]
+    }
+  ]
+}
