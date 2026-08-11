@@ -212,7 +212,7 @@ def test_common_change_corpus_keeps_nine_of_ten_off_full_fallback() -> None:
         "AGENTS.md",
         ".agents/skills/simplify/SKILL.md",
         ".agents/skills/test-skill-regression/scripts/compare_runs.py",
-        "docs/sync-mechanism.md",
+        "docs/roadmap.md",
         "src/animetta/services/vad/detector.py",
         "src/animetta/config/live2d.py",
         "src/animetta/avatar/performance.py",

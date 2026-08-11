@@ -273,6 +273,12 @@ config/tools.yaml        # Tool and MCP server configuration
 | [ADR-003](../adrs/ADR-003-plugin-architecture.md) | Decorator-based plugin registry | Factory pattern, DI container |
 | [ADR-004](../adrs/ADR-004-streaming-response.md) | Streaming-first design | Buffered response, Polling |
 | [ADR-005](../adrs/ADR-005-wiki-memory.md) | Wiki-architecture memory | Buffer-only, Chroma-only |
+| [ADR-006](../adrs/ADR-006-observability-stack.md) | OTel + Prometheus + Grafana | Competing telemetry frameworks |
+| [ADR-007](../adrs/ADR-007-wiki-memory-extensions.md) | Atom-based V2 memory | Ad-hoc memory shapes |
+| [ADR-008](../adrs/ADR-008-mcp-bridge.md) | External tools via MCP bridge | Per-tool IPC protocols |
+| [ADR-009](../adrs/ADR-009-live2d-expression.md) | Emotion→param mapping pipeline | Real-time `getBounds()` scaling |
+| [ADR-010](../adrs/ADR-010-bilibili-meme-collection.md) | Bilibili meme pipeline + scoring | Parallel ad-hoc meme stores |
+| [ADR-011](../adrs/ADR-011-realtime-audio-pipeline.md) | Unified realtime audio pipeline | Per-feature raw audio handling |
 
 ---
 

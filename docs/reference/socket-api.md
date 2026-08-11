@@ -370,15 +370,27 @@ Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，
 
 ## 8. Minecraft 事件
 
-### `minecraft.start`
+### `minecraft:connect`
 - **方向**: 客户端 → 服务器
-- **触发**: 启动 Minecraft 机器人
-- **数据**: `{}`（空对象）
+- **触发**: 连接 mc-mcp profile
+- **数据**: `{ "request_id": "string", "profile": "string" }`
 
-### `minecraft.stop`
+### `minecraft:disconnect`
 - **方向**: 客户端 → 服务器
-- **触发**: 停止 Minecraft 机器人
-- **数据**: 无
+- **触发**: 只断开 Bot（保留托管资源）
+
+### `minecraft:shutdown`
+- **方向**: 客户端 → 服务器
+- **触发**: 关闭 mc-mcp 自有托管资源
+
+### `minecraft:reattach_viewer`
+- **方向**: 客户端 → 服务器
+- **触发**: 请求 MC 侧重新附身观众
+
+### `minecraft:status`
+- **方向**: 客户端 → 服务器
+- **触发**: 读取 server / bot / viewer 状态
+- **服务器回复**: `minecraft:status` / `minecraft:viewer_status`
 
 ---
 
@@ -501,19 +513,6 @@ Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，
 | 🎭 人格 | 切换到人格面板 |
 | 🎵 音乐 | 切换到音乐面板 |
 | ⚙️ 设置 | 切换到设置面板 |
-
----
-
-## 新增功能接口需求
-
-### 记忆卡片功能（待实现）
-
-| 功能 | 需要的接口 | 说明 |
-|------|-----------|------|
-| 获取记忆话题列表 | `get_memory_topics` | 返回结构化的话题列表 |
-| 发送话题到聊天 | `text_input` | 复用现有接口 |
-| 删除记忆话题 | `delete_memory_topic` | 新增接口 |
-| 自动提取话题 | `extract_topics` | 新增接口（可选） |
 
 ---
 
