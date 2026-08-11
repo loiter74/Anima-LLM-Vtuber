@@ -276,6 +276,8 @@ def test_repository_catalog_covers_full_python_standard_scope() -> None:
     for component_id in {
         "backend-core",
         "backend-config",
+        "backend-config-tests",
+        "persona-config",
         "orchestration-server",
         "orchestration-graph",
         "backend-services",

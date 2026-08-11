@@ -236,6 +236,28 @@ def test_common_change_corpus_keeps_nine_of_ten_off_full_fallback() -> None:
     assert len(daily_feedback_plans) >= 9
 
 
+def test_persona_and_standalone_html_changes_use_focused_daily_gates() -> None:
+    persona_plan = plan_verification(
+        _catalog(),
+        from_paths(
+            ["config/personas/anima.v0.1.yaml", "tests/config/test_persona.py"],
+            repo_root=ROOT,
+        ),
+        Tier.AFFECTED,
+    )
+    live_html_plan = plan_verification(
+        _catalog(),
+        from_paths(["frontend/live.html"], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert persona_plan.fallbacks == ()
+    assert "persona-config-unit" in _group_ids(persona_plan)
+    assert "backend-full" not in _group_ids(persona_plan)
+    assert live_html_plan.fallbacks == ()
+    assert "frontend-tests" in _group_ids(live_html_plan)
+
+
 def test_affected_expands_declared_component_impacts() -> None:
     changes = from_paths(
         ["src/animetta/orchestration/server/handlers/chat_handlers.py"],
@@ -321,6 +343,10 @@ def test_sequential_shadow_plan_can_disable_dominance() -> None:
     [
         ("tooling/quality/cli.py", "backend-tooling-quality"),
         ("scripts/runtime_lifecycle.py", "runtime-lifecycle-unit"),
+        ("scripts/benchmark_host_tts.py", "runtime-lifecycle-unit"),
+        ("config/host-tts.yaml", "host-tts-contract-unit"),
+        ("config/animetta.yaml", "backend-config-unit"),
+        ("src/animetta/config/providers/tts/failover.py", "backend-config-unit"),
         ("scripts/minecraft_adaptive_showcase.py", "minecraft-adaptive-mission-unit"),
         ("scripts/minecraft_adaptive_micro_gate.py", "minecraft-adaptive-mission-unit"),
         ("tests/core/test_socketio_server.py", "backend-core-unit"),

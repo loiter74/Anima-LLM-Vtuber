@@ -528,6 +528,9 @@ class TestAnimaV01Persona:
         assert config.name == "Anima"
         assert config.role == "深夜赛博酒馆 AI VTuber"
         assert "被召唤者 X 从赛博世界强行召唤出来打工" in config.identity
+        assert "直播观众统一称作“家人们”" in config.identity
+        assert "直播观众统一称作“家人们”" in prompt
+        assert "旅人们" not in prompt
         assert "先下结论，再套世界观，最后轻轻接住人" in prompt
         assert "虫子" in prompt
         assert "作为 AI" in config.behavior.forbidden_phrases

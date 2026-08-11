@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js'
 import { mountTtsFailoverReviewNotification } from '@/tts-failover/main'
 import { DisposerStack } from '@/review/disposable'
 import { bootstrapLiveSession } from './bootstrap'
+import { createLiveAudioController } from './audio'
 import type { LiveSocket } from './controller'
 import { applyLiveReviewLayout } from './layout'
 import { createLive2DStage } from './live2d-stage'
@@ -63,7 +64,9 @@ const session = bootstrapLiveSession({
 const pageDisposers = new DisposerStack()
 let pageDisposed = false
 const live2dStage = createLive2DStage(session.socket)
+const liveAudio = createLiveAudioController(session.socket, document)
 pageDisposers.add(() => session.dispose())
+pageDisposers.add(() => liveAudio.dispose())
 pageDisposers.add(() => live2dStage.dispose())
 const disposePage = (): void => {
   if (pageDisposed) return

@@ -17,20 +17,20 @@ from urllib.request import Request, urlopen
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from animetta.host_tts_contract import HOST_TTS_CONTRACT  # noqa: E402
+
 DEFAULT_BASE_URL = "http://127.0.0.1:8767"
 
-# Identity of the host-local gguf Qwen TTS runtime (port 8767). This is the
-# single source of truth for the local runtime; keep it in sync with
-# HOST_TTS_IDENTITY in scripts/runtime_lifecycle.py. The /ready endpoint returns
-# both ``revision`` and ``runtime_commit`` (same value); preflight validates the
-# subset that is stable across host process restarts.
 HOST_TTS_EXPECTED_IDENTITY: dict[str, str] = {
     "service": "qwen-tts",
     "api_version": "v1",
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "vivian-synthetic-zh",
+    "provider": HOST_TTS_CONTRACT.provider,
+    "model": HOST_TTS_CONTRACT.model,
+    "revision": HOST_TTS_CONTRACT.revision,
+    "voice": HOST_TTS_CONTRACT.voice,
 }
 
 

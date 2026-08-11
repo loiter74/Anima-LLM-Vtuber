@@ -36,6 +36,7 @@ from animetta.config.providers.tts import (
 )
 from animetta.config.providers.vad import MimoVADConfig, MockVADConfig
 from animetta.config.runtime_reload import RuntimeConfigReloader
+from animetta.host_tts_contract import HOST_TTS_CONTRACT
 
 pytestmark = pytest.mark.config_unit
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -476,8 +477,8 @@ def test_cfg_012_public_status_is_sanitized_and_separates_provider_identities(
             "name": "qwen-host",
             "type": "remote",
             "provider": "qwen3-tts-gguf-host",
-            "model": "Qwen3-TTS-1.7B-Base",
-            "voice": "vivian-synthetic-zh",
+            "model": "test-model",
+            "voice": "test-voice",
         },
         "resolved": {
             "type": "mimo",
@@ -739,23 +740,33 @@ def test_default_production_selects_dashscope_with_host_qwen_fallback(
     assert isinstance(typed, FailoverTTSConfig)
     assert typed.primary.model == "qwen3-tts-instruct-flash-realtime"
     assert typed.primary.voice == "Seren"
-    assert typed.fallback.model == "Qwen3-TTS-1.7B-Base"
-    assert typed.fallback.voice == "vivian-synthetic-zh"
+    assert typed.fallback.model == HOST_TTS_CONTRACT.model
+    assert typed.fallback.voice == HOST_TTS_CONTRACT.voice
     assert typed.fallback.base_url == "http://host.docker.internal:8767"
 
 
-def test_repository_selftest_uses_local_qwen_without_changing_production(
+def test_repository_smoke_and_selftest_use_local_qwen_without_changing_production(
     manifest_secrets: pytest.MonkeyPatch,
 ) -> None:
+    smoke = load_effective_config(profile="smoke")
     selftest = load_effective_config(profile="selftest")
     production = load_effective_config(profile="production")
 
+    assert smoke.services.tts == "qwen-host"
+    assert smoke.tts.provider == "qwen3-tts-gguf-host"
+    assert smoke.system.tts_timeout_seconds == 120.0
     assert selftest.profile == "selftest"
     assert selftest.services.tts == "qwen-host"
     assert selftest.tts.type == "remote"
     assert selftest.tts.provider == "qwen3-tts-gguf-host"
-    assert selftest.tts.model == "Qwen3-TTS-1.7B-Base"
-    assert selftest.tts.voice == "vivian-synthetic-zh"
+    assert selftest.tts.model == HOST_TTS_CONTRACT.model
+    assert selftest.tts.voice == HOST_TTS_CONTRACT.voice
+    assert (
+        selftest.tts.model_dump(
+            exclude={"type", "api_key", "base_url", "speed"},
+        )
+        == HOST_TTS_CONTRACT.remote_declaration()
+    )
     assert selftest.system.tts_timeout_seconds == 120.0
     assert production.services.tts == "dashscope-local-failover"
 
@@ -805,7 +816,7 @@ def test_typed_provider_instances_cannot_mutate_effective_config(
     first = effective.typed_provider("tts")
     first.voice = "tampered"
 
-    assert effective.typed_provider("tts").voice == "vivian-synthetic-zh"
+    assert effective.typed_provider("tts").voice == "test-voice"
 
 
 @pytest.mark.parametrize("port", ["not-a-port", "70000"])

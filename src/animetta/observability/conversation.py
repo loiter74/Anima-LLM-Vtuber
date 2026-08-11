@@ -68,6 +68,7 @@ class ConversationObserver:
     ) -> None:
         self._recorder = recorder
         self._runtime_profile = runtime_profile
+        self._digest_salt = digest_salt
         self._policy = (
             ObservationContentPolicy(privacy_mode, salt=digest_salt)
             if privacy_mode is not None
@@ -84,7 +85,10 @@ class ConversationObserver:
         user_text = str(initial_state.get("user_text") or "")
         metadata = initial_state.get("metadata")
         metadata = metadata if isinstance(metadata, Mapping) else {}
-        trace_attributes = self._policy.filter_attributes(
+        policy = self._policy
+        if metadata.get("live_session_id"):
+            policy = ObservationContentPolicy(PrivacyMode.FULL, salt=self._digest_salt)
+        trace_attributes = policy.filter_attributes(
             {
                 "runtime_profile": self._runtime_profile,
                 "input_type": initial_state.get("input_type"),
@@ -99,9 +103,9 @@ class ConversationObserver:
                 identity=identity,
                 runtime_profile=self._runtime_profile,
                 input_type=str(initial_state.get("input_type") or "text"),
-                privacy_mode=self._policy.mode,
+                privacy_mode=policy.mode,
                 started_at=time.time(),
-                user_content=self._policy.content_facts(user_text),
+                user_content=policy.content_facts(user_text),
                 attributes=trace_attributes,
             )
         )
@@ -130,14 +134,14 @@ class ConversationObserver:
             message_id=identity.message_id,
             conversation_id=identity.conversation_id,
             session_id=identity.session_id,
-            privacy_mode=self._policy.mode,
+            privacy_mode=policy.mode,
         )
         token = attach_observation_context(context)
         recorder_token = attach_observation_recorder(self._recorder)
         delivery_token = begin_delivery_evidence()
         return TurnObservation(
             recorder=self._recorder,
-            policy=self._policy,
+            policy=policy,
             trace_id=identity.trace_id,
             token=token,
             delivery_token=delivery_token,

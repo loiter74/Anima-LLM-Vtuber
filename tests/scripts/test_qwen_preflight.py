@@ -13,14 +13,7 @@ def test_qwen_preflight_entrypoint_exists() -> None:
     assert (ROOT / "scripts" / "qwen_preflight.py").is_file()
 
 
-EXPECTED_IDENTITY = {
-    "service": "qwen-tts",
-    "api_version": "v1",
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "vivian-synthetic-zh",
-}
+EXPECTED_IDENTITY = preflight.HOST_TTS_EXPECTED_IDENTITY
 
 
 def test_exact_ready_identity_is_accepted() -> None:

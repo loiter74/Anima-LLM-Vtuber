@@ -15,8 +15,8 @@ class FailoverTTSConfig(TTSBaseConfig):
     """Exact DashScope primary and authenticated remote fallback pair."""
 
     type: Literal["failover"] = "failover"
-    model: str = "dashscope+qwen3-tts-1.7b"
-    voice: str = "Seren+vivian-synthetic-zh"
+    model: str = "failover"
+    voice: str = "dynamic"
     primary: DashScopeTTSConfig
     fallback: RemoteTTSConfig
     cooldown_seconds: float = Field(default=300.0, gt=0)

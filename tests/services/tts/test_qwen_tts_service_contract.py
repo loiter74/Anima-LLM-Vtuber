@@ -16,6 +16,13 @@ from animetta_qwen_tts.app import (
 
 pytestmark = pytest.mark.provider_contract
 
+TEST_PROVIDER = "test-provider"
+TEST_MODEL = "test-model"
+TEST_REVISION = "test-revision"
+TEST_VOICE = "test-voice"
+TEST_QUANTIZATION = "test-quantization"
+TEST_RUNTIME_COMMIT = "test-runtime-commit"
+
 
 def valid_wav_bytes() -> bytes:
     buffer = io.BytesIO()
@@ -74,10 +81,10 @@ class FakeQwenEngine:
 def settings(**overrides: Any) -> QwenServiceSettings:
     values: dict[str, Any] = {
         "api_key": "worker-secret",
-        "provider": "qwen3-tts-gguf-host",
-        "model": "Qwen3-TTS-1.7B-Base",
-        "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-        "voice": "vivian-synthetic-zh",
+        "provider": TEST_PROVIDER,
+        "model": TEST_MODEL,
+        "revision": TEST_REVISION,
+        "voice": TEST_VOICE,
         "language": "Chinese",
         "response_format": "wav",
         "sample_rate": 24000,
@@ -112,8 +119,8 @@ async def request(app: Any, method: str, path: str, **kwargs: Any) -> httpx.Resp
 
 def speech_payload(**overrides: Any) -> dict[str, Any]:
     payload = {
-        "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "vivian-synthetic-zh",
+        "model": TEST_MODEL,
+        "voice": TEST_VOICE,
         "input": "你好，爱丽丝",
         "response_format": "wav",
         "language": "Chinese",
@@ -169,11 +176,7 @@ async def test_preload_publishes_exact_ready_and_identity_contracts() -> None:
         "ready": True,
         "service": "qwen-tts",
         "api_version": "v1",
-        "provider": "qwen3-tts-gguf-host",
-        "model": "Qwen3-TTS-1.7B-Base",
-        "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-        "voice": "vivian-synthetic-zh",
-        "sample_rate": 24000,
+        **settings().identity_fields(),
     }
     assert ready.status_code == 200
     assert ready.json() == expected
@@ -187,12 +190,8 @@ async def test_identity_includes_fixed_host_runtime_metadata_when_configured() -
     app, service = app_for(
         engine,
         service_settings=settings(
-            provider="qwen3-tts-gguf-host",
-            model="Qwen3-TTS-1.7B-Base",
-            revision="0eb32e283ee46b86820c67843abb04cf12bc58d7",
-            voice="vivian-synthetic-zh",
-            quantization="talker=Q5_K,predictor=Q8_0,onnx=FP16",
-            runtime_commit="0eb32e283ee46b86820c67843abb04cf12bc58d7",
+            quantization=TEST_QUANTIZATION,
+            runtime_commit=TEST_RUNTIME_COMMIT,
         ),
     )
     await service.preload()
@@ -200,8 +199,8 @@ async def test_identity_includes_fixed_host_runtime_metadata_when_configured() -
     identity = await request(app, "GET", "/v1/identity", headers=auth_headers())
 
     assert identity.status_code == 200
-    assert identity.json()["quantization"] == ("talker=Q5_K,predictor=Q8_0,onnx=FP16")
-    assert identity.json()["runtime_commit"] == ("0eb32e283ee46b86820c67843abb04cf12bc58d7")
+    assert identity.json()["quantization"] == TEST_QUANTIZATION
+    assert identity.json()["runtime_commit"] == TEST_RUNTIME_COMMIT
 
 
 async def test_preload_warms_generation_before_publishing_readiness() -> None:
@@ -263,9 +262,9 @@ async def test_valid_speech_returns_audio_and_correlated_identity_headers() -> N
     assert response.status_code == 200
     assert response.content == VALID_WAV
     assert response.headers["content-type"] == "audio/wav"
-    assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
+    assert response.headers["x-animetta-provider"] == TEST_PROVIDER
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "vivian-synthetic-zh"
+    assert response.headers["x-animetta-voice"] == TEST_VOICE
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_calls == [
         {
@@ -295,9 +294,9 @@ async def test_streaming_speech_returns_ordered_pcm16_chunks_and_identity_header
     assert response.headers["x-animetta-audio-format"] == "pcm_s16le"
     assert response.headers["x-animetta-sample-rate"] == "24000"
     assert response.headers["x-animetta-channels"] == "1"
-    assert response.headers["x-animetta-provider"] == "qwen3-tts-gguf-host"
+    assert response.headers["x-animetta-provider"] == TEST_PROVIDER
     assert response.headers["x-animetta-model"] == settings().model
-    assert response.headers["x-animetta-voice"] == "vivian-synthetic-zh"
+    assert response.headers["x-animetta-voice"] == TEST_VOICE
     assert response.headers["x-request-id"] == "turn-7"
     assert engine.synthesize_stream_calls == [
         {

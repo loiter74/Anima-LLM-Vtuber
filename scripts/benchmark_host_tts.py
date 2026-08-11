@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import statistics
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -15,9 +16,12 @@ import httpx
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from animetta.host_tts_contract import HOST_TTS_CONTRACT  # noqa: E402
+
 DEFAULT_TEXT = "你好，今天也请多关照。我们一起把这件事情做好吧。"
-HOST_MODEL = "Qwen3-TTS-1.7B-Base"
-HOST_VOICE = "vivian-synthetic-zh"
 
 
 def _synthesize_once(
@@ -35,11 +39,11 @@ def _synthesize_once(
         f"{url.rstrip('/')}/v1/audio/speech",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "model": HOST_MODEL,
-            "voice": HOST_VOICE,
+            "model": HOST_TTS_CONTRACT.model,
+            "voice": HOST_TTS_CONTRACT.voice,
             "input": text,
-            "language": "Chinese",
-            "response_format": "wav",
+            "language": HOST_TTS_CONTRACT.language,
+            "response_format": HOST_TTS_CONTRACT.response_format,
             "stream": True,
         },
     ) as response:

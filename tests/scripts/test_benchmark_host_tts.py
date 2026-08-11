@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.benchmark_host_tts import _synthesize_once
+from scripts.benchmark_host_tts import HOST_TTS_CONTRACT, _synthesize_once
 
 
 class _Response:
@@ -47,11 +47,11 @@ def test_benchmark_uses_the_versioned_host_identity_contract() -> None:
 
     assert client.request is not None
     assert client.request["json"] == {
-        "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "vivian-synthetic-zh",
+        "model": HOST_TTS_CONTRACT.model,
+        "voice": HOST_TTS_CONTRACT.voice,
         "input": "你好",
-        "language": "Chinese",
-        "response_format": "wav",
+        "language": HOST_TTS_CONTRACT.language,
+        "response_format": HOST_TTS_CONTRACT.response_format,
         "stream": True,
     }
     assert result["audio_bytes"] == 48_000

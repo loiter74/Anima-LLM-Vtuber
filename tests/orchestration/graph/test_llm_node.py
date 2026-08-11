@@ -744,7 +744,8 @@ class TestLLMNodeWithTools:
         self, mock_service_context
     ):
         mock_chat_model = MagicMock()
-        bound_tool = MagicMock(name="mc_connection")
+        bound_tool = MagicMock()
+        bound_tool.name = "mc_connection"
         mock_chat_model.bound_tools = [bound_tool]
         mock_service_context.llm_engine.chat_with_tools = AsyncMock(
             return_value={"content": "连接状态正常。"}
@@ -778,6 +779,59 @@ class TestLLMNodeWithTools:
         assert result["tool_calls"] is None
         assert result["response_text"] == "连接状态正常。"
         assert mock_service_context.llm_engine.chat_with_tools.await_args.kwargs["tools"] == []
+
+    @pytest.mark.asyncio
+    async def test_completed_connection_call_keeps_gameplay_tool_available(
+        self, mock_service_context
+    ):
+        mock_chat_model = MagicMock()
+        connection_tool = MagicMock()
+        connection_tool.name = "mc_connection"
+        operate_tool = MagicMock()
+        operate_tool.name = "mc_operate_bot"
+        mock_chat_model.bound_tools = [connection_tool, operate_tool]
+        expected_tool_call = {
+            "id": "call-mission-1",
+            "name": "mc_operate_bot",
+            "args": {"operation": "execute", "request_id": "mission-1"},
+        }
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={"content": "正在执行。", "tool_calls": [expected_tool_call]}
+        )
+        state = create_initial_state(
+            session_id="test-session",
+            user_text="连接后向前走三格再回来",
+        )
+        state["messages"] = [
+            HumanMessage(content="连接后向前走三格再回来"),
+            AIMessage(
+                content="正在连接。",
+                tool_calls=[
+                    {
+                        "id": "call-connect-1",
+                        "name": "mc_connection",
+                        "args": {
+                            "operation": "connect",
+                            "request_id": "connect-1",
+                            "profile": "external-local",
+                        },
+                    }
+                ],
+            ),
+            ToolMessage(content='{"state":"ready"}', tool_call_id="call-connect-1"),
+        ]
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+
+        result = await llm_node(state, config)
+
+        assert result["tool_calls"] == [expected_tool_call]
+        assert mock_service_context.llm_engine.chat_with_tools.await_args.kwargs["tools"] == [
+            operate_tool
+        ]
 
     @pytest.mark.asyncio
     async def test_tool_call_keeps_raw_performance_marker_for_next_graph_pass(

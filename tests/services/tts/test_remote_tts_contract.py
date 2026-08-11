@@ -29,10 +29,10 @@ EXPECTED_IDENTITY = {
     "ready": True,
     "service": "qwen-tts",
     "api_version": "v1",
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "vivian-synthetic-zh",
+    "provider": "test-provider",
+    "model": "test-model",
+    "revision": "test-revision",
+    "voice": "test-voice",
     "sample_rate": 24000,
 }
 
@@ -55,10 +55,10 @@ def remote_config(**overrides: Any) -> RemoteTTSConfig:
         "type": "remote",
         "api_key": "test-secret",
         "base_url": "http://127.0.0.1:8767",
-        "provider": "qwen3-tts-gguf-host",
+        "provider": EXPECTED_IDENTITY["provider"],
         "model": EXPECTED_IDENTITY["model"],
         "revision": EXPECTED_IDENTITY["revision"],
-        "voice": "vivian-synthetic-zh",
+        "voice": EXPECTED_IDENTITY["voice"],
         "response_format": "wav",
         "timeout_seconds": 0.25,
     }
@@ -73,9 +73,9 @@ def client_for(handler: Any) -> httpx.AsyncClient:
 def identity_headers(*, request_id: str = "req-1", **overrides: str) -> dict[str, str]:
     headers = {
         "content-type": "audio/wav",
-        "x-animetta-provider": "qwen3-tts-gguf-host",
+        "x-animetta-provider": str(EXPECTED_IDENTITY["provider"]),
         "x-animetta-model": str(EXPECTED_IDENTITY["model"]),
-        "x-animetta-voice": "vivian-synthetic-zh",
+        "x-animetta-voice": str(EXPECTED_IDENTITY["voice"]),
         "x-request-id": request_id,
     }
     headers.update(overrides)
@@ -104,7 +104,7 @@ def test_factory_keeps_remote_type_separate_from_worker_provider() -> None:
 
     target = object.__getattribute__(tts, "_target")
     assert isinstance(target, RemoteTTS)
-    assert target.provider == "qwen3-tts-gguf-host"
+    assert target.provider == EXPECTED_IDENTITY["provider"]
     assert target.language is None
 
 
@@ -121,10 +121,10 @@ async def test_matching_readiness_publishes_configured_and_resolved_identity() -
 
     assert resolved == EXPECTED_IDENTITY
     assert tts.configured_identity == {
-        "provider": "qwen3-tts-gguf-host",
+        "provider": EXPECTED_IDENTITY["provider"],
         "model": EXPECTED_IDENTITY["model"],
         "revision": EXPECTED_IDENTITY["revision"],
-        "voice": "vivian-synthetic-zh",
+        "voice": EXPECTED_IDENTITY["voice"],
     }
     assert tts.resolved_identity == EXPECTED_IDENTITY
     await tts.close()
@@ -225,9 +225,10 @@ async def test_synthesize_validates_request_and_response_identity(tmp_path: Path
     assert result == str(output_path)
     assert output_path.read_bytes() == VALID_WAV
     assert seen["path"] == "/v1/audio/speech"
-    assert '"model":"Qwen3-TTS-1.7B-Base"' in seen["payload"]
-    assert '"voice":"vivian-synthetic-zh"' in seen["payload"]
-    assert '"input":"你好，世界"' in seen["payload"]
+    payload = json.loads(seen["payload"])
+    assert payload["model"] == EXPECTED_IDENTITY["model"]
+    assert payload["voice"] == EXPECTED_IDENTITY["voice"]
+    assert payload["input"] == "你好，世界"
     assert seen["authorization"] == "Bearer test-secret"
     await tts.close()
 

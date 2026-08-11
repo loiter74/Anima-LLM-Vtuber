@@ -21,6 +21,8 @@ from pydantic import (
     model_validator,
 )
 
+from animetta.host_tts_contract import load_host_tts_contract
+
 from .core.base import ProviderConfig
 from .core.registry import ProviderRegistry
 from .humor import HumorConfig
@@ -465,11 +467,32 @@ def _read_manifest(path: Path) -> tuple[RuntimeManifest, dict[str, Any]]:
         raise ManifestValidationError(f"Invalid runtime manifest YAML: {exc}") from exc
     if not isinstance(raw, dict):
         raise ManifestValidationError("Runtime manifest root must be a mapping")
+    raw = _expand_external_contracts(raw, path.parent)
 
     try:
         return RuntimeManifest.model_validate(raw), raw
     except ValidationError as exc:
         raise ManifestValidationError(_validation_message(exc)) from exc
+
+
+def _expand_external_contracts(value: Any, config_dir: Path) -> Any:
+    if isinstance(value, list):
+        return [_expand_external_contracts(item, config_dir) for item in value]
+    if not isinstance(value, dict):
+        return value
+    expanded = {key: _expand_external_contracts(item, config_dir) for key, item in value.items()}
+    contract_name = expanded.pop("contract", None)
+    if contract_name is None:
+        return expanded
+    if contract_name != "host-tts":
+        raise ManifestValidationError(f"Unknown provider contract: {contract_name}")
+    contract_fields = load_host_tts_contract(config_dir / "host-tts.yaml").remote_declaration()
+    duplicates = sorted(set(expanded) & set(contract_fields))
+    if duplicates:
+        raise ManifestValidationError(
+            f"Provider contract host-tts duplicates fields: {', '.join(duplicates)}"
+        )
+    return {**expanded, **contract_fields}
 
 
 def _path_label(path: tuple[str, ...]) -> str:

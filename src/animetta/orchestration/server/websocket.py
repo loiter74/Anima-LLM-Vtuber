@@ -41,6 +41,7 @@ from animetta.observability.ports import (
     ObservationRecorder,
     ObservationReportStore,
 )
+from animetta.orchestration.graph.translation_state import translation_state
 from animetta.orchestration.socket_events import EVENTS
 
 from .desktop import DesktopClientManager
@@ -62,6 +63,7 @@ class WebSocketServer:
     def __init__(self, config: EffectiveConfig | None = None) -> None:
         """Initialize WebSocket server"""
         self.config = config
+        translation_state.apply_runtime_config(config)
         self.runtime_reloader = RuntimeConfigReloader(config) if config is not None else None
         self._cleanup_lock = asyncio.Lock()
         self._observation_start_lock = asyncio.Lock()
@@ -365,6 +367,7 @@ class WebSocketServer:
     def set_config(self, config: EffectiveConfig) -> None:
         """Set application config"""
         self.config = config
+        translation_state.apply_runtime_config(config)
         self.runtime_reloader = RuntimeConfigReloader(config)
         ServicePool.configure_runtime(config, self.model_manager)
         set_runtime_readiness_context(config, self.frontend_readiness)
@@ -378,6 +381,7 @@ class WebSocketServer:
     ) -> RuntimeConfigApplyResult:
         """Apply a successfully reloaded config to active runtime holders."""
         self.config = config
+        translation_state.apply_runtime_config(config)
         if self.runtime_reloader is not None:
             self.runtime_reloader._config = config
             self.runtime_reloader.version = version

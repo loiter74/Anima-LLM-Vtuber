@@ -43,7 +43,7 @@ def _state() -> dict:
     }
 
 
-async def test_conversation_observer_uses_task_id_verbatim_and_flushes() -> None:
+async def test_developer_console_records_full_content_and_flushes() -> None:
     recorder = Recorder()
     observer = ConversationObserver(
         recorder,
@@ -56,16 +56,58 @@ async def test_conversation_observer_uses_task_id_verbatim_and_flushes() -> None
 
     trace = recorder.started[0]
     assert trace.trace_id == "task-canonical"
-    assert trace.privacy_mode is PrivacyMode.REDACTED
-    assert trace.user_content.text is None
+    assert trace.privacy_mode is PrivacyMode.FULL
+    assert trace.user_content.text == "secret input"
     assert trace.attributes["actor_role"] == "developer"
     assert recorder.finished[0][0] == "task-canonical"
     assert recorder.finished[0][1] is TraceOutcome.SUCCESS
-    assert recorder.finished[0][2]["assistant_content"].text is None
+    assert recorder.finished[0][2]["assistant_content"].text == "secret output"
     assert recorder.finished[0][2]["attributes"]["live_session_id"] == "live-1"
     assert recorder.events[0].direction.value == "ingress"
     assert recorder.events[0].phase == "accepted"
     assert recorder.flushes == 1
+
+
+async def test_production_livestream_viewer_records_full_content() -> None:
+    recorder = Recorder()
+    observer = ConversationObserver(
+        recorder,
+        runtime_profile="production",
+        digest_salt="test-salt",
+    )
+    state = {
+        **_state(),
+        "metadata": {
+            "actor_role": "viewer",
+            "source": "bilibili",
+            "live_session_id": "live-1",
+            "audience": "livestream",
+        },
+    }
+
+    turn = await observer.start(state)
+    await turn.finish({**state, "response_text": "public response"})
+
+    assert recorder.started[0].privacy_mode is PrivacyMode.FULL
+    assert recorder.started[0].user_content.text == "secret input"
+    assert recorder.finished[0][2]["assistant_content"].text == "public response"
+
+
+async def test_production_non_live_turn_remains_redacted() -> None:
+    recorder = Recorder()
+    observer = ConversationObserver(
+        recorder,
+        runtime_profile="production",
+        digest_salt="test-salt",
+    )
+    state = {**_state(), "metadata": {"actor_role": "viewer", "source": "local"}}
+
+    turn = await observer.start(state)
+    await turn.finish({**state, "response_text": "private response"})
+
+    assert recorder.started[0].privacy_mode is PrivacyMode.REDACTED
+    assert recorder.started[0].user_content.text is None
+    assert recorder.finished[0][2]["assistant_content"].text is None
 
 
 def test_outcome_reduction_uses_state_and_required_delivery_evidence() -> None:

@@ -8,10 +8,12 @@ const {
   sendText,
   placeholder = '输入消息...',
   showVoice = true,
+  appearance = 'glass',
 } = defineProps<{
   sendText: (text: string) => void
   placeholder?: string
   showVoice?: boolean
+  appearance?: 'glass' | 'surface'
 }>()
 const { isMobile } = useMobile()
 const inputText = ref('')
@@ -45,7 +47,10 @@ function sendMessage(): void {
   <div
     data-testid="chat-input-bar"
     class="border border-c-border rounded-lg backdrop-blur-md flex items-center focus-within:border-c-border-accent focus-within:shadow-[0_0_0_3px_var(--c-accent-soft)]"
-    style="background: rgba(36, 21, 56, 0.35); touch-action: manipulation"
+    :style="{
+      background: appearance === 'surface' ? 'var(--c-panel)' : 'rgba(36, 21, 56, 0.35)',
+      touchAction: 'manipulation',
+    }"
     :class="
       isMobile
         ? 'mobile-input-bar gap-3 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] w-full'

@@ -36,6 +36,17 @@ describe('InputBar', () => {
     expect(wrapper.find('button').exists()).toBe(true)
   })
 
+  it('uses the theme panel surface when requested', () => {
+    const wrapper = mount(InputBar, {
+      props: { sendText: vi.fn(), appearance: 'surface' },
+      global: { stubs: { VoiceButton: true } },
+    })
+
+    expect(wrapper.get('[data-testid="chat-input-bar"]').attributes('style')).toContain(
+      'background: var(--c-panel)',
+    )
+  })
+
   it('send button is disabled when input is empty', () => {
     const wrapper = createWrapper()
     const sendBtn = wrapper.find('button:last-of-type')

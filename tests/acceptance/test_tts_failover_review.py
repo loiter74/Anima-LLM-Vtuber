@@ -172,15 +172,13 @@ async def test_harness_rejects_invalid_token_and_unknown_scene(tmp_path: Path) -
 async def test_harness_disables_fallback_with_non_24khz_resolved_identity(
     tmp_path: Path,
 ) -> None:
-    from animetta.acceptance.tts_failover_review import ReviewIdentityError
+    from animetta.acceptance.tts_failover_review import (
+        FALLBACK_IDENTITY,
+        ReviewIdentityError,
+    )
 
     fallback = PCMStreamingFallback()
-    fallback.resolved_identity = {
-        "provider": "qwen3-tts-gguf-host",
-        "model": "Qwen3-TTS-1.7B-Base",
-        "voice": "vivian-synthetic-zh",
-        "sample_rate": 16000,
-    }
+    fallback.resolved_identity = {**FALLBACK_IDENTITY, "sample_rate": 16000}
     harness, _fallback = make_harness(tmp_path, fallback)
 
     with pytest.raises(ReviewIdentityError):

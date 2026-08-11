@@ -173,11 +173,11 @@ function formatDuration(value?: number | null) {
 }
 
 function activityTone(activity: LiveActivity) {
-  if (activity.status === 'success') return 'border-c-success/40 bg-c-success/10 text-c-success'
+  if (activity.status === 'success') return 'border-c-success text-c-success'
   if (activity.status === 'error' || activity.status === 'cancelled') {
-    return 'border-c-error/40 bg-c-error/10 text-c-error'
+    return 'border-c-error text-c-error'
   }
-  return 'border-c-warning/40 bg-c-warning/10 text-c-warning'
+  return 'border-c-warning text-c-warning'
 }
 
 function activityDotTone(activity: LiveActivity) {
@@ -312,6 +312,7 @@ function rawValue(activity: LiveActivity, key: string) {
               输入不会进入字幕或语音，AI 的公开回答会自动播出
             </p>
             <InputBar
+              appearance="surface"
               :send-text="sendDeveloperText"
               :show-voice="false"
               placeholder="从后台向直播中的 AI 提出话题…"
@@ -358,9 +359,9 @@ function rawValue(activity: LiveActivity, key: string) {
                 }}</strong>
               </span>
               <span class="text-c-text-muted">
-                隐私
+                内容
                 <strong class="font-mono font-medium uppercase text-c-text-secondary">{{
-                  selectedTurn.privacy_mode
+                  selectedTurn.privacy_mode === 'full' ? '后台原文' : '历史脱敏'
                 }}</strong>
               </span>
             </div>
@@ -428,6 +429,12 @@ function rawValue(activity: LiveActivity, key: string) {
                       activity.minecraft.state
                     }}</strong>
                   </div>
+                  <p
+                    v-if="selectedTurn?.privacy_mode === 'full'"
+                    class="mt-2 break-all font-mono text-10px text-c-text-secondary"
+                  >
+                    {{ activity.minecraft.command_id }}
+                  </p>
                   <p v-if="activity.minecraft.failure_reason" class="mt-2 text-c-error">
                     {{ activity.minecraft.failure_reason }}
                   </p>
@@ -447,9 +454,10 @@ function rawValue(activity: LiveActivity, key: string) {
                     selectedTurn?.privacy_mode === 'full' &&
                     (rawValue(activity, 'arguments_text') || rawValue(activity, 'result_text'))
                   "
+                  open
                   class="mt-3"
                 >
-                  <summary class="cursor-pointer text-xs text-c-accent">展开可见原始数据</summary>
+                  <summary class="cursor-pointer text-xs text-c-accent">工具原始数据</summary>
                   <pre
                     v-if="rawValue(activity, 'arguments_text')"
                     class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"

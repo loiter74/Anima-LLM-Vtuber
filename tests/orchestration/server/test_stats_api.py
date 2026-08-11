@@ -105,6 +105,43 @@ class TestLiveStatsEndpoints:
         activities = response.json()["activities"]
         assert [item["label"] for item in activities] == ["模型规划", "决定并调用工具"]
 
+    def test_live_turn_labels_noncritical_output_llm_as_subtitle_translation(
+        self, client, mock_store
+    ):
+        detail = dict(mock_store.trace_detail.return_value)
+        detail["attributes"] = {"live_session_id": "live-1"}
+        detail["operations"] = [
+            {
+                "operation_id": "tool-1",
+                "name": "tool:search",
+                "status": "success",
+                "attributes": {},
+            },
+            {
+                "operation_id": "output-1",
+                "name": "output",
+                "layer": "workflow",
+                "status": "success",
+                "critical_path": True,
+                "attributes": {},
+            },
+            {
+                "operation_id": "translation-1",
+                "parent_operation_id": "output-1",
+                "name": "llm.chat_messages",
+                "layer": "service",
+                "status": "success",
+                "critical_path": False,
+                "attributes": {"method": "chat_messages"},
+            },
+        ]
+        mock_store.trace_detail.return_value = detail
+
+        response = client.get("/api/stats/live/turns/abc")
+
+        assert response.status_code == 200
+        assert response.json()["activities"][-1]["label"] == "字幕翻译"
+
 
 # ── Fixtures ───────────────────────────────────────────────────────
 

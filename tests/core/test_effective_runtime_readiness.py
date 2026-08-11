@@ -53,9 +53,9 @@ class _StaticFailoverTTS:
                 "error_category": None if self.fallback_ready else "connection",
                 "identity": {
                     "type": "remote",
-                    "provider": "qwen3-tts",
-                    "model": "Qwen3-TTS-12Hz-1.7B-Base",
-                    "voice": "vivian-synthetic-zh",
+                    "provider": "test-provider",
+                    "model": "test-model",
+                    "voice": "test-voice",
                 },
             },
             "circuit": {
@@ -183,7 +183,7 @@ def test_smoke_snapshot_publishes_one_config_identity_and_distinct_asr_tts_rows(
     assert payload["effective_hash"] == config.effective_hash
     assert payload["semantic_hash"] == config.semantic_hash
     assert payload["components"]["asr"]["configured"]["model"] == "mimo-v2.5-asr"
-    assert payload["components"]["tts"]["configured"]["model"] == "mimo-v2.5-tts"
+    assert payload["components"]["tts"]["configured"]["model"] == config.tts.model
     assert payload["components"]["asr"] != payload["components"]["tts"]
 
 

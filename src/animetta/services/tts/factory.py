@@ -134,7 +134,7 @@ class TTSFactory:
                 svc,
                 observation_recorder,
                 "tts",
-                provider=provider_type,
+                provider=getattr(config, "provider", provider_type),
                 model=getattr(config, "model", None),
             )
         except Exception as e:

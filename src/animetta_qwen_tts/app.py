@@ -74,6 +74,20 @@ class QwenServiceSettings:
     warmup_text: str = "你好，我是爱丽丝。"
     warmup_max_new_tokens: int = 48
 
+    def identity_fields(self) -> dict[str, str | int]:
+        identity: dict[str, str | int] = {
+            "provider": self.provider,
+            "model": self.model,
+            "revision": self.revision,
+            "voice": self.voice,
+            "sample_rate": self.sample_rate,
+        }
+        if self.quantization is not None:
+            identity["quantization"] = self.quantization
+        if self.runtime_commit is not None:
+            identity["runtime_commit"] = self.runtime_commit
+        return identity
+
     def __post_init__(self) -> None:
         required = {
             "api_key": self.api_key,
@@ -159,16 +173,8 @@ class QwenTTSService:
             "ready": True,
             "service": "qwen-tts",
             "api_version": "v1",
-            "provider": self.settings.provider,
-            "model": self.settings.model,
-            "revision": self.settings.revision,
-            "voice": self.settings.voice,
-            "sample_rate": self.settings.sample_rate,
+            **self.settings.identity_fields(),
         }
-        if self.settings.quantization is not None:
-            identity["quantization"] = self.settings.quantization
-        if self.settings.runtime_commit is not None:
-            identity["runtime_commit"] = self.settings.runtime_commit
         return identity
 
     def authorized(self, request: Request) -> bool:

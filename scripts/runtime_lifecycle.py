@@ -24,20 +24,17 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from animetta.host_tts_contract import HOST_TTS_CONTRACT  # noqa: E402
 
 HOST_TTS_RUNTIME_ROOT = Path(r"D:\AnimaModelAuditions\qwen3-tts-1.7b-streaming-20260726")
 HOST_TTS_PYTHON = HOST_TTS_RUNTIME_ROOT / "venv" / "Scripts" / "python.exe"
 HOST_TTS_PID_FILE = HOST_TTS_RUNTIME_ROOT / "host-tts.pid.json"
 HOST_TTS_LOG_FILE = HOST_TTS_RUNTIME_ROOT / "log" / "host-tts.log"
 HOST_TTS_BASE_URL = "http://127.0.0.1:8767"
-HOST_TTS_IDENTITY = {
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "quantization": "talker=Q5_K,predictor=Q8_0,onnx=FP16",
-    "voice": "vivian-synthetic-zh",
-    "runtime_commit": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "sample_rate": 24000,
-}
+HOST_TTS_IDENTITY = HOST_TTS_CONTRACT.identity()
 
 OPERATIONS = (
     "host-tts-up",

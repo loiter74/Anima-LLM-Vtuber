@@ -1,5 +1,12 @@
 # Reference voice assets
 
+## Active local host reference
+
+The active Windows-host Qwen voice uses a local-only reference and is not
+copied into the repository. Voice identity, reference path, transcript and
+SHA-256 live together in `config/host-tts.yaml`. Replace that one contract and
+rerun the standard host-TTS lifecycle; no source or test literals need editing.
+
 ## `animetta-vivian-reference.wav`
 
 This is synthetic speech generated locally with the official
@@ -15,5 +22,5 @@ anime, film, or livestream.
 - Generator/model license: [Apache License 2.0](https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE)
 
 The short transcript was generated for this reference clip and may be reused
-with the audio. Keep the hash and transcript synchronized with
-`src/animetta_qwen_tts/gguf_host.py` when replacing this file.
+with the audio. Keep its hash and transcript together if this file is selected
+in `config/host-tts.yaml`.

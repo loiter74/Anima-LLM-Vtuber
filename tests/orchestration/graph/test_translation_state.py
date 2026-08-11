@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Tests for translation runtime configuration state."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from animetta.orchestration.graph.translation_state import TranslationState, translation_state
@@ -68,6 +70,24 @@ class TestTranslationStateToggle:
         assert ts.enabled is True
         ts.enabled = False
         assert ts.enabled is False
+
+    def test_runtime_config_sets_initial_enabled_state(self):
+        ts = TranslationState()
+
+        ts.apply_runtime_config(
+            SimpleNamespace(system=SimpleNamespace(enable_subtitle_translation=False))
+        )
+
+        assert ts.enabled is False
+
+    def test_runtime_config_ignores_untyped_legacy_values(self):
+        ts = TranslationState()
+
+        ts.apply_runtime_config(
+            SimpleNamespace(system=SimpleNamespace(enable_subtitle_translation="false"))
+        )
+
+        assert ts.enabled is True
 
 
 class TestTranslationStateLanguage:

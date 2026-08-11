@@ -28,6 +28,13 @@
         <span class="status-pill" id="socketStatus" data-state="connecting">服务连接中</span>
         <span class="status-pill" id="livestreamStatus" data-state="stopped">直播未启动</span>
         <span class="status-pill" id="modelStatus" data-state="connecting">Live2D 加载中</span>
+        <span
+          id="audioStatus"
+          data-playback-state="idle"
+          data-playback-count="0"
+          data-last-audio-task-id=""
+          hidden
+        ></span>
       </aside>
       <section class="danmaku-panel" id="danmakuPanel" aria-label="实时弹幕">
         <header class="panel-header">

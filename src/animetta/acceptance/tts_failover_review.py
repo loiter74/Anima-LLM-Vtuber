@@ -22,6 +22,7 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer
+from animetta.host_tts_contract import HOST_TTS_CONTRACT
 from animetta.services.tts.dashscope_tts import DashScopeRealtimeTTS
 from animetta.services.tts.emotion_instructions import build_emotion_instruction
 from animetta.services.tts.failover_tts import FailoverTTS, FailoverTTSUnavailableError
@@ -29,18 +30,10 @@ from animetta.services.tts.remote_tts import RemoteTTS
 
 FIXED_REVIEW_TEXT = "晚上好，欢迎来到直播间。云端语音暂时不可用，现在由本小姐继续为你播报。"
 REVIEW_SCENE_ID = "billing-to-local"
-SAMPLE_RATE = 24000
+SAMPLE_RATE = HOST_TTS_CONTRACT.sample_rate
 CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
-FALLBACK_IDENTITY = {
-    "provider": "qwen3-tts-gguf-host",
-    "model": "Qwen3-TTS-1.7B-Base",
-    "revision": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "quantization": "talker=Q5_K,predictor=Q8_0,onnx=FP16",
-    "runtime_commit": "0eb32e283ee46b86820c67843abb04cf12bc58d7",
-    "voice": "vivian-synthetic-zh",
-    "sample_rate": SAMPLE_RATE,
-}
+FALLBACK_IDENTITY = HOST_TTS_CONTRACT.identity()
 
 
 @dataclass(frozen=True, slots=True)

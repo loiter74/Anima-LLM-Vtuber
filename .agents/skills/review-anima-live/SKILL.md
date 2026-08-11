@@ -24,6 +24,10 @@ description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser 
 7. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
 8. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
 9. 只根据本轮新证据判断通过、调整或重做。
+10. 验收真实 TTS 播放时，不等待“声音播放中”等瞬时文案。触发前记录
+    `#audioStatus[data-playback-count]`，触发后断言计数递增、
+    `data-last-audio-task-id` 等于本轮 `task_id`，且最终
+    `data-playback-state` 为 `playing` 或 `completed`；同时检查控制台没有播放失败。
 
 ## 不变量
 

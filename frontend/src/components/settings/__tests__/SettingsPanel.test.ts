@@ -68,15 +68,15 @@ describe('SettingsPanel runtime status', () => {
               configured: {
                 name: 'qwen-host',
                 type: 'remote',
-                provider: 'qwen3-tts-gguf-host',
-                model: 'Qwen3-TTS-1.7B-Base',
-                voice: 'vivian-synthetic-zh',
+                provider: 'test-provider',
+                model: 'test-model',
+                voice: 'test-voice',
               },
               resolved: {
                 type: 'remote',
-                provider: 'qwen3-tts-gguf-host',
-                model: 'Qwen3-TTS-1.7B-Base',
-                voice: 'vivian-synthetic-zh',
+                provider: 'test-provider',
+                model: 'test-model',
+                voice: 'test-voice',
               },
             },
             vad: {
@@ -109,8 +109,8 @@ describe('SettingsPanel runtime status', () => {
     expect(asr).toContain('配置')
     expect(asr).toContain('实际')
     expect(asr).toContain('mimo-v2.5-asr')
-    expect(tts).toContain('Qwen3-TTS-1.7B-Base')
-    expect(tts).toContain('vivian-synthetic-zh')
+    expect(tts).toContain('test-model')
+    expect(tts).toContain('test-voice')
     expect(asr).not.toEqual(tts)
   })
 })

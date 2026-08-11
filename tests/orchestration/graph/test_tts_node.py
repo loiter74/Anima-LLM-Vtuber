@@ -211,13 +211,13 @@ class TestTTSNode:
     def _production_context(tts_engine):
         configured = SimpleNamespace(
             type="remote",
-            model="Qwen3-TTS-1.7B-Base",
-            voice="vivian-synthetic-zh",
+            model="test-model",
+            voice="test-voice",
             public_identity=lambda: {
                 "type": "remote",
-                "provider": "qwen3-tts-gguf-host",
-                "model": "Qwen3-TTS-1.7B-Base",
-                "voice": "vivian-synthetic-zh",
+                "provider": "test-provider",
+                "model": "test-model",
+                "voice": "test-voice",
             },
         )
         return SimpleNamespace(
@@ -236,9 +236,9 @@ class TestTTSNode:
         target = RemoteTTS(
             api_key="test",
             base_url="http://127.0.0.1:8767",
-            provider="qwen3-tts-gguf-host",
-            model="Qwen3-TTS-1.7B-Base",
-            voice="vivian-synthetic-zh",
+            provider="test-provider",
+            model="test-model",
+            voice="test-voice",
             response_format="wav",
             language="Chinese",
             timeout_seconds=20.0,
@@ -259,8 +259,8 @@ class TestTTSNode:
             RunnableConfig(configurable={"service_context": context}),
         )
 
-        assert result["media_status"].provider == "qwen3-tts-gguf-host"
-        assert result["metadata"]["tts_provider"] == "qwen3-tts-gguf-host"
+        assert result["media_status"].provider == "test-provider"
+        assert result["metadata"]["tts_provider"] == "test-provider"
         assert "Proxy" not in result["metadata"]["tts_provider"]
 
     @pytest.mark.asyncio

@@ -45,6 +45,13 @@ class TranslationState:
             "source_language": self._source_language,
         }
 
+    def apply_runtime_config(self, config: object | None) -> None:
+        """Initialize the live override from a validated runtime snapshot."""
+        system = getattr(config, "system", None)
+        enabled = getattr(system, "enable_subtitle_translation", None)
+        if isinstance(enabled, bool):
+            self.enabled = enabled
+
 
 # Module-level singleton — shared across the process
 translation_state = TranslationState()

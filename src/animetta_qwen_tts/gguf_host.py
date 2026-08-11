@@ -14,18 +14,9 @@ from typing import Any
 
 import numpy as np
 
+from animetta.host_tts_contract import HOST_TTS_CONTRACT
+
 _STREAM_END = object()
-_RUNTIME_COMMIT = "0eb32e283ee46b86820c67843abb04cf12bc58d7"
-_REFERENCE_AUDIO = (
-    Path(__file__).resolve().parents[2]
-    / "config"
-    / "personas"
-    / "voices"
-    / "animetta-vivian-reference.wav"
-)
-_REFERENCE_SHA256 = "A2BBFF2BB0E33C72027DC0BB24565FA288BDF81FD147172861A3BC8831412E73"
-_REFERENCE_TEXT = "你好，我是千问，你今天过得好吗？"
-_VOICE = "vivian-synthetic-zh"
 
 
 class GGUFHostEngine:
@@ -229,18 +220,18 @@ def build_host_service_from_env(
     model_dir = Path(
         os.environ.get(
             "QWEN_HOST_TTS_MODEL_DIR",
-            r"D:\AnimaModelAuditions\qwen3-tts-1.7b-streaming-20260726\model-base",
+            str(HOST_TTS_CONTRACT.model_dir),
         )
     )
     reference_audio = Path(
         os.environ.get(
             "QWEN_HOST_TTS_REFERENCE_AUDIO",
-            str(_REFERENCE_AUDIO),
+            str(HOST_TTS_CONTRACT.reference_audio),
         )
     )
     expected_hash = os.environ.get(
         "QWEN_HOST_TTS_REFERENCE_SHA256",
-        _REFERENCE_SHA256,
+        HOST_TTS_CONTRACT.reference_sha256,
     ).upper()
     try:
         actual_hash = hashlib.sha256(reference_audio.read_bytes()).hexdigest().upper()
@@ -254,22 +245,28 @@ def build_host_service_from_env(
         reference_audio=reference_audio,
         reference_text=os.environ.get(
             "QWEN_HOST_TTS_REFERENCE_TEXT",
-            _REFERENCE_TEXT,
+            HOST_TTS_CONTRACT.reference_text,
         ),
+        sample_rate=HOST_TTS_CONTRACT.sample_rate,
         engine_factory=engine_factory,
     )
     settings = QwenServiceSettings(
         api_key=os.environ.get("QWEN_TTS_API_KEY", ""),
-        provider="qwen3-tts-gguf-host",
-        model="Qwen3-TTS-1.7B-Base",
-        revision=_RUNTIME_COMMIT,
-        voice=_VOICE,
-        quantization="talker=Q5_K,predictor=Q8_0,onnx=FP16",
-        runtime_commit=_RUNTIME_COMMIT,
-        language="Chinese",
-        response_format="wav",
-        sample_rate=24000,
-        synthesis_timeout_seconds=float(os.environ.get("QWEN_HOST_TTS_TIMEOUT_SECONDS", "120")),
+        provider=HOST_TTS_CONTRACT.provider,
+        model=HOST_TTS_CONTRACT.model,
+        revision=HOST_TTS_CONTRACT.revision,
+        voice=HOST_TTS_CONTRACT.voice,
+        quantization=HOST_TTS_CONTRACT.quantization,
+        runtime_commit=HOST_TTS_CONTRACT.runtime_commit,
+        language=HOST_TTS_CONTRACT.language,
+        response_format=HOST_TTS_CONTRACT.response_format,
+        sample_rate=HOST_TTS_CONTRACT.sample_rate,
+        synthesis_timeout_seconds=float(
+            os.environ.get(
+                "QWEN_HOST_TTS_TIMEOUT_SECONDS",
+                str(HOST_TTS_CONTRACT.timeout_seconds),
+            )
+        ),
         capacity_wait_seconds=float(os.environ.get("QWEN_HOST_TTS_CAPACITY_WAIT_SECONDS", "0.05")),
         max_concurrency=1,
         queue_capacity=2,

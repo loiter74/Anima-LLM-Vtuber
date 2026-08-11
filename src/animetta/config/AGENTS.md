@@ -44,6 +44,7 @@ config/
 - **@ProviderRegistry.register_config**: Decorator-based registration — no if/elif chains
 - **Config ↔ Service pairing**: Every provider config at `config/providers/{type}/` mirrors an implementation at `services/{type}/` (flat, no speech/intelligence nesting)
 - **Single-manifest**: `config/animetta.yaml` → strict Pydantic validation → immutable EffectiveConfig
+- **Lightweight imports**: Shared declarative contracts consumed by `animetta.config` live in a lightweight `animetta` root module; do not import through a package whose `__init__` loads `animetta.services` or Torch
 - **Pydantic V2 only**: `model_config = ConfigDict(...)` — `class Config:` is forbidden
 
 ## ANTI-PATTERNS

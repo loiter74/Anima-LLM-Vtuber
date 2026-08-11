@@ -65,8 +65,8 @@ def _apply_context_budget(
     return trimmed
 
 
-def _completed_connection_call(messages: list[Any]) -> bool:
-    """A successful lifecycle operation is terminal for the current user turn."""
+def _has_completed_connection_call(messages: list[Any]) -> bool:
+    """Return whether the latest tool result completed a connection operation."""
 
     if len(messages) < 2 or not isinstance(messages[-1], ToolMessage):
         return False
@@ -615,8 +615,12 @@ async def _llm_with_tools(
     bound_tools = getattr(chat_model, "bound_tools", []) or getattr(chat_model, "tools", [])
     completed_tool_calls = sum(isinstance(message, ToolMessage) for message in messages)
     max_tool_calls = int(_get_config_value(config, "max_tool_calls_per_turn", 5) or 5)
-    if completed_tool_calls >= max_tool_calls or _completed_connection_call(messages):
+    if completed_tool_calls >= max_tool_calls:
         bound_tools = []
+    elif _has_completed_connection_call(messages):
+        bound_tools = [
+            tool for tool in bound_tools if getattr(tool, "name", None) != "mc_connection"
+        ]
 
     history_for_llm = [
         msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))

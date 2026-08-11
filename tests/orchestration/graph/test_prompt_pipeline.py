@@ -304,7 +304,7 @@ async def test_default_affinity_section_appears():
     }
     result = await compile_prompt(state)
     assert "好感度状态" in result.system_prompt
-    assert "当前对旅人的好感度: 50/100" in result.system_prompt
+    assert "当前对家人的好感度: 50/100" in result.system_prompt
     assert "affinity" in result.section_names
 
 
@@ -317,7 +317,7 @@ async def test_affinity_value_from_metadata():
         "metadata": {"affinity": 82},
     }
     result = await compile_prompt(state)
-    assert "当前对旅人的好感度: 82/100" in result.system_prompt
+    assert "当前对家人的好感度: 82/100" in result.system_prompt
     assert "亲近" in result.system_prompt  # band for 71-85
 
 
@@ -377,7 +377,7 @@ async def test_affinity_clamped_to_display_range():
         }
         result = await compile_prompt(state)
         # Clamped to [0, 100], prompt still compiles
-        assert "当前对旅人的好感度:" in result.system_prompt
+        assert "当前对家人的好感度:" in result.system_prompt
 
 
 # ── Live improvisation section tests (task 1.5) ──────────────────

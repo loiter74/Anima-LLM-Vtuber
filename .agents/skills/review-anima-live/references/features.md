@@ -4,6 +4,7 @@
 |---|---|---|
 | 打开、显示或获取真实直播页面 | `live` | 使用 `--print-url` 只解析 feature 路由 |
 | 直播页面与弹幕布局 | `live` | 状态、弹幕、布局、控制台、截图 |
+| 真实直播 TTS 播放 | `live` | 播放计数、最后 task_id、持久播放状态、控制台 |
 | Live2D 性能和稳定性 | `live2d-performance` | 帧率、边界、动作、资源与控制台 |
 | TTS 主备切换 | `tts-failover` | 音频、通知、状态转换、布局与日志 |
 | Minecraft 直播展示 | `minecraft-gameplay` | 游戏画面、任务状态、OBS 与日志 |

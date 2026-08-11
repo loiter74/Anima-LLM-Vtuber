@@ -105,7 +105,7 @@ class AffinityPromptSource:
     """Produces the 好感度 (affinity) overlay section.
 
     Borrows the Galgame/VTuber "好感度" mechanic: the LLM is told its current
-    affection toward the 旅人 plus a tone hint for that range, so it can
+    affection toward the current viewer plus a tone hint for that range, so it can
     naturally shift register (疏离 / 毒舌温柔 / 宠溺) without an if-else ladder.
 
     The value comes from parsing the LLM's own ``[affinity:N]`` marker on the
@@ -122,7 +122,7 @@ class AffinityPromptSource:
 
         content = (
             f"## 好感度状态 (Affinity)\n\n"
-            f"当前对旅人的好感度: {affinity}/100 — {band}\n\n"
+            f"当前对家人的好感度: {affinity}/100 — {band}\n\n"
             f"区间提示：\n"
             f"- 0-30: 警惕疏离，话少而硬，不主动找话题\n"
             f"- 31-54: 礼貌但有距离感，回答克制\n"
@@ -130,8 +130,8 @@ class AffinityPromptSource:
             f"- 71-85: 亲近，会主动找话题，偶尔流露在意\n"
             f"- 86-100: 宠溺，护短，偶尔撒娇\n\n"
             f"每轮回复末尾在内心更新好感度并输出 marker：``[affinity:N]``"
-            f"（N 为 0-100 的整数）。除非旅人消息带``【debug】``，"
-            f"否则 marker 不对旅人可见——后台会剥除它。"
+            f"（N 为 0-100 的整数）。除非家人消息带``【debug】``，"
+            f"否则 marker 不对家人可见——后台会剥除它。"
         )
         return [
             PromptSection(

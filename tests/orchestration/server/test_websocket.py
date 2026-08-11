@@ -212,6 +212,18 @@ class TestSetConfig:
         websocket_server.set_config(cfg)
         assert websocket_server.config is cfg
 
+    def test_set_config_applies_subtitle_translation_runtime_default(self, websocket_server):
+        from animetta.orchestration.graph.translation_state import translation_state
+
+        previous = translation_state.enabled
+        cfg = MagicMock()
+        cfg.system.enable_subtitle_translation = False
+        try:
+            websocket_server.set_config(cfg)
+            assert translation_state.enabled is False
+        finally:
+            translation_state.enabled = previous
+
 
 # ── WebSocketServer — setup_routes ─────────────────────────────────
 

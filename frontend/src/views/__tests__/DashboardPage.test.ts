@@ -19,10 +19,20 @@ const turn = {
   finished_at: 1_784_000_002,
   duration_ms: 2000,
   outcome: 'success',
-  privacy_mode: 'redacted',
+  privacy_mode: 'full',
   content: {
-    user: { text: null, character_count: 18, byte_count: 36, digest: 'abcdef1234567890' },
-    assistant: { text: null, character_count: 24, byte_count: 48, digest: '123456abcdef7890' },
+    user: {
+      text: '去 Minecraft 看看基地',
+      character_count: 18,
+      byte_count: 36,
+      digest: 'abcdef1234567890',
+    },
+    assistant: {
+      text: '开发者刚刚在后台提到基地，我现在去看看。',
+      character_count: 24,
+      byte_count: 48,
+      digest: '123456abcdef7890',
+    },
   },
   tool_calls: 1,
   mc_status: 'success',
@@ -60,10 +70,11 @@ const detailPayload = {
       attributes: {
         tool_source: 'mcp',
         mcp_server: 'minecraft',
-        arguments_digest: 'args-digest',
+        arguments_text: '{"operation":"progress","command_id":"command-1"}',
+        result_text: '{"state":"succeeded"}',
       },
       minecraft: {
-        command_id: '[REDACTED]',
+        command_id: 'command-1',
         state: 'succeeded',
         failure_reason: null,
         transitions: [
@@ -111,7 +122,7 @@ describe('DashboardPage livestream operations console', () => {
     return wrapper
   }
 
-  it('shows developer source, core metrics, deterministic tool phase and redaction', async () => {
+  it('shows full developer and tool content in the trusted operations console', async () => {
     const wrapper = await mountDashboard()
 
     expect(wrapper.get('[data-testid="shared-titlebar"]')).toBeTruthy()
@@ -123,8 +134,12 @@ describe('DashboardPage livestream operations console', () => {
     expect(wrapper.text()).toContain('决定并调用工具')
     expect(wrapper.text()).toContain('MCP minecraft')
     expect(wrapper.text()).toContain('queued → succeeded')
-    expect(wrapper.text()).toContain('原始数据已脱敏')
-    expect(wrapper.text()).not.toContain('secret prompt')
+    expect(wrapper.text()).toContain('去 Minecraft 看看基地')
+    expect(wrapper.text()).toContain('开发者刚刚在后台提到基地')
+    expect(wrapper.text()).toContain('command-1')
+    expect(wrapper.text()).toContain('"operation":"progress"')
+    expect(wrapper.text()).toContain('后台原文')
+    expect(wrapper.text()).not.toContain('已脱敏')
     wrapper.unmount()
   })
 

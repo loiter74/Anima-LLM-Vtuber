@@ -92,17 +92,23 @@ async def live_turn_detail(
     privacy_mode = str(detail.get("privacy_mode") or "redacted")
     activities: list[dict[str, Any]] = []
     seen_tool = False
-    for operation in detail.get("operations", ()):
-        if not isinstance(operation, Mapping):
-            continue
+    operations = [
+        operation for operation in detail.get("operations", ()) if isinstance(operation, Mapping)
+    ]
+    operation_names = {
+        str(operation.get("operation_id")): str(operation.get("name") or "")
+        for operation in operations
+        if operation.get("operation_id")
+    }
+    for operation in operations:
         attributes = dict(operation.get("attributes") or {})
-        kind = _activity_kind(str(operation.get("name") or ""))
-        label = _activity_label(str(operation.get("name") or ""))
-        if (
-            kind == "model"
-            and seen_tool
-            and "composer" not in str(operation.get("name") or "").lower()
-        ):
+        name = str(operation.get("name") or "")
+        kind = _activity_kind(name)
+        label = _activity_label(name)
+        parent_name = operation_names.get(str(operation.get("parent_operation_id")), "")
+        if _is_subtitle_translation(operation, name=name, parent_name=parent_name):
+            label = "字幕翻译"
+        elif kind == "model" and seen_tool and "composer" not in name.lower():
             label = "结合结果复盘"
         activity = {
             "id": operation.get("operation_id"),
@@ -209,6 +215,19 @@ def _activity_label(name: str) -> str:
     if "output" in lowered or "delivery" in lowered or "tts" in lowered:
         return "公开投递"
     return name
+
+
+def _is_subtitle_translation(
+    operation: Mapping[str, Any],
+    *,
+    name: str,
+    parent_name: str,
+) -> bool:
+    return (
+        name.lower() == "llm.chat_messages"
+        and operation.get("critical_path") is False
+        and _activity_kind(parent_name) == "delivery"
+    )
 
 
 def _latest_mc_status(operations: Sequence[Mapping[str, Any]]) -> str:

@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from animetta.host_tts_contract import HOST_TTS_CONTRACT
 from animetta_qwen_tts.gguf_host import GGUFHostEngine, build_host_service_from_env
 
 
@@ -157,15 +158,10 @@ def test_host_service_environment_publishes_fixed_identity(
 
     service = build_host_service_from_env(engine_factory=FakeRuntimeEngine)
 
-    assert service.settings.provider == "qwen3-tts-gguf-host"
-    assert service.settings.model == "Qwen3-TTS-1.7B-Base"
-    assert service.settings.voice == "vivian-synthetic-zh"
-    assert service.settings.quantization == ("talker=Q5_K,predictor=Q8_0,onnx=FP16")
-    assert service.settings.runtime_commit == ("0eb32e283ee46b86820c67843abb04cf12bc58d7")
-    assert service.settings.sample_rate == 24000
+    assert service.settings.identity_fields() == HOST_TTS_CONTRACT.identity()
 
 
-def test_host_service_defaults_to_bundled_synthetic_reference(monkeypatch: Any) -> None:
+def test_host_service_uses_the_shared_reference_contract(monkeypatch: Any) -> None:
     monkeypatch.setenv("QWEN_TTS_API_KEY", "host-secret")
     for name in (
         "QWEN_HOST_TTS_REFERENCE_AUDIO",
@@ -177,8 +173,8 @@ def test_host_service_defaults_to_bundled_synthetic_reference(monkeypatch: Any) 
     service = build_host_service_from_env(engine_factory=FakeRuntimeEngine)
 
     assert isinstance(service.engine, GGUFHostEngine)
-    assert service.engine.reference_audio.name == "animetta-vivian-reference.wav"
-    assert service.engine.reference_text == "你好，我是千问，你今天过得好吗？"
+    assert service.engine.reference_audio == HOST_TTS_CONTRACT.reference_audio
+    assert service.engine.reference_text == HOST_TTS_CONTRACT.reference_text
     assert hashlib.sha256(service.engine.reference_audio.read_bytes()).hexdigest().upper() == (
-        "A2BBFF2BB0E33C72027DC0BB24565FA288BDF81FD147172861A3BC8831412E73"
+        HOST_TTS_CONTRACT.reference_sha256
     )
