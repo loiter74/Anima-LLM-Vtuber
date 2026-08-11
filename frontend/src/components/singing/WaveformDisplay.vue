@@ -27,6 +27,9 @@ function connectAudio(audioEl: HTMLAudioElement) {
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 256
     source.connect(analyser)
+    // createMediaElementSource reroutes the element's output into the Web Audio
+    // graph, so we must reach the destination or the main mix is silent.
+    analyser.connect(audioCtx.destination)
   } catch {
     /* already connected */
   }

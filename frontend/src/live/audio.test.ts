@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Events } from '@/constants/socket-events'
 import { createLiveAudioController } from './audio'
 import type { LiveSocket } from './controller'
+import { SINGING_PLAYBACK_STORAGE_KEY, writeSingingPlayback } from '@/singing/playback-sync'
 
 const playback = vi.hoisted(() => ({
   endAudioStream: vi.fn(),
@@ -19,7 +20,7 @@ const lipSync = vi.hoisted(() => ({
 vi.mock('@/components/live2d/useAudioPlayback', () => playback)
 vi.mock('@/components/live2d/useLipSync', () => lipSync)
 
-function harness() {
+function harness(playResult: Promise<void> = Promise.resolve()) {
   const handlers = new Map<string, (...args: unknown[]) => void>()
   const setMouthTarget = vi.fn()
   const socket: LiveSocket = {
@@ -34,16 +35,10 @@ function harness() {
   }
   document.body.innerHTML = `
     <span id="audioStatus" data-playback-state="idle" data-playback-count="0" hidden></span>
-    <section id="singingPlayer" data-state="idle" hidden>
-      <h2 id="singingTitle"></h2>
-      <p id="singingIdentity"></p>
-      <button id="singingPlayButton" type="button">播放</button>
-      <audio id="singingAudio"></audio>
-      <p id="singingPlaybackStatus"></p>
-    </section>
+    <audio id="singingAudio" hidden></audio>
   `
   const singingAudio = document.getElementById('singingAudio') as HTMLAudioElement
-  vi.spyOn(singingAudio, 'play').mockResolvedValue()
+  vi.spyOn(singingAudio, 'play').mockReturnValue(playResult)
   vi.spyOn(singingAudio, 'pause').mockImplementation(() => undefined)
   vi.spyOn(singingAudio, 'load').mockImplementation(() => undefined)
   const controller = createLiveAudioController(socket, document, setMouthTarget)
@@ -51,7 +46,122 @@ function harness() {
 }
 
 describe('standalone live audio', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('restores dashboard singing playback when live opens later', () => {
+    writeSingingPlayback({
+      taskId: 'late-live-task',
+      track: 'mix',
+      audioUrl: '/api/singing/audio/late_final.wav',
+      volumes: [0.2, 0.7],
+      durationSeconds: 240,
+      state: 'playing',
+      positionSeconds: 18,
+      updatedAtMs: Date.now(),
+    })
+
+    const { controller, setMouthTarget, singingAudio } = harness()
+
+    expect(singingAudio.getAttribute('src')).toBe('/api/singing/audio/late_final.wav')
+    expect(singingAudio.currentTime).toBeCloseTo(18, 0)
+    expect(singingAudio.play).toHaveBeenCalledOnce()
+    singingAudio.dispatchEvent(new Event('play'))
+    expect(lipSync.startLipSync).toHaveBeenCalledWith(singingAudio, [0.2, 0.7], setMouthTarget)
+    expect(document.getElementById('audioStatus')).toHaveProperty(
+      'dataset.lastAudioTaskId',
+      'late-live-task',
+    )
+    controller.dispose()
+  })
+
+  it('applies dashboard pause and seek changes without a new socket event', () => {
+    const { controller, singingAudio } = harness()
+    const playing = {
+      version: 1 as const,
+      taskId: 'controlled-task',
+      track: 'mix' as const,
+      audioUrl: '/api/singing/audio/controlled.wav',
+      volumes: [0.4],
+      durationSeconds: 200,
+      state: 'playing' as const,
+      positionSeconds: 20,
+      updatedAtMs: Date.now(),
+    }
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: SINGING_PLAYBACK_STORAGE_KEY,
+        newValue: JSON.stringify(playing),
+      }),
+    )
+    expect(singingAudio.play).toHaveBeenCalledOnce()
+
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: SINGING_PLAYBACK_STORAGE_KEY,
+        newValue: JSON.stringify({
+          ...playing,
+          state: 'paused',
+          positionSeconds: 31,
+          updatedAtMs: Date.now(),
+        }),
+      }),
+    )
+
+    expect(singingAudio.currentTime).toBe(31)
+    expect(singingAudio.pause).toHaveBeenCalled()
+    expect(document.getElementById('audioStatus')).toHaveProperty('dataset.playbackState', 'paused')
+    controller.dispose()
+  })
+
+  it('retries browser-blocked singing playback on the first live page gesture', async () => {
+    writeSingingPlayback({
+      taskId: 'gesture-task',
+      track: 'mix',
+      audioUrl: '/gesture.wav',
+      volumes: [0.3],
+      durationSeconds: 120,
+      state: 'playing',
+      positionSeconds: 4,
+      updatedAtMs: Date.now(),
+    })
+    const { controller, singingAudio } = harness(Promise.reject(new Error('NotAllowedError')))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(document.getElementById('audioStatus')).toHaveProperty('dataset.playbackState', 'error')
+
+    vi.mocked(singingAudio.play).mockResolvedValue()
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+
+    expect(singingAudio.play).toHaveBeenCalledTimes(2)
+    expect(playback.unlockAudioPlayback).toHaveBeenCalledOnce()
+    controller.dispose()
+  })
+
+  it('does not miss a gesture that arrives before autoplay rejection settles', async () => {
+    writeSingingPlayback({
+      taskId: 'early-gesture-task',
+      track: 'mix',
+      audioUrl: '/early-gesture.wav',
+      volumes: [0.4],
+      durationSeconds: 120,
+      state: 'playing',
+      positionSeconds: 2,
+      updatedAtMs: Date.now(),
+    })
+    const { controller, singingAudio } = harness(Promise.reject(new Error('NotAllowedError')))
+    vi.mocked(singingAudio.play).mockResolvedValue()
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(singingAudio.play).toHaveBeenCalledTimes(2)
+    expect(document.getElementById('audioStatus')?.dataset.playbackState).not.toBe('error')
+    controller.dispose()
+  })
 
   it('routes complete and progressive TTS events through the shared player', () => {
     const { controller, handlers, setMouthTarget } = harness()
@@ -100,22 +210,22 @@ describe('standalone live audio', () => {
     controller.dispose()
   })
 
-  it('exposes completed singing audio in a visible replayable player', () => {
+  it('keeps singing playback hidden on live while preserving lip sync evidence', () => {
     const { controller, handlers, setMouthTarget, singingAudio } = harness()
     const complete = {
       task_id: 'sing-task',
       audio_url: '/api/singing/audio/song_final.wav',
       volumes: [0.1, 0.5],
+      duration: 180,
       video_title: '测试歌曲',
       voice_name: 'shige_utage',
     }
 
     handlers.get(Events.SING.COMPLETE)!(complete)
 
-    expect(document.getElementById('singingPlayer')).toHaveProperty('hidden', false)
+    expect(document.getElementById('singingPlayer')).toBeNull()
+    expect(singingAudio.hidden).toBe(true)
     expect(singingAudio.getAttribute('src')).toBe(complete.audio_url)
-    expect(document.getElementById('singingTitle')?.textContent).toBe('测试歌曲')
-    expect(document.getElementById('singingIdentity')?.textContent).toContain('shige_utage')
     expect(singingAudio.play).toHaveBeenCalledOnce()
     singingAudio.dispatchEvent(new Event('play'))
     expect(lipSync.startLipSync).toHaveBeenCalledWith(
@@ -137,10 +247,10 @@ describe('standalone live audio', () => {
     )
 
     singingAudio.dispatchEvent(new Event('ended'))
-    expect(document.getElementById('singingPlaybackStatus')?.textContent).toBe(
-      '播放完成，可重新播放',
+    expect(document.getElementById('audioStatus')).toHaveProperty(
+      'dataset.playbackState',
+      'completed',
     )
-    expect(document.getElementById('singingPlayButton')?.textContent).toBe('重播')
     controller.dispose()
   })
 

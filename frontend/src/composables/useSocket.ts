@@ -69,6 +69,7 @@ export function useSocket() {
     )
     socket.on(Events.SING.COMPLETE, (data: SingCompletePayload) => {
       singStore.setResult({
+        task_id: data.task_id,
         audio_url: data.audio_url,
         subtitle_url: data.subtitle_url || '',
         tts_audio_url: data.tts_audio_url || '',
@@ -78,6 +79,11 @@ export function useSocket() {
         duration: data.duration,
         lyrics: data.lyrics || [],
         volumes: data.volumes || [],
+        voice_conversion_applied: data.voice_conversion_applied,
+        voice_provider: data.voice_provider,
+        voice_model: data.voice_model,
+        voice_revision: data.voice_revision,
+        voice_name: data.voice_name,
       })
     })
     socket.on(Events.SING.ERROR, (data: { error: string }) => {

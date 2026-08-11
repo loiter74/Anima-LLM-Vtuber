@@ -23,7 +23,11 @@ from animetta.config.user import UserSettings
 from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
 from animetta.orchestration.graph.builder import set_external_checkpointer
-from animetta.orchestration.server.websocket import WebSocketServer, create_server
+from animetta.orchestration.server.websocket import (
+    SINGING_SOCKET_MAX_BUFFER_BYTES,
+    WebSocketServer,
+    create_server,
+)
 from animetta.utils.logger_manager import logger_manager
 
 # Load environment variables from .env file (must be before other imports)
@@ -138,6 +142,7 @@ def run_server() -> None:
         port=global_config.system.port,
         log_level="info",
         factory=True,
+        ws_max_size=SINGING_SOCKET_MAX_BUFFER_BYTES,
     )
 
 

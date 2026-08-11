@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import binascii
 import os
 import uuid
 from pathlib import Path
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
     from ..desktop import DesktopClientManager
     from ..live2d import Live2DManager
     from ..session import SessionManager
+
+MAX_SINGING_UPLOAD_BYTES = 64 * 1024 * 1024
 
 
 class SingingHandlers(BaseSocketHandler):
@@ -140,15 +143,23 @@ class SingingHandlers(BaseSocketHandler):
                 {"task_id": task_id, "error": str(e)},
                 to=sid,
             )
+            if self._pipeline is not None:
+                await self._pipeline.close()
             self._pipeline = None
 
     async def _save_uploaded_file(self, file_data: str, file_name: str) -> str:
         """Save base64-encoded file to disk, return path."""
+        try:
+            raw_bytes = base64.b64decode(file_data, validate=True)
+        except (ValueError, binascii.Error) as error:
+            raise ValueError("Singing upload is not valid base64") from error
+        if len(raw_bytes) > MAX_SINGING_UPLOAD_BYTES:
+            raise ValueError(f"Singing upload exceeds the {MAX_SINGING_UPLOAD_BYTES} bytes limit")
+
         upload_dir = Path("./data/singing/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
         output_path = upload_dir / Path(file_name).name
 
-        raw_bytes = base64.b64decode(file_data)
         output_path.write_bytes(raw_bytes)
         logger.info(f"Uploaded file saved: {output_path} ({len(raw_bytes)} bytes)")
         return str(output_path)

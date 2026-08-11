@@ -19,6 +19,8 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
+MAX_RVC_AUDIO_BYTES = 64 * 1024 * 1024
+
 
 class RVCEngine(Protocol):
     async def preload(self) -> None: ...
@@ -113,7 +115,7 @@ class RVCService:
             audio = base64.b64decode(encoded, validate=True)
         except (ValueError, binascii.Error):
             return JSONResponse({"category": "invalid_audio", "request_id": request_id}, 422)
-        if len(audio) <= 44 or len(audio) > 32 * 1024 * 1024:
+        if len(audio) <= 44 or len(audio) > MAX_RVC_AUDIO_BYTES:
             return JSONResponse({"category": "invalid_audio", "request_id": request_id}, 422)
 
         kwargs = {

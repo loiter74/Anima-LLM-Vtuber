@@ -56,6 +56,8 @@ from .stats_api import (
     set_runtime_readiness_context,
 )
 
+SINGING_SOCKET_MAX_BUFFER_BYTES = 96 * 1024 * 1024
+
 
 class WebSocketServer:
     """WebSocket server"""
@@ -84,7 +86,8 @@ class WebSocketServer:
             engineio_logger=False,
             ping_timeout=120,
             ping_interval=30,
-            max_http_buffer_size=10_000_000,  # 10MB for singing file uploads
+            # A 64 MiB decoded song expands to about 86 MiB as base64 JSON.
+            max_http_buffer_size=SINGING_SOCKET_MAX_BUFFER_BYTES,
         )
 
         # Socket.IO ASGI + Stats API routes
@@ -238,7 +241,10 @@ class WebSocketServer:
         self.component_readiness_cache = ComponentReadinessCache(self.inspection_runtime())
         set_component_readiness_cache(self.component_readiness_cache)
         self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
-            lambda payload: self.sio.emit(EVENTS["memory"]["changed"]["name"], payload)
+            lambda payload: self.supervise_background(
+                self.sio.emit(EVENTS["memory"]["changed"]["name"], payload),
+                name="memory_changed_emit",
+            )
         )
         self.session_manager = SessionManager(
             model_manager=self.model_manager,

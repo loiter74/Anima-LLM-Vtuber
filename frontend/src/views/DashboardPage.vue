@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import InputBar from '@/components/chat/InputBar.vue'
 import MessageBubble from '@/components/chat/MessageBubble.vue'
 import TitleBar from '@/components/layout/TitleBar.vue'
+import MusicCard from '@/components/singing/MusicCard.vue'
 import { sendDeveloperChatText } from '@/composables/chatTransport'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
@@ -20,6 +21,7 @@ const historyLocked = ref(false)
 const pendingTurns = ref<Array<{ traceId: string; text: string; startedAt: number }>>([])
 let summaryTimer: ReturnType<typeof setInterval> | null = null
 let detailTimer: ReturnType<typeof setInterval> | null = null
+let mounted = true
 
 const selectedTurn = computed(
   () => store.liveTurns.find((turn) => turn.trace_id === selectedTraceId.value) ?? null,
@@ -46,8 +48,12 @@ const metricItems = computed(() => [
 
 onMounted(async () => {
   await refreshSummary()
+  // Guard against the component unmounting while awaits are in flight; the
+  // timers and socket listener below must not register on a dead instance.
+  if (!mounted) return
   followLatest()
   await refreshDetail()
+  if (!mounted) return
   summaryTimer = setInterval(() => {
     if (!document.hidden) void refreshSummary()
   }, 2000)
@@ -58,6 +64,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  mounted = false
   if (summaryTimer) clearInterval(summaryTimer)
   if (detailTimer) clearInterval(detailTimer)
   getSocket()?.off(Events.MINECRAFT.COMMAND_TRANSITION, onMinecraftTransition)
@@ -320,183 +327,194 @@ function rawValue(activity: LiveActivity, key: string) {
           </div>
         </section>
 
-        <aside class="glass flex min-h-136 flex-col overflow-hidden lg:min-h-0">
-          <div class="shrink-0 border-b border-c-border px-5 py-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h2 class="text-sm font-semibold">执行检查器</h2>
-                <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
-                  {{
-                    selectedTurn
-                      ? `${sourceLabel(selectedTurn)} · ${selectedTurn.trace_id}`
-                      : '选择一个回合查看执行阶段'
-                  }}
-                </p>
-              </div>
-              <button
-                class="shrink-0 rounded-lg border border-c-border px-2.5 py-1.5 text-10px text-c-text-secondary transition-colors duration-200 hover:border-c-border-accent hover:text-c-text"
-                data-testid="follow-latest"
-                @click="followLatest"
-              >
-                {{ historyLocked ? '回到最新' : '跟随最新' }}
-              </button>
-            </div>
-
-            <div
-              v-if="selectedTurn"
-              class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-10px"
-            >
-              <span class="text-c-text-muted">
-                来源
-                <strong class="font-medium text-c-text-secondary">{{
-                  sourceLabel(selectedTurn)
-                }}</strong>
-              </span>
-              <span class="text-c-text-muted">
-                总耗时
-                <strong class="font-mono font-medium text-c-text-secondary">{{
-                  formatDuration(selectedTurn.duration_ms)
-                }}</strong>
-              </span>
-              <span class="text-c-text-muted">
-                内容
-                <strong class="font-mono font-medium uppercase text-c-text-secondary">{{
-                  selectedTurn.privacy_mode === 'full' ? '后台原文' : '历史脱敏'
-                }}</strong>
-              </span>
-            </div>
-          </div>
-
-          <ol
-            class="ops-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4"
-            data-testid="execution-timeline"
+        <div class="flex min-h-136 flex-col gap-3 lg:min-h-0">
+          <section
+            class="glass min-h-72 shrink-0 overflow-hidden lg:basis-[42%]"
+            aria-label="唱歌播放器"
           >
-            <li
-              v-for="(activity, index) in selectedDetail?.activities ?? []"
-              :key="activity.id"
-              class="grid grid-cols-[12px_minmax(0,1fr)] gap-3"
-            >
-              <div class="flex flex-col items-center">
-                <span
-                  class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                  :class="activityDotTone(activity)"
-                />
-                <span
-                  v-if="index < (selectedDetail?.activities.length ?? 0) - 1"
-                  class="my-1 w-px flex-1 bg-c-border"
-                />
+            <MusicCard />
+          </section>
+
+          <aside class="glass flex min-h-96 flex-1 flex-col overflow-hidden lg:min-h-0">
+            <div class="shrink-0 border-b border-c-border px-5 py-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h2 class="text-sm font-semibold">执行检查器</h2>
+                  <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
+                    {{
+                      selectedTurn
+                        ? `${sourceLabel(selectedTurn)} · ${selectedTurn.trace_id}`
+                        : '选择一个回合查看执行阶段'
+                    }}
+                  </p>
+                </div>
+                <button
+                  class="shrink-0 rounded-lg border border-c-border px-2.5 py-1.5 text-10px text-c-text-secondary transition-colors duration-200 hover:border-c-border-accent hover:text-c-text"
+                  data-testid="follow-latest"
+                  @click="followLatest"
+                >
+                  {{ historyLocked ? '回到最新' : '跟随最新' }}
+                </button>
               </div>
 
-              <article class="min-w-0 pb-5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium">{{ activity.label }}</p>
-                    <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
-                      {{ activity.name }} · {{ activity.layer }}
-                    </p>
-                  </div>
+              <div
+                v-if="selectedTurn"
+                class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-10px"
+              >
+                <span class="text-c-text-muted">
+                  来源
+                  <strong class="font-medium text-c-text-secondary">{{
+                    sourceLabel(selectedTurn)
+                  }}</strong>
+                </span>
+                <span class="text-c-text-muted">
+                  总耗时
+                  <strong class="font-mono font-medium text-c-text-secondary">{{
+                    formatDuration(selectedTurn.duration_ms)
+                  }}</strong>
+                </span>
+                <span class="text-c-text-muted">
+                  内容
+                  <strong class="font-mono font-medium uppercase text-c-text-secondary">{{
+                    selectedTurn.privacy_mode === 'full' ? '后台原文' : '历史脱敏'
+                  }}</strong>
+                </span>
+              </div>
+            </div>
+
+            <ol
+              class="ops-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4"
+              data-testid="execution-timeline"
+            >
+              <li
+                v-for="(activity, index) in selectedDetail?.activities ?? []"
+                :key="activity.id"
+                class="grid grid-cols-[12px_minmax(0,1fr)] gap-3"
+              >
+                <div class="flex flex-col items-center">
                   <span
-                    class="shrink-0 rounded-lg border px-2 py-1 font-mono text-9px uppercase"
-                    :class="activityTone(activity)"
-                  >
-                    {{ activity.status }}
-                  </span>
+                    class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                    :class="activityDotTone(activity)"
+                  />
+                  <span
+                    v-if="index < (selectedDetail?.activities.length ?? 0) - 1"
+                    class="my-1 w-px flex-1 bg-c-border"
+                  />
                 </div>
 
-                <div
-                  class="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-10px text-c-text-secondary"
-                >
-                  <span>{{ formatDuration(activity.duration_ms) }}</span>
-                  <span v-if="activity.provider">{{ activity.provider }}</span>
-                  <span v-if="activity.model">{{ activity.model }}</span>
-                  <span v-if="activity.attributes.tool_source"
-                    >来源 {{ activity.attributes.tool_source }}</span
-                  >
-                  <span v-if="activity.attributes.mcp_server"
-                    >MCP {{ activity.attributes.mcp_server }}</span
-                  >
-                </div>
-
-                <p v-if="activity.error" class="mt-2 text-xs text-c-error">{{ activity.error }}</p>
-
-                <div
-                  v-if="activity.minecraft"
-                  class="mt-3 border-l-2 border-c-blue bg-c-panel/35 px-3 py-2.5 text-xs"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-c-text-muted">MC 指令</span>
-                    <strong class="font-mono uppercase text-c-text">{{
-                      activity.minecraft.state
-                    }}</strong>
-                  </div>
-                  <p
-                    v-if="selectedTurn?.privacy_mode === 'full'"
-                    class="mt-2 break-all font-mono text-10px text-c-text-secondary"
-                  >
-                    {{ activity.minecraft.command_id }}
-                  </p>
-                  <p v-if="activity.minecraft.failure_reason" class="mt-2 text-c-error">
-                    {{ activity.minecraft.failure_reason }}
-                  </p>
-                  <ol class="mt-2 space-y-1 font-mono text-10px text-c-text-secondary">
-                    <li
-                      v-for="(transition, transitionIndex) in activity.minecraft.transitions"
-                      :key="transitionIndex"
+                <article class="min-w-0 pb-5">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium">{{ activity.label }}</p>
+                      <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
+                        {{ activity.name }} · {{ activity.layer }}
+                      </p>
+                    </div>
+                    <span
+                      class="shrink-0 rounded-lg border px-2 py-1 font-mono text-9px uppercase"
+                      :class="activityTone(activity)"
                     >
-                      {{ transition.from_state ?? 'accepted' }} → {{ transition.to_state }} ·
-                      {{ transition.reason_code }}
-                    </li>
-                  </ol>
+                      {{ activity.status }}
+                    </span>
+                  </div>
+
+                  <div
+                    class="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-10px text-c-text-secondary"
+                  >
+                    <span>{{ formatDuration(activity.duration_ms) }}</span>
+                    <span v-if="activity.provider">{{ activity.provider }}</span>
+                    <span v-if="activity.model">{{ activity.model }}</span>
+                    <span v-if="activity.attributes.tool_source"
+                      >来源 {{ activity.attributes.tool_source }}</span
+                    >
+                    <span v-if="activity.attributes.mcp_server"
+                      >MCP {{ activity.attributes.mcp_server }}</span
+                    >
+                  </div>
+
+                  <p v-if="activity.error" class="mt-2 text-xs text-c-error">
+                    {{ activity.error }}
+                  </p>
+
+                  <div
+                    v-if="activity.minecraft"
+                    class="mt-3 border-l-2 border-c-blue bg-c-panel/35 px-3 py-2.5 text-xs"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-c-text-muted">MC 指令</span>
+                      <strong class="font-mono uppercase text-c-text">{{
+                        activity.minecraft.state
+                      }}</strong>
+                    </div>
+                    <p
+                      v-if="selectedTurn?.privacy_mode === 'full'"
+                      class="mt-2 break-all font-mono text-10px text-c-text-secondary"
+                    >
+                      {{ activity.minecraft.command_id }}
+                    </p>
+                    <p v-if="activity.minecraft.failure_reason" class="mt-2 text-c-error">
+                      {{ activity.minecraft.failure_reason }}
+                    </p>
+                    <ol class="mt-2 space-y-1 font-mono text-10px text-c-text-secondary">
+                      <li
+                        v-for="(transition, transitionIndex) in activity.minecraft.transitions"
+                        :key="transitionIndex"
+                      >
+                        {{ transition.from_state ?? 'accepted' }} → {{ transition.to_state }} ·
+                        {{ transition.reason_code }}
+                      </li>
+                    </ol>
+                  </div>
+
+                  <details
+                    v-if="
+                      selectedTurn?.privacy_mode === 'full' &&
+                      (rawValue(activity, 'arguments_text') || rawValue(activity, 'result_text'))
+                    "
+                    open
+                    class="mt-3"
+                  >
+                    <summary class="cursor-pointer text-xs text-c-accent">工具原始数据</summary>
+                    <pre
+                      v-if="rawValue(activity, 'arguments_text')"
+                      class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
+                      >{{ rawValue(activity, 'arguments_text') }}</pre>
+                    <pre
+                      v-if="rawValue(activity, 'result_text')"
+                      class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
+                      >{{ rawValue(activity, 'result_text') }}</pre>
+                  </details>
+                  <p
+                    v-else-if="
+                      activity.attributes.arguments_digest || activity.attributes.result_digest
+                    "
+                    class="mt-2 text-10px text-c-text-muted"
+                  >
+                    原始数据已脱敏，仅保留长度与摘要
+                  </p>
+                </article>
+              </li>
+
+              <li
+                v-if="!selectedDetail?.activities?.length"
+                class="grid min-h-72 place-items-center text-center"
+              >
+                <div>
+                  <p class="text-sm text-c-text-secondary">
+                    {{ selectedTraceId ? '正在等待执行阶段' : '尚未选择回合' }}
+                  </p>
+                  <p class="mt-1 text-xs text-c-text-muted">
+                    {{
+                      selectedTraceId
+                        ? '模型、工具和 MC 状态会在这里实时更新'
+                        : '从左侧消息流选择一个回合'
+                    }}
+                  </p>
                 </div>
-
-                <details
-                  v-if="
-                    selectedTurn?.privacy_mode === 'full' &&
-                    (rawValue(activity, 'arguments_text') || rawValue(activity, 'result_text'))
-                  "
-                  open
-                  class="mt-3"
-                >
-                  <summary class="cursor-pointer text-xs text-c-accent">工具原始数据</summary>
-                  <pre
-                    v-if="rawValue(activity, 'arguments_text')"
-                    class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
-                    >{{ rawValue(activity, 'arguments_text') }}</pre>
-                  <pre
-                    v-if="rawValue(activity, 'result_text')"
-                    class="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-c-panel/50 p-3 font-mono text-10px"
-                    >{{ rawValue(activity, 'result_text') }}</pre>
-                </details>
-                <p
-                  v-else-if="
-                    activity.attributes.arguments_digest || activity.attributes.result_digest
-                  "
-                  class="mt-2 text-10px text-c-text-muted"
-                >
-                  原始数据已脱敏，仅保留长度与摘要
-                </p>
-              </article>
-            </li>
-
-            <li
-              v-if="!selectedDetail?.activities?.length"
-              class="grid min-h-72 place-items-center text-center"
-            >
-              <div>
-                <p class="text-sm text-c-text-secondary">
-                  {{ selectedTraceId ? '正在等待执行阶段' : '尚未选择回合' }}
-                </p>
-                <p class="mt-1 text-xs text-c-text-muted">
-                  {{
-                    selectedTraceId
-                      ? '模型、工具和 MC 状态会在这里实时更新'
-                      : '从左侧消息流选择一个回合'
-                  }}
-                </p>
-              </div>
-            </li>
-          </ol>
-        </aside>
+              </li>
+            </ol>
+          </aside>
+        </div>
       </div>
 
       <p

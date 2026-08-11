@@ -1,8 +1,12 @@
 """Singing Socket.IO delivery tests."""
 
+import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from animetta.orchestration.server.handlers import singing_handlers
 from animetta.orchestration.server.handlers.singing_handlers import SingingHandlers
 from animetta.services.singing.interface import SongResult
 
@@ -45,3 +49,17 @@ async def test_complete_broadcasts_correlated_song_and_closes_pipeline() -> None
     assert payload["voice_model"] == "shige_utage.pth"
     assert "to" not in sio.emit.await_args.kwargs
     pipeline.close.assert_awaited_once()
+
+
+async def test_uploaded_song_rejects_decoded_audio_over_the_bounded_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handler = SingingHandlers(
+        SimpleNamespace(emit=AsyncMock()), MagicMock(), MagicMock(), MagicMock()
+    )
+    monkeypatch.setattr(singing_handlers, "MAX_SINGING_UPLOAD_BYTES", 8)
+
+    with pytest.raises(ValueError, match="8 bytes"):
+        await handler._save_uploaded_file(
+            base64.b64encode(b"123456789").decode("ascii"), "song.wav"
+        )

@@ -100,6 +100,31 @@ class TestParseServerArgs:
         assert args.redis_url is None
 
 
+def test_run_server_uses_the_bounded_singing_websocket_frame_limit(mod, monkeypatch) -> None:
+    config = MagicMock()
+    config.system.host = "127.0.0.1"
+    config.system.port = 12394
+    server = MagicMock()
+    monkeypatch.setattr(mod, "global_config", config)
+
+    with (
+        patch("atexit.register"),
+        patch.object(mod, "init_config"),
+        patch.object(mod, "create_server", return_value=server),
+        patch.object(mod.uvicorn, "run") as run,
+    ):
+        mod.run_server()
+
+    run.assert_called_once_with(
+        "animetta.core.socketio_server:get_asgi_app",
+        host="127.0.0.1",
+        port=12394,
+        log_level="info",
+        factory=True,
+        ws_max_size=96 * 1024 * 1024,
+    )
+
+
 # ── TestInitConfig ──────────────────────────────────────────────────
 
 

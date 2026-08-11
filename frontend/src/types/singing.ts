@@ -17,6 +17,7 @@ export interface LyricLine {
 }
 
 export interface SongResult {
+  task_id?: string
   audio_url: string
   subtitle_url: string
   tts_audio_url: string
@@ -26,4 +27,9 @@ export interface SongResult {
   duration: number
   lyrics: LyricLine[]
   volumes?: number[]
+  voice_conversion_applied?: boolean
+  voice_provider?: string
+  voice_model?: string
+  voice_revision?: string
+  voice_name?: string
 }

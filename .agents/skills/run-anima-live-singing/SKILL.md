@@ -22,6 +22,12 @@ description: 诊断 Animetta 唱歌模型与依赖，并在唯一正式入口 /l
    pnpm -C frontend run live:sing-smoke -- --base-url http://127.0.0.1 --audio-file <音频路径> --lyrics <歌词> --duration-seconds 12
    ```
 
+   整首歌曲必须先让短 smoke 通过，再运行容量契约测试；不要等长任务超时后才检查代理、Socket、上传解码和 RVC 的逐层限制：
+
+   ```powershell
+   py -3.13 -m pytest tests/deployment/test_runtime_topology.py::test_production_proxy_accepts_the_bounded_whole_song_socket_payload tests/core/test_socketio_server.py::test_run_server_uses_the_bounded_singing_websocket_frame_limit tests/orchestration/server/test_websocket.py::TestWebSocketServerInit::test_init_creates_sio_and_asgi tests/services/singing/test_rvc_host_app.py::test_host_rvc_rejects_decoded_audio_over_the_bounded_limit -q
+   ```
+
 5. 只在输出同时满足以下条件时判定跑通：
    - `sing:complete.task_id` 与本轮一致；
    - `voice_conversion_applied=true`；
@@ -29,8 +35,9 @@ description: 诊断 Animetta 唱歌模型与依赖，并在唯一正式入口 /l
    - `sing:progress` 不含 `Voice conversion skipped`；
    - 宿主预检中 `separation_ready=true` 且 `separation_model` 与配置一致；
    - 生成音频 HTTP 200 且字节数大于 WAV 头；
-   - `/live.html` 中 `#singingPlayer` 可见，`#singingAudio` 带原生控件且 URL 等于本轮输出；
-   - 点击 `#singingPlayButton` 后 `#singingAudio.currentTime > 0` 且未暂停；
+   - `/live.html` 不显示播放器卡片，隐藏的 `#singingAudio` URL 等于本轮输出、`currentTime > 0` 且未暂停；
+   - `/dashboard` 中可见的唱歌播放器属于本轮 `task_id`，显示 RVC 声线身份，并提供“RVC 混音 / RVC 纯人声 / 原始音频”试听切换；
+   - 点击 Dashboard 的 RVC 混音播放按钮后，其音频 `currentTime > 0` 且未暂停；
    - `#audioStatus[data-playback-count]` 递增；
    - `data-last-audio-task-id` 等于本轮 `task_id`；
    - `data-last-audio-kind=singing`；
@@ -48,4 +55,4 @@ description: 诊断 Animetta 唱歌模型与依赖，并在唯一正式入口 /l
 
 ## 报告
 
-报告宿主 RVC 与 Demucs 身份、是否真实转换、降级阶段、`task_id`、生成音频响应、可见播放器状态、点击后的 `currentTime`、播放计数变化和证据路径。
+报告宿主 RVC 与 Demucs 身份、是否真实转换、降级阶段、`task_id`、生成音频响应、live 隐藏播放状态、Dashboard 可见播放器及 A/B 音轨、点击后的 `currentTime`、播放计数变化和证据路径。

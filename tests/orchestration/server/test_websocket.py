@@ -97,7 +97,7 @@ class TestWebSocketServerInit:
                 engineio_logger=False,
                 ping_timeout=120,
                 ping_interval=30,
-                max_http_buffer_size=10000000,
+                max_http_buffer_size=96 * 1024 * 1024,
             )
 
     def test_init_stores_config(self):

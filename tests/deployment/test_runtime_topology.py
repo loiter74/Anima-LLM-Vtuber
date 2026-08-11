@@ -5,6 +5,10 @@ from pathlib import Path
 
 import yaml
 
+from animetta.orchestration.server.handlers.singing_handlers import MAX_SINGING_UPLOAD_BYTES
+from animetta.orchestration.server.websocket import SINGING_SOCKET_MAX_BUFFER_BYTES
+from animetta_rvc_host.app import MAX_RVC_AUDIO_BYTES
+
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_SELECTORS = (
     "ANIMETTA_CONFIG",
@@ -131,6 +135,15 @@ def test_production_redirects_legacy_live_stream_to_canonical_obs_surface() -> N
     assert "location = /live-stream" in nginx
     assert "absolute_redirect off;" in nginx
     assert "return 308 /live.html$is_args$args;" in nginx
+
+
+def test_production_proxy_accepts_the_bounded_whole_song_socket_payload() -> None:
+    nginx = _text("docker/nginx.conf")
+    base64_envelope_bytes = 4 * ((MAX_SINGING_UPLOAD_BYTES + 2) // 3)
+
+    assert "client_max_body_size 96m;" in nginx
+    assert base64_envelope_bytes + 1024 * 1024 <= SINGING_SOCKET_MAX_BUFFER_BYTES
+    assert MAX_SINGING_UPLOAD_BYTES <= MAX_RVC_AUDIO_BYTES
 
 
 def test_compose_services_inject_only_explicit_least_privilege_environment() -> None:

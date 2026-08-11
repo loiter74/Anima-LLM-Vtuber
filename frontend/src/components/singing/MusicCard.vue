@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useSingingStore } from '@/stores/singing'
 import { useSinging } from '@/composables/useSinging'
 import { startLipSync, stopLipSync } from '@/components/live2d/useLipSync'
+import { writeSingingPlayback, type SingingPlaybackState } from '@/singing/playback-sync'
 import WaveformDisplay from './WaveformDisplay.vue'
 import PlaybackControls from './PlaybackControls.vue'
 import ProcessTimeline from './ProcessTimeline.vue'
@@ -11,6 +12,21 @@ const store = useSingingStore()
 const { process, cancel } = useSinging()
 const inputUrl = ref('')
 const waveformRef = ref<InstanceType<typeof WaveformDisplay> | null>(null)
+const selectedTrackKey = ref<'mix' | 'vocals' | 'original'>('mix')
+const playbackError = ref('')
+
+const tracks = computed(() => {
+  const result = store.result
+  if (!result) return []
+  return [
+    { key: 'mix' as const, label: 'RVC 混音', url: result.audio_url },
+    { key: 'vocals' as const, label: 'RVC 纯人声', url: result.vocals_url },
+    { key: 'original' as const, label: '原始音频', url: result.original_url },
+  ].filter((track) => Boolean(track.url))
+})
+const selectedTrack = computed(
+  () => tracks.value.find((track) => track.key === selectedTrackKey.value) ?? tracks.value[0],
+)
 
 function startProcess() {
   if (!inputUrl.value.trim()) return
@@ -28,6 +44,7 @@ function handleTimeupdate(time: number) {
 }
 
 function handlePlay() {
+  playbackError.value = ''
   store.isPlaying = true
   // Stronger lip sync mode: use pre-computed volumes for RAF-driven mouth
   const vols = store.result?.volumes
@@ -35,21 +52,61 @@ function handlePlay() {
     const el = store.audioElement
     if (el) startLipSync(el, vols)
   }
+  syncLivePlayback('playing')
 }
 
 function handlePause() {
   store.isPlaying = false
   stopLipSync()
+  syncLivePlayback('paused')
+}
+
+function syncLivePlayback(
+  state: SingingPlaybackState,
+  position = store.audioElement?.currentTime ?? 0,
+) {
+  const result = store.result
+  const track = selectedTrack.value
+  if (!result || !track) return
+  writeSingingPlayback({
+    taskId: result.task_id || result.audio_url,
+    track: track.key,
+    audioUrl: track.url,
+    volumes: result.volumes || [],
+    durationSeconds: result.duration,
+    state,
+    positionSeconds: position,
+    updatedAtMs: Date.now(),
+  })
+}
+
+function handleSeek(time: number) {
+  handleTimeupdate(time)
+  syncLivePlayback(store.isPlaying ? 'playing' : 'paused', time)
 }
 
 function handleAudioReady(el: HTMLAudioElement) {
-  store.setPlaying(store.result?.audio_url || '', el)
+  store.setPlaying(selectedTrack.value?.url || '', el)
   waveformRef.value?.connectAudio(el)
 }
 
 function handleAudioEnded() {
   store.isPlaying = false
   stopLipSync()
+  syncLivePlayback('completed', store.result?.duration ?? 0)
+}
+
+function selectTrack(key: 'mix' | 'vocals' | 'original') {
+  if (selectedTrackKey.value === key) return
+  stopLipSync()
+  store.isPlaying = false
+  selectedTrackKey.value = key
+  playbackError.value = ''
+  syncLivePlayback('paused', 0)
+}
+
+function handlePlaybackError() {
+  playbackError.value = '浏览器无法播放该音轨，请检查媒体权限后重试。'
 }
 
 interface RecentItem {
@@ -83,6 +140,7 @@ async function loadRecent() {
 onMounted(loadRecent)
 
 function playRecent(item: RecentItem) {
+  selectedTrackKey.value = 'mix'
   store.setResult({
     audio_url: item.audio_url,
     subtitle_url: item.subtitle_url || '',
@@ -98,7 +156,18 @@ function playRecent(item: RecentItem) {
 
 <template>
   <div class="flex flex-col h-full p-4 gap-4 overflow-y-auto">
-    <div class="text-sm font-medium text-c-text">🎵 音乐制作</div>
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <div class="text-sm font-medium text-c-text">唱歌播放器</div>
+        <p class="mt-1 text-xs text-c-text-muted">制作、试听并核对 RVC 声线</p>
+      </div>
+      <span
+        v-if="store.result?.voice_conversion_applied"
+        class="rounded-lg border border-c-success/40 bg-c-success/10 px-2 py-1 text-10px text-c-success"
+      >
+        RVC 已应用
+      </span>
+    </div>
 
     <!-- URL Input (shown when idle/error) -->
     <div v-if="store.status === 'idle' || store.status === 'error'" class="flex gap-2">
@@ -187,7 +256,26 @@ function playRecent(item: RecentItem) {
     </button>
 
     <!-- Result: playback controls -->
-    <div v-if="store.result" class="flex flex-col gap-3">
+    <div
+      v-if="store.result"
+      class="flex flex-col gap-3"
+      data-testid="singing-player-result"
+      :data-task-id="store.result.task_id || ''"
+      :data-audio-url="store.result.audio_url"
+    >
+      <div
+        v-if="store.result.voice_name || store.result.voice_model"
+        class="rounded-xl border border-c-border bg-c-panel/35 px-3 py-2"
+        data-testid="singing-voice-identity"
+      >
+        <p class="text-xs text-c-text-secondary">
+          当前声线
+          <strong class="ml-1 text-c-accent">{{ store.result.voice_name || '未命名声线' }}</strong>
+        </p>
+        <p class="mt-1 truncate font-mono text-10px text-c-text-muted">
+          {{ store.result.voice_provider }} · {{ store.result.voice_model }}
+        </p>
+      </div>
       <button
         class="self-start flex items-center gap-1 px-2 py-1 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
         @click="store.reset()"
@@ -204,15 +292,37 @@ function playRecent(item: RecentItem) {
         </svg>
         返回列表
       </button>
+      <div class="flex flex-wrap gap-2" role="group" aria-label="试听音轨">
+        <button
+          v-for="track in tracks"
+          :key="track.key"
+          class="rounded-lg border px-3 py-1.5 text-xs transition-colors duration-200"
+          :class="
+            selectedTrack?.key === track.key
+              ? 'border-c-border-accent bg-c-accent-soft text-c-accent'
+              : 'border-c-border bg-c-panel/35 text-c-text-secondary hover:text-c-text'
+          "
+          :aria-label="`试听${track.label}`"
+          :aria-pressed="selectedTrack?.key === track.key"
+          @click="selectTrack(track.key)"
+        >
+          {{ track.label }}
+        </button>
+      </div>
       <PlaybackControls
+        :key="`${store.result.task_id || store.result.audio_url}:${selectedTrack?.key || 'mix'}`"
         :duration="store.result.duration"
-        :audio-url="store.result.audio_url"
+        :audio-url="selectedTrack?.url || store.result.audio_url"
+        :label="selectedTrack?.label"
         @play="handlePlay"
         @pause="handlePause"
         @timeupdate="handleTimeupdate"
+        @seek="handleSeek"
         @audio-ready="handleAudioReady"
         @ended="handleAudioEnded"
+        @error="handlePlaybackError"
       />
+      <p v-if="playbackError" class="text-xs text-c-error" role="alert">{{ playbackError }}</p>
       <WaveformDisplay
         ref="waveformRef"
         :is-playing="store.isPlaying"
@@ -239,7 +349,7 @@ function playRecent(item: RecentItem) {
             target="_blank"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text hover:text-c-accent hover:border-c-accent/30 transition-all"
           >
-            🎤 纯人声 (口型)
+            🎤 RVC 纯人声
           </a>
           <!-- Original audio -->
           <a

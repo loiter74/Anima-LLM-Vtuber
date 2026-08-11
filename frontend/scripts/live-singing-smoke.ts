@@ -148,21 +148,30 @@ async function main(): Promise<void> {
   const pageErrors: string[] = []
 
   try {
-    const context = await browser.newContext({ viewport: { width: 1080, height: 1920 } })
-    const page = await context.newPage()
-    page.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors.push(message.text())
-    })
-    page.on('pageerror', (error) => pageErrors.push(error.message))
-    await page.goto(new URL('/live.html', options.baseUrl).href, {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
+    const livePage = await context.newPage()
+    const dashboardPage = await context.newPage()
+    const captureErrors = (page: Page, label: string): void => {
+      page.on('console', (message) => {
+        if (message.type() === 'error') consoleErrors.push(`${label}: ${message.text()}`)
+      })
+      page.on('pageerror', (error) => pageErrors.push(`${label}: ${error.message}`))
+    }
+    captureErrors(livePage, 'live')
+    captureErrors(dashboardPage, 'dashboard')
+    await livePage.goto(new URL('/live.html', options.baseUrl).href, {
       waitUntil: 'domcontentloaded',
     })
-    await page.waitForFunction(
+    await livePage.waitForFunction(
       () => document.getElementById('socketStatus')?.dataset.state === 'connected',
       undefined,
       { timeout: 120_000 },
     )
-    const before = await playbackEvidence(page)
+    await dashboardPage.goto(new URL('/dashboard', options.baseUrl).href, {
+      waitUntil: 'domcontentloaded',
+    })
+    await dashboardPage.getByTestId('live-ops-dashboard').waitFor({ state: 'visible' })
+    const before = await playbackEvidence(livePage)
     await waitForSocket(trigger, 120_000)
 
     const terminal = new Promise<Record<string, unknown>>((resolveTerminal, rejectTerminal) => {
@@ -179,13 +188,17 @@ async function main(): Promise<void> {
       })
     })
 
+    const preparedBytes = await readFile(preparedAudio)
     trigger.emit('sing:process', {
       task_id: taskId,
-      file_data: (await readFile(preparedAudio)).toString('base64'),
+      file_data: preparedBytes.toString('base64'),
       file_name: `${taskId}.wav`,
       lyrics_text: options.lyrics,
       auto_confirm: true,
     })
+    process.stdout.write(
+      `${JSON.stringify({ task_id: taskId, stage: 'submitted', prepared_bytes: preparedBytes.byteLength })}\n`,
+    )
     const complete = await withTimeout(terminal, options.timeoutMs, 'singing pipeline')
     const expectedIdentity = {
       voice_provider: options.expectedProvider,
@@ -217,29 +230,22 @@ async function main(): Promise<void> {
       throw new Error(`Generated audio is not readable: HTTP ${audioResponse.status}`)
     }
 
-    await page.waitForFunction(
+    await livePage.waitForFunction(
       ({ expectedTaskId, expectedAudioUrl }) => {
         const status = document.getElementById('audioStatus')
-        const player = document.getElementById('singingPlayer')
         const audio = document.getElementById('singingAudio') as HTMLAudioElement | null
         return (
           status?.dataset.lastAudioTaskId === expectedTaskId &&
           status?.dataset.lastAudioKind === 'singing' &&
-          player?.hidden === false &&
-          audio?.controls === true &&
+          document.getElementById('singingPlayer') === null &&
+          audio?.hidden === true &&
           audio.src === expectedAudioUrl
         )
       },
       { expectedTaskId: taskId, expectedAudioUrl: audioUrl.href },
       { timeout: 30_000 },
     )
-    await page.locator('#singingAudio').evaluate((element) => {
-      const audio = element as HTMLAudioElement
-      audio.pause()
-      audio.currentTime = 0
-    })
-    await page.locator('#singingPlayButton').click()
-    await page.waitForFunction(
+    await livePage.waitForFunction(
       () => {
         const audio = document.getElementById('singingAudio') as HTMLAudioElement | null
         return Boolean(audio && !audio.paused && audio.currentTime > 0)
@@ -247,7 +253,37 @@ async function main(): Promise<void> {
       undefined,
       { timeout: 30_000 },
     )
-    const after = await playbackEvidence(page)
+    await dashboardPage.waitForFunction(
+      ({ expectedTaskId, expectedAudioUrl, expectedVoice }) => {
+        const result = document.querySelector<HTMLElement>('[data-testid="singing-player-result"]')
+        const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
+        const identity = document.querySelector<HTMLElement>(
+          '[data-testid="singing-voice-identity"]',
+        )
+        return (
+          result?.dataset.taskId === expectedTaskId &&
+          result?.dataset.audioUrl === new URL(expectedAudioUrl).pathname &&
+          audio?.src === expectedAudioUrl &&
+          identity?.textContent?.includes(expectedVoice)
+        )
+      },
+      {
+        expectedTaskId: taskId,
+        expectedAudioUrl: audioUrl.href,
+        expectedVoice: options.expectedVoice,
+      },
+      { timeout: 30_000 },
+    )
+    await dashboardPage.getByRole('button', { name: '播放RVC 混音' }).click()
+    await dashboardPage.waitForFunction(
+      () => {
+        const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
+        return Boolean(audio && !audio.paused && audio.currentTime > 0)
+      },
+      undefined,
+      { timeout: 30_000 },
+    )
+    const after = await playbackEvidence(livePage)
     const playbackFailures = consoleErrors.filter((message) =>
       /audio] (Chat|Singing) audio playback failed/.test(message),
     )
@@ -260,16 +296,18 @@ async function main(): Promise<void> {
     const outputPath = resolve(
       options.output ?? join('..', 'artifacts', 'live-singing', taskId, 'evidence.json'),
     )
-    const screenshot = join(dirname(outputPath), 'live.png')
+    const dashboardScreenshot = join(dirname(outputPath), 'dashboard.png')
+    const liveScreenshot = join(dirname(outputPath), 'live.png')
     await mkdir(dirname(outputPath), { recursive: true })
-    await page.screenshot({ path: screenshot, fullPage: false })
+    await dashboardPage.screenshot({ path: dashboardScreenshot, fullPage: false })
+    await livePage.screenshot({ path: liveScreenshot, fullPage: false })
     const evidence = {
       task_id: taskId,
       base_url: options.baseUrl,
       input: {
         source: options.audioFile,
         duration_seconds: options.durationSeconds,
-        prepared_bytes: (await readFile(preparedAudio)).byteLength,
+        prepared_bytes: preparedBytes.byteLength,
       },
       progress,
       complete,
@@ -279,26 +317,62 @@ async function main(): Promise<void> {
         bytes: audioBytes,
       },
       playback: { before, after },
-      visible_player: await page.locator('#singingPlayer').evaluate((element) => {
-        const audio = document.getElementById('singingAudio') as HTMLAudioElement
+      live_playback: await livePage.locator('#singingAudio').evaluate((element) => {
+        const audio = element as HTMLAudioElement
         return {
-          visible: !(element as HTMLElement).hidden,
-          controls: audio.controls,
+          hidden: audio.hidden,
           src: audio.src,
           current_time: audio.currentTime,
           paused: audio.paused,
         }
       }),
+      dashboard_player: await dashboardPage
+        .getByTestId('singing-player-result')
+        .evaluate((element) => {
+          const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
+          return {
+            visible: true,
+            task_id: (element as HTMLElement).dataset.taskId,
+            audio_url: (element as HTMLElement).dataset.audioUrl,
+            current_time: audio?.currentTime ?? 0,
+            paused: audio?.paused ?? true,
+            tracks: Array.from(document.querySelectorAll('button[aria-label^="试听"]')).map(
+              (track) => track.textContent?.trim() ?? '',
+            ),
+          }
+        }),
       console_errors: consoleErrors,
       page_errors: pageErrors,
-      screenshot,
+      screenshots: { dashboard: dashboardScreenshot, live: liveScreenshot },
       passed: true,
     }
     await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8')
-    process.stdout.write(`${JSON.stringify({ ...evidence, evidence: outputPath }, null, 2)}\n`)
+    const volumes = Array.isArray(complete.volumes) ? complete.volumes : []
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          ...evidence,
+          complete: {
+            ...complete,
+            volumes: {
+              samples: volumes.length,
+              active_samples: volumes.filter((sample) => Number(sample) > 0).length,
+            },
+          },
+          evidence: outputPath,
+        },
+        null,
+        2,
+      )}\n`,
+    )
   } finally {
     trigger.disconnect()
-    await browser.close()
+    try {
+      await browser.close()
+    } catch (error) {
+      console.warn('[smoke] browser.close failed', error)
+    }
+    // Always clean the temp dir even if browser.close throws.
     await rm(temporary, { recursive: true, force: true })
   }
 }

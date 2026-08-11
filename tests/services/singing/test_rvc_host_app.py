@@ -8,6 +8,7 @@ from typing import Any
 
 from starlette.testclient import TestClient
 
+from animetta_rvc_host import app as rvc_app
 from animetta_rvc_host.app import RVCService, RVCServiceSettings, create_app
 
 
@@ -124,3 +125,31 @@ def test_host_rvc_streams_authenticated_demucs_stems(tmp_path: Path) -> None:
         assert archive.read("backing.wav") == b"RIFFbacking"
     assert separator.payloads == [b"RIFF" + (b"s" * 64)]
     assert separator.closed is True
+
+
+def test_host_rvc_rejects_decoded_audio_over_the_bounded_limit(monkeypatch) -> None:
+    engine = FakeEngine()
+    monkeypatch.setattr(rvc_app, "MAX_RVC_AUDIO_BYTES", 64)
+    settings = RVCServiceSettings(
+        api_key="secret",
+        provider="rvc-webui-host",
+        model="shige_utage.pth",
+        revision="f8e22f8c",
+        voice="shige_utage",
+        sample_rate=40000,
+    )
+    service = RVCService(settings, engine)
+
+    with TestClient(create_app(service)) as client:
+        response = client.post(
+            "/v1/convert",
+            headers={"Authorization": "Bearer secret"},
+            json={
+                "model": "shige_utage.pth",
+                "audio_base64": base64.b64encode(b"R" * 65).decode("ascii"),
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["category"] == "invalid_audio"
+    assert engine.payloads == []

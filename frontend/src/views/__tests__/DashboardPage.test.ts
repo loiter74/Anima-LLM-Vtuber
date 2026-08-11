@@ -115,7 +115,10 @@ describe('DashboardPage livestream operations console', () => {
     const wrapper = mount(DashboardPage, {
       global: {
         plugins: [createPinia()],
-        stubs: { TitleBar: { template: '<header data-testid="shared-titlebar" />' } },
+        stubs: {
+          TitleBar: { template: '<header data-testid="shared-titlebar" />' },
+          MusicCard: { template: '<div data-testid="music-card" />' },
+        },
       },
     })
     await flushPromises()
@@ -140,6 +143,7 @@ describe('DashboardPage livestream operations console', () => {
     expect(wrapper.text()).toContain('"operation":"progress"')
     expect(wrapper.text()).toContain('后台原文')
     expect(wrapper.text()).not.toContain('已脱敏')
+    expect(wrapper.get('[aria-label="唱歌播放器"]')).toBeTruthy()
     wrapper.unmount()
   })
 

@@ -37,33 +37,7 @@
           hidden
         ></span>
       </aside>
-      <section
-        id="singingPlayer"
-        class="glass absolute bottom-7 left-7 z-30 w-[min(420px,calc(100vw-56px))] rounded-xl p-4"
-        aria-label="唱歌播放器"
-        aria-live="polite"
-        data-state="idle"
-        hidden
-      >
-        <div class="mb-3 flex items-start gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="text-[11px] uppercase tracking-[0.16em] text-c-accent">NOW SINGING</div>
-            <h2 id="singingTitle" class="m-0 mt-1 truncate text-base font-semibold text-c-text">
-              唱歌音频
-            </h2>
-            <p id="singingIdentity" class="m-0 mt-1 truncate text-xs text-c-text-dim"></p>
-          </div>
-          <button id="singingPlayButton" class="btn-accent min-w-20" type="button">播放</button>
-        </div>
-        <audio
-          id="singingAudio"
-          class="block h-10 w-full"
-          aria-label="当前唱歌音频"
-          controls
-          preload="metadata"
-        ></audio>
-        <p id="singingPlaybackStatus" class="m-0 mt-2 text-xs text-c-text-dim">已就绪，点击播放</p>
-      </section>
+      <audio id="singingAudio" preload="metadata" hidden></audio>
       <section class="danmaku-panel" id="danmakuPanel" aria-label="实时弹幕">
         <header class="panel-header">
           <div>
