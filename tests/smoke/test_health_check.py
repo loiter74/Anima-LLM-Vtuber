@@ -44,17 +44,23 @@ def test_requirement_files_are_ascii_for_windows_pip() -> None:
         data.decode("ascii")
 
 
-def test_dev_requirements_include_socketio_websocket_transport() -> None:
-    requirements = (health_check.ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
-    requirement_lines = [
+def test_runtime_and_dev_requirements_include_required_transports() -> None:
+    runtime = (health_check.ROOT / "requirements.txt").read_text(encoding="utf-8")
+    dev = (health_check.ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    runtime_lines = [
         line.strip()
-        for line in requirements.splitlines()
+        for line in runtime.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    dev_lines = [
+        line.strip()
+        for line in dev.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
 
-    assert any(line.startswith("websocket-client") for line in requirement_lines)
-    assert any(line.startswith("pytest-cov") for line in requirement_lines)
-    assert any(line.startswith("bilibili-api-python") for line in requirement_lines)
+    assert any(line.startswith("bilibili-api-python") for line in runtime_lines)
+    assert any(line.startswith("websocket-client") for line in dev_lines)
+    assert any(line.startswith("pytest-cov") for line in dev_lines)
 
 
 def test_build_gates_includes_required_health_domains() -> None:
