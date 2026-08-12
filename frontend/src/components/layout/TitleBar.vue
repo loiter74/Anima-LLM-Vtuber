@@ -31,23 +31,22 @@ function isActive(item: (typeof navItems)[number]) {
 
 <template>
   <header class="titlebar">
-    <!-- Left: brand -->
+    <!-- Left: brand + primary nav grouped together -->
     <div class="titlebar-left">
       <div class="brand">Anima<span class="brand-dot">.</span></div>
+      <nav class="titlebar-nav" aria-label="Main sections">
+        <a
+          v-for="item in navItems"
+          :key="item.key"
+          :data-testid="`nav-${item.key}`"
+          :href="item.path"
+          class="nav-btn"
+          :class="{ active: isActive(item) }"
+        >
+          {{ item.label }}
+        </a>
+      </nav>
     </div>
-
-    <nav class="titlebar-center" aria-label="Main sections">
-      <a
-        v-for="item in navItems"
-        :key="item.key"
-        :data-testid="`nav-${item.key}`"
-        :href="item.path"
-        class="nav-btn"
-        :class="{ active: isActive(item) }"
-      >
-        {{ item.label }}
-      </a>
-    </nav>
 
     <!-- Right: connection status -->
     <div class="titlebar-right">
@@ -78,7 +77,7 @@ function isActive(item: (typeof navItems)[number]) {
 .titlebar-left {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  gap: var(--s-8);
 }
 
 .brand {
@@ -93,18 +92,15 @@ function isActive(item: (typeof navItems)[number]) {
   color: var(--c-accent);
 }
 
-.titlebar-center {
+.titlebar-nav {
   display: flex;
   gap: var(--s-1);
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 .nav-btn {
   display: inline-flex;
   align-items: center;
-  padding: var(--s-1_5) var(--s-3);
+  padding: var(--s-2) var(--s-4);
   font-size: 12px;
   color: var(--c-text-dim);
   background: transparent;
@@ -159,10 +155,8 @@ function isActive(item: (typeof navItems)[number]) {
 }
 
 @media (max-width: 680px) {
-  .titlebar-center {
-    position: static;
-    transform: none;
-    margin-left: auto;
+  .titlebar-left {
+    gap: var(--s-3);
   }
 
   .titlebar-right {
