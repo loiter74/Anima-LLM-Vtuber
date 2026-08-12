@@ -524,6 +524,30 @@ async def test_valid_scene_guidance_replaces_generic_improvisation() -> None:
     assert '"scene_revision"' not in result.system_prompt
 
 
+async def test_scripted_scene_scope_replaces_streaming_eighteen_character_limit() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "program",
+            "system_prompt": "Base.",
+            "metadata": {
+                "personality_mode": "streaming",
+                "scene_guidance": _scene_guidance(
+                    response_objective="组合复述四个记忆槽位。",
+                    scope={
+                        "max_sentences": 4,
+                        "max_chars": 160,
+                        "allow_topic_switch": False,
+                        "audience_target": "current_viewer",
+                    },
+                ),
+            },
+        }
+    )
+
+    assert "最多 4 句、160 字" in result.system_prompt
+    assert "不超过18个字" not in result.system_prompt
+
+
 async def test_scene_meme_policy_suppresses_recalled_meme_documents() -> None:
     result = await compile_prompt(
         {

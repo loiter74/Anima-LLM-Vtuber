@@ -576,11 +576,18 @@ async def llm_node(
     chat_model = _get_config_value(config, "chat_model", None)
 
     if enable_tools and chat_model:
-        return await _llm_with_tools(
+        result = await _llm_with_tools(
             session_id, state, service_context, chat_model, config, memory_context
         )
     else:
-        return await _llm_without_tools(session_id, state, service_context, config, memory_context)
+        result = await _llm_without_tools(
+            session_id,
+            state,
+            service_context,
+            config,
+            memory_context,
+        )
+    return {**result, "memory_recall": rag_metadata}
 
 
 async def _llm_with_tools(

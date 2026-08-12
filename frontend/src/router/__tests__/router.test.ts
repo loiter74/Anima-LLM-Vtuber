@@ -4,9 +4,10 @@ import { describe, it, expect } from 'vitest'
 import router from '@/router'
 
 describe('Router', () => {
-  it('resolves / (chat) route', () => {
+  it('redirects / to the backstage dashboard', () => {
     const route = router.resolve('/')
-    expect(route.name).toBe('chat')
+    expect(route.redirectedFrom).toBeUndefined()
+    expect(route.matched[0]?.redirect).toBe('/dashboard')
   })
 
   it('resolves /dashboard route', () => {
@@ -14,14 +15,9 @@ describe('Router', () => {
     expect(route.name).toBe('dashboard')
   })
 
-  it('resolves /meme-review route', () => {
-    const route = router.resolve('/meme-review')
-    expect(route.name).toBe('meme-review')
-  })
-
-  it('resolves /music route', () => {
+  it('redirects removed and unknown SPA pages to the dashboard', () => {
     const route = router.resolve('/music')
-    expect(route.name).toBe('music')
+    expect(route.matched[0]?.redirect).toBe('/dashboard')
   })
 
   it('registers only application routes', () => {
@@ -29,7 +25,7 @@ describe('Router', () => {
       router
         .getRoutes()
         .map(({ name }) => name)
-        .sort(),
-    ).toEqual(['chat', 'dashboard', 'meme-review', 'music'])
+        .filter(Boolean),
+    ).toEqual(['dashboard'])
   })
 })

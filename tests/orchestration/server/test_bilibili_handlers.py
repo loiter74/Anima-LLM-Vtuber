@@ -442,3 +442,62 @@ async def test_active_scene_guidance_enters_turn_metadata_and_host_reply_feeds_b
     kwargs = orchestrator.process_text.await_args.kwargs
     assert SceneGuidance.model_validate(kwargs["scene_guidance"]) == guidance
     assert scene_runtime.host_replies == ["接住了，这波是穿模艺术。"]
+
+
+async def test_program_danmaku_uses_controlled_actor_probe_and_checkpoint_metadata() -> None:
+    sio = MagicMock()
+    sio.emit = AsyncMock()
+    scene_runtime = ActiveSceneRuntime(
+        SceneGuidance(
+            scene_revision=1,
+            scene_summary="ambient",
+            response_objective="ambient",
+            confidence=1,
+            expires_at=time.time() + 60,
+        )
+    )
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(return_value={"response_text": "记得，小岚。"})
+    admin = MagicMock()
+    admin._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
+    handler = BilibiliHandlers(
+        sio,
+        MagicMock(),
+        admin,
+        session=MagicMock(),
+        scene_runtime=scene_runtime,
+    )
+    scripted_guidance = SceneGuidance(
+        scene_revision=9,
+        scene_summary="Q9",
+        response_objective="回答称呼",
+        confidence=1,
+        expires_at=time.time() + 60,
+    ).model_dump(mode="json")
+
+    result = await handler.process_program_danmaku(
+        "我回来啦，还记得我是谁吗？",
+        {
+            "actor_id": "program:run-1",
+            "display_name": "首播测试观众",
+            "turn_id": "00000000-0000-4000-8000-000000000009",
+            "program_run_id": "run-1",
+            "program_beat_id": "q09",
+            "is_probe": True,
+            "memory_mode": "probe",
+            "checkpoint_thread_id": "program:run-1:q09",
+            "retention_policy": "ephemeral",
+            "scene_guidance": scripted_guidance,
+        },
+        room_id=1,
+    )
+
+    kwargs = orchestrator.process_text.await_args.kwargs
+    assert result["response_text"] == "记得，小岚。"
+    assert kwargs["user_id"] == "program:run-1"
+    assert kwargs["turn_id"] == "00000000-0000-4000-8000-000000000009"
+    assert kwargs["is_probe"] is True
+    assert kwargs["memory_mode"] == "probe"
+    assert kwargs["checkpoint_thread_id"] == "program:run-1:q09"
+    assert kwargs["scene_guidance"] == scripted_guidance
+    assert scene_runtime.host_replies == []

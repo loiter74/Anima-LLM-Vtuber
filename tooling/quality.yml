@@ -1010,7 +1010,17 @@ components:
 
   backend-core:
     domain: backend
-    paths: [src/animetta/core/**]
+    paths:
+      - src/animetta/core/__init__.py
+      - src/animetta/core/component_readiness.py
+      - src/animetta/core/golden_preflight.py
+      - src/animetta/core/message_filter.py
+      - src/animetta/core/model_loading_manager.py
+      - src/animetta/core/readiness.py
+      - src/animetta/core/redis_checkpoint.py
+      - src/animetta/core/service_context.py
+      - src/animetta/core/service_pool.py
+      - src/animetta/core/socketio_server.py
     direct_groups:
       - backend-core-unit
       - backend-route-smoke
@@ -1020,6 +1030,20 @@ components:
       - backend-deadcode
     impacts: [orchestration-server, orchestration-graph]
     risk: high
+
+  backend-memory-runtime:
+    domain: backend
+    paths: [src/animetta/core/shared_memory_runtime.py]
+    direct_groups:
+      - backend-core-unit
+      - backend-services-unit
+      - backend-route-smoke
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [orchestration-server, orchestration-graph]
+    risk: normal
 
   backend-config:
     domain: backend

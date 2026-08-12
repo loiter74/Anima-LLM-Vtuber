@@ -405,7 +405,102 @@ class TestOutputNode:
         assert turn.context.conversation_id == "22222222-2222-4222-8222-222222222222"
         assert turn.context.stream_id == "bilibili:100"
         assert turn.context.connection_id == "socket-a"
+        assert turn.is_probe is False
         mock_service_context.memory_system.encode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_probe_flag_reaches_shared_runtime_submission(
+        self, mock_socketio, mock_service_context
+    ):
+        runtime = MagicMock()
+        runtime.submit_turn.return_value = False
+        mock_service_context.memory_runtime = runtime
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
+        state = create_initial_state(
+            session_id="program-run",
+            user_text="还记得我吗",
+            user_id="program:run-1",
+        )
+        state["response_text"] = "记得。"
+        state["metadata"] = {
+            "dialogue_status": "composer",
+            "channel": "bilibili",
+            "is_probe": True,
+        }
+        config = RunnableConfig(
+            configurable={"socketio": mock_socketio, "service_context": mock_service_context}
+        )
+
+        await output_node(state, config)
+
+        turn = runtime.submit_turn.call_args.args[0]
+        assert turn.is_probe is True
+
+    @pytest.mark.asyncio
+    async def test_program_write_overrides_global_memory_off(
+        self, mock_socketio, mock_service_context
+    ):
+        runtime = MagicMock()
+        runtime.submit_turn.return_value = True
+        mock_service_context.memory_runtime = runtime
+        mock_service_context.config.system.long_term_memory_mode = "off"
+        state = create_initial_state(
+            session_id="program-run",
+            user_text="以后叫我小岚吧",
+            user_id="program:run-1",
+        )
+        state["response_text"] = "好，以后叫你小岚。"
+        state["metadata"] = {
+            "channel": "bilibili",
+            "program_run_id": "run-1",
+            "memory_mode": "write",
+            "retention_policy": "ephemeral",
+        }
+
+        await output_node(
+            state,
+            RunnableConfig(
+                configurable={
+                    "socketio": mock_socketio,
+                    "service_context": mock_service_context,
+                }
+            ),
+        )
+
+        turn = runtime.submit_turn.call_args.args[0]
+        assert turn.retention_policy == "ephemeral"
+
+    @pytest.mark.asyncio
+    async def test_program_none_disables_write_when_global_memory_is_read_write(
+        self, mock_socketio, mock_service_context
+    ):
+        runtime = MagicMock()
+        mock_service_context.memory_runtime = runtime
+        mock_service_context.config.system.long_term_memory_mode = "read_write"
+        state = create_initial_state(
+            session_id="program-run",
+            user_text="这轮不写记忆",
+            user_id="program:run-1",
+        )
+        state["response_text"] = "收到。"
+        state["metadata"] = {
+            "dialogue_status": "composer",
+            "channel": "bilibili",
+            "program_run_id": "run-1",
+            "memory_mode": "none",
+        }
+
+        await output_node(
+            state,
+            RunnableConfig(
+                configurable={
+                    "socketio": mock_socketio,
+                    "service_context": mock_service_context,
+                }
+            ),
+        )
+
+        runtime.submit_turn.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_developer_turn_memory_preserves_trusted_provenance(

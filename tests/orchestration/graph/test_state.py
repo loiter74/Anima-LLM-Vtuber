@@ -77,6 +77,7 @@ class TestAgentStateKeys:
             "user_query_depth",
             "meme_candidates",
             "meme_injected",
+            "memory_recall",
             # Personality
             "personality_mode",
             "personality_mood",

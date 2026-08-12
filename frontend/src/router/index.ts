@@ -5,8 +5,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'chat',
-      component: () => import('../views/ChatPage.vue'),
+      redirect: '/dashboard',
     },
     {
       path: '/dashboard',
@@ -14,14 +13,8 @@ const router = createRouter({
       component: () => import('../views/DashboardPage.vue'),
     },
     {
-      path: '/meme-review',
-      name: 'meme-review',
-      component: () => import('../views/MemeReview.vue'),
-    },
-    {
-      path: '/music',
-      name: 'music',
-      component: () => import('../views/MusicPage.vue'),
+      path: '/:pathMatch(.*)*',
+      redirect: '/dashboard',
     },
   ],
 })

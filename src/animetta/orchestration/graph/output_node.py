@@ -351,25 +351,32 @@ async def _store_conversation_to_memory(
         if not user_text or not response_text:
             return
 
+        metadata = state.get("metadata", {}) or {}
         system = getattr(getattr(service_context, "config", None), "system", None)
         configured_mode = getattr(system, "long_term_memory_mode", "off")
+        controlled_program = isinstance(metadata.get("program_run_id"), str)
+        program_memory_mode = metadata.get("memory_mode") if controlled_program else None
+        if controlled_program:
+            if program_memory_mode == "write":
+                configured_mode = "read_write"
+            elif program_memory_mode in {"probe", "none"}:
+                configured_mode = "off"
         mode = (
             cast(PersistenceMode, configured_mode)
             if configured_mode in {"off", "read_only", "read_write"}
             else "off"
         )
-        status = state.get("metadata", {}).get("dialogue_status")
+        status = metadata.get("dialogue_status")
+        selected_final = status in {"composer", "composer_fallback"} or (
+            program_memory_mode == "write" and not state.get("error")
+        )
         decision = decide_persistence(
             PersistenceRequest(
                 mode=mode,
                 sink="long_term_write",
-                content_class=(
-                    "selected_final"
-                    if status in {"composer", "composer_fallback"}
-                    else "incomplete"
-                ),
-                completed=status in {"composer", "composer_fallback"},
-                real_provider=status in {"composer", "composer_fallback"},
+                content_class="selected_final" if selected_final else "incomplete",
+                completed=selected_final,
+                real_provider=selected_final,
             )
         )
         if not decision.allowed:
@@ -394,7 +401,6 @@ async def _store_conversation_to_memory(
 
         vad = VADVector(*vad_tuple) if vad_tuple else None
 
-        metadata = state.get("metadata", {}) or {}
         channel = metadata.get("channel") or "unknown"
         context = MemoryContext(
             actor_id=normalize_actor_id(
@@ -437,6 +443,7 @@ async def _store_conversation_to_memory(
                     emotion_vad=vad,
                     context=context,
                     turn_id=state.get("turn_id") or metadata.get("turn_id"),
+                    is_probe=bool(metadata.get("is_probe", False)),
                     retention_policy=metadata.get("retention_policy", "standard"),
                     observation_carrier=carrier,
                 )

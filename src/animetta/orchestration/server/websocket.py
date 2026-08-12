@@ -43,10 +43,18 @@ from animetta.observability.ports import (
 )
 from animetta.orchestration.graph.translation_state import translation_state
 from animetta.orchestration.socket_events import EVENTS
+from animetta.services.program_script import (
+    ProgramReplayCoordinator,
+    ProgramScriptRepository,
+    ProgramScriptRunner,
+)
+from animetta.services.program_script.runtime import build_script_guidance
+from animetta.utils.env_helper import get_data_dir
 
 from .desktop import DesktopClientManager
 from .lifecycle import LifecycleManager
 from .live2d import Live2DManager
+from .program_script_api import get_program_script_routes
 from .routes import RouteHandlers, register_routes
 from .session import SessionManager
 from .stats_api import (
@@ -110,6 +118,21 @@ class WebSocketServer:
         import mimetypes
 
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+        self.memory_runtime = SharedMemoryRuntime(observation_recorder=self.observation_recorder)
+        self.program_repository = ProgramScriptRepository(
+            get_data_dir() / "program_scripts",
+            builtin_dir=project_root / "config" / "program_scripts",
+        )
+        self.program_runner = ProgramScriptRunner(
+            self.program_repository,
+            memory_runtime=self.memory_runtime,
+        )
+        self.program_replay = ProgramReplayCoordinator()
+        program_routes = get_program_script_routes(
+            self.program_repository,
+            self.program_runner,
+            self.program_replay,
+        )
 
         async def serve_singing_audio(request: Request) -> Response:
             filename = request.path_params.get("filename", "")
@@ -228,16 +251,19 @@ class WebSocketServer:
             + metrics_route
             + singing_routes
             + config_routes
+            + program_routes
             + frontend_routes
             + [Mount("/", app=sio_app)],
             lifespan=lifespan,
         )
         self.asgi_app.state.observation_query = self.observation_query
+        self.asgi_app.state.program_repository = self.program_repository
+        self.asgi_app.state.program_runner = self.program_runner
+        self.asgi_app.state.program_replay = self.program_replay
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
         ServicePool.configure_runtime(self.config, self.model_manager)
         set_runtime_readiness_context(self.config, self.frontend_readiness)
-        self.memory_runtime = SharedMemoryRuntime(observation_recorder=self.observation_recorder)
         self.component_readiness_cache = ComponentReadinessCache(self.inspection_runtime())
         set_component_readiness_cache(self.component_readiness_cache)
         self._unsubscribe_memory_revision = self.memory_runtime.subscribe_revision(
@@ -466,6 +492,61 @@ class WebSocketServer:
             observation_report_store=self.observation_report_store,
         )
 
+        async def dispatch_program(text: str, context: dict[str, Any]) -> dict[str, Any]:
+            assert self.route_handlers is not None
+            room_id = int(context.get("room_id", 1) or 1)
+            return await self.route_handlers.bilibili.process_program_danmaku(
+                text,
+                context,
+                room_id=room_id,
+            )
+
+        async def dispatch_replay(event: Any) -> None:
+            assert self.route_handlers is not None
+            message = event.to_danmaku_message()
+            context = dict(event.payload.get("program_context", {}))
+            room_id = int(context.get("room_id", 1) or 1)
+            if message is None:
+                await self.route_handlers.bilibili._broadcast_live_event(
+                    event,
+                    room_id,
+                    0,
+                )
+                return
+            context.setdefault("display_name", event.actor_id or "首播测试观众")
+            context.setdefault("is_probe", True)
+            reply = context.get("reply")
+            if isinstance(reply, dict):
+                context["scene_guidance"] = build_script_guidance(
+                    "弹幕重放",
+                    event.sequence + 1,
+                    reply,
+                )
+            await self.route_handlers.bilibili.process_program_danmaku(
+                event.text,
+                context,
+                room_id=room_id,
+            )
+            if context.get("memory_mode") == "write":
+                await self.memory_runtime.drain(timeout=15)
+
+        self.program_runner.set_dispatcher(dispatch_program)
+        self.program_replay.set_dispatcher(dispatch_replay)
+        self.program_runner.set_room_state_provider(
+            lambda room_id: (
+                {"state": "replay"}
+                if self.program_replay.is_active(room_id)
+                else self.route_handlers.bilibili.session.snapshot()
+            )
+        )
+        self.program_replay.set_room_state_provider(
+            lambda room_id: (
+                {"state": "program"}
+                if self.program_runner.is_active(room_id)
+                else self.route_handlers.bilibili.session.snapshot()
+            )
+        )
+
         # Wire up model manager with Socket.IO for status events
         self.model_manager._socketio = self.sio
 
@@ -530,6 +611,8 @@ class WebSocketServer:
         logger.info("Starting to clean up all resources...")
 
         await self._stop_background_tasks()
+        await self.program_replay.shutdown()
+        await self.program_runner.shutdown()
         await self.component_readiness_cache.stop()
 
         if self.route_handlers:

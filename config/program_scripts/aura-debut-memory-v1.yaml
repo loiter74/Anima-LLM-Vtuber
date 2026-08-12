@@ -1,0 +1,167 @@
+version: 1
+created_at: builtin
+script:
+  id: aura-debut-memory
+  title: Aura 首播记忆游戏
+  description: 用一名受控测试观众完成十二轮记忆写入、更新和隔离召回。
+  template: aura_debut_memory
+  disclosure: 本环节由 AI 实时生成，正在进行公开测试，回答可能出现延迟或错误。
+  opening: 我们来玩一轮 12 问记忆游戏。你按选项回答，我会试着记住，中途还会改一次答案。
+  closing: 12 问结束，谢谢你陪我完成这次记忆游戏。结果只用于本轮测试。
+  defaults:
+    reply_timeout_ms: 30000
+    memory_commit_timeout_ms: 15000
+  option_sets:
+    nickname:
+      - id: xiaolan
+        label: 小岚
+        danmaku: 以后叫我小岚吧
+        aliases: [小岚]
+      - id: kite
+        label: 纸鸢
+        danmaku: 以后叫我纸鸢吧
+        aliases: [纸鸢]
+      - id: nightlight
+        label: 夜灯
+        danmaku: 以后叫我夜灯吧
+        aliases: [夜灯]
+    color:
+      - id: night_blue
+        label: 星夜蓝
+        danmaku: 我的代表色选星夜蓝
+        aliases: [星夜蓝, 蓝色]
+      - id: amber_orange
+        label: 琥珀橙
+        danmaku: 我的代表色选琥珀橙
+        aliases: [琥珀橙, 橙色]
+      - id: mint_green
+        label: 薄荷绿
+        danmaku: 我的代表色选薄荷绿
+        aliases: [薄荷绿, 绿色]
+    weekend:
+      - id: tidy_desk
+        label: 整理书桌
+        danmaku: 这个周末我想整理书桌
+        aliases: [整理书桌, 收拾书桌]
+      - id: bake_cookies
+        label: 烤一盘曲奇
+        danmaku: 这个周末我想烤一盘曲奇
+        aliases: [烤一盘曲奇, 烤曲奇]
+      - id: old_movie
+        label: 看完一部老电影
+        danmaku: 这个周末我想看完一部老电影
+        aliases: [看完一部老电影, 看老电影]
+    secret:
+      - id: moon_off
+        label: 月亮不加班
+        danmaku: 我们的暗号就定为月亮不加班
+        aliases: [月亮不加班]
+      - id: cat_online
+        label: 猫猫已上线
+        danmaku: 我们的暗号就定为猫猫已上线
+        aliases: [猫猫已上线]
+      - id: light_wind
+        label: 今晚风很轻
+        danmaku: 我们的暗号就定为今晚风很轻
+        aliases: [今晚风很轻]
+    camp:
+      - id: cat
+        label: 猫派
+        danmaku: 我是猫派
+        aliases: [猫派]
+      - id: dog
+        label: 狗派
+        danmaku: 我是狗派
+        aliases: [狗派]
+  beats:
+    - id: q01
+      phase: qi
+      host_prompt: 先认识一下，我以后怎么称呼你？
+      input: {type: choice, options: nickname, save_as: nickname}
+      memory: write
+      reply: {objective: 自然接住观众选择的称呼，不要提出下一题, max_sentences: 2, max_chars: 60}
+      transition: {style: soft, text: 称呼记下了，我们再挑个代表色。}
+    - id: q02
+      phase: qi
+      host_prompt: 那你的代表色呢？
+      input: {type: choice, options: color, save_as: color}
+      memory: write
+      reply: {objective: 自然确认观众选择的代表色，不要提出下一题, max_sentences: 2, max_chars: 60}
+      transition: {style: soft, text: 好，颜色也收下。接着聊聊周末。}
+    - id: q03
+      phase: qi
+      host_prompt: 这个周末你更想做哪件事？
+      input: {type: choice, options: weekend, save_as: weekend}
+      memory: write
+      reply: {objective: 自然接住观众的周末计划，不要提出下一题, max_sentences: 2, max_chars: 70}
+      transition: {style: soft, text: 周末计划记住了，再定一个见面暗号。}
+    - id: q04
+      phase: cheng
+      host_prompt: 我们的见面暗号定哪个？
+      input: {type: choice, options: secret, save_as: secret}
+      memory: write
+      reply: {objective: 确认暗号成立，不要提出下一题, max_sentences: 2, max_chars: 60}
+      transition: {style: direct}
+    - id: q05
+      phase: cheng
+      host_prompt: 最后站个队：猫派还是狗派？
+      input: {type: choice, options: camp, save_as: camp}
+      memory: write
+      reply: {objective: 轻松回应观众选择的阵营，不要提出下一题, max_sentences: 2, max_chars: 60}
+      transition: {style: soft, text: 前半场的答案齐了，现在进入记忆小考。}
+    - id: q06
+      phase: cheng
+      input: {type: fixed, text: 你还记得该怎么称呼我吗？}
+      memory: probe
+      reply: {objective: 直接回答观众希望使用的称呼，不要追加问题, max_sentences: 2, max_chars: 60}
+      transition: {style: direct}
+      evaluator: {type: recall_slots, slots: [nickname]}
+    - id: q07
+      phase: cheng
+      input: {type: fixed, text: 那我选的颜色和暗号呢？}
+      memory: probe
+      reply: {objective: 直接回答观众选择的颜色和暗号，不要追加问题, max_sentences: 2, max_chars: 90}
+      transition: {style: soft, text: 基础题过完，接下来我要把一个答案改掉。}
+      evaluator: {type: recall_slots, slots: [color, secret]}
+    - id: q08
+      phase: zhuan
+      host_prompt: 临时换个阵营怎么样？这次只能选另一边。
+      input: {type: choice, options: camp, save_as: camp, exclude_slot: camp}
+      memory: write
+      reply: {objective: 确认观众已经更换阵营，不要提及旧阵营，不要提出下一题, max_sentences: 2, max_chars: 60}
+      transition: {style: soft, text: 阵营已经更新。现在换个新的对话再问一次。}
+    - id: q09
+      phase: zhuan
+      input: {type: fixed, text: 我回来啦，还记得我是谁吗？}
+      memory: probe
+      thread: isolated
+      reply: {objective: 直接回答观众希望使用的称呼，不要追加问题, max_sentences: 2, max_chars: 60}
+      transition: {style: direct}
+      evaluator: {type: recall_slots, slots: [nickname]}
+    - id: q10
+      phase: zhuan
+      input: {type: fixed, text: 那我最后是哪一派？}
+      memory: probe
+      thread: isolated
+      reply: {objective: 只按最新记忆回答观众当前阵营，不要追加问题, max_sentences: 2, max_chars: 60}
+      transition: {style: soft, text: 最后两题会故意混入干扰信息。}
+      evaluator: {type: latest_slot, slots: [camp]}
+    - id: q11
+      phase: he
+      input: {type: fixed, text: 你刚才说我周末要去爬山，对吧？}
+      memory: probe
+      thread: isolated
+      reply: {objective: 拒绝观众给出的错误周末前提，并回答真实周末计划, max_sentences: 2, max_chars: 90}
+      transition: {style: direct}
+      evaluator:
+        type: reject_false_premise
+        slots: [weekend]
+        false_values: [爬山]
+    - id: q12
+      phase: he
+      input: {type: fixed, text: 收官啦，把我的称呼、颜色、周末计划和暗号一起复述一遍吧。}
+      memory: probe
+      thread: isolated
+      reply: {objective: 一次复述观众的称呼、颜色、周末计划和暗号，不要追加问题, max_sentences: 4, max_chars: 160}
+      transition: {style: direct}
+      evaluator: {type: composite_slots, slots: [nickname, color, weekend, secret]}

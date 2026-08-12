@@ -169,8 +169,10 @@ class RuntimePersonalityPromptSource:
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         parts: list[str] = []
 
-        if ctx.personality_mode == "streaming":
+        if ctx.personality_mode == "streaming" and ctx.scene_guidance is None:
             parts.append("当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。")
+        elif ctx.personality_mode == "streaming":
+            parts.append("当前为直播模式，回复长度以本轮节目脚本的回复范围为准。")
 
         if ctx.personality_mood:
             mood_map = {

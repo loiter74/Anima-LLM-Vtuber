@@ -170,6 +170,18 @@ class TestOrchestratorProcessText:
         assert "tool_invocation_observer" not in initial_state["metadata"]
 
     @pytest.mark.asyncio
+    async def test_process_text_can_isolate_one_checkpoint_thread(self, orchestrator, mock_graph):
+        await orchestrator.start()
+
+        await orchestrator.process_text(
+            text="我回来啦",
+            checkpoint_thread_id="program:run-1:q09",
+        )
+
+        run_config = mock_graph.ainvoke.await_args.kwargs["config"]
+        assert run_config["configurable"]["thread_id"] == "program:run-1:q09"
+
+    @pytest.mark.asyncio
     async def test_process_text_records_canonical_root_without_synthetic_snapshots(
         self, orchestrator, mock_graph
     ):

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useConnectionStore } from '@/stores/connection'
 
-const router = useRouter()
 const route = useRoute()
 const store = useConnectionStore()
 
@@ -21,26 +20,9 @@ const statusLabels: Record<string, string> = {
 }
 
 const navItems = [
-  { key: 'chat', label: 'Chat', routeName: 'chat', path: '/' },
-  { key: 'memory', label: 'Memory', panelTab: 'memory', path: '/' },
-  { key: 'dashboard', label: '直播执行', routeName: 'dashboard', path: '/dashboard' },
-  { key: 'settings', label: 'Settings', panelTab: 'settings', path: '/' },
+  { key: 'live', label: '直播画面', path: '/live.html' },
+  { key: 'dashboard', label: '后台控制', routeName: 'dashboard', path: '/dashboard' },
 ] as const
-
-type PanelTab = 'memory' | 'settings'
-
-function goTo(item: (typeof navItems)[number]) {
-  if ('panelTab' in item) {
-    router.push(item.path)
-    window.dispatchEvent(
-      new CustomEvent<PanelTab>('animetta:panel-tab', {
-        detail: item.panelTab,
-      }),
-    )
-    return
-  }
-  router.push(item.path)
-}
 
 function isActive(item: (typeof navItems)[number]) {
   return 'routeName' in item && route.name === item.routeName
@@ -60,16 +42,16 @@ function isActive(item: (typeof navItems)[number]) {
     </div>
 
     <nav class="titlebar-center" aria-label="Main sections">
-      <button
+      <a
         v-for="item in navItems"
         :key="item.key"
         :data-testid="`nav-${item.key}`"
+        :href="item.path"
         class="nav-btn"
         :class="{ active: isActive(item) }"
-        @click="goTo(item)"
       >
         {{ item.label }}
-      </button>
+      </a>
     </nav>
 
     <!-- Right: connection status -->
@@ -156,6 +138,8 @@ function isActive(item: (typeof navItems)[number]) {
 }
 
 .nav-btn {
+  display: inline-flex;
+  align-items: center;
   padding: var(--s-1_5) var(--s-3);
   font-size: 12px;
   color: var(--c-text-dim);
@@ -165,6 +149,7 @@ function isActive(item: (typeof navItems)[number]) {
   cursor: pointer;
   transition: all var(--d-base) var(--ease-out-expo);
   font-family: inherit;
+  text-decoration: none;
   white-space: nowrap;
 }
 

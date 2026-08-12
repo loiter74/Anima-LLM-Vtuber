@@ -58,9 +58,9 @@ export default defineConfig({
     'glass-strong': 'bg-c-surface/85 backdrop-blur-2xl border border-c-border rounded-2xl',
     // 按钮
     'btn-accent':
-      'bg-c-accent hover:bg-c-accent-hover text-white rounded-xl px-4 py-2 transition-all duration-200 active:scale-95',
+      'cursor-pointer bg-c-accent hover:bg-c-accent-hover text-white rounded-xl px-4 py-2 transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:bg-c-card disabled:text-c-text-muted disabled:opacity-60 disabled:hover:bg-c-card disabled:active:scale-100',
     'btn-ghost':
-      'bg-transparent hover:bg-c-accent-soft text-c-text-dim hover:text-c-accent rounded-xl px-3 py-2 transition-all duration-200',
+      'cursor-pointer bg-transparent hover:bg-c-accent-soft text-c-text-dim hover:text-c-accent rounded-xl px-3 py-2 transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:text-c-text-muted disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-c-text-muted disabled:active:scale-100',
     // 渐变
     'gradient-accent': 'bg-gradient-to-br from-c-accent to-c-accent-hover',
     'gradient-accent-soft': 'bg-gradient-to-br from-c-accent/20 to-c-blue/20',

@@ -364,6 +364,9 @@ class LangGraphOrchestrator:
                 "configurable": dict(self._langgraph_config.get("configurable", {})),
             },
         )
+        checkpoint_thread_id = initial_state.get("metadata", {}).get("checkpoint_thread_id")
+        if isinstance(checkpoint_thread_id, str) and checkpoint_thread_id:
+            run_config["configurable"]["thread_id"] = checkpoint_thread_id
         from .tool_observation import (
             CompositeToolInvocationObserver,
             LedgerToolInvocationObserver,
@@ -459,6 +462,7 @@ class LangGraphOrchestrator:
             "conversation_id": final_state.get("conversation_id"),
             "task_id": final_state.get("task_id"),
             "turn_id": final_state.get("turn_id"),
+            "memory_recall": final_state.get("memory_recall", {}),
         }
 
     def _get_system_prompt(self) -> str | None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 """Tests for LLM reasoning node — tool-calling and streaming paths."""
 
 import asyncio
+import importlib
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -74,6 +75,29 @@ async def test_retrieve_memory_context_forwards_stable_identity():
 
     assert result == ("memory", {"revision": 3})
     assert middleware.before_llm_call.await_args.kwargs["context"] is context
+
+
+@pytest.mark.asyncio
+async def test_llm_node_returns_recall_diagnostics_for_probe_audit(
+    mock_service_context,
+    monkeypatch,
+):
+    async def _chat_stream(user_text, system_prompt=""):
+        del user_text, system_prompt
+        yield "当然记得。"
+
+    mock_service_context.llm_engine.chat_stream = _chat_stream
+    llm_module = importlib.import_module("animetta.orchestration.graph.llm_node")
+    monkeypatch.setattr(
+        llm_module,
+        "_retrieve_memory_context",
+        AsyncMock(return_value=("", {"degraded": False, "atom_count": 1})),
+    )
+    state = create_initial_state(session_id="probe", user_text="还记得我吗？")
+
+    result = await llm_node(state, _make_config(service_context=mock_service_context))
+
+    assert result["memory_recall"] == {"degraded": False, "atom_count": 1}
 
 
 @pytest.mark.asyncio

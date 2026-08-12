@@ -9,8 +9,10 @@ import PlaybackControls from './PlaybackControls.vue'
 import ProcessTimeline from './ProcessTimeline.vue'
 
 const store = useSingingStore()
-const { process, cancel } = useSinging()
+const { process, confirmLyrics, cancel } = useSinging()
 const inputUrl = ref('')
+const inputError = ref('')
+const assDraft = ref('')
 const waveformRef = ref<InstanceType<typeof WaveformDisplay> | null>(null)
 const selectedTrackKey = ref<'mix' | 'vocals' | 'original'>('mix')
 const playbackError = ref('')
@@ -29,8 +31,20 @@ const selectedTrack = computed(
 )
 
 function startProcess() {
-  if (!inputUrl.value.trim()) return
-  process(inputUrl.value.trim())
+  const url = inputUrl.value.trim()
+  if (!/^(https?:\/\/)?((www\.)?bilibili\.com|b23\.tv)\//i.test(url)) {
+    inputError.value = '请输入有效的 Bilibili 或 b23.tv 地址'
+    return
+  }
+  inputError.value = ''
+  if (store.status === 'error') store.reset()
+  process(url)
+}
+
+function submitLyrics() {
+  const content = assDraft.value.trim()
+  if (!content) return
+  confirmLyrics(content)
 }
 
 function handleTimeupdate(time: number) {
@@ -167,13 +181,19 @@ function playRecent(item: RecentItem) {
       >
         RVC 已应用
       </span>
+      <span
+        v-else
+        class="rounded-lg border border-c-border bg-c-panel/45 px-2 py-1 font-mono text-10px uppercase text-c-text-muted"
+      >
+        {{ store.status }}
+      </span>
     </div>
 
     <!-- URL Input (shown when idle/error) -->
     <div v-if="store.status === 'idle' || store.status === 'error'" class="flex gap-2">
       <input
         v-model="inputUrl"
-        placeholder="📎 贴上 B站 视频链接..."
+        placeholder="粘贴 Bilibili 视频地址"
         class="flex-1 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-sm text-c-text placeholder-c-text-dim/50 outline-none focus:border-c-accent/50 transition-all"
         @keyup.enter="startProcess"
       />
@@ -184,10 +204,11 @@ function playRecent(item: RecentItem) {
         开始制作
       </button>
     </div>
+    <p v-if="inputError" class="text-xs text-c-error" role="alert">{{ inputError }}</p>
 
     <!-- Recent works -->
     <div v-if="recentItems.length > 0 && store.status === 'idle'" class="flex flex-col gap-2 mt-2">
-      <div class="text-xs text-c-text-dim font-medium">Recent Works</div>
+      <div class="text-xs text-c-text-dim font-medium">最近作品</div>
       <div
         v-for="item in recentItems"
         :key="item.session_id"
@@ -196,7 +217,7 @@ function playRecent(item: RecentItem) {
         <button
           class="w-7 h-7 flex items-center justify-center rounded-full bg-c-accent/20 text-c-accent hover:bg-c-accent/40 transition-all shrink-0"
           @click="playRecent(item)"
-          :title="'Play ' + item.session_id"
+          :title="'载入 ' + item.session_id"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5,3 19,12 5,21" />
@@ -208,7 +229,7 @@ function playRecent(item: RecentItem) {
           class="px-2 py-1 rounded bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-colors shrink-0"
           target="_blank"
         >
-          DL
+          音轨
         </a>
         <a
           v-if="item.subtitle_url"
@@ -216,7 +237,7 @@ function playRecent(item: RecentItem) {
           class="px-2 py-1 rounded bg-c-bg/40 text-c-text-dim hover:text-c-text transition-colors shrink-0"
           target="_blank"
         >
-          Sub
+          字幕
         </a>
       </div>
     </div>
@@ -240,10 +261,18 @@ function playRecent(item: RecentItem) {
     <!-- Lyrics confirmation hint -->
     <div
       v-if="store.status === 'waiting_lyrics'"
-      class="px-3 py-2 rounded-lg bg-c-gold/10 border border-c-gold/30 text-xs"
-      style="color: #f0c060"
+      class="space-y-3 rounded-xl border border-c-warning/30 bg-c-warning/10 px-3 py-3 text-xs text-c-warning"
     >
-      歌词已生成，请在 <strong>Aegisub</strong> 中审核时间轴后确认。
+      <p>歌词已生成，请在 <strong>Aegisub</strong> 中审核时间轴，再粘贴确认后的 ASS 内容。</p>
+      <textarea
+        v-model="assDraft"
+        rows="4"
+        class="w-full resize-none rounded-xl border border-c-border bg-c-panel/65 px-3 py-2 font-mono text-10px text-c-text outline-none focus:border-c-border-accent"
+        placeholder="粘贴已确认的 ASS 字幕内容"
+      />
+      <button class="btn-accent" type="button" :disabled="!assDraft.trim()" @click="submitLyrics">
+        确认歌词并继续
+      </button>
     </div>
 
     <!-- Cancel button during processing -->
@@ -331,7 +360,7 @@ function playRecent(item: RecentItem) {
 
       <!-- Output file links -->
       <div class="flex flex-col gap-2 mt-1">
-        <div class="text-xs text-c-text-dim font-medium">📂 输出文件</div>
+        <div class="text-xs text-c-text-dim font-medium">输出文件</div>
         <div class="flex flex-wrap gap-2">
           <!-- RVC mixed final audio -->
           <a
@@ -340,7 +369,7 @@ function playRecent(item: RecentItem) {
             target="_blank"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-accent/10 border border-c-accent/30 text-xs text-c-accent hover:bg-c-accent/20 transition-all"
           >
-            🎵 RVC混音 (播放)
+            RVC 混音
           </a>
           <!-- RVC vocals only (for lip sync) -->
           <a
@@ -349,7 +378,7 @@ function playRecent(item: RecentItem) {
             target="_blank"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text hover:text-c-accent hover:border-c-accent/30 transition-all"
           >
-            🎤 RVC 纯人声
+            RVC 纯人声
           </a>
           <!-- Original audio -->
           <a
@@ -358,7 +387,7 @@ function playRecent(item: RecentItem) {
             target="_blank"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-text hover:border-c-border/60 transition-all"
           >
-            📻 原始音频
+            原始音频
           </a>
           <!-- TTS voice mix -->
           <a
@@ -367,7 +396,7 @@ function playRecent(item: RecentItem) {
             target="_blank"
             class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
           >
-            🤖 TTS语音
+            TTS 语音
           </a>
         </div>
       </div>
@@ -379,7 +408,7 @@ function playRecent(item: RecentItem) {
         download
         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-c-bg/40 border border-c-border/30 text-xs text-c-text-dim hover:text-c-accent hover:border-c-accent/30 transition-all"
       >
-        📝 下载字幕文件 (.ass)
+        下载字幕文件 (.ass)
       </a>
     </div>
   </div>

@@ -254,16 +254,35 @@ class BilibiliHandlers:
         await self._broadcast_raw_danmaku(msg, room_id)
         await self._process_ai_reply(msg, room_id)
 
+    async def process_program_danmaku(
+        self,
+        text: str,
+        context: dict[str, Any],
+        *,
+        room_id: int,
+    ) -> dict[str, Any]:
+        """Inject one controlled test-viewer message through the real reply path."""
+        message = DanmakuMessage(
+            text=text,
+            user_name=str(context.get("display_name") or "首播测试观众"),
+            user_id=0,
+            meta={"program_run_id": context.get("program_run_id")},
+        )
+        await self._broadcast_raw_danmaku(message, room_id)
+        return await self._process_ai_reply(message, room_id, program_context=context)
+
     async def _process_ai_reply(
         self,
         msg: DanmakuMessage,
         room_id: int,
-    ) -> None:
+        *,
+        program_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Generate and deliver one already-admitted AI reply."""
         from ...graph.translation_state import translation_state
 
         try:
-            task_id = str(uuid4())
+            task_id = str((program_context or {}).get("turn_id") or uuid4())
             identity = ChatIdentity(
                 message_id=str(uuid4()),
                 conversation_id=str(uuid4()),
@@ -273,7 +292,10 @@ class BilibiliHandlers:
             delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
             orchestrator = await self.admin._get_or_create_orchestrator("bilibili")
             scene_metadata: dict[str, object] = {}
-            if self.scene_runtime is not None:
+            scripted_guidance = (program_context or {}).get("scene_guidance")
+            if isinstance(scripted_guidance, dict):
+                scene_metadata["scene_guidance"] = scripted_guidance
+            elif self.scene_runtime is not None:
                 try:
                     service_context = getattr(orchestrator, "service_context", None)
                     if service_context is not None:
@@ -286,8 +308,26 @@ class BilibiliHandlers:
                         "Scene guidance lookup failed: error_type={}",
                         type(exc).__name__,
                     )
-            actor_id = normalize_actor_id(msg.user_id, "bilibili")
+            actor_override = (program_context or {}).get("actor_id")
+            actor_id = (
+                str(actor_override)
+                if isinstance(actor_override, str) and actor_override
+                else normalize_actor_id(msg.user_id, "bilibili")
+            )
             stream_id = f"bilibili:{room_id}" if room_id else None
+            program_metadata = {
+                key: value
+                for key, value in (program_context or {}).items()
+                if key
+                in {
+                    "program_run_id",
+                    "program_beat_id",
+                    "is_probe",
+                    "memory_mode",
+                    "checkpoint_thread_id",
+                    "retention_policy",
+                }
+            }
             result = await orchestrator.process_text(
                 text=f"{msg.user_name}说: {msg.text}",
                 user_id=actor_id,
@@ -305,6 +345,7 @@ class BilibiliHandlers:
                 actor_role="viewer",
                 audience="livestream",
                 **cast(dict[str, Any], scene_metadata),
+                **program_metadata,
             )
 
             reply_text = result.get("response_text", "")
@@ -411,7 +452,7 @@ class BilibiliHandlers:
                         "timestamp": time.time(),
                     },
                 )
-            if reply_text and self.scene_runtime is not None:
+            if reply_text and self.scene_runtime is not None and program_context is None:
                 try:
                     await self.scene_runtime.record_host_reply(reply_text)
                 except Exception as exc:
@@ -419,6 +460,7 @@ class BilibiliHandlers:
                         "Scene host-reply feedback failed: error_type={}",
                         type(exc).__name__,
                     )
+            return result
         except Exception as exc:
             logger.error(
                 "Bilibili reply processing failed: error_type={}",

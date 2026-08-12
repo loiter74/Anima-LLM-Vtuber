@@ -1,179 +1,87 @@
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import DashboardPage from '@/views/DashboardPage.vue'
-import { Events } from '@/constants/socket-events'
 
-const socket = vi.hoisted(() => ({ emit: vi.fn(), on: vi.fn(), off: vi.fn() }))
-vi.mock('@/composables/useSocket', () => ({ getSocket: () => socket }))
-
-const turn = {
-  trace_id: '00000000-0000-4000-8000-000000000003',
-  message_id: '00000000-0000-4000-8000-000000000002',
-  conversation_id: '00000000-0000-4000-8000-000000000001',
-  actor_role: 'developer',
-  source: 'developer_console',
-  live_session_id: 'live-1',
-  audience: 'livestream',
-  started_at: 1_784_000_000,
-  finished_at: 1_784_000_002,
-  duration_ms: 2000,
-  outcome: 'success',
-  privacy_mode: 'full',
-  content: {
-    user: {
-      text: '去 Minecraft 看看基地',
-      character_count: 18,
-      byte_count: 36,
-      digest: 'abcdef1234567890',
-    },
-    assistant: {
-      text: '开发者刚刚在后台提到基地，我现在去看看。',
-      character_count: 24,
-      byte_count: 48,
-      digest: '123456abcdef7890',
-    },
+const leafStubs = {
+  TitleBar: { template: '<header data-testid="title-bar" />' },
+  LiveOperationsWorkspace: { template: '<main data-testid="live-workspace" />' },
+  ProgramScriptEditor: { template: '<section data-testid="script-workspace" />' },
+  MusicCard: { template: '<section data-testid="singing-workspace" />' },
+  MemeWorkspace: { template: '<section data-testid="meme-workspace" />' },
+  MemoryWorkspace: {
+    emits: ['send-to-sandbox'],
+    template:
+      '<main data-testid="memory-workspace"><button data-testid="send-memory" @click="$emit(\'send-to-sandbox\', \'记住观众喜欢雨夜电台\')">发送到沙盒</button></main>',
   },
-  tool_calls: 1,
-  mc_status: 'success',
-} as const
-
-const livePayload = {
-  api_version: '1',
-  metrics: {
-    turn_count: 1,
-    model_calls: 2,
-    tool_calls: 1,
-    tool_success_rate: 100,
-    mc_command_count: 1,
-    mc_status: 'success',
+  ConversationSandbox: {
+    props: ['modelValue'],
+    template: '<section data-testid="sandbox-workspace">{{ modelValue }}</section>',
   },
-  turns: [turn],
+  ProgramReplayPanel: { template: '<section data-testid="replay-workspace" />' },
 }
 
-const detailPayload = {
-  api_version: '1',
-  ...turn,
-  activities: [
-    {
-      id: 'tool-1',
-      kind: 'tool',
-      label: '决定并调用工具',
-      name: 'tool:mc_operate_bot',
-      layer: 'service',
-      status: 'success',
-      started_at: 1_784_000_001,
-      duration_ms: 125,
-      provider: null,
-      model: null,
-      error: null,
-      attributes: {
-        tool_source: 'mcp',
-        mcp_server: 'minecraft',
-        arguments_text: '{"operation":"progress","command_id":"command-1"}',
-        result_text: '{"state":"succeeded"}',
-      },
-      minecraft: {
-        command_id: 'command-1',
-        state: 'succeeded',
-        failure_reason: null,
-        transitions: [
-          { from_state: null, to_state: 'queued', reason_code: 'accepted' },
-          { from_state: 'queued', to_state: 'succeeded', reason_code: 'completed' },
-        ],
-      },
+function mountPage() {
+  return mount(DashboardPage, {
+    global: {
+      plugins: [createPinia()],
+      stubs: leafStubs,
     },
-  ],
-  events: [],
+  })
 }
 
-function response(data: unknown) {
-  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(data) })
+function tab(wrapper: ReturnType<typeof mountPage>, label: string) {
+  const button = wrapper.findAll('[role="tab"]').find((item) => item.text() === label)
+  if (!button) throw new Error(`missing tab ${label}`)
+  return button
 }
 
-async function flushPromises() {
-  for (let index = 0; index < 10; index += 1) await Promise.resolve()
-}
+describe('DashboardPage information architecture', () => {
+  it('keeps exactly four backend tasks and starts in live operations', () => {
+    const wrapper = mountPage()
 
-describe('DashboardPage livestream operations console', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    socket.emit.mockReset()
-    socket.on.mockReset()
-    socket.off.mockReset()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: string | URL | Request) =>
-        String(input).includes('/turns/') ? response(detailPayload) : response(livePayload),
-      ),
+    const taskTabs = wrapper.findAll('[aria-label="后台任务"] [role="tab"]')
+    expect(taskTabs.map((item) => item.text())).toEqual(['现场', '节目', '记忆', '验证'])
+    expect(wrapper.get('[data-testid="title-bar"]')).toBeTruthy()
+    expect(wrapper.get('[data-testid="live-workspace"]')).toBeTruthy()
+    expect(wrapper.find('[data-testid="script-workspace"]').exists()).toBe(false)
+  })
+
+  it('keeps scripts, singing, and Meme in the program task', async () => {
+    const wrapper = mountPage()
+    await tab(wrapper, '节目').trigger('click')
+
+    expect(wrapper.get('[data-testid="script-workspace"]')).toBeTruthy()
+    expect(
+      wrapper.findAll('[aria-label="节目工作区"] [role="tab"]').map((item) => item.text()),
+    ).toEqual(['脚本编排', '唱歌制作', 'Meme 梗库'])
+
+    await tab(wrapper, '唱歌制作').trigger('click')
+    expect(wrapper.get('[data-testid="singing-workspace"]')).toBeTruthy()
+    await tab(wrapper, 'Meme 梗库').trigger('click')
+    expect(wrapper.get('[data-testid="meme-workspace"]')).toBeTruthy()
+  })
+
+  it('moves a memory draft into the private validation sandbox without sending it', async () => {
+    const wrapper = mountPage()
+    await tab(wrapper, '记忆').trigger('click')
+    await wrapper.get('[data-testid="send-memory"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="sandbox-workspace"]').text()).toContain(
+      '记住观众喜欢雨夜电台',
     )
+    expect(
+      wrapper.findAll('[aria-label="验证工作区"] [role="tab"]').map((item) => item.text()),
+    ).toEqual(['对话沙盒', '弹幕重放'])
   })
 
-  afterEach(() => vi.unstubAllGlobals())
+  it('keeps replay exclusively under validation', async () => {
+    const wrapper = mountPage()
+    await tab(wrapper, '验证').trigger('click')
+    await tab(wrapper, '弹幕重放').trigger('click')
 
-  async function mountDashboard() {
-    const wrapper = mount(DashboardPage, {
-      global: {
-        plugins: [createPinia()],
-        stubs: {
-          TitleBar: { template: '<header data-testid="shared-titlebar" />' },
-          MusicCard: { template: '<div data-testid="music-card" />' },
-        },
-      },
-    })
-    await flushPromises()
-    return wrapper
-  }
-
-  it('shows full developer and tool content in the trusted operations console', async () => {
-    const wrapper = await mountDashboard()
-
-    expect(wrapper.get('[data-testid="shared-titlebar"]')).toBeTruthy()
-    expect(wrapper.text()).toContain('开发者对话')
-    expect(wrapper.text()).toContain('执行检查器')
-    expect(wrapper.text()).toContain('开发者')
-    expect(wrapper.text()).toContain('模型调用')
-    expect(wrapper.text()).toContain('100%')
-    expect(wrapper.text()).toContain('决定并调用工具')
-    expect(wrapper.text()).toContain('MCP minecraft')
-    expect(wrapper.text()).toContain('queued → succeeded')
-    expect(wrapper.text()).toContain('去 Minecraft 看看基地')
-    expect(wrapper.text()).toContain('开发者刚刚在后台提到基地')
-    expect(wrapper.text()).toContain('command-1')
-    expect(wrapper.text()).toContain('"operation":"progress"')
-    expect(wrapper.text()).toContain('后台原文')
-    expect(wrapper.text()).not.toContain('已脱敏')
-    expect(wrapper.get('[aria-label="唱歌播放器"]')).toBeTruthy()
-    wrapper.unmount()
-  })
-
-  it('sends dashboard text only through the trusted developer event', async () => {
-    const wrapper = await mountDashboard()
-    const textarea = wrapper.get('[data-testid="chat-input-bar"] textarea')
-    await textarea.setValue('去 Minecraft 看看基地')
-    await textarea.trigger('keydown', { key: 'Enter' })
-
-    expect(socket.emit).toHaveBeenCalledOnce()
-    expect(socket.emit.mock.calls[0][0]).toBe(Events.CHAT.DEVELOPER_TEXT)
-    expect(socket.emit.mock.calls[0][1]).toMatchObject({
-      text: '去 Minecraft 看看基地',
-      source: 'text',
-    })
-    expect(wrapper.text()).toContain('投递中')
-    wrapper.unmount()
-  })
-
-  it('refreshes selected MC detail immediately on command transition', async () => {
-    const wrapper = await mountDashboard()
-    const registration = socket.on.mock.calls.find(
-      ([event]) => event === Events.MINECRAFT.COMMAND_TRANSITION,
-    )
-    expect(registration).toBeTruthy()
-
-    await registration![1]({ command_id: 'command-1' })
-    await flushPromises()
-
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/stats/live/turns/'))
-    wrapper.unmount()
+    expect(wrapper.get('[data-testid="replay-workspace"]')).toBeTruthy()
+    expect(wrapper.find('[data-testid="meme-workspace"]').exists()).toBe(false)
   })
 })

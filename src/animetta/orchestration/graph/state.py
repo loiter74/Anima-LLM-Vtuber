@@ -74,6 +74,7 @@ class AgentState(TypedDict):
     user_query_depth: int
     meme_candidates: list[dict[str, Any]]
     meme_injected: bool
+    memory_recall: dict[str, Any]
 
     # Personality
     personality_mode: str  # 'default' | 'streaming' | 'mood_xxx'
@@ -151,6 +152,7 @@ def create_initial_state(
         "user_query_depth": 0,
         "meme_candidates": [],
         "meme_injected": False,
+        "memory_recall": {},
         # Personality
         "personality_mode": "default",
         "personality_mood": None,

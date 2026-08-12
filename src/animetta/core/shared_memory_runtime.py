@@ -255,7 +255,7 @@ class SharedMemoryRuntime:
                     await self._ingest_observed(system, turn, carrier)
             return
         atom = await self._encode_turn(system, turn)
-        await self._publish_revision(system, atom)
+        await self._publish_revision(system, atom, turn_id=turn.turn_id)
 
     async def _ingest_observed(
         self,
@@ -277,7 +277,7 @@ class SharedMemoryRuntime:
             critical_path=False,
         ):
             await self._index_carriers.put(carrier)
-        await self._publish_revision(system, atom)
+        await self._publish_revision(system, atom, turn_id=turn.turn_id)
 
     async def _encode_turn(self, system: Any, turn: ConversationTurn) -> Any:
         scope, visibility = self._safe_scope(turn)
@@ -291,13 +291,21 @@ class SharedMemoryRuntime:
             retention_policy=turn.retention_policy,
         )
 
-    async def _publish_revision(self, system: Any, atom: Any) -> None:
+    async def _publish_revision(
+        self,
+        system: Any,
+        atom: Any,
+        *,
+        turn_id: str | None,
+    ) -> None:
         revision = await system.store.get_revision()
         payload: dict[str, object] = {
             "revision": revision,
             "reason": "ingested",
             "atom_id": atom.id,
         }
+        if turn_id:
+            payload["turn_id"] = turn_id
         for callback in tuple(self._revision_subscribers):
             try:
                 result = callback(payload)

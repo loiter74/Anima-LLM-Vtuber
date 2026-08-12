@@ -129,6 +129,13 @@ def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> 
     assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
 
 
+def test_animetta_compose_persists_the_configured_data_directory() -> None:
+    app = _compose("docker-compose.yml")["services"]["animetta"]
+
+    assert "ANIMETTA_DATA_DIR=/app/data" in app["environment"]
+    assert "animetta-data:/app/data" in app["volumes"]
+
+
 def test_production_redirects_legacy_live_stream_to_canonical_obs_surface() -> None:
     nginx = _text("docker/nginx.conf")
 
@@ -155,6 +162,7 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}",
         "ANIMETTA_HOST=0.0.0.0",
         "ANIMETTA_PORT=12394",
+        "ANIMETTA_DATA_DIR=/app/data",
         "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}",
         "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}",
         "MIMO_API_KEY=${MIMO_API_KEY:-}",
