@@ -30,10 +30,10 @@
   --c-card-rgb: 54 32 90;
   --c-text: #e8e0f0;
   --c-text-rgb: 232 224 240;
-  --c-text-dim: #c8a6b8;
-  --c-text-dim-rgb: 200 166 184;
-  --c-text-muted: #a06f85;
-  --c-text-muted-rgb: 160 111 133;
+  --c-text-dim: #e4afc5;
+  --c-text-dim-rgb: 228 175 197;
+  --c-text-muted: #c8849c;
+  --c-text-muted-rgb: 200 132 156;
   --c-accent: #e879a8;
   --c-accent-rgb: 232 121 168;
   --c-accent-hover: #f090c0;
