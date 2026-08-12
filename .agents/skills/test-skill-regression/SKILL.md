@@ -21,7 +21,7 @@ description: 使用仓库固定用例高效回归 Codex Skill，预检基线并�
 ## 快路径
 
 1. 读取目标 Skill 与固定用例。
-2. 运行准备器。它在创建副本前验证用例、基线和正反语义约束，然后输出唯一 `task`、`output_root` 和全部 `run_roots`：
+2. 运行准备器。它在创建副本前验证用例、基线路径边界和正反语义约束本身；允许任务声明的输出由执行过程首次创建。随后输出唯一 `task`、`output_root` 和全部 `run_roots`：
 
    ```powershell
    py -3.13 .agents/skills/test-skill-regression/scripts/prepare_case.py --case .agents/skills/test-skill-regression/fixtures/cases/<case>.json

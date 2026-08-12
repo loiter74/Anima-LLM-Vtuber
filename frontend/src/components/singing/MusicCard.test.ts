@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MusicCard from './MusicCard.vue'
@@ -67,6 +67,44 @@ describe('MusicCard live playback control', () => {
 
     await wrapper.get('[aria-label="暂停RVC 混音"]').trigger('click')
     expect(readSingingPlayback()).toMatchObject({ state: 'paused' })
+    wrapper.unmount()
+  })
+
+  it('clears a stale URL validation error when a recent work is loaded', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          session_id: 'recent-song',
+          audio_url: '/recent_final.wav',
+          vocals_url: '/recent_vocals.wav',
+          original_url: '/recent_original.wav',
+          subtitle_url: '/recent.ass',
+          tts_audio_url: '',
+          created_at: '2026-08-12T00:00:00Z',
+          duration_sec: 60,
+        },
+      ],
+    } as Response)
+    const wrapper = mount(MusicCard, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          WaveformDisplay: { template: '<div />', methods: { connectAudio: vi.fn() } },
+          ProcessTimeline: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('input[placeholder="粘贴 Bilibili 视频地址"]').setValue('https://example.com')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('[role="alert"]').text()).toContain('请输入有效的 Bilibili')
+
+    await wrapper.get('button[title="载入 recent-song"]').trigger('click')
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(useSingingStore().result?.audio_url).toBe('/recent_final.wav')
     wrapper.unmount()
   })
 })

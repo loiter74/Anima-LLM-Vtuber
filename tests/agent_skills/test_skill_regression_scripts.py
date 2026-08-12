@@ -94,6 +94,27 @@ def test_prepare_case_preflights_and_copies_isolated_runs(tmp_path: Path) -> Non
     assert (run_roots[1] / "result.txt").read_text(encoding="utf-8") == "after\n"
 
 
+def test_prepare_case_allows_a_generated_output_absent_from_baseline(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline"
+    baseline.mkdir()
+    case = tmp_path / "case.json"
+    write_case(case)
+    prepared = tmp_path / "prepared"
+
+    result = run_script(
+        str(PREPARE),
+        "--case",
+        str(case),
+        "--output-root",
+        str(prepared),
+    )
+
+    payload = json.loads(result.stdout)
+    run_roots = [Path(path) for path in payload["run_roots"]]
+    assert payload["preflight_passed"] is True
+    assert all(not (root / "result.txt").exists() for root in run_roots)
+
+
 def test_prepare_case_rejects_contradictory_constraints_before_creating_runs(
     tmp_path: Path,
 ) -> None:
@@ -137,9 +158,8 @@ def test_bundled_cases_reference_fixed_skill_and_baseline_paths() -> None:
         assert case["invariants"]
         for invariant in case["invariants"]:
             target = baseline_path / invariant["path"]
-            baseline_text = target.read_text(encoding="utf-8")
+            assert target.resolve().is_relative_to(baseline_path)
             assert invariant.get("contains") or invariant.get("not_contains")
-            assert all(fragment in baseline_text for fragment in invariant.get("contains", []))
             assert all(
                 fragment not in required
                 for fragment in invariant.get("not_contains", [])

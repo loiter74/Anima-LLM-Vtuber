@@ -15,12 +15,14 @@ description: 验收 Animetta 唯一两个正式产品入口 /live.html 与 /dash
    - `profile` 必须是用户要求的 Profile；正式本地使用默认为 `production`。
    - LLM `configured` 与 `resolved` 均不得是 `mock`；若为 mock，停止功能验收，先修复 Profile 并重启。
    - TTS、ASR、VAD 的 mock 是否允许由目标场景决定；真实直播音频验收禁止 mock TTS。
+   - 对声明为启用的模型工具核对其运行时依赖；需要外部 Token 或 CLI 的工具在两者都不存在时不得注册给 LLM。浏览器正常回复不能抵消工具执行错误。
 4. 按 [matrix.md](references/matrix.md) 选择最小功能集；页面交互使用 `$qa-testing-playwright`，直播页面证据使用 `$review-anima-live`。
 5. 后台对话必须分别验证：
    - “现场”开发者输入产生 `actor_role=developer` 的真实回合，执行检查器显示非 mock LLM Provider。
    - “验证 / 对话沙盒”返回 `chat:sandbox_chunk`，显示非 mock Provider；同一 task 不得产生公开字幕、TTS 播放或记忆提交。
 6. `/live.html` 公开回复必须验证字幕 DOM 与 TTS 持久播放证据；Socket 收到句子或服务端合成成功均不算播放通过。
-7. 每个失败都记录入口、动作、期望、实际与证据路径；不要以其他模块通过抵消失败。
+7. 完成交互后重新检查当前时段的服务端 `ERROR` / Traceback；区分预期降级与能力声明错误，后者必须修复或明确列为失败。
+8. 每个失败都记录入口、动作、期望、实际与证据路径；不要以其他模块通过抵消失败。
 
 ## 边界
 

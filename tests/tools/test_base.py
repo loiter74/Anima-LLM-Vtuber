@@ -139,6 +139,40 @@ class TestLoadToolsFromConfig:
         assert len(tools) == 0
         assert tools_map == {}
 
+    def test_unavailable_minecraft_runtime_is_not_exposed_to_the_model(self, monkeypatch):
+        monkeypatch.delenv("MC_MCP_AUTH_TOKEN", raising=False)
+        with patch("animetta.tools.base.shutil.which", return_value=None):
+            _tools, tools_map = load_tools_from_config(
+                {
+                    "builtin_tools": ["calculator"],
+                    "minecraft": {
+                        "enabled": True,
+                        "mcp": {
+                            "auth_token_env": "MC_MCP_AUTH_TOKEN",
+                            "cli_command": "mc-mcp",
+                        },
+                    },
+                }
+            )
+
+        assert set(tools_map) == {"calculator"}
+        assert "mc_connection" not in tools_map
+        assert "mc_operate_bot" not in tools_map
+
+    def test_configured_minecraft_token_makes_runtime_available(self, monkeypatch):
+        from animetta.tools.base import _minecraft_runtime_available
+
+        monkeypatch.setenv("ANIMETTA_TEST_MC_TOKEN", "configured")
+
+        assert _minecraft_runtime_available(
+            {
+                "mcp": {
+                    "auth_token_env": "ANIMETTA_TEST_MC_TOKEN",
+                    "cli_command": "missing-mc-mcp",
+                }
+            }
+        )
+
     @patch("animetta.tools.base.load_tools_from_config")
     def test_get_builtin_tools(self, mock_load):
         tools = get_builtin_tools()

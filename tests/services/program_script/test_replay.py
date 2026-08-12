@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from animetta.services.bilibili import LivestreamEvent, LivestreamEventType
-from animetta.services.program_script import ProgramReplayCoordinator
+from animetta.services.program_script import ProgramReplayCoordinator, ReplayCoordinatorError
 
 
 async def wait_until(predicate, timeout: float = 2.0) -> None:
@@ -76,3 +78,64 @@ async def test_replay_failure_stops_without_reusing_the_failed_event() -> None:
     failed = coordinator.get_run(started["replay_id"])
     assert failed["cursor"] == 0
     assert failed["error"] == "RuntimeError"
+
+
+async def test_replay_pause_waits_for_the_current_dispatch_within_the_control_bound() -> None:
+    coordinator = ProgramReplayCoordinator(control_timeout_seconds=0.2)
+    started_dispatch = asyncio.Event()
+    release_dispatch = asyncio.Event()
+
+    async def dispatch(_event: LivestreamEvent) -> None:
+        started_dispatch.set()
+        await release_dispatch.wait()
+
+    coordinator.set_dispatcher(dispatch)
+    coordinator.set_room_state_provider(lambda _room_id: {"state": "stopped"})
+    started = await coordinator.start(
+        [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
+        room_id=1,
+        creator_id="creator",
+        source="jsonl",
+        speed=1,
+    )
+    await asyncio.wait_for(started_dispatch.wait(), timeout=1)
+
+    pause_task = asyncio.create_task(
+        coordinator.control(started["replay_id"], "pause", creator_id="creator")
+    )
+    await asyncio.sleep(0.05)
+    assert not pause_task.done()
+    release_dispatch.set()
+
+    paused = await asyncio.wait_for(pause_task, timeout=1)
+    assert paused["state"] == "paused"
+    assert paused["cursor"] == 1
+
+
+async def test_replay_pause_timeout_is_a_domain_error_and_eventually_settles() -> None:
+    coordinator = ProgramReplayCoordinator(control_timeout_seconds=0.01)
+    started_dispatch = asyncio.Event()
+    release_dispatch = asyncio.Event()
+
+    async def dispatch(_event: LivestreamEvent) -> None:
+        started_dispatch.set()
+        await release_dispatch.wait()
+
+    coordinator.set_dispatcher(dispatch)
+    coordinator.set_room_state_provider(lambda _room_id: {"state": "stopped"})
+    started = await coordinator.start(
+        [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
+        room_id=1,
+        creator_id="creator",
+        source="jsonl",
+        speed=1,
+    )
+    await asyncio.wait_for(started_dispatch.wait(), timeout=1)
+
+    with pytest.raises(ReplayCoordinatorError, match="当前事件仍在处理") as captured:
+        await coordinator.control(started["replay_id"], "pause", creator_id="creator")
+    assert captured.value.code == "replay_control_timeout"
+    assert captured.value.status_code == 504
+
+    release_dispatch.set()
+    await wait_until(lambda: coordinator.get_run(started["replay_id"])["state"] == "paused")

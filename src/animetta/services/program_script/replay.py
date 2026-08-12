@@ -53,18 +53,22 @@ class ReplayRun:
     gateway: ReplayDanmakuGateway | None = None
     step_mode: bool = False
     stopping_for_control: bool = False
+    control_target: ReplayState | None = None
 
 
 class ProgramReplayCoordinator:
     """Pause and re-slice immutable event sources without duplicating gateway scheduling."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, control_timeout_seconds: float = 50.0) -> None:
+        if not math.isfinite(control_timeout_seconds) or control_timeout_seconds <= 0:
+            raise ValueError("control_timeout_seconds must be positive")
         self._dispatcher: ReplayDispatcher | None = None
         self._room_state_provider: RoomStateProvider | None = None
         self._runs: dict[str, ReplayRun] = {}
         self._active_by_room: dict[int, str] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
+        self._control_timeout_seconds = control_timeout_seconds
 
     def set_dispatcher(self, dispatcher: ReplayDispatcher) -> None:
         self._dispatcher = dispatcher
@@ -204,7 +208,11 @@ class ProgramReplayCoordinator:
             self._active_by_room.pop(run.room_id, None)
             return
         rebased = _rebase_events(remaining)
-        gateway = ReplayDanmakuGateway(rebased, speed=run.speed)
+        gateway = ReplayDanmakuGateway(
+            rebased,
+            speed=run.speed,
+            shutdown_timeout_seconds=self._control_timeout_seconds,
+        )
         gateway.set_event_callback(lambda event: self._dispatch_from_worker(run, event))
         gateway.set_status_callback(
             lambda connected, message: self._status_from_worker(run, connected, message)
@@ -269,7 +277,12 @@ class ProgramReplayCoordinator:
 
     def _finish_gateway(self, run: ReplayRun, message: str) -> None:
         run.gateway = None
-        if run.stopping_for_control or run.state is ReplayState.FAILED:
+        if run.state is ReplayState.FAILED:
+            return
+        if run.stopping_for_control:
+            target = run.control_target
+            if target is not None:
+                self._complete_control(run, target)
             return
         if run.step_mode:
             run.step_mode = False
@@ -288,22 +301,48 @@ class ProgramReplayCoordinator:
     async def _pause(self, run: ReplayRun) -> None:
         if run.state is not ReplayState.RUNNING:
             return
-        run.stopping_for_control = True
-        gateway = run.gateway
-        if gateway is not None:
-            await asyncio.to_thread(gateway.stop)
-        run.gateway = None
-        run.stopping_for_control = False
-        run.state = ReplayState.PAUSED
+        await self._stop_gateway_for_control(
+            run,
+            ReplayState.PAUSED,
+            "当前事件仍在处理，暂停将在本轮完成后生效",
+        )
+        self._complete_control(run, ReplayState.PAUSED)
 
     async def _stop(self, run: ReplayRun) -> None:
+        await self._stop_gateway_for_control(
+            run,
+            ReplayState.STOPPED,
+            "当前事件仍在处理，停止将在本轮完成后生效",
+        )
+        self._complete_control(run, ReplayState.STOPPED)
+
+    async def _stop_gateway_for_control(
+        self,
+        run: ReplayRun,
+        target: ReplayState,
+        timeout_message: str,
+    ) -> None:
         run.stopping_for_control = True
+        run.control_target = target
         gateway = run.gateway
-        if gateway is not None:
+        if gateway is None:
+            return
+        try:
             await asyncio.to_thread(gateway.stop)
+        except TimeoutError as exc:
+            raise ReplayCoordinatorError(
+                "replay_control_timeout",
+                timeout_message,
+                status_code=504,
+            ) from exc
+
+    def _complete_control(self, run: ReplayRun, target: ReplayState) -> None:
         run.gateway = None
-        run.state = ReplayState.STOPPED
-        self._active_by_room.pop(run.room_id, None)
+        run.stopping_for_control = False
+        run.control_target = None
+        run.state = target
+        if target is ReplayState.STOPPED:
+            self._active_by_room.pop(run.room_id, None)
 
     def _active_run(self, room_id: int) -> ReplayRun | None:
         replay_id = self._active_by_room.get(room_id)

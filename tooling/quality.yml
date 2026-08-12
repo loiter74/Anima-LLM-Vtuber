@@ -1256,7 +1256,9 @@ components:
 
   backend-tools:
     domain: backend
-    paths: [src/animetta/tools/**]
+    paths:
+      - src/animetta/tools/**
+      - tests/tools/*.py
     direct_groups:
       - backend-tools-unit
       - python-format

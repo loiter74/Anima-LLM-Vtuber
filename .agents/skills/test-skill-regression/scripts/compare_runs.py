@@ -105,8 +105,11 @@ def preflight_invariants(
     case: RegressionCase, baseline: Path
 ) -> tuple[bool, list[dict[str, object]]]:
     checks: list[dict[str, object]] = []
+    resolved_baseline = baseline.resolve(strict=True)
     for invariant in case["invariants"]:
-        _, error = read_invariant_text(baseline, invariant["path"])
+        relative = PurePosixPath(invariant["path"])
+        target = (resolved_baseline / Path(*relative.parts)).resolve()
+        error = None if target.is_relative_to(resolved_baseline) else "目标路径越出运行目录"
         forbidden = invariant.get("not_contains", [])
         contradictions = [
             fragment

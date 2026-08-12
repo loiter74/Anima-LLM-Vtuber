@@ -154,6 +154,8 @@ async function loadRecent() {
 onMounted(loadRecent)
 
 function playRecent(item: RecentItem) {
+  inputError.value = ''
+  playbackError.value = ''
   selectedTrackKey.value = 'mix'
   store.setResult({
     audio_url: item.audio_url,
