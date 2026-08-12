@@ -66,7 +66,7 @@ function isActive(item: (typeof navItems)[number]) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--s-4);
+  padding: 0 var(--s-6);
   background: rgba(26, 16, 40, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -77,7 +77,7 @@ function isActive(item: (typeof navItems)[number]) {
 .titlebar-left {
   display: flex;
   align-items: center;
-  gap: var(--s-8);
+  gap: var(--s-12);
 }
 
 .brand {
@@ -94,13 +94,13 @@ function isActive(item: (typeof navItems)[number]) {
 
 .titlebar-nav {
   display: flex;
-  gap: var(--s-1);
+  gap: var(--s-2);
 }
 
 .nav-btn {
   display: inline-flex;
   align-items: center;
-  padding: var(--s-2) var(--s-4);
+  padding: var(--s-2_5) var(--s-5);
   font-size: 12px;
   color: var(--c-text-dim);
   background: transparent;
