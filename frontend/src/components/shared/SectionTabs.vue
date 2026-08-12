@@ -70,7 +70,7 @@ function handleKeydown(event: KeyboardEvent): void {
       :class="
         modelValue === tab.id
           ? 'bg-c-accent-soft text-c-accent'
-          : 'text-c-text-dim hover:bg-c-panel/70 hover:text-c-text'
+          : 'bg-c-panel/50 text-c-text-dim hover:bg-c-panel/80 hover:text-c-accent'
       "
       role="tab"
       :id="`${label}-${tab.id}-tab`"
