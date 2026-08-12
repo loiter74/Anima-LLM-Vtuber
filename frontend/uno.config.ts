@@ -57,9 +57,13 @@ export default defineConfig({
     },
   },
   shortcuts: {
-    // Glassmorphism 面板 — rounded-2xl (16px) for AIRI-inspired softness
-    glass: 'bg-c-surface/70 backdrop-blur-xl border border-c-border rounded-2xl',
-    'glass-strong': 'bg-c-surface/85 backdrop-blur-2xl border border-c-border rounded-2xl',
+    // Glassmorphism 面板 — rounded-2xl (16px) for AIRI-inspired softness.
+    // No border: the translucent surface + backdrop blur already define the
+    // edge, and border-c-border read as a jarring faint-white outline in
+    // dark mode. A soft dark shadow gives gentle elevation instead.
+    glass: 'bg-c-surface/70 backdrop-blur-xl rounded-2xl shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)]',
+    'glass-strong':
+      'bg-c-surface/85 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)]',
     // 按钮
     'btn-accent':
       'cursor-pointer bg-c-accent hover:bg-c-accent-hover text-white rounded-xl px-4 py-2 transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:bg-c-card disabled:text-c-text-muted disabled:opacity-60 disabled:hover:bg-c-card disabled:active:scale-100',
