@@ -273,13 +273,13 @@ function closePreflight(): void {
               }}
             </p>
           </div>
-          <div class="flex rounded-xl bg-c-panel/40 p-1" role="group" aria-label="现场消息视图">
+          <div class="flex gap-1" role="group" aria-label="现场消息视图">
             <button
               class="rounded-lg px-2.5 py-1 text-10px transition-colors duration-200"
               :class="
                 feedMode === 'turns'
                   ? 'bg-c-accent-soft text-c-accent'
-                  : 'text-c-text-dim hover:text-c-text'
+                  : 'bg-c-panel/50 text-c-text-dim hover:bg-c-panel/80 hover:text-c-accent'
               "
               type="button"
               :aria-pressed="feedMode === 'turns'"
@@ -292,7 +292,7 @@ function closePreflight(): void {
               :class="
                 feedMode === 'raw'
                   ? 'bg-c-accent-soft text-c-accent'
-                  : 'text-c-text-dim hover:text-c-text'
+                  : 'bg-c-panel/50 text-c-text-dim hover:bg-c-panel/80 hover:text-c-accent'
               "
               type="button"
               :aria-pressed="feedMode === 'raw'"
@@ -440,7 +440,12 @@ function closePreflight(): void {
                 </p>
               </div>
               <button
-                class="shrink-0 rounded-lg border border-c-border px-2.5 py-1.5 text-10px text-c-text-secondary transition-colors duration-200 hover:border-c-border-accent hover:text-c-text"
+                class="shrink-0 rounded-lg px-2.5 py-1.5 text-10px transition-colors duration-200"
+                :class="
+                  historyLocked
+                    ? 'bg-c-accent-soft text-c-accent hover:bg-c-accent/25'
+                    : 'bg-c-panel/50 text-c-text-dim hover:bg-c-panel/80 hover:text-c-accent'
+                "
                 data-testid="follow-latest"
                 @click="followLatest"
               >
