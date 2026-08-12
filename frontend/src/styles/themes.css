@@ -4,6 +4,12 @@
 
 :root {
   /* Dark mode (default) */
+  /* color-scheme tells the browser native form controls (select dropdowns,
+     option lists, input/textarea text, placeholders, scrollbars, autofill)
+     to render for a dark canvas. Without it the page is treated as
+     color-scheme: normal (light), so <select>/<input> fall back to black
+     fieldtext / dark-gray placeholders on our dark panels — unreadable. */
+  color-scheme: dark;
   /* Hex vars stay for direct CSS consumers (graph.css stroke, etc.).
      The matching -rgb channel vars feed UnoCSS opacity modifiers
      (rgb(var(--c-X-rgb) / <alpha-value>)). Without them, bg-c-accent/20
@@ -53,6 +59,7 @@
 
 .theme-light {
   /* AIRI-inspired light mode */
+  color-scheme: light;
   --c-bg: #e8f0fa;
   --c-bg-rgb: 232 240 250;
   --c-surface: #dce6f2;
@@ -94,4 +101,25 @@
   --c-ai-bubble: rgba(212, 104, 140, 0.1);
   --c-glow: rgba(212, 104, 140, 0.25);
   --c-glow-soft: rgba(212, 104, 140, 0.08);
+}
+
+/* ============================================================
+   Global form control baseline
+   color-scheme (above) already makes native select option lists,
+   autofill and scrollbars match the theme. These rules pin the
+   remaining UA defaults — placeholder text and bare form controls
+   that lack an explicit text-c-* / .form-control color — to a
+   design token so nothing renders as unreadable black-on-dark.
+   Specificity is one pseudo-element / one element, so component
+   utility classes (placeholder-c-*, text-c-*, .form-control) win.
+   ============================================================ */
+::placeholder {
+  color: var(--c-text-dim);
+  opacity: 0.85;
+}
+
+input,
+select,
+textarea {
+  color: var(--c-text);
 }
