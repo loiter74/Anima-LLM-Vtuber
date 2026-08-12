@@ -153,6 +153,27 @@ async function loadRecent() {
 
 onMounted(loadRecent)
 
+// session_ids are path-derived (data_singing_uploads_sing-<uuid>-<short>) and
+// unreadable when shown verbatim. Surface the creation time as the primary
+// label and keep only a short id tail for disambiguation.
+function formatRecentTime(item: RecentItem): string {
+  if (!item.created_at) return ''
+  const d = new Date(item.created_at)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
+function shortSessionId(sessionId: string): string {
+  const parts = sessionId.split(/[-_]/).filter(Boolean)
+  const tail = parts.slice(-2).join('-')
+  return tail.length > 12 ? tail.slice(-12) : tail
+}
+
 function playRecent(item: RecentItem) {
   inputError.value = ''
   playbackError.value = ''
@@ -225,7 +246,12 @@ function playRecent(item: RecentItem) {
             <polygon points="5,3 19,12 5,21" />
           </svg>
         </button>
-        <span class="flex-1 text-c-text truncate">{{ item.session_id }}</span>
+        <div class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-c-text">{{ formatRecentTime(item) || '未命名作品' }}</span>
+          <span class="truncate font-mono text-10px text-c-text-muted">{{
+            shortSessionId(item.session_id)
+          }}</span>
+        </div>
         <a
           :href="item.audio_url"
           class="px-2 py-1 rounded bg-c-accent/20 text-c-accent hover:bg-c-accent/30 transition-colors shrink-0"

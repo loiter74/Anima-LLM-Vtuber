@@ -7,36 +7,55 @@
 :root {
   /* ---------- SURFACE SCALE (deep night-violet) ------------------------ */
   --c-bg:        #1a1028;
+  --c-bg-rgb:        26 16 40;
   --c-surface:   #241538;
+  --c-surface-rgb:   36 21 56;
   --c-panel:     #2d1b45;
+  --c-panel-rgb:     45 27 69;
   --c-card:      #36205a;
+  --c-card-rgb:      54 32 90;
 
   /* ---------- TEXT ----------------------------------------------------- */
   --c-text:        #e8e0f0;
+  --c-text-rgb:        232 224 240;
   --c-text-dim:    #9b8bb0;
+  --c-text-dim-rgb:    155 139 176;
   --c-text-muted:  #6b5a80;
+  --c-text-muted-rgb:  107 90 128;
 
   /* ---------- ACCENT (sakura pink — Anima's heart) -------------------- */
   --c-accent:        #e879a8;
+  --c-accent-rgb:        232 121 168;
   --c-accent-hover:  #f090c0;
+  --c-accent-hover-rgb:  240 144 192;
   --c-accent-soft:   rgba(232, 121, 168, 0.15);
   --c-glow:          rgba(232, 121, 168, 0.40);
   --c-glow-soft:     rgba(232, 121, 168, 0.15);
 
   /* ---------- SUPPORTING HUES ----------------------------------------- */
   --c-blue:  #7c8cf5;    /* user message bubble                 */
+  --c-blue-rgb:  124 140 245;
   --c-mint:  #6ee7b7;
+  --c-mint-rgb:  110 231 183;
   --c-gold:  #f5c872;
+  --c-gold-rgb:  245 200 114;
   --c-violet: #a882ff;   /* sliders and MBTI dimension accents */
+  --c-violet-rgb: 168 130 255;
   --c-violet-soft: rgba(168, 130, 255, 0.15);
   --c-violet-glow: rgba(168, 130, 255, 0.50);
 
   /* ---------- SEMANTIC ------------------------------------------------- */
   --c-success: #4ade80;
+  --c-success-rgb: 74 222 128;
   --c-warning: #fbbf24;
+  --c-warning-rgb: 251 191 36;
   --c-error:   #f87171;
+  --c-error-rgb:   248 113 113;
 
   /* ---------- LINES + BUBBLES ----------------------------------------- */
+  /* c-border is rgba-backed (base alpha baked in); opacity modifiers on it
+     are intentionally not supported. Use the pre-baked -soft/-glow tokens
+     or the hex-backed colors above for bg-*/text-*/border-*/<alpha>. */
   --c-border:        rgba(255, 255, 255, 0.08);
   --c-border-accent: rgba(232, 121, 168, 0.30);
   --c-user-bubble:   rgba(124, 140, 245, 0.20);

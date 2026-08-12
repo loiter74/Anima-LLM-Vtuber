@@ -4,25 +4,45 @@
 
 :root {
   /* Dark mode (default) */
+  /* Hex vars stay for direct CSS consumers (graph.css stroke, etc.).
+     The matching -rgb channel vars feed UnoCSS opacity modifiers
+     (rgb(var(--c-X-rgb) / <alpha-value>)). Without them, bg-c-accent/20
+     compiles to the same opaque var as text-c-accent, hiding content. */
   --c-bg: #1a1028;
+  --c-bg-rgb: 26 16 40;
   --c-surface: #241538;
+  --c-surface-rgb: 36 21 56;
   --c-panel: #2d1b45;
+  --c-panel-rgb: 45 27 69;
   --c-card: #36205a;
+  --c-card-rgb: 54 32 90;
   --c-text: #e8e0f0;
+  --c-text-rgb: 232 224 240;
   --c-text-dim: #9b8bb0;
+  --c-text-dim-rgb: 155 139 176;
   --c-text-muted: #6b5a80;
+  --c-text-muted-rgb: 107 90 128;
   --c-accent: #e879a8;
+  --c-accent-rgb: 232 121 168;
   --c-accent-hover: #f090c0;
+  --c-accent-hover-rgb: 240 144 192;
   --c-accent-soft: rgba(232, 121, 168, 0.15);
   --c-blue: #7c8cf5;
+  --c-blue-rgb: 124 140 245;
   --c-mint: #6ee7b7;
+  --c-mint-rgb: 110 231 183;
   --c-gold: #f5c872;
+  --c-gold-rgb: 245 200 114;
   --c-violet: #a882ff;
+  --c-violet-rgb: 168 130 255;
   --c-violet-soft: rgba(168, 130, 255, 0.15);
   --c-violet-glow: rgba(168, 130, 255, 0.5);
   --c-success: #4ade80;
+  --c-success-rgb: 74 222 128;
   --c-warning: #fbbf24;
+  --c-warning-rgb: 251 191 36;
   --c-error: #f87171;
+  --c-error-rgb: 248 113 113;
   --c-border: rgba(255, 255, 255, 0.08);
   --c-border-accent: rgba(232, 121, 168, 0.3);
   --c-user-bubble: rgba(124, 140, 245, 0.2);
@@ -34,24 +54,40 @@
 .theme-light {
   /* AIRI-inspired light mode */
   --c-bg: #e8f0fa;
+  --c-bg-rgb: 232 240 250;
   --c-surface: #dce6f2;
+  --c-surface-rgb: 220 230 242;
   --c-panel: #ffffff;
+  --c-panel-rgb: 255 255 255;
   --c-card: #eaf0f8;
+  --c-card-rgb: 234 240 248;
   --c-text: #2d3050;
+  --c-text-rgb: 45 48 80;
   --c-text-dim: #6b7d95;
+  --c-text-dim-rgb: 107 125 149;
   --c-text-muted: #94a3b8;
+  --c-text-muted-rgb: 148 163 184;
   --c-accent: #d4688c;
+  --c-accent-rgb: 212 104 140;
   --c-accent-hover: #c0567a;
+  --c-accent-hover-rgb: 192 86 122;
   --c-accent-soft: rgba(212, 104, 140, 0.12);
   --c-blue: #6b7df0;
+  --c-blue-rgb: 107 125 240;
   --c-mint: #34d399;
+  --c-mint-rgb: 52 211 153;
   --c-gold: #f59e0b;
+  --c-gold-rgb: 245 158 11;
   --c-violet: #8b6fe8;
+  --c-violet-rgb: 139 111 232;
   --c-violet-soft: rgba(139, 111, 232, 0.12);
   --c-violet-glow: rgba(139, 111, 232, 0.35);
   --c-success: #22c55e;
+  --c-success-rgb: 34 197 94;
   --c-warning: #f59e0b;
+  --c-warning-rgb: 245 158 11;
   --c-error: #ef4444;
+  --c-error-rgb: 239 68 68;
   --c-border: #d0d8e4;
   --c-border-accent: rgba(212, 104, 140, 0.25);
   --c-user-bubble: rgba(124, 140, 245, 0.12);
