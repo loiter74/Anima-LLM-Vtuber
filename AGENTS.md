@@ -100,6 +100,8 @@ LLM / ASR / TTS Provider 遵循 `interface.py → implementation → factory →
 
 日常源码修改不启动 Docker。仅当用户明确要求启动/运行/发布，或改动 Docker/Compose、运行生命周期、端口、启动协议及其他高风险运行时行为时进入运行时验证。
 
+用户点名真实访问 URL 或要求当前运行实例体现改动时，必须把该 URL 作为最终验收对象：先确认其实际服务进程和前端资源指纹，再通过规范生命周期更新运行时，并在同一 URL 验证结果。Vite 开发或预览端口只能证明源码构建，不能证明真实入口已更新。
+
 Qwen TTS 仅作为 Windows 宿主机服务运行在 `127.0.0.1:8767`；不得恢复 Qwen Dockerfile、Compose service 或容器生命周期。RVC 唱歌声线推理仅运行在宿主机 `127.0.0.1:8769`；不得新增 RVC Compose service 或把 GPU 推理依赖装入主容器。
 
 生命周期统一通过 `py -3.13 scripts/runtime_lifecycle.py` 执行。`anima-down` 必须保留宿主机 Qwen 与 RVC；只有 `host-tts-stop`、`host-rvc-stop` 可分别停止它们。
