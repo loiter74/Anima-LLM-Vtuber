@@ -56,7 +56,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <template>
   <nav
-    class="flex shrink-0 gap-1 overflow-x-auto border-b border-c-border bg-c-surface/65 px-3 py-2 sm:px-4"
+    class="flex shrink-0 gap-1 overflow-x-auto bg-c-surface/65 px-3 py-2 sm:px-4"
     :aria-label="label"
     role="tablist"
     @keydown="handleKeydown"
@@ -70,7 +70,7 @@ function handleKeydown(event: KeyboardEvent): void {
       :class="
         modelValue === tab.id
           ? 'bg-c-accent-soft text-c-accent'
-          : 'text-c-text-muted hover:bg-c-panel hover:text-c-text'
+          : 'text-c-text-dim hover:bg-c-panel/70 hover:text-c-text'
       "
       role="tab"
       :id="`${label}-${tab.id}-tab`"

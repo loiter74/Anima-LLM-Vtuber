@@ -273,14 +273,14 @@ function closePreflight(): void {
               }}
             </p>
           </div>
-          <div
-            class="flex rounded-xl border border-c-border bg-c-panel/45 p-1"
-            role="group"
-            aria-label="现场消息视图"
-          >
+          <div class="flex rounded-xl bg-c-panel/40 p-1" role="group" aria-label="现场消息视图">
             <button
-              class="rounded-lg px-2.5 py-1 text-10px"
-              :class="feedMode === 'turns' ? 'bg-c-accent-soft text-c-accent' : 'text-c-text-muted'"
+              class="rounded-lg px-2.5 py-1 text-10px transition-colors duration-200"
+              :class="
+                feedMode === 'turns'
+                  ? 'bg-c-accent-soft text-c-accent'
+                  : 'text-c-text-dim hover:text-c-text'
+              "
               type="button"
               :aria-pressed="feedMode === 'turns'"
               @click="feedMode = 'turns'"
@@ -288,8 +288,12 @@ function closePreflight(): void {
               执行回合
             </button>
             <button
-              class="rounded-lg px-2.5 py-1 text-10px"
-              :class="feedMode === 'raw' ? 'bg-c-accent-soft text-c-accent' : 'text-c-text-muted'"
+              class="rounded-lg px-2.5 py-1 text-10px transition-colors duration-200"
+              :class="
+                feedMode === 'raw'
+                  ? 'bg-c-accent-soft text-c-accent'
+                  : 'text-c-text-dim hover:text-c-text'
+              "
               type="button"
               :aria-pressed="feedMode === 'raw'"
               @click="feedMode = 'raw'"
