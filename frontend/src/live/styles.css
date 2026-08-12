@@ -71,6 +71,7 @@ button {
   transform: translateX(-50%);
   border: 1px solid var(--c-border);
   border-radius: 12px;
+  background: rgb(var(--c-panel-rgb) / 0.82);
   background: color-mix(in srgb, var(--c-panel) 82%, transparent);
   backdrop-filter: blur(20px);
   box-shadow: 0 18px 60px color-mix(in srgb, var(--c-bg) 70%, transparent);
@@ -99,6 +100,7 @@ button {
   padding: 8px 12px;
   border: 1px solid var(--c-border);
   border-radius: 12px;
+  background: rgb(var(--c-panel-rgb) / 0.75);
   background: color-mix(in srgb, var(--c-panel) 75%, transparent);
   backdrop-filter: blur(20px);
   color: var(--c-text-dim);
@@ -120,6 +122,7 @@ button {
   overflow: hidden;
   border: 1px solid var(--c-border);
   border-radius: 20px;
+  background: rgb(var(--c-panel-rgb) / 0.78);
   background: color-mix(in srgb, var(--c-panel) 78%, transparent);
   backdrop-filter: blur(28px);
   box-shadow: 0 18px 60px color-mix(in srgb, var(--c-bg) 70%, transparent);
