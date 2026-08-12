@@ -25,6 +25,7 @@ button {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   isolation: isolate;
 }
 .ambient,
@@ -118,7 +119,7 @@ button {
   top: var(--live-danmaku-panel-top, 108px);
   right: 28px;
   z-index: 0;
-  width: min(520px, calc(100vw - 56px));
+  width: min(500px, calc(100vw - 56px));
   overflow: hidden;
   border: 1px solid var(--c-border);
   border-radius: 20px;
@@ -238,13 +239,24 @@ button {
 }
 @media (max-width: 600px) {
   .danmaku-panel {
-    top: 16px;
+    top: 62px;
     right: 16px;
     width: calc(100vw - 32px);
   }
   .status-rail {
     top: 16px;
+    right: 16px;
     left: 16px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .status-pill {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+    text-align: center;
+    white-space: nowrap;
   }
   .subtitle-overlay {
     bottom: 16px;

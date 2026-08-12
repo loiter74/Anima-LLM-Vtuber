@@ -5,8 +5,12 @@ import { describe, expect, it } from 'vitest'
 const liveStyles = readFileSync(resolve(process.cwd(), 'src/live/styles.css'), 'utf8')
 
 describe('standalone live panel styles', () => {
+  it('keeps the desktop panel inside the right half of the review viewport', () => {
+    expect(liveStyles).toMatch(/\.danmaku-panel\s*\{[^}]*width:\s*min\(500px,/s)
+  })
+
   it('caps the danmaku list above the Live2D model', () => {
-    expect(liveStyles).toMatch(/\.danmaku-list\s*\{[^}]*max-height:\s*min\(290px,\s*24vh\)/s)
+    expect(liveStyles).toMatch(/\.danmaku-list\s*\{[^}]*max-height:\s*min\(460px,\s*28vh\)/s)
   })
 
   it('composites the Live2D model in front of the danmaku panel', () => {
@@ -29,5 +33,18 @@ describe('standalone live panel styles', () => {
   it('keeps the public subtitle above the model using theme tokens', () => {
     expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*z-index:\s*20/s)
     expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*var\(--c-panel\)/s)
+  })
+
+  it('keeps mobile chrome inside the dynamic viewport without covering the panel heading', () => {
+    expect(liveStyles).toMatch(/\.live-shell\s*\{[^}]*height:\s*100dvh/s)
+    expect(liveStyles).toMatch(
+      /@media \(max-width: 600px\)[\s\S]*\.danmaku-panel\s*\{[^}]*top:\s*62px/s,
+    )
+    expect(liveStyles).toMatch(
+      /@media \(max-width: 600px\)[\s\S]*\.status-rail\s*\{[^}]*right:\s*16px[^}]*flex-wrap:\s*nowrap/s,
+    )
+    expect(liveStyles).toMatch(
+      /@media \(max-width: 600px\)[\s\S]*\.status-pill\s*\{[^}]*font-size:\s*12px/s,
+    )
   })
 })
