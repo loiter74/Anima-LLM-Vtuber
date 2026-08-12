@@ -31,13 +31,8 @@ function isActive(item: (typeof navItems)[number]) {
 
 <template>
   <header class="titlebar">
-    <!-- Left: traffic lights + brand -->
+    <!-- Left: brand -->
     <div class="titlebar-left">
-      <div class="traffic-lights">
-        <span class="close"></span>
-        <span class="minimize"></span>
-        <span class="maximize"></span>
-      </div>
       <div class="brand">Anima<span class="brand-dot">.</span></div>
     </div>
 
@@ -86,41 +81,10 @@ function isActive(item: (typeof navItems)[number]) {
   gap: var(--s-2);
 }
 
-.traffic-lights {
-  display: flex;
-  gap: var(--s-2);
-}
-
-.traffic-lights span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: opacity var(--d-fast);
-  flex-shrink: 0;
-}
-
-.traffic-lights span:hover {
-  opacity: 0.8;
-}
-
-.traffic-lights .close {
-  background: #ff5f57;
-}
-
-.traffic-lights .minimize {
-  background: #febc2e;
-}
-
-.traffic-lights .maximize {
-  background: #28c840;
-}
-
 .brand {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
-  margin-left: var(--s-3);
   color: var(--c-text);
   white-space: nowrap;
 }
