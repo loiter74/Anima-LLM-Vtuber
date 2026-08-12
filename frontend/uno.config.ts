@@ -32,6 +32,10 @@ export default defineConfig({
       'c-card': 'rgb(var(--c-card-rgb) / <alpha-value>)',
       'c-text': 'rgb(var(--c-text-rgb) / <alpha-value>)',
       'c-text-dim': 'rgb(var(--c-text-dim-rgb) / <alpha-value>)',
+      // c-text-secondary is a legacy alias used across many components; point
+      // it at the same channels as c-text-dim so those 37 call sites pick up
+      // the dusty-rose secondary color instead of resolving to nothing.
+      'c-text-secondary': 'rgb(var(--c-text-dim-rgb) / <alpha-value>)',
       'c-text-muted': 'rgb(var(--c-text-muted-rgb) / <alpha-value>)',
       'c-accent': 'rgb(var(--c-accent-rgb) / <alpha-value>)',
       'c-accent-hover': 'rgb(var(--c-accent-hover-rgb) / <alpha-value>)',
