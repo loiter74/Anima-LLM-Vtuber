@@ -17,8 +17,11 @@ Usage:
 
 import asyncio
 import contextlib
+import hashlib
+import json
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -69,11 +72,16 @@ class DanmakuService:
         sessdata: str = "",
         max_queue_size: int = 100,
         max_retries: int = 5,
+        dedup_ttl_seconds: float = 120.0,
+        dedup_capacity: int = 10_000,
     ):
         self.room_id = room_id
         self.sessdata = sessdata
         self.max_queue_size = max_queue_size
         self.max_retries = max_retries
+        self._dedup_ttl_seconds = max(0.0, dedup_ttl_seconds)
+        self._dedup_capacity = max(1, dedup_capacity)
+        self._seen_events: OrderedDict[str, float] = OrderedDict()
 
         # Threading
         self._thread: threading.Thread | None = None
@@ -100,6 +108,7 @@ class DanmakuService:
         self._connected = False
         self._reconnect_delay = 1.0  # starts at 1s, doubles each retry
         self._event_sequence = 0
+        self._seen_events.clear()
         self._started_monotonic = time.monotonic()
 
     # ========================================
@@ -142,6 +151,7 @@ class DanmakuService:
 
         self._running = True
         self._event_sequence = 0
+        self._seen_events.clear()
         self._started_monotonic = time.monotonic()
         self._thread = threading.Thread(
             target=self._run_event_loop,
@@ -269,57 +279,49 @@ class DanmakuService:
         @monitor.on("DANMU_MSG")
         async def on_danmaku(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(self._normalize_event("DANMU_MSG", event))
+                await self._enqueue_event("DANMU_MSG", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing DANMU_MSG: {e}")
 
         @monitor.on("SEND_GIFT")
         async def on_gift(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(self._normalize_event("SEND_GIFT", event))
+                await self._enqueue_event("SEND_GIFT", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SEND_GIFT: {e}")
 
         @monitor.on("SUPER_CHAT_MESSAGE")
         async def on_sc(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(
-                    self._normalize_event("SUPER_CHAT_MESSAGE", event),
-                )
+                await self._enqueue_event("SUPER_CHAT_MESSAGE", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing SUPER_CHAT: {e}")
 
         @monitor.on("INTERACT_WORD_V2")
         async def on_interact(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(
-                    self._normalize_event("INTERACT_WORD_V2", event),
-                )
+                await self._enqueue_event("INTERACT_WORD_V2", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing INTERACT_WORD: {e}")
 
         @monitor.on("LIKE_INFO_V3_CLICK")
         async def on_like_click(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(
-                    self._normalize_event("LIKE_INFO_V3_CLICK", event),
-                )
+                await self._enqueue_event("LIKE_INFO_V3_CLICK", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing LIKE click: {e}")
 
         @monitor.on("LIKE_INFO_V3_UPDATE")
         async def on_like_update(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(
-                    self._normalize_event("LIKE_INFO_V3_UPDATE", event),
-                )
+                await self._enqueue_event("LIKE_INFO_V3_UPDATE", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing LIKE update: {e}")
 
         @monitor.on("VIEW")
         async def on_popularity(event: dict[str, Any]) -> None:
             try:
-                await self._queue.put(self._normalize_event("VIEW", event))
+                await self._enqueue_event("VIEW", event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing VIEW: {e}")
 
@@ -341,7 +343,7 @@ class DanmakuService:
             if command in known_commands:
                 return
             try:
-                await self._queue.put(self._normalize_event(command, event))
+                await self._enqueue_event(command, event)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing unknown event: {e}")
 
@@ -349,16 +351,14 @@ class DanmakuService:
         async def on_disconnected(event: dict[str, Any] | object) -> None:
             try:
                 payload = event if isinstance(event, dict) else {"data": event}
-                await self._queue.put(self._normalize_event("DISCONNECT", payload))
+                await self._enqueue_event("DISCONNECT", payload)
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing DISCONNECT: {e}")
 
         @monitor.on("VERIFICATION_SUCCESSFUL")
         async def on_verified(event: dict[str, Any]) -> None:
             self._connected = True
-            await self._queue.put(
-                self._normalize_event("VERIFICATION_SUCCESSFUL", event),
-            )
+            await self._enqueue_event("VERIFICATION_SUCCESSFUL", event)
             self._notify_status(True, "Connected")
             logger.info("[DanmakuService] Connected to room {}", self.room_id)
 
@@ -438,6 +438,40 @@ class DanmakuService:
         self._event_sequence += 1
         return normalized
 
+    async def _enqueue_event(self, command: str, event: dict[str, object]) -> None:
+        if self._is_duplicate_event(command, event):
+            logger.debug("[DanmakuService] Duplicate event dropped: {}", command)
+            return
+        await self._queue.put(self._normalize_event(command, event))
+
+    def _is_duplicate_event(self, command: str, event: dict[str, object]) -> bool:
+        now = time.monotonic()
+        cutoff = now - self._dedup_ttl_seconds
+        while self._seen_events:
+            _, seen_at = next(iter(self._seen_events.items()))
+            if seen_at > cutoff:
+                break
+            self._seen_events.popitem(last=False)
+        raw_data = event.get("data")
+        stable_id = _provider_event_id(raw_data)
+        if stable_id:
+            key = f"{self.room_id}:{command}:{stable_id}"
+        else:
+            encoded = json.dumps(
+                {"room_id": self.room_id, "command": command, "data": raw_data},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+            key = hashlib.sha256(encoded).hexdigest()
+        if key in self._seen_events:
+            return True
+        self._seen_events[key] = now
+        while len(self._seen_events) > self._dedup_capacity:
+            self._seen_events.popitem(last=False)
+        return False
+
     async def _disconnect(self) -> None:
         """Disconnect from Bilibili live room."""
         self._connected = False
@@ -453,3 +487,16 @@ class DanmakuService:
         self._connected = connected
         if self._on_status_change:
             self._on_status_change(connected, message)
+
+
+def _provider_event_id(raw: object) -> str:
+    if not isinstance(raw, dict):
+        return ""
+    nested = raw.get("data")
+    candidates = (nested, raw) if isinstance(nested, dict) else (raw,)
+    for payload in candidates:
+        for field in ("id_str", "message_id", "rnd"):
+            value = payload.get(field)
+            if value not in (None, "", 0):
+                return f"{field}:{value}"
+    return ""

@@ -98,6 +98,15 @@ class TestBilibiliDanmakuService:
     def test_initial_state(self, service):
         """Service starts not connected, not running."""
         assert service._running is False
+
+    @pytest.mark.asyncio
+    async def test_duplicate_provider_event_is_not_enqueued(self, service):
+        payload = {"data": {"data": {"id_str": "event-1", "num": 1}}}
+
+        await service._enqueue_event("SEND_GIFT", payload)
+        await service._enqueue_event("SEND_GIFT", payload)
+
+        assert service._queue.qsize() == 1
         assert service._connected is False
         assert service._thread is None
         assert service._on_danmaku is None

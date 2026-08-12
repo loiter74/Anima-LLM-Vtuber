@@ -1,5 +1,20 @@
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 
+export type CommandTaskStatus =
+  'accepted' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'
+
+export interface CommandTaskSnapshot {
+  kind: string
+  task_id: string
+  status: CommandTaskStatus
+  progress: Record<string, unknown> | null
+  result: Record<string, unknown> | null
+  error: { code: string; message: string } | null
+  reused: boolean
+  created_at: number
+  updated_at: number
+}
+
 export interface ChatIdentity {
   message_id: string
   conversation_id: string

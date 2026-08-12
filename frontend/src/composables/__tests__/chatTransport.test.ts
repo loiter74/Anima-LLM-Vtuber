@@ -99,4 +99,18 @@ describe('chatTransport', () => {
     expect(command.turn_id).toBe(command.task_id)
     expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.SANDBOX_REQUEST, command)
   })
+
+  it('reuses an explicit sandbox task id after a transport retry', () => {
+    const socket = { emit: vi.fn() }
+    const values = [...IDS]
+
+    const command = sendSandboxChatText(socket, '私密问题', [], {
+      storage: localStorage,
+      randomUUID: () => values.shift()!,
+      taskId: IDS[3],
+    })
+
+    expect(command.task_id).toBe(IDS[3])
+    expect(command.turn_id).toBe(IDS[3])
+  })
 })

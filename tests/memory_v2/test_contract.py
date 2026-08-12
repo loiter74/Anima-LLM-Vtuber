@@ -42,16 +42,28 @@ async def test_canonical_memory_contract_and_revisioned_mutations() -> None:
     pinned = await system.pin_memory(atom.id, pinned=True)
     assert pinned is not None
     assert pinned["retention_policy"] == "pinned"
+    revision_after_pin = await system.store.get_revision()
+    pinned_again = await system.pin_memory(atom.id, pinned=True)
+    assert pinned_again == pinned
+    assert await system.store.get_revision() == revision_after_pin
 
     changed = await system.change_memory(atom.id, summary="观众偏好拿铁")
     assert changed is not None
     assert changed["summary"] == "观众偏好拿铁"
     assert changed["content"] == atom.content
     assert changed["version"] == 2
+    revision_after_change = await system.store.get_revision()
+    changed_again = await system.change_memory(atom.id, summary="观众偏好拿铁")
+    assert changed_again == changed
+    assert await system.store.get_revision() == revision_after_change
 
     forgotten = await system.forget_memory(atom.id)
     assert forgotten is not None
     assert forgotten["is_archived"] is True
+    revision_after_forget = await system.store.get_revision()
+    forgotten_again = await system.forget_memory(atom.id)
+    assert forgotten_again == forgotten
+    assert await system.store.get_revision() == revision_after_forget
     await system.shutdown()
 
 

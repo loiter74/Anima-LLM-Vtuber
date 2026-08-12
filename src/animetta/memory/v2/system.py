@@ -197,7 +197,10 @@ class LivingMemorySystem:
         atom = await self.store.get(atom_id)
         if atom is None:
             return None
-        atom.retention_policy = "pinned" if pinned else "standard"
+        target_policy = "pinned" if pinned else "standard"
+        if atom.retention_policy == target_policy:
+            return self.atom_to_dto(atom)
+        atom.retention_policy = target_policy
         if pinned:
             atom.forget_at = None
             atom.salience = max(atom.salience, 0.95)
@@ -208,6 +211,8 @@ class LivingMemorySystem:
         atom = await self.store.get(atom_id)
         if atom is None:
             return None
+        if atom.is_archived:
+            return self.atom_to_dto(atom)
         atom.is_archived = True
         await self.store.update(atom)
         return self.atom_to_dto(atom)
@@ -224,6 +229,8 @@ class LivingMemorySystem:
         atom = await self.store.get(atom_id)
         if atom is None:
             return None
+        if atom.summary == corrected:
+            return self.atom_to_dto(atom)
         updated = await self.store.create_version(
             atom_id,
             corrected,

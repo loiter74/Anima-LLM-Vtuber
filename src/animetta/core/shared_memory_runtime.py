@@ -28,6 +28,7 @@ from animetta.observability.domain import (
 )
 from animetta.observability.operations import observe_operation
 from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
+from animetta.services.command_inbox import CommandDecision, CommandInbox, CommandKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,7 @@ class SharedMemoryRuntime:
         worker_interval: float = 0.5,
         ingestion_queue_size: int = 256,
         dedup_window: int = 2048,
+        command_inbox: CommandInbox | None = None,
         observation_recorder: ObservationRecorder | None = None,
     ) -> None:
         self.db_path = str(db_path)
@@ -78,6 +80,7 @@ class SharedMemoryRuntime:
         self.observation_recorder = observation_recorder or NoOpObservationRecorder()
         self._dedup: OrderedDict[str, None] = OrderedDict()
         self._dedup_window = max(1, dedup_window)
+        self._command_inbox = command_inbox
         self._revision_subscribers: list[Callable[[dict[str, object]], Any]] = []
         self._ingestion_rejected = 0
         self._ingestion_dropped = 0
@@ -173,7 +176,7 @@ class SharedMemoryRuntime:
             return False
 
         fingerprint = self._fingerprint(turn)
-        if fingerprint in self._dedup:
+        if fingerprint in self._dedup and not turn.turn_id:
             self._ingestion_rejected += 1
             self._schedule_queue_event(turn, "rejected")
             return False
@@ -233,6 +236,7 @@ class SharedMemoryRuntime:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                self._dedup.pop(self._fingerprint(turn), None)
                 self._ingestion_failed += 1
                 self._last_ingestion_error = type(exc).__name__
                 logger.warning("[SharedMemoryRuntime] Ingestion failed: {}", exc)
@@ -243,26 +247,57 @@ class SharedMemoryRuntime:
         system = self.system
         if system is None:
             return
+        inbox_key: CommandKey | None = None
+        if self._command_inbox is not None and turn.turn_id:
+            inbox_key = CommandKey(
+                f"memory:{turn.context.conversation_id or turn.context.actor_id or 'shared'}",
+                "memory.ingest",
+                turn.turn_id,
+            )
+            accepted = await self._command_inbox.accept(
+                inbox_key,
+                {
+                    "user_input": turn.user_input,
+                    "agent_response": turn.agent_response,
+                    "actor_id": turn.context.actor_id,
+                    "conversation_id": turn.context.conversation_id,
+                    "retention_policy": turn.retention_policy,
+                },
+            )
+            if accepted.decision is not CommandDecision.EXECUTE:
+                return
+            await self._command_inbox.mark_processing(inbox_key)
         carrier = turn.observation_carrier
-        if carrier is not None:
-            with observation_context(carrier.to_context()):
-                async with observe_operation(
-                    self.observation_recorder,
-                    "memory.ingest",
-                    layer=ObservationLayer.MEMORY,
-                    critical_path=False,
-                ):
-                    await self._ingest_observed(system, turn, carrier)
-            return
-        atom = await self._encode_turn(system, turn)
-        await self._publish_revision(system, atom, turn_id=turn.turn_id)
+        try:
+            if carrier is not None:
+                with observation_context(carrier.to_context()):
+                    async with observe_operation(
+                        self.observation_recorder,
+                        "memory.ingest",
+                        layer=ObservationLayer.MEMORY,
+                        critical_path=False,
+                    ):
+                        atom = await self._ingest_observed(system, turn, carrier)
+            else:
+                atom = await self._encode_turn(system, turn)
+                await self._publish_revision(system, atom, turn_id=turn.turn_id)
+            if inbox_key is not None:
+                await self._command_inbox.succeed(inbox_key, {"atom_id": atom.id})
+        except Exception as exc:
+            if inbox_key is not None:
+                await self._command_inbox.fail(
+                    inbox_key,
+                    error_code="MEMORY_INGEST_FAILED",
+                    error_message=str(exc),
+                )
+            raise
 
     async def _ingest_observed(
         self,
         system: Any,
         turn: ConversationTurn,
         carrier: ObservationCarrier,
-    ) -> None:
+    ) -> Any:
         async with observe_operation(
             self.observation_recorder,
             "memory.sqlite_commit",
@@ -278,6 +313,7 @@ class SharedMemoryRuntime:
         ):
             await self._index_carriers.put(carrier)
         await self._publish_revision(system, atom, turn_id=turn.turn_id)
+        return atom
 
     async def _encode_turn(self, system: Any, turn: ConversationTurn) -> Any:
         scope, visibility = self._safe_scope(turn)

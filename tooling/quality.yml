@@ -1244,7 +1244,9 @@ components:
 
   backend-memory:
     domain: backend
-    paths: [src/animetta/memory/**]
+    paths:
+      - src/animetta/memory/**
+      - tests/memory_v2/**
     direct_groups:
       - backend-memory-unit
       - python-format

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getSocket } from '@/composables/useSocket'
+import { fetchCommandTask, readCommandTask, startCommandTask } from '@/composables/commandTasks'
 import { Events } from '@/constants/socket-events'
 
 interface MemeItem {
@@ -34,6 +35,9 @@ const manualText = ref('')
 const manualUrl = ref('')
 const adding = ref(false)
 const downloadUrl = ref('')
+let collectListener:
+  ((payload: { ok?: boolean; task_id?: string; count?: number; error?: string }) => void) | null =
+  null
 
 const current = computed(() => items.value[currentIndex.value] ?? null)
 const isDone = computed(() => items.value.length > 0 && currentIndex.value >= items.value.length)
@@ -79,13 +83,21 @@ function loadCandidates(): void {
 function collectCandidates(): void {
   const socket = connectedSocket()
   if (!socket || collecting.value) return
+  const isRetry = Boolean(error.value)
   collecting.value = true
   error.value = ''
+  const taskId = startCommandTask(
+    'meme.collect',
+    source.value || 'bilibili',
+    window.localStorage,
+    () => crypto.randomUUID(),
+    isRetry,
+  )
   socket
     .timeout(120_000)
     .emit(
       Events.MEME.COLLECT,
-      {},
+      { task_id: taskId, source: source.value || 'bilibili' },
       (timeoutError: Error | null, payload?: { ok?: boolean; count?: number; error?: string }) => {
         collecting.value = false
         if (timeoutError) {
@@ -100,6 +112,45 @@ function collectCandidates(): void {
         loadCandidates()
       },
     )
+}
+
+async function recoverCollection(): Promise<void> {
+  const socket = connectedSocket()
+  const persisted = readCommandTask('meme.collect')
+  if (!socket || !persisted) return
+  const snapshot = await fetchCommandTask(socket, 'meme.collect', persisted.taskId)
+  if (!snapshot) return
+  if (snapshot.status === 'accepted' || snapshot.status === 'processing') {
+    collecting.value = true
+    notice.value = '已恢复采集任务，等待完成'
+    if (collectListener) socket.off(Events.MEME.COLLECT, collectListener)
+    const listener = (payload: {
+      ok?: boolean
+      task_id?: string
+      count?: number
+      error?: string
+    }) => {
+      if (payload?.task_id !== persisted.taskId) return
+      collecting.value = false
+      socket.off(Events.MEME.COLLECT, listener)
+      collectListener = null
+      if (!payload.ok) {
+        error.value = payload.error || '采集失败'
+        return
+      }
+      notice.value = `采集完成，新增 ${payload.count ?? 0} 个候选`
+      loadCandidates()
+    }
+    collectListener = listener
+    socket.on(Events.MEME.COLLECT, collectListener)
+  } else if (snapshot.status === 'succeeded') {
+    notice.value = '已恢复上次采集结果'
+    loadCandidates()
+  } else if (snapshot.status === 'interrupted') {
+    error.value = '服务重启，原采集结果未知；重试会创建新任务。'
+  } else if (snapshot.status === 'failed' || snapshot.status === 'cancelled') {
+    error.value = snapshot.error?.message || '上次采集未完成；重试会创建新任务。'
+  }
 }
 
 function addManual(): void {
@@ -173,7 +224,15 @@ function exportDataset(): void {
   })
 }
 
-onMounted(loadCandidates)
+onMounted(() => {
+  loadCandidates()
+  void recoverCollection()
+})
+
+onBeforeUnmount(() => {
+  const socket = getSocket()
+  if (socket && collectListener) socket.off(Events.MEME.COLLECT, collectListener)
+})
 </script>
 
 <template>

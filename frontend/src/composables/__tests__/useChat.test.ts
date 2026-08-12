@@ -76,7 +76,11 @@ describe('useChat', () => {
 
     await organizeMemory()
 
-    expect(socket.emit).toHaveBeenCalledWith(Events.MEMORY.ORGANIZE, {}, expect.any(Function))
+    expect(socket.emit).toHaveBeenCalledWith(
+      Events.MEMORY.ORGANIZE,
+      { task_id: expect.stringMatching(/^[0-9a-f-]{36}$/) },
+      expect.any(Function),
+    )
     expect(memoryStore.job?.job_id).toBe('job-a')
 
     const onResult = socket.on.mock.calls.find(

@@ -6,7 +6,12 @@ import { useSingingStore } from '@/stores/singing'
 import { readSingingPlayback } from '@/singing/playback-sync'
 
 vi.mock('@/composables/useSinging', () => ({
-  useSinging: () => ({ process: vi.fn(), cancel: vi.fn() }),
+  useSinging: () => ({
+    process: vi.fn(),
+    confirmLyrics: vi.fn(),
+    cancel: vi.fn(),
+    recover: vi.fn(),
+  }),
 }))
 vi.mock('@/components/live2d/useLipSync', () => ({
   startLipSync: vi.fn(),

@@ -1032,6 +1032,35 @@
       "payload": {}
     }
   },
+  "task": {
+    "status": {
+      "name": "task:status",
+      "payload": {
+        "kind": "string",
+        "task_id": "string",
+        "scope_context?": "object"
+      },
+      "ack": {
+        "ok": "boolean",
+        "data?": "object",
+        "error?": "object"
+      }
+    },
+    "snapshot": {
+      "name": "task:snapshot",
+      "payload": {
+        "kind": "string",
+        "task_id": "string",
+        "status": "string",
+        "progress?": "object",
+        "result?": "object",
+        "error?": "object",
+        "reused": "boolean",
+        "created_at": "number",
+        "updated_at": "number"
+      }
+    }
+  },
   "system": {
     "heartbeat": {
       "name": "system:heartbeat",
@@ -1556,7 +1585,12 @@
     },
     "change": {
       "name": "memory:change",
-      "payload": { "id": "string", "summary": "string" }
+      "payload": {
+        "id": "string",
+        "summary": "string",
+        "task_id?": "string",
+        "expected_version": "integer"
+      }
     },
     "job": {
       "name": "memory:job",
@@ -1572,7 +1606,7 @@
     },
     "organize": {
       "name": "memory:organize",
-      "payload": {}
+      "payload": { "task_id?": "string" }
     },
     "list_pages": {
       "name": "memory:list_pages",
@@ -1615,12 +1649,13 @@
     "confirm_lyrics": {
       "name": "sing:confirm_lyrics",
       "payload": {
-        "ass_content": "string"
+        "ass_content": "string",
+        "task_id?": "string"
       }
     },
     "cancel": {
       "name": "sing:cancel",
-      "payload": {}
+      "payload": { "task_id?": "string" }
     },
     "subtitle_sync": {
       "name": "sing:subtitle_sync",
@@ -1697,7 +1732,7 @@
     },
     "collect": {
       "name": "meme:collect",
-      "payload": {}
+      "payload": { "task_id?": "string", "source?": "string" }
     }
   }
 }

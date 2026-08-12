@@ -7,6 +7,7 @@ Outputs structured CognitiveAnalysis for Meme model.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -101,10 +102,11 @@ class MemePool:
         format_confidence: float | None = None,
         rendered_text: str = "",
         mode: str = "",
+        source_platform: str = "bilibili",
     ) -> Meme | None:
         """Create and store a Meme from a candidate string."""
         meme = Meme(
-            id=f"meme_{hash(text) & 0xFFFFFFFF:08x}",
+            id=stable_meme_id(text, source_platform),
             text=text,
             context_hint=context_hint,
             confidence=confidence,
@@ -114,10 +116,17 @@ class MemePool:
             format_confidence=format_confidence,
             rendered_text=rendered_text,
             mode=mode,
+            source_platform=source_platform,
         )
         if self.store is not None:
             self.store.update(meme)
         return meme
+
+
+def stable_meme_id(text: str, source_platform: str = "bilibili") -> str:
+    normalized_text = " ".join(text.casefold().split())
+    identity = f"{source_platform.strip().casefold()}\0{normalized_text}"
+    return f"meme_{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:24]}"
 
 
 # ── LLM Prompt for cognitive analysis ─────────────────────────────────
@@ -320,6 +329,7 @@ class MemeCognitiveAnalyzer:
         format_confidence: float | None = None,
         rendered_text: str = "",
         mode: str = "",
+        source_platform: str = "bilibili",
     ) -> Meme | None:
         """Analyze a meme candidate and ingest into MemePool if confidence is sufficient.
 
@@ -328,7 +338,7 @@ class MemeCognitiveAnalyzer:
         analysis = await self.analyze(
             text=text,
             context_hint=context_hint,
-            source="bilibili",
+            source=source_platform,
             tags=tags,
             source_url=source_url,
             format_id=format_id,
@@ -351,6 +361,7 @@ class MemeCognitiveAnalyzer:
                     format_confidence=format_confidence,
                     rendered_text=rendered_text,
                     mode=mode,
+                    source_platform=source_platform,
                 )
             return None
 
@@ -376,10 +387,11 @@ class MemeCognitiveAnalyzer:
                 format_confidence=format_confidence,
                 rendered_text=rendered_text,
                 mode=mode,
+                source_platform=source_platform,
             )
             if meme:
                 meme.cognitive_analysis = analysis
-                meme.source_platform = "bilibili"
+                meme.source_platform = source_platform
                 meme.format_id = format_id
                 meme.format_slots = format_slots or {}
                 meme.format_confidence = format_confidence

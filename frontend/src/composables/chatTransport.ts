@@ -114,6 +114,7 @@ export function sendSandboxChatText(
   dependencies: {
     storage?: Pick<Storage, 'getItem' | 'setItem'>
     randomUUID?: UuidFactory
+    taskId?: string
   } = {},
 ): SandboxRequestEvent {
   if (!text.trim() || text.length > 4000) {
@@ -126,7 +127,7 @@ export function sendSandboxChatText(
     randomUUID,
   )
   const messageId = randomUUID()
-  const taskId = randomUUID()
+  const taskId = dependencies.taskId ?? randomUUID()
   if (!isCanonicalUuid(messageId) || !isCanonicalUuid(taskId)) {
     throw new Error('randomUUID returned a non-canonical UUID')
   }

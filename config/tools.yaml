@@ -84,7 +84,4 @@ minecraft:
 tool_settings:
   enable_tools: true
   max_tool_calls_per_turn: 5
-  tool_execution_timeout: 30
-  retry_on_failure: true
-  max_retries: 2
   log_tool_calls: true

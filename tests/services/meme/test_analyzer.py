@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from animetta.services.meme.analyzer import MemeCognitiveAnalyzer
+from animetta.services.meme.analyzer import MemeCognitiveAnalyzer, stable_meme_id
+
+
+def test_stable_meme_id_normalizes_text_and_separates_sources() -> None:
+    assert stable_meme_id("  绝绝子  ", "BILIBILI") == stable_meme_id("绝绝子", "bilibili")
+    assert stable_meme_id("绝绝子", "user") != stable_meme_id("绝绝子", "bilibili")
 
 
 @pytest.fixture

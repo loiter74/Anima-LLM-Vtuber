@@ -168,3 +168,17 @@ class TestLive2DActionQueueEnqueue:
         )
         await q.stop()
         assert q.is_processing is False
+
+    @pytest.mark.asyncio
+    async def test_duplicate_action_id_executes_once(self):
+        q = Live2DActionQueue(mutex=Live2DActionMutex(cooldown_ms=0))
+        callback = AsyncMock()
+        q.set_execute_callback(callback)
+
+        first = await q.enqueue(ActionMessage("same", {"type": "test"}, duration_sec=0.001))
+        duplicate = await q.enqueue(ActionMessage("same", {"type": "test"}, duration_sec=0.001))
+        await asyncio.sleep(0.05)
+
+        assert first["ok"] is True
+        assert duplicate == {"ok": True, "duplicate": True, "queue_size": 1}
+        callback.assert_awaited_once()

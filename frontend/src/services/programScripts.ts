@@ -205,6 +205,7 @@ export function startProgramRun(payload: {
   version: number
   room_id: number
   creator_id: string
+  task_id: string
 }): Promise<ProgramRunSnapshot> {
   return api('/api/program-runs/start', { method: 'POST', body: JSON.stringify(payload) })
 }
@@ -225,10 +226,16 @@ export function submitProgramChoice(
   beatId: string,
   optionId: string,
   creatorId: string,
+  commandId: string,
 ): Promise<ProgramRunSnapshot> {
   return api(`/api/program-runs/${encodeURIComponent(runId)}/choice`, {
     method: 'POST',
-    body: JSON.stringify({ beat_id: beatId, option_id: optionId, creator_id: creatorId }),
+    body: JSON.stringify({
+      beat_id: beatId,
+      option_id: optionId,
+      creator_id: creatorId,
+      command_id: commandId,
+    }),
   })
 }
 
@@ -236,10 +243,11 @@ export function controlProgramRun(
   runId: string,
   action: 'pause' | 'resume' | 'retry' | 'stop',
   creatorId: string,
+  commandId: string,
 ): Promise<ProgramRunSnapshot> {
   return api(`/api/program-runs/${encodeURIComponent(runId)}/control`, {
     method: 'POST',
-    body: JSON.stringify({ action, creator_id: creatorId }),
+    body: JSON.stringify({ action, creator_id: creatorId, command_id: commandId }),
   })
 }
 
@@ -256,10 +264,11 @@ export function controlProgramReplay(
   action: 'pause' | 'resume' | 'step' | 'speed' | 'restart' | 'stop',
   creatorId: string,
   speed?: number,
+  commandId = crypto.randomUUID(),
 ): Promise<ReplaySnapshot> {
   return api(`/api/program-replays/${encodeURIComponent(replayId)}/control`, {
     method: 'POST',
-    body: JSON.stringify({ action, creator_id: creatorId, speed }),
+    body: JSON.stringify({ action, creator_id: creatorId, speed, command_id: commandId }),
   })
 }
 

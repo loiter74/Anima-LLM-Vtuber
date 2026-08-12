@@ -248,6 +248,7 @@ class TestSetupRoutes:
                 observation_recorder=websocket_server.observation_recorder,
                 observation_query=websocket_server.observation_query,
                 observation_report_store=websocket_server.observation_report_store,
+                command_inbox=websocket_server.command_inbox,
             )
 
     def test_setup_routes_wires_socketio_to_model_manager(self, websocket_server):

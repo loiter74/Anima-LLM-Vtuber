@@ -333,3 +333,29 @@ async def test_sandbox_rejects_duplicate_task_identity(handler) -> None:
     existing.cancel()
     with pytest.raises(asyncio.CancelledError):
         await existing
+
+
+@pytest.mark.asyncio
+async def test_completed_public_turn_replays_text_without_running_orchestrator_twice(
+    handler,
+) -> None:
+    chat, sio, admin = handler
+    command = _command()
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(
+        return_value={"response_text": "只重放文字", "response_chunks": ["只重放", "文字"]}
+    )
+    admin._get_or_create_orchestrator.return_value = orchestrator
+
+    await chat.on_text_command("sid", command)
+    sio.emit.reset_mock()
+    await chat.on_text_command("retry-sid", command)
+
+    orchestrator.process_text.assert_awaited_once()
+    assert [call.args[0] for call in sio.emit.await_args_list] == [
+        "chat:sentence",
+        "chat:sentence",
+        "chat:sentence",
+        "chat:control",
+    ]
+    assert all(call.kwargs["to"] == "retry-sid" for call in sio.emit.await_args_list)

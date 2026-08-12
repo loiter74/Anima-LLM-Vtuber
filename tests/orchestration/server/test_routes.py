@@ -938,18 +938,22 @@ class TestRouteHandlersConnection:
                 assert call_args[0][1].get("text") != "start-mic"
 
     @pytest.mark.asyncio
-    async def test_on_disconnect_cleans_up(self, mock_socketio, mock_session_manager):
-        """on_disconnect unregisters client and cleans up session."""
+    async def test_on_disconnect_detaches_transport_without_cancelling_task(
+        self, mock_socketio, mock_session_manager
+    ):
+        """Disconnect cleans the socket session but preserves application-owned work."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
         sandbox_task = asyncio.create_task(asyncio.Event().wait())
         handlers.chat._sandbox_tasks["sandbox-task"] = sandbox_task
         handlers.chat._sandbox_task_sids["sandbox-task"] = "sid1"
 
         await handlers.on_disconnect("sid1")
+
+        assert not sandbox_task.done()
+        mock_session_manager.cleanup_session.assert_called_once_with("sid1")
+        sandbox_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await sandbox_task
-
-        mock_session_manager.cleanup_session.assert_called_once_with("sid1")
 
 
 # ── register_routes ────────────────────────────────────────────────

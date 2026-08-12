@@ -43,6 +43,7 @@ from animetta.observability.ports import (
 )
 from animetta.orchestration.graph.translation_state import translation_state
 from animetta.orchestration.socket_events import EVENTS
+from animetta.services.command_inbox import CommandInbox
 from animetta.services.program_script import (
     ProgramReplayCoordinator,
     ProgramScriptRepository,
@@ -118,7 +119,11 @@ class WebSocketServer:
         import mimetypes
 
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
-        self.memory_runtime = SharedMemoryRuntime(observation_recorder=self.observation_recorder)
+        self.command_inbox = CommandInbox(get_data_dir() / "command_inbox.db")
+        self.memory_runtime = SharedMemoryRuntime(
+            command_inbox=self.command_inbox,
+            observation_recorder=self.observation_recorder,
+        )
         self.program_repository = ProgramScriptRepository(
             get_data_dir() / "program_scripts",
             builtin_dir=project_root / "config" / "program_scripts",
@@ -132,6 +137,7 @@ class WebSocketServer:
             self.program_repository,
             self.program_runner,
             self.program_replay,
+            command_inbox=self.command_inbox,
         )
 
         async def serve_singing_audio(request: Request) -> Response:
@@ -238,6 +244,13 @@ class WebSocketServer:
         @asynccontextmanager
         async def lifespan(_app: Starlette) -> AsyncIterator[None]:
             await self._start_observability()
+            recovered = await self.command_inbox.start()
+            if recovered:
+                logger.warning("[CommandInbox] Interrupted {} stale command(s)", recovered)
+            self.supervise_background(
+                self._command_inbox_cleanup_loop(),
+                name="command_inbox_cleanup",
+            )
             await self.component_readiness_cache.start()
             if self.route_handlers:
                 await self.route_handlers.start_runtime()
@@ -260,6 +273,7 @@ class WebSocketServer:
         self.asgi_app.state.program_repository = self.program_repository
         self.asgi_app.state.program_runner = self.program_runner
         self.asgi_app.state.program_replay = self.program_replay
+        self.asgi_app.state.command_inbox = self.command_inbox
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
         ServicePool.configure_runtime(self.config, self.model_manager)
@@ -490,6 +504,7 @@ class WebSocketServer:
             observation_recorder=self.observation_recorder,
             observation_query=self.observation_query,
             observation_report_store=self.observation_report_store,
+            command_inbox=self.command_inbox,
         )
 
         async def dispatch_program(text: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -590,6 +605,13 @@ class WebSocketServer:
         task.add_done_callback(on_done)
         return task
 
+    async def _command_inbox_cleanup_loop(self) -> None:
+        while True:
+            await asyncio.sleep(6 * 60 * 60)
+            removed = await self.command_inbox.cleanup_expired()
+            if removed:
+                logger.info("[CommandInbox] Removed {} expired task(s)", removed)
+
     async def _stop_background_tasks(self) -> None:
         tasks = tuple(self._background_tasks)
         for task in tasks:
@@ -633,6 +655,7 @@ class WebSocketServer:
             )
 
         await self.memory_runtime.shutdown()
+        await self.command_inbox.close()
         await ServicePool.shutdown()
         if self.observation_ledger is not None:
             await self.observation_ledger.close()

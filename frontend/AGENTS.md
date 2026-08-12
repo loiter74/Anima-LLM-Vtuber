@@ -107,7 +107,7 @@ pnpm test:run                # Frontend tests (Vitest + happy-dom)
 
 ## NOTES
 
-- **65 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
+- **66 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
 - 新增、删除或重命名 `src/**/*.test.ts` 时，同批更新上一行的数量；`tests/smoke/test_frontend_agents_docs.py` 会校验该不变量。
 - Live2D model files (`.moc3`, textures) are loaded from `assets/` at runtime.
 - Bilingual subtitle feature uses LLM translation — configured in Settings panel.

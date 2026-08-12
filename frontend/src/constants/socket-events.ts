@@ -36,6 +36,10 @@ const socketEvents = events as SocketEventsConfig
  * ```
  */
 export const Events = {
+  TASK: {
+    STATUS: socketEvents.task.status.name,
+    SNAPSHOT: socketEvents.task.snapshot.name,
+  },
   CHAT: {
     TEXT: socketEvents.chat.text.name,
     DEVELOPER_TEXT: socketEvents.chat.developer_text.name,

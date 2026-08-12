@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from animetta.orchestration.server.program_script_api import get_program_script_routes
+from animetta.services.command_inbox import CommandInbox
 from animetta.services.program_script import (
     ProgramReplayCoordinator,
     ProgramScriptRepository,
@@ -114,3 +119,56 @@ def test_duplicate_returns_field_level_validation_errors(tmp_path: Path) -> None
     assert response.status_code == 422
     assert response.json()["error_code"] == "validation_error"
     assert any("id" in issue["loc"] for issue in response.json()["issues"])
+
+
+@pytest.mark.asyncio
+async def test_duplicate_program_control_waits_and_replays_one_operation(tmp_path: Path) -> None:
+    repository = ProgramScriptRepository(
+        tmp_path,
+        builtin_dir=PROJECT_ROOT / "config" / "program_scripts",
+    )
+    inbox = CommandInbox(":memory:")
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def control(**_command):
+        entered.set()
+        await release.wait()
+        return {"run_id": "run-1", "state": "paused"}
+
+    runner = SimpleNamespace(control=AsyncMock(side_effect=control))
+    app = Starlette(
+        routes=get_program_script_routes(
+            repository,
+            runner,
+            ProgramReplayCoordinator(),
+            inbox,
+        )
+    )
+
+    async def request_once():
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            return await client.post(
+                "/api/program-runs/run-1/control",
+                json={"action": "pause", "creator_id": "dashboard", "command_id": "cmd-1"},
+            )
+
+    first = asyncio.create_task(request_once())
+    await entered.wait()
+    second = asyncio.create_task(request_once())
+    await asyncio.sleep(0)
+    release.set()
+    first_response, second_response = await asyncio.gather(first, second)
+
+    assert (
+        first_response.json()
+        == second_response.json()
+        == {
+            "run_id": "run-1",
+            "state": "paused",
+        }
+    )
+    runner.control.assert_awaited_once()
+    await inbox.close()

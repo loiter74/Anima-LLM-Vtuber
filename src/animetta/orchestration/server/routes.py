@@ -11,8 +11,9 @@ from loguru import logger
 
 from animetta.config.manifest import EffectiveConfig
 from animetta.config.user import UserSettings
+from animetta.services.command_inbox import ACTIVE_STATUSES, CommandInbox, CommandKey
 
-from ..socket_events import event_aliases, event_name
+from ..socket_events import EVENTS, event_aliases, event_name
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -55,6 +56,7 @@ class RouteHandlers:
         observation_recorder: "ObservationRecorder | None" = None,
         observation_query: "ObservationQuery | None" = None,
         observation_report_store: "ObservationReportStore | None" = None,
+        command_inbox: CommandInbox | None = None,
     ):
         # Infrastructure
         self.sio = sio
@@ -64,6 +66,7 @@ class RouteHandlers:
         self.observation_recorder = observation_recorder
         self.observation_query = observation_query
         self.observation_report_store = observation_report_store
+        self.command_inbox = command_inbox or CommandInbox(":memory:")
 
         # Shared base — used by dependent handlers that need orchestrator access
         self.base = BaseSocketHandler(
@@ -75,10 +78,10 @@ class RouteHandlers:
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
-        self.chat = ChatHandlers(sio, session_manager, self.base)
+        self.chat = ChatHandlers(sio, session_manager, self.base, self.command_inbox)
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
-        self.memory = MemoryHandlers(sio, session_manager, self.base)
-        self.meme = MemeHandlers(sio, session_manager, self.base)
+        self.memory = MemoryHandlers(sio, session_manager, self.base, self.command_inbox)
+        self.meme = MemeHandlers(sio, session_manager, self.base, self.command_inbox)
         self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
@@ -87,7 +90,11 @@ class RouteHandlers:
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
         self.singing = SingingHandlers(
-            sio, session_manager, self.desktop_manager, self.live2d_manager
+            sio,
+            session_manager,
+            self.desktop_manager,
+            self.live2d_manager,
+            self.command_inbox,
         )
 
         # Wire up Live2D callback
@@ -187,11 +194,68 @@ class RouteHandlers:
 
     async def start_runtime(self) -> None:
         """Start async domain runtimes during the ASGI lifespan."""
+        await self.command_inbox.start()
+        await self.meme.restore_latest_collection()
         await self.bilibili.start_configured()
 
     async def stop_runtime(self) -> None:
         """Stop async domain runtimes during server shutdown."""
+        await self.singing.shutdown()
         await self.bilibili.stop_bilibili()
+
+    async def on_task_status(self, sid: str, data: dict) -> dict[str, Any]:
+        """Return a durable task snapshot without trusting a client-supplied scope."""
+        kind = str(data.get("kind") or "").strip()
+        task_id = str(data.get("task_id") or "").strip()
+        context = data.get("scope_context")
+        context = context if isinstance(context, dict) else {}
+        conversation_id = str(context.get("conversation_id") or "").strip()
+        audience = str(context.get("audience") or "").strip()
+        if not kind or not task_id:
+            return _task_error("INVALID_REQUEST", "kind and task_id are required")
+        public_kinds = {
+            "chat.public",
+            "chat.sandbox",
+            "singing.process",
+            "meme.collect",
+            "memory.change",
+            "memory.organize",
+            "program.start",
+            "program.choice",
+            "program.control",
+            "replay.start",
+            "replay.control",
+        }
+        if kind not in public_kinds:
+            return _task_error("INVALID_REQUEST", "unknown task kind")
+        if kind == "chat.public":
+            if audience == "livestream":
+                scope = f"stream:{self.base.live_session_id}"
+            elif not conversation_id:
+                return _task_error("INVALID_REQUEST", "conversation_id is required")
+            else:
+                scope = f"conversation:{conversation_id}"
+        elif kind == "chat.sandbox":
+            if not conversation_id:
+                return _task_error("INVALID_REQUEST", "conversation_id is required")
+            scope = f"sandbox:{conversation_id}"
+        else:
+            scope = "dashboard"
+        accepted = await self.command_inbox.get(CommandKey(scope, kind, task_id))
+        if accepted.task is None:
+            return _task_error("TASK_NOT_FOUND", "task not found")
+        if accepted.task.status in ACTIVE_STATUSES:
+            if kind == "chat.sandbox":
+                self.chat.observe_sandbox(sid, task_id)
+            elif kind == "singing.process":
+                self.singing.observe(sid, task_id)
+            elif kind == "meme.collect":
+                self.meme.observe_collection(sid, task_id)
+            elif kind == "memory.organize":
+                self.memory.observe_organize(sid, task_id)
+        snapshot = accepted.task.snapshot(reused=True)
+        await self.sio.emit(EVENTS["task"]["snapshot"]["name"], snapshot, to=sid)
+        return {"ok": True, "data": snapshot}
 
     # ── Connection events ─────────────────────────────────────────────
 
@@ -323,10 +387,10 @@ class RouteHandlers:
     async def on_sing_process(self, sid: str, data: dict) -> None:
         return await self.singing.on_sing_process(sid, data)
 
-    async def on_sing_confirm_lyrics(self, sid: str, data: dict) -> None:
+    async def on_sing_confirm_lyrics(self, sid: str, data: dict) -> dict[str, object]:
         return await self.singing.on_sing_confirm_lyrics(sid, data)
 
-    async def on_sing_cancel(self, sid: str, data: dict) -> None:
+    async def on_sing_cancel(self, sid: str, data: dict) -> dict[str, object]:
         return await self.singing.on_sing_cancel(sid, data)
 
     async def on_sing_subtitle_sync(self, sid: str, data: dict) -> None:
@@ -388,6 +452,7 @@ def register_routes(
     observation_recorder: "ObservationRecorder | None" = None,
     observation_query: "ObservationQuery | None" = None,
     observation_report_store: "ObservationReportStore | None" = None,
+    command_inbox: CommandInbox | None = None,
 ) -> RouteHandlers:
     """Register all routes to the Socket.IO server."""
     handlers = RouteHandlers(
@@ -398,6 +463,7 @@ def register_routes(
         observation_recorder,
         observation_query,
         observation_report_store,
+        command_inbox,
     )
 
     handlers.bilibili.configure(bilibili_config)
@@ -448,6 +514,9 @@ def register_routes(
 
     # Heartbeat
     sio.on(event_name("system", "heartbeat"), handlers.on_heartbeat)
+
+    # Durable task status
+    sio.on(event_name("task", "status"), handlers.on_task_status)
 
     # Desktop client events
     sio.on(event_name("desktop", "register"), handlers.on_desktop_register)
@@ -504,3 +573,7 @@ def register_routes(
 
     logger.info("WebSocket routes registered")
     return handlers
+
+
+def _task_error(code: str, message: str) -> dict[str, Any]:
+    return {"ok": False, "error": {"code": code, "message": message}}

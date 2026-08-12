@@ -118,7 +118,10 @@ function formatTime(value: string): string {
   }).format(new Date(value))
 }
 
-onMounted(() => void refresh())
+onMounted(() => {
+  void store.recoverOrganize()
+  void refresh()
+})
 </script>
 
 <template>

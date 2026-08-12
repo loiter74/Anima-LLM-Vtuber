@@ -10,6 +10,8 @@ import {
   type ProgramScriptSummary,
   type ReplaySnapshot,
 } from '@/services/programScripts'
+import { fetchCommandTask, readCommandTask, startCommandTask } from '@/composables/commandTasks'
+import { getSocket } from '@/composables/useSocket'
 
 const creatorId = 'dashboard'
 const scripts = ref<ProgramScriptSummary[]>([])
@@ -78,6 +80,7 @@ const controlHint = computed(() => {
 
 onMounted(async () => {
   await refreshScripts()
+  await recoverStart()
   pollTimer = setInterval(() => void poll(), 500)
 })
 
@@ -107,6 +110,18 @@ async function loadSelectedScript() {
   }
 }
 
+async function recoverStart() {
+  const socket = getSocket()
+  const persisted = readCommandTask('replay.start')
+  if (!socket?.connected || !persisted) return
+  const snapshot = await fetchCommandTask(socket, 'replay.start', persisted.taskId)
+  const recovered = snapshot?.result ?? snapshot?.progress
+  if (recovered?.replay_id) replay.value = recovered as unknown as ReplaySnapshot
+  else if (snapshot?.status === 'interrupted') {
+    error.value = '服务重启，原重放结果未知；再次开始会创建新任务。'
+  }
+}
+
 async function start() {
   const choice = publishedChoices.value.find((item) => item.key === selected.value)
   if (source.value === 'script' && !choice) return
@@ -121,6 +136,16 @@ async function start() {
             room_id: roomId.value,
             creator_id: creatorId,
             speed: speed.value,
+            task_id: startCommandTask(
+              'replay.start',
+              `script:${choice!.id}@${choice!.version}:${roomId.value}:${speed.value}`,
+              window.localStorage,
+              () => crypto.randomUUID(),
+              Boolean(error.value) ||
+                Boolean(
+                  replay.value && ['completed', 'stopped', 'failed'].includes(replay.value.state),
+                ),
+            ),
           }
         : {
             source: 'jsonl',
@@ -128,6 +153,16 @@ async function start() {
             room_id: roomId.value,
             creator_id: creatorId,
             speed: speed.value,
+            task_id: startCommandTask(
+              'replay.start',
+              `jsonl:${jsonl.value}:${roomId.value}:${speed.value}`,
+              window.localStorage,
+              () => crypto.randomUUID(),
+              Boolean(error.value) ||
+                Boolean(
+                  replay.value && ['completed', 'stopped', 'failed'].includes(replay.value.state),
+                ),
+            ),
           },
     )
   })
@@ -141,6 +176,7 @@ async function control(action: 'pause' | 'resume' | 'step' | 'speed' | 'restart'
       action,
       creatorId,
       action === 'speed' || action === 'restart' ? speed.value : undefined,
+      crypto.randomUUID(),
     )
   })
 }

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
+import { fetchCommandTask, readCommandTask, startCommandTask } from '@/composables/commandTasks'
 
 export interface MemoryRelation {
   source_id: string
@@ -219,12 +220,51 @@ export const useMemoryStore = defineStore('memory', () => {
 
   const pinMemory = (id: string, pinned: boolean) => mutate(Events.MEMORY.PIN, { id, pinned })
   const forgetMemory = (id: string) => mutate(Events.MEMORY.FORGET, { id })
-  const changeMemory = (id: string, summary: string) =>
-    mutate(Events.MEMORY.CHANGE, { id, summary })
+  const changeMemory = (id: string, summary: string) => {
+    const current = wikiPages.value.find((item) => item.id === id)
+    if (!current) throw fail('NOT_FOUND', 'Memory not found')
+    const taskId = startCommandTask(
+      'memory.change',
+      `${id}\u0000${current.version}\u0000${summary}`,
+    )
+    return mutate(Events.MEMORY.CHANGE, {
+      id,
+      summary,
+      task_id: taskId,
+      expected_version: current.version,
+    })
+  }
 
   async function organizeMemory(): Promise<void> {
-    const accepted = await request<MemoryJob>(Events.MEMORY.ORGANIZE, {})
+    const forceNew = ['succeeded', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
+      job.value?.status ?? '',
+    )
+    const taskId = startCommandTask(
+      'memory.organize',
+      'global',
+      window.localStorage,
+      () => crypto.randomUUID(),
+      forceNew,
+    )
+    const accepted = await request<MemoryJob>(Events.MEMORY.ORGANIZE, { task_id: taskId })
     job.value = accepted
+  }
+
+  async function recoverOrganize(): Promise<void> {
+    const socket = getSocket()
+    const persisted = readCommandTask('memory.organize')
+    if (!socket?.connected || !persisted) return
+    const snapshot = await fetchCommandTask(socket, 'memory.organize', persisted.taskId)
+    if (!snapshot) return
+    const source = snapshot.result ?? snapshot.progress
+    const status = snapshot.status === 'succeeded' ? 'completed' : snapshot.status
+    job.value = {
+      job_id: persisted.taskId,
+      status,
+      progress: Number(source?.progress ?? (snapshot.status === 'succeeded' ? 100 : 0)),
+      text: snapshot.reused ? '已恢复整理任务' : undefined,
+      error: snapshot.error?.message,
+    }
   }
 
   const onChanged = (payload: unknown) => {
@@ -310,6 +350,7 @@ export const useMemoryStore = defineStore('memory', () => {
     forgetMemory,
     changeMemory,
     organizeMemory,
+    recoverOrganize,
     startListeners,
     stopListeners,
     selectPath,

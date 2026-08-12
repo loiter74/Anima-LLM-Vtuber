@@ -8,6 +8,7 @@ Manages the action queue for Live2D models, based on open-yachiyo implementation
 import asyncio
 import contextlib
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -98,11 +99,16 @@ class Live2DActionQueue:
         max_size: int = 120,
         overflow_policy: OverflowPolicy = OverflowPolicy.DROP_OLDEST,
         mutex: Live2DActionMutex | None = None,
+        dedup_ttl_seconds: float = 30.0,
+        dedup_capacity: int = 1024,
     ):
         self.max_size = max_size
         self.overflow_policy = overflow_policy
         self.queue: list[ActionMessage] = []
         self.mutex = mutex or Live2DActionMutex()
+        self._dedup_ttl_seconds = max(0.0, dedup_ttl_seconds)
+        self._dedup_capacity = max(1, dedup_capacity)
+        self._seen_action_ids: OrderedDict[str, float] = OrderedDict()
 
         # Execution state
         self._is_processing = False
@@ -134,6 +140,8 @@ class Live2DActionQueue:
         # Handle queue policy
         if isinstance(action.queue_policy, str):
             action.queue_policy = QueuePolicy(action.queue_policy)
+        if action.action_id and self._is_duplicate(action.action_id):
+            return {"ok": True, "duplicate": True, "queue_size": len(self.queue)}
 
         if action.queue_policy == QueuePolicy.REPLACE:
             # Clear the queue
@@ -160,6 +168,8 @@ class Live2DActionQueue:
 
         # Enqueue
         self.queue.append(action)
+        if action.action_id:
+            self._remember_action(action.action_id)
         logger.debug(
             f"[ActionQueue] Action enqueued: {action.action_id}, queue length: {len(self.queue)}"
         )
@@ -171,6 +181,24 @@ class Live2DActionQueue:
             self._process_task.add_done_callback(self._handle_task_exception)
 
         return {"ok": True, "queue_size": len(self.queue)}
+
+    def _is_duplicate(self, action_id: str) -> bool:
+        self._prune_seen_actions()
+        return action_id in self._seen_action_ids
+
+    def _remember_action(self, action_id: str) -> None:
+        self._seen_action_ids[action_id] = time.monotonic()
+        self._seen_action_ids.move_to_end(action_id)
+        while len(self._seen_action_ids) > self._dedup_capacity:
+            self._seen_action_ids.popitem(last=False)
+
+    def _prune_seen_actions(self) -> None:
+        cutoff = time.monotonic() - self._dedup_ttl_seconds
+        while self._seen_action_ids:
+            _, seen_at = next(iter(self._seen_action_ids.items()))
+            if seen_at > cutoff:
+                break
+            self._seen_action_ids.popitem(last=False)
 
     async def _interrupt_current(self):
         """Interrupt the current action"""
@@ -251,6 +279,7 @@ class Live2DActionQueue:
 
         # Clear the queue
         self.queue.clear()
+        self._seen_action_ids.clear()
         self._is_processing = False
         self._current_action = None
         logger.debug("[ActionQueue] Queue stopped")

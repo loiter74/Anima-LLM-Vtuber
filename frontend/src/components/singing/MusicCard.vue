@@ -9,7 +9,7 @@ import PlaybackControls from './PlaybackControls.vue'
 import ProcessTimeline from './ProcessTimeline.vue'
 
 const store = useSingingStore()
-const { process, confirmLyrics, cancel } = useSinging()
+const { process, confirmLyrics, cancel, recover } = useSinging()
 const inputUrl = ref('')
 const inputError = ref('')
 const assDraft = ref('')
@@ -37,8 +37,9 @@ function startProcess() {
     return
   }
   inputError.value = ''
-  if (store.status === 'error') store.reset()
-  process(url)
+  const isRetry = store.status === 'error'
+  if (isRetry) store.reset()
+  process(url, true, isRetry)
 }
 
 function submitLyrics() {
@@ -151,7 +152,10 @@ async function loadRecent() {
   }
 }
 
-onMounted(loadRecent)
+onMounted(() => {
+  void loadRecent()
+  void recover()
+})
 
 // session_ids are path-derived (data_singing_uploads_sing-<uuid>-<short>) and
 // unreadable when shown verbatim. Surface the creation time as the primary

@@ -25,6 +25,8 @@ const api = vi.hoisted(() => ({
   controlProgramReplay: vi.fn(),
 }))
 
+vi.mock('@/composables/useSocket', () => ({ getSocket: () => null }))
+
 vi.mock('@/services/programScripts', () => ({
   ...api,
   ProgramApiError: class extends Error {

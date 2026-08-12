@@ -13,3 +13,4 @@
 | [ADR-009](ADR-009-live2d-expression.md) | Live2D expression | Accepted |
 | [ADR-010](ADR-010-bilibili-meme-collection.md) | Bilibili meme collection | Accepted |
 | [ADR-011](ADR-011-realtime-audio-pipeline.md) | Real-time audio pipeline | Accepted |
+| [ADR-012](ADR-012-sqlite-command-inbox.md) | SQLite command Inbox for local idempotency | Accepted |

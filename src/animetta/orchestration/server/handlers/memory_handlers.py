@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from ....services.command_inbox import CommandDecision, CommandInbox, CommandKey
 from ...socket_events import EVENTS
 from .base_handler import BaseSocketHandler
 
@@ -33,11 +34,15 @@ class MemoryHandlers(BaseSocketHandler):
         sio: AsyncServer,
         session_manager: SessionManager,
         base: BaseSocketHandler,
+        command_inbox: CommandInbox | None = None,
     ) -> None:
         self._base = base
         self._global_config = None
         self._jobs: dict[str, dict[str, Any]] = {}
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
+        self._command_inbox = command_inbox or CommandInbox(":memory:")
+        self._active_organize_id: str | None = None
+        self._organize_subscribers: dict[str, set[str]] = {}
         super().__init__(sio, session_manager, base.desktop_manager, base.live2d_manager)
 
     @property
@@ -122,12 +127,60 @@ class MemoryHandlers(BaseSocketHandler):
         summary = str(data.get("summary") or "").strip()
         if not summary:
             return _error("INVALID_REQUEST", "summary is required")
-        return await self._mutate(
-            sid,
-            str(data.get("id") or ""),
-            "change_memory",
-            summary=summary,
+        atom_id = str(data.get("id") or "")
+        task_id = str(data.get("task_id") or uuid.uuid4())
+        expected_version = data.get("expected_version")
+        if not atom_id:
+            return _error("INVALID_REQUEST", "id is required")
+        key = CommandKey("dashboard", "memory.change", task_id)
+        accepted = await self._command_inbox.accept(
+            key,
+            {"id": atom_id, "summary": summary, "expected_version": expected_version},
         )
+        if accepted.decision is CommandDecision.CONFLICT:
+            return _error("IDEMPOTENCY_CONFLICT", "task_id was already used")
+        if accepted.decision is CommandDecision.REPLAY and accepted.task:
+            return accepted.task.result or _error("UNAVAILABLE", "missing task result")
+        if accepted.decision is CommandDecision.TERMINAL and accepted.task:
+            return _error(
+                accepted.task.error_code or accepted.task.status.value,
+                accepted.task.error_message or "memory change did not complete",
+            )
+        if accepted.decision is CommandDecision.OBSERVE:
+            return _error("RESOURCE_BUSY", "memory change is already running")
+        await self._command_inbox.mark_processing(key)
+        try:
+            memory = await self._get_memory(sid)
+            current = await memory.get_memory(atom_id)
+            if current is None:
+                result = _error("NOT_FOUND", "memory not found")
+                await self._command_inbox.fail(
+                    key, error_code="NOT_FOUND", error_message="memory not found"
+                )
+                return result
+            if expected_version is None:
+                expected_version = current.get("version")
+            if not isinstance(expected_version, int) or isinstance(expected_version, bool):
+                await self._command_inbox.fail(
+                    key,
+                    error_code="INVALID_REQUEST",
+                    error_message="expected_version must be an integer",
+                )
+                return _error("INVALID_REQUEST", "expected_version must be an integer")
+            if current.get("version") != expected_version:
+                await self._command_inbox.fail(
+                    key,
+                    error_code="STALE_MEMORY_VERSION",
+                    error_message="memory version has changed",
+                )
+                return _error("STALE_MEMORY_VERSION", "memory version has changed")
+            item = await memory.change_memory(atom_id, summary=summary)
+            result = _ok({"item": item, "revision": await memory.store.get_revision()})
+            await self._command_inbox.succeed(key, result)
+            return result
+        except Exception as exc:
+            await self._command_inbox.fail(key, error_code="UNAVAILABLE", error_message=str(exc))
+            return _error("UNAVAILABLE", str(exc))
 
     async def _mutate(
         self,
@@ -154,12 +207,33 @@ class MemoryHandlers(BaseSocketHandler):
         sid: str,
         data: dict[str, Any],
     ) -> dict[str, Any]:
-        del data
         try:
             memory = await self._get_memory(sid)
         except Exception as exc:
             return _error("UNAVAILABLE", str(exc))
-        job_id = uuid.uuid4().hex
+        job_id = str(data.get("task_id") or uuid.uuid4())
+        key = CommandKey("dashboard", "memory.organize", job_id)
+        accepted = await self._command_inbox.accept(key, {"operation": "organize"})
+        if accepted.decision is CommandDecision.CONFLICT:
+            return _error("IDEMPOTENCY_CONFLICT", "task_id was already used")
+        if accepted.decision is CommandDecision.REPLAY and accepted.task:
+            return _ok(accepted.task.result or accepted.task.snapshot(reused=True))
+        if accepted.decision is CommandDecision.TERMINAL and accepted.task:
+            return _error(
+                accepted.task.error_code or accepted.task.status.value,
+                accepted.task.error_message or "memory organization did not complete",
+            )
+        if accepted.decision is CommandDecision.OBSERVE:
+            self._organize_subscribers.setdefault(job_id, set()).add(sid)
+            return _ok(dict(self._jobs.get(job_id) or accepted.task.snapshot(reused=True)))
+        if self._active_organize_id is not None:
+            await self._command_inbox.fail(
+                key, error_code="RESOURCE_BUSY", error_message="Memory organization is active"
+            )
+            return _error("RESOURCE_BUSY", "Memory organization is active")
+        self._active_organize_id = job_id
+        self._organize_subscribers.setdefault(job_id, set()).add(sid)
+        await self._command_inbox.mark_processing(key)
         self._jobs[job_id] = {"job_id": job_id, "status": "accepted", "progress": 0}
         task = asyncio.create_task(
             self._run_organize_job(sid, job_id, memory),
@@ -169,36 +243,50 @@ class MemoryHandlers(BaseSocketHandler):
         return _ok(dict(self._jobs[job_id]))
 
     async def _run_organize_job(self, sid: str, job_id: str, memory: Any) -> None:
+        key = CommandKey("dashboard", "memory.organize", job_id)
         try:
             self._jobs[job_id].update(status="running", progress=30)
-            await self.sio.emit(
-                EVENTS["memory"]["organize_progress"]["name"],
-                {**self._jobs[job_id], "text": "Running metabolism tick..."},
-                to=sid,
-            )
+            progress = {**self._jobs[job_id], "text": "Running metabolism tick..."}
+            await self._command_inbox.update_progress(key, progress)
+            for subscriber in tuple(self._organize_subscribers.get(job_id, ())):
+                await self.sio.emit(
+                    EVENTS["memory"]["organize_progress"]["name"], progress, to=subscriber
+                )
             await memory.run_metabolism_tick()
             revision = await memory.store.get_revision()
             self._jobs[job_id].update(status="completed", progress=100, revision=revision)
-            await self.sio.emit(
-                EVENTS["memory"]["organize_result"]["name"],
-                {
-                    **self._jobs[job_id],
-                    "message": "Memory organized",
-                },
-                to=sid,
-            )
+            result = {**self._jobs[job_id], "message": "Memory organized"}
+            await self._command_inbox.succeed(key, result)
+            for subscriber in tuple(self._organize_subscribers.get(job_id, ())):
+                await self.sio.emit(
+                    EVENTS["memory"]["organize_result"]["name"],
+                    result,
+                    to=subscriber,
+                )
         except Exception as exc:
             self._jobs[job_id].update(status="failed", error=str(exc))
-            await self.sio.emit(
-                EVENTS["memory"]["organize_result"]["name"],
-                {**self._jobs[job_id], "message": str(exc)},
-                to=sid,
+            await self._command_inbox.fail(
+                key, error_code="ORGANIZE_FAILED", error_message=str(exc)
             )
+            for subscriber in tuple(self._organize_subscribers.get(job_id, ())):
+                await self.sio.emit(
+                    EVENTS["memory"]["organize_result"]["name"],
+                    {**self._jobs[job_id], "message": str(exc)},
+                    to=subscriber,
+                )
+        finally:
+            if self._active_organize_id == job_id:
+                self._active_organize_id = None
+            self._organize_subscribers.pop(job_id, None)
+            self._job_tasks.pop(job_id, None)
 
     async def wait_for_job(self, job_id: str) -> None:
         task = self._job_tasks.get(job_id)
         if task is not None:
             await task
+
+    def observe_organize(self, sid: str, job_id: str) -> None:
+        self._organize_subscribers.setdefault(job_id, set()).add(sid)
 
     async def on_job(self, sid: str, data: dict[str, Any]) -> dict[str, Any]:
         del sid

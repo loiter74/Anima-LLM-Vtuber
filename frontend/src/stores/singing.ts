@@ -9,6 +9,7 @@ export const useSingingStore = defineStore('singing', () => {
   const message = ref('')
   const result = ref<SongResult | null>(null)
   const error = ref('')
+  const taskId = ref('')
 
   const isProcessing = computed(() =>
     [
@@ -43,6 +44,7 @@ export const useSingingStore = defineStore('singing', () => {
     status.value = 'done'
     progress.value = 100
     message.value = ''
+    taskId.value = res.task_id || taskId.value
   }
 
   function setError(err: string) {
@@ -57,6 +59,7 @@ export const useSingingStore = defineStore('singing', () => {
     message.value = ''
     result.value = null
     error.value = ''
+    taskId.value = ''
     isPlaying.value = false
     currentTime.value = 0
     currentLyricIndex.value = -1
@@ -69,6 +72,7 @@ export const useSingingStore = defineStore('singing', () => {
     message,
     result,
     error,
+    taskId,
     isProcessing,
     isPlaying,
     currentTime,

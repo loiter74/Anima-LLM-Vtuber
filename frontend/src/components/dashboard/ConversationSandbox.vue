@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { sendSandboxChatText } from '@/composables/chatTransport'
+import { clearCommandTask, fetchCommandTask, startCommandTask } from '@/composables/commandTasks'
 import { getSocket } from '@/composables/useSocket'
 import { Events } from '@/constants/socket-events'
 import { fetchRuntimeStatus } from '@/services/runtimeStatus'
@@ -51,6 +52,10 @@ function stopStream(status: 'complete' | 'interrupted'): void {
   }
   if (active) active.status = status
   if (status === 'interrupted') activeCommand = null
+  if (status === 'interrupted') {
+    window.sessionStorage.removeItem('animetta.sandbox.active-command')
+    clearCommandTask('chat.sandbox', window.sessionStorage)
+  }
 }
 
 async function runPrivateExercise(): Promise<void> {
@@ -95,7 +100,15 @@ async function runPrivateExercise(): Promise<void> {
   messages.value.push(response)
   draft.value = ''
   isStreaming.value = true
-  activeCommand = sendSandboxChatText(socket, text, history)
+  const requestKey = JSON.stringify({ text, history })
+  const taskId = startCommandTask('chat.sandbox', requestKey, window.sessionStorage, () =>
+    crypto.randomUUID(),
+  )
+  activeCommand = sendSandboxChatText(socket, text, history, {
+    storage: window.localStorage,
+    taskId,
+  })
+  window.sessionStorage.setItem('animetta.sandbox.active-command', JSON.stringify(activeCommand))
   response.taskId = activeCommand.task_id
 }
 
@@ -124,6 +137,51 @@ function onSandboxChunk(payload: SandboxChunkEvent): void {
   }
   isStreaming.value = false
   activeCommand = null
+  window.sessionStorage.removeItem('animetta.sandbox.active-command')
+  clearCommandTask('chat.sandbox', window.sessionStorage)
+}
+
+async function recoverActiveCommand(): Promise<void> {
+  const socket = getSocket()
+  const raw = window.sessionStorage.getItem('animetta.sandbox.active-command')
+  if (!socket?.connected || !raw) return
+  try {
+    const command = JSON.parse(raw) as SandboxRequestEvent
+    const snapshot = await fetchCommandTask(socket, 'chat.sandbox', command.task_id, {
+      conversation_id: command.conversation_id,
+    })
+    if (!snapshot) return
+    activeCommand = command
+    const resultText = typeof snapshot.result?.text === 'string' ? snapshot.result.text : ''
+    const status: SandboxMessage['status'] =
+      snapshot.status === 'succeeded'
+        ? 'complete'
+        : snapshot.status === 'interrupted'
+          ? 'interrupted'
+          : snapshot.status === 'failed'
+            ? 'error'
+            : 'streaming'
+    messages.value.push({
+      id: ++sequence,
+      role: 'assistant',
+      text:
+        resultText ||
+        (snapshot.status === 'interrupted'
+          ? '服务重启，原任务结果未知；请重新发送以创建新任务。'
+          : snapshot.error?.message || ''),
+      status,
+      taskId: command.task_id,
+    })
+    isStreaming.value = status === 'streaming'
+    if (!isStreaming.value) {
+      activeCommand = null
+      window.sessionStorage.removeItem('animetta.sandbox.active-command')
+      clearCommandTask('chat.sandbox', window.sessionStorage)
+    }
+  } catch {
+    window.sessionStorage.removeItem('animetta.sandbox.active-command')
+    clearCommandTask('chat.sandbox', window.sessionStorage)
+  }
 }
 
 function toggleRecording(): void {
@@ -138,10 +196,10 @@ function previewSpeech(): void {
 
 onMounted(() => {
   getSocket()?.on(Events.CHAT.SANDBOX_CHUNK, onSandboxChunk)
+  void recoverActiveCommand()
 })
 
 onUnmounted(() => {
-  if (activeCommand) getSocket()?.emit(Events.CHAT.SANDBOX_CANCEL, activeCommand)
   getSocket()?.off(Events.CHAT.SANDBOX_CHUNK, onSandboxChunk)
 })
 </script>

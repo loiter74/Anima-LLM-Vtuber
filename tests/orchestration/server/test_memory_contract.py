@@ -63,6 +63,29 @@ async def test_typed_memory_acknowledgements_are_deterministic(memory_handler) -
 
 
 @pytest.mark.asyncio
+async def test_memory_change_replays_and_rejects_stale_versions(memory_handler) -> None:
+    handler, _, atom, _ = memory_handler
+    task_id = "change-task"
+    command = {
+        "id": atom.id,
+        "summary": "观众喜欢燕麦拿铁",
+        "task_id": task_id,
+        "expected_version": atom.version,
+    }
+
+    changed = await handler.on_change("socket-a", command)
+    replayed = await handler.on_change("socket-a", command)
+    stale = await handler.on_change(
+        "socket-a",
+        {**command, "task_id": "stale-task", "summary": "并发旧修改"},
+    )
+
+    assert changed == replayed
+    assert changed["data"]["item"]["version"] == atom.version + 1
+    assert stale["error"]["code"] == "STALE_MEMORY_VERSION"
+
+
+@pytest.mark.asyncio
 async def test_organize_job_events_are_scoped_by_job_id(memory_handler) -> None:
     handler, memory, _, sio = memory_handler
     memory.run_metabolism_tick = AsyncMock()

@@ -10,6 +10,8 @@ import {
   type ProgramRunSnapshot,
   type ProgramScriptSummary,
 } from '@/services/programScripts'
+import { fetchCommandTask, readCommandTask, startCommandTask } from '@/composables/commandTasks'
+import { getSocket } from '@/composables/useSocket'
 
 const creatorId = 'dashboard'
 const roomId = ref(1)
@@ -51,6 +53,7 @@ const controlHint = computed(() => {
 onMounted(async () => {
   await refreshScripts()
   await refreshCurrent()
+  await recoverStart()
   pollTimer = setInterval(() => void pollRun(), 1000)
 })
 
@@ -75,6 +78,19 @@ async function refreshCurrent() {
   }
 }
 
+async function recoverStart() {
+  if (run.value) return
+  const socket = getSocket()
+  const persisted = readCommandTask('program.start')
+  if (!socket?.connected || !persisted) return
+  const snapshot = await fetchCommandTask(socket, 'program.start', persisted.taskId)
+  const recovered = snapshot?.result ?? snapshot?.progress
+  if (recovered?.run_id) run.value = recovered as unknown as ProgramRunSnapshot
+  else if (snapshot?.status === 'interrupted') {
+    error.value = '服务重启，原节目运行结果未知；再次开始会创建新任务。'
+  }
+}
+
 async function pollRun() {
   if (!run.value || !isActive.value) return
   try {
@@ -93,6 +109,14 @@ async function start() {
       version: choice.version,
       room_id: roomId.value,
       creator_id: creatorId,
+      task_id: startCommandTask(
+        'program.start',
+        `${choice.id}@${choice.version}:${roomId.value}`,
+        window.localStorage,
+        () => crypto.randomUUID(),
+        Boolean(error.value) ||
+          Boolean(run.value && ['completed', 'stopped', 'failed'].includes(run.value.state)),
+      ),
     })
   })
 }
@@ -105,6 +129,7 @@ async function choose(optionId: string) {
       run.value!.current_beat!.id,
       optionId,
       creatorId,
+      crypto.randomUUID(),
     )
   })
 }
@@ -112,7 +137,7 @@ async function choose(optionId: string) {
 async function control(action: 'pause' | 'resume' | 'retry' | 'stop') {
   if (!run.value) return
   await act(async () => {
-    run.value = await controlProgramRun(run.value!.run_id, action, creatorId)
+    run.value = await controlProgramRun(run.value!.run_id, action, creatorId, crypto.randomUUID())
   })
 }
 

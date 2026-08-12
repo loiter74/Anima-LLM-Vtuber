@@ -26,6 +26,7 @@ from animetta.orchestration.chat_contracts import (
 )
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
+from animetta.services.command_inbox import CommandDecision, CommandInbox, CommandKey
 from animetta.services.dialogue import (
     SandboxConversationError,
     SandboxConversationService,
@@ -58,6 +59,7 @@ class ChatHandlers:
         sio: "AsyncServer",
         session_manager: "SessionManager",
         admin: "BaseSocketHandler",
+        command_inbox: CommandInbox | None = None,
     ):
         self.sio = sio
         self.session_manager = session_manager
@@ -66,6 +68,8 @@ class ChatHandlers:
         self._conversation_locks: dict[str, asyncio.Lock] = {}
         self._sandbox_tasks: dict[str, asyncio.Task[None]] = {}
         self._sandbox_task_sids: dict[str, str] = {}
+        self._sandbox_subscribers: dict[str, set[str]] = {}
+        self._command_inbox = command_inbox or CommandInbox(":memory:")
 
     # ── Text input ────────────────────────────────────────────────────
 
@@ -188,12 +192,57 @@ class ChatHandlers:
         developer_console: bool = False,
     ) -> None:
         text = command.text
+        scope = (
+            f"stream:{self.admin.live_session_id}"
+            if developer_console or command.source == "livestream"
+            else f"conversation:{command.conversation_id}"
+        )
+        key = CommandKey(scope, "chat.public", command.task_id)
+        accepted = await self._command_inbox.accept(
+            key,
+            {
+                "text": text,
+                "source": command.source,
+                "user_id": command.user_id,
+                "from_name": command.from_name,
+                "developer_console": developer_console,
+            },
+        )
+        if accepted.decision is CommandDecision.CONFLICT:
+            await self._emit_command_error(
+                sid,
+                command,
+                error_type=ChatErrorType.VALIDATION,
+                message="IDEMPOTENCY_CONFLICT",
+                component=ChatErrorComponent.TRANSPORT,
+                phase=ChatErrorPhase.VALIDATION,
+                transport_mode=command.transport_mode,
+            )
+            return
+        if accepted.decision is CommandDecision.REPLAY and accepted.task:
+            await self._replay_chat_text(sid, command, accepted.task.result or {})
+            return
+        if accepted.decision is CommandDecision.TERMINAL and accepted.task:
+            await self._emit_command_error(
+                sid,
+                command,
+                error_type=ChatErrorType.INTERRUPTED,
+                message=accepted.task.error_code or accepted.task.status.value,
+                component=ChatErrorComponent.WORKFLOW,
+                phase=ChatErrorPhase.WORKFLOW,
+                transport_mode=command.transport_mode,
+            )
+            return
+        if accepted.decision is CommandDecision.OBSERVE:
+            return
+        await self._command_inbox.mark_processing(key)
         logger.info("[{}] Received normalized text input: {}", sid, text)
         delivery = ChatDelivery(self.sio, command, command.transport_mode)
 
         if not developer_console and await self._handle_explicit_meme_invocation(
             sid, text, delivery
         ):
+            await self._command_inbox.succeed(key, {"text": "", "chunks": []})
             return
 
         try:
@@ -234,6 +283,11 @@ class ChatHandlers:
                 **trusted_metadata,
             )
             if isinstance(result, dict) and result.get("error"):
+                await self._command_inbox.fail(
+                    key,
+                    error_code="CHAT_PROCESSING_FAILED",
+                    error_message=str(result["error"]),
+                )
                 await self._emit_command_error(
                     sid,
                     command,
@@ -243,7 +297,27 @@ class ChatHandlers:
                     phase=ChatErrorPhase.WORKFLOW,
                     transport_mode=command.transport_mode,
                 )
+            else:
+                response_text = (
+                    str(result.get("response_text") or "") if isinstance(result, dict) else ""
+                )
+                response_chunks = result.get("response_chunks") if isinstance(result, dict) else []
+                chunks = (
+                    [str(chunk) for chunk in response_chunks]
+                    if isinstance(response_chunks, list)
+                    else []
+                )
+                await self._command_inbox.succeed(
+                    key,
+                    {
+                        "text": response_text,
+                        "chunks": chunks or ([response_text] if response_text else []),
+                    },
+                )
         except Exception as exc:
+            await self._command_inbox.fail(
+                key, error_code="CHAT_INTERNAL_ERROR", error_message=str(exc)
+            )
             await self._emit_command_error(
                 sid,
                 command,
@@ -253,6 +327,31 @@ class ChatHandlers:
                 phase=ChatErrorPhase.WORKFLOW,
                 transport_mode=command.transport_mode,
             )
+
+    async def _replay_chat_text(
+        self,
+        sid: str,
+        identity: ChatTurnCommand,
+        result: dict[str, Any],
+    ) -> None:
+        """Replay text-only evidence without re-entering graph side effects."""
+        delivery = ChatDelivery(self.sio, identity, identity.transport_mode)
+        raw_chunks = result.get("chunks")
+        chunks = raw_chunks if isinstance(raw_chunks, list) else [result.get("text", "")]
+        for seq, chunk in enumerate(chunks):
+            await delivery.emit(
+                "chat",
+                "sentence",
+                {"text": str(chunk), "seq": seq, "lang": "zh"},
+                to=sid,
+            )
+        await delivery.emit(
+            "chat",
+            "sentence",
+            {"text": "", "seq": len(chunks), "lang": "zh", "is_complete": True},
+            to=sid,
+        )
+        await delivery.emit("chat", "control", {"signal": "conversation-end"}, to=sid)
 
     async def on_text_input(self, sid: str, data: dict) -> None:
         """Compatibility facade for internal callers that predate named routes."""
@@ -307,8 +406,9 @@ class ChatHandlers:
             )
             return
 
+        key = CommandKey(f"sandbox:{identity.conversation_id}", "chat.sandbox", identity.task_id)
         prior = self._sandbox_tasks.get(identity.task_id)
-        if prior:
+        if prior and (await self._command_inbox.get(key)).decision is CommandDecision.NOT_FOUND:
             await self._emit_sandbox_chunk(
                 sid,
                 identity,
@@ -318,6 +418,40 @@ class ChatHandlers:
                 error_code="task_conflict",
             )
             return
+        accepted = await self._command_inbox.accept(
+            key,
+            {
+                "text": text.strip(),
+                "history": [{"role": item.role, "content": item.content} for item in history],
+            },
+        )
+        if accepted.decision is CommandDecision.CONFLICT:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code="IDEMPOTENCY_CONFLICT",
+            )
+            return
+        if accepted.decision is CommandDecision.REPLAY and accepted.task:
+            await self._replay_sandbox(sid, identity, accepted.task.result or {})
+            return
+        if accepted.decision is CommandDecision.TERMINAL and accepted.task:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code=accepted.task.error_code or accepted.task.status.value,
+            )
+            return
+        self._sandbox_subscribers.setdefault(identity.task_id, set()).add(sid)
+        if accepted.decision is CommandDecision.OBSERVE:
+            return
+        await self._command_inbox.mark_processing(key)
         task = asyncio.create_task(self._run_sandbox(sid, identity, text.strip(), history))
         self._sandbox_tasks[identity.task_id] = task
         self._sandbox_task_sids[identity.task_id] = sid
@@ -331,8 +465,21 @@ class ChatHandlers:
         except ValueError:
             return
         task = self._sandbox_tasks.get(identity.task_id)
-        if task and self._sandbox_task_sids.get(identity.task_id) == sid:
+        owns_task = sid in self._sandbox_subscribers.get(identity.task_id, set()) or (
+            self._sandbox_task_sids.get(identity.task_id) == sid
+        )
+        if task and owns_task:
+            key = CommandKey(
+                f"sandbox:{identity.conversation_id}",
+                "chat.sandbox",
+                identity.task_id,
+            )
+            if (await self._command_inbox.get(key)).decision is not CommandDecision.NOT_FOUND:
+                await self._command_inbox.request_cancel(key)
             task.cancel()
+
+    def observe_sandbox(self, sid: str, task_id: str) -> None:
+        self._sandbox_subscribers.setdefault(task_id, set()).add(sid)
 
     @staticmethod
     def _sandbox_identity(data: Any) -> ChatIdentity:
@@ -346,17 +493,15 @@ class ChatHandlers:
         )
 
     def cancel_sandbox_tasks_for_sid(self, sid: str) -> None:
-        """Cancel private model work owned by one disconnected client."""
-        for task_id, owner_sid in list(self._sandbox_task_sids.items()):
-            if owner_sid == sid:
-                task = self._sandbox_tasks.get(task_id)
-                if task:
-                    task.cancel()
+        """Detach a transport without cancelling application-owned model work."""
+        for subscribers in self._sandbox_subscribers.values():
+            subscribers.discard(sid)
 
     def _discard_sandbox_task(self, task_id: str, completed: asyncio.Task[None]) -> None:
         if self._sandbox_tasks.get(task_id) is completed:
             self._sandbox_tasks.pop(task_id, None)
             self._sandbox_task_sids.pop(task_id, None)
+            self._sandbox_subscribers.pop(task_id, None)
 
     @staticmethod
     def _sandbox_history(data: list[Any]) -> list[SandboxTurn]:
@@ -386,6 +531,8 @@ class ChatHandlers:
         provider_name = "unavailable"
         model_name: str | None = None
         seq = 0
+        chunks: list[str] = []
+        key = CommandKey(f"sandbox:{identity.conversation_id}", "chat.sandbox", identity.task_id)
         try:
             context = await self.admin.get_or_create_context(sid)
             if context.llm_engine is None:
@@ -407,6 +554,7 @@ class ChatHandlers:
                 history,
                 system_prompt=config.get_system_prompt(),
             ):
+                chunks.append(chunk)
                 await self._emit_sandbox_chunk(
                     sid,
                     identity,
@@ -416,6 +564,15 @@ class ChatHandlers:
                     model=model_name,
                 )
                 seq += 1
+            await self._command_inbox.succeed(
+                key,
+                {
+                    "text": "".join(chunks),
+                    "chunks": chunks,
+                    "provider": provider_name,
+                    "model": model_name,
+                },
+            )
             await self._emit_sandbox_chunk(
                 sid,
                 identity,
@@ -425,6 +582,7 @@ class ChatHandlers:
                 is_complete=True,
             )
         except asyncio.CancelledError:
+            await self._command_inbox.cancel(key)
             await self._emit_sandbox_chunk(
                 sid,
                 identity,
@@ -435,6 +593,7 @@ class ChatHandlers:
                 error_code="interrupted",
             )
         except SandboxConversationError as exc:
+            await self._command_inbox.fail(key, error_code=exc.code, error_message=exc.code)
             await self._emit_sandbox_chunk(
                 sid,
                 identity,
@@ -446,6 +605,9 @@ class ChatHandlers:
             )
         except Exception:
             logger.exception("[{}] Private sandbox failed", sid)
+            await self._command_inbox.fail(
+                key, error_code="internal_error", error_message="Private sandbox failed"
+            )
             await self._emit_sandbox_chunk(
                 sid,
                 identity,
@@ -479,7 +641,37 @@ class ChatHandlers:
             payload["model"] = model
         if error_code:
             payload["error_code"] = error_code
-        await self.sio.emit(EVENTS["chat"]["sandbox_chunk"]["name"], payload, to=sid)
+        targets = tuple(self._sandbox_subscribers.get(identity.task_id, ())) or (sid,)
+        for target in targets:
+            await self.sio.emit(EVENTS["chat"]["sandbox_chunk"]["name"], payload, to=target)
+
+    async def _replay_sandbox(
+        self,
+        sid: str,
+        identity: ChatIdentity,
+        result: dict[str, Any],
+    ) -> None:
+        provider = str(result.get("provider") or "replay")
+        model = result.get("model")
+        raw_chunks = result.get("chunks")
+        chunks = raw_chunks if isinstance(raw_chunks, list) else [result.get("text", "")]
+        for seq, chunk in enumerate(chunks):
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=seq,
+                provider=provider,
+                model=str(model) if model else None,
+                text=str(chunk),
+            )
+        await self._emit_sandbox_chunk(
+            sid,
+            identity,
+            seq=len(chunks),
+            provider=provider,
+            model=str(model) if model else None,
+            is_complete=True,
+        )
 
     async def _handle_explicit_meme_invocation(
         self,
