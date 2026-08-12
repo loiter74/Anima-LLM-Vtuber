@@ -4,6 +4,12 @@
 
 :root {
   /* Dark mode (default) */
+  /* Paint the <html> canvas with the theme bg so no white ever bleeds
+     through at the viewport bottom / overscroll / when content is shorter
+     than the window. <html> (:root) previously had a transparent bg, so
+     any gap revealed the browser default canvas (white) — jarring in dark
+     mode. var(--c-bg) flips with the theme, so this is correct in both. */
+  background-color: var(--c-bg);
   /* color-scheme tells the browser native form controls (select dropdowns,
      option lists, input/textarea text, placeholders, scrollbars, autofill)
      to render for a dark canvas. Without it the page is treated as
