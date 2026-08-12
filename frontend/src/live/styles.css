@@ -81,7 +81,7 @@ button {
 .subtitle-overlay p {
   margin: 0;
   color: var(--c-text);
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 1.55;
   text-align: center;
@@ -97,14 +97,14 @@ button {
   flex-wrap: wrap;
 }
 .status-pill {
-  padding: 8px 12px;
+  padding: 10px 16px;
   border: 1px solid var(--c-border);
   border-radius: 12px;
   background: rgb(var(--c-panel-rgb) / 0.75);
   background: color-mix(in srgb, var(--c-panel) 75%, transparent);
   backdrop-filter: blur(20px);
   color: var(--c-text-dim);
-  font-size: 12px;
+  font-size: 18px;
 }
 .status-pill[data-state='live'],
 .status-pill[data-state='connected'] {
@@ -118,7 +118,7 @@ button {
   top: var(--live-danmaku-panel-top, 108px);
   right: 28px;
   z-index: 0;
-  width: min(420px, calc(100vw - 56px));
+  width: min(520px, calc(100vw - 56px));
   overflow: hidden;
   border: 1px solid var(--c-border);
   border-radius: 20px;
@@ -132,37 +132,37 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 56px;
-  padding: 0 18px;
+  min-height: 76px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--c-border);
 }
 .panel-kicker {
   color: var(--c-accent);
-  font-size: 11px;
+  font-size: 16px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .panel-title {
   margin: 2px 0 0;
-  font-size: 15px;
+  font-size: 24px;
   font-weight: 600;
 }
 .message-count {
   margin-left: auto;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 18px;
 }
 .danmaku-list {
-  max-height: min(290px, 24vh);
+  max-height: min(460px, 28vh);
   overflow: auto;
   scrollbar-width: none;
-  padding: 6px 18px 14px;
+  padding: 8px 24px 20px;
 }
 .danmaku-list::-webkit-scrollbar {
   display: none;
 }
 .danmaku-item {
-  padding: 12px 0;
+  padding: 18px 0;
   border-bottom: 1px solid var(--c-border);
   animation: enter 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -174,7 +174,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: 16px;
 }
 .danmaku-identity {
   display: flex;
@@ -184,7 +184,7 @@ button {
 }
 .danmaku-user {
   color: var(--c-accent);
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 600;
 }
 .danmaku-kind {
@@ -192,7 +192,7 @@ button {
   padding: 2px 6px;
   border: 1px solid currentColor;
   border-radius: 12px;
-  font-size: 10px;
+  font-size: 14px;
   line-height: 1.2;
 }
 .danmaku-kind--gift {
@@ -206,15 +206,15 @@ button {
 .danmaku-item p {
   margin: 5px 0 0;
   color: var(--c-text);
-  font-size: 14px;
+  font-size: 22px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 .empty-state {
-  padding: 40px 18px;
+  padding: 56px 24px;
   color: var(--c-text-muted);
   text-align: center;
-  font-size: 13px;
+  font-size: 20px;
 }
 @keyframes enter {
   from {

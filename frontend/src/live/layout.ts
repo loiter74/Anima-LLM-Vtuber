@@ -11,7 +11,7 @@ export interface Live2DLayout {
   y: number
 }
 
-const REVIEW_MODEL_SCALE = 1.5
+const REVIEW_MODEL_SCALE = 1.8
 const DANMAKU_PANEL_TOP_PX = 28
 
 export function applyLiveReviewLayout(root: HTMLElement): void {
