@@ -1422,6 +1422,7 @@ components:
   docker-infrastructure:
     domain: repository
     paths:
+      - .env.example
       - Dockerfile*
       - docker-compose*.yml
       - docker/**

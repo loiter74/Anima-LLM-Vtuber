@@ -1,0 +1,4 @@
+interface:
+  display_name: "验收 Animetta 双页面"
+  short_description: "系统验证直播与后台真实功能、Provider 身份及链路隔离状态"
+  default_prompt: "使用 $verify-anima-surfaces 验收 /live.html 和 /dashboard 的真实运行功能。"

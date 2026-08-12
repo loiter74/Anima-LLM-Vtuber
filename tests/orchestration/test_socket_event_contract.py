@@ -23,6 +23,9 @@ CORRELATED_DELIVERY_EVENTS = (
     ("chat", "subtitle_translation"),
     ("chat", "live2d_action"),
     ("chat", "expression"),
+    ("chat", "sandbox_request"),
+    ("chat", "sandbox_cancel"),
+    ("chat", "sandbox_chunk"),
     ("system", "error"),
 )
 

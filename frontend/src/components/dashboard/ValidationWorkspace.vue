@@ -23,7 +23,7 @@ watch(
 )
 
 const modes: readonly SectionTab[] = [
-  { id: 'sandbox', label: '对话沙盒', description: '在浏览器本地演练输入和执行证据' },
+  { id: 'sandbox', label: '对话沙盒', description: '使用当前模型私密演练并核对执行证据' },
   { id: 'replay', label: '弹幕重放', description: '用节目脚本或 JSONL 验证直播执行' },
 ]
 </script>

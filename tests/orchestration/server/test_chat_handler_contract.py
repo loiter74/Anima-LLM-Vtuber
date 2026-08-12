@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -11,6 +11,7 @@ from animetta.orchestration.chat_contracts import (
     ChatTurnCommand,
 )
 from animetta.orchestration.server.handlers.chat_handlers import ChatHandlers
+from animetta.services.llm.interface import LLMInterface
 
 
 def _command(
@@ -185,3 +186,150 @@ async def test_invalid_canonical_command_emits_generated_correlated_error(handle
     assert payload["turn_id"] == payload["task_id"]
     for field in ("message_id", "conversation_id", "task_id"):
         assert str(uuid4().__class__(payload[field])) == payload[field]
+
+
+async def test_sandbox_uses_private_service_context_and_emits_only_sandbox_chunks(
+    handler,
+) -> None:
+    chat, sio, admin = handler
+    config = MagicMock()
+    config.providers = {"llm": MagicMock(type="deepseek", model="deepseek-v4-flash")}
+    config.get_system_prompt.return_value = "persona"
+    admin.get_active_config.return_value = config
+
+    class SandboxLLM(LLMInterface):
+        async def chat(self, user_input: str, **kwargs) -> str:  # pragma: no cover
+            raise AssertionError
+
+        async def chat_messages(self, messages: list[dict], **kwargs) -> str:
+            return "unused"
+
+        async def chat_messages_stream(self, messages, **kwargs):
+            yield "私密"
+            yield "回复"
+
+        def chat_stream(self, user_input: str, **kwargs):  # pragma: no cover
+            raise AssertionError
+
+        def set_system_prompt(self, prompt: str) -> None: ...
+
+        def get_history(self) -> list[dict]:
+            return []
+
+        def clear_history(self) -> None: ...
+
+        async def close(self) -> None: ...
+
+        def handle_interrupt(self, heard_response: str = "") -> None: ...
+
+        def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None: ...
+
+    context = MagicMock(llm_engine=SandboxLLM())
+    admin.get_or_create_context = AsyncMock(return_value=context)
+    task_id = str(uuid4())
+    payload = {
+        "text": "测试私密回复",
+        "history": [],
+        "message_id": str(uuid4()),
+        "conversation_id": str(uuid4()),
+        "task_id": task_id,
+        "turn_id": task_id,
+    }
+
+    with patch(
+        "animetta.orchestration.server.handlers.chat_handlers.resolve_service_identity",
+        return_value={
+            "type": "deepseek",
+            "provider": "deepseek",
+            "model": "deepseek-v4-flash",
+            "voice": None,
+        },
+    ):
+        await chat.on_sandbox_request("sid", payload)
+        await chat._sandbox_tasks[task_id]
+
+    admin._get_or_create_orchestrator.assert_not_awaited()
+    assert [call.args[0] for call in sio.emit.await_args_list] == [
+        "chat:sandbox_chunk",
+        "chat:sandbox_chunk",
+        "chat:sandbox_chunk",
+    ]
+    assert all(call.kwargs["to"] == "sid" for call in sio.emit.await_args_list)
+    final = sio.emit.await_args_list[-1].args[1]
+    assert final["provider"] == "deepseek"
+    assert final["model"] == "deepseek-v4-flash"
+    assert final["is_complete"] is True
+
+
+async def test_sandbox_rejects_mismatched_turn_identity(handler) -> None:
+    chat, sio, admin = handler
+    payload = {
+        "text": "invalid identity",
+        "history": [],
+        "message_id": str(uuid4()),
+        "conversation_id": str(uuid4()),
+        "task_id": str(uuid4()),
+        "turn_id": str(uuid4()),
+    }
+
+    await chat.on_sandbox_request("sid", payload)
+
+    admin.get_or_create_context.assert_not_called()
+    event, response = sio.emit.await_args.args[:2]
+    assert event == "chat:sandbox_chunk"
+    assert response["error_code"] == "validation_error"
+
+
+async def test_sandbox_cancel_is_scoped_to_owning_socket(handler) -> None:
+    chat, _, _ = handler
+
+    async def wait_forever() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(wait_forever())
+    task_id = str(uuid4())
+    identity = {
+        "message_id": str(uuid4()),
+        "conversation_id": str(uuid4()),
+        "task_id": task_id,
+        "turn_id": task_id,
+    }
+    chat._sandbox_tasks[task_id] = task
+    chat._sandbox_task_sids[task_id] = "owner"
+
+    await chat.on_sandbox_cancel("other", identity)
+    assert not task.cancelled()
+
+    await chat.on_sandbox_cancel("owner", identity)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_sandbox_rejects_duplicate_task_identity(handler) -> None:
+    chat, sio, _ = handler
+
+    async def wait_forever() -> None:
+        await asyncio.Event().wait()
+
+    existing = asyncio.create_task(wait_forever())
+    task_id = str(uuid4())
+    payload = {
+        "text": "duplicate",
+        "history": [],
+        "message_id": str(uuid4()),
+        "conversation_id": str(uuid4()),
+        "task_id": task_id,
+        "turn_id": task_id,
+    }
+    chat._sandbox_tasks[task_id] = existing
+    chat._sandbox_task_sids[task_id] = "owner"
+
+    await chat.on_sandbox_request("owner", payload)
+
+    assert chat._sandbox_tasks[task_id] is existing
+    assert not existing.cancelled()
+    response = sio.emit.await_args.args[1]
+    assert response["error_code"] == "task_conflict"
+    existing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await existing

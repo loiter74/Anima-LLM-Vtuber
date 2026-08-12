@@ -4,10 +4,12 @@ import { Events } from '@/constants/socket-events'
 import {
   CHAT_CONVERSATION_STORAGE_KEY,
   DEVELOPER_CONVERSATION_STORAGE_KEY,
+  SANDBOX_CONVERSATION_STORAGE_KEY,
   createCanonicalChatCommand,
   getStableConversationId,
   sendCanonicalChatText,
   sendDeveloperChatText,
+  sendSandboxChatText,
 } from '@/composables/chatTransport'
 
 const IDS = [
@@ -80,5 +82,21 @@ describe('chatTransport', () => {
     expect(localStorage.getItem(DEVELOPER_CONVERSATION_STORAGE_KEY)).toBe(IDS[0])
     expect(localStorage.getItem(CHAT_CONVERSATION_STORAGE_KEY)).toBeNull()
     expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.DEVELOPER_TEXT, command)
+  })
+
+  it('uses a separate stable identity for the private sandbox event', () => {
+    const socket = { emit: vi.fn() }
+    const values = [...IDS]
+
+    const command = sendSandboxChatText(
+      socket,
+      '私密问题',
+      [{ role: 'assistant', content: '前一轮' }],
+      { storage: localStorage, randomUUID: () => values.shift()! },
+    )
+
+    expect(localStorage.getItem(SANDBOX_CONVERSATION_STORAGE_KEY)).toBe(IDS[0])
+    expect(command.turn_id).toBe(command.task_id)
+    expect(socket.emit).toHaveBeenCalledWith(Events.CHAT.SANDBOX_REQUEST, command)
   })
 })

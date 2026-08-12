@@ -7,6 +7,7 @@ from .contracts import (
     parse_composer_result,
     parse_reasoner_result,
 )
+from .sandbox import SandboxConversationError, SandboxConversationService, SandboxTurn
 from .services import AnimaComposer, DialogueServiceError, Reasoner
 
 __all__ = [
@@ -18,4 +19,7 @@ __all__ = [
     "AnimaComposer",
     "DialogueServiceError",
     "Reasoner",
+    "SandboxConversationError",
+    "SandboxConversationService",
+    "SandboxTurn",
 ]

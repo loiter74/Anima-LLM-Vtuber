@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { sendSandboxChatText } from '@/composables/chatTransport'
+import { getSocket } from '@/composables/useSocket'
+import { Events } from '@/constants/socket-events'
+import { fetchRuntimeStatus } from '@/services/runtimeStatus'
+import type {
+  SandboxChunkEvent,
+  SandboxHistoryMessage,
+  SandboxRequestEvent,
+} from '@/types/socket-events'
 
 interface SandboxMessage {
   id: number
   role: 'user' | 'assistant'
   text: string
-  status: 'complete' | 'streaming' | 'interrupted'
+  status: 'complete' | 'streaming' | 'interrupted' | 'error'
+  taskId?: string
 }
 
 const props = defineProps<{ modelValue: string }>()
@@ -16,8 +26,10 @@ const isRecording = ref(false)
 const isStreaming = ref(false)
 const isSpeaking = ref(false)
 const evidence = ref<Array<{ label: string; value: string }>>([])
+const isCheckingRuntime = ref(false)
 let sequence = 0
-let streamTimer: ReturnType<typeof setInterval> | null = null
+let activeCommand: SandboxRequestEvent | null = null
+let startedAt = 0
 
 const draft = computed({
   get: () => props.modelValue,
@@ -25,8 +37,9 @@ const draft = computed({
 })
 
 function stopStream(status: 'complete' | 'interrupted'): void {
-  if (streamTimer) clearInterval(streamTimer)
-  streamTimer = null
+  if (status === 'interrupted' && activeCommand) {
+    getSocket()?.emit(Events.CHAT.SANDBOX_CANCEL, activeCommand)
+  }
   isStreaming.value = false
   isSpeaking.value = false
   let active: SandboxMessage | undefined
@@ -37,13 +50,41 @@ function stopStream(status: 'complete' | 'interrupted'): void {
     }
   }
   if (active) active.status = status
+  if (status === 'interrupted') activeCommand = null
 }
 
-function runLocalExercise(): void {
+async function runPrivateExercise(): Promise<void> {
   const text = draft.value.trim()
   if (!text || isStreaming.value) return
+  const socket = getSocket()
+  if (!socket?.connected) {
+    evidence.value = [{ label: '错误', value: '后台服务未连接' }]
+    return
+  }
+  isCheckingRuntime.value = true
+  try {
+    const status = await fetchRuntimeStatus()
+    const llm = status.components.llm
+    if (
+      status.profile === 'test' ||
+      llm.configured.provider === 'mock' ||
+      llm.resolved.provider === 'mock'
+    ) {
+      evidence.value = [{ label: '错误', value: '当前运行时为测试模型，私密演练已阻止' }]
+      return
+    }
+  } catch {
+    evidence.value = [{ label: '错误', value: '无法确认当前模型身份' }]
+    return
+  } finally {
+    isCheckingRuntime.value = false
+  }
 
-  const startedAt = performance.now()
+  const history: SandboxHistoryMessage[] = messages.value
+    .filter((message) => message.status === 'complete' && message.text)
+    .slice(-20)
+    .map((message) => ({ role: message.role, content: message.text }))
+  startedAt = performance.now()
   messages.value.push({ id: ++sequence, role: 'user', text, status: 'complete' })
   const response: SandboxMessage = {
     id: ++sequence,
@@ -54,22 +95,35 @@ function runLocalExercise(): void {
   messages.value.push(response)
   draft.value = ''
   isStreaming.value = true
+  activeCommand = sendSandboxChatText(socket, text, history)
+  response.taskId = activeCommand.task_id
+}
 
-  const localReply = '本地演练已记录。当前沙盒未连接模型，因此不会进入直播、字幕、语音或记忆链路。'
-  let index = 0
-  streamTimer = setInterval(() => {
-    response.text += localReply[index] ?? ''
-    index += 1
-    if (index >= localReply.length) {
-      stopStream('complete')
-      evidence.value = [
-        { label: '执行边界', value: '浏览器本地' },
-        { label: '网络请求', value: '0' },
-        { label: '公开输出', value: '未触发' },
-        { label: '耗时', value: `${Math.round(performance.now() - startedAt)} ms` },
-      ]
-    }
-  }, 20)
+function onSandboxChunk(payload: SandboxChunkEvent): void {
+  if (!activeCommand || payload.task_id !== activeCommand.task_id) return
+  const response = messages.value.find(
+    (message) => message.role === 'assistant' && message.taskId === payload.task_id,
+  )
+  if (!response) return
+  if (payload.text) response.text += payload.text
+  evidence.value = [
+    { label: '模型', value: [payload.provider, payload.model].filter(Boolean).join(' / ') },
+    { label: '执行边界', value: '私密模型链路' },
+    { label: '直播输出', value: '未接入（私密链路）' },
+    { label: 'TTS / 记忆', value: '未接入（私密链路）' },
+    { label: '耗时', value: `${Math.round(performance.now() - startedAt)} ms` },
+  ]
+  if (!payload.is_complete) return
+  response.status = payload.error_code
+    ? payload.error_code === 'interrupted'
+      ? 'interrupted'
+      : 'error'
+    : 'complete'
+  if (payload.error_code && payload.error_code !== 'interrupted') {
+    response.text ||= `生成失败：${payload.error_code}`
+  }
+  isStreaming.value = false
+  activeCommand = null
 }
 
 function toggleRecording(): void {
@@ -82,8 +136,13 @@ function previewSpeech(): void {
   isSpeaking.value = !isSpeaking.value
 }
 
+onMounted(() => {
+  getSocket()?.on(Events.CHAT.SANDBOX_CHUNK, onSandboxChunk)
+})
+
 onUnmounted(() => {
-  if (streamTimer) clearInterval(streamTimer)
+  if (activeCommand) getSocket()?.emit(Events.CHAT.SANDBOX_CANCEL, activeCommand)
+  getSocket()?.off(Events.CHAT.SANDBOX_CHUNK, onSandboxChunk)
 })
 </script>
 
@@ -94,12 +153,14 @@ onUnmounted(() => {
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 class="text-sm font-semibold">私密对话演练</h1>
-            <p class="mt-1 text-xs text-c-text-muted">仅保存在当前浏览器，不调用 API 或 Socket</p>
+            <p class="mt-1 text-xs text-c-text-muted">
+              调用当前运行时模型，不进入直播、语音或记忆链路
+            </p>
           </div>
           <span
             class="rounded-lg border border-c-warning/40 bg-c-warning/10 px-2 py-1 text-10px text-c-warning"
           >
-            本地模式
+            私密模型
           </span>
         </div>
       </header>
@@ -122,12 +183,13 @@ onUnmounted(() => {
           "
         >
           <p class="mb-1 text-10px text-c-text-muted">
-            {{ message.role === 'user' ? '演练输入' : '本地响应' }}
+            {{ message.role === 'user' ? '演练输入' : '模型响应' }}
           </p>
           <p>{{ message.text }}</p>
           <p v-if="message.status === 'interrupted'" class="mt-2 text-10px text-c-warning">
             已中断
           </p>
+          <p v-if="message.status === 'error'" class="mt-2 text-10px text-c-error">执行失败</p>
         </article>
       </div>
 
@@ -137,7 +199,7 @@ onUnmounted(() => {
           rows="3"
           class="w-full resize-none rounded-xl border border-c-border bg-c-panel/55 px-3 py-2 text-sm outline-none transition-colors duration-200 placeholder:text-c-text-muted focus:border-c-border-accent"
           placeholder="输入要验证的对话，内容不会自动发送"
-          @keydown.ctrl.enter.prevent="runLocalExercise"
+          @keydown.ctrl.enter.prevent="runPrivateExercise"
         />
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <button
@@ -169,10 +231,10 @@ onUnmounted(() => {
           <button
             class="btn-accent"
             type="button"
-            :disabled="!draft.trim() || isStreaming"
-            @click="runLocalExercise"
+            :disabled="!draft.trim() || isStreaming || isCheckingRuntime"
+            @click="runPrivateExercise"
           >
-            开始本地演练
+            发送到私密模型
           </button>
         </div>
       </footer>
@@ -195,7 +257,7 @@ onUnmounted(() => {
         v-else
         class="mt-4 rounded-xl border border-c-border bg-c-panel/35 p-4 text-xs text-c-text-muted"
       >
-        运行一次本地演练后，这里会记录执行边界、网络请求与公开输出状态。
+        运行一次私密演练后，这里会记录模型身份与公开链路隔离状态。
       </div>
     </aside>
   </section>

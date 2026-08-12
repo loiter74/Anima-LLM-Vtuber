@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from loguru import logger
 
 from animetta.core.message_filter import is_probe_message
+from animetta.core.readiness import resolve_service_identity
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.orchestration.chat_contracts import (
     ChatErrorComponent,
@@ -25,6 +26,11 @@ from animetta.orchestration.chat_contracts import (
 )
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
+from animetta.services.dialogue import (
+    SandboxConversationError,
+    SandboxConversationService,
+    SandboxTurn,
+)
 from animetta.services.effects import (
     EffectPlanner,
     create_default_effect_runtime,
@@ -58,6 +64,8 @@ class ChatHandlers:
         self.admin = admin
         self._raw_audio_first_sids: set = set()
         self._conversation_locks: dict[str, asyncio.Lock] = {}
+        self._sandbox_tasks: dict[str, asyncio.Task[None]] = {}
+        self._sandbox_task_sids: dict[str, str] = {}
 
     # ── Text input ────────────────────────────────────────────────────
 
@@ -254,6 +262,224 @@ class ChatHandlers:
             update={"transport_mode": ChatTransportMode.CANONICAL}
         )
         await self.on_text_command(sid, command)
+
+    async def on_sandbox_request(self, sid: str, data: dict) -> None:
+        """Run a private LLM conversation without graph, TTS, subtitle, or memory effects."""
+        try:
+            identity = self._sandbox_identity(data)
+        except ValueError:
+            await self._emit_sandbox_chunk(
+                sid,
+                self._correlation_identity(data),
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code="validation_error",
+            )
+            return
+        text = data.get("text") if isinstance(data, dict) else None
+        history_data = data.get("history", []) if isinstance(data, dict) else []
+        if (
+            not isinstance(text, str)
+            or not text.strip()
+            or len(text) > 4000
+            or not isinstance(history_data, list)
+        ):
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code="validation_error",
+            )
+            return
+        try:
+            history = self._sandbox_history(history_data)
+        except ValueError:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code="validation_error",
+            )
+            return
+
+        prior = self._sandbox_tasks.get(identity.task_id)
+        if prior:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=0,
+                provider="unavailable",
+                is_complete=True,
+                error_code="task_conflict",
+            )
+            return
+        task = asyncio.create_task(self._run_sandbox(sid, identity, text.strip(), history))
+        self._sandbox_tasks[identity.task_id] = task
+        self._sandbox_task_sids[identity.task_id] = sid
+        task.add_done_callback(
+            lambda completed: self._discard_sandbox_task(identity.task_id, completed)
+        )
+
+    async def on_sandbox_cancel(self, sid: str, data: dict) -> None:
+        try:
+            identity = self._sandbox_identity(data)
+        except ValueError:
+            return
+        task = self._sandbox_tasks.get(identity.task_id)
+        if task and self._sandbox_task_sids.get(identity.task_id) == sid:
+            task.cancel()
+
+    @staticmethod
+    def _sandbox_identity(data: Any) -> ChatIdentity:
+        if not isinstance(data, dict):
+            raise ValueError("sandbox payload must be an object")
+        return ChatIdentity.model_validate(
+            {
+                field: data.get(field)
+                for field in ("message_id", "conversation_id", "task_id", "turn_id")
+            }
+        )
+
+    def cancel_sandbox_tasks_for_sid(self, sid: str) -> None:
+        """Cancel private model work owned by one disconnected client."""
+        for task_id, owner_sid in list(self._sandbox_task_sids.items()):
+            if owner_sid == sid:
+                task = self._sandbox_tasks.get(task_id)
+                if task:
+                    task.cancel()
+
+    def _discard_sandbox_task(self, task_id: str, completed: asyncio.Task[None]) -> None:
+        if self._sandbox_tasks.get(task_id) is completed:
+            self._sandbox_tasks.pop(task_id, None)
+            self._sandbox_task_sids.pop(task_id, None)
+
+    @staticmethod
+    def _sandbox_history(data: list[Any]) -> list[SandboxTurn]:
+        history: list[SandboxTurn] = []
+        for item in data[-20:]:
+            if not isinstance(item, dict):
+                raise ValueError("history item must be an object")
+            role = item.get("role")
+            content = item.get("content")
+            if role not in {"user", "assistant"} or not isinstance(content, str):
+                raise ValueError("invalid history item")
+            clean = content.strip()
+            if not clean or len(clean) > 4000:
+                raise ValueError("invalid history content")
+            history.append(SandboxTurn(role=role, content=clean))
+        return history
+
+    async def _run_sandbox(
+        self,
+        sid: str,
+        identity: ChatIdentity,
+        text: str,
+        history: list[SandboxTurn],
+    ) -> None:
+        config = self.admin.get_active_config()
+        configured_provider = config.providers["llm"]
+        provider_name = "unavailable"
+        model_name: str | None = None
+        seq = 0
+        try:
+            context = await self.admin.get_or_create_context(sid)
+            if context.llm_engine is None:
+                raise SandboxConversationError("llm_unavailable")
+            resolved = resolve_service_identity(
+                "llm",
+                context.llm_engine,
+                configured_provider,
+            )
+            if resolved is None:
+                raise SandboxConversationError("identity_unavailable")
+            provider_name = str(resolved.get("provider") or resolved.get("type") or "unavailable")
+            model_name = resolved.get("model")
+            if "mock" in {provider_name, str(resolved.get("type") or "")}:
+                raise SandboxConversationError("mock_disallowed")
+            service = SandboxConversationService(context.llm_engine)
+            async for chunk in service.stream(
+                text,
+                history,
+                system_prompt=config.get_system_prompt(),
+            ):
+                await self._emit_sandbox_chunk(
+                    sid,
+                    identity,
+                    text=chunk,
+                    seq=seq,
+                    provider=provider_name,
+                    model=model_name,
+                )
+                seq += 1
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=seq,
+                provider=provider_name,
+                model=model_name,
+                is_complete=True,
+            )
+        except asyncio.CancelledError:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=seq,
+                provider=provider_name,
+                model=model_name,
+                is_complete=True,
+                error_code="interrupted",
+            )
+        except SandboxConversationError as exc:
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=seq,
+                provider=provider_name,
+                model=model_name,
+                is_complete=True,
+                error_code=exc.code,
+            )
+        except Exception:
+            logger.exception("[{}] Private sandbox failed", sid)
+            await self._emit_sandbox_chunk(
+                sid,
+                identity,
+                seq=seq,
+                provider=provider_name,
+                model=model_name,
+                is_complete=True,
+                error_code="internal_error",
+            )
+
+    async def _emit_sandbox_chunk(
+        self,
+        sid: str,
+        identity: ChatIdentity,
+        *,
+        seq: int,
+        provider: str,
+        text: str = "",
+        model: str | None = None,
+        is_complete: bool = False,
+        error_code: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            **identity.model_dump(mode="json"),
+            "text": text,
+            "seq": seq,
+            "provider": provider,
+            "is_complete": is_complete,
+        }
+        if model:
+            payload["model"] = model
+        if error_code:
+            payload["error_code"] = error_code
+        await self.sio.emit(EVENTS["chat"]["sandbox_chunk"]["name"], payload, to=sid)
 
     async def _handle_explicit_meme_invocation(
         self,

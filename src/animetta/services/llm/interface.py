@@ -46,6 +46,18 @@ class LLMInterface(ABC):
         prompt = "\n".join(f"[{m['role']}]: {m['content']}" for m in messages)
         return await self.chat(prompt, **kwargs)
 
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream a history-neutral messages request when supported.
+
+        Providers without a native messages stream return one complete chunk.
+        This keeps private internal calls off the provider's shared chat history.
+        """
+        response = await self.chat_messages(messages, **kwargs)
+        if response:
+            yield response
+
     @abstractmethod
     def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         """

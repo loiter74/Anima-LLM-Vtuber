@@ -73,12 +73,13 @@ describe('dashboard domain workspaces', () => {
     socket.timeout.mockReturnValue(socket)
     runtimeApi.fetchRuntimeStatus.mockReset()
     runtimeApi.fetchRuntimeStatus.mockResolvedValue({
+      profile: 'production',
       components: {
         llm: {
           ready: true,
           reason: '',
-          configured: { provider: 'mock' },
-          resolved: { provider: 'mock' },
+          configured: { provider: 'deepseek' },
+          resolved: { provider: 'deepseek' },
         },
         asr: {
           ready: true,
@@ -104,18 +105,77 @@ describe('dashboard domain workspaces', () => {
 
   afterEach(() => vi.useRealTimers())
 
-  it('runs the conversation sandbox locally and records a zero-network boundary', async () => {
-    vi.useFakeTimers()
+  it('reports a disconnected private sandbox without falling back to a fake reply', async () => {
+    socket.connected = false
     const wrapper = mount(ConversationSandbox, { props: { modelValue: '验证这条记忆' } })
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '开始本地演练')!
+      .find((button) => button.text() === '发送到私密模型')!
       .trigger('click')
-    await vi.runAllTimersAsync()
 
-    expect(wrapper.text()).toContain('当前沙盒未连接模型')
-    expect(wrapper.text()).toContain('网络请求')
-    expect(wrapper.text()).toContain('公开输出')
+    expect(wrapper.text()).toContain('后台服务未连接')
+    expect(wrapper.text()).not.toContain('本地演练已记录')
+  })
+
+  it('renders correlated private model chunks and execution evidence', async () => {
+    const wrapper = mount(ConversationSandbox, { props: { modelValue: '验证真实模型' } })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '发送到私密模型')!
+      .trigger('click')
+    await flushPromises()
+    const request = socket.emit.mock.calls.find(
+      ([event]) => event === Events.CHAT.SANDBOX_REQUEST,
+    )?.[1] as { message_id: string; conversation_id: string; task_id: string; turn_id: string }
+    const listener = socket.on.mock.calls.find(
+      ([event]) => event === Events.CHAT.SANDBOX_CHUNK,
+    )?.[1] as (payload: object) => void
+
+    listener({
+      ...request,
+      text: '真实回复',
+      seq: 0,
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    })
+    listener({
+      ...request,
+      text: '',
+      seq: 1,
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      is_complete: true,
+    })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('真实回复')
+    expect(wrapper.text()).toContain('deepseek / deepseek-v4-flash')
+    expect(wrapper.text()).toContain('私密模型链路')
+    expect(wrapper.text()).toContain('TTS / 记忆')
+  })
+
+  it('blocks the private sandbox when readiness resolves to mock', async () => {
+    runtimeApi.fetchRuntimeStatus.mockResolvedValueOnce({
+      profile: 'test',
+      components: {
+        llm: {
+          ready: true,
+          reason: '',
+          configured: { provider: 'mock' },
+          resolved: { provider: 'mock' },
+        },
+      },
+    })
+    const wrapper = mount(ConversationSandbox, { props: { modelValue: '不能发给 mock' } })
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '发送到私密模型')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('当前运行时为测试模型')
+    expect(socket.emit).not.toHaveBeenCalledWith(Events.CHAT.SANDBOX_REQUEST, expect.any(Object))
   })
 
   it('keeps memory actions in the memory workspace and emits a sandbox draft', async () => {

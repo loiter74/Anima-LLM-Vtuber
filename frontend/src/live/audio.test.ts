@@ -130,7 +130,10 @@ describe('standalone live audio', () => {
     const { controller, singingAudio } = harness(Promise.reject(new Error('NotAllowedError')))
     await Promise.resolve()
     await Promise.resolve()
-    expect(document.getElementById('audioStatus')).toHaveProperty('dataset.playbackState', 'error')
+    expect(document.getElementById('audioStatus')).toHaveProperty(
+      'dataset.playbackState',
+      'blocked',
+    )
 
     vi.mocked(singingAudio.play).mockResolvedValue()
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
@@ -160,6 +163,26 @@ describe('standalone live audio', () => {
 
     expect(singingAudio.play).toHaveBeenCalledTimes(2)
     expect(document.getElementById('audioStatus')?.dataset.playbackState).not.toBe('error')
+    controller.dispose()
+  })
+
+  it('forgets an unavailable persisted singing track instead of retrying it on every load', () => {
+    writeSingingPlayback({
+      taskId: 'missing-task',
+      track: 'mix',
+      audioUrl: '/missing.wav',
+      volumes: [],
+      durationSeconds: 120,
+      state: 'playing',
+      positionSeconds: 0,
+      updatedAtMs: Date.now(),
+    })
+    const { controller, singingAudio } = harness()
+
+    singingAudio.dispatchEvent(new Event('error'))
+
+    expect(localStorage.getItem(SINGING_PLAYBACK_STORAGE_KEY)).toBeNull()
+    expect(document.getElementById('audioStatus')).toHaveProperty('dataset.playbackState', 'error')
     controller.dispose()
   })
 

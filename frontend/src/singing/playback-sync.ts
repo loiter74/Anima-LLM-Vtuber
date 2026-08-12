@@ -62,6 +62,17 @@ export function readSingingPlayback(): SingingPlaybackSnapshot | null {
   }
 }
 
+export function clearSingingPlayback(taskId: string): boolean {
+  try {
+    const current = parseSingingPlayback(window.localStorage.getItem(SINGING_PLAYBACK_STORAGE_KEY))
+    if (current?.taskId !== taskId) return false
+    window.localStorage.removeItem(SINGING_PLAYBACK_STORAGE_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function subscribeSingingPlayback(
   listener: (snapshot: SingingPlaybackSnapshot) => void,
 ): () => void {

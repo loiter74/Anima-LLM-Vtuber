@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Tests for WebSocket route handlers — event dispatch and registration."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock
 from uuid import UUID, uuid4
@@ -940,8 +941,13 @@ class TestRouteHandlersConnection:
     async def test_on_disconnect_cleans_up(self, mock_socketio, mock_session_manager):
         """on_disconnect unregisters client and cleans up session."""
         handlers = RouteHandlers(mock_socketio, mock_session_manager)
+        sandbox_task = asyncio.create_task(asyncio.Event().wait())
+        handlers.chat._sandbox_tasks["sandbox-task"] = sandbox_task
+        handlers.chat._sandbox_task_sids["sandbox-task"] = "sid1"
 
         await handlers.on_disconnect("sid1")
+        with pytest.raises(asyncio.CancelledError):
+            await sandbox_task
 
         mock_session_manager.cleanup_session.assert_called_once_with("sid1")
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SINGING_PLAYBACK_STORAGE_KEY,
+  clearSingingPlayback,
   readSingingPlayback,
   resolveSingingPlaybackPosition,
   subscribeSingingPlayback,
@@ -39,6 +40,24 @@ describe('singing playback sync', () => {
   it('rejects malformed persisted state', () => {
     localStorage.setItem(SINGING_PLAYBACK_STORAGE_KEY, '{"state":"playing"}')
 
+    expect(readSingingPlayback()).toBeNull()
+  })
+
+  it('only clears the persisted task that reported a playback failure', () => {
+    writeSingingPlayback({
+      taskId: 'current-task',
+      track: 'mix',
+      audioUrl: '/current.wav',
+      volumes: [],
+      durationSeconds: 60,
+      state: 'playing',
+      positionSeconds: 0,
+      updatedAtMs: 1_000,
+    })
+
+    expect(clearSingingPlayback('stale-task')).toBe(false)
+    expect(readSingingPlayback()?.taskId).toBe('current-task')
+    expect(clearSingingPlayback('current-task')).toBe(true)
     expect(readSingingPlayback()).toBeNull()
   })
 

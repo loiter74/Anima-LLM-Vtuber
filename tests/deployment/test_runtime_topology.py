@@ -90,6 +90,13 @@ def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     assert app["healthcheck"]["start_period"] == "360s"
 
 
+def test_example_environment_starts_the_two_product_surfaces_with_real_providers() -> None:
+    example = _text(".env.example")
+
+    assert "ANIMETTA_PROFILE=production" in example
+    assert "ANIMETTA_PROFILE=test" not in example
+
+
 def test_manifest_has_one_host_qwen_runtime_contract() -> None:
     manifest = yaml.safe_load(_text("config/animetta.yaml"))
     qwen = manifest["providers"]["tts"]["qwen-host"]

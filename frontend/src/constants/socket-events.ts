@@ -39,6 +39,9 @@ export const Events = {
   CHAT: {
     TEXT: socketEvents.chat.text.name,
     DEVELOPER_TEXT: socketEvents.chat.developer_text.name,
+    SANDBOX_REQUEST: socketEvents.chat.sandbox_request.name,
+    SANDBOX_CANCEL: socketEvents.chat.sandbox_cancel.name,
+    SANDBOX_CHUNK: socketEvents.chat.sandbox_chunk.name,
     AUDIO: socketEvents.chat.audio.name,
     AUDIO_END: socketEvents.chat.audio_end.name,
     INTERRUPT: socketEvents.chat.interrupt.name,

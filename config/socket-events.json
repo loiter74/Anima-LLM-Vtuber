@@ -153,6 +153,47 @@
         }
       }
     },
+    "sandbox_request": {
+      "name": "chat:sandbox_request",
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "text": { "type": "string", "required": true, "strict": true, "non_whitespace": true, "min_length": 1, "max_length": 4000 },
+        "message_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "conversation_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "task_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "turn_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "history?": { "type": "array", "required": false, "strict": true, "default": null, "items": { "type": "object", "required": true, "strict": true } }
+      }
+    },
+    "sandbox_cancel": {
+      "name": "chat:sandbox_cancel",
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "message_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "conversation_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "task_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "turn_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 }
+      }
+    },
+    "sandbox_chunk": {
+      "name": "chat:sandbox_chunk",
+      "identity": "correlated",
+      "golden_path": true,
+      "payload": {
+        "text": { "type": "string", "required": true, "strict": true, "min_length": 0, "max_length": 4000 },
+        "seq": { "type": "integer", "required": true, "strict": true },
+        "message_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "conversation_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "task_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "turn_id": { "type": "string", "required": true, "strict": true, "format": "uuid", "min_length": 36, "max_length": 36 },
+        "provider": { "type": "string", "required": true, "strict": true, "min_length": 1, "max_length": 64 },
+        "model?": { "type": "string", "required": false, "strict": true, "default": null, "min_length": 1, "max_length": 128 },
+        "is_complete?": { "type": "boolean", "required": false, "strict": true, "default": false },
+        "error_code?": { "type": "string", "required": false, "strict": true, "default": null, "min_length": 1, "max_length": 64 }
+      }
+    },
     "audio": {
       "name": "chat:audio",
       "payload": {

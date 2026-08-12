@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "verify-anima-surfaces-plan",
+  "skill": "verify-anima-surfaces",
+  "task": "使用 $verify-anima-surfaces 读取 request.md，只生成 result/plan.md，不启动浏览器、模型或运行时。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/verify-anima-surfaces-plan",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": [
+        "入口: /live.html, /dashboard",
+        "门禁: profile=production, llm configured/resolved != mock",
+        "沙盒: non-mock chat:sandbox_chunk, no subtitle/TTS/memory",
+        "直播: subtitle DOM, audioStatus playback count/task_id"
+      ]
+    }
+  ]
+}

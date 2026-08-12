@@ -1,12 +1,17 @@
 import { Events } from '@/constants/socket-events'
-import type { ChatCommandPayload } from '@/types/socket-events'
+import type {
+  ChatCommandPayload,
+  SandboxHistoryMessage,
+  SandboxRequestEvent,
+} from '@/types/socket-events'
 import { activateChatTask } from './chatTaskGate'
 
 export const CHAT_CONVERSATION_STORAGE_KEY = 'animetta.chat.conversation_id'
 export const DEVELOPER_CONVERSATION_STORAGE_KEY = 'animetta.developer.conversation_id'
+export const SANDBOX_CONVERSATION_STORAGE_KEY = 'animetta.sandbox.conversation_id'
 
 type UuidFactory = () => string
-type ChatEmitter = { emit: (event: string, payload: ChatCommandPayload) => unknown }
+type ChatEmitter = { emit: (event: string, payload: object) => unknown }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -99,5 +104,40 @@ export function sendDeveloperChatText(
   const command = createCanonicalChatCommand(text, conversationId, randomUUID)
   activateChatTask(command)
   socket.emit(Events.CHAT.DEVELOPER_TEXT, command)
+  return command
+}
+
+export function sendSandboxChatText(
+  socket: ChatEmitter,
+  text: string,
+  history: SandboxHistoryMessage[],
+  dependencies: {
+    storage?: Pick<Storage, 'getItem' | 'setItem'>
+    randomUUID?: UuidFactory
+  } = {},
+): SandboxRequestEvent {
+  if (!text.trim() || text.length > 4000) {
+    throw new Error('sandbox text must contain 1-4000 characters')
+  }
+  const randomUUID = dependencies.randomUUID ?? (() => crypto.randomUUID())
+  const conversationId = getStableConversationIdForKey(
+    SANDBOX_CONVERSATION_STORAGE_KEY,
+    dependencies.storage ?? window.localStorage,
+    randomUUID,
+  )
+  const messageId = randomUUID()
+  const taskId = randomUUID()
+  if (!isCanonicalUuid(messageId) || !isCanonicalUuid(taskId)) {
+    throw new Error('randomUUID returned a non-canonical UUID')
+  }
+  const command: SandboxRequestEvent = {
+    text,
+    history,
+    message_id: messageId,
+    conversation_id: conversationId,
+    task_id: taskId,
+    turn_id: taskId,
+  }
+  socket.emit(Events.CHAT.SANDBOX_REQUEST, command)
   return command
 }

@@ -200,6 +200,7 @@ class RouteHandlers:
         await self.bilibili.emit_current_snapshot(sid)
 
     async def on_disconnect(self, sid: str) -> None:
+        self.chat.cancel_sandbox_tasks_for_sid(sid)
         return await self.lifecycle.on_disconnect(sid)
 
     # ── Conversation events ───────────────────────────────────────────
@@ -428,6 +429,8 @@ def register_routes(
         )
 
     sio.on(developer_text_event, developer_text_adapter)
+    sio.on(event_name("chat", "sandbox_request"), handlers.chat.on_sandbox_request)
+    sio.on(event_name("chat", "sandbox_cancel"), handlers.chat.on_sandbox_cancel)
     sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
     sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
     sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)

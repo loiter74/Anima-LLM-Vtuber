@@ -16,6 +16,7 @@ import {
 } from '@/components/live2d/useAudioPlayback'
 import { startLipSync, stopLipSync, type MouthTarget } from '@/components/live2d/useLipSync'
 import {
+  clearSingingPlayback,
   readSingingPlayback,
   resolveSingingPlaybackPosition,
   subscribeSingingPlayback,
@@ -99,6 +100,8 @@ export function createLiveAudioController(
   }
   const onSingingError = (): void => {
     stopLipSync()
+    if (currentSingingPlayback) clearSingingPlayback(currentSingingPlayback.taskId)
+    currentSingingPlayback = null
     if (status) status.dataset.playbackState = 'error'
   }
   const applySingingPlayback = (snapshot: SingingPlaybackSnapshot): void => {
@@ -145,6 +148,12 @@ export function createLiveAudioController(
       void singingAudio.play().catch((error: unknown) => {
         if (playbackAttempt !== singingPlaybackAttempt) return
         console.warn('[audio] Singing audio playback failed', error)
+        const name = error instanceof DOMException ? error.name : ''
+        const message = error instanceof Error ? error.message : String(error)
+        if (name === 'NotAllowedError' || message.includes('NotAllowedError')) {
+          if (status) status.dataset.playbackState = 'blocked'
+          return
+        }
         onSingingError()
       })
       return

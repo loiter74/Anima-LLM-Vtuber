@@ -112,3 +112,22 @@ export interface ChatErrorEvent extends ChatIdentity {
   retryable: boolean
   terminal: boolean
 }
+
+export interface SandboxHistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface SandboxRequestEvent extends ChatIdentity {
+  text: string
+  history: SandboxHistoryMessage[]
+}
+
+export interface SandboxChunkEvent extends ChatIdentity {
+  text: string
+  seq: number
+  provider: string
+  model?: string | null
+  is_complete?: boolean
+  error_code?: string | null
+}

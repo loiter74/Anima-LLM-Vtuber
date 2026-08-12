@@ -438,6 +438,35 @@ class TestOpenAILLM:
         assert chunks == ["Hello", " ", "World"]
 
     @pytest.mark.asyncio
+    async def test_chat_messages_stream_preserves_explicit_history(self):
+        """Private message streaming must not mutate the provider's shared history."""
+
+        with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
+
+            async def mock_stream():
+                for token in ["private", " reply"]:
+                    chunk = MagicMock()
+                    choice = MagicMock()
+                    choice.delta.content = token
+                    chunk.choices = [choice]
+                    yield chunk
+
+            mock_client = MagicMock()
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
+            mock.return_value = mock_client
+            llm = OpenAILLM(api_key="key", model="gpt-4")
+            llm.history.append({"role": "user", "content": "public turn"})
+            messages = [{"role": "user", "content": "sandbox turn"}]
+
+            chunks = [chunk async for chunk in llm.chat_messages_stream(messages)]
+
+        assert chunks == ["private", " reply"]
+        assert llm.history == [{"role": "user", "content": "public turn"}]
+        call_kwargs = mock_client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["messages"] is messages
+        assert call_kwargs["stream"] is True
+
+    @pytest.mark.asyncio
     async def test_close(self):
         """close() should call client.close()."""
 

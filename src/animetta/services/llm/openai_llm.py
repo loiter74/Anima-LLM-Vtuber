@@ -281,6 +281,33 @@ class OpenAILLM(LLMInterface):
         async for chunk in self.stream_handler.stream(user_input, **kwargs):
             yield chunk
 
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream an explicit messages request without mutating shared history."""
+        create_kwargs: dict[str, Any] = {
+            "model": kwargs.get("model", self.model),
+            "messages": messages,
+            "temperature": kwargs.get("temperature", self.temperature),
+            "top_p": kwargs.get("top_p", self.top_p),
+            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if self.extra_body:
+            create_kwargs["extra_body"] = self.extra_body
+
+        try:
+            create_completion = cast(Any, self.client.chat.completions.create)
+            response = await create_completion(**create_kwargs)
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception:
+            self._record_error(0.0)
+            logger.exception("OpenAI chat_messages_stream error")
+            raise
+
     def set_system_prompt(self, prompt: str) -> None:
         """Set the system prompt"""
         self.system_prompt = prompt
