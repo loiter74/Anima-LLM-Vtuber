@@ -18,8 +18,10 @@ from uuid import uuid4
 
 DEFAULT_BASE_URL = "http://127.0.0.1"
 DEFAULT_CREATOR_ID = "codex-danmaku-simulator"
+HOURLY_DURATION_MINUTES = 60
 TERMINAL_STATES = {"completed", "stopped", "failed"}
 REPLYABLE_EVENT_TYPES = {"danmaku", "gift", "super_chat"}
+HEAT_EXTRA_EVENTS = {"low": 0, "medium": 1, "high": 2}
 
 ACTORS = (
     ("柚子茶不加冰", 91001),
@@ -59,6 +61,12 @@ TEXTS = {
         "如果给刚入坑的人一句建议，你会说什么？",
         "今天最想留给大家的一句话是什么？",
     ),
+    "companion": (
+        "我还在直播间，继续陪你聊会儿。",
+        "这一分钟也来打个卡。",
+        "慢慢播，我在这里听着。",
+        "路过留个脚印，继续加油。",
+    ),
 }
 
 SCENARIO_DESCRIPTIONS = {
@@ -67,6 +75,7 @@ SCENARIO_DESCRIPTIONS = {
     "quiet": "冷场恢复：稀疏消息与长间隔后的继续互动",
     "crowd": "短时高峰：连续弹幕、点赞与关注",
     "support": "混合支持：普通弹幕、礼物、醒目留言与后续追问",
+    "hourly": "一小时陪跑：每分钟一条保底弹幕，按合成热度追加互动",
 }
 
 
@@ -133,7 +142,7 @@ def build_scenario(name: str, seed: int) -> list[dict[str, Any]]:
             _event(4_200, "follow", actors[7]),
             _event(5_000, "danmaku", actors[7], choose("follow_up")),
         ]
-    else:
+    elif name == "support":
         events = [
             _event(0, "enter", actors[0]),
             _event(1_000, "danmaku", actors[0], choose("greeting")),
@@ -150,7 +159,79 @@ def build_scenario(name: str, seed: int) -> list[dict[str, Any]]:
             _event(30_000, "danmaku", actors[4], choose("follow_up")),
             _event(38_000, "follow", actors[4]),
         ]
+    else:
+        events = _build_hourly_scenario(rng, actors)
     return events
+
+
+def _build_hourly_scenario(
+    rng: random.Random,
+    actors: list[tuple[str, int]],
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    heat_ranges = {
+        "low": (80, 299),
+        "medium": (300, 1_499),
+        "high": (1_500, 7_999),
+    }
+    adaptive_texts = (*TEXTS["crowd"], *TEXTS["topic"], *TEXTS["follow_up"])
+
+    for minute in range(HOURLY_DURATION_MINUTES):
+        heat_tier = _hourly_heat_tier(minute)
+        minute_offset = minute * 60_000
+        events.append(
+            _event(
+                minute_offset,
+                "popularity_snapshot",
+                actors[minute % len(actors)],
+                popularity=rng.randint(*heat_ranges[heat_tier]),
+                heat_tier=heat_tier,
+                minute=minute + 1,
+            )
+        )
+        events.append(
+            _event(
+                minute_offset,
+                "danmaku",
+                actors[minute % len(actors)],
+                rng.choice(TEXTS["companion"]),
+                cadence="fixed",
+                heat_tier=heat_tier,
+                minute=minute + 1,
+            )
+        )
+        extra_count = HEAT_EXTRA_EVENTS[heat_tier]
+        for index in range(extra_count):
+            events.append(
+                _event(
+                    minute_offset + (index + 1) * 60_000 // (extra_count + 1),
+                    "danmaku",
+                    actors[(minute + index + 1) % len(actors)],
+                    rng.choice(adaptive_texts),
+                    cadence="adaptive",
+                    heat_tier=heat_tier,
+                    minute=minute + 1,
+                )
+            )
+
+    events.append(
+        _event(
+            HOURLY_DURATION_MINUTES * 60_000,
+            "connection_state",
+            actors[0],
+            connected=False,
+            message="Synthetic hourly session completed",
+        )
+    )
+    return events
+
+
+def _hourly_heat_tier(minute: int) -> str:
+    if minute < 10 or minute >= 55:
+        return "low"
+    if minute < 25 or minute >= 40:
+        return "medium"
+    return "high"
 
 
 def render_jsonl(name: str, seed: int) -> str:
@@ -163,8 +244,27 @@ def render_jsonl(name: str, seed: int) -> str:
     )
 
 
-def replyable_count(name: str, seed: int) -> int:
-    return sum(event["event_type"] in REPLYABLE_EVENT_TYPES for event in build_scenario(name, seed))
+def scenario_metrics(name: str, seed: int) -> dict[str, Any]:
+    events = build_scenario(name, seed)
+    heat_tiers = {tier: 0 for tier in HEAT_EXTRA_EVENTS}
+    for event in events:
+        if event["event_type"] == "popularity_snapshot":
+            tier = event["payload"].get("heat_tier")
+            if tier in heat_tiers:
+                heat_tiers[tier] += 1
+    return {
+        "events": len(events),
+        "replyable_events": sum(event["event_type"] in REPLYABLE_EVENT_TYPES for event in events),
+        "duration_seconds": max(event["offset_ms"] for event in events) / 1_000,
+        "fixed_events": sum(event["payload"].get("cadence") == "fixed" for event in events),
+        "adaptive_events": sum(event["payload"].get("cadence") == "adaptive" for event in events),
+        "heat_minutes": heat_tiers,
+    }
+
+
+def default_timeout_seconds(name: str, seed: int, speed: float) -> float:
+    timeline_seconds = float(scenario_metrics(name, seed)["duration_seconds"]) / speed
+    return 900.0 if timeline_seconds < 900.0 else timeline_seconds + 900.0
 
 
 def _url(base_url: str, path: str) -> str:
@@ -265,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--creator-id", default=DEFAULT_CREATOR_ID)
     start.add_argument("--task-id", default=None)
     start.add_argument("--wait", action="store_true")
-    start.add_argument("--timeout-seconds", type=float, default=900)
+    start.add_argument("--timeout-seconds", type=float)
     start.add_argument("--poll-seconds", type=float, default=1)
 
     status = subparsers.add_parser("status", help="读取重放状态")
@@ -289,8 +389,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     name: {
                         "description": description,
-                        "events": len(build_scenario(name, 20260813)),
-                        "replyable_events": replyable_count(name, 20260813),
+                        **scenario_metrics(name, 20260813),
                     }
                     for name, description in SCENARIO_DESCRIPTIONS.items()
                 }
@@ -315,7 +414,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "start":
             if args.room_id <= 0:
                 raise ValueError("room-id 必须为正整数")
-            if args.poll_seconds <= 0 or args.timeout_seconds <= 0:
+            if args.poll_seconds <= 0 or (
+                args.timeout_seconds is not None and args.timeout_seconds <= 0
+            ):
                 raise ValueError("等待与轮询时间必须为正数")
             assert_ready(args.base_url)
             started_at = time.monotonic()
@@ -338,7 +439,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 snapshot = wait_for_terminal(
                     args.base_url,
                     str(snapshot["replay_id"]),
-                    timeout_seconds=args.timeout_seconds,
+                    timeout_seconds=(
+                        args.timeout_seconds
+                        if args.timeout_seconds is not None
+                        else default_timeout_seconds(args.scenario, args.seed, args.speed)
+                    ),
                     poll_seconds=args.poll_seconds,
                 )
             runtime_after: dict[str, Any] | None = None
@@ -363,7 +468,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "base_url": args.base_url.rstrip("/"),
                     "scenario": args.scenario,
                     "seed": args.seed,
-                    "replyable_events": replyable_count(args.scenario, args.seed),
+                    **scenario_metrics(args.scenario, args.seed),
                     "elapsed_seconds": round(time.monotonic() - started_at, 3),
                     **snapshot,
                     **(

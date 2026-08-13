@@ -1,6 +1,6 @@
 ---
 name: simulate-live-danmaku
-description: 在 Animetta 正式运行时与 /live.html 中快速生成并重放可复现的合成直播弹幕，覆盖单轮冒烟、日常多轮、冷场、弹幕高峰、礼物与醒目留言文本，并通过现有节目重放 API 驱动 Bilibili、LLM、TTS 和 Socket.IO 链路。用户要求使用弹幕姬、模拟观众、测试实时弹幕、压测弹幕、复现直播互动、调试主播回复或验收直播链路时使用。
+description: 在 Animetta 正式运行时与 /live.html 中快速生成并重放可复现的合成直播弹幕，覆盖单轮冒烟、日常多轮、一小时定时陪跑、冷场、弹幕高峰、礼物与醒目留言文本，并通过现有节目重放 API 驱动 Bilibili、LLM、TTS 和 Socket.IO 链路。用户要求使用弹幕姬、模拟观众、测试实时弹幕、每分钟定时发弹幕、按直播热度补充互动、压测弹幕、复现直播互动、调试主播回复或验收直播链路时使用。
 ---
 
 # 弹幕姬
@@ -13,7 +13,7 @@ description: 在 Animetta 正式运行时与 /live.html 中快速生成并重放
    - 只需要样本或复现输入：执行 `render`，不启动运行时。
    - 需要后端回复链路：在当前正式实例执行 `start --wait`。
    - 需要页面、Live2D 或真实音频证据：先用 `$review-anima-live` 打开或评审 `live`，页面连接后再注入。
-2. 读取 [scenarios.md](references/scenarios.md)，选择覆盖目标的最小场景；“发一条、播下、测下实时弹幕”等未指定请求默认用 `smoke`、`--seed 20260813`、`--speed 100`，只有多轮上下文目标才用 `daily`。
+2. 读取 [scenarios.md](references/scenarios.md)，选择覆盖目标的最小场景；“发一条、播下、测下实时弹幕”等未指定请求默认用 `smoke`、`--seed 20260813`、`--speed 100`，只有多轮上下文目标才用 `daily`。要求“每分钟一条、持续一小时、其余按热度”时使用 `hourly`、`--speed 1`；其中热度是可复现的合成快照，不声称来自真实房间。
 3. 用户要求实际执行而运行时不可用时，使用 `$operate-anima-runtime` 启动并等待 ready；只要求生成或计划时不得启动服务。
 4. 从仓库根目录运行：
 
@@ -22,6 +22,7 @@ description: 在 Animetta 正式运行时与 /live.html 中快速生成并重放
    py -3.13 .agents/skills/simulate-live-danmaku/scripts/danmaku_simulator.py list
    py -3.13 .agents/skills/simulate-live-danmaku/scripts/danmaku_simulator.py render smoke --seed 20260813
    py -3.13 .agents/skills/simulate-live-danmaku/scripts/danmaku_simulator.py start smoke --base-url http://127.0.0.1 --room-id 1 --seed 20260813 --speed 100 --wait
+   py -3.13 .agents/skills/simulate-live-danmaku/scripts/danmaku_simulator.py start hourly --base-url http://127.0.0.1 --room-id 1 --seed 20260813 --speed 1
    ```
 
 5. 根据目标收集证据：
@@ -31,6 +32,7 @@ description: 在 Animetta 正式运行时与 /live.html 中快速生成并重放
    - TTS：按 `$review-anima-live` 的持久播放证据验收播放计数、最后 `task_id` 和最终播放状态；不得以重放完成、合成成功或收到 socket 事件代替真实播放证据。
 6. 页面验收只取两次持久快照：注入前基线，以及命令结束后的弹幕、播放和口型数据；不要轮询瞬时口型或重复刷新健康页。
 7. 若 `runtime_ready_after=false`，将本轮判为失败；用 `$operate-anima-runtime` 恢复、重新打开页面，再只补跑一次 `smoke`。若中途失败或用户取消，只停止本 Skill 创建且仍在运行的 `replay_id`。
+8. `hourly` 启动后立即报告 `replay_id`，不要用 `--wait` 占住交互；按用户要求或阶段节点用 `status` 读取同一任务。完整验收必须看到 `duration_seconds=3600`、`fixed_events=60`、最终 `state=completed`、`cursor=total_events`，并在结束后补查 `/ready`。
 
 ## 控制运行
 
@@ -52,6 +54,7 @@ py -3.13 .agents/skills/simulate-live-danmaku/scripts/danmaku_simulator.py contr
 - API 返回 `room_input_active` 或 `replay_already_active` 时立即停止并报告；不得接管、断开或停止现有真实弹幕、节目或他人的重放。
 - `smoke` 只触发 1 次真实 LLM/TTS，是交互测试的默认快路径；其他场景会串行触发多次真实 Provider 调用，仅在相应目标下使用。
 - 重放上下文使用临时保留策略，但仍会调用当前实例配置的真实 Provider；报告 Provider 失败，不静默换成 mock。
+- `hourly` 每分钟固定 1 条可回复弹幕；低、中、高合成热度分别追加 0、1、2 条，结束事件位于 3600 秒。真实一小时陪跑必须保持 `--speed 1`；更高速度只用于离线或回归验证。
 - 不修改 `data/`、`evidence/`、`text-boundaries` 或 `sparse` 夹具。需要保存 JSONL 时只写用户明确指定的 `render --output` 路径。
 - 只把 `danmaku`、`gift`、`super_chat` 视为可回复事件；`enter`、`follow`、`like_batch` 只验证直播事件传输。
 - 当前节目重放会把 `gift` 与 `super_chat` 的文本送入真实回复链路，但页面原始消息会被归一成普通弹幕；不得用 `support` 验收礼物或醒目留言的 UI 标记。

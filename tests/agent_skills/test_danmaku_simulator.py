@@ -74,6 +74,42 @@ def test_non_replyable_events_remain_in_daily_transport_trace() -> None:
     }
 
 
+def test_hourly_scenario_has_sixty_fixed_messages_and_heat_adaptation() -> None:
+    simulator = load_simulator()
+    events = simulator.build_scenario("hourly", 20260813)
+    fixed = [event for event in events if event["payload"].get("cadence") == "fixed"]
+    adaptive = [event for event in events if event["payload"].get("cadence") == "adaptive"]
+    snapshots = [event for event in events if event["event_type"] == "popularity_snapshot"]
+
+    assert len(fixed) == 60
+    assert [event["offset_ms"] for event in fixed] == [minute * 60_000 for minute in range(60)]
+    assert len(adaptive) == 60
+    assert len(snapshots) == 60
+    assert events[-1]["offset_ms"] == 3_600_000
+    assert events[-1]["event_type"] == "connection_state"
+    assert simulator.scenario_metrics("hourly", 20260813) == {
+        "events": 181,
+        "replyable_events": 120,
+        "duration_seconds": 3600.0,
+        "fixed_events": 60,
+        "adaptive_events": 60,
+        "heat_minutes": {"low": 15, "medium": 30, "high": 15},
+    }
+
+    for snapshot in snapshots:
+        minute = snapshot["payload"]["minute"]
+        tier = snapshot["payload"]["heat_tier"]
+        minute_adaptive = [event for event in adaptive if event["payload"]["minute"] == minute]
+        assert len(minute_adaptive) == simulator.HEAT_EXTRA_EVENTS[tier]
+
+
+def test_hourly_wait_timeout_covers_timeline_plus_provider_allowance() -> None:
+    simulator = load_simulator()
+
+    assert simulator.default_timeout_seconds("hourly", 20260813, 1) == 4500
+    assert simulator.default_timeout_seconds("smoke", 20260813, 100) == 900
+
+
 def test_waited_start_reports_post_run_readiness(monkeypatch, capsys) -> None:
     simulator = load_simulator()
 

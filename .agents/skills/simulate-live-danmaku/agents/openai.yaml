@@ -1,4 +1,4 @@
 interface:
   display_name: "弹幕姬"
-  short_description: "快速模拟可复现的实时弹幕并验收回复、声音与口型"
-  default_prompt: "使用 $simulate-live-danmaku 在当前 Animetta 实例快速发送一轮实时弹幕，并报告重放、页面、声音、口型和运行时稳定性证据。"
+  short_description: "快速模拟、定时陪跑并验收直播弹幕"
+  default_prompt: "使用 $simulate-live-danmaku 在当前 Animetta 实例发送或定时陪跑一轮实时弹幕，并分层报告重放、页面、声音、口型和运行时稳定性证据。"
