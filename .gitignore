@@ -98,18 +98,12 @@ C:tmp_pip/
 # Local agent artifacts
 .zcode/
 .worktrees/
+.understand-anything/
 
 # Testing artifacts
 .pytest_cache/
 .playwright-mcp/
-artifacts/health/
-artifacts/livestream-eval/
-artifacts/minecraft-demo/
-artifacts/minecraft-adaptive-mission/
-artifacts/test-impact/
-artifacts/iteration-plans/
-artifacts/tts-audition/
-artifacts/tts-streaming/
+artifacts/
 evidence/runtime-config/
 evidence/minecraft-adaptive-showcase/
 docs/benchmarks/
