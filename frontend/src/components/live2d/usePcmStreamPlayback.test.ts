@@ -288,6 +288,39 @@ describe('progressive PCM playback', () => {
     expect(setMouthTarget.mock.calls.some(([value]) => Number(value) > 0)).toBe(false)
   })
 
+  it('makes quiet speech visible while keeping silence below the mouth noise gate', async () => {
+    const playback = await loadPlayback()
+    const stageMouthTarget = vi.fn()
+    playback.startAudioStream(startEvent(), undefined, stageMouthTarget)
+    for (let sequence = 0; sequence < 4; sequence++) {
+      playback.pushAudioStreamChunk({
+        stream_id: 'stream-a',
+        sequence,
+        audio_data: pcmChunk(700),
+      })
+    }
+
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(
+      Math.max(...stageMouthTarget.mock.calls.map(([value]) => Number(value))),
+    ).toBeGreaterThan(0.2)
+
+    playback.stopAudio()
+    stageMouthTarget.mockClear()
+    playback.startAudioStream(startEvent('stream-silence'), undefined, stageMouthTarget)
+    for (let sequence = 0; sequence < 4; sequence++) {
+      playback.pushAudioStreamChunk({
+        stream_id: 'stream-silence',
+        sequence,
+        audio_data: pcmChunk(100),
+      })
+    }
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(stageMouthTarget.mock.calls.every(([value]) => Number(value) === 0)).toBe(true)
+  })
+
   it('stops every scheduled source on interruption and prevents overlap with legacy audio', async () => {
     const playback = await loadPlayback()
     playback.startAudioStream(startEvent())

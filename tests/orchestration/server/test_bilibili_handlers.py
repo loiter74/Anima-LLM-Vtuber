@@ -250,39 +250,6 @@ async def test_live_event_broadcast_includes_room_and_generation(handler_harness
 
 
 @pytest.mark.asyncio
-async def test_broadcast_danmaku_audio_reads_file_payload(
-    handler_harness,
-    tmp_path,
-) -> None:
-    handler, _, _ = handler_harness
-    delivery = MagicMock()
-    delivery.emit = AsyncMock()
-    audio_path = tmp_path / "reply.wav"
-    audio_path.write_bytes(b"RIFF-invalid-test-audio")
-
-    await handler._broadcast_danmaku_audio(str(audio_path), delivery)
-
-    delivery.emit.assert_awaited_once()
-    event = delivery.emit.await_args
-    assert event.args[:2] == ("chat", "audio_with_expression")
-    assert event.args[2]["format"] == "wav"
-
-
-@pytest.mark.asyncio
-async def test_broadcast_danmaku_audio_accepts_bytes_payload(handler_harness) -> None:
-    handler, _, _ = handler_harness
-    delivery = MagicMock()
-    delivery.emit = AsyncMock()
-
-    await handler._broadcast_danmaku_audio(b"RIFF-invalid-test-audio", delivery)
-
-    delivery.emit.assert_awaited_once()
-    event = delivery.emit.await_args
-    assert event.args[:2] == ("chat", "audio_with_expression")
-    assert event.args[2]["format"] == "wav"
-
-
-@pytest.mark.asyncio
 async def test_real_session_integration_hot_switches_and_rejects_stale_raw() -> None:
     sio = MagicMock()
     sio.emit = AsyncMock()
@@ -348,7 +315,9 @@ async def test_real_session_integration_serializes_admitted_ai_reply() -> None:
         if handler._process_ai_reply.await_count:
             break
 
-    handler._process_ai_reply.assert_awaited_once_with(message, 300)
+    handler._process_ai_reply.assert_awaited_once()
+    assert handler._process_ai_reply.await_args.args == (message, 300)
+    assert isinstance(handler._process_ai_reply.await_args.kwargs["reply_id"], str)
     assert handler.metrics.displayed == 1
     assert handler.metrics.admitted == 1
     await handler.stop_bilibili()
@@ -441,6 +410,10 @@ async def test_active_scene_guidance_enters_turn_metadata_and_host_reply_feeds_b
 
     kwargs = orchestrator.process_text.await_args.kwargs
     assert SceneGuidance.model_validate(kwargs["scene_guidance"]) == guidance
+    assert kwargs["source_message_id"]
+    assert kwargs["reply_id"] == kwargs["task_id"]
+    assert kwargs["received_at"] > 0
+    assert not [call for call in sio.emit.await_args_list if call.args[0].startswith("chat:")]
     assert scene_runtime.host_replies == ["接住了，这波是穿模艺术。"]
 
 

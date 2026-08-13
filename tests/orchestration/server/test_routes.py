@@ -568,15 +568,9 @@ class TestRouteHandlersDispatch:
         assert process_kwargs["turn_id"] == process_kwargs["task_id"]
         assert process_kwargs["user_id"] == "bilibili:1001"
         assert process_kwargs["channel"] == "bilibili"
-        golden_payloads = [
-            call.args[1]
-            for call in mock_socketio.emit.call_args_list
-            if call.args[0] in {"chat:control", "chat:sentence"}
+        assert not [
+            call for call in mock_socketio.emit.call_args_list if call.args[0].startswith("chat:")
         ]
-        assert golden_payloads
-        for payload in golden_payloads:
-            for field in ("message_id", "conversation_id", "task_id", "turn_id"):
-                assert payload[field] == process_kwargs[field]
 
         reply_payload = None
         for call_args in mock_socketio.emit.call_args_list:

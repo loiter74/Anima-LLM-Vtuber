@@ -7,6 +7,10 @@ import pytest
 from animetta.config import ReplyPolicyConfig
 from animetta.services.bilibili.models import DanmakuMessage
 from animetta.services.bilibili.reply_admission import ReplyPriority
+from animetta.services.bilibili.reply_media import (
+    OrderedReplyMediaCoordinator,
+    ReplyMediaTurn,
+)
 from animetta.services.bilibili.reply_queue import (
     BoundedReplyQueue,
     DanmakuReplyRuntime,
@@ -125,10 +129,11 @@ async def test_worker_drops_expired_and_isolates_reply_failures() -> None:
     await worker.stop()
     await task
 
-    assert processed == ["fails", "succeeds"]
+    assert processed == ["fails", "fails", "succeeds"]
     assert metrics.dropped["expired"] == 1
     assert metrics.admitted_dropped["expired"] == 1
     assert metrics.reply_failure == 1
+    assert metrics.reply_retries == 1
     assert metrics.reply_success == 1
     assert metrics.queue_depth == 0
 
@@ -195,10 +200,87 @@ async def test_runtime_counts_processor_failure_and_continues() -> None:
             break
         await asyncio.sleep(0)
 
-    assert processed == ["bad", "good"]
+    assert processed == ["bad", "bad", "good"]
+    assert runtime.metrics.reply_retries == 1
     assert runtime.metrics.reply_failure == 1
     assert runtime.metrics.reply_success == 1
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_exhaustive_runtime_waits_for_capacity_and_completes_ten_replies() -> None:
+    release = asyncio.Event()
+    started = asyncio.Event()
+    processed: list[str] = []
+
+    async def processor(candidate: ReplyCandidate) -> None:
+        processed.append(candidate.message.text)
+        started.set()
+        await release.wait()
+
+    runtime = DanmakuReplyRuntime(
+        ReplyPolicyConfig(mode="exhaustive", max_queue_size=2, generation_concurrency=2),
+        processor,
+    )
+    await runtime.switch_generation(1)
+    submissions = [
+        asyncio.create_task(
+            runtime.submit(
+                DanmakuMessage(text=f"m{index}", user_id=7),
+                room_id=7,
+                generation_id=1,
+            )
+        )
+        for index in range(10)
+    ]
+    await started.wait()
+    release.set()
+    results = await asyncio.gather(*submissions)
+    for _ in range(50):
+        if runtime.metrics.reply_success == 10:
+            break
+        await asyncio.sleep(0)
+
+    assert all(result.admitted for result in results)
+    assert processed == [f"m{index}" for index in range(10)]
+    assert runtime.metrics.reply_success == 10
+    assert runtime.metrics.admitted_dropped == {}
+    assert runtime.metrics.max_queue_depth <= 2
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_ordered_media_turns_wait_for_earlier_generation_and_skip_cancelled_turns() -> None:
+    coordinator = OrderedReplyMediaCoordinator()
+    first = ReplyMediaTurn(coordinator, 0)
+    second = ReplyMediaTurn(coordinator, 1)
+    third = ReplyMediaTurn(coordinator, 2)
+    second_acquired = asyncio.Event()
+    third_acquired = asyncio.Event()
+
+    async def acquire_second() -> None:
+        await second.acquire()
+        second_acquired.set()
+
+    async def acquire_third() -> None:
+        await third.acquire()
+        third_acquired.set()
+
+    await first.acquire()
+    second_task = asyncio.create_task(acquire_second())
+    third_task = asyncio.create_task(acquire_third())
+    await asyncio.sleep(0)
+    assert second_acquired.is_set() is False
+    assert third_acquired.is_set() is False
+
+    await second.cancel()
+    await first.finish()
+    await asyncio.sleep(0)
+
+    assert third_acquired.is_set() is True
+    await third.finish()
+    await second_task
+    await third_task
 
 
 @pytest.mark.asyncio

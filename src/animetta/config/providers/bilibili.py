@@ -1,5 +1,7 @@
 """Bilibili danmaku configuration model."""
 
+from typing import Literal
+
 from pydantic import Field
 
 from ..core.base import BaseConfig
@@ -9,8 +11,10 @@ class ReplyPolicyConfig(BaseConfig):
     """Deterministic admission and backpressure settings for AI replies."""
 
     enabled: bool = True
+    mode: Literal["selective", "exhaustive"] = "selective"
     max_replies_per_minute: int = Field(default=6, ge=1, le=60)
     max_queue_size: int = Field(default=20, ge=1, le=1000)
+    generation_concurrency: int = Field(default=1, ge=1, le=8)
     max_message_age_seconds: int = Field(default=15, ge=1, le=300)
     per_user_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     duplicate_window_seconds: int = Field(default=60, ge=0, le=3600)

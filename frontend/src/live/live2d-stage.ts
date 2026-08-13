@@ -19,7 +19,7 @@ import {
 
 export interface Live2DStage {
   ready: Promise<void>
-  setMouth(value: number): void
+  setMouth(value: number, taskId?: string): void
   playReviewAudio(
     notification: HTMLElement,
     volumes: readonly number[],
@@ -39,6 +39,7 @@ export function createLive2DStage(
 ): Live2DStage {
   const canvas = document.getElementById('live2dCanvas')
   const state = document.getElementById('modelStatus')
+  const audioStatus = document.getElementById('audioStatus')
   if (!(canvas instanceof HTMLCanvasElement) || !state) {
     return {
       ready: Promise.resolve(),
@@ -55,6 +56,7 @@ export function createLive2DStage(
   let setStageMouth: (value: number) => void = () => {}
   let setReviewMouthSampler: (callback: (() => void) | null) => void = () => {}
   let markReviewMouthApplied = (): void => {}
+  let activeMouthTaskId = ''
   let reviewLipSync: ReturnType<typeof createReviewVolumeTimelineLipSync> | null = null
   let performanceController: Live2DPerformanceController | null = null
 
@@ -83,7 +85,19 @@ export function createLive2DStage(
       const baseHeight = model.height / model.scale.y
       const mouthBinding = bindReviewMouthAfterMotion(
         model.internalModel as Parameters<typeof bindReviewMouthAfterMotion>[0],
-        () => markReviewMouthApplied(),
+        (value) => {
+          markReviewMouthApplied()
+          if (!audioStatus || value <= 0.02) return
+          audioStatus.dataset.lipSyncState = 'observed'
+          audioStatus.dataset.lipSyncAppliedCount = String(
+            Number(audioStatus.dataset.lipSyncAppliedCount ?? 0) + 1,
+          )
+          audioStatus.dataset.lipSyncPeak = String(
+            Math.max(Number(audioStatus.dataset.lipSyncPeak ?? 0), value),
+          )
+          audioStatus.dataset.lastLipSyncTaskId = activeMouthTaskId
+          audioStatus.dataset.lastLipSyncAppliedAt = String(Date.now())
+        },
       )
       setStageMouth = mouthBinding.setMouth
       setReviewMouthSampler = mouthBinding.setBeforeApply
@@ -134,7 +148,8 @@ export function createLive2DStage(
 
   return {
     ready,
-    setMouth(value: number): void {
+    setMouth(value: number, taskId = ''): void {
+      if (taskId) activeMouthTaskId = taskId
       setStageMouth(value)
     },
     playReviewAudio(

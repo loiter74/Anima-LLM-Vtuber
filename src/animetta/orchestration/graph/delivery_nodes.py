@@ -10,6 +10,11 @@ from langchain_core.runnables import RunnableConfig
 from animetta.avatar.performance import validated_performance_payload
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
+from animetta.services.bilibili.reply_media import (
+    acquire_reply_media_turn,
+    finish_reply_media_turn,
+    has_reply_media_turn,
+)
 
 from .media_status import MediaStatus
 from .output_node import _compute_volumes, _public_tts_degradation_reason
@@ -46,22 +51,28 @@ def _delivery(
 async def conversation_start_node(
     state: AgentState, config: RunnableConfig | None = None
 ) -> dict[str, Any]:
+    started_at = time.time()
+    if has_reply_media_turn():
+        return {"metadata": {**state.get("metadata", {}), "conversation_started_at": started_at}}
     delivery, to = _delivery(state, config)
     if delivery is None:
         return {"error": "Socket.IO not configured"}
     await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
-    return {"metadata": {**state.get("metadata", {}), "conversation_started_at": time.time()}}
+    return {"metadata": {**state.get("metadata", {}), "conversation_started_at": started_at}}
 
 
 async def reply_output_node(
     state: AgentState, config: RunnableConfig | None = None
 ) -> dict[str, Any]:
+    await acquire_reply_media_turn()
     delivery, to = _delivery(state, config)
     if delivery is None:
         return {"error": "Socket.IO not configured"}
     response = state.get("response_text", "")
     if not response:
         return {"error": "No authored response"}
+    if has_reply_media_turn():
+        await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
     lang = translation_state.source_language.lower()[:2]
     await delivery.emit("chat", "sentence", {"text": response, "seq": 0, "lang": lang}, to=to)
     await delivery.emit(
@@ -118,6 +129,7 @@ async def performance_output_node(
         )
 
     await delivery.emit("chat", "control", {"signal": "conversation-end"}, to=to)
+    await finish_reply_media_turn()
     text_ready_at = float(state.get("metadata", {}).get("text_ready_at", time.time()))
     log_timing(state, "media_ready", max(0.0, (time.time() - text_ready_at) * 1000))
     return {"metadata": {**state.get("metadata", {}), "media_ready_at": time.time()}}

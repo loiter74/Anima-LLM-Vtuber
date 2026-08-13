@@ -18,7 +18,7 @@ interface ReviewInternalModel {
 
 export function bindReviewMouthAfterMotion(
   internalModel: ReviewInternalModel,
-  onApplied?: () => void,
+  onApplied?: (value: number) => void,
 ): {
   setMouth(value: number): void
   setBeforeApply(callback: (() => void) | null): void
@@ -32,7 +32,7 @@ export function bindReviewMouthAfterMotion(
     beforeApply?.()
     if (parameterIndex >= 0) {
       internalModel.coreModel.setParameterValueByIndex(parameterIndex, mouth)
-      if (mouth > 0.02) onApplied?.()
+      if (mouth > 0.02) onApplied?.(mouth)
     }
   }
   internalModel.on('beforeModelUpdate', applyBeforeModelCommit)

@@ -5,6 +5,7 @@ import type {
 } from '@/types/socket-events'
 import { setMouthTarget, type MouthTarget } from './useLipSync'
 import type { AudioPlaybackLifecycle } from './useAudioPlayback'
+import { createMouthEnvelope, type MouthEnvelope } from './mouthEnvelope'
 
 const INITIAL_BUFFER_SECONDS = 0.2
 const PLAYBACK_LEAD_SECONDS = 0.02
@@ -31,6 +32,7 @@ interface ActivePcmStream {
   lifecycle: AudioPlaybackLifecycle | null
   startNotified: boolean
   setMouthTarget: MouthTarget
+  mouthEnvelope: MouthEnvelope
 }
 
 let pcmAudioContext: AudioContext | null = null
@@ -82,7 +84,7 @@ function scheduleMouthTargets(
       squareSum += samples[index] * samples[index]
     }
     const rms = Math.sqrt(squareSum / (end - offset))
-    const mouthTarget = Math.min(1, rms * 3)
+    const mouthTarget = stream.mouthEnvelope.next(rms)
     const delayMs = Math.max(
       0,
       (startAt - stream.context.currentTime + offset / stream.sampleRate) * 1000,
@@ -187,6 +189,7 @@ export function startPcmAudioStream(
     lifecycle: lifecycle ?? null,
     startNotified: false,
     setMouthTarget: mouthTarget,
+    mouthEnvelope: createMouthEnvelope(),
   }
 }
 

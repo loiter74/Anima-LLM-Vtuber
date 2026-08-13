@@ -41,8 +41,9 @@ function harness(playResult: Promise<void> = Promise.resolve()) {
   vi.spyOn(singingAudio, 'play').mockReturnValue(playResult)
   vi.spyOn(singingAudio, 'pause').mockImplementation(() => undefined)
   vi.spyOn(singingAudio, 'load').mockImplementation(() => undefined)
-  const controller = createLiveAudioController(socket, document, setMouthTarget)
-  return { controller, handlers, setMouthTarget, singingAudio, socket }
+  const bgm = { duck: vi.fn(), release: vi.fn(), unlock: vi.fn() }
+  const controller = createLiveAudioController(socket, document, setMouthTarget, bgm)
+  return { bgm, controller, handlers, setMouthTarget, singingAudio, socket }
 }
 
 describe('standalone live audio', () => {
@@ -69,7 +70,14 @@ describe('standalone live audio', () => {
     expect(singingAudio.currentTime).toBeCloseTo(18, 0)
     expect(singingAudio.play).toHaveBeenCalledOnce()
     singingAudio.dispatchEvent(new Event('play'))
-    expect(lipSync.startLipSync).toHaveBeenCalledWith(singingAudio, [0.2, 0.7], setMouthTarget)
+    expect(lipSync.startLipSync).toHaveBeenCalledWith(
+      singingAudio,
+      [0.2, 0.7],
+      expect.any(Function),
+    )
+    const mouthTarget = lipSync.startLipSync.mock.calls[0][2]
+    mouthTarget(0.6)
+    expect(setMouthTarget).toHaveBeenCalledWith(0.6, 'late-live-task')
     expect(document.getElementById('audioStatus')).toHaveProperty(
       'dataset.lastAudioTaskId',
       'late-live-task',
@@ -187,7 +195,7 @@ describe('standalone live audio', () => {
   })
 
   it('routes complete and progressive TTS events through the shared player', () => {
-    const { controller, handlers, setMouthTarget } = harness()
+    const { bgm, controller, handlers } = harness()
     const identity = {
       message_id: 'message',
       conversation_id: 'conversation',
@@ -211,21 +219,29 @@ describe('standalone live audio', () => {
     handlers.get(Events.CHAT.AUDIO_STREAM_END)!(end)
     handlers.get(Events.CHAT.STOP_AUDIO)!({})
 
-    expect(playback.playAudio).toHaveBeenCalledWith(complete, expect.any(Object), setMouthTarget)
+    expect(playback.playAudio).toHaveBeenCalledWith(
+      complete,
+      expect.any(Object),
+      expect.any(Function),
+    )
     expect(playback.startAudioStream).toHaveBeenCalledWith(
       start,
       expect.any(Object),
-      setMouthTarget,
+      expect.any(Function),
     )
     expect(playback.pushAudioStreamChunk).toHaveBeenCalledWith(chunk)
     expect(playback.endAudioStream).toHaveBeenCalledWith(end)
     expect(playback.stopAudio).toHaveBeenCalledOnce()
+    expect(bgm.release).toHaveBeenCalledOnce()
+    bgm.release.mockClear()
 
     const lifecycle = playback.playAudio.mock.calls[0][1]
     lifecycle.onStart()
+    expect(bgm.duck).toHaveBeenCalledOnce()
     expect(document.getElementById('audioStatus')).toHaveProperty('dataset.playbackCount', '1')
     expect(document.getElementById('audioStatus')).toHaveProperty('dataset.lastAudioTaskId', 'task')
     lifecycle.onComplete()
+    expect(bgm.release).toHaveBeenCalledOnce()
     expect(document.getElementById('audioStatus')).toHaveProperty(
       'dataset.playbackState',
       'completed',
@@ -234,7 +250,7 @@ describe('standalone live audio', () => {
   })
 
   it('keeps singing playback hidden on live while preserving lip sync evidence', () => {
-    const { controller, handlers, setMouthTarget, singingAudio } = harness()
+    const { controller, handlers, singingAudio } = harness()
     const complete = {
       task_id: 'sing-task',
       audio_url: '/api/singing/audio/song_final.wav',
@@ -254,7 +270,7 @@ describe('standalone live audio', () => {
     expect(lipSync.startLipSync).toHaveBeenCalledWith(
       singingAudio,
       complete.volumes,
-      setMouthTarget,
+      expect.any(Function),
     )
     expect(document.getElementById('audioStatus')).toHaveProperty(
       'dataset.lastAudioTaskId',
@@ -278,12 +294,14 @@ describe('standalone live audio', () => {
   })
 
   it('unlocks playback from a user gesture and releases every listener', () => {
-    const { controller, handlers, socket } = harness()
+    vi.clearAllMocks()
+    const { bgm, controller, handlers, socket } = harness()
     const status = document.getElementById('audioStatus')!
 
     status.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
 
     expect(playback.unlockAudioPlayback).toHaveBeenCalledOnce()
+    expect(bgm.unlock).toHaveBeenCalledOnce()
     expect(status.hidden).toBe(true)
     expect(status.textContent).toBe('')
     controller.dispose()

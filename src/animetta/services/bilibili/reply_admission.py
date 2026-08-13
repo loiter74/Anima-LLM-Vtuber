@@ -67,12 +67,14 @@ class ReplyAdmissionController:
         text = message.text.strip()
         if not text:
             return self._reject("invalid")
-        if now - message.timestamp > self._config.max_message_age_seconds:
-            return self._reject("expired")
-
         priority = self._priority_for(message, text)
         if priority is None:
             return self._reject("message_type_disabled")
+        if self._config.mode == "exhaustive":
+            self.admitted_count += 1
+            return AdmissionDecision(admitted=True, priority=priority)
+        if now - message.timestamp > self._config.max_message_age_seconds:
+            return self._reject("expired")
         if (
             priority is ReplyPriority.ORDINARY
             and self._random_source() >= self._config.ordinary_sample_rate

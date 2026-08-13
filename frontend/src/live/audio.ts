@@ -14,7 +14,7 @@ import {
   stopAudio,
   unlockAudioPlayback,
 } from '@/components/live2d/useAudioPlayback'
-import { startLipSync, stopLipSync, type MouthTarget } from '@/components/live2d/useLipSync'
+import { startLipSync, stopLipSync } from '@/components/live2d/useLipSync'
 import {
   clearSingingPlayback,
   readSingingPlayback,
@@ -24,6 +24,7 @@ import {
   type SingingPlaybackSnapshot,
 } from '@/singing/playback-sync'
 import type { LiveSocket } from './controller'
+import type { LiveBgmController } from './bgm'
 
 export interface LiveAudioController {
   dispose(): void
@@ -32,7 +33,8 @@ export interface LiveAudioController {
 export function createLiveAudioController(
   socket: LiveSocket,
   document: Document,
-  setMouthTarget: MouthTarget,
+  setMouthTarget: (value: number, taskId?: string) => void,
+  bgm?: Pick<LiveBgmController, 'duck' | 'release' | 'unlock'>,
 ): LiveAudioController {
   const status = document.getElementById('audioStatus')
   const singingAudio = document.getElementById('singingAudio') as HTMLAudioElement | null
@@ -43,6 +45,7 @@ export function createLiveAudioController(
 
   const lifecycle = (event: Pick<ChatIdentity, 'task_id'>, kind: 'chat' | 'singing') => ({
     onStart: () => {
+      bgm?.duck()
       if (status) {
         status.dataset.playbackCount = String(Number(status.dataset.playbackCount ?? 0) + 1)
         status.dataset.lastAudioTaskId = event.task_id
@@ -51,9 +54,11 @@ export function createLiveAudioController(
       }
     },
     onComplete: () => {
+      bgm?.release()
       if (status) status.dataset.playbackState = 'completed'
     },
     onCancel: () => {
+      bgm?.release()
       if (status) status.dataset.playbackState = 'cancelled'
     },
   })
@@ -65,16 +70,22 @@ export function createLiveAudioController(
     status.dataset.lastAudioTaskId = event.task_id
     status.dataset.lastAudioKind = kind
     status.dataset.playbackState = 'pending'
+    status.dataset.lipSyncState = 'pending'
+    status.dataset.lipSyncAppliedCount = '0'
+    status.dataset.lipSyncPeak = '0'
+    status.dataset.lastLipSyncTaskId = event.task_id
   }
   const onAudio = (value: unknown): void => {
     const event = value as AudioWithExpressionEvent
     markPending(event)
-    playAudio(event, lifecycle(event, 'chat'), setMouthTarget)
+    playAudio(event, lifecycle(event, 'chat'), (value) => setMouthTarget(value, event.task_id))
   }
   const onStreamStart = (value: unknown): void => {
     const event = value as AudioStreamStartEvent
     markPending(event)
-    startAudioStream(event, lifecycle(event, 'chat'), setMouthTarget)
+    startAudioStream(event, lifecycle(event, 'chat'), (value) =>
+      setMouthTarget(value, event.task_id),
+    )
   }
   const onStreamChunk = (value: unknown): void =>
     pushAudioStreamChunk(value as AudioStreamChunkEvent)
@@ -82,15 +93,19 @@ export function createLiveAudioController(
   const onStop = (): void => {
     stopAudio()
     if (singingAudio && !singingAudio.paused) singingAudio.pause()
+    bgm?.release()
   }
   const onSingingPlay = (): void => {
     if (!singingAudio || !singingTaskId) return
     lifecycle({ task_id: singingTaskId }, 'singing').onStart()
-    if (singingVolumes.length) startLipSync(singingAudio, singingVolumes, setMouthTarget)
+    if (singingVolumes.length) {
+      startLipSync(singingAudio, singingVolumes, (value) => setMouthTarget(value, singingTaskId))
+    }
   }
   const onSingingPause = (): void => {
     if (!singingAudio || singingAudio.ended || !singingTaskId) return
     stopLipSync()
+    bgm?.release()
     if (status?.dataset.playbackState === 'playing') status.dataset.playbackState = 'paused'
   }
   const onSingingEnded = (): void => {
@@ -100,6 +115,7 @@ export function createLiveAudioController(
   }
   const onSingingError = (): void => {
     stopLipSync()
+    bgm?.release()
     if (currentSingingPlayback) clearSingingPlayback(currentSingingPlayback.taskId)
     currentSingingPlayback = null
     if (status) status.dataset.playbackState = 'error'
@@ -166,6 +182,7 @@ export function createLiveAudioController(
   }
   const onPlaybackGesture = (): void => {
     unlockAudioPlayback()
+    bgm?.unlock()
     if (currentSingingPlayback?.state === 'playing' && singingAudio?.paused) {
       applySingingPlayback(currentSingingPlayback)
     }

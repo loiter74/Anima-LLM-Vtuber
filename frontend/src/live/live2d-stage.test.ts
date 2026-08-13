@@ -55,7 +55,11 @@ vi.mock('pixi-live2d-display/cubism4', () => ({
 describe('createLive2DStage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    document.body.innerHTML = '<canvas id="live2dCanvas"></canvas><p id="modelStatus"></p>'
+    document.body.innerHTML = `
+      <canvas id="live2dCanvas"></canvas>
+      <p id="modelStatus"></p>
+      <span id="audioStatus" data-lip-sync-applied-count="0" data-lip-sync-peak="0"></span>
+    `
   })
 
   it('owns the only review playback and samples mouth volume in the model frame', async () => {
@@ -93,10 +97,19 @@ describe('createLive2DStage', () => {
     const stage = createLive2DStage(socket)
     await stage.ready
 
-    stage.setMouth(0.8)
+    stage.setMouth(0.8, 'task-1')
     fixtures.emitBeforeModelUpdate()
 
     expect(fixtures.setParameterValueByIndex).toHaveBeenLastCalledWith(1, 0.8)
+    expect(document.getElementById('audioStatus')).toHaveProperty(
+      'dataset.lastLipSyncTaskId',
+      'task-1',
+    )
+    expect(document.getElementById('audioStatus')).toHaveProperty(
+      'dataset.lipSyncAppliedCount',
+      '1',
+    )
+    expect(Number(document.getElementById('audioStatus')?.dataset.lipSyncPeak)).toBe(0.8)
     stage.dispose()
   })
 

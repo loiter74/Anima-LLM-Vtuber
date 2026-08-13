@@ -143,3 +143,21 @@ def test_disabled_policy_rejects_without_consuming_budget() -> None:
 
     assert decision.admitted is False
     assert decision.reason == "disabled"
+
+
+def test_exhaustive_mode_admits_every_valid_message_without_selective_filters() -> None:
+    controller = _controller(
+        mode="exhaustive",
+        max_replies_per_minute=1,
+        per_user_cooldown_seconds=3600,
+        duplicate_window_seconds=3600,
+        ordinary_sample_rate=0.0,
+        max_message_age_seconds=1,
+    )
+
+    decisions = [
+        controller.decide(_message("同一条普通弹幕", user_id=7, timestamp=0)) for _ in range(10)
+    ]
+
+    assert all(decision.admitted for decision in decisions)
+    assert controller.admitted_count == 10

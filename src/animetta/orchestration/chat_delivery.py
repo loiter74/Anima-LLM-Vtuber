@@ -37,9 +37,17 @@ def resolve_delivery_target(state: Mapping[str, Any]) -> str | None:
     metadata = state.get("metadata")
     if (
         isinstance(metadata, Mapping)
-        and metadata.get("source") == "developer_console"
-        and metadata.get("actor_role") == "developer"
         and metadata.get("audience") == "livestream"
+        and (
+            (
+                metadata.get("source") == "developer_console"
+                and metadata.get("actor_role") == "developer"
+            )
+            or (
+                metadata.get("source") == "bilibili:danmaku"
+                and metadata.get("actor_role") == "viewer"
+            )
+        )
     ):
         return None
     channel_id = state.get("channel_id")

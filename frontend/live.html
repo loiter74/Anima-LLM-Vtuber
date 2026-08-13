@@ -34,10 +34,17 @@
           data-playback-count="0"
           data-last-audio-task-id=""
           data-last-audio-kind=""
+          data-bgm-state="idle"
+          data-lip-sync-state="idle"
+          data-lip-sync-applied-count="0"
+          data-lip-sync-peak="0"
+          data-last-lip-sync-task-id=""
+          data-last-lip-sync-applied-at=""
           hidden
         ></span>
       </aside>
       <audio id="singingAudio" preload="metadata" hidden></audio>
+      <audio id="bgmAudio" preload="auto" hidden></audio>
       <section class="danmaku-panel" id="danmakuPanel" aria-label="实时弹幕">
         <header class="panel-header">
           <div>

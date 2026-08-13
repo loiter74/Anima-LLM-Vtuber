@@ -66,4 +66,47 @@ describe('standalone live DOM view', () => {
     expect(overlay.hidden).toBe(true)
     expect(document.getElementById('subtitleText')?.textContent).toBe('')
   })
+
+  it('increments the live list without rebuilding old nodes and caps it at 60 items', () => {
+    const view = mountLiveView()
+    const messages = Array.from({ length: 100 }, (_, index) => ({
+      source_message_id: `m-${index}`,
+      user_name: '观众',
+      user_id: index,
+      text: `弹幕 ${index}`,
+      timestamp: index,
+    }))
+
+    view.renderMessages(messages.slice(0, 99))
+    const previousLast = document.querySelector('[data-message-id="m-98"]')
+    view.renderMessages(messages)
+
+    expect(document.querySelectorAll('.danmaku-item')).toHaveLength(60)
+    expect(document.querySelector('[data-message-id="m-40"]')).not.toBeNull()
+    expect(document.querySelector('[data-message-id="m-99"]')).not.toBeNull()
+    expect(document.querySelector('[data-message-id="m-98"]')).toBe(previousLast)
+    expect(document.getElementById('messageCount')?.textContent).toBe('100')
+  })
+
+  it('does not force the list back to the tail after the viewer scrolls up', () => {
+    const view = mountLiveView()
+    const list = document.getElementById('danmakuList')!
+    Object.defineProperties(list, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, value: 200, writable: true },
+    })
+
+    view.renderMessages([
+      {
+        source_message_id: 'new-message',
+        user_name: '观众',
+        user_id: 1,
+        text: '新弹幕',
+        timestamp: 1,
+      },
+    ])
+
+    expect(list.scrollTop).toBe(200)
+  })
 })

@@ -10,8 +10,10 @@ def test_reply_policy_defaults_are_bounded_and_safe() -> None:
     policy = ReplyPolicyConfig()
 
     assert policy.enabled is True
+    assert policy.mode == "selective"
     assert policy.max_replies_per_minute == 6
     assert policy.max_queue_size == 20
+    assert policy.generation_concurrency == 1
     assert policy.max_message_age_seconds == 15
     assert policy.per_user_cooldown_seconds == 30
     assert policy.duplicate_window_seconds == 60
@@ -25,6 +27,7 @@ def test_reply_policy_defaults_are_bounded_and_safe() -> None:
     [
         ("max_replies_per_minute", 0),
         ("max_queue_size", 0),
+        ("generation_concurrency", 0),
         ("max_message_age_seconds", 0),
         ("per_user_cooldown_seconds", -1),
         ("duplicate_window_seconds", -1),

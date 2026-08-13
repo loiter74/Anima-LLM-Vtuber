@@ -1215,6 +1215,7 @@ components:
   orchestration-graph:
     domain: backend
     paths:
+      - src/animetta/orchestration/chat_delivery.py
       - src/animetta/orchestration/graph/**
       - src/animetta/orchestration/prompting/**
       - tests/orchestration/graph/**

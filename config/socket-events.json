@@ -1278,7 +1278,8 @@
         "timestamp": "number",
         "is_gift": "boolean",
         "is_super_chat": "boolean",
-        "meta": "object"
+        "meta": "object",
+        "source_message_id?": "string"
       }
     },
     "danmaku_status": {
@@ -1315,7 +1316,9 @@
         "reply_text": "string",
         "user_name": "string",
         "character_name": "string",
-        "timestamp": "number"
+        "timestamp": "number",
+        "source_message_id?": "string",
+        "reply_id?": "string"
       }
     }
   },

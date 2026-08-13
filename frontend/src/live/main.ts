@@ -4,6 +4,7 @@ import { mountTtsFailoverReviewNotification } from '@/tts-failover/main'
 import { DisposerStack } from '@/review/disposable'
 import { bootstrapLiveSession } from './bootstrap'
 import { createLiveAudioController } from './audio'
+import { createLiveBgmController } from './bgm'
 import type { LiveSocket } from './controller'
 import { applyLiveReviewLayout } from './layout'
 import { createLive2DStage } from './live2d-stage'
@@ -64,9 +65,11 @@ const session = bootstrapLiveSession({
 const pageDisposers = new DisposerStack()
 let pageDisposed = false
 const live2dStage = createLive2DStage(session.socket)
-const liveAudio = createLiveAudioController(session.socket, document, live2dStage.setMouth)
+const liveBgm = createLiveBgmController(document, search)
+const liveAudio = createLiveAudioController(session.socket, document, live2dStage.setMouth, liveBgm)
 pageDisposers.add(() => session.dispose())
 pageDisposers.add(() => liveAudio.dispose())
+pageDisposers.add(() => liveBgm.dispose())
 pageDisposers.add(() => live2dStage.dispose())
 const disposePage = (): void => {
   if (pageDisposed) return

@@ -1,5 +1,6 @@
 import { getModel } from './useLive2DModel'
 import { resolveMouthParameterIndex, type MouthParameterLookup } from './mouthParameter'
+import { createMouthEnvelope } from './mouthEnvelope'
 
 // ===== LipSync State =====
 
@@ -57,12 +58,13 @@ export function startLipSync(
   let preRollCount = 0
   const preRollTarget = 3
   let lipSyncTarget = 0
+  const mouthEnvelope = createMouthEnvelope()
 
   // RAF tracks the audio envelope only. The PIXI late-frame ticker owns the
   // actual parameter write so mouth opening is always applied after motion
   // and semantic expression overlays.
   function setLipSyncParam(value: number) {
-    lipSyncTarget = Math.max(0, Math.min(1, value))
+    lipSyncTarget = value === 0 ? mouthEnvelope.reset() : mouthEnvelope.next(value)
     setTarget(lipSyncTarget)
   }
 

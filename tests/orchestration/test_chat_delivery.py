@@ -38,6 +38,20 @@ def test_only_trusted_developer_livestream_reply_broadcasts() -> None:
     assert resolve_delivery_target(forged_ordinary) == "sid"
 
 
+def test_server_admitted_bilibili_reply_broadcasts_to_the_live_page() -> None:
+    state = {
+        "session_id": "bilibili-session",
+        "channel_id": "bilibili",
+        "metadata": {
+            "source": "bilibili:danmaku",
+            "actor_role": "viewer",
+            "audience": "livestream",
+        },
+    }
+
+    assert resolve_delivery_target(state) is None
+
+
 @pytest.mark.asyncio
 async def test_canonical_delivery_attaches_identity_and_emits_once() -> None:
     sio = MagicMock()

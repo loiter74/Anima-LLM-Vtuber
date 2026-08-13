@@ -38,6 +38,14 @@ function isDanmakuItem(value: unknown): value is DanmakuItem {
   )
 }
 
+function ensureSourceMessageId(item: DanmakuItem): DanmakuItem {
+  if (item.source_message_id) return item
+  return {
+    ...item,
+    source_message_id: `${item.timestamp}:${item.user_id}:${item.text}`,
+  }
+}
+
 function isStatus(value: unknown): value is BilibiliStatusPayload {
   if (!value || typeof value !== 'object') return false
   const status = value as Record<string, unknown>
@@ -105,6 +113,7 @@ export function createLiveController(options: LiveControllerOptions) {
   let activeReplyTaskId: string | null = null
   let accumulatedReply = ''
   let subtitleHideTimer: ReturnType<typeof setTimeout> | null = null
+  let messageRenderFrame: number | null = null
 
   const cancelSubtitleHide = (): void => {
     if (subtitleHideTimer) clearTimeout(subtitleHideTimer)
@@ -120,11 +129,16 @@ export function createLiveController(options: LiveControllerOptions) {
   const onConnectError = (): void => view.setSocketState('error')
   const onDanmaku = (value: unknown): void => {
     if (!isDanmakuItem(value)) return
-    messages.push(value)
+    messages.push(ensureSourceMessageId(value))
     if (messages.length > maxMessages) {
       messages.splice(0, messages.length - maxMessages)
     }
-    view.renderMessages(messages)
+    if (messageRenderFrame === null) {
+      messageRenderFrame = requestAnimationFrame(() => {
+        messageRenderFrame = null
+        view.renderMessages(messages)
+      })
+    }
   }
   const onStatus = (value: unknown): void => {
     if (isStatus(value)) view.setLivestreamStatus(value)
@@ -177,6 +191,8 @@ export function createLiveController(options: LiveControllerOptions) {
       socket.off(Events.BILIBILI.DANMAKU_STATUS, onStatus)
       socket.off(Events.CHAT.SENTENCE, onSentence)
       socket.off(Events.CHAT.CONTROL, onControl)
+      if (messageRenderFrame !== null) cancelAnimationFrame(messageRenderFrame)
+      messageRenderFrame = null
       cancelSubtitleHide()
       view.setSubtitle(null)
     },

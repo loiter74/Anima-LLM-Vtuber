@@ -23,6 +23,7 @@ export interface Transcript {
 
 /** Bilibili danmaku message from backend */
 export interface DanmakuItem {
+  source_message_id?: string
   text: string
   user_name: string
   user_id: number

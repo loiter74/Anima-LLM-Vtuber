@@ -14,6 +14,7 @@ from animetta.avatar.performance import validated_performance_payload
 from animetta.observability.context import noncritical_observation_context
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
+from animetta.services.bilibili.reply_media import finish_reply_media_turn
 from animetta.utils.tempfiles import write_temp_bytes
 
 from .media_status import MediaStatus
@@ -273,6 +274,7 @@ async def output_node(
 
     # Send conversation-end signal
     await delivery.emit("chat", "control", {"signal": "conversation-end"}, to=to)
+    await finish_reply_media_turn()
 
     logger.info(f"[{session_id}] [OutputNode] Distribution complete")
     return {}

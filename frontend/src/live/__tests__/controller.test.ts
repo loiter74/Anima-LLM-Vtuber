@@ -62,16 +62,35 @@ describe('standalone live controller', () => {
   })
 
   it('keeps only the newest 500 messages', () => {
+    vi.useFakeTimers()
     const { controller, handlers } = harness()
     const onDanmaku = handlers.get(Events.BILIBILI.DANMAKU)!
 
     for (let i = 0; i < 501; i++) {
       onDanmaku({ text: `m${i}`, user_name: 'u', user_id: i, timestamp: i })
     }
+    vi.runAllTimers()
 
     expect(controller.messages).toHaveLength(500)
     expect(controller.messages[0].text).toBe('m1')
     expect(controller.messages[499].text).toBe('m500')
+  })
+
+  it('coalesces a danmaku burst into one render frame', () => {
+    vi.useFakeTimers()
+    const { handlers, view } = harness()
+    const onDanmaku = handlers.get(Events.BILIBILI.DANMAKU)!
+
+    for (let index = 0; index < 10; index++) {
+      onDanmaku({ text: `m${index}`, user_name: 'u', user_id: index, timestamp: index })
+    }
+
+    expect(view.renderMessages).not.toHaveBeenCalled()
+    vi.runAllTimers()
+    expect(view.renderMessages).toHaveBeenCalledOnce()
+    expect(view.renderMessages).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ text: 'm9' })]),
+    )
   })
 
   it('renders reconnect state from the backend snapshot', () => {

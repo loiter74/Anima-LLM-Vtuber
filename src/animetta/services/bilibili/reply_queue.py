@@ -8,6 +8,7 @@ import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 from loguru import logger
 
@@ -15,6 +16,7 @@ from animetta.config import ReplyPolicyConfig
 
 from .models import DanmakuMessage
 from .reply_admission import ReplyAdmissionController, ReplyPriority
+from .reply_media import OrderedReplyMediaCoordinator, ReplyMediaTurn
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +28,9 @@ class ReplyCandidate:
     generation_id: int
     admitted_at: float
     room_id: int = 0
+    reply_id: str = field(default_factory=lambda: str(uuid4()))
+    sequence: int = 0
+    media_turn: ReplyMediaTurn | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +64,10 @@ class ReplyMetrics:
     admitted_dropped: Counter[str] = field(default_factory=Counter)
     reply_success: int = 0
     reply_failure: int = 0
+    reply_retries: int = 0
     queue_depth: int = 0
     max_queue_depth: int = 0
+    queue_wait_seconds: list[float] = field(default_factory=list)
     reply_latency_seconds: list[float] = field(default_factory=list)
 
     @property
@@ -78,10 +85,11 @@ class _QueueEntry:
 class BoundedReplyQueue:
     """Priority queue with deterministic lower-priority eviction."""
 
-    def __init__(self, max_size: int) -> None:
+    def __init__(self, max_size: int, *, prioritize: bool = True) -> None:
         if max_size <= 0:
             raise ValueError("max_size must be positive")
         self._max_size = max_size
+        self._prioritize = prioritize
         self._entries: list[_QueueEntry] = []
         self._sequence = 0
         self._closed = False
@@ -126,6 +134,20 @@ class BoundedReplyQueue:
             self._condition.notify(1)
             return QueuePutResult(accepted=True, reason=reason, evicted=evicted)
 
+    async def put_wait(self, candidate: ReplyCandidate) -> QueuePutResult:
+        """Wait for bounded capacity without silently evicting an admitted reply."""
+        async with self._condition:
+            while len(self._entries) >= self._max_size and not self._closed:
+                await self._condition.wait()
+            if self._closed:
+                return QueuePutResult(accepted=False, reason="queue_closed")
+            entry = _QueueEntry(sequence=self._sequence, candidate=candidate)
+            self._sequence += 1
+            self._entries.append(entry)
+            self._max_observed_size = max(self._max_observed_size, len(self._entries))
+            self._condition.notify_all()
+            return QueuePutResult(accepted=True)
+
     async def get(self) -> ReplyCandidate | None:
         """Wait for and remove the highest-priority, oldest candidate."""
         async with self._condition:
@@ -135,9 +157,14 @@ class BoundedReplyQueue:
                 return None
             entry = min(
                 self._entries,
-                key=lambda item: (item.candidate.priority, item.sequence),
+                key=(
+                    (lambda item: (item.candidate.priority, item.sequence))
+                    if self._prioritize
+                    else (lambda item: item.sequence)
+                ),
             )
             self._entries.remove(entry)
+            self._condition.notify_all()
             return entry.candidate
 
     async def discard_except_generation(self, generation_id: int) -> int:
@@ -178,7 +205,7 @@ class ReplyWorker:
         processor: ReplyProcessor,
         metrics: ReplyMetrics,
         generation_id: int,
-        max_message_age_seconds: float,
+        max_message_age_seconds: float | None,
         clock: Callable[[], float] = time.time,
         terminal_drop_sink: ReplyTerminalDropSink | None = None,
     ) -> None:
@@ -198,25 +225,55 @@ class ReplyWorker:
             if candidate is None:
                 return
             if candidate.generation_id != self._generation_id:
+                if candidate.media_turn is not None:
+                    await candidate.media_turn.cancel()
                 self._record_terminal_drop(candidate, "stale_generation")
                 continue
-            if self._clock() - candidate.message.timestamp > self._max_message_age_seconds:
+            if (
+                self._max_message_age_seconds is not None
+                and self._clock() - candidate.message.timestamp > self._max_message_age_seconds
+            ):
+                if candidate.media_turn is not None:
+                    await candidate.media_turn.cancel()
                 self._record_terminal_drop(candidate, "expired")
                 continue
 
             started_at = self._clock()
-            try:
-                await self._processor(candidate)
-            except asyncio.CancelledError:
-                self._record_terminal_drop(candidate, "cancelled")
-                raise
-            except Exception as exc:
-                self._metrics.reply_failure += 1
-                self._metrics.dropped["reply_failed"] += 1
-                logger.error(
-                    "Danmaku reply processing failed: error_type={}",
-                    type(exc).__name__,
-                )
+            self._metrics.queue_wait_seconds.append(max(0.0, started_at - candidate.admitted_at))
+            succeeded = False
+            for attempt in range(2):
+                try:
+                    await self._processor(candidate)
+                    succeeded = True
+                    break
+                except asyncio.CancelledError:
+                    if candidate.media_turn is not None:
+                        await candidate.media_turn.cancel()
+                    self._record_terminal_drop(candidate, "cancelled")
+                    raise
+                except Exception as exc:
+                    media_started = (
+                        candidate.media_turn is not None and candidate.media_turn.acquired
+                    )
+                    if attempt == 0 and not media_started:
+                        self._metrics.reply_retries += 1
+                        logger.warning(
+                            "Retrying danmaku reply once: reply_id={} error_type={}",
+                            candidate.reply_id,
+                            type(exc).__name__,
+                        )
+                        continue
+                    if candidate.media_turn is not None:
+                        await candidate.media_turn.cancel()
+                    self._metrics.reply_failure += 1
+                    self._metrics.dropped["reply_failed"] += 1
+                    logger.error(
+                        "Danmaku reply processing failed after retry: reply_id={} error_type={}",
+                        candidate.reply_id,
+                        type(exc).__name__,
+                    )
+                    break
+            if not succeeded:
                 continue
 
             self._metrics.reply_success += 1
@@ -249,14 +306,16 @@ class DanmakuReplyRuntime:
         self._terminal_drop_sink = terminal_drop_sink
         self._admission = ReplyAdmissionController(policy)
         self._queue: BoundedReplyQueue | None = None
-        self._worker_task: asyncio.Task[None] | None = None
+        self._worker_tasks: list[asyncio.Task[None]] = []
         self._generation_id = 0
+        self._submission_sequence = 0
+        self._media_coordinator = OrderedReplyMediaCoordinator()
         self.metrics = ReplyMetrics()
 
     @property
     def worker_running(self) -> bool:
         """Whether the generation's serialized reply worker is active."""
-        return self._worker_task is not None and not self._worker_task.done()
+        return any(not task.done() for task in self._worker_tasks)
 
     def configure(self, policy: ReplyPolicyConfig) -> None:
         """Replace policy before a session starts processing messages."""
@@ -271,19 +330,25 @@ class DanmakuReplyRuntime:
             return
 
         queue = self._queue
-        task = self._worker_task
+        tasks = self._worker_tasks
         if queue is not None:
             for candidate in await queue.drain():
+                if candidate.media_turn is not None:
+                    await candidate.media_turn.cancel()
                 self._record_terminal_drop(candidate, "stale_generation")
             await queue.close()
-        if task is not None and not task.done():
-            task.cancel()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
         self._queue = None
-        self._worker_task = None
+        self._worker_tasks = []
         self._generation_id = generation_id
+        self._submission_sequence = 0
+        self._media_coordinator = OrderedReplyMediaCoordinator()
         self.metrics.queue_depth = 0
 
     async def submit(
@@ -308,16 +373,23 @@ class DanmakuReplyRuntime:
 
         self._ensure_worker()
         assert self._queue is not None
-        result = await self._queue.put(
-            ReplyCandidate(
-                message=message,
-                priority=decision.priority,
-                generation_id=generation_id,
-                admitted_at=time.time(),
-                room_id=room_id,
-            ),
+        queue = self._queue
+        candidate = ReplyCandidate(
+            message=message,
+            priority=decision.priority,
+            generation_id=generation_id,
+            admitted_at=time.time(),
+            room_id=room_id,
+            sequence=self._submission_sequence,
+            media_turn=ReplyMediaTurn(self._media_coordinator, self._submission_sequence),
+        )
+        self._submission_sequence += 1
+        result = await (
+            queue.put_wait(candidate) if self._policy.mode == "exhaustive" else queue.put(candidate)
         )
         if not result.accepted:
+            if candidate.media_turn is not None:
+                await candidate.media_turn.cancel()
             self.metrics.dropped[result.reason or "queue_rejected"] += 1
             return ReplySubmissionResult(
                 admitted=False,
@@ -326,11 +398,13 @@ class DanmakuReplyRuntime:
             )
         self.metrics.admitted += 1
         if result.evicted is not None:
+            if result.evicted.media_turn is not None:
+                await result.evicted.media_turn.cancel()
             self._record_terminal_drop(result.evicted, "queue_evicted")
-        self.metrics.queue_depth = self._queue.qsize
+        self.metrics.queue_depth = queue.qsize
         self.metrics.max_queue_depth = max(
             self.metrics.max_queue_depth,
-            self._queue.max_observed_size,
+            queue.max_observed_size,
         )
         return ReplySubmissionResult(
             admitted=True,
@@ -343,35 +417,50 @@ class DanmakuReplyRuntime:
     async def close(self) -> None:
         """Cancel all reply work and release owned queue resources."""
         queue = self._queue
-        task = self._worker_task
+        tasks = self._worker_tasks
         if queue is not None:
             for candidate in await queue.drain():
+                if candidate.media_turn is not None:
+                    await candidate.media_turn.cancel()
                 self._record_terminal_drop(candidate, "cancelled")
             await queue.close()
-        if task is not None and not task.done():
-            task.cancel()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         self._queue = None
-        self._worker_task = None
+        self._worker_tasks = []
         self.metrics.queue_depth = 0
 
     def _ensure_worker(self) -> None:
         if self.worker_running:
             return
-        self._queue = BoundedReplyQueue(self._policy.max_queue_size)
-        worker = ReplyWorker(
-            queue=self._queue,
-            processor=self._processor,
-            metrics=self.metrics,
-            generation_id=self._generation_id,
-            max_message_age_seconds=self._policy.max_message_age_seconds,
-            terminal_drop_sink=self._terminal_drop_sink,
+        if self._queue is not None:
+            return
+        self._queue = BoundedReplyQueue(
+            self._policy.max_queue_size,
+            prioritize=self._policy.mode != "exhaustive",
         )
-        self._worker_task = asyncio.create_task(
-            worker.run(),
-            name=f"bilibili-reply-{self._generation_id}",
+        max_age = (
+            None if self._policy.mode == "exhaustive" else self._policy.max_message_age_seconds
         )
+        for index in range(self._policy.generation_concurrency):
+            worker = ReplyWorker(
+                queue=self._queue,
+                processor=self._processor,
+                metrics=self.metrics,
+                generation_id=self._generation_id,
+                max_message_age_seconds=max_age,
+                terminal_drop_sink=self._terminal_drop_sink,
+            )
+            self._worker_tasks.append(
+                asyncio.create_task(
+                    worker.run(),
+                    name=f"bilibili-reply-{self._generation_id}-{index}",
+                )
+            )
 
     def _record_terminal_drop(self, candidate: ReplyCandidate, reason: str) -> None:
         self.metrics.dropped[reason] += 1

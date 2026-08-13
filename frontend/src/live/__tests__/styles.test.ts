@@ -33,6 +33,10 @@ describe('standalone live panel styles', () => {
   it('keeps the public subtitle above the model using theme tokens', () => {
     expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*z-index:\s*20/s)
     expect(liveStyles).toMatch(/\.subtitle-overlay\s*\{[^}]*var\(--c-panel\)/s)
+    expect(liveStyles).toMatch(
+      /\.subtitle-overlay p\s*\{[^}]*font-size:\s*clamp\(30px,\s*3\.4vw,\s*40px\)/s,
+    )
+    expect(liveStyles).toMatch(/\.subtitle-overlay p\s*\{[^}]*font-weight:\s*500/s)
   })
 
   it('keeps mobile chrome inside the dynamic viewport without covering the panel heading', () => {

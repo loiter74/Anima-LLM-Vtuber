@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
+from uuid import uuid4
 
 
 @dataclass
@@ -24,6 +25,7 @@ class DanmakuMessage:
     is_gift: bool = False
     is_super_chat: bool = False
     meta: dict[str, Any] = field(default_factory=dict)
+    source_message_id: str = field(default_factory=lambda: str(uuid4()), compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

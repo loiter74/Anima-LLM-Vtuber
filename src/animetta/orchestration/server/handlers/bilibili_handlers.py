@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from loguru import logger
 
-from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.config import ReplyPolicyConfig, SceneAnalysisConfig
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.services.bilibili import (
@@ -20,11 +19,10 @@ from animetta.services.bilibili import (
     ReplyMetrics,
 )
 from animetta.services.bilibili.livestream_session import StaleGenerationError
+from animetta.services.bilibili.reply_media import bind_reply_media_turn
 from animetta.services.scene_analysis import SceneModelGateway, SceneRuntime
-from animetta.utils.tempfiles import write_temp_bytes
 
-from ...chat_contracts import ChatIdentity, ChatTransportMode
-from ...chat_delivery import ChatDelivery
+from ...chat_contracts import ChatTransportMode
 from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
@@ -32,22 +30,6 @@ if TYPE_CHECKING:
 
     from ..session import SessionManager
     from .base_handler import BaseSocketHandler
-
-
-def _read_file_bytes(path: str) -> bytes:
-    """Read an audio file for transport from a worker thread."""
-    with open(path, "rb") as audio_file:
-        return audio_file.read()
-
-
-def _compute_volumes(audio_path: str) -> list[float]:
-    """Build the non-normalized peak envelope used by Live2D lip sync."""
-    return AudioAnalyzer().compute_volume_envelope(
-        audio_path,
-        normalize=False,
-        gain=3.5,
-        use_peak=True,
-    )
 
 
 class BilibiliHandlers:
@@ -216,7 +198,14 @@ class BilibiliHandlers:
         )
 
     async def _process_reply_candidate(self, candidate: ReplyCandidate) -> None:
-        await self._process_ai_reply(candidate.message, candidate.room_id)
+        with bind_reply_media_turn(candidate.media_turn):
+            await self._process_ai_reply(
+                candidate.message,
+                candidate.room_id,
+                reply_id=candidate.reply_id,
+            )
+        if candidate.media_turn is not None:
+            await candidate.media_turn.finish()
 
     async def _prepare_scene_runtime(self) -> None:
         """Bind the selected profile LLM before room events can trigger reflection."""
@@ -277,19 +266,14 @@ class BilibiliHandlers:
         room_id: int,
         *,
         program_context: dict[str, Any] | None = None,
+        reply_id: str | None = None,
     ) -> dict[str, Any]:
         """Generate and deliver one already-admitted AI reply."""
-        from ...graph.translation_state import translation_state
-
         try:
-            task_id = str((program_context or {}).get("turn_id") or uuid4())
-            identity = ChatIdentity(
-                message_id=str(uuid4()),
-                conversation_id=str(uuid4()),
-                task_id=task_id,
-                turn_id=task_id,
-            )
-            delivery = ChatDelivery(self.sio, identity, ChatTransportMode.CANONICAL)
+            task_id = str((program_context or {}).get("turn_id") or reply_id or uuid4())
+            source_message_id = getattr(msg, "source_message_id", str(uuid4()))
+            message_id = source_message_id
+            conversation_id = str(uuid4())
             orchestrator = await self.admin._get_or_create_orchestrator("bilibili")
             scene_metadata: dict[str, object] = {}
             scripted_guidance = (program_context or {}).get("scene_guidance")
@@ -328,107 +312,36 @@ class BilibiliHandlers:
                     "retention_policy",
                 }
             }
+            program_metadata.setdefault(
+                "checkpoint_thread_id",
+                f"bilibili:{room_id}:{task_id}",
+            )
             result = await orchestrator.process_text(
                 text=f"{msg.user_name}说: {msg.text}",
                 user_id=actor_id,
                 user_name=msg.user_name,
                 channel_id="bilibili",
                 source=EVENTS["bilibili"]["danmaku"]["name"],
-                message_id=identity.message_id,
-                conversation_id=identity.conversation_id,
-                task_id=identity.task_id,
-                turn_id=identity.task_id,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                turn_id=task_id,
                 transport_mode=ChatTransportMode.CANONICAL.value,
                 channel="bilibili",
                 stream_id=stream_id,
                 live_session_id=self.admin.live_session_id,
                 actor_role="viewer",
                 audience="livestream",
+                source_message_id=source_message_id,
+                reply_id=task_id,
+                received_at=float(getattr(msg, "timestamp", time.time())),
                 **cast(dict[str, Any], scene_metadata),
                 **program_metadata,
             )
 
             reply_text = result.get("response_text", "")
-
-            # Broadcast conversation-start
-            await delivery.emit("chat", "control", {"signal": "conversation-start"})
-
-            # Broadcast text response via sentence events
-            if reply_text:
-                sentence_payload = {
-                    "text": reply_text,
-                    "seq": 0,
-                    "lang": translation_state.source_language.lower()[:2],
-                }
-                await delivery.emit("chat", "sentence", sentence_payload)
-                await delivery.emit(
-                    "chat",
-                    "sentence",
-                    {
-                        "text": "",
-                        "seq": 1,
-                        "lang": sentence_payload["lang"],
-                        "is_complete": True,
-                    },
-                )
-
-                # ── Run translation in background (non-blocking) ──
-                if translation_state.enabled:
-
-                    async def _translate_danmaku():
-                        try:
-                            orchestrator_svc = getattr(orchestrator, "service_context", None)
-                            llm = (
-                                getattr(orchestrator_svc, "llm_engine", None)
-                                if orchestrator_svc
-                                else None
-                            )
-                            if llm:
-                                translate_prompt = (
-                                    f"Translate the following text from {translation_state.source_language} "
-                                    f"to {translation_state.target_language}. "
-                                    f"Output only the translation, no explanations, no quotes.\n\n"
-                                    f"Text: {reply_text}\n"
-                                    f"Translation:"
-                                )
-                                translated = await llm.chat(translate_prompt)
-                                if translated and translated.strip():
-                                    t = translated.strip()
-                                    t_lang = translation_state.target_language.lower()[:2]
-                                    await delivery.emit(
-                                        "chat",
-                                        "subtitle_translation",
-                                        {
-                                            "translation": t,
-                                            "target_lang": t_lang,
-                                        },
-                                    )
-                                    logger.info(
-                                        f"[Bilibili] Translated danmaku reply to "
-                                        f"{translation_state.target_language}"
-                                    )
-                        except Exception as exc:
-                            logger.warning(
-                                "Bilibili translation failed: error_type={}",
-                                type(exc).__name__,
-                            )
-
-                    # Translation is part of the generation-owned reply task so a
-                    # room switch or stop cancels it with the reply worker.
-                    await _translate_danmaku()
-
-            # Broadcast emotion
-            emotion = result.get("emotion")
-            if emotion:
-                await delivery.emit("chat", "expression", {"emotion": emotion})
-
-            # Broadcast audio
-            tts_audio = result.get("tts_audio")
-            if tts_audio:
-                await self._broadcast_danmaku_audio(tts_audio, delivery)
-
-            # Broadcast conversation-end
-            await delivery.emit("chat", "control", {"signal": "conversation-end"})
+            if not reply_text:
+                raise RuntimeError(str(result.get("error") or "empty bilibili reply"))
 
             # Also emit danmaku.ai_reply for the chat message integration
             if reply_text:
@@ -450,6 +363,8 @@ class BilibiliHandlers:
                         "user_name": msg.user_name,
                         "character_name": character_name,
                         "timestamp": time.time(),
+                        "source_message_id": source_message_id,
+                        "reply_id": task_id,
                     },
                 )
             if reply_text and self.scene_runtime is not None and program_context is None:
@@ -464,58 +379,6 @@ class BilibiliHandlers:
         except Exception as exc:
             logger.error(
                 "Bilibili reply processing failed: error_type={}",
-                type(exc).__name__,
-            )
-            raise
-
-    # ── Audio broadcasting ────────────────────────────────────────────
-
-    async def _broadcast_danmaku_audio(
-        self,
-        tts_audio: str | bytes,
-        delivery: ChatDelivery,
-    ) -> None:
-        """Process TTS audio and broadcast to all clients."""
-        import base64
-        import os
-        from functools import partial
-
-        loop = asyncio.get_running_loop()
-
-        try:
-            audio_data = None
-            format = "wav"
-            volumes: list[float] = []
-
-            if isinstance(tts_audio, str) and os.path.exists(tts_audio):
-                raw_bytes = await loop.run_in_executor(None, partial(_read_file_bytes, tts_audio))
-                ext = os.path.splitext(tts_audio)[1].lower()
-                format = ext.lstrip(".") if ext else "wav"
-                audio_data = base64.b64encode(raw_bytes).decode("utf-8")
-                volumes = _compute_volumes(tts_audio) or []
-
-            elif isinstance(tts_audio, bytes):
-                if tts_audio[:4] == b"RIFF":
-                    format = "wav"
-                elif tts_audio[:3] == b"ID3" or (
-                    tts_audio[0] == 0xFF and (tts_audio[1] & 0xE0) == 0xE0
-                ):
-                    format = "mp3"
-                elif tts_audio[:4] == b"OggS":
-                    format = "ogg"
-                audio_data = base64.b64encode(tts_audio).decode("utf-8")
-                tmp_audio = write_temp_bytes(tts_audio, suffix=f".{format}")
-                volumes = _compute_volumes(tmp_audio) or []
-
-            if audio_data:
-                payload: dict[str, Any] = {"audio_data": audio_data, "format": format}
-                if volumes:
-                    payload["volumes"] = volumes
-                await delivery.emit("chat", "audio_with_expression", payload)
-
-        except Exception as exc:
-            logger.error(
-                "Bilibili audio broadcasting failed: error_type={}",
                 type(exc).__name__,
             )
             raise

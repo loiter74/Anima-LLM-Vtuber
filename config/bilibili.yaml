@@ -5,11 +5,13 @@ sessdata: ""
 
 reply_policy:
   enabled: true
-  max_replies_per_minute: 6
-  max_queue_size: 20
-  max_message_age_seconds: 15
-  per_user_cooldown_seconds: 30
-  duplicate_window_seconds: 60
-  ordinary_sample_rate: 0.1
+  mode: exhaustive
+  max_replies_per_minute: 60
+  max_queue_size: 100
+  generation_concurrency: 2
+  max_message_age_seconds: 300
+  per_user_cooldown_seconds: 0
+  duplicate_window_seconds: 0
+  ordinary_sample_rate: 1.0
   reply_to_gifts: true
   reply_to_super_chat: true
