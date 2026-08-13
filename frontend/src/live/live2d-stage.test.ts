@@ -167,8 +167,8 @@ describe('createLive2DStage', () => {
     fixtures.setParameterValue('ParamBreath', 0.9)
     fixtures.emitBeforeModelUpdate()
 
-    expect(fixtures.getParameterValue('ParamAngleX')).toBeCloseTo(8.9)
-    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeCloseTo(5.2)
+    expect(fixtures.getParameterValue('ParamAngleX')).toBeCloseTo(15.8)
+    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeCloseTo(10.4)
     expect(fixtures.getParameterValue('ParamBreath')).toBe(1)
 
     fixtures.setMotionGroup('TapBody')

@@ -19,13 +19,13 @@ import {
 } from '@/components/live2d/live2dPerformanceProfile'
 
 const IDLE_VITALITY_PARAMETERS = [
-  { name: 'ParamAngleX', factor: 1.15 },
-  { name: 'ParamAngleY', factor: 1.15 },
-  { name: 'ParamAngleZ', factor: 1.15 },
-  { name: 'ParamBodyAngleX', factor: 1.3 },
-  { name: 'ParamBodyAngleY', factor: 1.3 },
-  { name: 'ParamBodyAngleZ', factor: 1.3 },
-  { name: 'ParamBreath', factor: 1.2 },
+  { name: 'ParamAngleX', factor: 2.3 },
+  { name: 'ParamAngleY', factor: 2.3 },
+  { name: 'ParamAngleZ', factor: 2.3 },
+  { name: 'ParamBodyAngleX', factor: 2.6 },
+  { name: 'ParamBodyAngleY', factor: 2.6 },
+  { name: 'ParamBodyAngleZ', factor: 2.6 },
+  { name: 'ParamBreath', factor: 2.4 },
 ] as const
 
 function amplifyIdleMotion(internalModel: Cubism4InternalModel): void {
