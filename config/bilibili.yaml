@@ -1,6 +1,6 @@
 # Bilibili 直播弹幕配置
 enabled: false
-room_id: 0
+room_id: 1914110916
 sessdata: ""
 
 reply_policy:

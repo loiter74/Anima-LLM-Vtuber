@@ -110,6 +110,10 @@ export function createDomLiveView(document: Document): LiveView {
       livestreamStatus.textContent = labels[status.state]
       livestreamStatus.dataset.state = status.state
     },
+    setBilibiliReplyEvidence(reply): void {
+      livestreamStatus.dataset.lastBilibiliSourceMessageId = reply.source_message_id
+      livestreamStatus.dataset.lastBilibiliReplyId = reply.reply_id
+    },
     setBackground(config: BackgroundConfig): void {
       background.style.opacity = String(config.opacity)
       background.style.backgroundPosition = config.position

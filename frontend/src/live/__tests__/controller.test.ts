@@ -19,6 +19,7 @@ function harness(search = '') {
     renderMessages: vi.fn(),
     setSocketState: vi.fn(),
     setLivestreamStatus: vi.fn(),
+    setBilibiliReplyEvidence: vi.fn(),
     setCollapsed: vi.fn(),
     setBackground: vi.fn(),
     setSubtitle: vi.fn(),
@@ -57,6 +58,7 @@ describe('standalone live controller', () => {
 
     expect(handlers.has(Events.BILIBILI.DANMAKU)).toBe(true)
     expect(handlers.has(Events.BILIBILI.DANMAKU_STATUS)).toBe(true)
+    expect(handlers.has(Events.BILIBILI.DANMAKU_AI_REPLY)).toBe(true)
     expect(handlers.has('danmaku')).toBe(false)
     expect(socket.emit).not.toHaveBeenCalled()
   })
@@ -99,6 +101,17 @@ describe('standalone live controller', () => {
     handlers.get(Events.BILIBILI.DANMAKU_STATUS)!(status('reconnecting'))
 
     expect(view.setLivestreamStatus).toHaveBeenCalledWith(status('reconnecting'))
+  })
+
+  it('retains the Bilibili source and reply identities for playback acceptance', () => {
+    const { controller, handlers, socket, view } = harness()
+    const reply = { source_message_id: 'source-1', reply_id: 'reply-1' }
+
+    handlers.get(Events.BILIBILI.DANMAKU_AI_REPLY)!(reply)
+
+    expect(view.setBilibiliReplyEvidence).toHaveBeenCalledWith(reply)
+    controller.dispose()
+    expect(socket.off).toHaveBeenCalledWith(Events.BILIBILI.DANMAKU_AI_REPLY, expect.any(Function))
   })
 
   it('applies background query parameters through the view boundary', () => {

@@ -104,6 +104,9 @@ C:tmp_pip/
 .pytest_cache/
 .playwright-mcp/
 artifacts/
+artifacts/test-impact/
+artifacts/tts-audition/
+artifacts/tts-streaming/
 evidence/runtime-config/
 evidence/minecraft-adaptive-showcase/
 docs/benchmarks/

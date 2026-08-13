@@ -35,6 +35,7 @@ function harness(playResult: Promise<void> = Promise.resolve()) {
   }
   document.body.innerHTML = `
     <span id="audioStatus" data-playback-state="idle" data-playback-count="0" hidden></span>
+    <span id="livestreamStatus" data-last-bilibili-reply-id="reply-task"></span>
     <audio id="singingAudio" hidden></audio>
   `
   const singingAudio = document.getElementById('singingAudio') as HTMLAudioElement
@@ -245,6 +246,26 @@ describe('standalone live audio', () => {
     expect(document.getElementById('audioStatus')).toHaveProperty(
       'dataset.playbackState',
       'completed',
+    )
+    controller.dispose()
+  })
+
+  it('exposes the same task identity for a Bilibili reply and its actual playback', () => {
+    const { controller, handlers } = harness()
+    const event = {
+      message_id: 'message',
+      conversation_id: 'conversation',
+      task_id: 'reply-task',
+      turn_id: 'reply-task',
+      audio_data: 'audio',
+      format: 'wav',
+    }
+
+    handlers.get(Events.CHAT.AUDIO_WITH_EXPRESSION)!(event)
+    playback.playAudio.mock.calls.at(-1)?.[1].onStart()
+
+    expect(document.getElementById('audioStatus')?.dataset.lastAudioTaskId).toBe(
+      document.getElementById('livestreamStatus')?.dataset.lastBilibiliReplyId,
     )
     controller.dispose()
   })

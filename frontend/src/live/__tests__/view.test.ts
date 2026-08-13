@@ -67,6 +67,21 @@ describe('standalone live DOM view', () => {
     expect(document.getElementById('subtitleText')?.textContent).toBe('')
   })
 
+  it('persists Bilibili reply identities without changing visible status text', () => {
+    const view = mountLiveView()
+    const status = document.getElementById('livestreamStatus')!
+    status.textContent = '弹幕直播中'
+
+    view.setBilibiliReplyEvidence({
+      source_message_id: 'source-1',
+      reply_id: 'reply-1',
+    })
+
+    expect(status).toHaveProperty('dataset.lastBilibiliSourceMessageId', 'source-1')
+    expect(status).toHaveProperty('dataset.lastBilibiliReplyId', 'reply-1')
+    expect(status.textContent).toBe('弹幕直播中')
+  })
+
   it('increments the live list without rebuilding old nodes and caps it at 60 items', () => {
     const view = mountLiveView()
     const messages = Array.from({ length: 100 }, (_, index) => ({

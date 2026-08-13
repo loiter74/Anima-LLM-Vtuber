@@ -12,10 +12,16 @@ export interface BackgroundConfig {
   position: 'top' | 'center' | 'bottom'
 }
 
+export interface BilibiliReplyEvidence {
+  source_message_id: string
+  reply_id: string
+}
+
 export interface LiveView {
   renderMessages(messages: readonly DanmakuItem[]): void
   setSocketState(state: 'connecting' | 'connected' | 'disconnected' | 'error'): void
   setLivestreamStatus(status: BilibiliStatusPayload): void
+  setBilibiliReplyEvidence(reply: BilibiliReplyEvidence): void
   setBackground(config: BackgroundConfig): void
   setSubtitle(text: string | null): void
 }
@@ -54,6 +60,16 @@ function isStatus(value: unknown): value is BilibiliStatusPayload {
     typeof status.connected === 'boolean' &&
     typeof status.generation_id === 'number'
   )
+}
+
+function bilibiliReplyEvidence(value: unknown): BilibiliReplyEvidence | null {
+  if (!value || typeof value !== 'object') return null
+  const reply = value as Record<string, unknown>
+  if (typeof reply.source_message_id !== 'string' || typeof reply.reply_id !== 'string') return null
+  return {
+    source_message_id: reply.source_message_id,
+    reply_id: reply.reply_id,
+  }
 }
 
 interface LiveReplyFrame {
@@ -143,6 +159,10 @@ export function createLiveController(options: LiveControllerOptions) {
   const onStatus = (value: unknown): void => {
     if (isStatus(value)) view.setLivestreamStatus(value)
   }
+  const onBilibiliReply = (value: unknown): void => {
+    const evidence = bilibiliReplyEvidence(value)
+    if (evidence) view.setBilibiliReplyEvidence(evidence)
+  }
   const onSentence = (value: unknown): void => {
     const frame = liveReplyFrame(value)
     if (!frame) return
@@ -174,6 +194,7 @@ export function createLiveController(options: LiveControllerOptions) {
   socket.on('connect_error', onConnectError)
   socket.on(Events.BILIBILI.DANMAKU, onDanmaku)
   socket.on(Events.BILIBILI.DANMAKU_STATUS, onStatus)
+  socket.on(Events.BILIBILI.DANMAKU_AI_REPLY, onBilibiliReply)
   socket.on(Events.CHAT.SENTENCE, onSentence)
   socket.on(Events.CHAT.CONTROL, onControl)
   view.setSocketState('connecting')
@@ -189,6 +210,7 @@ export function createLiveController(options: LiveControllerOptions) {
       socket.off('connect_error', onConnectError)
       socket.off(Events.BILIBILI.DANMAKU, onDanmaku)
       socket.off(Events.BILIBILI.DANMAKU_STATUS, onStatus)
+      socket.off(Events.BILIBILI.DANMAKU_AI_REPLY, onBilibiliReply)
       socket.off(Events.CHAT.SENTENCE, onSentence)
       socket.off(Events.CHAT.CONTROL, onControl)
       if (messageRenderFrame !== null) cancelAnimationFrame(messageRenderFrame)

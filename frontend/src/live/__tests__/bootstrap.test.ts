@@ -8,6 +8,7 @@ function viewHarness(): LiveView {
     renderMessages: vi.fn(),
     setSocketState: vi.fn(),
     setLivestreamStatus: vi.fn(),
+    setBilibiliReplyEvidence: vi.fn(),
     setBackground: vi.fn(),
     setSubtitle: vi.fn(),
   }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "B 站直播连接"
+  short_description: "一分钟内连接真实 B 站弹幕并验收 Animetta"
+  default_prompt: "使用 $connect-bilibili-live 连接默认 B 站直播间，并验收正式直播页面与真实回复播放链路。"
