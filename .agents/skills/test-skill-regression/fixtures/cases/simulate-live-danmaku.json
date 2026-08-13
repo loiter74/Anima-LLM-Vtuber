@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "id": "simulate-live-danmaku-daily-plan",
+  "id": "simulate-live-danmaku-smoke-plan",
   "skill": "simulate-live-danmaku",
   "task": "使用 $simulate-live-danmaku 读取 request.md，只生成 result/plan.md，不启动浏览器、OBS、Bilibili、Animetta 或任何重放。严格按 request.md 的输出模板逐字填写，不增加解释。",
-  "baseline": "../baselines/simulate-live-danmaku-daily-plan",
+  "baseline": "../baselines/simulate-live-danmaku-smoke-plan",
   "run_count": 3,
   "allowed_paths": ["result/plan.md"],
   "require_content_identical": true,
@@ -11,14 +11,15 @@
     {
       "path": "result/plan.md",
       "contains": [
-        "场景: daily",
+        "场景: smoke",
         "seed: 20260813",
+        "速度: 100",
         "输入: 合成 JSONL",
         "链路: program replay -> Bilibili -> LLM/TTS -> Socket.IO",
         "真实房间: 不连接",
         "证据: 后端、页面、播放分层报告"
       ],
-      "not_contains": ["text-boundaries", "sparse", "bilibili:connect"]
+      "not_contains": ["场景: daily", "text-boundaries", "sparse", "bilibili:connect"]
     }
   ]
 }

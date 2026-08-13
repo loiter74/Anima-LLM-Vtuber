@@ -19,6 +19,7 @@ from uuid import uuid4
 DEFAULT_BASE_URL = "http://127.0.0.1"
 DEFAULT_CREATOR_ID = "codex-danmaku-simulator"
 TERMINAL_STATES = {"completed", "stopped", "failed"}
+REPLYABLE_EVENT_TYPES = {"danmaku", "gift", "super_chat"}
 
 ACTORS = (
     ("柚子茶不加冰", 91001),
@@ -61,6 +62,7 @@ TEXTS = {
 }
 
 SCENARIO_DESCRIPTIONS = {
+    "smoke": "快速冒烟：一次真实回复加完整页面传输事件",
     "daily": "日常聊天：入场、问候、追问、点赞、话题互动与关注",
     "quiet": "冷场恢复：稀疏消息与长间隔后的继续互动",
     "crowd": "短时高峰：连续弹幕、点赞与关注",
@@ -95,7 +97,14 @@ def build_scenario(name: str, seed: int) -> list[dict[str, Any]]:
     def choose(key: str) -> str:
         return rng.choice(TEXTS[key])
 
-    if name == "daily":
+    if name == "smoke":
+        events = [
+            _event(0, "enter", actors[0]),
+            _event(200, "danmaku", actors[0], choose("greeting")),
+            _event(400, "like_batch", actors[1], count=18),
+            _event(600, "follow", actors[2]),
+        ]
+    elif name == "daily":
         events = [
             _event(0, "enter", actors[0]),
             _event(1_500, "danmaku", actors[0], choose("greeting")),
@@ -154,6 +163,10 @@ def render_jsonl(name: str, seed: int) -> str:
     )
 
 
+def replyable_count(name: str, seed: int) -> int:
+    return sum(event["event_type"] in REPLYABLE_EVENT_TYPES for event in build_scenario(name, seed))
+
+
 def _url(base_url: str, path: str) -> str:
     return f"{base_url.rstrip('/')}{path}"
 
@@ -197,6 +210,11 @@ def _request(
 
 def assert_ready(base_url: str) -> None:
     _request(base_url, "/ready", timeout=10)
+
+
+def runtime_status(base_url: str) -> dict[str, Any]:
+    ready = _request(base_url, "/ready", timeout=10)
+    return {key: ready.get(key) for key in ("status", "ready", "profile") if key in ready}
 
 
 def wait_for_terminal(
@@ -272,6 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     name: {
                         "description": description,
                         "events": len(build_scenario(name, 20260813)),
+                        "replyable_events": replyable_count(name, 20260813),
                     }
                     for name, description in SCENARIO_DESCRIPTIONS.items()
                 }
@@ -299,6 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.poll_seconds <= 0 or args.timeout_seconds <= 0:
                 raise ValueError("等待与轮询时间必须为正数")
             assert_ready(args.base_url)
+            started_at = time.monotonic()
             payload = {
                 "source": "jsonl",
                 "jsonl": render_jsonl(args.scenario, args.seed),
@@ -321,15 +341,43 @@ def main(argv: Sequence[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     poll_seconds=args.poll_seconds,
                 )
+            runtime_after: dict[str, Any] | None = None
+            runtime_error_after: str | None = None
+            runtime_ready_after: bool | None = None
+            if args.wait:
+                try:
+                    runtime_after = runtime_status(args.base_url)
+                except (
+                    OSError,
+                    RuntimeError,
+                    TimeoutError,
+                    ValueError,
+                    json.JSONDecodeError,
+                ) as exc:
+                    runtime_error_after = str(exc)
+                runtime_ready_after = (
+                    runtime_after is not None and runtime_after.get("ready") is True
+                )
             _print(
                 {
                     "base_url": args.base_url.rstrip("/"),
                     "scenario": args.scenario,
                     "seed": args.seed,
+                    "replyable_events": replyable_count(args.scenario, args.seed),
+                    "elapsed_seconds": round(time.monotonic() - started_at, 3),
                     **snapshot,
+                    **(
+                        {
+                            "runtime_ready_after": runtime_ready_after,
+                            "runtime_status_after": runtime_after,
+                            "runtime_error_after": runtime_error_after,
+                        }
+                        if args.wait
+                        else {}
+                    ),
                 }
             )
-            return 1 if snapshot.get("state") == "failed" else 0
+            return 1 if snapshot.get("state") == "failed" or runtime_ready_after is False else 0
 
         if args.command == "status":
             _print(
