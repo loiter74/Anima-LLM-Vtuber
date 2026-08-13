@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { PNG } from 'pngjs'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  assertHardwareWebGl,
   buildReviewBrowserArgs,
   captureBrowserAttempt,
   type ReviewPageAdapter,
@@ -73,6 +74,27 @@ function harness() {
 }
 
 describe('generic Playwright attempt capture', () => {
+  it.each([
+    ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))', false],
+    ['ANGLE (Microsoft, Microsoft Basic Render Driver, D3D11)', false],
+    ['ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 D v2)', true],
+  ])('validates the WebGL renderer %s and closes its context', async (renderer, supported) => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const browser = {
+      newContext: vi.fn(async () => ({
+        newPage: vi.fn(async () => ({
+          evaluate: vi.fn(async () => renderer),
+        })),
+        close,
+      })),
+    }
+
+    const result = assertHardwareWebGl(browser as never)
+    if (supported) await expect(result).resolves.toBe(renderer)
+    else await expect(result).rejects.toThrow(/hardware WebGL/)
+    expect(close).toHaveBeenCalledOnce()
+  })
+
   it('mutes the Playwright copy when OBS owns monitored review audio', () => {
     expect(
       buildReviewBrowserArgs({

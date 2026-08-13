@@ -22,7 +22,12 @@ import {
   type ReviewSummaryV2,
   type RunManifestV2,
 } from './evidence'
-import { buildReviewBrowserArgs, captureBrowserAttempt, type BrowserAttemptResult } from './browser'
+import {
+  assertHardwareWebGl,
+  buildReviewBrowserArgs,
+  captureBrowserAttempt,
+  type BrowserAttemptResult,
+} from './browser'
 import { ObsPreviewAdapter, type ObsClient, type ReviewObsAdapter } from './obs'
 import { runReviewWorkflow } from './orchestrator'
 import { parseReviewOptions } from './options'
@@ -102,6 +107,7 @@ export async function runReviewCli(
   validateReviewCapabilities(plugin, {
     requireObs: options.requireObs,
     interactive: options.interactive,
+    headed: options.headed,
     hostTtsAvailable: await hostTtsConfigured(),
   })
   const currentRunId = runId()
@@ -192,6 +198,7 @@ export async function runReviewCli(
         enableObsAudioMonitoring: plugin.enableObsAudioMonitoring === true,
       }),
     })
+    if (plugin.capabilities?.requireHardwareWebgl) await assertHardwareWebGl(browser)
     if (options.interactive) {
       terminal = createInterface({ input: stdin, output: stdout })
     }

@@ -55,6 +55,7 @@ describe('TTS failover review plugin', () => {
       validateReviewCapabilities(plugin, {
         requireObs: false,
         interactive: true,
+        headed: true,
         hostTtsAvailable: true,
       }),
     ).toThrow(/OBS/)
@@ -62,6 +63,7 @@ describe('TTS failover review plugin', () => {
       validateReviewCapabilities(plugin, {
         requireObs: true,
         interactive: false,
+        headed: true,
         hostTtsAvailable: true,
       }),
     ).toThrow(/interactive/)
@@ -69,6 +71,7 @@ describe('TTS failover review plugin', () => {
       validateReviewCapabilities(plugin, {
         requireObs: true,
         interactive: true,
+        headed: true,
         hostTtsAvailable: false,
       }),
     ).toThrow(/host TTS/)
@@ -76,6 +79,7 @@ describe('TTS failover review plugin', () => {
       validateReviewCapabilities(plugin, {
         requireObs: true,
         interactive: true,
+        headed: true,
         hostTtsAvailable: true,
       }),
     ).not.toThrow()

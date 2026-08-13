@@ -10,11 +10,13 @@ export interface ReviewCapabilities {
   requireObs?: boolean
   requireInteractive?: boolean
   requireHostTts?: boolean
+  requireHardwareWebgl?: boolean
 }
 
 export interface ReviewRuntimeCapabilities {
   requireObs: boolean
   interactive: boolean
+  headed: boolean
   hostTtsAvailable: boolean
 }
 
@@ -93,6 +95,9 @@ export function validateReviewCapabilities(
   }
   if (required?.requireInteractive && !runtime.interactive) {
     throw new Error(`${plugin.definition.id} review requires interactive mode`)
+  }
+  if (required?.requireHardwareWebgl && !runtime.headed) {
+    throw new Error(`${plugin.definition.id} hardware WebGL review requires a headed browser`)
   }
   if (required?.requireHostTts && !runtime.hostTtsAvailable) {
     throw new Error(`${plugin.definition.id} review requires host TTS credentials`)

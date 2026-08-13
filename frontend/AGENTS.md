@@ -101,7 +101,7 @@ pnpm test:run                # Frontend tests (Vitest + happy-dom)
 - 真实直播与 OBS Browser Source 的唯一正式入口是 `/live.html`；`/live-stream` 仅作为 nginx 兼容重定向保留。Electron、文档和自动化不得重新指向或实现第二套 SPA 直播页面。
 - 验收 `/live.html` 的公开 AI 回复时，Socket 收到 `chat:sentence` 只证明传输成功；该入口使用 `src/live/{controller,view}.ts`，不加载 Vue `useSubtitle`。必须分别断言页面字幕 DOM 可见，以及音频/表情事件是否到达。
 - 启动评审前先查看 `scripts/review/plugins/` 中目标插件声明的 capabilities，再选择参数；不要靠失败的长任务探测依赖。
-- `live2d-performance` 要求 OBS、interactive 和 host TTS，禁止与 `--no-obs` 组合。OBS 不可用时，只能用 `pnpm live:review -- --no-obs` 做通用浏览器场景诊断，并在交付中明确 OBS 性能评审未执行。
+- `live2d-performance` 要求 OBS、interactive、host TTS 和 headed 硬件 WebGL，禁止与 `--no-obs` 或 `--headless` 组合；检测到 SwiftShader、WARP 等软件渲染时必须立即失败并清理浏览器。OBS 不可用时，只能用 `pnpm live:review -- --no-obs` 做通用浏览器场景诊断，并在交付中明确 OBS 性能评审未执行。
 - 新增外部 Live2D 模型、纹理或参考音频时，在影响感知门禁前核对仓库内许可证说明、运行时清单引用、实际文件大小，并对相关文件运行 pre-commit 大文件检查；不得等到提交阶段才发现资产不合规。
 - `SettingsPanel` 的完整浏览器验收依赖后端 `/ready` 和面板切换生命周期；仅启动 Vite 时验证其状态逻辑应使用组件/Store Vitest，不得靠重复点击全应用设置页探测。必须取得浏览器证据时使用完整运行时或提供专用、确定性的页面夹具。
 

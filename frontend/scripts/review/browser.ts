@@ -74,6 +74,32 @@ export function buildReviewBrowserArgs(options: {
   return args
 }
 
+export async function assertHardwareWebGl(browser: Browser): Promise<string> {
+  const context = await browser.newContext()
+  try {
+    const page = await context.newPage()
+    const renderer = await page.evaluate(() => {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+      if (!gl) return 'unavailable'
+      const extension = gl.getExtension('WEBGL_debug_renderer_info')
+      return extension
+        ? String(gl.getParameter(extension.UNMASKED_RENDERER_WEBGL))
+        : String(gl.getParameter(gl.RENDERER))
+    })
+    if (
+      /swiftshader|software|llvmpipe|softpipe|basic render driver|\bwarp\b|unavailable/i.test(
+        renderer,
+      )
+    ) {
+      throw new Error(`Live2D performance review requires hardware WebGL; renderer=${renderer}`)
+    }
+    return renderer
+  } finally {
+    await context.close()
+  }
+}
+
 function waitFor(delayMs: number): Promise<void> {
   return delayMs > 0
     ? new Promise((resolve) => {

@@ -73,6 +73,7 @@ export const live2dPerformanceReviewNodePlugin = {
     requireObs: true,
     requireInteractive: true,
     requireHostTts: true,
+    requireHardwareWebgl: true,
   },
   enableObsAudioMonitoring: true,
   prepareRun: ({ repositoryDir }: { repositoryDir: string }) =>

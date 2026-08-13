@@ -16,8 +16,17 @@ describe('live2d-performance review plugin', () => {
       validateReviewCapabilities(plugin, {
         requireObs: true,
         interactive: true,
+        headed: true,
         hostTtsAvailable: true,
       }),
     ).not.toThrow()
+    expect(() =>
+      validateReviewCapabilities(plugin, {
+        requireObs: true,
+        interactive: true,
+        headed: false,
+        hostTtsAvailable: true,
+      }),
+    ).toThrow(/hardware WebGL review requires a headed browser/)
   })
 })
