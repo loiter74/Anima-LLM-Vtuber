@@ -31,7 +31,7 @@ def status(
 ) -> dict[str, Any]:
     return {
         "state": state,
-        "connected": state == "live",
+        "connected": state in {"prelive", "live"},
         "room_id": room_id,
         "desired_room_id": desired_room_id,
         "retry_count": 0,
@@ -128,7 +128,7 @@ async def test_get_status_reports_backend_unavailable_without_exception_details(
     assert "SESSDATA" not in repr(result)
 
 
-async def test_connect_sends_generation_and_waits_for_live() -> None:
+async def test_connect_sends_generation_and_accepts_prelive() -> None:
     client = FakeSocketIOClient(status("stopped", 0))
     controller = BilibiliController(client=client)
 
@@ -137,7 +137,7 @@ async def test_connect_sends_generation_and_waits_for_live() -> None:
         assert data == {"room_id": 2233, "expected_generation_id": 0}
         await client.push(
             STATUS_EVENT,
-            status("live", 1, room_id=2233, desired_room_id=2233),
+            status("prelive", 1, room_id=2233, desired_room_id=2233),
         )
         return {"accepted": True, "state": "connecting", "error_code": None, "message": "ok"}
 
@@ -145,7 +145,7 @@ async def test_connect_sends_generation_and_waits_for_live() -> None:
     result = await controller.connect_room(2233)
 
     assert result["ok"] is True
-    assert result["status"]["state"] == "live"
+    assert result["status"]["state"] == "prelive"
     assert client.calls[0][0] == CONNECT_EVENT
     assert "SESSDATA" not in repr(client.calls)
 

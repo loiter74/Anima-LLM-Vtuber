@@ -80,6 +80,58 @@ async def test_replay_failure_stops_without_reusing_the_failed_event() -> None:
     assert failed["error"] == "RuntimeError"
 
 
+async def test_replay_accepts_matching_prelive_room() -> None:
+    coordinator = ProgramReplayCoordinator()
+    received = asyncio.Event()
+
+    async def dispatch(_event: LivestreamEvent) -> None:
+        received.set()
+
+    coordinator.set_dispatcher(dispatch)
+    coordinator.set_room_state_provider(
+        lambda _room_id: {
+            "state": "prelive",
+            "room_id": 1914110916,
+            "desired_room_id": 1914110916,
+        }
+    )
+
+    started = await coordinator.start(
+        [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
+        room_id=1914110916,
+        creator_id="creator",
+        source="jsonl",
+        speed=100,
+    )
+
+    await asyncio.wait_for(received.wait(), timeout=1)
+    await wait_until(lambda: coordinator.get_run(started["replay_id"])["state"] == "completed")
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        {"state": "live", "room_id": 1914110916},
+        {"state": "prelive", "room_id": 123},
+    ],
+)
+async def test_replay_rejects_live_or_other_connected_room(snapshot: dict[str, object]) -> None:
+    coordinator = ProgramReplayCoordinator()
+    coordinator.set_dispatcher(lambda _event: asyncio.sleep(0))
+    coordinator.set_room_state_provider(lambda _room_id: snapshot)
+
+    with pytest.raises(ReplayCoordinatorError) as captured:
+        await coordinator.start(
+            [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
+            room_id=1914110916,
+            creator_id="creator",
+            source="jsonl",
+            speed=100,
+        )
+
+    assert captured.value.code == "room_input_active"
+
+
 async def test_replay_pause_waits_for_the_current_dispatch_within_the_control_bound() -> None:
     coordinator = ProgramReplayCoordinator(control_timeout_seconds=0.2)
     started_dispatch = asyncio.Event()

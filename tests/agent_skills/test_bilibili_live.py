@@ -58,7 +58,7 @@ def result(
     *,
     ok: bool = True,
     room_id: int | None = 1914110916,
-    state: str = "live",
+    state: str = "prelive",
     error_code: str | None = None,
 ) -> dict[str, Any]:
     return {
@@ -113,7 +113,7 @@ def test_connect_uses_default_room_and_closes_only_the_control_transport(tmp_pat
 
     assert output["ok"] is True
     assert output["room_id"] == 1914110916
-    assert output["state"] == "live"
+    assert output["state"] == "prelive"
     assert output["generation_id"] == 3
     assert output["elapsed_ms"] >= 0
     assert controller.calls == [("connect", 1914110916, 30.0)]
@@ -314,6 +314,6 @@ def test_status_and_disconnect_do_not_require_a_room_config(tmp_path: Path) -> N
     status = run(cli, ["status"], controller, tmp_path / "missing.yaml")
     disconnected = run(cli, ["disconnect"], controller, tmp_path / "missing.yaml")
 
-    assert status["state"] == "live"
+    assert status["state"] == "prelive"
     assert disconnected["state"] == "stopped"
     assert controller.calls == [("status", None, None), ("disconnect", None, 30.0)]

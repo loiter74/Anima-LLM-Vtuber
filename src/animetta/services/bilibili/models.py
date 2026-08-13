@@ -42,6 +42,7 @@ class LivestreamEventType(StrEnum):
     LIKE_BATCH = "like_batch"
     POPULARITY_SNAPSHOT = "popularity_snapshot"
     CONNECTION_STATE = "connection_state"
+    BROADCAST_STATE = "broadcast_state"
     UNKNOWN = "unknown"
 
 

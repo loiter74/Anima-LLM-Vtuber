@@ -121,6 +121,18 @@ def normalize_bilibili_event(
             },
         )
 
+    if command in {"LIVE", "PREPARING"}:
+        is_live = command == "LIVE"
+        return _event(
+            sequence,
+            offset_ms,
+            LivestreamEventType.BROADCAST_STATE,
+            payload={
+                "live": is_live,
+                "message": "Live" if is_live else "Waiting for broadcast",
+            },
+        )
+
     safe_command = re.sub(r"[^A-Z0-9_]", "_", command.upper())[:64]
     return _event(
         sequence,

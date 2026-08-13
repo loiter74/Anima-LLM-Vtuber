@@ -98,12 +98,7 @@ class ProgramReplayCoordinator:
             )
         if not events:
             raise ReplayCoordinatorError("empty_replay", "重放事件不能为空")
-        if self._room_state_provider is not None:
-            room_state = str(self._room_state_provider(room_id).get("state", "idle"))
-            if room_state not in {"idle", "stopped"}:
-                raise ReplayCoordinatorError(
-                    "room_input_active", "真实弹幕或节目运行活动时不能启动重放", status_code=409
-                )
+        self._ensure_room_available(room_id)
         self._loop = asyncio.get_running_loop()
         replay_id = str(uuid4())
         run = ReplayRun(
@@ -225,6 +220,36 @@ class ProgramReplayCoordinator:
     def _dispatch_from_worker(self, run: ReplayRun, rebased: LivestreamEvent) -> None:
         if self._loop is None or self._dispatcher is None:
             return
+        future: Future[None] = asyncio.run_coroutine_threadsafe(
+            self._dispatch_if_room_available(run),
+            self._loop,
+        )
+        try:
+            future.result()
+        except ReplayCoordinatorError as exc:
+            gateway = run.gateway
+            if gateway is not None:
+                gateway.stop()
+            self._loop.call_soon_threadsafe(self._mark_failed, run, exc.code)
+            raise
+        except Exception as exc:
+            gateway = run.gateway
+            if gateway is not None:
+                gateway.stop()
+            self._loop.call_soon_threadsafe(
+                self._mark_failed,
+                run,
+                type(exc).__name__,
+            )
+            raise
+
+    async def _dispatch_if_room_available(
+        self,
+        run: ReplayRun,
+    ) -> None:
+        if self._dispatcher is None:
+            return
+        self._ensure_room_available(run.room_id)
         original = run.events[run.cursor]
         payload = dict(original.payload)
         context = dict(payload.get("program_context", {}))
@@ -251,22 +276,7 @@ class ProgramReplayCoordinator:
             text=original.text,
             payload=payload,
         )
-        future: Future[None] = asyncio.run_coroutine_threadsafe(
-            self._dispatcher(dispatched),
-            self._loop,
-        )
-        try:
-            future.result()
-        except Exception as exc:
-            gateway = run.gateway
-            if gateway is not None:
-                gateway.stop()
-            self._loop.call_soon_threadsafe(
-                self._mark_failed,
-                run,
-                type(exc).__name__,
-            )
-            raise
+        await self._dispatcher(dispatched)
         with self._lock:
             run.cursor += 1
 
@@ -351,6 +361,20 @@ class ProgramReplayCoordinator:
             self._active_by_room.pop(room_id, None)
             return None
         return run
+
+    def _ensure_room_available(self, room_id: int) -> None:
+        if self._room_state_provider is None:
+            return
+        snapshot = self._room_state_provider(room_id)
+        state = str(snapshot.get("state", "idle"))
+        connected_room = snapshot.get("room_id") or snapshot.get("desired_room_id")
+        if state in {"idle", "stopped"} or (state == "prelive" and connected_room == room_id):
+            return
+        raise ReplayCoordinatorError(
+            "room_input_active",
+            "真实直播、其他房间连接或节目运行活动时不能启动重放",
+            status_code=409,
+        )
 
     def _owned_run(self, replay_id: str, creator_id: str) -> ReplayRun:
         run = self._runs.get(replay_id)

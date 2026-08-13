@@ -102,6 +102,22 @@ from animetta.services.bilibili.models import LivestreamEventType
             "",
             {"connected": True, "message": "Connected"},
         ),
+        (
+            "LIVE",
+            {"data": {"roomid": 123}},
+            LivestreamEventType.BROADCAST_STATE,
+            "",
+            "",
+            {"live": True, "message": "Live"},
+        ),
+        (
+            "PREPARING",
+            {"data": {"roomid": 123}},
+            LivestreamEventType.BROADCAST_STATE,
+            "",
+            "",
+            {"live": False, "message": "Waiting for broadcast"},
+        ),
     ],
 )
 def test_normalizes_supported_bilibili_events(

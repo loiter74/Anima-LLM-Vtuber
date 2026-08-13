@@ -82,6 +82,26 @@ describe('standalone live DOM view', () => {
     expect(status.textContent).toBe('弹幕直播中')
   })
 
+  it('distinguishes a connected pre-live room from an active broadcast', () => {
+    const view = mountLiveView()
+
+    view.setLivestreamStatus({
+      state: 'prelive',
+      connected: true,
+      room_id: 1914110916,
+      desired_room_id: 1914110916,
+      retry_count: 0,
+      error_code: null,
+      generation_id: 1,
+      message: 'Waiting for broadcast',
+      updated_at: 1,
+    })
+
+    const status = document.getElementById('livestreamStatus')!
+    expect(status.dataset.state).toBe('prelive')
+    expect(status.textContent).toBe('弹幕姬已连接 · 等待开播')
+  })
+
   it('increments the live list without rebuilding old nodes and caps it at 60 items', () => {
     const view = mountLiveView()
     const messages = Array.from({ length: 100 }, (_, index) => ({

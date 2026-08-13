@@ -13,6 +13,7 @@ class LivestreamState(StrEnum):
 
     STOPPED = "stopped"
     CONNECTING = "connecting"
+    PRELIVE = "prelive"
     LIVE = "live"
     RECONNECTING = "reconnecting"
     STOPPING = "stopping"

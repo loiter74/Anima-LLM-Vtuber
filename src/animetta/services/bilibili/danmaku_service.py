@@ -108,6 +108,7 @@ class DanmakuService:
         self._connected = False
         self._reconnect_delay = 1.0  # starts at 1s, doubles each retry
         self._event_sequence = 0
+        self._broadcast_event_seen = False
         self._seen_events.clear()
         self._started_monotonic = time.monotonic()
 
@@ -151,6 +152,7 @@ class DanmakuService:
 
         self._running = True
         self._event_sequence = 0
+        self._broadcast_event_seen = False
         self._seen_events.clear()
         self._started_monotonic = time.monotonic()
         self._thread = threading.Thread(
@@ -325,6 +327,22 @@ class DanmakuService:
             except Exception as e:
                 logger.error(f"[DanmakuService] Error parsing VIEW: {e}")
 
+        @monitor.on("LIVE")
+        async def on_live(event: dict[str, Any]) -> None:
+            try:
+                self._broadcast_event_seen = True
+                await self._enqueue_event("LIVE", event)
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing LIVE: {e}")
+
+        @monitor.on("PREPARING")
+        async def on_preparing(event: dict[str, Any]) -> None:
+            try:
+                self._broadcast_event_seen = True
+                await self._enqueue_event("PREPARING", event)
+            except Exception as e:
+                logger.error(f"[DanmakuService] Error parsing PREPARING: {e}")
+
         known_commands = {
             "DANMU_MSG",
             "SEND_GIFT",
@@ -333,6 +351,8 @@ class DanmakuService:
             "LIKE_INFO_V3_CLICK",
             "LIKE_INFO_V3_UPDATE",
             "VIEW",
+            "LIVE",
+            "PREPARING",
             "VERIFICATION_SUCCESSFUL",
             "DISCONNECT",
         }
@@ -361,6 +381,9 @@ class DanmakuService:
             await self._enqueue_event("VERIFICATION_SUCCESSFUL", event)
             self._notify_status(True, "Connected")
             logger.info("[DanmakuService] Connected to room {}", self.room_id)
+            await self._sync_initial_broadcast_state(
+                live.LiveRoom(self.room_id, credential),
+            )
 
         # Start consumer task (drains queue → calls callback)
         consumer_task = asyncio.create_task(self._consume_queue())
@@ -443,6 +466,23 @@ class DanmakuService:
             logger.debug("[DanmakuService] Duplicate event dropped: {}", command)
             return
         await self._queue.put(self._normalize_event(command, event))
+
+    async def _sync_initial_broadcast_state(self, room: Any) -> None:
+        """Publish the room's authoritative on-air state after transport verification."""
+        try:
+            room_info = await room.get_room_play_info()
+            live_status = room_info.get("live_status") if isinstance(room_info, dict) else None
+            if isinstance(live_status, bool) or not isinstance(live_status, int):
+                raise ValueError("invalid live_status")
+            if live_status not in {0, 1, 2}:
+                raise ValueError("unsupported live_status")
+            if not self._broadcast_event_seen:
+                await self._enqueue_event("LIVE" if live_status == 1 else "PREPARING", {})
+        except Exception as exc:
+            logger.warning(
+                "[DanmakuService] Initial broadcast status unavailable: error_type={}",
+                type(exc).__name__,
+            )
 
     def _is_duplicate_event(self, command: str, event: dict[str, object]) -> bool:
         now = time.monotonic()

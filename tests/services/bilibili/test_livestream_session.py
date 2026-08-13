@@ -119,7 +119,7 @@ async def test_initial_snapshot_is_stopped_and_public(session_harness) -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_room_is_idempotent_and_waits_for_real_connected_status(
+async def test_set_room_waits_for_authoritative_broadcast_state_after_transport_connects(
     session_harness,
 ) -> None:
     session, gateways, statuses, _ = session_harness
@@ -139,9 +139,36 @@ async def test_set_room_is_idempotent_and_waits_for_real_connected_status(
     gateways[0].emit_status(True, "Connected")
     await _settle_callbacks()
 
-    assert session.snapshot()["state"] == LivestreamState.LIVE.value
+    assert session.snapshot()["state"] == LivestreamState.CONNECTING.value
     assert session.snapshot()["connected"] is True
     assert session.snapshot()["room_id"] == 123
+    assert statuses[-1]["state"] == "connecting"
+
+    gateways[0].emit_event(
+        LivestreamEvent(
+            0,
+            0,
+            LivestreamEventType.BROADCAST_STATE,
+            payload={"live": False, "message": "Waiting for broadcast"},
+        )
+    )
+    await _settle_callbacks()
+
+    assert session.snapshot()["state"] == LivestreamState.PRELIVE.value
+    assert statuses[-1]["state"] == "prelive"
+
+    gateways[0].emit_event(
+        LivestreamEvent(
+            1,
+            10,
+            LivestreamEventType.BROADCAST_STATE,
+            payload={"live": True, "message": "Live"},
+        )
+    )
+    await _settle_callbacks()
+
+    assert session.snapshot()["state"] == LivestreamState.LIVE.value
+    assert session.snapshot()["connected"] is True
     assert statuses[-1]["state"] == "live"
 
 

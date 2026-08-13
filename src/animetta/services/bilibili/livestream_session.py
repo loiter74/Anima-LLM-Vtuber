@@ -15,7 +15,12 @@ from animetta.config import ReplyPolicyConfig
 from .danmaku_buffer import DanmakuBuffer
 from .gateway import DanmakuGateway, create_danmaku_gateway
 from .livestream_state import LivestreamSnapshot, LivestreamState
-from .models import DanmakuMessage, LivestreamEvent, LivestreamEventMetrics
+from .models import (
+    DanmakuMessage,
+    LivestreamEvent,
+    LivestreamEventMetrics,
+    LivestreamEventType,
+)
 from .reply_queue import DanmakuReplyRuntime, ReplyMetrics, ReplySubmissionResult
 
 GatewayFactory = Callable[[int, str], DanmakuGateway]
@@ -158,6 +163,7 @@ class LivestreamSession:
                 and self._snapshot.state
                 in {
                     LivestreamState.CONNECTING,
+                    LivestreamState.PRELIVE,
                     LivestreamState.LIVE,
                     LivestreamState.RECONNECTING,
                 }
@@ -390,12 +396,12 @@ class LivestreamSession:
 
             if connected:
                 self._transition(
-                    state=LivestreamState.LIVE,
+                    state=LivestreamState.CONNECTING,
                     connected=True,
                     room_id=self._snapshot.desired_room_id,
                     retry_count=0,
                     error_code=None,
-                    message=message or "Connected",
+                    message="Checking broadcast state",
                 )
             elif message in {
                 "Dependency unavailable",
@@ -500,9 +506,26 @@ class LivestreamSession:
             if generation != self._snapshot.generation_id or self._gateway is None:
                 return
             room_id = self._snapshot.desired_room_id
+            status_changed = False
+            if (
+                event.event_type is LivestreamEventType.BROADCAST_STATE
+                and self._snapshot.connected
+                and isinstance(event.payload.get("live"), bool)
+            ):
+                next_state = (
+                    LivestreamState.LIVE if event.payload["live"] else LivestreamState.PRELIVE
+                )
+                if self._snapshot.state is not next_state:
+                    self._transition(
+                        state=next_state,
+                        message=str(event.payload.get("message") or next_state.value),
+                    )
+                    status_changed = True
 
         if room_id is None:
             return
+        if status_changed:
+            await self._publish_status()
         self._event_metrics.record_received(event)
         try:
             await self._raw_event_sink(event, room_id, generation)

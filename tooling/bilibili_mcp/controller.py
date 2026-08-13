@@ -18,10 +18,10 @@ SWITCH_ROOM_EVENT = "bilibili:update_room"
 DISCONNECT_EVENT = "bilibili:disconnect"
 
 LIVESTREAM_STATES = frozenset(
-    {"stopped", "connecting", "live", "reconnecting", "stopping", "error"}
+    {"stopped", "connecting", "prelive", "live", "reconnecting", "stopping", "error"}
 )
 MUTABLE_CONNECT_STATES = frozenset({"stopped", "error"})
-IDEMPOTENT_ROOM_STATES = frozenset({"connecting", "live", "reconnecting"})
+IDEMPOTENT_ROOM_STATES = frozenset({"connecting", "prelive", "live", "reconnecting"})
 EVENT_BUFFER_CAPACITY = 200
 MAX_EVENT_LIMIT = 100
 MAX_WAIT_SECONDS = 60.0
@@ -324,7 +324,7 @@ class BilibiliController:
             return {**ack_result, "status": self._status_copy()}
         remaining = self._remaining_timeout(started_at, timeout_seconds)
         status = await self._wait_for_status(
-            states=frozenset({"live", "error"}),
+            states=frozenset({"prelive", "live", "error"}),
             timeout_seconds=remaining,
             room_id=room_id,
             minimum_generation=expected_generation + 1,
@@ -341,7 +341,7 @@ class BilibiliController:
                 "Bilibili 直播会话进入错误状态",
                 status=status,
             )
-        return _success("Bilibili 房间已进入直播状态", status=status)
+        return _success("Bilibili 房间弹幕连接已就绪", status=status)
 
     async def _wait_after_idempotent_command(
         self,
@@ -350,7 +350,7 @@ class BilibiliController:
         timeout_seconds: float,
     ) -> ToolResult:
         status = await self._wait_for_status(
-            states=frozenset({"live", "error"}),
+            states=frozenset({"prelive", "live", "error"}),
             timeout_seconds=timeout_seconds,
             room_id=room_id,
         )
@@ -366,7 +366,7 @@ class BilibiliController:
                 "Bilibili 直播会话进入错误状态",
                 status=status,
             )
-        return _success("Bilibili 房间已经处于直播状态", status=status)
+        return _success("Bilibili 房间弹幕连接已经就绪", status=status)
 
     async def _send_command(
         self,

@@ -39,7 +39,7 @@ async def settle_callbacks() -> None:
 
 
 def _snapshot(state: str = "stopped") -> dict[str, object]:
-    connected = state == "live"
+    connected = state in {"prelive", "live"}
     return {
         "state": state,
         "connected": connected,

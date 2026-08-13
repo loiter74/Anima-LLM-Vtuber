@@ -102,6 +102,7 @@ export function createDomLiveView(document: Document): LiveView {
       const labels: Record<BilibiliStatusPayload['state'], string> = {
         stopped: '直播未启动',
         connecting: '弹幕连接中',
+        prelive: '弹幕姬已连接 · 等待开播',
         live: '弹幕直播中',
         reconnecting: `弹幕重连中 · ${status.retry_count}`,
         stopping: '弹幕停止中',

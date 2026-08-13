@@ -35,7 +35,7 @@ export interface DanmakuItem {
 
 /** Status of Bilibili connection */
 export interface DanmakuStatus {
-  state: 'stopped' | 'connecting' | 'live' | 'reconnecting' | 'stopping' | 'error'
+  state: 'stopped' | 'connecting' | 'prelive' | 'live' | 'reconnecting' | 'stopping' | 'error'
   connected: boolean
   room_id: number | null
   desired_room_id: number | null

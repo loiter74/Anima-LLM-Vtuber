@@ -184,7 +184,7 @@ export interface SingCompletePayload {
 }
 
 export type LivestreamState =
-  'stopped' | 'connecting' | 'live' | 'reconnecting' | 'stopping' | 'error'
+  'stopped' | 'connecting' | 'prelive' | 'live' | 'reconnecting' | 'stopping' | 'error'
 
 export interface BilibiliCommandAck {
   accepted: boolean

@@ -22,8 +22,8 @@ vi.mock('@/composables/useSocket', () => ({ getSocket: () => socket }))
 function status(state: BilibiliStatusPayload['state']): BilibiliStatusPayload {
   return {
     state,
-    connected: state === 'live',
-    room_id: state === 'live' ? 123 : null,
+    connected: state === 'prelive' || state === 'live',
+    room_id: state === 'prelive' || state === 'live' ? 123 : null,
     desired_room_id: state === 'stopped' ? null : 123,
     retry_count: state === 'reconnecting' ? 2 : 0,
     error_code: null,

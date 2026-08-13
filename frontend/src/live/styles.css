@@ -110,6 +110,7 @@ button {
   color: var(--c-text-dim);
   font-size: 18px;
 }
+.status-pill[data-state='prelive'],
 .status-pill[data-state='live'],
 .status-pill[data-state='connected'] {
   color: var(--c-success);

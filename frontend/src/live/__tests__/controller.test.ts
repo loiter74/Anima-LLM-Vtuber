@@ -39,7 +39,7 @@ function harness(search = '') {
 function status(state: BilibiliStatusPayload['state']): BilibiliStatusPayload {
   return {
     state,
-    connected: state === 'live',
+    connected: state === 'prelive' || state === 'live',
     room_id: null,
     desired_room_id: 123,
     retry_count: 2,
