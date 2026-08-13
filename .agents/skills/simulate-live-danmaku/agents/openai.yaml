@@ -1,0 +1,4 @@
+interface:
+  display_name: "弹幕姬"
+  short_description: "在正式直播链路中生成可复现的日常、冷场与高峰弹幕调试场景"
+  default_prompt: "使用 $simulate-live-danmaku 在当前 Animetta 实例模拟一轮可复现的真实弹幕场景，并报告链路证据。"
