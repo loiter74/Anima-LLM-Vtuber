@@ -4,6 +4,21 @@ const fixtures = vi.hoisted(() => {
   let beforeModelUpdate: (() => void) | null = null
   let applicationOptions: Record<string, unknown> | null = null
   const setParameterValueByIndex = vi.fn()
+  const parameterNames = [
+    'ParamMouthOpenY',
+    'ParamAngleX',
+    'ParamAngleY',
+    'ParamAngleZ',
+    'ParamBodyAngleX',
+    'ParamBodyAngleY',
+    'ParamBodyAngleZ',
+    'ParamBreath',
+  ]
+  const parameterValues = Array.from({ length: parameterNames.length }, () => 0)
+  const motionState: { currentGroup?: string } = { currentGroup: 'Idle' }
+  setParameterValueByIndex.mockImplementation((index: number, value: number) => {
+    parameterValues[index] = value
+  })
   const model = {
     width: 400,
     height: 800,
@@ -12,11 +27,15 @@ const fixtures = vi.hoisted(() => {
     position: { set: vi.fn() },
     internalModel: {
       coreModel: {
-        getParameterCount: vi.fn().mockReturnValue(2),
-        getParameterIndex: vi.fn().mockReturnValue(1),
+        getParameterCount: vi.fn().mockReturnValue(parameterNames.length),
+        getParameterIndex: vi.fn((name: string) => parameterNames.indexOf(name)),
+        getParameterValueByIndex: vi.fn((index: number) => parameterValues[index]),
+        getParameterDefaultValue: vi.fn((index: number) => (index === 1 ? 2 : 0)),
+        getParameterMinimumValue: vi.fn((index: number) => (index === 7 ? 0 : -30)),
+        getParameterMaximumValue: vi.fn((index: number) => (index === 7 ? 1 : 30)),
         setParameterValueByIndex,
       },
-      motionManager: { stopAllMotions: vi.fn() },
+      motionManager: { state: motionState, stopAllMotions: vi.fn() },
       on: vi.fn((_event: string, listener: () => void) => {
         beforeModelUpdate = listener
       }),
@@ -31,6 +50,17 @@ const fixtures = vi.hoisted(() => {
     setParameterValueByIndex,
     setApplicationOptions: (options: Record<string, unknown>) => {
       applicationOptions = options
+    },
+    resetModelState: () => {
+      parameterValues.fill(0)
+      motionState.currentGroup = 'Idle'
+    },
+    setParameterValue: (name: string, value: number) => {
+      parameterValues[parameterNames.indexOf(name)] = value
+    },
+    getParameterValue: (name: string) => parameterValues[parameterNames.indexOf(name)],
+    setMotionGroup: (group: string) => {
+      motionState.currentGroup = group
     },
     getApplicationOptions: () => applicationOptions,
     emitBeforeModelUpdate: () => beforeModelUpdate?.(),
@@ -55,6 +85,7 @@ vi.mock('pixi-live2d-display/cubism4', () => ({
 describe('createLive2DStage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    fixtures.resetModelState()
     document.body.innerHTML = `
       <canvas id="live2dCanvas"></canvas>
       <p id="modelStatus"></p>
@@ -85,7 +116,7 @@ describe('createLive2DStage', () => {
     fixtures.emitBeforeModelUpdate()
 
     expect(play).toHaveBeenCalledOnce()
-    expect(fixtures.setParameterValueByIndex).toHaveBeenCalledWith(1, expect.any(Number))
+    expect(fixtures.setParameterValueByIndex).toHaveBeenCalledWith(0, expect.any(Number))
     expect(notification.dataset.lipSync).toBe('observed')
     stage.dispose()
     stage.dispose()
@@ -100,7 +131,7 @@ describe('createLive2DStage', () => {
     stage.setMouth(0.8, 'task-1')
     fixtures.emitBeforeModelUpdate()
 
-    expect(fixtures.setParameterValueByIndex).toHaveBeenLastCalledWith(1, 0.8)
+    expect(fixtures.setParameterValueByIndex).toHaveBeenLastCalledWith(0, 0.8)
     expect(document.getElementById('audioStatus')).toHaveProperty(
       'dataset.lastLipSyncTaskId',
       'task-1',
@@ -122,6 +153,28 @@ describe('createLive2DStage', () => {
     await stage.ready
 
     expect(fixtures.getApplicationOptions()?.resizeTo).toBe(avatarContainer)
+    stage.dispose()
+  })
+
+  it('amplifies authored head, body, and breath parameters only during idle motion', async () => {
+    const { createLive2DStage } = await import('./live2d-stage')
+    const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
+    const stage = createLive2DStage(socket, { idleVitality: true })
+    await stage.ready
+
+    fixtures.setParameterValue('ParamAngleX', 8)
+    fixtures.setParameterValue('ParamBodyAngleX', 4)
+    fixtures.setParameterValue('ParamBreath', 0.9)
+    fixtures.emitBeforeModelUpdate()
+
+    expect(fixtures.getParameterValue('ParamAngleX')).toBeCloseTo(8.9)
+    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeCloseTo(5.2)
+    expect(fixtures.getParameterValue('ParamBreath')).toBe(1)
+
+    fixtures.setMotionGroup('TapBody')
+    fixtures.setParameterValue('ParamAngleX', 8)
+    fixtures.emitBeforeModelUpdate()
+    expect(fixtures.getParameterValue('ParamAngleX')).toBe(8)
     stage.dispose()
   })
 })

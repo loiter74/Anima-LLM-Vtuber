@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
+import type { Cubism4InternalModel } from 'pixi-live2d-display/cubism4'
 import { Events } from '@/constants/socket-events'
 import { DisposerStack } from '@/review/disposable'
 import type { Live2DAction } from '@/types/live2d'
@@ -17,6 +18,36 @@ import {
   type CubismParameterModel,
 } from '@/components/live2d/live2dPerformanceProfile'
 
+const IDLE_VITALITY_PARAMETERS = [
+  { name: 'ParamAngleX', factor: 1.15 },
+  { name: 'ParamAngleY', factor: 1.15 },
+  { name: 'ParamAngleZ', factor: 1.15 },
+  { name: 'ParamBodyAngleX', factor: 1.3 },
+  { name: 'ParamBodyAngleY', factor: 1.3 },
+  { name: 'ParamBodyAngleZ', factor: 1.3 },
+  { name: 'ParamBreath', factor: 1.2 },
+] as const
+
+function amplifyIdleMotion(internalModel: Cubism4InternalModel): void {
+  if (internalModel.motionManager.state.currentGroup !== 'Idle') return
+
+  for (const { name, factor } of IDLE_VITALITY_PARAMETERS) {
+    const index = internalModel.coreModel.getParameterIndex(name)
+    if (index < 0) continue
+    const current = internalModel.coreModel.getParameterValueByIndex(index)
+    const defaultValue = internalModel.coreModel.getParameterDefaultValue?.(index) ?? 0
+    const minimum =
+      internalModel.coreModel.getParameterMinimumValue?.(index) ?? Number.NEGATIVE_INFINITY
+    const maximum =
+      internalModel.coreModel.getParameterMaximumValue?.(index) ?? Number.POSITIVE_INFINITY
+    const amplified = defaultValue + (current - defaultValue) * factor
+    internalModel.coreModel.setParameterValueByIndex(
+      index,
+      Math.max(minimum, Math.min(maximum, amplified)),
+    )
+  }
+}
+
 export interface Live2DStage {
   ready: Promise<void>
   setMouth(value: number, taskId?: string): void
@@ -31,6 +62,7 @@ export interface Live2DStage {
 
 export interface Live2DStageOptions {
   readonly resizeTo?: Window | HTMLElement
+  readonly idleVitality?: boolean
 }
 
 export function createLive2DStage(
@@ -108,6 +140,9 @@ export function createLive2DStage(
       )
       setReviewMouthSampler(() => {
         performanceController?.tick()
+        if (options.idleVitality) {
+          amplifyIdleMotion(model.internalModel as Cubism4InternalModel)
+        }
         reviewLipSync?.sample()
       })
       disposers.add(() => performanceController?.destroy())

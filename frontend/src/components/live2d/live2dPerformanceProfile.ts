@@ -23,6 +23,7 @@ export interface CubismParameterModel {
   getParameterIndex(name: string): number
   getParameterValueByIndex(index: number): number
   setParameterValueByIndex(index: number, value: number): void
+  getParameterDefaultValue?: (index: number) => number
   getParameterMinimumValue?: (index: number) => number
   getParameterMaximumValue?: (index: number) => number
 }

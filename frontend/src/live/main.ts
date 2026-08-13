@@ -64,7 +64,7 @@ const session = bootstrapLiveSession({
 
 const pageDisposers = new DisposerStack()
 let pageDisposed = false
-const live2dStage = createLive2DStage(session.socket)
+const live2dStage = createLive2DStage(session.socket, { idleVitality: true })
 const liveBgm = createLiveBgmController(document, search)
 const liveAudio = createLiveAudioController(session.socket, document, live2dStage.setMouth, liveBgm)
 pageDisposers.add(() => session.dispose())
