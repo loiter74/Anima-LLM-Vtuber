@@ -16,6 +16,7 @@ const fixtures = vi.hoisted(() => {
   ]
   const parameterValues = Array.from({ length: parameterNames.length }, () => 0)
   const motionState: { currentGroup?: string } = { currentGroup: 'Idle' }
+  const idleMotions = [{ setIsLoopFadeIn: vi.fn() }, { setIsLoopFadeIn: vi.fn() }]
   setParameterValueByIndex.mockImplementation((index: number, value: number) => {
     parameterValues[index] = value
   })
@@ -35,7 +36,13 @@ const fixtures = vi.hoisted(() => {
         getParameterMaximumValue: vi.fn((index: number) => (index === 7 ? 1 : 30)),
         setParameterValueByIndex,
       },
-      motionManager: { state: motionState, stopAllMotions: vi.fn() },
+      motionManager: {
+        state: motionState,
+        groups: { idle: 'Idle' },
+        definitions: { Idle: [{}, {}] },
+        loadMotion: vi.fn((_group: string, index: number) => Promise.resolve(idleMotions[index])),
+        stopAllMotions: vi.fn(),
+      },
       on: vi.fn((_event: string, listener: () => void) => {
         beforeModelUpdate = listener
       }),
@@ -47,6 +54,7 @@ const fixtures = vi.hoisted(() => {
   }
   return {
     model,
+    idleMotions,
     setParameterValueByIndex,
     setApplicationOptions: (options: Record<string, unknown>) => {
       applicationOptions = options
@@ -153,6 +161,18 @@ describe('createLive2DStage', () => {
     await stage.ready
 
     expect(fixtures.getApplicationOptions()?.resizeTo).toBe(avatarContainer)
+    stage.dispose()
+  })
+
+  it('keeps authored idle motion continuous when the same motion loops', async () => {
+    const { createLive2DStage } = await import('./live2d-stage')
+    const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
+
+    const stage = createLive2DStage(socket)
+    await stage.ready
+
+    expect(fixtures.idleMotions[0].setIsLoopFadeIn).toHaveBeenCalledWith(false)
+    expect(fixtures.idleMotions[1].setIsLoopFadeIn).toHaveBeenCalledWith(false)
     stage.dispose()
   })
 
