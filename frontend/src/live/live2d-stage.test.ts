@@ -32,8 +32,12 @@ const fixtures = vi.hoisted(() => {
         getParameterIndex: vi.fn((name: string) => parameterNames.indexOf(name)),
         getParameterValueByIndex: vi.fn((index: number) => parameterValues[index]),
         getParameterDefaultValue: vi.fn((index: number) => (index === 1 ? 2 : 0)),
-        getParameterMinimumValue: vi.fn((index: number) => (index === 7 ? 0 : -30)),
-        getParameterMaximumValue: vi.fn((index: number) => (index === 7 ? 1 : 30)),
+        getParameterMinimumValue: vi.fn((index: number) =>
+          index === 7 ? 0 : parameterNames[index].startsWith('ParamBodyAngle') ? -10 : -30,
+        ),
+        getParameterMaximumValue: vi.fn((index: number) =>
+          index === 7 ? 1 : parameterNames[index].startsWith('ParamBodyAngle') ? 10 : 30,
+        ),
         setParameterValueByIndex,
       },
       motionManager: {
@@ -176,7 +180,7 @@ describe('createLive2DStage', () => {
     stage.dispose()
   })
 
-  it('amplifies authored head, body, and breath parameters only during idle motion', async () => {
+  it('amplifies idle motion without hitting hard parameter limits', async () => {
     const { createLive2DStage } = await import('./live2d-stage')
     const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
     const stage = createLive2DStage(socket, { idleVitality: true })
@@ -188,8 +192,9 @@ describe('createLive2DStage', () => {
     fixtures.emitBeforeModelUpdate()
 
     expect(fixtures.getParameterValue('ParamAngleX')).toBeCloseTo(15.8)
-    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeCloseTo(10.4)
-    expect(fixtures.getParameterValue('ParamBreath')).toBe(1)
+    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeGreaterThan(9)
+    expect(fixtures.getParameterValue('ParamBodyAngleX')).toBeLessThan(10)
+    expect(fixtures.getParameterValue('ParamBreath')).toBeCloseTo(1, 3)
 
     fixtures.setMotionGroup('TapBody')
     fixtures.setParameterValue('ParamAngleX', 8)

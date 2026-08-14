@@ -28,6 +28,28 @@ const IDLE_VITALITY_PARAMETERS = [
   { name: 'ParamBreath', factor: 2.4 },
 ] as const
 
+const PARAMETER_LIMIT_KNEE_RATIO = 0.8
+
+function softlyLimitParameter(
+  value: number,
+  defaultValue: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const offset = value - defaultValue
+  const limit = offset < 0 ? defaultValue - minimum : maximum - defaultValue
+  if (!Number.isFinite(limit)) return value
+  if (limit <= 0) return defaultValue
+
+  const magnitude = Math.abs(offset)
+  const knee = limit * PARAMETER_LIMIT_KNEE_RATIO
+  if (magnitude <= knee) return value
+
+  const remaining = limit - knee
+  const softened = knee + remaining * (1 - Math.exp(-(magnitude - knee) / remaining))
+  return defaultValue + Math.sign(offset) * softened
+}
+
 function amplifyIdleMotion(internalModel: Cubism4InternalModel): void {
   if (internalModel.motionManager.state.currentGroup !== 'Idle') return
 
@@ -40,10 +62,14 @@ function amplifyIdleMotion(internalModel: Cubism4InternalModel): void {
       internalModel.coreModel.getParameterMinimumValue?.(index) ?? Number.NEGATIVE_INFINITY
     const maximum =
       internalModel.coreModel.getParameterMaximumValue?.(index) ?? Number.POSITIVE_INFINITY
-    const amplified = defaultValue + (current - defaultValue) * factor
     internalModel.coreModel.setParameterValueByIndex(
       index,
-      Math.max(minimum, Math.min(maximum, amplified)),
+      softlyLimitParameter(
+        defaultValue + (current - defaultValue) * factor,
+        defaultValue,
+        minimum,
+        maximum,
+      ),
     )
   }
 }
