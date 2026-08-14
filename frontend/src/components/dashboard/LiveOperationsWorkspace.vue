@@ -101,7 +101,7 @@ async function refreshSummary() {
 }
 
 async function refreshDetail() {
-  if (selectedTraceId.value) await store.fetchLiveTurn(selectedTraceId.value)
+  if (selectedTurn.value) await store.fetchLiveTurn(selectedTurn.value.trace_id)
 }
 
 function followLatest() {

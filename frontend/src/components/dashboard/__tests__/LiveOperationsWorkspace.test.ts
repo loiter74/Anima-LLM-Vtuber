@@ -144,11 +144,14 @@ describe('LiveOperationsWorkspace', () => {
     const textarea = wrapper.get('[data-testid="chat-input-bar"] textarea')
     await textarea.setValue('去 Minecraft 看看基地')
     await textarea.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
 
     expect(socket.emit).toHaveBeenCalledOnce()
     expect(socket.emit.mock.calls[0][0]).toBe(Events.CHAT.DEVELOPER_TEXT)
     expect(socket.emit.mock.calls[0][1]).toMatchObject({ text: '去 Minecraft 看看基地' })
     expect(wrapper.text()).toContain('投递中')
+    const pendingTaskId = socket.emit.mock.calls[0][1].task_id
+    expect(fetch).not.toHaveBeenCalledWith(`/api/stats/live/turns/${pendingTaskId}`)
     wrapper.unmount()
   })
 

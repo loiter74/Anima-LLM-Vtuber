@@ -258,6 +258,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const detail = await res.json()
       if (!res.ok || detail.error) throw new Error(detail.error ?? `HTTP ${res.status}`)
       liveTurnDetails.value = { ...liveTurnDetails.value, [traceId]: detail }
+      error.value = null
       return detail
     } catch (e) {
       error.value = String(e)
