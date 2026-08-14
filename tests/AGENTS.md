@@ -101,9 +101,7 @@ pnpm --dir frontend test:coverage
 
 ## 对话连续性契约
 
-新增聊天入口、LLM Provider、finalizer 提交排除条件或连续性 trace 字段时，必须同步扩展对应的连续性场景或合同矩阵。确定性连续性测试不得访问真实网络，也不得断言模型自由生成文案；只验证随机哨兵可见性与结构状态。
-
-运行时连续性 evidence 只能保存 trace ID、作用域、窗口计数、布尔判据和稳定错误码，不得保存输入、回答或历史正文。连续性测试不得复用或修改 `text-boundaries`、`sparse` 直播评审夹具。
+新增聊天入口、LLM Provider、finalizer 排除条件、replay 行为或连续性 trace/evidence 字段时，必须使用 `$verify-conversation-continuity` 闭合相应契约矩阵。继续遵守脱敏 evidence 边界，不得复用或修改 `text-boundaries`、`sparse` 直播评审夹具。
 
 ## ANTI-PATTERNS
 

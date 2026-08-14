@@ -140,6 +140,8 @@ def test_quick_always_includes_catalogued_required_smoke() -> None:
         "tests/AGENTS.md",
         ".agents/skills/simplify/SKILL.md",
         ".agents/skills/test-skill-regression/SKILL.md",
+        ".agents/skills/verify-conversation-continuity/SKILL.md",
+        ".agents/skills/verify-conversation-continuity/references/contract.md",
     ],
 )
 def test_agent_guidance_affected_plan_stays_on_fast_docs_path(path: str) -> None:
@@ -152,7 +154,7 @@ def test_agent_guidance_affected_plan_stays_on_fast_docs_path(path: str) -> None
 
 def test_agent_skill_runtime_avoids_repository_and_docker_fallbacks() -> None:
     changes = from_paths(
-        [".agents/skills/test-skill-regression/scripts/compare_runs.py"],
+        [".agents/skills/verify-conversation-continuity/scripts/run_regression.py"],
         repo_root=ROOT,
     )
 
@@ -166,6 +168,39 @@ def test_agent_skill_runtime_avoids_repository_and_docker_fallbacks() -> None:
     }
     assert plan.fallbacks == ()
     assert plan.docker_actions == ()
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_extra"),
+    [
+        (
+            ".agents/skills/test-skill-regression/fixtures/cases/verify-conversation-continuity-deterministic.json",
+            {"operational-source-contract"},
+        ),
+        ("tests/agent_skills/test_continuity_regression_skill.py", set()),
+    ],
+)
+def test_conversation_continuity_skill_runtime_paths_stay_focused(
+    path: str,
+    expected_extra: set[str],
+) -> None:
+    changes = from_paths([path], repo_root=ROOT)
+
+    plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
+
+    assert (
+        set(_group_ids(plan))
+        == {
+            "agent-skill-format",
+            "agent-skill-regression",
+            "agent-skill-static",
+            "backend-route-smoke",
+        }
+        | expected_extra
+    )
+    assert plan.fallbacks == ()
+    assert plan.docker_actions == ()
+    assert "backend-full" not in _group_ids(plan)
 
 
 def test_bilibili_mcp_avoids_repository_and_docker_fallbacks() -> None:

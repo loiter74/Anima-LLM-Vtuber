@@ -1,0 +1,4 @@
+interface:
+  display_name: "验证直播对话连续性"
+  short_description: "稳定执行直播短期对话连续性的确定性契约与真实运行时哨兵"
+  default_prompt: "使用 $verify-conversation-continuity 选择并执行直播短期对话连续性回归。"
