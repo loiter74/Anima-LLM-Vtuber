@@ -74,14 +74,16 @@ function amplifyIdleMotion(internalModel: Cubism4InternalModel): void {
   }
 }
 
-async function disableIdleLoopFadeIn(internalModel: Cubism4InternalModel): Promise<void> {
+async function configureIdleLoopMotions(internalModel: Cubism4InternalModel): Promise<void> {
   const { motionManager } = internalModel
   const idleGroup = motionManager.groups.idle
   const idleDefinitions = motionManager.definitions[idleGroup] ?? []
   await Promise.all(
     idleDefinitions.map(async (_definition, index) => {
       const motion = await motionManager.loadMotion(idleGroup, index)
-      motion?.setIsLoopFadeIn(false)
+      if (!motion) return
+      motion.setIsLoop(true)
+      motion.setIsLoopFadeIn(false)
     }),
   )
 }
@@ -151,7 +153,7 @@ export function createLive2DStage(
         model.destroy()
         return
       }
-      await disableIdleLoopFadeIn(model.internalModel as Cubism4InternalModel)
+      await configureIdleLoopMotions(model.internalModel as Cubism4InternalModel)
       const baseWidth = model.width / model.scale.x
       const baseHeight = model.height / model.scale.y
       const mouthBinding = bindReviewMouthAfterMotion(

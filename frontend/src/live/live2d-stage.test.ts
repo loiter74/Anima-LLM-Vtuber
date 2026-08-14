@@ -16,7 +16,10 @@ const fixtures = vi.hoisted(() => {
   ]
   const parameterValues = Array.from({ length: parameterNames.length }, () => 0)
   const motionState: { currentGroup?: string } = { currentGroup: 'Idle' }
-  const idleMotions = [{ setIsLoopFadeIn: vi.fn() }, { setIsLoopFadeIn: vi.fn() }]
+  const idleMotions = [
+    { setIsLoop: vi.fn(), setIsLoopFadeIn: vi.fn() },
+    { setIsLoop: vi.fn(), setIsLoopFadeIn: vi.fn() },
+  ]
   setParameterValueByIndex.mockImplementation((index: number, value: number) => {
     parameterValues[index] = value
   })
@@ -175,6 +178,8 @@ describe('createLive2DStage', () => {
     const stage = createLive2DStage(socket)
     await stage.ready
 
+    expect(fixtures.idleMotions[0].setIsLoop).toHaveBeenCalledWith(true)
+    expect(fixtures.idleMotions[1].setIsLoop).toHaveBeenCalledWith(true)
     expect(fixtures.idleMotions[0].setIsLoopFadeIn).toHaveBeenCalledWith(false)
     expect(fixtures.idleMotions[1].setIsLoopFadeIn).toHaveBeenCalledWith(false)
     stage.dispose()
