@@ -111,6 +111,34 @@ def _is_expected_host_process(pid: int) -> bool:
     return "animetta_qwen_tts" in normalized and str(HOST_TTS_PYTHON).casefold() in normalized
 
 
+def _host_tts_listener_pid() -> int | None:
+    if sys.platform != "win32":
+        return None
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        (
+            "Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8767 "
+            "-State Listen -ErrorAction SilentlyContinue | "
+            "Select-Object -First 1 -ExpandProperty OwningProcess"
+        ),
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+        pid = int(result.stdout.strip())
+    except (OSError, TypeError, ValueError, subprocess.SubprocessError):
+        return None
+    return pid if pid > 0 else None
+
+
 def _host_token() -> str:
     load_dotenv(ROOT / ".env", override=False)
     return os.getenv("QWEN_TTS_API_KEY", "").strip()
@@ -130,6 +158,8 @@ def _host_request_json(path: str, token: str) -> dict[str, object]:
 
 def _host_tts_status() -> dict[str, object]:
     pid = _read_host_pid()
+    if pid is None or not _is_expected_host_process(pid):
+        pid = _host_tts_listener_pid()
     if pid is None or not _is_expected_host_process(pid):
         return {"running": False, "ready": False}
 
@@ -175,6 +205,11 @@ def _terminate_host_process(pid: int) -> None:
         capture_output=True,
         timeout=15,
     )
+    for _ in range(50):
+        if not _is_expected_host_process(pid):
+            return
+        time.sleep(0.1)
+    raise RuntimeError("Host TTS process tree did not stop")
 
 
 def _start_host_tts_process(token: str) -> int:
@@ -262,9 +297,10 @@ def _host_tts_up(*, best_effort: bool) -> bool:
 
 
 def _host_tts_stop() -> None:
-    pid = _read_host_pid()
-    if pid is not None:
-        _terminate_host_process(pid)
+    pids = {_read_host_pid(), _host_tts_listener_pid()}
+    for pid in pids:
+        if pid is not None:
+            _terminate_host_process(pid)
     _remove_host_pid_file()
 
 

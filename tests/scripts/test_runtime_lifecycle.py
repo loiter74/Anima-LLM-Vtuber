@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts import runtime_lifecycle
 
 
@@ -161,6 +163,86 @@ def test_host_pid_file_rejects_invalid_or_non_positive_pid(
     for contents in ("not-json", '{"pid": 0}', '{"pid": -1}', '{"pid": "7"}'):
         pid_file.write_text(contents, encoding="utf-8")
         assert runtime_lifecycle._read_host_pid() is None
+
+
+def test_host_tts_stop_waits_for_the_process_tree_to_exit(monkeypatch) -> None:
+    commands: list[list[str]] = []
+    process_states = iter([True, True, False])
+
+    monkeypatch.setattr(runtime_lifecycle, "_read_host_pid", lambda: 123)
+    monkeypatch.setattr(runtime_lifecycle, "_host_tts_listener_pid", lambda: None)
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_is_expected_host_process",
+        lambda pid: next(process_states),
+    )
+    monkeypatch.setattr(
+        runtime_lifecycle.subprocess,
+        "run",
+        lambda command, **_kwargs: commands.append(command),
+    )
+    monkeypatch.setattr(runtime_lifecycle.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(runtime_lifecycle, "_remove_host_pid_file", lambda: None)
+
+    runtime_lifecycle._host_tts_stop()
+
+    assert commands == [["taskkill", "/PID", "123", "/T", "/F"]]
+
+
+def test_host_tts_stop_fails_when_the_process_tree_survives(monkeypatch) -> None:
+    monkeypatch.setattr(runtime_lifecycle, "_read_host_pid", lambda: 123)
+    monkeypatch.setattr(runtime_lifecycle, "_host_tts_listener_pid", lambda: None)
+    monkeypatch.setattr(runtime_lifecycle, "_is_expected_host_process", lambda _pid: True)
+    monkeypatch.setattr(
+        runtime_lifecycle.subprocess,
+        "run",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(runtime_lifecycle.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(RuntimeError, match="Host TTS process tree did not stop"):
+        runtime_lifecycle._host_tts_stop()
+
+
+def test_host_tts_stop_uses_expected_listener_when_pid_file_is_stale(monkeypatch) -> None:
+    terminated: list[int] = []
+
+    monkeypatch.setattr(runtime_lifecycle, "_read_host_pid", lambda: 123)
+    monkeypatch.setattr(runtime_lifecycle, "_host_tts_listener_pid", lambda: 456)
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_terminate_host_process",
+        lambda pid: terminated.append(pid),
+    )
+    monkeypatch.setattr(runtime_lifecycle, "_remove_host_pid_file", lambda: None)
+
+    runtime_lifecycle._host_tts_stop()
+
+    assert set(terminated) == {123, 456}
+
+
+def test_host_tts_status_uses_listener_when_pid_file_is_stale(monkeypatch) -> None:
+    monkeypatch.setattr(runtime_lifecycle, "_read_host_pid", lambda: 123)
+    monkeypatch.setattr(runtime_lifecycle, "_host_tts_listener_pid", lambda: 456)
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_is_expected_host_process",
+        lambda pid: pid == 456,
+    )
+    monkeypatch.setattr(runtime_lifecycle, "_host_token", lambda: "secret")
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_host_request_json",
+        lambda path, _token: (
+            {"ready": True} if path == "/ready" else runtime_lifecycle.HOST_TTS_IDENTITY
+        ),
+    )
+
+    assert runtime_lifecycle._host_tts_status() == {
+        "running": True,
+        "ready": True,
+        "identity_matches": True,
+    }
 
 
 def test_cross_platform_entrypoint_exists() -> None:
