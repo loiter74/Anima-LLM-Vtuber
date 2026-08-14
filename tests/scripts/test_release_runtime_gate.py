@@ -12,6 +12,7 @@ from scripts import release_runtime_gate as gate
 from scripts.release_runtime_gate import (
     ReleaseGateError,
     assert_clean_logs,
+    validate_conversation_continuity_evidence,
     validate_live_soak_evidence,
     validate_playwright_evidence,
     validate_production_readiness,
@@ -140,6 +141,40 @@ def _soak_evidence() -> dict[str, object]:
     }
 
 
+def _continuity_evidence() -> dict[str, object]:
+    transitions = [
+        ("developer_seed", 0, 1, True, "developer", "developer_console"),
+        ("replay_probe", 1, 1, False, "viewer", "bilibili:danmaku"),
+        ("viewer_reply", 1, 2, True, "viewer", "bilibili:danmaku"),
+        ("developer_followup", 2, 3, True, "developer", "developer_console"),
+    ]
+    return {
+        "schema_version": 1,
+        "status": "passed",
+        "run_id": "continuity-run",
+        "provider_real": True,
+        "socket_recreated": True,
+        "steps": [
+            {
+                "step_id": step_id,
+                "trace_id": f"trace-{index}",
+                "scope_kind": "livestream",
+                "window_before": before,
+                "window_after": after,
+                "committed": committed,
+                "actor_role": actor_role,
+                "source": source,
+                "public_fact_recalled": True if index >= 2 else None,
+                "private_marker_absent": True if index >= 2 else None,
+            }
+            for index, (step_id, before, after, committed, actor_role, source) in enumerate(
+                transitions
+            )
+        ],
+        "error_codes": [],
+    }
+
+
 def test_release_gate_script_entrypoint_can_import_qwen_preflight() -> None:
     completed = subprocess.run(
         [sys.executable, "scripts/release_runtime_gate.py", "--help"],
@@ -224,6 +259,59 @@ def test_release_requires_thirty_complete_turns_and_latency_budget() -> None:
     evidence["thresholds"]["audio_latency"]["p95_ms"] = 5001.0  # type: ignore[index]
     with pytest.raises(ReleaseGateError, match="Thirty-turn"):
         validate_live_soak_evidence(evidence)
+
+
+def test_release_requires_content_free_conversation_continuity_evidence() -> None:
+    evidence = _continuity_evidence()
+
+    validate_conversation_continuity_evidence(evidence)
+
+    evidence["steps"][1]["committed"] = True  # type: ignore[index]
+    with pytest.raises(ReleaseGateError, match="transition"):
+        validate_conversation_continuity_evidence(evidence)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "match"),
+    [
+        (lambda value: value.update(status="failed"), "incomplete"),
+        (lambda value: value.update(provider_real=False), "incomplete"),
+        (lambda value: value.update(socket_recreated=False), "incomplete"),
+        (lambda value: value.pop("run_id"), "incomplete"),
+        (
+            lambda value: value["steps"][2].update(private_marker_absent=False),
+            "private_marker_leaked",
+        ),
+        (lambda value: value["steps"][0].pop("source"), "fields"),
+        (lambda value: value["steps"][0].update(response_text="forbidden"), "fields"),
+    ],
+)
+def test_release_continuity_evidence_fails_closed(mutation, match: str) -> None:
+    evidence = _continuity_evidence()
+    mutation(evidence)
+
+    with pytest.raises(ReleaseGateError, match=match):
+        validate_conversation_continuity_evidence(evidence)
+
+
+def test_release_runs_conversation_canary_and_reads_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[tuple[str, ...]] = []
+
+    def fake_run(argv, **_kwargs):
+        command = tuple(str(part) for part in argv)
+        commands.append(command)
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(_continuity_evidence()), encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, stdout=f"{output}\n", stderr="")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    assert gate._run_conversation_continuity(tmp_path) == _continuity_evidence()
+    assert "scripts/conversation_continuity_canary.py" in commands[0]
 
 
 def test_release_soak_reports_media_completion_without_gating_it(
@@ -320,6 +408,11 @@ def test_release_gate_uses_host_qwen_and_rebuilds_only_animetta(
     monkeypatch.setattr(gate, "_frontend_probe", lambda _url: {"status": 200, "bytes": 12})
     monkeypatch.setattr(gate, "_run_live_soak", lambda _path: _soak_evidence())
     monkeypatch.setattr(gate, "_run_playwright", lambda _path: _playwright_evidence())
+    monkeypatch.setattr(
+        gate,
+        "_run_conversation_continuity",
+        lambda _path: _continuity_evidence(),
+    )
 
     evidence = gate.run_release_gate(
         plan=plan,
@@ -331,6 +424,8 @@ def test_release_gate_uses_host_qwen_and_rebuilds_only_animetta(
 
     flattened = [" ".join(command) for command in commands]
     assert evidence["status"] == "passed"
+    assert evidence["schema_version"] == 3
+    assert evidence["conversation_continuity"] == _continuity_evidence()
     assert evidence["readiness"]["components"]["tts"]["primary"]["identity"] == TTS_IDENTITY
     assert evidence["host_qwen"] == {"status": "passed", "identity": {"ready": True}}
     assert any("runtime_lifecycle.py host-tts-up" in command for command in flattened)

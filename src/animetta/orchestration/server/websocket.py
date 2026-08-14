@@ -491,6 +491,36 @@ class WebSocketServer:
             "sessdata": getattr(bilibili_config, "sessdata", ""),
         }
 
+    async def _dispatch_replay_event(self, event: Any) -> None:
+        """Route one replay event through the production Bilibili reply boundary."""
+        assert self.route_handlers is not None
+        message = event.to_danmaku_message()
+        context = dict(event.payload.get("program_context", {}))
+        room_id = int(context.get("room_id", 1) or 1)
+        if message is None:
+            await self.route_handlers.bilibili._broadcast_live_event(
+                event,
+                room_id,
+                0,
+            )
+            return
+        context.setdefault("display_name", event.actor_id or "首播测试观众")
+        context.setdefault("is_probe", True)
+        reply = context.get("reply")
+        if isinstance(reply, dict):
+            context["scene_guidance"] = build_script_guidance(
+                "弹幕重放",
+                event.sequence + 1,
+                reply,
+            )
+        await self.route_handlers.bilibili.process_program_danmaku(
+            event.text,
+            context,
+            room_id=room_id,
+        )
+        if context.get("memory_mode") == "write":
+            await self.memory_runtime.drain(timeout=15)
+
     def setup_routes(self) -> None:
         """Set up all routes"""
         bilibili_config = self._load_bilibili_config()
@@ -516,37 +546,8 @@ class WebSocketServer:
                 room_id=room_id,
             )
 
-        async def dispatch_replay(event: Any) -> None:
-            assert self.route_handlers is not None
-            message = event.to_danmaku_message()
-            context = dict(event.payload.get("program_context", {}))
-            room_id = int(context.get("room_id", 1) or 1)
-            if message is None:
-                await self.route_handlers.bilibili._broadcast_live_event(
-                    event,
-                    room_id,
-                    0,
-                )
-                return
-            context.setdefault("display_name", event.actor_id or "首播测试观众")
-            context.setdefault("is_probe", True)
-            reply = context.get("reply")
-            if isinstance(reply, dict):
-                context["scene_guidance"] = build_script_guidance(
-                    "弹幕重放",
-                    event.sequence + 1,
-                    reply,
-                )
-            await self.route_handlers.bilibili.process_program_danmaku(
-                event.text,
-                context,
-                room_id=room_id,
-            )
-            if context.get("memory_mode") == "write":
-                await self.memory_runtime.drain(timeout=15)
-
         self.program_runner.set_dispatcher(dispatch_program)
-        self.program_replay.set_dispatcher(dispatch_replay)
+        self.program_replay.set_dispatcher(self._dispatch_replay_event)
         self.program_runner.set_room_state_provider(
             lambda room_id: (
                 {"state": "replay"}

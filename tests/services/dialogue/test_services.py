@@ -72,8 +72,17 @@ async def test_reasoner_uses_explicit_messages_without_provider_history() -> Non
 
     assert result.normal_response == "先休息一下。"
     assert llm.history == original
-    assert [message["role"] for message in llm.calls[0]] == ["system", "user"]
-    assert '"completed_window":[["上一问","上一答"]]' in llm.calls[0][1]["content"]
+    assert [message["role"] for message in llm.calls[0]] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert llm.calls[0][1:] == [
+        {"role": "user", "content": "上一问"},
+        {"role": "assistant", "content": "上一答"},
+        {"role": "user", "content": '{"user_input":"今天工作好累。"}'},
+    ]
     assert "normal_response" in llm.calls[0][0]["content"]
     assert llm.call_kwargs == [{"temperature": 0, "response_format": {"type": "json_object"}}]
 

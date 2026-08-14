@@ -579,6 +579,19 @@ groups:
     resource_class: cpu
     resource_weight: 2
     input_sets: [python-toolchain]
+    covers: [livestream-continuity-contract]
+
+  livestream-continuity-contract:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests/acceptance/test_livestream_conversation_continuity.py]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
 
   backend-avatar-unit:
     domain: backend
@@ -686,6 +699,7 @@ groups:
       - minecraft-presentation-artifacts
       - backend-observability-unit
       - backend-acceptance-unit
+      - livestream-continuity-contract
       - backend-avatar-unit
 
   backend-deadcode:
@@ -836,6 +850,57 @@ groups:
     input_sets: [operational-source]
 
 components:
+  livestream-conversation-continuity:
+    domain: backend
+    paths:
+      - src/animetta/acceptance/__init__.py
+      - src/animetta/acceptance/conversation_continuity.py
+      - src/animetta/orchestration/graph/conversation_session.py
+      - src/animetta/orchestration/graph/orchestrator.py
+      - src/animetta/orchestration/graph/builder.py
+      - src/animetta/orchestration/graph/dialogue_nodes.py
+      - src/animetta/orchestration/graph/llm_node.py
+      - src/animetta/orchestration/graph/output_node.py
+      - src/animetta/orchestration/server/session.py
+      - src/animetta/orchestration/server/handlers/chat_handlers.py
+      - src/animetta/orchestration/server/handlers/bilibili_handlers.py
+      - src/animetta/orchestration/server/websocket.py
+      - src/animetta/services/llm/**
+      - src/animetta/services/dialogue/**
+      - src/animetta/observability/conversation.py
+      - src/animetta/observability/privacy.py
+      - scripts/conversation_continuity_canary.py
+      - scripts/release_runtime_gate.py
+      - tests/acceptance/test_conversation_continuity_contract.py
+      - tests/acceptance/test_livestream_conversation_continuity.py
+      - tests/orchestration/graph/test_conversation_session_state.py
+      - tests/orchestration/graph/test_dialogue_nodes.py
+      - tests/orchestration/server/test_bilibili_handlers.py
+      - tests/orchestration/server/test_chat_handler_contract.py
+      - tests/orchestration/server/test_websocket.py
+      - tests/services/llm/test_explicit_history_contract.py
+      - tests/scripts/test_conversation_continuity_canary.py
+      - tests/scripts/test_release_runtime_gate.py
+    direct_groups:
+      - livestream-continuity-contract
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-support-typecheck
+      - backend-deadcode
+    impacts: []
+    risk: normal
+
+  release-runtime-contract:
+    domain: repository
+    paths:
+      - scripts/release_runtime_gate.py
+      - tests/scripts/test_release_runtime_gate.py
+    direct_groups:
+      - runtime-lifecycle-unit
+    impacts: []
+    risk: normal
+
   python-source-boundary:
     domain: repository
     paths:
@@ -1435,14 +1500,12 @@ components:
       - scripts/rvc_preflight.py
       - scripts/benchmark_host_tts.py
       - scripts/runtime_lifecycle.py
-      - scripts/release_runtime_gate.py
       - tests/deployment/**
       - tests/scripts/test_qwen_preflight.py
       - tests/scripts/test_rvc_preflight.py
       - tests/scripts/test_benchmark_host_tts.py
       - tests/scripts/test_runtime_lifecycle.py
       - tests/scripts/test_runtime_lifecycle_feedback.py
-      - tests/scripts/test_release_runtime_gate.py
     direct_groups:
       - runtime-lifecycle-unit
       - docker-compose-contract

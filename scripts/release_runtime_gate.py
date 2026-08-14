@@ -23,7 +23,15 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+SOURCE_ROOT = ROOT / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
+from animetta.acceptance.conversation_continuity import (
+    ContinuityStepEvidence,
+    ContinuityStepId,
+    validate_continuity_steps,
+)
 from scripts.qwen_preflight import load_expected_settings as load_qwen_expected_settings
 from scripts.qwen_preflight import run_preflight as run_qwen_preflight
 
@@ -194,6 +202,89 @@ def validate_live_soak_evidence(evidence: Mapping[str, Any]) -> None:
         and all(value for value in decisions.values() if isinstance(value, bool))
     ):
         raise ReleaseGateError("Thirty-turn streaming latency evidence is incomplete")
+
+
+def validate_conversation_continuity_evidence(evidence: Mapping[str, Any]) -> None:
+    """Require the canonical content-free live continuity state transitions."""
+    steps = evidence.get("steps")
+    allowed_root = {
+        "schema_version",
+        "status",
+        "run_id",
+        "provider_real",
+        "socket_recreated",
+        "steps",
+        "error_codes",
+    }
+    allowed_step = {
+        "step_id",
+        "trace_id",
+        "scope_kind",
+        "window_before",
+        "window_after",
+        "committed",
+        "actor_role",
+        "source",
+        "public_fact_recalled",
+        "private_marker_absent",
+    }
+    if not (
+        set(evidence) == allowed_root
+        and evidence.get("schema_version") == 1
+        and evidence.get("status") == "passed"
+        and bool(evidence.get("run_id"))
+        and evidence.get("provider_real") is True
+        and evidence.get("socket_recreated") is True
+        and evidence.get("error_codes") == []
+        and isinstance(steps, list)
+    ):
+        raise ReleaseGateError("Conversation continuity evidence is incomplete")
+    parsed_steps: list[ContinuityStepEvidence] = []
+    for step in steps:
+        if not isinstance(step, Mapping) or set(step) != allowed_step:
+            raise ReleaseGateError("Conversation continuity evidence fields are invalid")
+        if not (
+            isinstance(step.get("trace_id"), str)
+            and bool(str(step["trace_id"]).strip())
+            and isinstance(step.get("scope_kind"), str)
+            and isinstance(step.get("window_before"), int)
+            and not isinstance(step.get("window_before"), bool)
+            and isinstance(step.get("window_after"), int)
+            and not isinstance(step.get("window_after"), bool)
+            and isinstance(step.get("committed"), bool)
+            and isinstance(step.get("actor_role"), str)
+            and isinstance(step.get("source"), str)
+            and (
+                step.get("public_fact_recalled") is None
+                or isinstance(step.get("public_fact_recalled"), bool)
+            )
+            and (
+                step.get("private_marker_absent") is None
+                or isinstance(step.get("private_marker_absent"), bool)
+            )
+        ):
+            raise ReleaseGateError("Conversation continuity evidence fields are invalid")
+        try:
+            step_id = ContinuityStepId(str(step["step_id"]))
+        except ValueError as exc:
+            raise ReleaseGateError("Conversation continuity step identifier is invalid") from exc
+        parsed_steps.append(
+            ContinuityStepEvidence(
+                step_id=step_id,
+                trace_id=str(step["trace_id"]),
+                scope_kind=str(step["scope_kind"]),
+                window_before=int(step["window_before"]),
+                window_after=int(step["window_after"]),
+                committed=bool(step["committed"]),
+                actor_role=str(step["actor_role"]),
+                source=str(step["source"]),
+                public_fact_recalled=step.get("public_fact_recalled"),
+                private_marker_absent=step.get("private_marker_absent"),
+            )
+        )
+    errors = validate_continuity_steps(parsed_steps)
+    if errors:
+        raise ReleaseGateError("Conversation continuity contract failed: " + ",".join(errors))
 
 
 def assert_clean_logs(logs: str) -> None:
@@ -371,6 +462,30 @@ def _run_playwright(evidence_dir: Path) -> dict[str, Any]:
     return evidence
 
 
+def _run_conversation_continuity(evidence_dir: Path) -> dict[str, Any]:
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    evidence_path = evidence_dir / "evidence.json"
+    _run(
+        [
+            sys.executable,
+            "scripts/conversation_continuity_canary.py",
+            "--url",
+            "http://localhost",
+            "--turn-timeout",
+            "120",
+            "--output",
+            str(evidence_path),
+        ]
+    )
+    if not evidence_path.exists():
+        raise ReleaseGateError("Conversation continuity canary did not write evidence")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if not isinstance(evidence, dict):
+        raise ReleaseGateError("Conversation continuity evidence must be a JSON object")
+    validate_conversation_continuity_evidence(evidence)
+    return evidence
+
+
 def _ready(payload: Mapping[str, Any]) -> bool:
     return payload.get("ready") is True or payload.get("status") in {"ok", "ready"}
 
@@ -414,6 +529,9 @@ def run_release_gate(
 
     live_soak = _run_live_soak(evidence_root / "thirty-turn-soak")
     playwright = _run_playwright(evidence_root / "playwright")
+    conversation_continuity = _run_conversation_continuity(
+        evidence_root / "conversation-continuity"
+    )
     frontend_after = _frontend_probe("http://localhost/")
 
     animetta_logs = _run(
@@ -423,7 +541,7 @@ def run_release_gate(
     assert_clean_logs(animetta_logs)
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "passed",
         "started_at": started_at.isoformat(),
         "finished_at": datetime.now(UTC).isoformat(),
@@ -436,6 +554,7 @@ def run_release_gate(
         "frontend_before": frontend_before,
         "live_soak": live_soak,
         "playwright": playwright,
+        "conversation_continuity": conversation_continuity,
         "frontend_after": frontend_after,
         "clean_logs": True,
     }
@@ -465,7 +584,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except (OSError, ValueError, ReleaseGateError) as exc:
         evidence = {
-            "schema_version": 2,
+            "schema_version": 3,
             "status": "failed",
             "finished_at": datetime.now(UTC).isoformat(),
             "error_type": type(exc).__name__,

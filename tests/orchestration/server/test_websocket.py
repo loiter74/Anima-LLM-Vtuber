@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 
 from animetta.config.manifest import load_effective_config
 from animetta.orchestration.server.websocket import WebSocketServer, create_server
+from animetta.services.bilibili import LivestreamEvent, LivestreamEventType
 
 
 def _effective_config(*, observability: dict | None = None):
@@ -120,6 +121,92 @@ class TestWebSocketServerInit:
         """get_app returns the Starlette ASGI app."""
         app = websocket_server.get_app()
         assert app is websocket_server.asgi_app
+
+
+class TestReplayDispatchBoundary:
+    @staticmethod
+    def _event(
+        *,
+        event_type: LivestreamEventType = LivestreamEventType.DANMAKU,
+        context: dict | None = None,
+    ) -> LivestreamEvent:
+        return LivestreamEvent(
+            sequence=0,
+            offset_ms=0,
+            event_type=event_type,
+            actor_id="结构回归观众",
+            text="暗号是什么？",
+            payload={"program_context": context or {}},
+        )
+
+    async def test_missing_probe_flag_defaults_to_true(self, websocket_server) -> None:
+        bilibili = SimpleNamespace(
+            process_program_danmaku=AsyncMock(return_value={}),
+            _broadcast_live_event=AsyncMock(),
+        )
+        websocket_server.route_handlers = SimpleNamespace(bilibili=bilibili)
+
+        await websocket_server._dispatch_replay_event(self._event())
+
+        context = bilibili.process_program_danmaku.await_args.args[1]
+        assert context["is_probe"] is True
+
+    async def test_explicit_false_probe_flag_is_preserved(self, websocket_server) -> None:
+        bilibili = SimpleNamespace(
+            process_program_danmaku=AsyncMock(return_value={}),
+            _broadcast_live_event=AsyncMock(),
+        )
+        websocket_server.route_handlers = SimpleNamespace(bilibili=bilibili)
+
+        await websocket_server._dispatch_replay_event(self._event(context={"is_probe": False}))
+
+        context = bilibili.process_program_danmaku.await_args.args[1]
+        assert context["is_probe"] is False
+
+    async def test_non_replyable_event_only_broadcasts(self, websocket_server) -> None:
+        bilibili = SimpleNamespace(
+            process_program_danmaku=AsyncMock(return_value={}),
+            _broadcast_live_event=AsyncMock(),
+        )
+        websocket_server.route_handlers = SimpleNamespace(bilibili=bilibili)
+
+        event = self._event(event_type=LivestreamEventType.ENTER)
+        await websocket_server._dispatch_replay_event(event)
+
+        bilibili._broadcast_live_event.assert_awaited_once_with(event, 1, 0)
+        bilibili.process_program_danmaku.assert_not_awaited()
+
+    @pytest.mark.parametrize("memory_mode", ["off", "probe", None])
+    async def test_non_write_memory_mode_does_not_drain(
+        self,
+        websocket_server,
+        memory_mode: str | None,
+    ) -> None:
+        bilibili = SimpleNamespace(
+            process_program_danmaku=AsyncMock(return_value={}),
+            _broadcast_live_event=AsyncMock(),
+        )
+        websocket_server.route_handlers = SimpleNamespace(bilibili=bilibili)
+        drain = AsyncMock()
+        websocket_server.memory_runtime = SimpleNamespace(drain=drain)
+        context = {"memory_mode": memory_mode} if memory_mode is not None else {}
+
+        await websocket_server._dispatch_replay_event(self._event(context=context))
+
+        drain.assert_not_awaited()
+
+    async def test_write_memory_mode_drains_after_dispatch(self, websocket_server) -> None:
+        bilibili = SimpleNamespace(
+            process_program_danmaku=AsyncMock(return_value={}),
+            _broadcast_live_event=AsyncMock(),
+        )
+        websocket_server.route_handlers = SimpleNamespace(bilibili=bilibili)
+        drain = AsyncMock()
+        websocket_server.memory_runtime = SimpleNamespace(drain=drain)
+
+        await websocket_server._dispatch_replay_event(self._event(context={"memory_mode": "write"}))
+
+        drain.assert_awaited_once_with(timeout=15)
 
 
 # ── WebSocketServer — Singing media routes ─────────────────────────

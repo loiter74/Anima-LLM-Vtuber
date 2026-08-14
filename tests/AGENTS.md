@@ -99,6 +99,12 @@ pnpm --dir frontend test:coverage
 
 `quick` selects direct checks for rapid feedback. `affected` adds tests of impacted components. Both use exact content fingerprints, a bounded weighted scheduler, and trust-scoped reuse of successful cacheable hermetic results. `full` is a cold release gate (`cache off`) and executes `backend-full` once with coverage. `test-affected-shadow` disables dominance and cache for sequential comparison. The planner in `tooling/quality.yml` is authoritative; do not hand-maintain a second path or Docker-scope map. `docker-compose-contract` is a hermetic static config check; service-isolated Playwright or live Docker groups always collect fresh evidence when selected and when their declared capabilities are present.
 
+## 对话连续性契约
+
+新增聊天入口、LLM Provider、finalizer 提交排除条件或连续性 trace 字段时，必须同步扩展对应的连续性场景或合同矩阵。确定性连续性测试不得访问真实网络，也不得断言模型自由生成文案；只验证随机哨兵可见性与结构状态。
+
+运行时连续性 evidence 只能保存 trace ID、作用域、窗口计数、布尔判据和稳定错误码，不得保存输入、回答或历史正文。连续性测试不得复用或修改 `text-boundaries`、`sparse` 直播评审夹具。
+
 ## ANTI-PATTERNS
 
 - ❌ Never put tracing tests outside `tests/tracing/` — Prometheus REGISTRY is global; only that conftest resets it

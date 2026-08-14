@@ -266,76 +266,122 @@ async def test_finalizer_writes_only_selected_final_in_read_write_mode() -> None
     )
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "metadata",
+    ("response", "metadata", "is_mock", "expected_commit"),
     [
-        {"dialogue_status": "direct", "error_type": "timeout", "text_ready_at": 1.0},
-        {"dialogue_status": "direct", "interrupted": True, "text_ready_at": 1.0},
-        {"dialogue_status": "direct", "response_fallback": True, "text_ready_at": 1.0},
-        {"dialogue_status": "direct"},
+        pytest.param(
+            "real final",
+            {"dialogue_status": "direct", "text_ready_at": 1.0},
+            False,
+            True,
+            id="commit-real-delivered",
+        ),
+        pytest.param(
+            "text survives media degradation",
+            {
+                "dialogue_status": "direct",
+                "text_ready_at": 1.0,
+                "degradation_reason": "tts_unavailable",
+            },
+            False,
+            True,
+            id="commit-tts-degraded",
+        ),
+        pytest.param(
+            "probe",
+            {"dialogue_status": "direct", "text_ready_at": 1.0, "is_probe": True},
+            False,
+            False,
+            id="reject-probe",
+        ),
+        pytest.param(
+            "inspection",
+            {"dialogue_status": "direct", "text_ready_at": 1.0, "is_inspection": True},
+            False,
+            False,
+            id="reject-inspection",
+        ),
+        pytest.param(
+            "mock template",
+            {"dialogue_status": "direct", "text_ready_at": 1.0},
+            True,
+            False,
+            id="reject-mock",
+        ),
+        pytest.param(
+            "timeout fallback",
+            {"dialogue_status": "direct", "text_ready_at": 1.0, "error_type": "timeout"},
+            False,
+            False,
+            id="reject-timeout",
+        ),
+        pytest.param(
+            "partial response",
+            {"dialogue_status": "direct", "text_ready_at": 1.0, "interrupted": True},
+            False,
+            False,
+            id="reject-interrupted",
+        ),
+        pytest.param(
+            "fallback response",
+            {"dialogue_status": "direct", "text_ready_at": 1.0, "response_fallback": True},
+            False,
+            False,
+            id="reject-fallback",
+        ),
+        pytest.param(
+            "",
+            {"dialogue_status": "direct", "text_ready_at": 1.0},
+            False,
+            False,
+            id="reject-empty",
+        ),
+        pytest.param(
+            "not publicly delivered",
+            {"dialogue_status": "direct"},
+            False,
+            False,
+            id="reject-undelivered",
+        ),
+        pytest.param(
+            "rejected candidate",
+            {"dialogue_status": "rejected", "text_ready_at": 1.0},
+            False,
+            False,
+            id="reject-candidate",
+        ),
+        pytest.param(
+            "我是一个 Mock LLM，用于测试和开发。",
+            {"dialogue_status": "direct", "text_ready_at": 1.0},
+            False,
+            False,
+            id="reject-unpersistable-template",
+        ),
     ],
 )
-async def test_finalizer_rejects_nonfinal_or_undelivered_text(metadata) -> None:
+async def test_finalizer_submission_matrix(
+    response: str,
+    metadata: dict,
+    is_mock: bool,
+    expected_commit: bool,
+) -> None:
+    provider = SequencedLLM([])
+    provider.is_mock_provider = is_mock
     session = ConversationSessionState()
     runtime = {
         "configurable": {
-            "service_context": SimpleNamespace(llm_engine=SequencedLLM([])),
+            "service_context": SimpleNamespace(llm_engine=provider),
             "conversation_session": session,
         }
     }
     current = state()
-    current["response_text"] = "must not commit"
+    current["response_text"] = response
     current["metadata"] = metadata
 
     result = await conversation_finalizer_node(current, runtime)
 
-    assert result["metadata"]["conversation_committed"] is False
-    assert session.completed_window == ()
-
-
-@pytest.mark.asyncio
-async def test_finalizer_commits_text_when_only_tts_degraded() -> None:
-    session = ConversationSessionState()
-    runtime = {
-        "configurable": {
-            "service_context": SimpleNamespace(llm_engine=SequencedLLM([])),
-            "conversation_session": session,
-        }
-    }
-    current = state()
-    current["response_text"] = "text was publicly delivered"
-    current["metadata"] = {
-        "dialogue_status": "direct",
-        "text_ready_at": 1.0,
-        "degradation_reason": "tts_unavailable",
-    }
-
-    result = await conversation_finalizer_node(current, runtime)
-
-    assert result["metadata"]["conversation_committed"] is True
-    assert session.completed_window == (("你好", "text was publicly delivered"),)
-
-
-@pytest.mark.asyncio
-async def test_finalizer_rejects_mock_provider_template() -> None:
-    mock_provider = SequencedLLM([])
-    mock_provider.is_mock_provider = True
-    session = ConversationSessionState()
-    runtime = {
-        "configurable": {
-            "service_context": SimpleNamespace(llm_engine=mock_provider),
-            "conversation_session": session,
-        }
-    }
-    current = state()
-    current["response_text"] = "mock template"
-    current["metadata"] = {"dialogue_status": "direct", "text_ready_at": 1.0}
-
-    result = await conversation_finalizer_node(current, runtime)
-
-    assert result["metadata"]["conversation_committed"] is False
-    assert session.completed_window == ()
+    assert result["metadata"]["conversation_committed"] is expected_commit
+    assert bool(session.completed_window) is expected_commit
 
 
 @pytest.mark.asyncio

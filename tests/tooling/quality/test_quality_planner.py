@@ -111,7 +111,9 @@ def test_quick_selects_direct_server_groups_without_impact_expansion() -> None:
         "backend-route-smoke",
         "backend-server-unit",
         "backend-static",
+        "backend-support-typecheck",
         "backend-typecheck",
+        "livestream-continuity-contract",
         "python-format",
     ]
     assert "backend-graph-unit" not in _group_ids(plan)
@@ -273,6 +275,8 @@ def test_affected_expands_declared_component_impacts() -> None:
         "backend-graph-unit",
         "backend-static",
         "backend-typecheck",
+        "backend-support-typecheck",
+        "livestream-continuity-contract",
         "python-format",
     }
     graph = next(group for group in plan.groups if group.id == "backend-graph-unit")
@@ -318,6 +322,94 @@ def test_backend_full_explicitly_dominates_selected_focused_pytest_groups() -> N
     assert dominated["backend-graph-unit"] == "backend-full"
     assert "backend-route-smoke" in _group_ids(plan)
     assert "backend-static" in _group_ids(plan)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/animetta/orchestration/graph/dialogue_nodes.py",
+        "src/animetta/orchestration/server/handlers/chat_handlers.py",
+        "src/animetta/services/llm/openai_llm.py",
+        "src/animetta/services/dialogue/reasoner.py",
+        "src/animetta/observability/conversation.py",
+    ],
+)
+def test_continuity_sensitive_paths_select_focused_contract(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert "livestream-continuity-contract" in _group_ids(plan)
+    assert "backend-full" not in _group_ids(plan)
+    assert plan.fallbacks == ()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/animetta/services/tts/remote_tts.py",
+        "src/animetta/services/asr/whisper_asr.py",
+        "frontend/src/live/styles.css",
+    ],
+)
+def test_unrelated_paths_do_not_select_continuity_contract(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert "livestream-continuity-contract" not in _group_ids(plan)
+
+
+def test_release_gate_affected_plan_is_hermetic() -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths(["scripts/release_runtime_gate.py"], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert "runtime-lifecycle-unit" in _group_ids(plan)
+    assert "livestream-continuity-contract" in _group_ids(plan)
+    assert "docker-compose-contract" not in _group_ids(plan)
+    assert "docker" not in plan.required_capabilities
+
+
+def test_full_dominates_focused_continuity_contract() -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths(
+            ["src/animetta/orchestration/graph/dialogue_nodes.py"],
+            repo_root=ROOT,
+        ),
+        Tier.FULL,
+    )
+    assert "livestream-continuity-contract" not in _group_ids(plan)
+    assert "livestream-continuity-contract" in _catalog().catalog.groups["backend-full"].covers
+
+
+def test_all_named_continuity_files_are_owned_by_focused_component() -> None:
+    loaded = _catalog()
+    component = loaded.catalog.components["livestream-conversation-continuity"]
+    tracked = {
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "src", ROOT / "scripts", ROOT / "tests")
+        for path in root.rglob("*conversation_continuity*.py")
+    }
+
+    assert tracked
+    for path in tracked:
+        plan = plan_verification(
+            loaded,
+            from_paths([path], repo_root=ROOT),
+            Tier.AFFECTED,
+        )
+        assert "livestream-continuity-contract" in {
+            *_group_ids(plan),
+            *(item.id for item in plan.dominated_groups),
+        }, f"{path} is not owned by {component}"
 
 
 def test_sequential_shadow_plan_can_disable_dominance() -> None:

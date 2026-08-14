@@ -19,8 +19,16 @@ _COMPOSER_SCHEMA = (
 )
 
 
-def _window_payload(window: tuple[tuple[str, str], ...]) -> list[list[str]]:
-    return [[user, assistant] for user, assistant in window[-6:]]
+def _window_messages(window: tuple[tuple[str, str], ...]) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    for user, assistant in window[-6:]:
+        messages.extend(
+            (
+                {"role": "user", "content": user},
+                {"role": "assistant", "content": assistant},
+            )
+        )
+    return messages
 
 
 def build_reasoner_messages(request: ReasonerRequest) -> list[dict[str, str]]:
@@ -31,10 +39,10 @@ def build_reasoner_messages(request: ReasonerRequest) -> list[dict[str, str]]:
     )
     payload = {
         "user_input": request.user_input,
-        "completed_window": _window_payload(request.completed_window),
     }
     return [
         {"role": "system", "content": system},
+        *_window_messages(request.completed_window),
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
     ]
 
@@ -48,7 +56,6 @@ def build_composer_messages(request: ComposerRequest) -> list[dict[str, str]]:
     payload = {
         "user_input": request.user_input,
         "reasoner": request.reasoner.model_dump(),
-        "completed_window": _window_payload(request.completed_window),
         "state": {
             "mood": request.mood,
             "fatigue": request.fatigue,
@@ -57,5 +64,6 @@ def build_composer_messages(request: ComposerRequest) -> list[dict[str, str]]:
     }
     return [
         {"role": "system", "content": system},
+        *_window_messages(request.completed_window),
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
     ]
