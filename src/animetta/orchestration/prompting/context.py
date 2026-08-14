@@ -58,6 +58,7 @@ def build_context(
         actor_role=metadata.get("actor_role"),
         source=metadata.get("source"),
         audience=metadata.get("audience"),
+        has_private_developer_context=bool(metadata.get("has_private_developer_context")),
     )
 
 

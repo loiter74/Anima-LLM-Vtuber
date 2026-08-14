@@ -166,6 +166,37 @@ async def test_filtered_probe_makes_no_llm_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_golden_history_keeps_developer_context_private() -> None:
+    llm = SequencedLLM(['{"normal_response":"蓝玻璃","stance":"直接","humor":"","worldview":""}'])
+    session = ConversationSessionState()
+    session.commit(
+        task_id="previous",
+        user_text="本场暗号是蓝玻璃",
+        final_response="收到。",
+        actor_role="developer",
+        source="developer_console",
+    )
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=llm),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["metadata"] = {
+        "audience": "livestream",
+        "actor_role": "viewer",
+        "source": "bilibili:danmaku",
+    }
+
+    await reasoner_node(current, runtime)
+
+    assert "可自然使用回答当前问题所必需的普通事实" in llm.calls[0][0]["content"]
+    assert "复述整段开发者原文" in llm.calls[0][0]["content"]
+    assert "后台私有上下文" in llm.calls[0][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_finalizer_commits_once_and_clears_scratch() -> None:
     llm = SequencedLLM(
         [
@@ -184,11 +215,16 @@ async def test_finalizer_commits_once_and_clears_scratch() -> None:
     current.update(await reasoner_node(current, runtime))
     current.update(await anima_composer_node(current, runtime))
     current.update(await response_guard_node(current, runtime))
+    current["metadata"]["text_ready_at"] = 1.0
+    current["metadata"]["actor_role"] = "developer"
+    current["metadata"]["source"] = "developer_console"
     current.update(await conversation_finalizer_node(current, runtime))
     assert current["turn_scratch"] == {}
     assert session.completed_window == (("你好", "旅人，你好呀。"),)
     assert session.mood == "bright"
     assert session.affinity == 51
+    assert session.completed_turns[0].actor_role == "developer"
+    assert session.completed_turns[0].source == "developer_console"
     duplicate = await conversation_finalizer_node(current, runtime)
     assert duplicate["metadata"]["conversation_committed"] is False
     assert session.completed_window == (("你好", "旅人，你好呀。"),)
@@ -220,7 +256,7 @@ async def test_finalizer_writes_only_selected_final_in_read_write_mode() -> None
     }
     current = state()
     current["response_text"] = "selected final"
-    current["metadata"] = {"dialogue_status": "composer"}
+    current["metadata"] = {"dialogue_status": "composer", "text_ready_at": 1.0}
     current.update(await conversation_finalizer_node(current, runtime))
     memory.encode.assert_awaited_once_with(
         user_input="你好",
@@ -228,6 +264,78 @@ async def test_finalizer_writes_only_selected_final_in_read_write_mode() -> None
         emotion_vad=None,
         session_id="session",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"dialogue_status": "direct", "error_type": "timeout", "text_ready_at": 1.0},
+        {"dialogue_status": "direct", "interrupted": True, "text_ready_at": 1.0},
+        {"dialogue_status": "direct", "response_fallback": True, "text_ready_at": 1.0},
+        {"dialogue_status": "direct"},
+    ],
+)
+async def test_finalizer_rejects_nonfinal_or_undelivered_text(metadata) -> None:
+    session = ConversationSessionState()
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=SequencedLLM([])),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["response_text"] = "must not commit"
+    current["metadata"] = metadata
+
+    result = await conversation_finalizer_node(current, runtime)
+
+    assert result["metadata"]["conversation_committed"] is False
+    assert session.completed_window == ()
+
+
+@pytest.mark.asyncio
+async def test_finalizer_commits_text_when_only_tts_degraded() -> None:
+    session = ConversationSessionState()
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=SequencedLLM([])),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["response_text"] = "text was publicly delivered"
+    current["metadata"] = {
+        "dialogue_status": "direct",
+        "text_ready_at": 1.0,
+        "degradation_reason": "tts_unavailable",
+    }
+
+    result = await conversation_finalizer_node(current, runtime)
+
+    assert result["metadata"]["conversation_committed"] is True
+    assert session.completed_window == (("你好", "text was publicly delivered"),)
+
+
+@pytest.mark.asyncio
+async def test_finalizer_rejects_mock_provider_template() -> None:
+    mock_provider = SequencedLLM([])
+    mock_provider.is_mock_provider = True
+    session = ConversationSessionState()
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(llm_engine=mock_provider),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["response_text"] = "mock template"
+    current["metadata"] = {"dialogue_status": "direct", "text_ready_at": 1.0}
+
+    result = await conversation_finalizer_node(current, runtime)
+
+    assert result["metadata"]["conversation_committed"] is False
+    assert session.completed_window == ()
 
 
 @pytest.mark.asyncio
@@ -250,6 +358,7 @@ async def test_concurrent_sessions_share_provider_without_state_or_identity_leak
         current.update(await reasoner_node(current, runtime))
         current.update(await anima_composer_node(current, runtime))
         current.update(await response_guard_node(current, runtime))
+        current["metadata"]["text_ready_at"] = 1.0
         current.update(await conversation_finalizer_node(current, runtime))
         return current, session
 

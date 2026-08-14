@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from animetta.observability.ports import NoOpObservationRecorder
+from animetta.orchestration.graph.conversation_session import ConversationSessionRegistry
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 
 """Tests for LangGraph orchestrator — initialization and input processing."""
@@ -230,6 +231,110 @@ class TestOrchestratorProcessText:
         assert trace.user_content.text is None
         assert finish[2]["assistant_content"].text is None
         assert trace.trace_id == finish[0]
+
+    @pytest.mark.asyncio
+    async def test_shared_livestream_registry_survives_socket_recreation_and_isolates_sessions(
+        self, mock_socketio, monkeypatch
+    ):
+        registry = ConversationSessionRegistry()
+        seen_windows: list[tuple[tuple[str, str], ...]] = []
+
+        class CommittingGraph:
+            async def ainvoke(self, state, config):
+                session = config["configurable"]["conversation_session"]
+                seen_windows.append(session.completed_window)
+                response = f"reply:{state['user_text']}"
+                session.commit(
+                    task_id=state["task_id"],
+                    user_text=state["user_text"],
+                    final_response=response,
+                    actor_role=state["metadata"].get("actor_role"),
+                    source=state["metadata"].get("source"),
+                )
+                return {
+                    **state,
+                    "response_text": response,
+                    "response_chunks": [response],
+                    "metadata": {
+                        **state["metadata"],
+                        "conversation_committed": True,
+                        "conversation_window_pairs_after": len(session.completed_window),
+                    },
+                }
+
+        monkeypatch.setattr(
+            "animetta.orchestration.graph.orchestrator.get_observability",
+            lambda: MagicMock(_initialized=True, callbacks=[]),
+        )
+
+        def make_orchestrator(sid: str) -> LangGraphOrchestrator:
+            config = MagicMock()
+            config.get_persona.return_value = None
+            config.get_system_prompt.return_value = "persona"
+            config.system.runtime_profile = "development"
+            service_context = MagicMock(session_id=sid, config=config)
+            instance = LangGraphOrchestrator(
+                service_context=service_context,
+                socketio=mock_socketio,
+                conversation_registry=registry,
+            )
+            instance.graph = CommittingGraph()
+            instance._is_running = True
+            return instance
+
+        developer = make_orchestrator("dashboard-socket-before-refresh")
+        viewer = make_orchestrator("bilibili-socket")
+        refreshed = make_orchestrator("dashboard-socket-after-refresh")
+
+        await developer.process_text(
+            "本场暗号是蓝玻璃",
+            conversation_id="dashboard-conversation",
+            task_id="task-1",
+            message_id="message-1",
+            turn_id="turn-1",
+            audience="livestream",
+            live_session_id="live-1",
+            actor_role="developer",
+            source="developer_console",
+        )
+        await viewer.process_text(
+            "刚才的暗号是什么？",
+            conversation_id="danmaku-conversation",
+            task_id="task-2",
+            message_id="message-2",
+            turn_id="turn-2",
+            audience="livestream",
+            live_session_id="live-1",
+            actor_role="viewer",
+            source="bilibili:danmaku",
+        )
+        await refreshed.process_text(
+            "上一条弹幕问了什么？",
+            conversation_id="dashboard-conversation",
+            task_id="task-3",
+            message_id="message-3",
+            turn_id="turn-3",
+            audience="livestream",
+            live_session_id="live-1",
+            actor_role="developer",
+            source="developer_console",
+        )
+        await refreshed.process_text(
+            "新的直播",
+            conversation_id="dashboard-conversation",
+            task_id="task-4",
+            message_id="message-4",
+            turn_id="turn-4",
+            audience="livestream",
+            live_session_id="live-2",
+            actor_role="developer",
+            source="developer_console",
+        )
+
+        assert seen_windows[0] == ()
+        assert seen_windows[1] == (("本场暗号是蓝玻璃", "reply:本场暗号是蓝玻璃"),)
+        assert seen_windows[2][-1] == ("刚才的暗号是什么？", "reply:刚才的暗号是什么？")
+        assert seen_windows[3] == ()
 
 
 class TestOrchestratorCentralIngressFilter:

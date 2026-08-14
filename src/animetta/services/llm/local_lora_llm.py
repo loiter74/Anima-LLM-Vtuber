@@ -291,6 +291,44 @@ class LocalLoraLLM(LLMInterface):
 
         return prompt
 
+    def _format_messages_prompt(self, messages: list[dict]) -> str:
+        return self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+
+    async def chat_messages(self, messages: list[dict], **kwargs: Any) -> str:
+        """Generate from an explicit chat template without shared history."""
+        if not self._loaded:
+            self.load_model()
+        prompt = self._format_messages_prompt(messages)
+
+        def generate_sync() -> str:
+            inputs = self.tokenizer(
+                prompt, return_tensors="pt", truncation=True, max_length=256
+            ).to(self.device)
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=kwargs.get("max_tokens", 512),
+                    temperature=kwargs.get("temperature", 0.7),
+                    top_p=kwargs.get("top_p", 0.9),
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                )
+            return self.tokenizer.decode(
+                outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            )
+
+        return await asyncio.to_thread(generate_sync)
+
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        response = await self.chat_messages(messages, **kwargs)
+        if response:
+            yield response
+
     async def chat(self, user_input: str, **kwargs: Any) -> str:
         """
         Non-streaming conversation (async)

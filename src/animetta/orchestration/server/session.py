@@ -15,6 +15,7 @@ from loguru import logger
 
 from animetta.config.manifest import EffectiveConfig
 from animetta.core.service_pool import ServicePool
+from animetta.orchestration.graph.conversation_session import ConversationSessionRegistry
 
 from ...core.service_context import ServiceContext
 
@@ -54,6 +55,7 @@ class SessionManager:
         self.model_manager = model_manager
         self.memory_runtime = memory_runtime
         self.observation_recorder = observation_recorder
+        self.conversation_registry = ConversationSessionRegistry(max_scopes=256)
 
         # Store orchestrator per session
         # Key: session_id, Value: LangGraphOrchestrator instance
@@ -185,6 +187,7 @@ class SessionManager:
                 enable_memory=True,
                 tools_config=tools_config.get("config", tools_config),
                 observation_recorder=self.observation_recorder,
+                conversation_registry=self.conversation_registry,
             )
 
             logger.info(f"[{sid}] LangGraphOrchestrator created")

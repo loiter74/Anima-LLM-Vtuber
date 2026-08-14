@@ -36,6 +36,7 @@ Covers:
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from langchain_core.messages import HumanMessage
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -247,6 +248,23 @@ class TestMockLLM:
             chunks.append(chunk)
         assert len(chunks) > 0
         assert all(isinstance(c, str) for c in chunks)
+
+    @pytest.mark.asyncio
+    async def test_explicit_messages_are_history_neutral(self):
+        llm = MockLLM()
+        llm.history = [{"role": "assistant", "content": "shared"}]
+        messages = [
+            {"role": "user", "content": "earlier"},
+            {"role": "assistant", "content": "reply"},
+            {"role": "user", "content": "current"},
+        ]
+
+        response = await llm.chat_messages(messages)
+        chunks = [chunk async for chunk in llm.chat_messages_stream(messages)]
+
+        assert "current" in response
+        assert chunks
+        assert llm.history == [{"role": "assistant", "content": "shared"}]
 
     @pytest.mark.asyncio
     async def test_close(self):
@@ -467,6 +485,27 @@ class TestOpenAILLM:
         assert call_kwargs["stream"] is True
 
     @pytest.mark.asyncio
+    async def test_chat_messages_preserves_explicit_order_and_history(self):
+        with patch("animetta.services.llm.openai_llm.AsyncOpenAI") as mock:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock(message=MagicMock(content="response"))]
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+            mock.return_value = mock_client
+            llm = OpenAILLM(api_key="key", model="gpt-4")
+            llm.history = [{"role": "assistant", "content": "shared"}]
+            messages = [
+                {"role": "user", "content": "earlier"},
+                {"role": "assistant", "content": "reply"},
+                {"role": "user", "content": "current"},
+            ]
+
+            await llm.chat_messages(messages)
+
+        assert mock_client.chat.completions.create.await_args.kwargs["messages"] is messages
+        assert llm.history == [{"role": "assistant", "content": "shared"}]
+
+    @pytest.mark.asyncio
     async def test_close(self):
         """close() should call client.close()."""
 
@@ -556,6 +595,37 @@ class TestGLMLLM:
             async for chunk in llm.chat_stream("Hi"):
                 chunks.append(chunk)
         assert len(chunks) > 0
+
+    @pytest.mark.asyncio
+    async def test_explicit_messages_stream_preserves_order_and_history(self):
+        config = GLMLLMConfig(api_key="test-key")
+        llm = GLMLLM(config=config)
+        llm._conversation_history = [{"role": "assistant", "content": "shared"}]
+        chunk = MagicMock()
+        chunk.choices[0].delta.content = "response"
+        client = MagicMock()
+        client.chat.completions.create.return_value = [chunk]
+        llm.client = client
+        messages = [
+            {"role": "user", "content": "earlier"},
+            {"role": "assistant", "content": "reply"},
+            {"role": "user", "content": "current"},
+        ]
+
+        chunks = [part async for part in llm.chat_messages_stream(messages)]
+
+        assert chunks == ["response"]
+        assert client.chat.completions.create.call_args.kwargs["messages"] is messages
+        assert llm.get_history() == [{"role": "assistant", "content": "shared"}]
+
+    def test_tool_messages_do_not_duplicate_current_user(self):
+        llm = GLMLLM(config=GLMLLMConfig(api_key="test-key"))
+        current = HumanMessage(content="current")
+
+        messages = llm._build_langchain_messages([current], "system", "current")
+
+        assert [message["role"] for message in messages] == ["system", "user"]
+        assert messages[-1]["content"] == "current"
 
     @pytest.mark.asyncio
     async def test_close(self):
@@ -652,6 +722,26 @@ class TestOllamaLLM:
             async for chunk in llm.chat_stream("Hi"):
                 chunks.append(chunk)
         assert chunks == ["Hello", " ", "World"]
+
+    @pytest.mark.asyncio
+    async def test_explicit_messages_stream_preserves_order_and_history(self):
+        with patch("animetta.services.llm.ollama_llm.ollama") as mock_ollama:
+            client = MagicMock()
+            mock_ollama.Client.return_value = client
+            client.chat.return_value = iter([{"message": {"content": "response"}}])
+            llm = OllamaLLM(model="llama3")
+            llm.history = [{"role": "assistant", "content": "shared"}]
+            messages = [
+                {"role": "user", "content": "earlier"},
+                {"role": "assistant", "content": "reply"},
+                {"role": "user", "content": "current"},
+            ]
+
+            chunks = [part async for part in llm.chat_messages_stream(messages)]
+
+        assert chunks == ["response"]
+        assert client.chat.call_args.kwargs["messages"] is messages
+        assert llm.history == [{"role": "assistant", "content": "shared"}]
 
     @pytest.mark.asyncio
     async def test_close(self):
@@ -758,6 +848,37 @@ class TestLocalLoraLLM:
             response = await llm.chat("Hello")
         assert isinstance(response, str)
         assert len(response) > 0
+
+    @pytest.mark.asyncio
+    async def test_explicit_messages_use_chat_template_without_history_mutation(self):
+        llm = object.__new__(LocalLoraLLM)
+        llm._loaded = True
+        llm.device = "cpu"
+        llm.history = [{"role": "assistant", "content": "shared"}]
+        llm.tokenizer = MagicMock()
+        llm.tokenizer.apply_chat_template.return_value = "formatted prompt"
+        inputs = MagicMock()
+        inputs.__getitem__.return_value.shape = [1, 2]
+        inputs.to.return_value = inputs
+        llm.tokenizer.return_value = inputs
+        llm.tokenizer.decode.return_value = "response"
+        llm.tokenizer.pad_token_id = 0
+        llm.tokenizer.eos_token_id = 1
+        llm.model = MagicMock()
+        llm.model.generate.return_value = MagicMock(__getitem__=MagicMock(return_value=[1, 2, 3]))
+        messages = [
+            {"role": "user", "content": "earlier"},
+            {"role": "assistant", "content": "reply"},
+            {"role": "user", "content": "current"},
+        ]
+
+        response = await llm.chat_messages(messages)
+
+        assert response == "response"
+        llm.tokenizer.apply_chat_template.assert_called_once_with(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        assert llm.history == [{"role": "assistant", "content": "shared"}]
 
     @pytest.mark.asyncio
     async def test_close(self):

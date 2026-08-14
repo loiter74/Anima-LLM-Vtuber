@@ -4,8 +4,8 @@ from __future__ import annotations
 
 Covers the behavioral contracts from design.md Decision 3 and spec requirements:
 - Subtitle translation uses response_text as input, not a second authored answer.
-- Prefers chat_messages() and does not call history-mutating chat() when available.
-- Fallback translation restores LLM history or skips when safety cannot be guaranteed.
+- Requires chat_messages() and never calls history-mutating chat().
+- Providers without an explicit-messages implementation are skipped.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -71,8 +71,7 @@ class _NativeChatMessagesLLM(LLMInterface):
 
 
 class _FallbackLLM(LLMInterface):
-    """Fake LLM where chat_messages() delegates to chat() (default behavior).
-    Has get_history/set_system_prompt for restoration."""
+    """Legacy fake that only implements history-mutating chat()."""
 
     def __init__(self, translation: str = "translated text"):
         self._translation = translation
@@ -330,23 +329,22 @@ class TestPrefersChatMessages:
         assert len(llm.chat_messages_calls) == 1
 
 
-# ── Task 1.3: Fallback translation restores history or skips ──
+# ── Providers without native explicit messages are skipped ──
 
 
 class TestFallbackBehavior:
-    """Prove fallback translation restores LLM history or skips when
-    history safety cannot be guaranteed."""
+    """Prove translation never falls back to shared provider history."""
 
     @pytest.mark.asyncio
-    async def test_fallback_with_restorable_history(self):
-        """When LLM has get_history/clear_history, history should be restored."""
+    async def test_legacy_fallback_is_rejected_even_with_restorable_history(self):
+        """Shared-history restoration is no longer an accepted provider contract."""
         llm = _FallbackLLM(translation="lagging again")
 
         result = await translate_subtitle_text(llm, "主播你又卡了", "Chinese", "English")
 
-        assert result == "lagging again"
-        # History should have been restored (clear_history called)
-        llm.clear_history.assert_called()
+        assert result is None
+        llm._chat_mock.assert_not_called()
+        llm.clear_history.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_unsafe_llm_skips_translation(self):
@@ -360,10 +358,9 @@ class TestFallbackBehavior:
         llm._chat_mock.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_fallback_returns_none_on_empty_result(self):
+    async def test_native_messages_returns_none_on_empty_result(self):
         """When translation returns empty, return None."""
-        llm = _FallbackLLM(translation="")
-        llm._chat_mock = AsyncMock(return_value="")
+        llm = _NativeChatMessagesLLM(translation="")
 
         result = await translate_subtitle_text(llm, "测试", "Chinese", "English")
 

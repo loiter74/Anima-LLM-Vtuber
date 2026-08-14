@@ -96,6 +96,10 @@ class ConversationObserver:
                 "source": metadata.get("source"),
                 "live_session_id": metadata.get("live_session_id"),
                 "audience": metadata.get("audience"),
+                "conversation_scope_kind": metadata.get("conversation_scope_kind"),
+                "conversation_window_pairs_before": metadata.get(
+                    "conversation_window_pairs_before"
+                ),
             }
         )
         await self._recorder.start_trace(
@@ -215,6 +219,12 @@ class TurnObservation:
                         **dict(self.trace_attributes or {}),
                         "outcome": outcome.value,
                         "degradation_reason": _metadata_value(final_state, "degradation_reason"),
+                        "conversation_window_pairs_after": _metadata_value(
+                            final_state, "conversation_window_pairs_after"
+                        ),
+                        "conversation_committed": _metadata_value(
+                            final_state, "conversation_committed"
+                        ),
                     }
                 ),
             )

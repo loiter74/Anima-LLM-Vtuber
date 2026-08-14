@@ -77,6 +77,7 @@ class PromptContext:
     actor_role: str | None = None
     source: str | None = None
     audience: str | None = None
+    has_private_developer_context: bool = False
 
 
 class PromptSource(Protocol):

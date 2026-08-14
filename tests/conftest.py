@@ -21,12 +21,26 @@ if _src_path not in sys.path:
 def mock_llm():
     """Mock LLM service returning canned responses."""
     mock = MagicMock()
-    mock.chat_stream = AsyncMock()
 
-    async def _stream():
+    async def _chat_stream(user_input: str, system_prompt: str = ""):
+        del user_input, system_prompt
         yield "mock response chunk"
 
-    mock.chat_stream.return_value = _stream()
+    async def _chat_messages_stream(messages, **kwargs):
+        del kwargs
+        system_prompt = next(
+            (message["content"] for message in messages if message.get("role") == "system"),
+            "",
+        )
+        user_input = next(
+            (message["content"] for message in reversed(messages) if message.get("role") == "user"),
+            "",
+        )
+        async for chunk in mock.chat_stream(user_input, system_prompt=system_prompt):
+            yield chunk
+
+    mock.chat_stream = _chat_stream
+    mock.chat_messages_stream = _chat_messages_stream
     mock.close = AsyncMock()
     return mock
 

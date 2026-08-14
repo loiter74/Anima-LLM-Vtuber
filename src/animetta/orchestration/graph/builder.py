@@ -155,6 +155,7 @@ def build_graph(
     add_observed_node("tts", tts_node)
     add_observed_node("emotion", emotion_node)
     add_observed_node("output", output_node)
+    add_observed_node("conversation_finalizer", conversation_finalizer_node)
 
     registered_nodes = [
         "asr",
@@ -167,6 +168,7 @@ def build_graph(
         "tts",
         "emotion",
         "output",
+        "conversation_finalizer",
     ]
     if enable_tools:
         add_observed_node("tools", tool_node)
@@ -202,7 +204,8 @@ def build_graph(
     graph.add_edge("reply_output", "emotion")
     graph.add_edge("emotion", "tts")
     graph.add_edge("tts", "output")
-    graph.add_edge("output", END)
+    graph.add_edge("output", "conversation_finalizer")
+    graph.add_edge("conversation_finalizer", END)
 
     logger.info("[LangGraph] State graph built")
 
@@ -228,16 +231,14 @@ def create_default_graph(
         tools: List of tools
         tools_map: Tool mapping
 
-    Checkpointer priority:
-    1. External checkpointer (set via set_external_checkpointer()) — used
-       regardless of enable_memory flag.  This allows --redis-url to inject
-       a Redis checkpointer.
-    2. MemorySaver — when enable_memory=True and no external checkpointer.
-    3. None — when enable_memory=False and no external checkpointer.
+    Checkpointer priority when ``enable_memory`` is true:
+    1. External checkpointer (set via set_external_checkpointer()).
+    2. MemorySaver.
+    When ``enable_memory`` is false, no checkpoint is written.
     """
     checkpointer = None
 
-    if _external_checkpointer is not None:
+    if enable_memory and _external_checkpointer is not None:
         checkpointer = _external_checkpointer
         logger.info(f"[LangGraph] Using external checkpointer: {type(checkpointer).__name__}")
     elif enable_memory:

@@ -1,6 +1,7 @@
 """LLM inference node - supports tool calls and streaming output"""
 
 import asyncio
+import json
 import re
 import time as time_module
 from typing import Any
@@ -10,7 +11,6 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
     ToolMessage,
-    trim_messages,
 )
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -20,6 +20,7 @@ from animetta.orchestration.prompting.reasoning_classifier import is_english_met
 from animetta.services.bilibili.response_policy import constrain_livestream_response
 from animetta.services.llm.token_counting import make_trim_token_counter
 
+from .conversation_session import ConversationSessionState
 from .interrupt_handler import get_interrupt_handler
 from .memory_middleware import MemoryMiddleware
 from .node_error import log_node_error
@@ -33,36 +34,100 @@ FALLBACK_RESPONSE = "I need a moment to think about that."
 DEFAULT_CONTEXT_TOKEN_BUDGET = 6000
 
 
-def _apply_context_budget(
-    messages: list[Any],
+def _conversation_session(config: RunnableConfig | None) -> ConversationSessionState | None:
+    configurable = config.get("configurable", {}) if config else {}
+    session = configurable.get("conversation_session")
+    return session if isinstance(session, ConversationSessionState) else None
+
+
+def _explicit_history_messages(
+    current_messages: list[Any],
     state: AgentState,
+    config: RunnableConfig | None,
     session_id: str,
+    *,
+    fixed_messages: list[Any] | None = None,
 ) -> list[Any]:
-    """Bound the graph messages to a token budget (context-bloat guard)."""
+    """Prepend completed pairs and trim only whole oldest pairs.
+
+    ``current_messages`` is the in-flight tool chain and is never split. The
+    caller may supply system/current-user messages in ``fixed_messages`` for
+    accurate budget accounting without adding them to the returned history.
+    """
+
+    session = _conversation_session(config)
+    pairs = (
+        [
+            [HumanMessage(content=user), AIMessage(content=assistant)]
+            for user, assistant in session.prompt_window
+        ]
+        if session is not None
+        else []
+    )
     raw_budget = state.get("max_context_tokens")
     budget = (
         int(raw_budget) if isinstance(raw_budget, (int, float)) else DEFAULT_CONTEXT_TOKEN_BUDGET
     )
-    if budget <= 0 or len(messages) <= 1:
-        return messages
     counter = make_trim_token_counter()
-    before = counter(messages)
-    if before <= budget:
-        return messages
-    trimmed = trim_messages(
-        messages,
-        max_tokens=budget,
-        strategy="last",
-        token_counter=counter,
-        allow_partial=False,
-        include_system=True,
-    )
-    logger.info(
-        f"[{session_id}] [LLMNode] Context budget applied: {before} -> "
-        f"{counter(trimmed)} tokens (budget={budget}, "
-        f"messages {len(messages)} -> {len(trimmed)})"
-    )
-    return trimmed
+    fixed = fixed_messages or []
+    before_pairs = len(pairs)
+    if budget > 0:
+        while pairs:
+            combined = [message for pair in pairs for message in pair]
+            if counter([*fixed, *combined, *current_messages]) <= budget:
+                break
+            pairs.pop(0)
+    if len(pairs) != before_pairs:
+        logger.info(
+            "[{}] [LLMNode] Conversation budget applied: pairs {} -> {} (budget={})",
+            session_id,
+            before_pairs,
+            len(pairs),
+            budget,
+        )
+    return [message for pair in pairs for message in pair] + current_messages
+
+
+def _provider_message(message: Any) -> dict[str, Any]:
+    if isinstance(message, SystemMessage):
+        return {"role": "system", "content": str(message.content)}
+    if isinstance(message, HumanMessage):
+        return {"role": "user", "content": str(message.content)}
+    if isinstance(message, ToolMessage):
+        return {
+            "role": "tool",
+            "content": str(message.content),
+            "tool_call_id": message.tool_call_id,
+        }
+    if isinstance(message, AIMessage):
+        result: dict[str, Any] = {"role": "assistant", "content": str(message.content or "")}
+        if message.tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": call.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": call.get("name", ""),
+                        "arguments": json.dumps(call.get("args", {}), ensure_ascii=False),
+                    },
+                }
+                for call in message.tool_calls
+            ]
+        return result
+    raise TypeError(f"Unsupported explicit chat message: {type(message).__name__}")
+
+
+def _prompt_state(state: AgentState, config: RunnableConfig | None) -> AgentState:
+    session = _conversation_session(config)
+    if session is None or not session.has_private_developer_context:
+        return state
+    return {
+        **state,
+        "metadata": {
+            **state.get("metadata", {}),
+            "has_private_developer_context": True,
+        },
+    }
 
 
 def _has_completed_connection_call(messages: list[Any]) -> bool:
@@ -601,7 +666,6 @@ async def _llm_with_tools(
     """Use tool calling mode"""
     user_text = state.get("user_text", "")
     messages = list(state.get("messages", []))
-    messages = _apply_context_budget(messages, state, session_id)
     llm_engine = service_context.llm_engine
 
     logger.info(f"[{session_id}] [LLMNode] Using tool calling mode")
@@ -609,7 +673,9 @@ async def _llm_with_tools(
     # Compile final system prompt via pipeline (replaces manual concatenation)
     from animetta.orchestration.prompting.pipeline import compile as compile_prompt
 
-    compiled = await compile_prompt(state, config, memory_context=memory_context)
+    compiled = await compile_prompt(
+        _prompt_state(state, config), config, memory_context=memory_context
+    )
     enriched_prompt = compiled.system_prompt
 
     if compiled.warnings:
@@ -629,9 +695,14 @@ async def _llm_with_tools(
             tool for tool in bound_tools if getattr(tool, "name", None) != "mc_connection"
         ]
 
-    history_for_llm = [
-        msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))
-    ]
+    current_user = HumanMessage(content=user_text)
+    history_for_llm = _explicit_history_messages(
+        [msg for msg in messages if isinstance(msg, (HumanMessage, AIMessage, ToolMessage))],
+        state,
+        config,
+        session_id,
+        fixed_messages=[SystemMessage(content=enriched_prompt), current_user],
+    )
 
     try:
         t_llm = time_module.perf_counter()
@@ -704,7 +775,7 @@ async def _llm_with_tools(
                     "response_text": delivery_response,
                     "response_chunks": response_chunks,
                     "tool_calls": None,
-                    "metadata": {**state.get("metadata", {})},
+                    "metadata": {**state.get("metadata", {}), "dialogue_status": "direct"},
                 }
 
         logger.warning(
@@ -734,18 +805,16 @@ async def _llm_without_tools(
     user_text = state.get("user_text", "")
     llm_engine = service_context.llm_engine
     messages = list(state.get("messages", []))
-    messages = _apply_context_budget(messages, state, session_id)
 
     logger.info(f"[{session_id}] [LLMNode] Using streaming mode (no tools)")
 
     # Compile final system prompt via pipeline (replaces manual concatenation)
     from animetta.orchestration.prompting.pipeline import compile as compile_prompt
 
-    compiled = await compile_prompt(state, config, memory_context=memory_context)
+    compiled = await compile_prompt(
+        _prompt_state(state, config), config, memory_context=memory_context
+    )
     enriched_prompt = compiled.system_prompt
-
-    if (not messages or not isinstance(messages[0], SystemMessage)) and enriched_prompt:
-        messages.insert(0, SystemMessage(content=enriched_prompt))
 
     user_id = state.get("user_id")
     user_name = state.get("user_name")
@@ -753,23 +822,34 @@ async def _llm_without_tools(
     if not messages or not isinstance(messages[-1], HumanMessage):
         content = f"[{user_name}]: {user_text}" if user_name else user_text
         messages.append(HumanMessage(content=content, name=user_id or "user"))
+    system_messages = [SystemMessage(content=enriched_prompt)] if enriched_prompt else []
+    messages = _explicit_history_messages(
+        messages,
+        state,
+        config,
+        session_id,
+        fixed_messages=system_messages,
+    )
+    provider_messages = [_provider_message(message) for message in [*system_messages, *messages]]
 
     interrupt_handler = get_interrupt_handler()
     interrupt_handler.clear_interrupt(session_id)
 
     chunks = []
     full_response = ""
+    interrupted = False
 
     timeout_seconds = _get_config_value(config, "llm_timeout", TIMEOUT_SECONDS)
 
     t_llm = time_module.perf_counter()
     try:
         async with asyncio.timeout(timeout_seconds):
-            async for chunk in llm_engine.chat_stream(user_text, system_prompt=enriched_prompt):
+            async for chunk in llm_engine.chat_messages_stream(provider_messages):
                 if interrupt_handler.is_interrupted(session_id):
                     logger.warning(
                         f"[{session_id}] [LLMNode] Interrupt detected, stopping generation"
                     )
+                    interrupted = True
                     break
                 chunks.append(chunk)
                 full_response += chunk
@@ -810,6 +890,7 @@ async def _llm_without_tools(
     # history (used for roleplay-guard drift detection next turn) doesn't
     # carry stale markers.
     raw_response = full_response
+    response_fallback = not _has_user_visible_response(raw_response)
     full_response = _visible_response_or_fallback(full_response)
     full_response = _extract_and_update_affinity(state, full_response)
     original_response = full_response
@@ -832,5 +913,10 @@ async def _llm_without_tools(
         "response_text": delivery_response,
         "response_chunks": chunks,
         "tool_calls": None,
-        "metadata": {**state.get("metadata", {})},
+        "metadata": {
+            **state.get("metadata", {}),
+            "dialogue_status": "direct",
+            "interrupted": interrupted,
+            "response_fallback": response_fallback,
+        },
     }

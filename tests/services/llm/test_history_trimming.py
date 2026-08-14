@@ -175,7 +175,7 @@ class TestOpenAILLMHistoryTrimming:
         assert len(llm.history) == 4
 
     @pytest.mark.asyncio
-    async def test_chat_with_tools_trims_history_to_max(self) -> None:
+    async def test_chat_with_tools_does_not_mutate_shared_history(self) -> None:
         llm = OpenAILLM(api_key="test-key", max_history_messages=4)
         choice = MagicMock()
         choice.message.content = "reply"
@@ -188,7 +188,7 @@ class TestOpenAILLMHistoryTrimming:
         for i in range(5):
             await llm.chat_with_tools(f"message {i}", [], [])
 
-        assert len(llm.history) == 4
+        assert llm.history == []
 
 
 class TestLocalLoraHistoryTrimming:

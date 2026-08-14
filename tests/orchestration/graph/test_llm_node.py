@@ -13,6 +13,7 @@ from langgraph.types import RunnableConfig
 
 from animetta.memory.v2.context import MemoryContext
 from animetta.orchestration.graph import llm_node
+from animetta.orchestration.graph.conversation_session import ConversationSessionState
 from animetta.orchestration.graph.llm_node import (
     FALLBACK_RESPONSE,
     _enforce_persona_verbal_tics,
@@ -296,6 +297,11 @@ class _GraphHumorLLM:
             yield chunk
         self.history.append({"role": "assistant", "content": "".join(self.stream_chunks)})
 
+    async def chat_messages_stream(self, messages: list[dict], **kwargs):
+        del messages, kwargs
+        for chunk in self.stream_chunks:
+            yield chunk
+
     async def chat_with_tools(self, user_input: str, tools, langchain_history, system_prompt=""):
         content = self.tool_response or "".join(self.stream_chunks)
         self.history.append({"role": "user", "content": user_input})
@@ -392,6 +398,53 @@ class TestLLMNodeWithoutTools:
         assert result["response_chunks"] == ["Hello", " world"]
         assert result["tool_calls"] is None
         assert "messages" not in result
+
+    @pytest.mark.asyncio
+    async def test_streaming_uses_explicit_history_without_mutating_provider_state(
+        self, mock_service_context
+    ):
+        session = ConversationSessionState()
+        session.commit(
+            task_id="previous",
+            user_text="本场暗号是蓝玻璃",
+            final_response="我记住了。",
+            actor_role="developer",
+            source="developer_console",
+        )
+        captured: list[dict] = []
+        mock_service_context.llm_engine.history = [
+            {"role": "assistant", "content": "shared provider history"}
+        ]
+
+        async def _chat_messages_stream(messages, **kwargs):
+            del kwargs
+            captured.extend(messages)
+            yield "暗号是蓝玻璃。"
+
+        mock_service_context.llm_engine.chat_messages_stream = _chat_messages_stream
+        state = create_initial_state(
+            session_id="viewer-socket",
+            user_text="刚才的暗号是什么？",
+        )
+        config = _make_config(service_context=mock_service_context)
+        config["configurable"]["conversation_session"] = session
+
+        result = await llm_node(state, config)
+
+        assert result["response_text"] == "暗号是蓝玻璃。"
+        assert [message["role"] for message in captured] == [
+            "system",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert "后台私有上下文" in captured[1]["content"]
+        assert captured[2]["content"] == "我记住了。"
+        assert captured[-1]["content"] == "刚才的暗号是什么？"
+        assert sum(message["content"] == "刚才的暗号是什么？" for message in captured) == 1
+        assert mock_service_context.llm_engine.history == [
+            {"role": "assistant", "content": "shared provider history"}
+        ]
 
     @pytest.mark.asyncio
     async def test_streaming_empty_response(self, mock_service_context):
@@ -718,6 +771,43 @@ class TestLLMNodeWithTools:
         assert result["tool_calls"][0]["args"]["query"] == "weather"
         assert isinstance(result["messages"][0], HumanMessage)
         assert isinstance(result["messages"][1], AIMessage)
+
+    @pytest.mark.asyncio
+    async def test_explicit_completed_history_precedes_current_tool_turn(
+        self, mock_service_context
+    ):
+        session = ConversationSessionState()
+        session.commit(
+            task_id="previous",
+            user_text="本场暗号是蓝玻璃",
+            final_response="我记住了。",
+            actor_role="developer",
+            source="developer_console",
+        )
+        mock_chat_model = MagicMock(bound_tools=[])
+        mock_service_context.llm_engine.chat_with_tools = AsyncMock(
+            return_value={"content": "暗号是蓝玻璃。"}
+        )
+        state = create_initial_state(
+            session_id="viewer-socket",
+            user_text="刚才的暗号是什么？",
+        )
+        config = _make_config(
+            service_context=mock_service_context,
+            enable_tools=True,
+            chat_model=mock_chat_model,
+        )
+        config["configurable"]["conversation_session"] = session
+
+        await llm_node(state, config)
+
+        call = mock_service_context.llm_engine.chat_with_tools.await_args
+        history = call.kwargs["langchain_history"]
+        assert [type(message) for message in history] == [HumanMessage, AIMessage]
+        assert "后台私有上下文" in history[0].content
+        assert history[1].content == "我记住了。"
+        assert all(message.content != "刚才的暗号是什么？" for message in history)
+        assert call.args[0] == "刚才的暗号是什么？"
 
     @pytest.mark.asyncio
     async def test_tool_call_audit_metadata_is_not_added_to_ai_message(self, mock_service_context):
@@ -1113,7 +1203,7 @@ class TestLLMNodeHumorAgent:
         assert "messages" not in result
         assert "humor_agent" not in result.get("metadata", {})
         assert llm.chat_messages_calls == 0
-        assert llm.history[-1]["content"] == normal
+        assert llm.history == []
 
     @pytest.mark.asyncio
     async def test_tool_text_does_not_apply_humor_inside_llm_node(self, mock_service_context):

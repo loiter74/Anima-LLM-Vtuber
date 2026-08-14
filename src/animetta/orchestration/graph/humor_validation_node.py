@@ -7,7 +7,6 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.services.humor.filters import validate_humor_candidate
-from animetta.services.humor.history_safe import replace_last_assistant_history
 from animetta.services.humor.metadata import (
     candidate_from_metadata,
     record_humor_validation,
@@ -43,13 +42,6 @@ async def humor_validation_node(
             candidate.accept()
             final_response = candidate.visible_response
             final_chunks = [final_response]
-            llm_engine = getattr(service_context, "llm_engine", None) if service_context else None
-            if llm_engine:
-                replace_last_assistant_history(
-                    llm_engine,
-                    candidate.normal_response,
-                    final_response,
-                )
             logger.info(f"[{session_id}] [HumorValidationNode] Accepted humorous rewrite")
         metadata = record_humor_validation(metadata, candidate)
 

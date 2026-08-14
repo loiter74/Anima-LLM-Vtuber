@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
+from animetta.orchestration.graph.conversation_session import ConversationScope
 from animetta.orchestration.server.session import SessionManager
 
 # ── Fixtures ───────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ class TestSessionManagerInit:
         assert sm.orchestrators == {}
         assert sm.audio_processors == {}
         assert sm._orchestrator_lock is not None
+        assert sm.conversation_registry.scope_count == 0
 
     def test_init_stores_model_manager(self):
         """model_manager is stored."""
@@ -181,10 +183,11 @@ class TestGetOrCreateOrchestrator:
     async def test_creates_new_orchestrator(self, session_manager, monkeypatch):
         """get_or_create_orchestrator creates a LangGraphOrchestrator."""
         mock_orch = MagicMock()
+        create_mock = AsyncMock(return_value=mock_orch)
 
         monkeypatch.setattr(
             "animetta.orchestration.graph.orchestrator.LangGraphOrchestrator.create",
-            AsyncMock(return_value=mock_orch),
+            create_mock,
         )
         monkeypatch.setattr(
             "animetta.orchestration.server.session.SessionManager._load_tools_config",
@@ -203,6 +206,10 @@ class TestGetOrCreateOrchestrator:
 
         assert orch is mock_orch
         assert session_manager.orchestrators["sid1"] is mock_orch
+        assert (
+            create_mock.await_args.kwargs["conversation_registry"]
+            is session_manager.conversation_registry
+        )
 
     @pytest.mark.asyncio
     async def test_reuses_existing_orchestrator(self, session_manager):
@@ -334,6 +341,9 @@ class TestCleanupSession:
         session_manager.orchestrators["sid1"] = mock_orch
         session_manager.audio_processors["sid1"] = mock_processor
         session_manager.contexts["sid1"] = mock_ctx
+        scope = ConversationScope("livestream", "live-1")
+        async with session_manager.conversation_registry.turn(scope) as conversation:
+            conversation.commit(task_id="task", user_text="u", final_response="a")
 
         await session_manager.cleanup_session("sid1")
 
@@ -343,6 +353,7 @@ class TestCleanupSession:
         assert "sid1" not in session_manager.orchestrators
         assert "sid1" not in session_manager.audio_processors
         assert "sid1" not in session_manager.contexts
+        assert session_manager.conversation_registry.peek(scope) is not None
 
     @pytest.mark.asyncio
     async def test_cleanup_session_handles_missing_orchestrator(self, session_manager):

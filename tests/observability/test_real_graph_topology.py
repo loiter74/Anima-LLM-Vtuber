@@ -21,6 +21,7 @@ from animetta.orchestration.graph.state import create_initial_state
                 "emotion",
                 "tts",
                 "output",
+                "conversation_finalizer",
             ],
         ),
         (

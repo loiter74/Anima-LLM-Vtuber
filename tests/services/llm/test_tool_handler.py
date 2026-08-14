@@ -185,6 +185,7 @@ class TestOpenAIToolHandler:
         assert result["content"] == "The weather is sunny."
         assert result["tool_calls"] is None
         mock_openai_llm._record_usage.assert_called_once()
+        mock_openai_llm._append_history_turn.assert_not_called()
 
     @patch("animetta.services.llm.tool_handler.logger")
     async def test_chat_with_tools_with_tool_calls(self, mock_logger, handler, mock_openai_llm):

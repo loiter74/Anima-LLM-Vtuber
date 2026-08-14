@@ -235,9 +235,6 @@ class OpenAIToolHandler:
 
             logger.debug(f"[OpenAI] Response: {content[:100]}...")
 
-            # Update conversation history
-            self.llm._append_history_turn(user_input, content)
-
             return {
                 "content": content,
                 "tool_calls": None,

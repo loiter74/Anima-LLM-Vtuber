@@ -30,6 +30,7 @@ class MockLLM(LLMInterface):
 
     # Class-level attribute: supported config type
     config_class = MockLLMConfig
+    is_mock_provider = True
 
     def __init__(self, system_prompt: str = "", max_history_messages: int = 20):
         self.system_prompt = system_prompt
@@ -101,14 +102,10 @@ class MockLLM(LLMInterface):
 
     async def chat_stream(self, user_input: str, **kwargs) -> AsyncIterator[str]:
         """Stream mock response"""
-        # Call count
         self.call_count += 1
         call_id = f"{self.instance_id}-{self.call_count}"
-
-        # Log call start
         start_time = time.time()
         input_length = len(user_input)
-
         logger.info(f"[MockLLM:{call_id}] ═══════════════════════════════════")
         logger.info(f"[MockLLM:{call_id}] 🔵 Starting streaming call (mock mode)")
         logger.info(
@@ -116,20 +113,42 @@ class MockLLM(LLMInterface):
         )
 
         response = await self.chat(user_input, **kwargs)
-
-        # Simulate streaming output
         chunk_count = 0
         for char in response:
             chunk_count += 1
             yield char
 
-        # Calculate elapsed time
         elapsed_time = time.time() - start_time
-
         logger.info(f"[MockLLM:{call_id}] 🟢 Streaming call successful")
         logger.info(f"[MockLLM:{call_id}] Elapsed: {elapsed_time:.2f}s")
         logger.info(f"[MockLLM:{call_id}] Chunks: {chunk_count}")
         logger.info(f"[MockLLM:{call_id}] ═══════════════════════════════════")
+
+    async def chat_messages(self, messages: list[dict], **kwargs) -> str:
+        """Return a deterministic template without touching shared history."""
+        del kwargs
+        self.call_count += 1
+        user_input = next(
+            (
+                str(message.get("content", ""))
+                for message in reversed(messages)
+                if message.get("role") == "user"
+            ),
+            "",
+        )
+        responses = [
+            f"这是第 {self.call_count} 条模拟回复。你刚才说的是：「{user_input}」",
+            f"收到你的消息：「{user_input}」。我是一个 Mock LLM，用于测试和开发。",
+            f"你好！你说的是：「{user_input}」。有什么我可以帮助你的吗？",
+        ]
+        return responses[self.call_count % len(responses)]
+
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        response = await self.chat_messages(messages, **kwargs)
+        for char in response:
+            yield char
 
     def set_system_prompt(self, prompt: str) -> None:
         """Set the system prompt"""

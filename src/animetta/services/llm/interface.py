@@ -30,21 +30,9 @@ class LLMInterface(ABC):
         pass
 
     async def chat_messages(self, messages: list[dict], **kwargs) -> str:
-        """
-        Chat using messages-based protocol (OpenAI API style).
-
-        Default implementation serializes messages into a prompt string
-        and delegates to chat(). Override for native OpenAI integration.
-
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys
-            **kwargs: Additional parameters (response_format, model, temperature, etc.)
-
-        Returns:
-            str: LLM response
-        """
-        prompt = "\n".join(f"[{m['role']}]: {m['content']}" for m in messages)
-        return await self.chat(prompt, **kwargs)
+        """Use only the supplied messages and never read or mutate shared history."""
+        del messages, kwargs
+        raise NotImplementedError("provider must implement history-neutral chat_messages")
 
     async def chat_messages_stream(
         self, messages: list[dict[str, str]], **kwargs: Any

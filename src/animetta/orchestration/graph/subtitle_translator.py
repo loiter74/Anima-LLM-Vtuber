@@ -4,23 +4,19 @@ Translates response text for subtitle display without mutating the main
 conversation history or reusing the Anima roleplay system prompt.
 
 Design decisions (from design.md):
-- Prefer chat_messages() with isolated messages over history-mutating chat().
+- Require chat_messages() with isolated messages; never use history-mutating chat().
 - Strip runtime markers (emotion, affinity) before translation.
-- Fall back safely: restore history or skip if safety cannot be guaranteed.
+- Skip translation if a provider does not implement the explicit-messages contract.
 """
 
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
-from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.services.llm.interface import LLMInterface
-
-if TYPE_CHECKING:
-    pass  # LLMInterface imported above for runtime identity check
+from animetta.services.llm.internal_calls import has_native_chat_messages
 
 # ── Marker patterns to strip before translation ──────────────────
 
@@ -67,14 +63,8 @@ async def translate_subtitle_text(
 ) -> str | None:
     """Translate subtitle text using an isolated, history-safe call.
 
-    Strategy:
-    1. Strip runtime markers from source text.
-    2. Try chat_messages() with an isolated message pair (no history access).
-    3. If chat_messages() falls back to chat() (default impl), check whether
-       the provider exposes get_history/set_system_prompt for restoration.
-       - If yes: snapshot history, translate, restore.
-       - If no: skip translation and log a warning.
-    4. Return the translation string, or None if translation was skipped/failed.
+    Strip runtime markers, then use the provider's history-neutral messages API.
+    Providers without that contract are skipped.
     """
     cleaned = strip_runtime_markers(source_text)
     if not cleaned:
@@ -89,73 +79,18 @@ async def translate_subtitle_text(
         {"role": "user", "content": f"Source subtitle ({source_lang}):\n{cleaned}"},
     ]
 
-    # ── Detect whether chat_messages() is a native implementation ──
-    # The base LLMInterface.chat_messages() default serializes to string
-    # and calls chat(), which mutates history. We detect this by checking
-    # if the method is overridden in the concrete class's MRO.
-    llm_target = cast(LLMInterface, unwrap_tracing_proxy(llm))
-    chat_messages_impl = getattr(type(llm_target), "chat_messages", None)
-    has_native_chat_messages = (
-        chat_messages_impl is not None and chat_messages_impl is not LLMInterface.chat_messages
-    )
-
-    if has_native_chat_messages:
-        # Safe path: isolated call, no history mutation
-        try:
-            translated = await llm.chat_messages(messages, temperature=0)
-            if translated and translated.strip():
-                return translated.strip()
-            return None
-        except Exception as e:
-            logger.warning(f"[SubtitleTranslator] chat_messages() failed: {e}")
-            return None
-
-    # ── Fallback: chat_messages() delegates to chat() (history-mutating) ──
-    # We need to snapshot and restore history to prevent translation prompts
-    # from polluting subsequent main chat turns.
-    logger.debug(
-        "[SubtitleTranslator] chat_messages() not natively implemented, "
-        "using history-snapshot fallback"
-    )
-
-    can_restore = False
-    try:
-        # Check that get_history actually returns something usable
-        test_history = llm_target.get_history()
-        can_restore = isinstance(test_history, list) and hasattr(llm_target, "clear_history")
-    except Exception:
-        can_restore = False
-
-    if not can_restore:
+    if not has_native_chat_messages(llm):
         logger.warning(
-            "[SubtitleTranslator] Cannot safely translate — LLM lacks "
-            "get_history/set_system_prompt. Skipping subtitle translation."
+            "[SubtitleTranslator] Cannot safely translate — provider lacks native "
+            "chat_messages. Skipping subtitle translation."
         )
         return None
 
-    # Snapshot current state
-    saved_history = llm_target.get_history()
     try:
         translated = await llm.chat_messages(messages, temperature=0)
         if translated and translated.strip():
             return translated.strip()
         return None
     except Exception as e:
-        logger.warning(f"[SubtitleTranslator] Fallback translation failed: {e}")
+        logger.warning(f"[SubtitleTranslator] chat_messages() failed: {e}")
         return None
-    finally:
-        # Always restore history, even on failure
-        try:
-            llm_target.clear_history()
-            for msg in saved_history:
-                # Re-populate history by re-adding messages
-                if hasattr(llm_target, "_history"):
-                    llm_target._history.append(msg)
-                elif hasattr(llm_target, "history"):
-                    llm_target.history.append(msg)
-            logger.debug("[SubtitleTranslator] History restored after fallback translation")
-        except Exception as restore_err:
-            logger.error(
-                f"[SubtitleTranslator] Failed to restore history: {restore_err}. "
-                "Translation may have leaked into main conversation."
-            )

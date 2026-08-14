@@ -175,7 +175,7 @@ class TestHumorRewriteNode:
 
 class TestHumorValidationNode:
     @pytest.mark.asyncio
-    async def test_accepted_candidate_replaces_response_and_finalizes_message(self):
+    async def test_accepted_candidate_replaces_response_without_mutating_provider_history(self):
         normal = "普通回复"
         candidate = "幽默回复"
         llm = _HumorNodeLLM(history_response=normal)
@@ -189,7 +189,7 @@ class TestHumorValidationNode:
         assert result["messages"] == [AIMessage(content=candidate)]
         assert result["metadata"][HUMOR_AGENT_KEY]["accepted"] is True
         assert result["metadata"][HUMOR_VALIDATION_KEY]["accepted"] is True
-        assert llm.history[-1]["content"] == candidate
+        assert llm.history[-1]["content"] == normal
 
     @pytest.mark.asyncio
     async def test_rejected_candidate_preserves_normal_response(self):

@@ -179,12 +179,13 @@ class TestHistorySafeCalls:
         llm._chat_mock.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_fallback_restores_history(self):
+    async def test_legacy_provider_with_restorable_history_is_skipped(self):
         llm = _FallbackLLM()
         before = llm.get_history()
         result = await chat_messages_history_safe(llm, [{"role": "user", "content": "x"}])
-        assert result.content is not None
-        assert llm.chat_calls == 1
+        assert result.content is None
+        assert result.fallback_reason == HumorFallbackReason.HISTORY_UNSAFE
+        assert llm.chat_calls == 0
         assert llm.get_history() == before
 
     @pytest.mark.asyncio

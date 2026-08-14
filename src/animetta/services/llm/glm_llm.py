@@ -10,6 +10,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from langchain_core.messages import HumanMessage, ToolMessage
 from loguru import logger
 from zhipuai import ZhipuAI
 
@@ -128,6 +129,47 @@ class GLMLLM(LLMInterface):
             logger.error(f"[GLM] Chat failed: {e}")
             raise
 
+    async def chat_messages(self, messages: list[dict], **kwargs: Any) -> str:
+        """Call GLM with an explicit, history-neutral message list."""
+        await self._ensure_client()
+
+        def _create_completion():
+            return self.client.chat.completions.create(
+                model=kwargs.get("model", self.config.model),
+                messages=messages,
+                stream=False,
+                temperature=kwargs.get("temperature", self.config.temperature),
+                **(
+                    {"response_format": kwargs["response_format"]}
+                    if "response_format" in kwargs
+                    else {}
+                ),
+            )
+
+        response = await asyncio.to_thread(_create_completion)
+        self._track_usage(response)
+        return response.choices[0].message.content or ""
+
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream GLM output using only the supplied messages."""
+        await self._ensure_client()
+
+        def _create_stream():
+            return self.client.chat.completions.create(
+                model=kwargs.get("model", self.config.model),
+                messages=messages,
+                stream=True,
+                temperature=kwargs.get("temperature", self.config.temperature),
+            )
+
+        response = await asyncio.to_thread(_create_stream)
+        for chunk in response:
+            content = self._extract_chunk_content(chunk)
+            if content:
+                yield content
+
     async def chat_with_tools(
         self,
         user_input: str,
@@ -230,7 +272,12 @@ class GLMLLM(LLMInterface):
                 f"[GLM] Converted history message: {type(msg).__name__} -> {glm_msg.get('role')}"
             )
 
-        messages.append({"role": "user", "content": user_input})
+        last_history_message = langchain_history[-1] if langchain_history else None
+        if not isinstance(last_history_message, ToolMessage) and not (
+            isinstance(last_history_message, HumanMessage)
+            and last_history_message.content == user_input
+        ):
+            messages.append({"role": "user", "content": user_input})
         return messages
 
     def _convert_tools_if_needed(self, tools: list[Any] | None) -> list[dict] | None:

@@ -39,6 +39,8 @@ def _state() -> dict:
             "source": "developer_console",
             "live_session_id": "live-1",
             "audience": "livestream",
+            "conversation_scope_kind": "livestream",
+            "conversation_window_pairs_before": 2,
         },
     }
 
@@ -52,7 +54,14 @@ async def test_developer_console_records_full_content_and_flushes() -> None:
     )
 
     turn = await observer.start(_state())
-    await turn.finish({**_state(), "response_text": "secret output"})
+    final_state = _state()
+    final_state["response_text"] = "secret output"
+    final_state["metadata"] = {
+        **final_state["metadata"],
+        "conversation_window_pairs_after": 3,
+        "conversation_committed": True,
+    }
+    await turn.finish(final_state)
 
     trace = recorder.started[0]
     assert trace.trace_id == "task-canonical"
@@ -63,6 +72,12 @@ async def test_developer_console_records_full_content_and_flushes() -> None:
     assert recorder.finished[0][1] is TraceOutcome.SUCCESS
     assert recorder.finished[0][2]["assistant_content"].text == "secret output"
     assert recorder.finished[0][2]["attributes"]["live_session_id"] == "live-1"
+    assert trace.attributes["conversation_scope_kind"] == "livestream"
+    assert trace.attributes["conversation_window_pairs_before"] == 2
+    assert recorder.finished[0][2]["attributes"]["conversation_window_pairs_after"] == 3
+    assert recorder.finished[0][2]["attributes"]["conversation_committed"] is True
+    assert "secret input" not in repr(trace.attributes)
+    assert "secret output" not in repr(recorder.finished[0][2]["attributes"])
     assert recorder.events[0].direction.value == "ingress"
     assert recorder.events[0].phase == "accepted"
     assert recorder.flushes == 1

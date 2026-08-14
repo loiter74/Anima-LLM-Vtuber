@@ -6,6 +6,7 @@ Uses the ollama SDK to call local Ollama models
 
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -131,8 +132,6 @@ class OllamaLLM(LLMInterface):
 
         try:
             # ollama SDK is synchronous, needs to run in thread pool
-            import asyncio
-
             loop = asyncio.get_running_loop()
 
             response = await loop.run_in_executor(
@@ -177,8 +176,6 @@ class OllamaLLM(LLMInterface):
         full_response = ""
 
         try:
-            import asyncio
-
             loop = asyncio.get_running_loop()
 
             # Run sync streaming call in thread pool
@@ -210,6 +207,38 @@ class OllamaLLM(LLMInterface):
             logger.error(f"Ollama streaming chat error: {e}")
             raise
 
+    async def chat_messages(self, messages: list[dict], **kwargs: Any) -> str:
+        """Call Ollama with explicit messages without touching shared history."""
+        response = await asyncio.to_thread(
+            self.client.chat,
+            model=kwargs.get("model", self.model),
+            messages=messages,
+            options={
+                "temperature": kwargs.get("temperature", self.temperature),
+                "num_predict": kwargs.get("max_tokens", self.max_tokens),
+            },
+        )
+        return str(response["message"]["content"])
+
+    async def chat_messages_stream(
+        self, messages: list[dict[str, str]], **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream Ollama output using only the supplied messages."""
+        stream = await asyncio.to_thread(
+            self.client.chat,
+            model=kwargs.get("model", self.model),
+            messages=messages,
+            stream=True,
+            options={
+                "temperature": kwargs.get("temperature", self.temperature),
+                "num_predict": kwargs.get("max_tokens", self.max_tokens),
+            },
+        )
+        for chunk in stream:
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yield str(content)
+
     def set_system_prompt(self, prompt: str) -> None:
         """Set the system prompt"""
         self.system_prompt = prompt
@@ -228,3 +257,9 @@ class OllamaLLM(LLMInterface):
         """Clean up resources"""
         # Ollama client does not need explicit closing
         logger.info("OllamaLLM resources released")
+
+    def handle_interrupt(self, heard_response: str = "") -> None:
+        del heard_response
+
+    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
+        del conf_uid, history_uid

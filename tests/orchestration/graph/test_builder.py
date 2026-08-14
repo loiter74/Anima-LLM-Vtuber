@@ -178,6 +178,7 @@ class TestBuildGraph:
             "tts",
             "emotion",
             "output",
+            "conversation_finalizer",
         ]
 
     @pytest.mark.parametrize(
@@ -196,6 +197,7 @@ class TestBuildGraph:
                     "tts",
                     "emotion",
                     "output",
+                    "conversation_finalizer",
                 },
             ),
             (
@@ -241,7 +243,7 @@ class TestBuildGraph:
 
         node_names = [c.args[0] for c in graph.add_node.call_args_list]
         assert "tools" in node_names
-        assert len(node_names) == 11
+        assert len(node_names) == 12
 
     def test_build_graph_sets_conditional_entry_point(self, mock_state_graph):
         """Entry point is set with route_input and asr/llm mapping."""
@@ -270,8 +272,8 @@ class TestBuildGraph:
         assert call("llm", "tts") not in edge_calls
         assert call("emotion", "tts") in edge_calls
         assert call("tts", "output") in edge_calls
-        # END edge
-        assert call("output", ANY) in edge_calls
+        assert call("output", "conversation_finalizer") in edge_calls
+        assert call("conversation_finalizer", ANY) in edge_calls
 
     def test_build_graph_edges_with_tools(self, mock_state_graph, mock_tools):
         """With tools: conditional edges choose tools or humor rewrite, plus tools->llm loop."""
@@ -363,8 +365,8 @@ class TestCreateDefaultGraph:
 
         graph.compile.assert_called_once_with(checkpointer=external_cp)
 
-    def test_external_checkpointer_even_without_memory(self, mock_state_graph):
-        """External checkpointer is used even when enable_memory=False."""
+    def test_external_checkpointer_is_disabled_without_memory(self, mock_state_graph):
+        """Short-term conversation continuity never writes LangGraph checkpoints."""
         graph, compiled = mock_state_graph
         external_cp = MagicMock()
         with (
@@ -373,7 +375,7 @@ class TestCreateDefaultGraph:
         ):
             create_default_graph(enable_memory=False)
 
-        graph.compile.assert_called_once_with(checkpointer=external_cp)
+        graph.compile.assert_called_once_with(checkpointer=None)
 
     def test_tools_warning_no_tool_list(self, mock_state_graph):
         """enable_tools=True without tools list logs a warning."""

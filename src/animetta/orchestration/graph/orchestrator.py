@@ -21,7 +21,10 @@ from animetta.observability.ports import (
 )
 
 from .builder import CompiledAgentGraph, create_default_graph
-from .conversation_session import ConversationSessionState
+from .conversation_session import (
+    ConversationSessionRegistry,
+    resolve_conversation_scope,
+)
 from .interrupt_handler import get_interrupt_handler
 from .observability import get_observability
 from .state import AgentState, create_initial_state
@@ -51,6 +54,7 @@ class LangGraphOrchestrator:
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
         tool_manager: ToolManager | None = None,
+        conversation_registry: ConversationSessionRegistry | None = None,
     ):
         self.service_context = service_context
         self.socketio = socketio
@@ -68,7 +72,7 @@ class LangGraphOrchestrator:
         self.graph: CompiledAgentGraph | None = None
         self._is_running = False
         self._processing_audio = False  # guard against concurrent audio processing
-        self.conversation_session = ConversationSessionState()
+        self.conversation_registry = conversation_registry or ConversationSessionRegistry()
 
         # Initialize tool manager
         self.tool_manager = tool_manager
@@ -80,7 +84,6 @@ class LangGraphOrchestrator:
                 "socketio": socketio,
                 "emotion_analyzer": emotion_analyzer,
                 "thread_id": self.session_id,
-                "conversation_session": self.conversation_session,
                 "observation_recorder": self.observation_recorder,
             }
         }
@@ -355,64 +358,90 @@ class LangGraphOrchestrator:
     ) -> dict[str, Any]:
         """Run the state graph, passing service context through LangGraph config"""
         input_type = initial_state.get("input_type", "text")
-        user_text = initial_state.get("user_text", "")
-        turn = await self._conversation_observer().start(initial_state)
-        run_config = cast(
-            RunnableConfig,
-            {
-                **self._langgraph_config,
-                "configurable": dict(self._langgraph_config.get("configurable", {})),
-            },
+        metadata = initial_state.get("metadata", {})
+        scope = resolve_conversation_scope(
+            conversation_id=initial_state.get("conversation_id"),
+            session_id=self.session_id,
+            metadata=metadata,
         )
-        checkpoint_thread_id = initial_state.get("metadata", {}).get("checkpoint_thread_id")
-        if isinstance(checkpoint_thread_id, str) and checkpoint_thread_id:
-            run_config["configurable"]["thread_id"] = checkpoint_thread_id
-        from .tool_observation import (
-            CompositeToolInvocationObserver,
-            LedgerToolInvocationObserver,
-        )
-
-        ledger_tool_observer = LedgerToolInvocationObserver(
-            self.observation_recorder,
-            digest_salt=self._observation_digest_salt(),
-        )
-        if tool_invocation_observer is None:
-            run_config["configurable"]["tool_invocation_observer"] = ledger_tool_observer
-        else:
-            run_config["configurable"]["tool_invocation_observer"] = tool_invocation_observer
-            run_config["configurable"]["effective_tool_invocation_observer"] = (
-                CompositeToolInvocationObserver(tool_invocation_observer, ledger_tool_observer)
+        async with self.conversation_registry.turn(scope) as conversation_session:
+            window_before = len(conversation_session.completed_turns)
+            initial_state["metadata"] = {
+                **metadata,
+                "conversation_scope_kind": scope.kind,
+                "conversation_window_pairs_before": window_before,
+                "has_private_developer_context": (
+                    conversation_session.has_private_developer_context
+                ),
+            }
+            turn = await self._conversation_observer().start(initial_state)
+            run_config = cast(
+                RunnableConfig,
+                {
+                    **self._langgraph_config,
+                    "configurable": dict(self._langgraph_config.get("configurable", {})),
+                },
             )
-        callbacks = self._callbacks or get_observability().callbacks
-        if callbacks:
-            run_config["callbacks"] = callbacks
+            run_config["configurable"]["conversation_session"] = conversation_session
+            checkpoint_thread_id = initial_state.get("metadata", {}).get("checkpoint_thread_id")
+            if isinstance(checkpoint_thread_id, str) and checkpoint_thread_id:
+                run_config["configurable"]["thread_id"] = checkpoint_thread_id
+            from .tool_observation import (
+                CompositeToolInvocationObserver,
+                LedgerToolInvocationObserver,
+            )
 
-        logger.info(
-            f"[{self.session_id}] [LangGraph] _run_graph starting — input_type={input_type}, user_text={user_text[:50]}..."
-        )
-        t_start = time_module.perf_counter()
+            ledger_tool_observer = LedgerToolInvocationObserver(
+                self.observation_recorder,
+                digest_salt=self._observation_digest_salt(),
+            )
+            if tool_invocation_observer is None:
+                run_config["configurable"]["tool_invocation_observer"] = ledger_tool_observer
+            else:
+                run_config["configurable"]["tool_invocation_observer"] = tool_invocation_observer
+                run_config["configurable"]["effective_tool_invocation_observer"] = (
+                    CompositeToolInvocationObserver(tool_invocation_observer, ledger_tool_observer)
+                )
+            callbacks = self._callbacks or get_observability().callbacks
+            if callbacks:
+                run_config["callbacks"] = callbacks
 
-        try:
-            graph = self.graph
-            if graph is None:
-                raise RuntimeError("State graph is not initialized")
-            result = await graph.ainvoke(initial_state, config=run_config)
-            duration_ms = (time_module.perf_counter() - t_start) * 1000
             logger.info(
-                f"[{self.session_id}] [LangGraph] _run_graph completed in {duration_ms:.0f}ms"
+                "[{}] [LangGraph] _run_graph starting — input_type={}, scope_kind={}, "
+                "window_pairs={}",
+                self.session_id,
+                input_type,
+                scope.kind,
+                window_before,
             )
-            await turn.finish(result)
-            return result
-        except asyncio.CancelledError as exc:
-            await turn.fail(exc)
-            raise
-        except Exception as e:
-            duration_ms = (time_module.perf_counter() - t_start) * 1000
-            logger.error(
-                f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}"
-            )
-            await turn.fail(e)
-            raise
+            t_start = time_module.perf_counter()
+
+            try:
+                graph = self.graph
+                if graph is None:
+                    raise RuntimeError("State graph is not initialized")
+                result = await graph.ainvoke(initial_state, config=run_config)
+                duration_ms = (time_module.perf_counter() - t_start) * 1000
+                logger.info(
+                    "[{}] [LangGraph] _run_graph completed in {:.0f}ms — "
+                    "scope_kind={}, window_pairs={}",
+                    self.session_id,
+                    duration_ms,
+                    scope.kind,
+                    len(conversation_session.completed_turns),
+                )
+                await turn.finish(result)
+                return result
+            except asyncio.CancelledError as exc:
+                await turn.fail(exc)
+                raise
+            except Exception as e:
+                duration_ms = (time_module.perf_counter() - t_start) * 1000
+                logger.error(
+                    f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}"
+                )
+                await turn.fail(e)
+                raise
 
     def _conversation_observer(self) -> ConversationObserver:
         config = getattr(self.service_context, "config", None)
@@ -510,6 +539,7 @@ class LangGraphOrchestrator:
         tools_config: dict[str, Any] | None = None,
         observation_recorder: ObservationRecorder | None = None,
         tool_manager: ToolManager | None = None,
+        conversation_registry: ConversationSessionRegistry | None = None,
     ) -> LangGraphOrchestrator:
         """Create orchestrator instance
 
@@ -526,6 +556,7 @@ class LangGraphOrchestrator:
             tools_config=tools_config,
             observation_recorder=observation_recorder,
             tool_manager=tool_manager,
+            conversation_registry=conversation_registry,
         )
 
         await orchestrator.start()
