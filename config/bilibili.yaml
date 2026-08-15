@@ -1,6 +1,8 @@
 # Bilibili 直播弹幕配置
+# 真实房间号属于个人信息：写入 config/bilibili.local.yaml（已 gitignore），
+# 此模板保持 room_id: 0。
 enabled: false
-room_id: 1914110916
+room_id: 0
 sessdata: ""
 
 reply_policy:

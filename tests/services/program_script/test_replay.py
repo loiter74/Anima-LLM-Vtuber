@@ -91,14 +91,14 @@ async def test_replay_accepts_matching_prelive_room() -> None:
     coordinator.set_room_state_provider(
         lambda _room_id: {
             "state": "prelive",
-            "room_id": 1914110916,
-            "desired_room_id": 1914110916,
+            "room_id": 1234567890,
+            "desired_room_id": 1234567890,
         }
     )
 
     started = await coordinator.start(
         [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
-        room_id=1914110916,
+        room_id=1234567890,
         creator_id="creator",
         source="jsonl",
         speed=100,
@@ -111,7 +111,7 @@ async def test_replay_accepts_matching_prelive_room() -> None:
 @pytest.mark.parametrize(
     "snapshot",
     [
-        {"state": "live", "room_id": 1914110916},
+        {"state": "live", "room_id": 1234567890},
         {"state": "prelive", "room_id": 123},
     ],
 )
@@ -123,7 +123,7 @@ async def test_replay_rejects_live_or_other_connected_room(snapshot: dict[str, o
     with pytest.raises(ReplayCoordinatorError) as captured:
         await coordinator.start(
             [LivestreamEvent(0, 0, LivestreamEventType.DANMAKU, "viewer", "one")],
-            room_id=1914110916,
+            room_id=1234567890,
             creator_id="creator",
             source="jsonl",
             speed=100,

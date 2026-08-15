@@ -57,7 +57,7 @@ class FakeController:
 def result(
     *,
     ok: bool = True,
-    room_id: int | None = 1914110916,
+    room_id: int | None = 1234567890,
     state: str = "prelive",
     error_code: str | None = None,
 ) -> dict[str, Any]:
@@ -106,19 +106,33 @@ def run(
 def test_connect_uses_default_room_and_closes_only_the_control_transport(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"
-    config.write_text("room_id: 1914110916\nsessdata: secret-marker\n", encoding="utf-8")
+    config.write_text("room_id: 1234567890\nsessdata: secret-marker\n", encoding="utf-8")
     controller = FakeController(fake_results())
 
     output = run(cli, ["connect"], controller, config)
 
     assert output["ok"] is True
-    assert output["room_id"] == 1914110916
+    assert output["room_id"] == 1234567890
     assert output["state"] == "prelive"
     assert output["generation_id"] == 3
     assert output["elapsed_ms"] >= 0
-    assert controller.calls == [("connect", 1914110916, 30.0)]
+    assert controller.calls == [("connect", 1234567890, 30.0)]
     assert controller.closed is True
     assert "secret-marker" not in json.dumps(output)
+
+
+def test_local_override_room_wins_over_the_tracked_template(tmp_path: Path) -> None:
+    cli = load_cli()
+    config = tmp_path / "bilibili.yaml"
+    config.write_text("room_id: 0\n", encoding="utf-8")
+    override = tmp_path / "bilibili.local.yaml"
+    override.write_text("room_id: 1234567890\n", encoding="utf-8")
+    controller = FakeController(fake_results())
+
+    output = run(cli, ["connect"], controller, config)
+
+    assert output["ok"] is True
+    assert controller.calls == [("connect", 1234567890, 30.0)]
 
 
 def test_default_room_reader_stops_before_the_credential_line(
@@ -147,14 +161,14 @@ def test_default_room_reader_stops_before_the_credential_line(
                 raise AssertionError("credential line must not be read")
             return line
 
-    reader = StopAfterRoom(["room_id: 1914110916\n", "sessdata: secret-marker\n"])
+    reader = StopAfterRoom(["room_id: 1234567890\n", "sessdata: secret-marker\n"])
 
     def open_config(_path: Path, **_kwargs: object) -> StopAfterRoom:
         return reader
 
     monkeypatch.setattr(Path, "open", open_config)
 
-    assert cli.load_default_room(Path("unused.yaml")) == 1914110916
+    assert cli.load_default_room(Path("unused.yaml")) == 1234567890
     assert reader.lines_read == 1
 
 
@@ -206,7 +220,7 @@ def test_invalid_explicit_room_is_returned_as_a_structured_controller_error(
 def test_runtime_unavailable_stops_before_the_room_command(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"
-    config.write_text("room_id: 1914110916\n", encoding="utf-8")
+    config.write_text("room_id: 1234567890\n", encoding="utf-8")
     controller = FakeController(fake_results())
 
     output = run(cli, ["connect"], controller, config, ready=False)
@@ -219,19 +233,19 @@ def test_runtime_unavailable_stops_before_the_room_command(tmp_path: Path) -> No
 def test_same_room_connect_remains_idempotent(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"
-    config.write_text("room_id: 1914110916\n", encoding="utf-8")
+    config.write_text("room_id: 1234567890\n", encoding="utf-8")
     controller = FakeController(fake_results())
 
     output = run(cli, ["connect"], controller, config)
 
     assert output["ok"] is True
-    assert controller.calls == [("connect", 1914110916, 30.0)]
+    assert controller.calls == [("connect", 1234567890, 30.0)]
 
 
 def test_other_room_conflict_is_preserved_without_implicit_switch(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"
-    config.write_text("room_id: 1914110916\n", encoding="utf-8")
+    config.write_text("room_id: 1234567890\n", encoding="utf-8")
     conflict = result(ok=False, room_id=123, error_code="session_busy")
     controller = FakeController(fake_results(connect=conflict))
 
@@ -240,7 +254,7 @@ def test_other_room_conflict_is_preserved_without_implicit_switch(tmp_path: Path
     assert output["ok"] is False
     assert output["error_code"] == "session_busy"
     assert output["room_id"] == 123
-    assert controller.calls == [("connect", 1914110916, 30.0)]
+    assert controller.calls == [("connect", 1234567890, 30.0)]
 
 
 def test_explicit_switch_and_timeout_are_forwarded(tmp_path: Path) -> None:
@@ -276,7 +290,7 @@ def test_timeout_above_the_hot_start_budget_is_rejected(tmp_path: Path) -> None:
 def test_connect_timeout_remains_structured(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"
-    config.write_text("room_id: 1914110916\n", encoding="utf-8")
+    config.write_text("room_id: 1234567890\n", encoding="utf-8")
     timeout = result(ok=False, room_id=None, state="connecting", error_code="timeout")
     controller = FakeController(fake_results(connect=timeout))
 

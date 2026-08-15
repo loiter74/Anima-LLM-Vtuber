@@ -39,6 +39,7 @@ logs/
 
 # Local config (keep templates)
 config/config.yaml
+config/bilibili.local.yaml
 
 # Cache
 cache/

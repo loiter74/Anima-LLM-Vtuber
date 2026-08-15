@@ -88,8 +88,8 @@ describe('standalone live DOM view', () => {
     view.setLivestreamStatus({
       state: 'prelive',
       connected: true,
-      room_id: 1914110916,
-      desired_room_id: 1914110916,
+      room_id: 1234567890,
+      desired_room_id: 1234567890,
       retry_count: 0,
       error_code: null,
       generation_id: 1,

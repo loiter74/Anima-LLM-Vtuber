@@ -22,7 +22,7 @@ async def test_initial_room_status_publishes_authoritative_broadcast_state(
     live_status: int,
     is_live: bool,
 ) -> None:
-    service = DanmakuService(room_id=1914110916)
+    service = DanmakuService(room_id=1234567890)
 
     await service._sync_initial_broadcast_state(FakeRoom(live_status))
 
@@ -32,7 +32,7 @@ async def test_initial_room_status_publishes_authoritative_broadcast_state(
 
 
 async def test_realtime_broadcast_event_wins_over_stale_initial_query() -> None:
-    service = DanmakuService(room_id=1914110916)
+    service = DanmakuService(room_id=1234567890)
     service._broadcast_event_seen = True
 
     await service._sync_initial_broadcast_state(FakeRoom(0))

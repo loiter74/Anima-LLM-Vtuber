@@ -42,21 +42,37 @@ ControllerFactory = Callable[[str], Controller]
 ReadinessProbe = Callable[[str, float], bool]
 
 
+def local_override_path(config_path: Path) -> Path:
+    """Gitignored per-host override stored next to the tracked template."""
+    return config_path.with_name(f"{config_path.stem}.local{config_path.suffix}")
+
+
+def _first_room_id(config_path: Path) -> int:
+    with config_path.open(encoding="utf-8") as config:
+        for line in config:
+            match = ROOM_ID_LINE.fullmatch(line.rstrip("\r\n"))
+            if match:
+                return int(match.group(1))
+    return 0
+
+
 def load_default_room(config_path: Path = DEFAULT_CONFIG_PATH) -> int:
-    """Stop reading the config as soon as the public room identifier is found."""
-    try:
-        with config_path.open(encoding="utf-8") as config:
-            for line in config:
-                match = ROOM_ID_LINE.fullmatch(line.rstrip("\r\n"))
-                if match:
-                    room_id = int(match.group(1))
-                    break
-            else:
-                room_id = 0
-    except OSError as exc:
-        raise ValueError("无法读取 Bilibili 默认房间配置") from exc
+    """Prefer the gitignored local override, then the tracked template.
+
+    Stop reading either file as soon as the public room identifier is found.
+    """
+    room_id = 0
+    with suppress(OSError):
+        room_id = _first_room_id(local_override_path(config_path))
     if room_id <= 0:
-        raise ValueError("config/bilibili.yaml 的 room_id 必须是正整数")
+        try:
+            room_id = _first_room_id(config_path)
+        except OSError as exc:
+            raise ValueError("无法读取 Bilibili 默认房间配置") from exc
+    if room_id <= 0:
+        raise ValueError(
+            "config/bilibili.local.yaml 或 config/bilibili.yaml 的 room_id 必须是正整数"
+        )
     return room_id
 
 

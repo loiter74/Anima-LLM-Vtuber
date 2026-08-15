@@ -24,7 +24,7 @@ description: 连接、切换、查询或断开 Animetta 后端持有的唯一真
    py -3.13 .agents/skills/connect-bilibili-live/scripts/bilibili_live.py disconnect
    ```
 
-5. `connect` 默认读取 `config/bilibili.yaml` 的 `room_id`；只有用户明确给出临时房间时才传 `--room-id`。当前会话已在其他房间时停止并报告，只有明确要求“切换”才执行 `switch`。
+5. `connect` 默认读取 `config/bilibili.local.yaml`（本机真实房间，已 gitignore）的 `room_id`，不存在时回落到模板 `config/bilibili.yaml`；只有用户明确给出临时房间时才传 `--room-id`。当前会话已在其他房间时停止并报告，只有明确要求“切换”才执行 `switch`。
 6. 连接成功必须同时满足：
    - CLI 返回 `ok=true`、`state=prelive|live`、目标 `room_id`、`elapsed_ms<60000`；
    - 页面 `#socketStatus[data-state=connected]`；
