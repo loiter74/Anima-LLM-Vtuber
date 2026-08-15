@@ -19,7 +19,7 @@
 
 <img width="1673" height="941" alt="Animetta Live2D avatar speaking" src=".github/assets/readme-cover.webp" />
 
-Animetta is an open-source framework for building **AI virtual companions and VTubers** — characters that talk, listen, remember, emote through a Live2D avatar, and act in the world (chat, livestream, Minecraft). It orchestrates ASR → LLM → TTS → emotion as a single LangGraph state machine, so every turn can branch, call tools, and resume.
+Animetta is an open-source framework for building **AI virtual companions and VTubers** — characters that talk, listen, remember, emote through a Live2D avatar, and act in the world (chat, livestream, Minecraft). It orchestrates ASR → LLM → TTS → emotion as a single LangGraph state machine, with swappable `@ProviderRegistry` providers, hybrid memory (Chroma + SQLite FTS5 + Markdown wiki), a Vue 3 / Electron desktop app, and full-chain observability.
 
 > **Why Animetta?** Most "AI VTuber" projects hardcode one provider pipeline. Animetta makes every layer — LLM, ASR, TTS, VAD, memory, tools — a swappable plugin via `@ProviderRegistry`, with full observability built in.
 
@@ -27,6 +27,7 @@ Animetta is an open-source framework for building **AI virtual companions and VT
 
 - [Highlights](#-highlights)
 - [Architecture](#-architecture)
+- [Codebase Tour](#-codebase-tour)
 - [Quick Start](#-quick-start)
 - [Core Modules](#-core-modules)
 - [Project Structure](#-project-structure)
@@ -87,6 +88,62 @@ Animetta is not just another "ChatGPT + TTS" glue. It is an **engineered AI comp
 ```
 
 > Deeper architecture detail: [docs/architecture/overview.md](docs/architecture/overview.md).
+
+### Architecture map
+
+The codebase decomposes into 15 layers across four areas (node counts from the architecture knowledge graph):
+
+**Backend runtime**
+
+| Layer | What it covers | Key paths |
+|-------|----------------|-----------|
+| LangGraph Orchestration (63) | The state-graph engine — nodes, Starlette + Socket.IO ASGI server, prompting sources, routes. The only orchestration mechanism in the project. | [`src/animetta/orchestration/`](src/animetta/orchestration/) |
+| Provider Services (129) | Swappable LLM / ASR / TTS / VAD / singing providers following interface → implementation → factory → export with `@ProviderRegistry`. | [`src/animetta/services/`](src/animetta/services/) |
+| Product Tools & Minecraft (142) | Runtime product tools (incl. the Node.js Minecraft adapter) and MCP client integration exposed to the orchestrator. | [`src/animetta/tools/`](src/animetta/tools/) |
+| Persona & Effective Config (64) | Persona definitions and the EffectiveConfig / registry that resolves runtime configuration. | [`src/animetta/config/`](src/animetta/config/) |
+| Memory & Live2D Avatar (32) | Hybrid memory (Chroma vector + SQLite FTS5 + wiki, per ADR-005) and the Live2D avatar / emotion mapping domain. | [`src/animetta/memory/v2/`](src/animetta/memory/v2/) · [`src/animetta/avatar/`](src/animetta/avatar/) |
+| Backend Platform Core (70) | Cross-cutting foundations: shared runtime core, observability/tracing, inspection, notifier, utils, acceptance, and host TTS/RVC contracts. | [`src/animetta/core/`](src/animetta/core/) · [`src/animetta/observability/`](src/animetta/observability/) |
+| Backend Package & External Hosts (10) | Backend package roots and host-side service packages (Qwen TTS, RVC host) that run on the Windows host, not in containers. | [`src/animetta_qwen_tts/`](src/animetta_qwen_tts/) · [`src/animetta_rvc_host/`](src/animetta_rvc_host/) |
+
+**Frontend**
+
+| Layer | What it covers | Key paths |
+|-------|----------------|-----------|
+| Frontend Application (138) | Vue 3 + Vite application code: components, views, stores, router, composables, Live2D perf, and feature modules (live streaming, Minecraft gameplay, review, TTS failover). | [`frontend/src/`](frontend/src/) |
+| Frontend Assets (56) | Static public assets bundled with the desktop app — Live2D models, backgrounds, danmaku test data. | [`frontend/public/`](frontend/public/) |
+| Frontend Shell & Build (54) | Electron main/preload, sites worker, build/smoke scripts, and Vite/Uno/tsconfig/Electron-builder configuration plus entry HTML. | [`frontend/electron/`](frontend/) · [`frontend/scripts/`](frontend/scripts/) |
+
+**Configuration & infrastructure**
+
+| Layer | What it covers | Key paths |
+|-------|----------------|-----------|
+| Runtime Configuration (30) | Declarative runtime configuration: personas, features, demo data, program scripts, plus root manifests and environment templates. | [`config/`](config/) · [`.env.example`](.env.example) |
+| Infrastructure & CI/CD (22) | Container definitions, Compose topology, GitHub Actions pipelines, and host-side observability stack config. | [`docker/`](docker/) · [`observability/`](observability/) · [`.github/workflows/`](.github/workflows/) |
+
+**Developer surface**
+
+| Layer | What it covers | Key paths |
+|-------|----------------|-----------|
+| Dev Tooling & Scripts (78) | Quality planner, dev-agent MCP servers, and the runtime lifecycle / operational scripts. | [`tooling/`](tooling/) · [`scripts/`](scripts/) |
+| Evaluations & Contracts (28) | Evaluation harnesses/fixtures and interface contracts (gamebot, Minecraft). | [`evaluations/`](evaluations/) · [`contracts/`](contracts/) |
+| Project Skills & Docs (17) | In-repo agent skills and top-level documentation. | [`.agents/skills/`](.agents/skills/) · [`docs/`](docs/) |
+
+---
+
+## 🗺️ Codebase Tour
+
+A ten-step reading path through the actual code, from boot to deep internals:
+
+1. **Project Overview** — Start here: this README plus [docs/architecture/overview.md](docs/architecture/overview.md) for the purpose and shape of the system.
+2. **Frontend Entry Point** — [`frontend/src/main.ts`](frontend/src/main.ts) mounts the Vue 3 app (Vite + Electron); [`frontend/src/App.vue`](frontend/src/App.vue) wires the shell that hosts the Live2D renderer, chat UI, and dashboard.
+3. **The LangGraph Orchestration Engine** — The heart of the backend. [`orchestrator.py`](src/animetta/orchestration/graph/orchestrator.py) builds the directed state graph with conditional routing and tool-calling loops; [`state.py`](src/animetta/orchestration/graph/state.py) defines the shared `AgentState` that flows ASR → Persona → LLM → Emotion; [`llm_node.py`](src/animetta/orchestration/graph/llm_node.py) is where generation happens.
+4. **Prompts & Persona** — [`prompting/sources.py`](src/animetta/orchestration/prompting/sources.py) assembles the persona- and guard-aware system prompt; [`config/__init__.py`](src/animetta/config/__init__.py) loads character definitions and the EffectiveConfig that parameterizes every node.
+5. **Realtime Server (Starlette + Socket.IO)** — The ASGI server bridges frontend and orchestrator: [`websocket.py`](src/animetta/orchestration/server/websocket.py) manages sessions and streams events; [`routes.py`](src/animetta/orchestration/server/routes.py) declares the Socket.IO/REST route handlers.
+6. **Swappable Provider Services** — Every capability is a plugin via `@ProviderRegistry`. The package roots expose the LLM, TTS, and ASR provider factories (interface → implementation → factory → export): [`services/llm/`](src/animetta/services/llm/) · [`services/tts/`](src/animetta/services/tts/) · [`services/asr/`](src/animetta/services/asr/).
+7. **Hybrid Memory** — Memory v2 (ADR-005): [`memory/v2/context.py`](src/animetta/memory/v2/context.py) blends Chroma vector search, SQLite FTS5 keyword match, and a Markdown wiki knowledge base for long-term recall.
+8. **Product Tools — Minecraft** — The Minecraft adapter is a Node.js project living inside the Python repo, exposing world actions to the orchestrator as callable tools: [`tools/minecraft/`](src/animetta/tools/minecraft/).
+9. **Live2D Avatar & Emotion** — LLM emotion output is parsed and mapped to Live2D parameters in [`avatar/performance.py`](src/animetta/avatar/performance.py), driving expressions in real time alongside the conversation.
+10. **Configuration & Tool Registry** — Declarative anchors: [`pyproject.toml`](pyproject.toml) pins the Python 3.13 backend; [`config/tools.yaml`](config/tools.yaml) registers the product tools the orchestrator may call.
 
 ---
 
