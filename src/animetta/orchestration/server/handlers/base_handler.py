@@ -99,7 +99,7 @@ class BaseSocketHandler:
             sid, self.get_active_config(), send_callback
         )
 
-    async def _get_or_create_orchestrator(self, sid: str) -> LangGraphOrchestrator:
+    async def get_or_create_orchestrator(self, sid: str) -> LangGraphOrchestrator:
         """Get or create LangGraph orchestrator for a session."""
 
         send_callback = self.make_send_callback(sid)
@@ -119,6 +119,10 @@ class BaseSocketHandler:
         await self.session_manager.get_or_create_audio_processor(sid, ctx)
 
         return orchestrator
+
+    async def _get_or_create_orchestrator(self, sid: str) -> LangGraphOrchestrator:
+        """Deprecated compatibility wrapper for domain handlers."""
+        return await self.get_or_create_orchestrator(sid)
 
     async def broadcast_to_desktop_clients(self, client_type: str, event: str, data: dict) -> None:
         """Broadcast message to desktop clients of a specified type."""

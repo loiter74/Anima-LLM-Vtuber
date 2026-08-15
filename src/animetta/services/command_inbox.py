@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -18,6 +19,7 @@ from loguru import logger
 class CommandStatus(StrEnum):
     ACCEPTED = "accepted"
     PROCESSING = "processing"
+    WAITING_APPROVAL = "waiting_approval"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -33,7 +35,11 @@ class CommandDecision(StrEnum):
     NOT_FOUND = "not_found"
 
 
-ACTIVE_STATUSES = {CommandStatus.ACCEPTED, CommandStatus.PROCESSING}
+ACTIVE_STATUSES = {
+    CommandStatus.ACCEPTED,
+    CommandStatus.PROCESSING,
+    CommandStatus.WAITING_APPROVAL,
+}
 TERMINAL_STATUSES = {
     CommandStatus.SUCCEEDED,
     CommandStatus.FAILED,
@@ -312,6 +318,58 @@ class CommandInbox:
             started=True,
         )
 
+    async def wait_for_approval(
+        self,
+        key: CommandKey,
+        approval: dict[str, Any],
+    ) -> CommandTask:
+        """Persist the checkpoint/task mapping before notifying any client."""
+        return await self._transition(
+            key,
+            from_statuses={CommandStatus.PROCESSING},
+            to_status=CommandStatus.WAITING_APPROVAL,
+            progress=approval,
+        )
+
+    async def resume_after_approval(self, key: CommandKey) -> CommandTask:
+        return await self._transition(
+            key,
+            from_statuses={CommandStatus.WAITING_APPROVAL},
+            to_status=CommandStatus.PROCESSING,
+            require_source=True,
+        )
+
+    async def waiting_approvals(self) -> list[CommandTask]:
+        db = await self._require_db()
+        async with self._lock:
+            cursor = await db.execute(
+                """
+                SELECT * FROM command_tasks
+                WHERE status=? ORDER BY created_at_ms ASC
+                """,
+                (CommandStatus.WAITING_APPROVAL.value,),
+            )
+            rows = await cursor.fetchall()
+        return [_row_to_task(row) for row in rows]
+
+    async def reconcile_waiting_approvals(
+        self,
+        checkpoint_exists: Callable[[str], Awaitable[bool]],
+    ) -> int:
+        """Fail restart survivors whose durable checkpoint no longer exists."""
+        reconciled = 0
+        for task in await self.waiting_approvals():
+            thread_id = str((task.progress or {}).get("thread_id") or "")
+            if thread_id and await checkpoint_exists(thread_id):
+                continue
+            await self.fail(
+                task.key,
+                error_code="CHECKPOINT_UNAVAILABLE",
+                error_message="Pending approval checkpoint is unavailable after restart",
+            )
+            reconciled += 1
+        return reconciled
+
     async def update_progress(self, key: CommandKey, progress: dict[str, Any]) -> CommandTask:
         return await self._transition(
             key,
@@ -402,6 +460,7 @@ class CommandInbox:
         started: bool = False,
         finished: bool = False,
         cancel_requested: bool = False,
+        require_source: bool = False,
     ) -> CommandTask:
         db = await self._require_db()
         async with self._lock:
@@ -412,6 +471,8 @@ class CommandInbox:
                     raise CommandInboxError("TASK_NOT_FOUND")
                 current = _row_to_task(row)
                 if current.status not in from_statuses:
+                    if require_source:
+                        raise CommandInboxError("INVALID_STATUS")
                     await db.commit()
                     return current
                 now = _now_ms()

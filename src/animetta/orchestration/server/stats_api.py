@@ -23,6 +23,12 @@ from animetta.observability.ports import ObservationQuery
 _model_manager: Any | None = None
 _runtime_config: Any | None = None
 _component_readiness_cache: Any | None = None
+_checkpoint_readiness: dict[str, object | None] = {
+    "state": "degraded",
+    "ready": False,
+    "degraded": True,
+    "reason": "not_started",
+}
 _frontend_readiness: dict[str, str | bool | None] = {
     "state": "failed",
     "ready": False,
@@ -50,6 +56,12 @@ def set_component_readiness_cache(cache: Any | None) -> None:
     """Register the background-owned local component readiness cache."""
     global _component_readiness_cache
     _component_readiness_cache = cache
+
+
+def set_checkpoint_readiness(value: dict[str, object | None]) -> None:
+    """Cache the content-free durable execution status."""
+    global _checkpoint_readiness
+    _checkpoint_readiness = dict(value)
 
 
 async def stats_overview(request: Request) -> JSONResponse:
@@ -234,6 +246,8 @@ def _merge_component_readiness(payload: dict[str, Any]) -> None:
         local_snapshot = _component_readiness_cache.snapshot()
 
     components = payload.setdefault("components", {})
+    components["checkpoint"] = {**_checkpoint_readiness, "required": False}
+    payload["degraded"] = _checkpoint_readiness.get("degraded") is True
     local_components = local_snapshot.get("components", {})
     local_ready = True
     for name in required:

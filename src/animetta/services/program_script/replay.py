@@ -6,13 +6,14 @@ import asyncio
 import json
 import math
 import threading
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.bilibili.models import LivestreamEvent, LivestreamEventType
 from animetta.services.bilibili.replay_gateway import ReplayDanmakuGateway
 
@@ -20,6 +21,7 @@ from .models import InputType, MemoryMode, ProgramScript, ThreadMode
 
 ReplayDispatcher = Callable[[LivestreamEvent], Coroutine[Any, Any, None]]
 RoomStateProvider = Callable[[int], dict[str, Any]]
+CheckpointDelete = Callable[[str], Awaitable[None]]
 
 
 class ReplayCoordinatorError(RuntimeError):
@@ -54,12 +56,18 @@ class ReplayRun:
     step_mode: bool = False
     stopping_for_control: bool = False
     control_target: ReplayState | None = None
+    checkpoint_threads: set[str] = field(default_factory=set)
 
 
 class ProgramReplayCoordinator:
     """Pause and re-slice immutable event sources without duplicating gateway scheduling."""
 
-    def __init__(self, *, control_timeout_seconds: float = 50.0) -> None:
+    def __init__(
+        self,
+        *,
+        control_timeout_seconds: float = 50.0,
+        checkpoint_delete: CheckpointDelete | None = None,
+    ) -> None:
         if not math.isfinite(control_timeout_seconds) or control_timeout_seconds <= 0:
             raise ValueError("control_timeout_seconds must be positive")
         self._dispatcher: ReplayDispatcher | None = None
@@ -69,6 +77,7 @@ class ProgramReplayCoordinator:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
         self._control_timeout_seconds = control_timeout_seconds
+        self._checkpoint_delete = checkpoint_delete
 
     def set_dispatcher(self, dispatcher: ReplayDispatcher) -> None:
         self._dispatcher = dispatcher
@@ -201,6 +210,7 @@ class ProgramReplayCoordinator:
         if not remaining:
             run.state = ReplayState.COMPLETED
             self._active_by_room.pop(run.room_id, None)
+            self._schedule_checkpoint_cleanup(run)
             return
         rebased = _rebase_events(remaining)
         gateway = ReplayDanmakuGateway(
@@ -253,18 +263,24 @@ class ProgramReplayCoordinator:
         original = run.events[run.cursor]
         payload = dict(original.payload)
         context = dict(payload.get("program_context", {}))
+        checkpoint_thread = (
+            f"replay:{run.replay_id}:{run.cursor}"
+            if context.get("isolated")
+            else f"replay:{run.replay_id}"
+        )
+        run.checkpoint_threads.add(checkpoint_thread)
         context.update(
             {
                 "actor_id": run.actor_id,
                 "turn_id": str(uuid4()),
                 "program_run_id": run.replay_id,
                 "room_id": run.room_id,
-                "checkpoint_thread_id": (
-                    f"replay:{run.replay_id}:{run.cursor}"
-                    if context.get("isolated")
-                    else f"replay:{run.replay_id}"
+                "checkpoint_request": CheckpointRequest(
+                    thread_id=checkpoint_thread,
+                    owner_kind="replay",
+                    owner_id=run.replay_id,
+                    retention="stable",
                 ),
-                "retention_policy": "ephemeral",
             }
         )
         payload["program_context"] = context
@@ -300,6 +316,7 @@ class ProgramReplayCoordinator:
         elif run.cursor >= len(run.events):
             run.state = ReplayState.COMPLETED
             self._active_by_room.pop(run.room_id, None)
+            self._schedule_checkpoint_cleanup(run)
         elif message == "Replay stopped":
             run.state = ReplayState.PAUSED
 
@@ -307,6 +324,7 @@ class ProgramReplayCoordinator:
         run.state = ReplayState.FAILED
         run.error = reason
         self._active_by_room.pop(run.room_id, None)
+        self._schedule_checkpoint_cleanup(run)
 
     async def _pause(self, run: ReplayRun) -> None:
         if run.state is not ReplayState.RUNNING:
@@ -325,6 +343,7 @@ class ProgramReplayCoordinator:
             "当前事件仍在处理，停止将在本轮完成后生效",
         )
         self._complete_control(run, ReplayState.STOPPED)
+        await self._delete_checkpoints(run)
 
     async def _stop_gateway_for_control(
         self,
@@ -353,6 +372,17 @@ class ProgramReplayCoordinator:
         run.state = target
         if target is ReplayState.STOPPED:
             self._active_by_room.pop(run.room_id, None)
+
+    def _schedule_checkpoint_cleanup(self, run: ReplayRun) -> None:
+        if self._loop is not None:
+            self._loop.create_task(self._delete_checkpoints(run))
+
+    async def _delete_checkpoints(self, run: ReplayRun) -> None:
+        if self._checkpoint_delete is None:
+            return
+        for thread_id in sorted(run.checkpoint_threads):
+            await self._checkpoint_delete(thread_id)
+        run.checkpoint_threads.clear()
 
     def _active_run(self, room_id: int) -> ReplayRun | None:
         replay_id = self._active_by_room.get(room_id)

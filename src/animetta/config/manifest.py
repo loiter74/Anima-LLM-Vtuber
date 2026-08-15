@@ -16,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -28,11 +29,13 @@ from .core.registry import ProviderRegistry
 from .humor import HumorConfig
 from .observability import ObservabilityConfig
 from .scene_analysis import SceneAnalysisConfig
+from .security import SecurityConfig
 
 ProfileName = Literal["test", "smoke", "selftest", "production"]
 ServiceCategory = Literal["llm", "asr", "tts", "vad"]
 PROFILE_NAMES: tuple[ProfileName, ...] = ("test", "smoke", "selftest", "production")
 SERVICE_CATEGORIES: tuple[ServiceCategory, ...] = ("llm", "asr", "tts", "vad")
+_PROVIDER_DECLARATION_ADAPTER = TypeAdapter(dict[str, Any])
 DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[3] / "config" / "animetta.yaml"
 _MERGE_KEY = re.compile(r"(?m)^\s*<<\s*:")
 _ENV_EXPRESSION = re.compile(r"\$\{([^}]+)\}")
@@ -96,6 +99,14 @@ class ApplicationSystem(StrictFrozenModel):
 class ApplicationManifest(StrictFrozenModel):
     persona: str
     system: ApplicationSystem
+    security_snapshot_json: str = Field(
+        default_factory=lambda: _canonical_model_json(
+            SecurityConfig(allowed_origins=("http://127.0.0.1:8000",))
+        ),
+        alias="security",
+        exclude=True,
+        repr=False,
+    )
     observability_snapshot_json: str = Field(
         default_factory=lambda: _canonical_model_json(ObservabilityConfig()),
         alias="observability",
@@ -119,6 +130,11 @@ class ApplicationManifest(StrictFrozenModel):
     @classmethod
     def validate_observability_snapshot(cls, value: Any) -> str:
         return _validated_snapshot_json(value, ObservabilityConfig)
+
+    @field_validator("security_snapshot_json", mode="before")
+    @classmethod
+    def validate_security_snapshot(cls, value: Any) -> str:
+        return _validated_snapshot_json(value, SecurityConfig)
 
     @field_validator("humor_snapshot_json", mode="before")
     @classmethod
@@ -145,11 +161,16 @@ class ApplicationManifest(StrictFrozenModel):
             _freeze_json(json.loads(self.scene_analysis_snapshot_json)),
         )
 
+    @property
+    def security(self) -> Mapping[str, Any]:
+        return cast(Mapping[str, Any], _freeze_json(json.loads(self.security_snapshot_json)))
+
     def manifest_dict(self) -> dict[str, Any]:
         """Return the canonical public structure used for hashing and comparison."""
         return {
             "persona": self.persona,
             "system": self.system.model_dump(),
+            "security": json.loads(self.security_snapshot_json),
             "observability": json.loads(self.observability_snapshot_json),
             "humor": json.loads(self.humor_snapshot_json),
             "scene_analysis": json.loads(self.scene_analysis_snapshot_json),
@@ -216,7 +237,7 @@ class ProfileManifest(StrictFrozenModel):
 
 
 class RuntimeManifest(StrictFrozenModel):
-    schema_version: Literal[1]
+    schema_version: Literal[1, 2]
     application: ApplicationManifest
     providers: ProviderCatalog
     profiles: dict[str, ProfileManifest]
@@ -275,7 +296,7 @@ class ConfiguredProvider(StrictFrozenModel):
 
 
 class EffectiveConfig(StrictFrozenModel):
-    schema_version: Literal[1]
+    schema_version: Literal[1, 2]
     profile: ProfileName
     application: ApplicationManifest
     services: ServiceReferences
@@ -339,6 +360,10 @@ class EffectiveConfig(StrictFrozenModel):
     @property
     def observability(self) -> Any:
         return ObservabilityConfig.model_validate_json(self.application.observability_snapshot_json)
+
+    @property
+    def security(self) -> SecurityConfig:
+        return SecurityConfig.model_validate_json(self.application.security_snapshot_json)
 
     @property
     def scene_analysis(self) -> SceneAnalysisConfig:
@@ -642,7 +667,7 @@ def _resolve_provider(
         model=declaration.get("model"),
         voice=declaration.get("voice"),
         declaration_json=json.dumps(
-            declaration,
+            _PROVIDER_DECLARATION_ADAPTER.dump_python(declaration, mode="json"),
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
@@ -767,6 +792,10 @@ def load_effective_config(
     manifest, raw = _read_manifest(manifest_path)
     _validate_environment_locations(raw)
     profile_name, selected = _select_profile(manifest, profile)
+    if profile_name == "production" and manifest.schema_version != 2:
+        raise ManifestValidationError(
+            "Production requires runtime manifest schema v2; upgrade schema_version and security"
+        )
     providers = _resolve_providers(manifest, profile_name, selected)
     application = _resolve_application(manifest.application)
     from .persona.base import PersonaConfig

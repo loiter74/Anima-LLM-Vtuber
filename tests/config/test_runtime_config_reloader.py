@@ -249,7 +249,7 @@ def test_reload_rejects_profile_and_schema_changes_with_exact_paths(
     manifest_secrets.delenv("ANIMETTA_PROFILE")
     data = deepcopy(manifest_data)
     data["application"]["persona"] = "reload_test"
-    data["schema_version"] = 2
+    data["schema_version"] = 1
     write_manifest(data)
 
     schema_result = reloader.reload()

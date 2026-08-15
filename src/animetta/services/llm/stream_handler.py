@@ -7,7 +7,6 @@ Extracted from openai_llm.py to separate streaming concerns from
 core LLM implementation.
 """
 
-import contextlib
 import time as time_module
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
@@ -50,6 +49,7 @@ class OpenAIStreamHandler:
         messages = self.llm._build_messages(user_input, system_prompt=system_prompt)
 
         full_response = ""
+        provider_usage: Any | None = None
         t_start = time_module.perf_counter()
 
         try:
@@ -72,30 +72,29 @@ class OpenAIStreamHandler:
                     yield content
                 # Final chunk may contain usage info
                 if hasattr(chunk, "usage") and chunk.usage:
-                    with contextlib.suppress(AttributeError):
-                        # Mock response objects (e.g. async generators) may not support attribute assignment
-                        response._usage = chunk.usage
+                    provider_usage = chunk.usage
 
             # OTel metrics: record usage from stream
             duration_s = time_module.perf_counter() - t_start
             try:
                 # Try to get usage from response object or estimate from text
-                if hasattr(response, "_usage") and response._usage:
-                    input_tokens = getattr(response._usage, "prompt_tokens", 0)
-                    output_tokens = getattr(response._usage, "completion_tokens", 0)
+                if provider_usage is not None:
+                    usage = provider_usage
                 else:
                     # Fallback: rough estimate (4 chars ≈ 1 token)
-                    input_tokens = len(user_input) // 4
-                    output_tokens = len(full_response) // 4
-
-                # Use a synthetic response-like object for _record_usage.
-                usage_obj = SimpleNamespace(
-                    usage=SimpleNamespace(
-                        prompt_tokens=input_tokens,
-                        completion_tokens=output_tokens,
+                    usage = SimpleNamespace(
+                        prompt_tokens=len(user_input) // 4,
+                        completion_tokens=len(full_response) // 4,
+                        estimated=True,
                     )
+
+                # Preserve provider-specific details such as DeepSeek cache-hit tokens.
+                usage_obj = SimpleNamespace(usage=usage)
+                self.llm._record_usage(
+                    usage_obj,
+                    duration_s,
+                    model=kwargs.get("model", self.llm.model),
                 )
-                self.llm._record_usage(usage_obj, duration_s)
             except Exception:
                 pass
 

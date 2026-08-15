@@ -5,6 +5,7 @@ import asyncio
 from animetta.services.command_inbox import (
     CommandDecision,
     CommandInbox,
+    CommandInboxError,
     CommandKey,
     CommandStatus,
     TaskResultTooLargeError,
@@ -70,6 +71,83 @@ async def test_start_interrupts_unknown_active_work(tmp_path) -> None:
     assert result.task.status is CommandStatus.INTERRUPTED
     assert result.task.error_code == "SERVER_RESTARTED"
     await reopened.close()
+
+
+async def test_waiting_approval_survives_reopen_for_reconciliation(tmp_path) -> None:
+    path = tmp_path / "commands.db"
+    key = CommandKey("conversation:one", "chat.public", "task-approval")
+    inbox = CommandInbox(path)
+    await inbox.accept(key, {"text": "connect"})
+    await inbox.mark_processing(key)
+    await inbox.wait_for_approval(
+        key,
+        {
+            "approval_id": "approval-1",
+            "thread_id": "turn:task-approval",
+            "owner_kind": "turn",
+            "owner_id": "task-approval",
+            "retention": "temporary",
+            "expires_at": 4_000_000_000,
+        },
+    )
+    await inbox.close()
+
+    reopened = CommandInbox(path)
+    assert await reopened.start() == 0
+
+    waiting = await reopened.waiting_approvals()
+    assert len(waiting) == 1
+    assert waiting[0].status is CommandStatus.WAITING_APPROVAL
+    assert waiting[0].progress is not None
+    assert waiting[0].progress["thread_id"] == "turn:task-approval"
+    await reopened.close()
+
+
+async def test_restart_reconciliation_fails_approval_without_checkpoint(tmp_path) -> None:
+    inbox = CommandInbox(tmp_path / "commands.db")
+    key = CommandKey("dashboard", "chat.text", "task-missing")
+    await inbox.accept(key, {"text": "connect"})
+    await inbox.mark_processing(key)
+    await inbox.wait_for_approval(
+        key,
+        {"approval_id": "approval-1", "thread_id": "turn:task-missing"},
+    )
+
+    async def checkpoint_exists(_thread_id: str) -> bool:
+        return False
+
+    reconciled = await inbox.reconcile_waiting_approvals(checkpoint_exists)
+
+    result = await inbox.get(key)
+    assert reconciled == 1
+    assert result.task is not None
+    assert result.task.status is CommandStatus.FAILED
+    assert result.task.error_code == "CHECKPOINT_UNAVAILABLE"
+    await inbox.close()
+
+
+async def test_concurrent_approval_resume_is_claimed_once(tmp_path) -> None:
+    inbox = CommandInbox(tmp_path / "commands.db")
+    key = CommandKey("dashboard", "chat.text", "task-approval")
+    await inbox.accept(key, {"text": "connect"})
+    await inbox.mark_processing(key)
+    await inbox.wait_for_approval(key, {"approval_id": "approval-1"})
+
+    results = await asyncio.gather(
+        inbox.resume_after_approval(key),
+        inbox.resume_after_approval(key),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(result, CommandInboxError) for result in results) == 1
+    assert (
+        sum(
+            not isinstance(result, BaseException) and result.status is CommandStatus.PROCESSING
+            for result in results
+        )
+        == 1
+    )
+    await inbox.close()
 
 
 async def test_terminal_transition_is_not_reopened(tmp_path) -> None:

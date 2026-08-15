@@ -36,6 +36,12 @@ const socketEvents = events as SocketEventsConfig
  * ```
  */
 export const Events = {
+  TOOL: {
+    APPROVAL_REQUIRED: socketEvents.tool.approval_required.name,
+    APPROVAL_LIST: socketEvents.tool.approval_list.name,
+    APPROVAL_DECIDE: socketEvents.tool.approval_decide.name,
+    APPROVAL_RESOLVED: socketEvents.tool.approval_resolved.name,
+  },
   TASK: {
     STATUS: socketEvents.task.status.name,
     SNAPSHOT: socketEvents.task.snapshot.name,

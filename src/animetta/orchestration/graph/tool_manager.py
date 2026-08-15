@@ -12,6 +12,8 @@ from animetta.tools import load_tools_from_config
 from animetta.tools.mcp_bridge import MCPManager
 from animetta.tools.minecraft.core.tools import cleanup_bridge
 
+from .tool_execution_policy import ToolExecutionPolicy
+
 
 class ToolManager:
     """LangGraph tool manager"""
@@ -23,6 +25,8 @@ class ToolManager:
         self.tools_map: dict[str, Any] = {}
         self.chat_model: Any | None = None
         self.max_tool_calls_per_turn = 5
+        profile = str(getattr(getattr(service_context, "config", None), "profile", "test"))
+        self.execution_policy = ToolExecutionPolicy(production=profile == "production")
         self._mcp_manager: Any | None = None
         self._owns_tool_lifecycle = True
 
@@ -109,6 +113,7 @@ class ToolManager:
             "chat_model": self.chat_model,
             "enable_tools": True,
             "max_tool_calls_per_turn": self.max_tool_calls_per_turn,
+            "tool_execution_policy": self.execution_policy,
         }
 
     def is_loaded(self) -> bool:

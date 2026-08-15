@@ -6,6 +6,7 @@ Uses the openai SDK to call OpenAI GPT models
 """
 
 from collections.abc import AsyncIterator
+from contextvars import ContextVar
 from typing import Any, cast
 
 from loguru import logger
@@ -17,6 +18,7 @@ from animetta.config.providers.llm import LLMBaseConfig
 from .interface import LLMInterface
 from .stream_handler import OpenAIStreamHandler
 from .tool_handler import OpenAIToolHandler
+from .usage import ModelUsageV1, usage_from_response
 
 
 @ProviderRegistry.register_service("llm", "openai")
@@ -41,6 +43,7 @@ class OpenAILLM(LLMInterface):
         extra_body: dict | None = None,
         provider_identity: str = "openai",
         max_history_messages: int = 20,
+        pricing: Any | None = None,
         **kwargs,
     ):
         """
@@ -66,6 +69,11 @@ class OpenAILLM(LLMInterface):
         self.extra_body = extra_body or {}
         self._provider_identity = provider_identity
         self.max_history_messages = max_history_messages
+        self.pricing = pricing
+        self._last_usage: ContextVar[ModelUsageV1 | None] = ContextVar(
+            f"animetta_llm_usage_{id(self)}",
+            default=None,
+        )
 
         # Conversation history
         self.history: list[dict[str, str]] = []
@@ -141,6 +149,7 @@ class OpenAILLM(LLMInterface):
             extra_body=extra_body,
             provider_identity=getattr(config, "type", "openai"),
             max_history_messages=getattr(config, "max_history_messages", 20),
+            pricing=getattr(config, "pricing", None),
         )
 
     @property
@@ -201,8 +210,9 @@ class OpenAILLM(LLMInterface):
 
         try:
             create_completion = cast(Any, self.client.chat.completions.create)
+            request_model = kwargs.get("model", self.model)
             response = await create_completion(
-                model=kwargs.get("model", self.model),
+                model=request_model,
                 messages=messages,
                 temperature=kwargs.get("temperature", self.temperature),
                 top_p=kwargs.get("top_p", self.top_p),
@@ -212,7 +222,7 @@ class OpenAILLM(LLMInterface):
 
             assistant_message = response.choices[0].message.content or ""
 
-            self._record_usage(response, 0.0)
+            self._record_usage(response, 0.0, model=request_model)
 
             # Update history
             self._append_history_turn(user_input, assistant_message)
@@ -240,8 +250,9 @@ class OpenAILLM(LLMInterface):
         Returns:
             str: Model response
         """
+        request_model = kwargs.get("model", self.model)
         create_kwargs = {
-            "model": kwargs.get("model", self.model),
+            "model": request_model,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
             "top_p": kwargs.get("top_p", self.top_p),
@@ -257,7 +268,7 @@ class OpenAILLM(LLMInterface):
             response = await create_completion(**create_kwargs)
             assistant_message = response.choices[0].message.content or ""
 
-            self._record_usage(response, 0.0)
+            self._record_usage(response, 0.0, model=request_model)
 
             logger.debug(f"OpenAI chat_messages response: {assistant_message[:100]}...")
             return assistant_message
@@ -285,8 +296,9 @@ class OpenAILLM(LLMInterface):
         self, messages: list[dict[str, str]], **kwargs: Any
     ) -> AsyncIterator[str]:
         """Stream an explicit messages request without mutating shared history."""
+        request_model = kwargs.get("model", self.model)
         create_kwargs: dict[str, Any] = {
-            "model": kwargs.get("model", self.model),
+            "model": request_model,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.temperature),
             "top_p": kwargs.get("top_p", self.top_p),
@@ -301,6 +313,8 @@ class OpenAILLM(LLMInterface):
             create_completion = cast(Any, self.client.chat.completions.create)
             response = await create_completion(**create_kwargs)
             async for chunk in response:
+                if getattr(chunk, "usage", None) is not None:
+                    self._record_usage(chunk, 0.0, model=request_model)
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         except Exception:
@@ -339,9 +353,28 @@ class OpenAILLM(LLMInterface):
             return "deepseek"
         return "openai"
 
-    def _record_usage(self, response: Any, duration_s: float) -> None:
-        """Compatibility callback; canonical usage is emitted by observation adapters."""
-        del response, duration_s
+    def _record_usage(
+        self,
+        response: Any,
+        duration_s: float,
+        *,
+        model: str | None = None,
+    ) -> None:
+        """Capture provider usage for the enclosing observation adapter."""
+        del duration_s
+        self._last_usage.set(
+            usage_from_response(
+                response,
+                provider=self._provider_identity,
+                model=model or self.model,
+                pricing=self.pricing,
+            )
+        )
+
+    def consume_usage(self) -> ModelUsageV1 | None:
+        usage = self._last_usage.get()
+        self._last_usage.set(None)
+        return usage
 
     def _record_error(self, duration_s: float) -> None:
         """Compatibility callback; canonical errors are emitted by observation adapters."""

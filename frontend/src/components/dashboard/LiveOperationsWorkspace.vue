@@ -4,6 +4,7 @@ import InputBar from '@/components/chat/InputBar.vue'
 import MessageBubble from '@/components/chat/MessageBubble.vue'
 import ProgramRunPanel from '@/components/program/ProgramRunPanel.vue'
 import PreflightDrawer from '@/components/dashboard/PreflightDrawer.vue'
+import ToolApprovalQueue from '@/components/dashboard/ToolApprovalQueue.vue'
 import { sendDeveloperChatText } from '@/composables/chatTransport'
 import { useDanmaku } from '@/composables/useDanmaku'
 import { getSocket } from '@/composables/useSocket'
@@ -255,6 +256,7 @@ function closePreflight(): void {
     </header>
 
     <ProgramRunPanel />
+    <ToolApprovalQueue />
 
     <div class="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)]">
       <section class="glass flex min-h-136 flex-col overflow-hidden lg:min-h-0">

@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "dataset": "agent-v1",
+  "p95_cost_usd": 0.005
+}

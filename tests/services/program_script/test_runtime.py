@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.program_script import (
     ProgramRuntimeError,
     ProgramScriptRepository,
@@ -42,7 +43,12 @@ async def test_runner_waits_for_commit_and_uses_isolated_probe_thread(tmp_path: 
         builtin_dir=PROJECT_ROOT / "config" / "program_scripts",
     )
     memory = FakeMemoryRuntime()
-    runner = ProgramScriptRunner(repository, memory_runtime=memory)
+    delete_checkpoint = AsyncMock()
+    runner = ProgramScriptRunner(
+        repository,
+        memory_runtime=memory,
+        checkpoint_delete=delete_checkpoint,
+    )
     contexts: list[dict] = []
 
     async def dispatch(text: str, context: dict):
@@ -75,7 +81,12 @@ async def test_runner_waits_for_commit_and_uses_isolated_probe_thread(tmp_path: 
     assert runner.get_run(run_id)["slots"] == {"nickname": "xiaolan"}
     assert started["current_beat"]["lead_in"] == started["opening"]
     assert runner.get_run(run_id)["current_beat"]["lead_in"]
-    assert contexts[0]["checkpoint_thread_id"] == f"program:{run_id}"
+    assert contexts[0]["checkpoint_request"] == CheckpointRequest(
+        thread_id=f"program:{run_id}",
+        owner_kind="program",
+        owner_id=run_id,
+        retention="stable",
+    )
     assert contexts[0]["memory_mode"] == "write"
     assert contexts[0]["scene_guidance"]["response_objective"]
 
@@ -99,9 +110,18 @@ async def test_runner_waits_for_commit_and_uses_isolated_probe_thread(tmp_path: 
 
     assert contexts[-1]["is_probe"] is True
     assert contexts[-1]["memory_mode"] == "probe"
-    assert contexts[-1]["checkpoint_thread_id"] == f"program:{run_id}:q09"
+    assert contexts[-1]["checkpoint_request"] == CheckpointRequest(
+        thread_id=f"program:{run_id}:q09",
+        owner_kind="program",
+        owner_id=run_id,
+        retention="stable",
+    )
     assert runner.get_run(run_id)["records"][-1]["probe_result"] == "matched"
     await runner.control(run_id, "stop", creator_id="creator")
+    assert {call.args[0] for call in delete_checkpoint.await_args_list} == {
+        f"program:{run_id}",
+        f"program:{run_id}:q09",
+    }
 
 
 async def test_running_snapshot_is_frozen_when_a_new_version_is_published(tmp_path: Path) -> None:

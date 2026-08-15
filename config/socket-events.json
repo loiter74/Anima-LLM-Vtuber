@@ -1032,6 +1032,57 @@
       "payload": {}
     }
   },
+  "tool": {
+    "approval_required": {
+      "name": "tool:approval_required",
+      "payload": {
+        "schema_version": "integer",
+        "approval_id": "string",
+        "thread_id": "string",
+        "task_id?": "string|null",
+        "session_id?": "string|null",
+        "conversation_id?": "string|null",
+        "owner_kind": "string",
+        "owner_id": "string",
+        "retention": "string",
+        "expires_at": "integer",
+        "tools": "object[]",
+        "kind?": "string",
+        "status?": "string"
+      }
+    },
+    "approval_list": {
+      "name": "tool:approval_list",
+      "payload": {},
+      "ack": {
+        "ok": "boolean",
+        "approvals?": "object[]",
+        "error?": "object"
+      }
+    },
+    "approval_decide": {
+      "name": "tool:approval_decide",
+      "payload": {
+        "approval_id": "string",
+        "decision": "string"
+      },
+      "ack": {
+        "ok": "boolean",
+        "data?": "object",
+        "error?": "object"
+      }
+    },
+    "approval_resolved": {
+      "name": "tool:approval_resolved",
+      "payload": {
+        "approval_id": "string",
+        "task_id": "string",
+        "status": "string",
+        "decision": "string",
+        "reason?": "string|null"
+      }
+    }
+  },
   "task": {
     "status": {
       "name": "task:status",

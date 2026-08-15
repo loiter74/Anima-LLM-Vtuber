@@ -282,7 +282,22 @@ class ChatHandlers:
                 channel=channel,
                 **trusted_metadata,
             )
-            if isinstance(result, dict) and result.get("error"):
+            approvals = result.get("approval_required") if isinstance(result, dict) else None
+            if isinstance(approvals, list) and approvals:
+                approval = approvals[0]
+                if not isinstance(approval, dict):
+                    raise RuntimeError("Invalid approval interrupt payload")
+                waiting = await self._command_inbox.wait_for_approval(key, approval)
+                await self.sio.emit(
+                    EVENTS["tool"]["approval_required"]["name"],
+                    {
+                        **approval,
+                        "kind": waiting.key.kind,
+                        "task_id": waiting.key.task_id,
+                        "status": waiting.status.value,
+                    },
+                )
+            elif isinstance(result, dict) and result.get("error"):
                 await self._command_inbox.fail(
                     key,
                     error_code="CHAT_PROCESSING_FAILED",

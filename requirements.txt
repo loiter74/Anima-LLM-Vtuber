@@ -17,7 +17,9 @@ loguru>=0.7.0
 tzdata>=2024.1; sys_platform == "win32"
 
 # Orchestration
-langgraph>=0.2.0
+langgraph>=1.1.3,<1.2
+langgraph-checkpoint>=4,<5
+langgraph-checkpoint-redis==0.5.1
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-openai>=0.2.0

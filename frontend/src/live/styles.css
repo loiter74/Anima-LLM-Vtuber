@@ -267,3 +267,17 @@ button {
     width: calc(100vw - 32px);
   }
 }
+.tool-approval-status {
+  position: fixed;
+  left: 50%;
+  top: 2rem;
+  z-index: 40;
+  transform: translateX(-50%);
+  border: 1px solid var(--c-warning);
+  border-radius: 0.75rem;
+  background: var(--c-panel);
+  color: var(--c-text);
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--c-bg) 70%, transparent);
+}

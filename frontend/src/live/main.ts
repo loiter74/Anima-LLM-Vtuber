@@ -35,6 +35,7 @@ function createNetworkRuntime(): LiveSocketRuntime {
     reconnectionDelay: 3000,
     reconnectionAttempts: Infinity,
     timeout: 120000,
+    withCredentials: true,
   })
   const liveSocket: LiveSocket = {
     on(event, handler) {
@@ -46,12 +47,36 @@ function createNetworkRuntime(): LiveSocketRuntime {
       return liveSocket
     },
   }
+  const approvalStatus = document.createElement('div')
+  approvalStatus.id = 'toolApprovalStatus'
+  approvalStatus.className = 'tool-approval-status'
+  approvalStatus.hidden = true
+  document.body.appendChild(approvalStatus)
+  socket.on('tool:approval_required', () => {
+    approvalStatus.hidden = false
+    approvalStatus.dataset.state = 'waiting'
+    approvalStatus.textContent = 'Minecraft 操作等待后台审批'
+  })
+  socket.on('tool:approval_resolved', (payload: { decision?: string; reason?: string | null }) => {
+    approvalStatus.hidden = false
+    approvalStatus.dataset.state = payload.decision === 'approve' ? 'continued' : 'rejected'
+    approvalStatus.textContent =
+      payload.decision === 'approve'
+        ? 'Minecraft 操作已批准，正在继续'
+        : payload.reason === 'timeout'
+          ? 'Minecraft 操作审批超时，已拒绝'
+          : 'Minecraft 操作已拒绝'
+    window.setTimeout(() => {
+      approvalStatus.hidden = true
+    }, 5000)
+  })
   return {
     mode: 'network',
     socket: liveSocket,
     start() {},
     dispose() {
       socket.disconnect()
+      approvalStatus.remove()
     },
   }
 }

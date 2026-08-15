@@ -9,6 +9,7 @@ from loguru import logger
 
 from animetta.config import ReplyPolicyConfig, SceneAnalysisConfig
 from animetta.memory.v2.context import normalize_actor_id
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.bilibili import (
     DanmakuBuffer,
     DanmakuMessage,
@@ -299,6 +300,9 @@ class BilibiliHandlers:
                 else normalize_actor_id(msg.user_id, "bilibili")
             )
             stream_id = f"bilibili:{room_id}" if room_id else None
+            checkpoint_request = (program_context or {}).get("checkpoint_request")
+            if not isinstance(checkpoint_request, CheckpointRequest):
+                checkpoint_request = None
             program_metadata = {
                 key: value
                 for key, value in (program_context or {}).items()
@@ -308,14 +312,8 @@ class BilibiliHandlers:
                     "program_beat_id",
                     "is_probe",
                     "memory_mode",
-                    "checkpoint_thread_id",
-                    "retention_policy",
                 }
             }
-            program_metadata.setdefault(
-                "checkpoint_thread_id",
-                f"bilibili:{room_id}:{task_id}",
-            )
             result = await orchestrator.process_text(
                 text=f"{msg.user_name}说: {msg.text}",
                 user_id=actor_id,
@@ -326,6 +324,7 @@ class BilibiliHandlers:
                 conversation_id=conversation_id,
                 task_id=task_id,
                 turn_id=task_id,
+                checkpoint_request=checkpoint_request,
                 transport_mode=ChatTransportMode.CANONICAL.value,
                 channel="bilibili",
                 stream_id=stream_id,

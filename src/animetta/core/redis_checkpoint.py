@@ -1,168 +1,97 @@
-"""Redis-backed LangGraph checkpoint saver.
+"""Lifecycle owner for the official LangGraph Redis checkpointer."""
 
-Provides multi-instance session sharing via Redis.
-Falls back to MemorySaver if Redis is unavailable.
-"""
+from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator, Sequence
+import os
+from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-)
 from loguru import logger
 
 
-class AsyncRedisSaver(BaseCheckpointSaver):
-    """Redis-backed checkpoint saver for LangGraph.
+@dataclass(frozen=True, slots=True)
+class CheckpointHealth:
+    available: bool
+    degraded: bool
+    reason: str | None
 
-    Stores session state in Redis so multiple backend instances can
-    share the same session data.  Each thread_id maps to one Redis key.
-
-    Connection timeouts are set to 5s so a missing Redis does not
-    block startup indefinitely.
-    """
-
-    def __init__(self, redis_url: str) -> None:
-        super().__init__()
-        import redis.asyncio as aioredis
-
-        self._redis_url = redis_url
-        self._prefix = "checkpoint:"
-        self._writes_prefix = "checkpoint_writes:"
-        self.redis: aioredis.Redis = aioredis.from_url(
-            redis_url,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-        )
-
-    # ── helpers ──────────────────────────────────────────────────
-
-    @staticmethod
-    def _serialize(obj: Any) -> str:
-        return json.dumps(obj, default=str, ensure_ascii=False)
-
-    @staticmethod
-    def _deserialize(data: bytes) -> Any:
-        return json.loads(data)
-
-    def _make_key(self, thread_id: str) -> str:
-        return f"{self._prefix}{thread_id}"
-
-    def _make_writes_key(self, thread_id: str) -> str:
-        return f"{self._writes_prefix}{thread_id}"
-
-    # ── async checkpoint protocol ────────────────────────────────
-
-    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
-        thread_id: str = config["configurable"]["thread_id"]
-        key = self._make_key(thread_id)
-        try:
-            raw = await self.redis.get(key)
-            if not raw:
-                return None
-            stored = self._deserialize(raw)
-            checkpoint: Checkpoint = stored["checkpoint"]
-            metadata: CheckpointMetadata = stored.get("metadata", {})
-            checkpoint_id = checkpoint.get("id", "")
-
-            # Load pending writes if any
-            pending_writes: list = []
-            writes_key = self._make_writes_key(thread_id)
-            raw_writes = await self.redis.get(writes_key)
-            if raw_writes:
-                pending_writes = self._deserialize(raw_writes)
-
-            return CheckpointTuple(
-                config={
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": config["configurable"].get("checkpoint_ns", ""),
-                        "checkpoint_id": checkpoint_id,
-                    }
-                },
-                checkpoint=checkpoint,
-                metadata=metadata,
-                pending_writes=pending_writes,
-            )
-        except Exception as e:
-            logger.warning(f"[RedisSaver] aget_tuple failed: {e}")
-            return None
-
-    async def aput(
-        self,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        thread_id: str = config["configurable"]["thread_id"]
-        key = self._make_key(thread_id)
-        data = {
-            "checkpoint": checkpoint,
-            "metadata": metadata,
-            "new_versions": new_versions,
-        }
-        try:
-            await self.redis.set(key, self._serialize(data), ex=86400)
-        except Exception as e:
-            logger.warning(f"[RedisSaver] aput failed: {e}")
+    def public_dict(self) -> dict[str, object | None]:
         return {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_ns": config["configurable"].get("checkpoint_ns", ""),
-                "checkpoint_id": checkpoint["id"],
-            }
+            "state": "ready" if self.available else "degraded",
+            "ready": self.available,
+            "degraded": self.degraded,
+            "reason": self.reason,
         }
 
-    async def aput_writes(
-        self,
-        config: RunnableConfig,
-        writes: Sequence[tuple[str, Any]],
-        task_id: str,
-        task_path: str = "",
-    ) -> None:
-        _ = (task_id, task_path)  # signature compliance, params unused
-        thread_id: str = config["configurable"]["thread_id"]
-        writes_key = self._make_writes_key(thread_id)
+
+class RedisCheckpointRuntime:
+    """Own one official ``AsyncRedisSaver`` for the application lifespan."""
+
+    def __init__(self, redis_url: str | None = None, *, ttl_minutes: int = 1440) -> None:
+        self.redis_url = redis_url or os.getenv("ANIMETTA_REDIS_URL")
+        self.ttl_minutes = ttl_minutes
+        self.saver: Any | None = None
+        self._context: Any | None = None
+        self.health = CheckpointHealth(False, True, "redis_url_missing")
+
+    async def start(self) -> CheckpointHealth:
+        if self.saver is not None:
+            return self.health
+        if not self.redis_url:
+            return self.health
         try:
-            await self.redis.set(writes_key, self._serialize(writes), ex=86400)
-        except Exception as e:
-            logger.warning(f"[RedisSaver] aput_writes failed: {e}")
+            from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
-    async def alist(
-        self,
-        config: RunnableConfig | None,
-        *,
-        filter: dict[str, Any] | None = None,
-        before: RunnableConfig | None = None,
-        limit: int | None = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """Return matching checkpoints (minimal implementation)."""
-        _ = (filter, before, limit)  # signature compliance, params unused
-        if config:
-            tup = await self.aget_tuple(config)
-            if tup:
-                yield tup
+            self._context = AsyncRedisSaver.from_conn_string(
+                self.redis_url,
+                ttl={
+                    "default_ttl": self.ttl_minutes,
+                    "refresh_on_read": True,
+                },
+            )
+            self.saver = await self._context.__aenter__()
+            self.health = CheckpointHealth(True, False, None)
+            logger.info("[Checkpoint] Official Redis checkpointer is ready")
+        except Exception as exc:
+            self.saver = None
+            self._context = None
+            self.health = CheckpointHealth(False, True, "checkpoint_unavailable")
+            logger.warning(
+                "[Checkpoint] Redis unavailable: error_type={}",
+                type(exc).__name__,
+            )
+        return self.health
 
-    async def adelete_thread(self, thread_id: str) -> None:
+    async def check_health(self) -> CheckpointHealth:
+        """Refresh content-free readiness against the saver-owned Redis client."""
+        if self.saver is None:
+            return await self.start() if self.redis_url else self.health
         try:
-            await self.redis.delete(self._make_key(thread_id))
-            await self.redis.delete(self._make_writes_key(thread_id))
-        except Exception as e:
-            logger.warning(f"[RedisSaver] adelete_thread failed: {e}")
+            redis_client = getattr(self.saver, "_redis")
+            await redis_client.ping()
+            self.health = CheckpointHealth(True, False, None)
+        except Exception as exc:
+            self.health = CheckpointHealth(False, True, "checkpoint_unavailable")
+            logger.warning(
+                "[Checkpoint] Redis health check failed: error_type={}",
+                type(exc).__name__,
+            )
+        return self.health
 
-    # ── lifecycle ────────────────────────────────────────────────
+    async def delete_thread(self, thread_id: str) -> None:
+        if self.saver is None:
+            return
+        await self.saver.adelete_thread(thread_id)
+
+    async def has_thread(self, thread_id: str) -> bool:
+        if self.saver is None:
+            raise RuntimeError("checkpoint saver is unavailable")
+        checkpoint = await self.saver.aget_tuple({"configurable": {"thread_id": thread_id}})
+        return checkpoint is not None
 
     async def close(self) -> None:
-        """Close the Redis connection gracefully."""
-        try:
-            await self.redis.aclose()
-        except Exception as e:
-            logger.warning(f"[RedisSaver] close failed: {e}")
+        context, self._context = self._context, None
+        self.saver = None
+        if context is not None:
+            await context.__aexit__(None, None, None)
+        self.health = CheckpointHealth(False, True, "closed")

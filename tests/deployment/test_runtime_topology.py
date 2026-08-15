@@ -73,10 +73,11 @@ def test_build_context_excludes_local_frontend_package_cache() -> None:
     assert "frontend/.pnpm-store/" in dockerignore.splitlines()
 
 
-def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
+def test_production_compose_owns_animetta_and_private_redis_and_targets_host_qwen() -> None:
     compose = _compose("docker-compose.yml")
-    assert set(compose["services"]) == {"animetta"}
+    assert set(compose["services"]) == {"animetta", "redis"}
     app = compose["services"]["animetta"]
+    redis = compose["services"]["redis"]
     assert app["build"]["dockerfile"] == "Dockerfile"
     assert "ANIMETTA_PROFILE=${ANIMETTA_PROFILE:-production}" in app["environment"]
     assert "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}" in app["environment"]
@@ -84,7 +85,16 @@ def test_production_compose_owns_only_animetta_and_targets_host_qwen() -> None:
     assert "RVC_HOST_URL=http://host.docker.internal:8769" in app["environment"]
     assert "MC_MCP_URL=${MC_MCP_URL:-http://host.docker.internal:8768/mcp}" in app["environment"]
     assert "MC_MCP_AUTH_TOKEN=${MC_MCP_AUTH_TOKEN:-}" in app["environment"]
-    assert "depends_on" not in app
+    assert app["depends_on"] == {"redis": {"condition": "service_healthy"}}
+    assert redis["image"] == "redis:8.8.1-alpine"
+    assert "build" not in redis
+    assert "docker-entrypoint.sh redis-server" in redis["command"][2]
+    assert "--bind 0.0.0.0" in redis["command"][2]
+    assert "--pidfile /data/redis.pid" in redis["command"][2]
+    assert "FT.CREATE" in redis["healthcheck"]["test"][1]
+    assert "JSON.SET" in redis["healthcheck"]["test"][1]
+    assert "ports" not in redis
+    assert "animetta-redis:/data" in redis["volumes"]
     assert "networks" not in app
     assert "networks" not in compose
     assert app["healthcheck"]["start_period"] == "360s"
@@ -151,6 +161,13 @@ def test_production_redirects_legacy_live_stream_to_canonical_obs_surface() -> N
     assert "return 308 /live.html$is_args$args;" in nginx
 
 
+def test_production_proxy_forwards_metrics_to_the_authenticated_backend() -> None:
+    nginx = _text("docker/nginx.conf")
+
+    metrics_location = nginx.split("location = /metrics", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "proxy_pass http://backend;" in metrics_location
+
+
 def test_production_proxy_accepts_the_bounded_whole_song_socket_payload() -> None:
     nginx = _text("docker/nginx.conf")
     base64_envelope_bytes = 4 * ((MAX_SINGING_UPLOAD_BYTES + 2) // 3)
@@ -170,6 +187,8 @@ def test_compose_services_inject_only_explicit_least_privilege_environment() -> 
         "ANIMETTA_HOST=0.0.0.0",
         "ANIMETTA_PORT=12394",
         "ANIMETTA_DATA_DIR=/app/data",
+        "ANIMETTA_ACCESS_TOKEN=${ANIMETTA_ACCESS_TOKEN:?ANIMETTA_ACCESS_TOKEN is required}",
+        "ANIMETTA_REDIS_URL=${ANIMETTA_REDIS_URL:-redis://:${ANIMETTA_REDIS_PASSWORD}@redis:6379/0}",
         "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}",
         "DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}",
         "MIMO_API_KEY=${MIMO_API_KEY:-}",

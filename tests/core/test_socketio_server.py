@@ -9,7 +9,6 @@ file carefully mocks those side effects before the import, then tests each
 public/private function in isolation.
 """
 
-import argparse
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -182,68 +181,6 @@ class TestInitConfig:
         load.assert_called_once()
 
 
-# ── TestSetupCheckpointer ───────────────────────────────────────────
-
-
-class TestSetupCheckpointer:
-    """_setup_checkpointer() — LangGraph checkpointer configuration."""
-
-    # -- Helpers ------------------------------------------------------
-
-    @staticmethod
-    def _patch_redis_url(mod, url):
-        """Replace ``_server_args`` with a namespace for the test duration."""
-        original = mod._server_args
-        mod._server_args = argparse.Namespace(redis_url=url)
-        return original
-
-    # -- Tests --------------------------------------------------------
-
-    def test_sets_redis_checkpointer_when_redis_url_given(self, mod):
-        """With a --redis-url, AsyncRedisSaver is created and registered."""
-        original = self._patch_redis_url(mod, "redis://localhost:6379")
-
-        mock_checkpointer = MagicMock()
-        with (
-            patch("animetta.core.socketio_server.set_external_checkpointer") as mock_set,
-            patch(
-                "animetta.core.socketio_server.AsyncRedisSaver",
-                return_value=mock_checkpointer,
-            ),
-        ):
-            mod._setup_checkpointer()
-
-        mock_set.assert_called_once_with(mock_checkpointer)
-
-        mod._server_args = original
-
-    def test_skips_when_redis_url_not_set(self, mod):
-        """When --redis-url is None, no external checkpointer is registered."""
-        # _server_args.redis_url is None from import-time default
-        with patch("animetta.core.socketio_server.set_external_checkpointer") as mock_set:
-            mod._setup_checkpointer()
-
-        mock_set.assert_not_called()
-
-    def test_handles_exception_gracefully(self, mod):
-        """If AsyncRedisSaver raises, the error is caught and swallowed."""
-        original = self._patch_redis_url(mod, "redis://localhost:6379")
-
-        with (
-            patch("animetta.core.socketio_server.set_external_checkpointer") as mock_set,
-            patch(
-                "animetta.core.socketio_server.AsyncRedisSaver",
-                side_effect=ConnectionError("redis not available"),
-            ),
-        ):
-            # Should not raise
-            mod._setup_checkpointer()
-
-        mock_set.assert_not_called()
-
-        mod._server_args = original
-
-
 # ── TestGetAsgiApp ──────────────────────────────────────────────────
 
 
@@ -275,14 +212,13 @@ class TestGetAsgiApp:
         mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
         mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
-        with (
-            patch("animetta.core.socketio_server._setup_checkpointer") as mock_check,
-            patch("animetta.core.socketio_server.create_server", return_value=mock_server),
-        ):
+        with patch(
+            "animetta.core.socketio_server.create_server", return_value=mock_server
+        ) as mock_create:
             result = mod.get_asgi_app()
 
         assert result is mock_asgi_app
-        mock_check.assert_called_once()
+        mock_create.assert_called_once_with(mod.global_config, redis_url=None)
         mock_server.set_user_settings.assert_called_once()
         mock_server.get_app.assert_called_once()
 
@@ -299,10 +235,7 @@ class TestGetAsgiApp:
         mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
         mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
-        with (
-            patch("animetta.core.socketio_server._setup_checkpointer"),
-            patch("animetta.core.socketio_server.create_server", return_value=mock_server),
-        ):
+        with patch("animetta.core.socketio_server.create_server", return_value=mock_server):
             result1 = mod.get_asgi_app()
             result2 = mod.get_asgi_app()
 
@@ -322,7 +255,6 @@ class TestGetAsgiApp:
 
         with (
             patch("animetta.core.socketio_server.init_config") as mock_init,
-            patch("animetta.core.socketio_server._setup_checkpointer"),
             patch("animetta.core.socketio_server.create_server", return_value=mock_server),
         ):
             mod.get_asgi_app()
@@ -342,7 +274,6 @@ class TestGetAsgiApp:
 
         with (
             patch("animetta.core.socketio_server.init_config") as mock_init,
-            patch("animetta.core.socketio_server._setup_checkpointer"),
             patch("animetta.core.socketio_server.create_server", return_value=mock_server),
         ):
             mod.get_asgi_app()
@@ -360,10 +291,7 @@ class TestGetAsgiApp:
         mock_server.model_manager.warmup = MagicMock(side_effect=_noop_coro)
         mock_server.prewarm_services = MagicMock(side_effect=_noop_coro)
 
-        with (
-            patch("animetta.core.socketio_server._setup_checkpointer"),
-            patch("animetta.core.socketio_server.create_server", return_value=mock_server),
-        ):
+        with patch("animetta.core.socketio_server.create_server", return_value=mock_server):
             mod.get_asgi_app()
 
         assert not hasattr(mod, "init_tracing")

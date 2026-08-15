@@ -9,6 +9,8 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
+
 from .models import (
     EvaluatorType,
     InputType,
@@ -22,6 +24,7 @@ from .repository import ProgramScriptRepository
 
 ProgramDispatcher = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 RoomStateProvider = Callable[[int], dict[str, Any]]
+CheckpointDelete = Callable[[str], Awaitable[None]]
 
 
 class ProgramRuntimeError(RuntimeError):
@@ -88,12 +91,19 @@ class ProgramRun:
     error: str | None = None
     last_input: str | None = None
     last_option_id: str | None = None
+    checkpoint_threads: set[str] = field(default_factory=set)
 
 
 class ProgramScriptRunner:
     """Advance one immutable script snapshot without scene classification."""
 
-    def __init__(self, repository: ProgramScriptRepository, *, memory_runtime: Any = None) -> None:
+    def __init__(
+        self,
+        repository: ProgramScriptRepository,
+        *,
+        memory_runtime: Any = None,
+        checkpoint_delete: CheckpointDelete | None = None,
+    ) -> None:
         self.repository = repository
         self.memory_runtime = memory_runtime
         self._dispatcher: ProgramDispatcher | None = None
@@ -103,6 +113,7 @@ class ProgramScriptRunner:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._memory_receipts: dict[str, asyncio.Future[dict[str, object]]] = {}
         self._unsubscribe_revision: Callable[[], None] | None = None
+        self._checkpoint_delete = checkpoint_delete
         if memory_runtime is not None:
             self._unsubscribe_revision = memory_runtime.subscribe_revision(self._on_memory_revision)
 
@@ -395,6 +406,12 @@ class ProgramScriptRunner:
             run.current_index + 1,
             beat.reply,
         )
+        checkpoint_thread = (
+            f"program:{run.run_id}:{beat.id}"
+            if beat.thread is ThreadMode.ISOLATED
+            else f"program:{run.run_id}"
+        )
+        run.checkpoint_threads.add(checkpoint_thread)
         return await self._dispatcher(
             input_text,
             {
@@ -406,12 +423,12 @@ class ProgramScriptRunner:
                 "program_beat_id": beat.id,
                 "is_probe": beat.memory is MemoryMode.PROBE,
                 "memory_mode": beat.memory.value,
-                "checkpoint_thread_id": (
-                    f"program:{run.run_id}:{beat.id}"
-                    if beat.thread is ThreadMode.ISOLATED
-                    else f"program:{run.run_id}"
+                "checkpoint_request": CheckpointRequest(
+                    thread_id=checkpoint_thread,
+                    owner_kind="program",
+                    owner_id=run.run_id,
+                    retention="stable",
                 ),
-                "retention_policy": "ephemeral",
                 "scene_guidance": guidance,
             },
         )
@@ -490,6 +507,10 @@ class ProgramScriptRunner:
         await self._archive_run(run)
 
     async def _archive_run(self, run: ProgramRun) -> None:
+        if self._checkpoint_delete is not None:
+            for thread_id in sorted(run.checkpoint_threads):
+                await self._checkpoint_delete(thread_id)
+            run.checkpoint_threads.clear()
         system = getattr(self.memory_runtime, "system", None)
         if system is None:
             return

@@ -40,6 +40,10 @@ class ToolInvocationCompletion:
     result: Any | None
     error: str | None
     cancelled: bool = False
+    retry_count: int = 0
+    approval_result: str | None = None
+    error_code: str | None = None
+    tool_effect: str | None = None
 
 
 class ToolInvocationObserver(Protocol):
@@ -50,6 +54,18 @@ class ToolInvocationObserver(Protocol):
     async def before_invoke(self, invocation: ToolInvocation) -> None: ...
 
     async def after_invoke(self, completion: ToolInvocationCompletion) -> None: ...
+
+    async def record_policy_failure(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        code: str,
+    ) -> None: ...
+
+    async def record_approval(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        result: str,
+    ) -> None: ...
 
 
 class LedgerToolInvocationObserver:
@@ -111,6 +127,11 @@ class LedgerToolInvocationObserver:
             result_attributes["minecraft_command_id"] = command_id
         if request_id:
             result_attributes["minecraft_request_id"] = request_id
+        result_attributes["retry_count"] = completion.retry_count
+        if completion.approval_result:
+            result_attributes["approval_result"] = completion.approval_result
+        if completion.tool_effect:
+            result_attributes["tool_effect"] = completion.tool_effect
         if completion.error:
             status = OperationStatus.CANCELLED if completion.cancelled else OperationStatus.ERROR
             error = policy.sanitize_error(completion.error, error_type="tool_error")
@@ -119,7 +140,7 @@ class LedgerToolInvocationObserver:
                     operation_id=operation_id,
                     status=status,
                     finished_at=time.time(),
-                    error_type=error.error_type,
+                    error_type=completion.error_code or error.error_type,
                     error_summary=error.summary,
                     attributes={
                         **base_attributes,
@@ -137,6 +158,75 @@ class LedgerToolInvocationObserver:
                     **base_attributes,
                     **policy.filter_attributes(result_attributes),
                 },
+            )
+        )
+
+    async def record_policy_failure(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        code: str,
+    ) -> None:
+        for invocation in invocations:
+            await self._record_decision(
+                invocation,
+                name=f"tool_policy:{invocation.tool_name}",
+                status=OperationStatus.ERROR,
+                error_type=code,
+                attributes={"tool_name": invocation.tool_name},
+            )
+
+    async def record_approval(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        result: str,
+    ) -> None:
+        status = OperationStatus.SUCCESS if result == "approve" else OperationStatus.CANCELLED
+        for invocation in invocations:
+            await self._record_decision(
+                invocation,
+                name=f"approval:{invocation.tool_name}",
+                status=status,
+                error_type=None if result == "approve" else "APPROVAL_REJECTED",
+                attributes={
+                    "tool_name": invocation.tool_name,
+                    "approval_result": result,
+                },
+            )
+
+    async def _record_decision(
+        self,
+        invocation: ToolInvocation,
+        *,
+        name: str,
+        status: OperationStatus,
+        error_type: str | None,
+        attributes: dict[str, str],
+    ) -> None:
+        context = get_observation_context()
+        if context is None:
+            return
+        operation_id = uuid.uuid4().hex
+        now = time.time()
+        await self._recorder.start_operation(
+            OperationStarted(
+                operation_id=operation_id,
+                trace_id=context.trace_id,
+                parent_operation_id=context.operation_id or context.parent_operation_id,
+                layer=ObservationLayer.WORKFLOW,
+                name=name,
+                critical_path=True,
+                started_at=now,
+                attributes=attributes,
+            )
+        )
+        await self._recorder.finish_operation(
+            OperationFinished(
+                operation_id=operation_id,
+                status=status,
+                finished_at=now,
+                error_type=error_type,
+                error_summary=error_type,
+                attributes=attributes,
             )
         )
 
@@ -164,6 +254,26 @@ class CompositeToolInvocationObserver:
                 first_error = first_error or exc
         if first_error is not None:
             raise first_error
+
+    async def record_policy_failure(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        code: str,
+    ) -> None:
+        for observer in self._observers:
+            callback = getattr(observer, "record_policy_failure", None)
+            if callback is not None:
+                await callback(invocations, code)
+
+    async def record_approval(
+        self,
+        invocations: tuple[ToolInvocation, ...],
+        result: str,
+    ) -> None:
+        for observer in self._observers:
+            callback = getattr(observer, "record_approval", None)
+            if callback is not None:
+                await callback(invocations, result)
 
 
 def _content_attributes(

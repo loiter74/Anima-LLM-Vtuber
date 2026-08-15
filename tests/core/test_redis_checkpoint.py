@@ -1,140 +1,117 @@
 from __future__ import annotations
 
-"""Tests for Redis-backed LangGraph checkpoint saver.
-
-Requires a running Redis instance on localhost:6379 for the persistence test.
-The fallback test runs without Redis.
-"""
+import sys
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from animetta.core.redis_checkpoint import AsyncRedisSaver
-
-# ── Test 3.6: session persistence across checkpointer re-creation ─
+from animetta.core.redis_checkpoint import RedisCheckpointRuntime
 
 
-@pytest.mark.asyncio
-async def test_session_persists_with_redis():
-    """Session state survives checkpointer re-creation (simulating restart)."""
-    pytest.importorskip("redis", reason="redis-py not installed")
+class _SaverContext:
+    def __init__(self, saver, *, error: Exception | None = None) -> None:
+        self.saver = saver
+        self.error = error
+        self.closed = False
 
-    redis_url = "redis://localhost:6379/15"
+    async def __aenter__(self):
+        if self.error is not None:
+            raise self.error
+        await self.saver.asetup()
+        return self.saver
 
-    # Try to connect — skip if Redis is not running
-    try:
-        saver1 = AsyncRedisSaver(redis_url)
-        await saver1.redis.ping()
-    except Exception:
-        pytest.skip("Redis not available on localhost:6379")
-
-    config = {"configurable": {"thread_id": "test-restart"}}
-    checkpoint = {
-        "v": 1,
-        "id": "ckpt-001",
-        "ts": "2026-05-10T00:00:00Z",
-        "channel_values": {"messages": [{"role": "user", "content": "hello"}]},
-        "channel_versions": {},
-        "versions_seen": {},
-        "updated_channels": None,
-    }
-    metadata = {"source": "input", "step": -1, "parents": {}}
-    new_versions = {}
-
-    await saver1.aput(config, checkpoint, metadata, new_versions)
-
-    # Simulate restart — create a brand-new saver that connects to the same Redis
-    saver2 = AsyncRedisSaver(redis_url)
-    loaded = await saver2.aget_tuple(config)
-
-    assert loaded is not None, "Checkpoint should survive re-creation"
-    assert loaded.checkpoint["id"] == "ckpt-001"
-    assert loaded.checkpoint["channel_values"]["messages"][0]["content"] == "hello"
-    assert loaded.metadata.get("source") == "input"
-
-    # Cleanup
-    await saver1.adelete_thread("test-restart")
-    await saver1.close()
-    await saver2.close()
+    async def __aexit__(self, *_args) -> None:
+        self.closed = True
 
 
 @pytest.mark.asyncio
-async def test_redis_saver_handles_missing_key():
-    """aget_tuple returns None for a thread_id with no stored checkpoint."""
-    pytest.importorskip("redis", reason="redis-py not installed")
+async def test_runtime_owns_official_saver_setup_ttl_and_close() -> None:
+    saver = MagicMock()
+    saver.asetup = AsyncMock()
+    saver._redis.ping = AsyncMock(return_value=True)
+    context = _SaverContext(saver)
+    saver_type = MagicMock()
+    saver_type.from_conn_string.return_value = context
+    module = ModuleType("langgraph.checkpoint.redis.aio")
+    module.AsyncRedisSaver = saver_type
 
-    redis_url = "redis://localhost:6379/15"
+    with patch.dict(sys.modules, {"langgraph.checkpoint.redis.aio": module}):
+        runtime = RedisCheckpointRuntime("redis://redis:6379/0")
+        health = await runtime.start()
+        refreshed = await runtime.check_health()
+        await runtime.close()
 
-    try:
-        saver = AsyncRedisSaver(redis_url)
-        await saver.redis.ping()
-    except Exception:
-        pytest.skip("Redis not available on localhost:6379")
-
-    config = {"configurable": {"thread_id": "non-existent-thread"}}
-    result = await saver.aget_tuple(config)
-    assert result is None
-    await saver.close()
-
-
-# ── Test 3.7: fallback to MemorySaver when Redis is unreachable ─
-
-
-@pytest.mark.asyncio
-async def test_fallback_to_memory_when_redis_unreachable():
-    """When Redis is unreachable, MemorySaver is used as the fallback."""
-    from langgraph.checkpoint.memory import MemorySaver
-
-    checkpointer = MemorySaver()
-    config = {
-        "configurable": {
-            "thread_id": "test-fallback",
-            "checkpoint_ns": "",
-        }
-    }
-
-    checkpoint_data = {
-        "v": 1,
-        "id": "ckpt-fallback",
-        "ts": "2026-05-10T00:00:00Z",
-        "channel_values": {},
-        "channel_versions": {},
-        "versions_seen": {},
-        "updated_channels": None,
-    }
-    metadata = {"source": "input", "step": -1, "parents": {}}
-    new_versions = {}
-
-    result_config = await checkpointer.aput(
-        config,
-        checkpoint_data,
-        metadata,
-        new_versions,
+    assert health.available is True
+    assert refreshed.available is True
+    saver.asetup.assert_awaited_once()
+    saver._redis.ping.assert_awaited_once()
+    saver_type.from_conn_string.assert_called_once_with(
+        "redis://redis:6379/0",
+        ttl={"default_ttl": 1440, "refresh_on_read": True},
     )
-    assert result_config is not None
-    assert result_config["configurable"]["checkpoint_id"] == "ckpt-fallback"
-
-    tup = await checkpointer.aget_tuple(config)
-    assert tup is not None
-    assert tup.checkpoint["id"] == "ckpt-fallback"
+    assert context.closed is True
 
 
 @pytest.mark.asyncio
-async def test_redis_fallback_on_invalid_url():
-    """Creating AsyncRedisSaver with invalid URL raises (caught by caller).
+async def test_unavailable_redis_degrades_without_memory_fallback() -> None:
+    saver_type = MagicMock()
+    saver_type.from_conn_string.return_value = _SaverContext(
+        MagicMock(), error=ConnectionError("offline")
+    )
+    module = ModuleType("langgraph.checkpoint.redis.aio")
+    module.AsyncRedisSaver = saver_type
 
-    The _setup_checkpointer() in socketio_server catches this and falls back.
-    This test verifies the exception is raised so the fallback can trigger.
-    """
-    pytest.importorskip("redis", reason="redis-py not installed")
+    with patch.dict(sys.modules, {"langgraph.checkpoint.redis.aio": module}):
+        runtime = RedisCheckpointRuntime("redis://offline:6379/0")
+        health = await runtime.start()
 
-    try:
-        AsyncRedisSaver("redis://nonexistent-host:9999/0")
-    except Exception:
-        # Expected — invalid host should cause connection failure.
-        # The caller (_setup_checkpointer) catches this and falls back to MemorySaver.
-        pass
-    else:
-        # If no exception was raised (e.g. lazy connection), the saver's
-        # first Redis operation will fail gracefully.
-        # This is also acceptable — AsyncRedisSaver is designed to degrade.
-        pass
+    assert health.available is False
+    assert health.reason == "checkpoint_unavailable"
+    assert runtime.saver is None
+
+
+@pytest.mark.asyncio
+async def test_health_check_marks_live_saver_degraded_and_recovers() -> None:
+    saver = MagicMock()
+    saver.asetup = AsyncMock()
+    saver._redis.ping = AsyncMock(side_effect=[ConnectionError("offline"), True])
+    context = _SaverContext(saver)
+    saver_type = MagicMock()
+    saver_type.from_conn_string.return_value = context
+    module = ModuleType("langgraph.checkpoint.redis.aio")
+    module.AsyncRedisSaver = saver_type
+
+    with patch.dict(sys.modules, {"langgraph.checkpoint.redis.aio": module}):
+        runtime = RedisCheckpointRuntime("redis://redis:6379/0")
+        await runtime.start()
+        degraded = await runtime.check_health()
+        recovered = await runtime.check_health()
+        await runtime.close()
+
+    assert degraded.available is False
+    assert degraded.reason == "checkpoint_unavailable"
+    assert recovered.available is True
+
+
+@pytest.mark.asyncio
+async def test_has_thread_uses_official_saver_lookup() -> None:
+    runtime = RedisCheckpointRuntime("redis://example")
+    runtime.saver = MagicMock()
+    runtime.saver.aget_tuple = AsyncMock(return_value=MagicMock())
+
+    assert await runtime.has_thread("turn:task-1") is True
+    runtime.saver.aget_tuple.assert_awaited_once_with(
+        {"configurable": {"thread_id": "turn:task-1"}}
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_url_keeps_volatile_runtime_available() -> None:
+    runtime = RedisCheckpointRuntime(None)
+
+    health = await runtime.start()
+
+    assert health.available is False
+    assert health.reason == "redis_url_missing"
+    assert runtime.saver is None

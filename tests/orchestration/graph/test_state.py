@@ -39,6 +39,7 @@ class TestAgentStateKeys:
             # Tool calling
             "tool_calls",
             "tool_results",
+            "checkpoint_migration_required",
             # Output
             "response_text",
             "response_chunks",

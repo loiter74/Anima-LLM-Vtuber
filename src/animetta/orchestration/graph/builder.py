@@ -1,8 +1,8 @@
 """LangGraph state graph builder"""
 
+from collections.abc import Hashable
 from typing import Any, Literal
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from loguru import logger
@@ -30,23 +30,7 @@ from .instrumentation import instrument_node
 from .personality_node import personality_node
 from .state import AgentState
 
-# Module-level external checkpointer — set by socketio_server at startup.
-# When set, create_default_graph() uses this instead of constructing a new
-# MemorySaver.  Enables Redis session sharing via --redis-url CLI flag.
-_external_checkpointer: Any | None = None
 CompiledAgentGraph = CompiledStateGraph[AgentState, None, AgentState, AgentState]
-
-
-def set_external_checkpointer(checkpointer: Any) -> None:
-    """Set an external checkpointer for all graphs created by create_default_graph."""
-    global _external_checkpointer
-    _external_checkpointer = checkpointer
-    logger.info(f"[LangGraph] External checkpointer registered: {type(checkpointer).__name__}")
-
-
-def get_external_checkpointer() -> Any | None:
-    """Get the current external checkpointer (or None)."""
-    return _external_checkpointer
 
 
 def route_input(state: AgentState) -> Literal["asr", "llm"]:
@@ -59,6 +43,13 @@ def route_input(state: AgentState) -> Literal["asr", "llm"]:
     return "llm"
 
 
+def route_agent_entry(state: AgentState) -> Literal["asr", "llm", "tools"]:
+    """Resume a preflighted tool round without asking the model to plan twice."""
+    if state.get("checkpoint_migration_required") and state.get("tool_calls"):
+        return "tools"
+    return route_input(state)
+
+
 def should_use_tools(state: AgentState) -> Literal["tools", "humor_rewrite"]:
     """Check if LLM requested tool calls"""
     tool_calls = state.get("tool_calls")
@@ -67,6 +58,11 @@ def should_use_tools(state: AgentState) -> Literal["tools", "humor_rewrite"]:
         return "tools"
     logger.debug("[Router] LLM direct reply -> Humor rewrite node")
     return "humor_rewrite"
+
+
+def route_after_tools(state: AgentState) -> Literal["llm", "end"]:
+    """End the volatile run when a mutation must migrate to durable execution."""
+    return "end" if state.get("checkpoint_migration_required") else "llm"
 
 
 def build_graph(
@@ -145,7 +141,7 @@ def build_graph(
         graph.add_edge("performance_output", "conversation_finalizer")
         graph.add_edge("conversation_finalizer", END)
         logger.info("[LangGraph] Golden two-pass graph built")
-        return graph.compile(checkpointer=None)
+        return graph.compile(checkpointer=checkpointer)
 
     add_observed_node("conversation_start", conversation_start_node)
     add_observed_node("llm", llm_node)
@@ -178,10 +174,10 @@ def build_graph(
     logger.info(f"[LangGraph] Registered nodes: {registered_nodes}")
 
     # Set entry point
-    graph.set_conditional_entry_point(
-        route_input,
-        {"asr": "asr", "llm": "conversation_start"},
-    )
+    entry_routes: dict[Hashable, str] = {"asr": "asr", "llm": "conversation_start"}
+    if enable_tools:
+        entry_routes["tools"] = "tools"
+    graph.set_conditional_entry_point(route_agent_entry, entry_routes)
 
     # Add edges
     graph.add_edge("asr", "conversation_start")
@@ -194,7 +190,7 @@ def build_graph(
             should_use_tools,
             {"tools": "tools", "humor_rewrite": "humor_rewrite"},
         )
-        graph.add_edge("tools", "llm")
+        graph.add_conditional_edges("tools", route_after_tools, {"llm": "llm", "end": END})
         logger.info("[LangGraph] Tool loop configured: llm -> tools -> llm")
     else:
         graph.add_edge("llm", "humor_rewrite")
@@ -216,6 +212,7 @@ def build_graph(
 
 def create_default_graph(
     enable_memory: bool = True,
+    checkpointer: Any | None = None,
     enable_tools: bool = False,
     tools: list[Any] | None = None,
     tools_map: dict[str, Any] | None = None,
@@ -231,19 +228,16 @@ def create_default_graph(
         tools: List of tools
         tools_map: Tool mapping
 
-    Checkpointer priority when ``enable_memory`` is true:
-    1. External checkpointer (set via set_external_checkpointer()).
-    2. MemorySaver.
-    When ``enable_memory`` is false, no checkpoint is written.
+    A checkpointer must be explicitly injected. ``enable_memory`` only controls
+    whether the injected saver is attached; it never creates a process-local
+    fallback that could masquerade as durable execution.
     """
-    checkpointer = None
-
-    if enable_memory and _external_checkpointer is not None:
-        checkpointer = _external_checkpointer
-        logger.info(f"[LangGraph] Using external checkpointer: {type(checkpointer).__name__}")
-    elif enable_memory:
-        checkpointer = MemorySaver()
-        logger.info("[LangGraph] Memory checkpoint enabled")
+    selected_checkpointer = checkpointer if enable_memory else None
+    if selected_checkpointer is not None:
+        logger.info(
+            "[LangGraph] Using injected checkpointer: {}",
+            type(selected_checkpointer).__name__,
+        )
 
     if enable_tools and not tools:
         logger.warning(
@@ -251,7 +245,7 @@ def create_default_graph(
         )
 
     return build_graph(
-        checkpointer=checkpointer,
+        checkpointer=selected_checkpointer,
         enable_tools=enable_tools,
         tools=tools,
         tools_map=tools_map,

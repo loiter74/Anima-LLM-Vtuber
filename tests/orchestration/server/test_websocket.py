@@ -48,7 +48,7 @@ def websocket_server():
         mock_asgi.return_value = MagicMock()
         mock_starlette.return_value = MagicMock()
         mock_mlm.return_value = MagicMock()
-        server = WebSocketServer(config=MagicMock())
+        server = WebSocketServer(config=_effective_config())
         return server
 
 
@@ -71,7 +71,7 @@ class TestWebSocketServerInit:
             mock_starlette.return_value = MagicMock()
             mock_mlm.return_value = MagicMock()
 
-            config = MagicMock()
+            config = _effective_config()
             server = WebSocketServer(config=config)
 
             assert server.config is config
@@ -92,7 +92,7 @@ class TestWebSocketServerInit:
 
             mock_sio_cls.assert_called_once_with(
                 async_mode="asgi",
-                cors_allowed_origins="*",
+                cors_allowed_origins=list(config.security.allowed_origins),
                 cors_credentials=True,
                 logger=False,
                 engineio_logger=False,
@@ -113,7 +113,7 @@ class TestWebSocketServerInit:
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
 
-            cfg = MagicMock()
+            cfg = _effective_config()
             server = WebSocketServer(config=cfg)
             assert server.config is cfg
 
@@ -336,6 +336,7 @@ class TestSetupRoutes:
                 observation_query=websocket_server.observation_query,
                 observation_report_store=websocket_server.observation_report_store,
                 command_inbox=websocket_server.command_inbox,
+                security=websocket_server.security,
             )
 
     def test_setup_routes_wires_socketio_to_model_manager(self, websocket_server):
@@ -594,7 +595,7 @@ class TestCreateServer:
             mock_asgi.return_value = MagicMock()
             mock_starlette.return_value = MagicMock()
 
-            cfg = MagicMock()
+            cfg = _effective_config()
 
             with (
                 patch.object(WebSocketServer, "setup_routes") as mock_routes,

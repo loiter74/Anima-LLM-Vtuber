@@ -29,6 +29,7 @@ class AgentState(TypedDict):
     # Tool calling
     tool_calls: list[dict[str, Any]] | None
     tool_results: list[dict[str, Any]] | None
+    checkpoint_migration_required: bool
 
     # Output
     response_text: str
@@ -119,6 +120,7 @@ def create_initial_state(
         "system_prompt": system_prompt,
         "tool_calls": None,
         "tool_results": None,
+        "checkpoint_migration_required": False,
         "response_text": "",
         "response_chunks": [],
         "tts_audio": None,

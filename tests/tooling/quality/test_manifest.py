@@ -457,6 +457,7 @@ def test_single_compose_has_one_canonical_contract_gate() -> None:
             "docker-compose.yml",
             "config",
             "--quiet",
+            "--no-interpolate",
         ),
     }
 

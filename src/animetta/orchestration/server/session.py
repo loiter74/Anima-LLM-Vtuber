@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from animetta.config.live2d import Live2DConfig
     from animetta.core.model_loading_manager import ModelLoadingManager
+    from animetta.core.redis_checkpoint import RedisCheckpointRuntime
     from animetta.core.shared_memory_runtime import SharedMemoryRuntime
     from animetta.observability.ports import ObservationRecorder
     from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
@@ -48,6 +49,7 @@ class SessionManager:
         model_manager: ModelLoadingManager | None = None,
         memory_runtime: SharedMemoryRuntime | None = None,
         observation_recorder: ObservationRecorder | None = None,
+        checkpoint_runtime: RedisCheckpointRuntime | None = None,
     ) -> None:
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
@@ -55,6 +57,7 @@ class SessionManager:
         self.model_manager = model_manager
         self.memory_runtime = memory_runtime
         self.observation_recorder = observation_recorder
+        self.checkpoint_runtime = checkpoint_runtime
         self.conversation_registry = ConversationSessionRegistry(max_scopes=256)
 
         # Store orchestrator per session
@@ -188,6 +191,7 @@ class SessionManager:
                 tools_config=tools_config.get("config", tools_config),
                 observation_recorder=self.observation_recorder,
                 conversation_registry=self.conversation_registry,
+                checkpoint_runtime=self.checkpoint_runtime,
             )
 
             logger.info(f"[{sid}] LangGraphOrchestrator created")

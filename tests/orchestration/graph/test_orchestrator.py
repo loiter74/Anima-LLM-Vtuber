@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from animetta.observability.ports import NoOpObservationRecorder
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.orchestration.graph.conversation_session import ConversationSessionRegistry
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 
 """Tests for LangGraph orchestrator — initialization and input processing."""
 
 from inspect import signature
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -172,15 +174,167 @@ class TestOrchestratorProcessText:
 
     @pytest.mark.asyncio
     async def test_process_text_can_isolate_one_checkpoint_thread(self, orchestrator, mock_graph):
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(return_value=None)
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
         await orchestrator.start()
 
         await orchestrator.process_text(
             text="我回来啦",
-            checkpoint_thread_id="program:run-1:q09",
+            checkpoint_request=CheckpointRequest(
+                thread_id="program:run-1:q09",
+                owner_kind="program",
+                owner_id="run-1",
+                retention="stable",
+            ),
         )
 
         run_config = mock_graph.ainvoke.await_args.kwargs["config"]
         assert run_config["configurable"]["thread_id"] == "program:run-1:q09"
+        checkpoint_runtime.delete_thread.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_plain_chat_does_not_touch_checkpoint_storage(self, orchestrator, mock_graph):
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.health.available = True
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(return_value=None)
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
+        await orchestrator.start()
+
+        result = await orchestrator.process_text(text="普通聊天", task_id="task-plain")
+
+        assert result["response_text"] == "mock reply"
+        checkpoint_runtime.saver.aget_tuple.assert_not_awaited()
+        checkpoint_runtime.delete_thread.assert_not_awaited()
+        assert mock_graph.ainvoke.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_durable_graph_is_compiled_after_redis_recovers(self, orchestrator, mock_graph):
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.health.available = False
+        checkpoint_runtime.saver = None
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
+        await orchestrator.start()
+        assert orchestrator.durable_graph is None
+
+        checkpoint_runtime.health.available = True
+        checkpoint_runtime.saver = MagicMock()
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(return_value=None)
+
+        result = await orchestrator.process_text(
+            text="恢复后的长任务",
+            checkpoint_request=CheckpointRequest(
+                thread_id="program:recovered-run",
+                owner_kind="program",
+                owner_id="recovered-run",
+                retention="stable",
+            ),
+        )
+
+        assert result["response_text"] == "mock reply"
+        assert orchestrator.durable_graph is mock_graph
+        checkpoint_runtime.saver.aget_tuple.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_approval_tool_round_migrates_without_second_planning_call(
+        self, orchestrator, mock_graph
+    ):
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.health.available = True
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(return_value=None)
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
+        mock_graph.ainvoke.side_effect = [
+            {
+                "task_id": "task-mc",
+                "metadata": {"config_hash": "current"},
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "name": "mc_connection",
+                        "args": {"operation": "connect"},
+                    }
+                ],
+                "checkpoint_migration_required": True,
+            },
+            {
+                "task_id": "task-mc",
+                "response_text": "waiting",
+                "checkpoint_migration_required": False,
+                "__interrupt__": [SimpleNamespace(value={"approval_id": "approval-1"})],
+            },
+        ]
+        await orchestrator.start()
+
+        result = await orchestrator.process_text(text="连接 Minecraft", task_id="task-mc")
+
+        assert result["approval_required"] == [{"approval_id": "approval-1"}]
+        assert mock_graph.ainvoke.await_count == 2
+        first_state = mock_graph.ainvoke.await_args_list[0].args[0]
+        second_state = mock_graph.ainvoke.await_args_list[1].args[0]
+        second_config = mock_graph.ainvoke.await_args_list[1].kwargs["config"]
+        assert first_state["user_text"] == "连接 Minecraft"
+        assert second_state["tool_calls"][0]["id"] == "call-1"
+        assert second_config["configurable"]["thread_id"] == "turn:task-mc"
+        assert second_config["configurable"]["history_authority"] == "checkpoint"
+        checkpoint_runtime.saver.aget_tuple.assert_awaited_once()
+        checkpoint_runtime.delete_thread.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_resume_rejects_checkpoint_from_different_runtime_config(
+        self, orchestrator, mock_graph
+    ):
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.health.available = True
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(
+            return_value=SimpleNamespace(
+                checkpoint={"channel_values": {"metadata": {"config_hash": "old"}}}
+            )
+        )
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
+        orchestrator.service_context.runtime_config_hash = "new"
+        await orchestrator.start()
+
+        result = await orchestrator.process_text(
+            text="resume",
+            checkpoint_request=CheckpointRequest(
+                thread_id="replay:run-1",
+                owner_kind="replay",
+                owner_id="run-1",
+                retention="stable",
+            ),
+        )
+
+        assert result["error"] == "CHECKPOINT_CONFIG_MISMATCH"
+        mock_graph.ainvoke.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_durable_redis_interruption_returns_stable_error(self, orchestrator, mock_graph):
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        checkpoint_runtime = MagicMock()
+        checkpoint_runtime.health.available = True
+        checkpoint_runtime.saver.aget_tuple = AsyncMock(return_value=None)
+        checkpoint_runtime.delete_thread = AsyncMock()
+        orchestrator.checkpoint_runtime = checkpoint_runtime
+        mock_graph.ainvoke.side_effect = RedisConnectionError("offline")
+        await orchestrator.start()
+
+        result = await orchestrator.process_text(
+            text="resume",
+            checkpoint_request=CheckpointRequest(
+                thread_id="program:run-1",
+                owner_kind="program",
+                owner_id="run-1",
+                retention="stable",
+            ),
+        )
+
+        assert result["error"] == "CHECKPOINT_UNAVAILABLE"
 
     @pytest.mark.asyncio
     async def test_process_text_records_canonical_root_without_synthetic_snapshots(

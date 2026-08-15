@@ -21,6 +21,7 @@ const socketClient = io(window.location.origin, {
   path: '/socket.io/',
   transports: ['websocket', 'polling'],
   reconnection: true,
+  withCredentials: true,
 })
 const socket = socketClient as unknown as LiveSocket
 

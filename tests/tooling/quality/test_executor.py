@@ -230,7 +230,7 @@ def test_docker_contract_validates_quietly_without_serializing_compose_secrets()
 
     argv = build_argv(loaded.catalog.groups["docker-compose-contract"])
 
-    assert argv[-2:] == ["config", "--quiet"]
+    assert argv[-3:] == ["config", "--quiet", "--no-interpolate"]
     assert "--format" not in argv
 
 
@@ -265,6 +265,7 @@ def test_docker_contract_validates_quietly_without_rendering_environment() -> No
         "docker-compose.yml",
         "config",
         "--quiet",
+        "--no-interpolate",
     ]
 
 

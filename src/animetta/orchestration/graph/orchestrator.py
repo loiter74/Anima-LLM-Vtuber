@@ -10,9 +10,11 @@ import time as time_module
 from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 from loguru import logger
 
 from animetta.core.message_filter import should_skip_llm
+from animetta.core.redis_checkpoint import RedisCheckpointRuntime
 from animetta.observability.conversation import ConversationObserver
 from animetta.observability.domain import PrivacyMode
 from animetta.observability.ports import (
@@ -21,6 +23,11 @@ from animetta.observability.ports import (
 )
 
 from .builder import CompiledAgentGraph, create_default_graph
+from .checkpointing import (
+    CheckpointConfigMismatchError,
+    CheckpointRequest,
+    CheckpointUnavailableError,
+)
 from .conversation_session import (
     ConversationSessionRegistry,
     resolve_conversation_scope,
@@ -55,6 +62,7 @@ class LangGraphOrchestrator:
         observation_recorder: ObservationRecorder | None = None,
         tool_manager: ToolManager | None = None,
         conversation_registry: ConversationSessionRegistry | None = None,
+        checkpoint_runtime: RedisCheckpointRuntime | None = None,
     ):
         self.service_context = service_context
         self.socketio = socketio
@@ -63,6 +71,7 @@ class LangGraphOrchestrator:
         self.enable_memory = enable_memory
         self.tools_config = tools_config or {}
         self.observation_recorder = observation_recorder or NoOpObservationRecorder()
+        self.checkpoint_runtime = checkpoint_runtime
 
         raw_session_id = getattr(service_context, "session_id", None)
         self.session_id = (
@@ -70,6 +79,9 @@ class LangGraphOrchestrator:
         )
 
         self.graph: CompiledAgentGraph | None = None
+        self.volatile_graph: CompiledAgentGraph | None = None
+        self.durable_graph: CompiledAgentGraph | None = None
+        self._durable_graph_lock = asyncio.Lock()
         self._is_running = False
         self._processing_audio = False  # guard against concurrent audio processing
         self.conversation_registry = conversation_registry or ConversationSessionRegistry()
@@ -119,14 +131,18 @@ class LangGraphOrchestrator:
                 logger.warning(f"[{self.session_id}] [LangGraph] Tools not enabled")
 
             # Create state graph
-            self.graph = create_default_graph(
+            graph_options = self._graph_options()
+            self.volatile_graph = create_default_graph(
                 enable_memory=False,
-                enable_tools=self.enable_tools,
-                tools=self.tool_manager.tools if self.tool_manager else None,
-                tools_map=self.tool_manager.tools_map if self.tool_manager else None,
-                golden_profile=self._is_golden_profile(),
-                observation_recorder=self.observation_recorder,
+                **graph_options,
             )
+            saver = self.checkpoint_runtime.saver if self.checkpoint_runtime is not None else None
+            self.durable_graph = (
+                create_default_graph(enable_memory=True, checkpointer=saver, **graph_options)
+                if saver is not None
+                else None
+            )
+            self.graph = self.volatile_graph
 
             self._is_running = True
             logger.info(
@@ -189,6 +205,7 @@ class LangGraphOrchestrator:
         task_id: str | None = None,
         turn_id: str | None = None,
         tool_invocation_observer: ToolInvocationObserver | None = None,
+        checkpoint_request: CheckpointRequest | None = None,
         **metadata,
     ) -> dict[str, Any]:
         """Process text input.
@@ -243,9 +260,12 @@ class LangGraphOrchestrator:
             final_state = await self._run_graph(
                 initial_state,
                 tool_invocation_observer=tool_invocation_observer,
+                checkpoint_request=checkpoint_request,
             )
             return self._clean_result(final_state)
 
+        except (CheckpointUnavailableError, CheckpointConfigMismatchError) as exc:
+            return {"error": exc.code, "response_text": ""}
         except Exception as e:
             logger.error(f"[{self.session_id}] [LangGraph] Text processing failed: {e}")
             return {"error": str(e), "response_text": ""}
@@ -355,6 +375,7 @@ class LangGraphOrchestrator:
         initial_state: AgentState,
         *,
         tool_invocation_observer: ToolInvocationObserver | None = None,
+        checkpoint_request: CheckpointRequest | None = None,
     ) -> dict[str, Any]:
         """Run the state graph, passing service context through LangGraph config"""
         input_type = initial_state.get("input_type", "text")
@@ -382,10 +403,20 @@ class LangGraphOrchestrator:
                     "configurable": dict(self._langgraph_config.get("configurable", {})),
                 },
             )
-            run_config["configurable"]["conversation_session"] = conversation_session
-            checkpoint_thread_id = initial_state.get("metadata", {}).get("checkpoint_thread_id")
-            if isinstance(checkpoint_thread_id, str) and checkpoint_thread_id:
-                run_config["configurable"]["thread_id"] = checkpoint_thread_id
+            durable = checkpoint_request is not None
+            if durable:
+                run_config = await self._durable_run_config(run_config, checkpoint_request)
+                initial_state["metadata"] = {
+                    **initial_state["metadata"],
+                    "checkpoint_owner_kind": checkpoint_request.owner_kind,
+                    "checkpoint_owner_id": checkpoint_request.owner_id,
+                    "checkpoint_retention": checkpoint_request.retention,
+                }
+                window_before = 0
+            else:
+                run_config["configurable"]["checkpoint_available"] = self._checkpoint_available()
+                run_config["configurable"]["conversation_session"] = conversation_session
+                run_config["configurable"]["history_authority"] = "conversation_registry"
             from .tool_observation import (
                 CompositeToolInvocationObserver,
                 LedgerToolInvocationObserver,
@@ -417,10 +448,39 @@ class LangGraphOrchestrator:
             t_start = time_module.perf_counter()
 
             try:
-                graph = self.graph
+                graph = self.durable_graph if durable else (self.volatile_graph or self.graph)
                 if graph is None:
                     raise RuntimeError("State graph is not initialized")
                 result = await graph.ainvoke(initial_state, config=run_config)
+                if not durable and result.get("checkpoint_migration_required"):
+                    task_id = str(result.get("task_id") or initial_state.get("task_id") or "")
+                    if not task_id:
+                        raise CheckpointUnavailableError("Durable tool execution needs a task id")
+                    checkpoint_request = CheckpointRequest(
+                        thread_id=f"turn:{task_id}",
+                        owner_kind="turn",
+                        owner_id=task_id,
+                        retention="temporary",
+                    )
+                    run_config = await self._durable_run_config(run_config, checkpoint_request)
+                    result["metadata"] = {
+                        **dict(result.get("metadata") or {}),
+                        "checkpoint_owner_kind": checkpoint_request.owner_kind,
+                        "checkpoint_owner_id": checkpoint_request.owner_id,
+                        "checkpoint_retention": checkpoint_request.retention,
+                    }
+                    durable = True
+                    assert self.durable_graph is not None
+                    result = await self.durable_graph.ainvoke(
+                        cast(AgentState, result),
+                        config=run_config,
+                    )
+                if (
+                    checkpoint_request is not None
+                    and checkpoint_request.retention == "temporary"
+                    and not result.get("__interrupt__")
+                ):
+                    await self.checkpoint_runtime.delete_thread(checkpoint_request.thread_id)
                 duration_ms = (time_module.perf_counter() - t_start) * 1000
                 logger.info(
                     "[{}] [LangGraph] _run_graph completed in {:.0f}ms — "
@@ -441,7 +501,131 @@ class LangGraphOrchestrator:
                     f"[{self.session_id}] [LangGraph] _run_graph failed after {duration_ms:.0f}ms: {e}"
                 )
                 await turn.fail(e)
+                if durable and _is_checkpoint_io_error(e):
+                    raise CheckpointUnavailableError("Checkpoint execution failed") from e
                 raise
+
+    async def _durable_run_config(
+        self,
+        base: RunnableConfig,
+        request: CheckpointRequest,
+    ) -> RunnableConfig:
+        await self._ensure_durable_graph()
+        if (
+            self.durable_graph is None
+            or self.checkpoint_runtime is None
+            or not self._checkpoint_available()
+        ):
+            raise CheckpointUnavailableError("Durable execution is unavailable")
+        config = cast(
+            RunnableConfig,
+            {
+                **base,
+                "configurable": dict(base.get("configurable", {})),
+            },
+        )
+        config["configurable"].pop("conversation_session", None)
+        config["configurable"].update(
+            {
+                "thread_id": request.thread_id,
+                "history_authority": "checkpoint",
+                "checkpoint_available": True,
+            }
+        )
+        await self._validate_checkpoint_config(config)
+        return config
+
+    async def _ensure_durable_graph(self) -> None:
+        """Compile against a saver that recovered after degraded startup."""
+        if self.durable_graph is not None:
+            return
+        runtime = self.checkpoint_runtime
+        if runtime is None or runtime.saver is None:
+            return
+        async with self._durable_graph_lock:
+            if self.durable_graph is None and runtime.saver is not None:
+                self.durable_graph = create_default_graph(
+                    enable_memory=True,
+                    checkpointer=runtime.saver,
+                    **self._graph_options(),
+                )
+
+    def _graph_options(self) -> dict[str, Any]:
+        return {
+            "enable_tools": self.enable_tools,
+            "tools": self.tool_manager.tools if self.tool_manager else None,
+            "tools_map": self.tool_manager.tools_map if self.tool_manager else None,
+            "golden_profile": self._is_golden_profile(),
+            "observation_recorder": self.observation_recorder,
+        }
+
+    async def _validate_checkpoint_config(self, config: RunnableConfig) -> None:
+        assert self.checkpoint_runtime is not None
+        saver = self.checkpoint_runtime.saver
+        if saver is None:
+            raise CheckpointUnavailableError("Durable execution is unavailable")
+        try:
+            existing = await saver.aget_tuple(config)
+        except Exception as exc:
+            raise CheckpointUnavailableError("Checkpoint read failed") from exc
+        if existing is None:
+            return
+        checkpoint = existing.checkpoint if hasattr(existing, "checkpoint") else {}
+        values = checkpoint.get("channel_values", {}) if isinstance(checkpoint, dict) else {}
+        metadata = values.get("metadata", {}) if isinstance(values, dict) else {}
+        stored_hash = metadata.get("config_hash") if isinstance(metadata, dict) else None
+        current_hash = getattr(self.service_context, "runtime_config_hash", None)
+        if stored_hash and current_hash and stored_hash != current_hash:
+            raise CheckpointConfigMismatchError("Checkpoint configuration changed")
+
+    async def resume_checkpoint(
+        self,
+        request: CheckpointRequest,
+        *,
+        approval_id: str,
+        approved: bool,
+    ) -> dict[str, Any]:
+        """Resume one trusted interrupt without accepting parameter edits."""
+        run_config = await self._durable_run_config(
+            cast(RunnableConfig, self._langgraph_config),
+            request,
+        )
+        assert self.durable_graph is not None
+        assert self.checkpoint_runtime is not None
+        from .tool_observation import LedgerToolInvocationObserver
+
+        run_config["configurable"]["tool_invocation_observer"] = LedgerToolInvocationObserver(
+            self.observation_recorder,
+            digest_salt=self._observation_digest_salt(),
+        )
+        try:
+            result = await self.durable_graph.ainvoke(
+                Command(
+                    resume={
+                        "approval_id": approval_id,
+                        "approved": approved,
+                    }
+                ),
+                config=run_config,
+            )
+        except Exception as exc:
+            if _is_checkpoint_io_error(exc):
+                raise CheckpointUnavailableError("Checkpoint resume failed") from exc
+            raise
+        if request.retention == "temporary" and not result.get("__interrupt__"):
+            await self.checkpoint_runtime.delete_thread(request.thread_id)
+        return self._clean_result(result)
+
+    def _runtime_profile(self) -> str:
+        config = getattr(self.service_context, "config", None)
+        return str(getattr(config, "profile", "test"))
+
+    def _checkpoint_available(self) -> bool:
+        runtime = self.checkpoint_runtime
+        if runtime is None or runtime.saver is None:
+            return False
+        health = getattr(runtime, "health", None)
+        return health is None or getattr(health, "available", True) is not False
 
     def _conversation_observer(self) -> ConversationObserver:
         config = getattr(self.service_context, "config", None)
@@ -481,7 +665,7 @@ class LangGraphOrchestrator:
 
     def _clean_result(self, final_state: dict[str, Any]) -> dict[str, Any]:
         """Clean up return value"""
-        return {
+        result = {
             "response_text": final_state.get("response_text", ""),
             "response_chunks": final_state.get("response_chunks", []),
             "tts_audio": final_state.get("tts_audio"),
@@ -493,6 +677,12 @@ class LangGraphOrchestrator:
             "turn_id": final_state.get("turn_id"),
             "memory_recall": final_state.get("memory_recall", {}),
         }
+        interrupts = final_state.get("__interrupt__")
+        if interrupts:
+            result["approval_required"] = [
+                item.value if hasattr(item, "value") else item for item in interrupts
+            ]
+        return result
 
     def _get_system_prompt(self) -> str | None:
         """Get a compatibility fallback; per-turn prompt ownership is in the pipeline."""
@@ -540,6 +730,7 @@ class LangGraphOrchestrator:
         observation_recorder: ObservationRecorder | None = None,
         tool_manager: ToolManager | None = None,
         conversation_registry: ConversationSessionRegistry | None = None,
+        checkpoint_runtime: RedisCheckpointRuntime | None = None,
     ) -> LangGraphOrchestrator:
         """Create orchestrator instance
 
@@ -557,7 +748,19 @@ class LangGraphOrchestrator:
             observation_recorder=observation_recorder,
             tool_manager=tool_manager,
             conversation_registry=conversation_registry,
+            checkpoint_runtime=checkpoint_runtime,
         )
 
         await orchestrator.start()
         return orchestrator
+
+
+def _is_checkpoint_io_error(error: BaseException) -> bool:
+    current: BaseException | None = error
+    while current is not None:
+        module = type(current).__module__.lower()
+        name = type(current).__name__.lower()
+        if "redis" in module or "redis" in name:
+            return True
+        current = current.__cause__ or current.__context__
+    return False

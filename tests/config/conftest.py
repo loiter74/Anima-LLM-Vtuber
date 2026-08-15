@@ -47,10 +47,11 @@ def isolated_manifest_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch
 def manifest_data() -> dict[str, Any]:
     """Small complete manifest used by loader tests."""
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "application": {
             "persona": "anima.v0.1",
             "system": {"host": "${ANIMETTA_HOST}", "port": "${ANIMETTA_PORT}"},
+            "security": {"allowed_origins": ["http://127.0.0.1:12394"]},
         },
         "providers": {
             "llm": {

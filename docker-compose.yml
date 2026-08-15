@@ -1,4 +1,21 @@
 services:
+  redis:
+    image: redis:8.8.1-alpine
+    environment:
+      REDIS_PASSWORD: ${ANIMETTA_REDIS_PASSWORD:?ANIMETTA_REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - exec docker-entrypoint.sh redis-server --bind 0.0.0.0 --dir /data --pidfile /data/redis.pid --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - animetta-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG && REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli --raw COMMAND INFO FT.CREATE | grep -qi ft.create && REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli --raw COMMAND INFO JSON.SET | grep -qi json.set"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   animetta:
     build:
       context: .
@@ -13,6 +30,8 @@ services:
       - ANIMETTA_HOST=0.0.0.0
       - ANIMETTA_PORT=12394
       - ANIMETTA_DATA_DIR=/app/data
+      - ANIMETTA_ACCESS_TOKEN=${ANIMETTA_ACCESS_TOKEN:?ANIMETTA_ACCESS_TOKEN is required}
+      - ANIMETTA_REDIS_URL=${ANIMETTA_REDIS_URL:-redis://:${ANIMETTA_REDIS_PASSWORD}@redis:6379/0}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - MIMO_API_KEY=${MIMO_API_KEY:-}
@@ -25,8 +44,11 @@ services:
       - animetta-memory-db:/app/memory_db
       - animetta-data:/app/data
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:80/ready"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:80/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -35,3 +57,4 @@ services:
 volumes:
   animetta-memory-db:
   animetta-data:
+  animetta-redis:

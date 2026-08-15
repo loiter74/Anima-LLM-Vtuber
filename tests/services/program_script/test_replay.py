@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -81,7 +82,8 @@ async def test_replay_failure_stops_without_reusing_the_failed_event() -> None:
 
 
 async def test_replay_accepts_matching_prelive_room() -> None:
-    coordinator = ProgramReplayCoordinator()
+    delete_checkpoint = AsyncMock()
+    coordinator = ProgramReplayCoordinator(checkpoint_delete=delete_checkpoint)
     received = asyncio.Event()
 
     async def dispatch(_event: LivestreamEvent) -> None:
@@ -106,6 +108,8 @@ async def test_replay_accepts_matching_prelive_room() -> None:
 
     await asyncio.wait_for(received.wait(), timeout=1)
     await wait_until(lambda: coordinator.get_run(started["replay_id"])["state"] == "completed")
+    await wait_until(lambda: delete_checkpoint.await_count == 1)
+    delete_checkpoint.assert_awaited_once_with(f"replay:{started['replay_id']}")
 
 
 @pytest.mark.parametrize(

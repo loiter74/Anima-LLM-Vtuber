@@ -20,9 +20,7 @@ from loguru import logger
 
 from animetta.config.manifest import EffectiveConfig, load_effective_config
 from animetta.config.user import UserSettings
-from animetta.core.redis_checkpoint import AsyncRedisSaver
 from animetta.inspection.scheduler import InspectionScheduler
-from animetta.orchestration.graph.builder import set_external_checkpointer
 from animetta.orchestration.server.websocket import (
     SINGING_SOCKET_MAX_BUFFER_BYTES,
     WebSocketServer,
@@ -192,11 +190,8 @@ def get_asgi_app() -> Starlette:
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
         )
 
-        # ── Redis checkpoint setup ──────────────────────────────
-        _setup_checkpointer()
-
         # Create server
-        _server = create_server(global_config)
+        _server = create_server(global_config, redis_url=_server_args.redis_url)
         _server.set_user_settings(user_settings)
 
         # Start background model warmup (non-blocking - models load while server accepts connections)
@@ -313,29 +308,6 @@ def _wrap_with_frontend_serving(app: Starlette) -> Starlette:
     app.add_middleware(FrontendServingMiddleware)
     logger.info("[Frontend] SPA middleware registered — /api/ and /socket.io/ pass through")
     return app
-
-
-def _setup_checkpointer() -> None:
-    """Set up the LangGraph checkpointer based on --redis-url.
-
-    If --redis-url is given, tries to create an AsyncRedisSaver.
-    On failure, or if --redis-url is absent, falls back to MemorySaver.
-    """
-
-    redis_url = _server_args.redis_url
-
-    if not redis_url:
-        logger.info("[Checkpoint] --redis-url not set, using in-memory MemorySaver")
-        return  # keep default builder behavior (no external checkpointer)
-
-    try:
-        checkpointer = AsyncRedisSaver(redis_url)
-        set_external_checkpointer(checkpointer)
-        logger.info(f"[Checkpoint] Redis checkpointer active: {redis_url}")
-    except Exception as e:
-        logger.warning(
-            f"[Checkpoint] Redis unavailable ({e}), falling back to in-memory MemorySaver"
-        )
 
 
 if __name__ == "__main__":

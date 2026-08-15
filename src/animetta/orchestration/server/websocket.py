@@ -11,6 +11,7 @@ import socketio
 from loguru import logger
 from prometheus_client import CollectorRegistry, generate_latest
 from starlette.applications import Starlette
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
@@ -27,6 +28,7 @@ from animetta.config.user import UserSettings
 from animetta.core.component_readiness import ComponentReadinessCache
 from animetta.core.model_loading_manager import ModelLoadingManager
 from animetta.core.readiness import frontend_asset_readiness, unwrap_tracing_proxy
+from animetta.core.redis_checkpoint import RedisCheckpointRuntime
 from animetta.core.service_pool import ServicePool
 from animetta.core.shared_memory_runtime import SharedMemoryRuntime
 from animetta.inspection.runtime import InspectionRuntime
@@ -57,9 +59,11 @@ from .lifecycle import LifecycleManager
 from .live2d import Live2DManager
 from .program_script_api import get_program_script_routes
 from .routes import RouteHandlers, register_routes
+from .security import AuthenticationMiddleware, SecurityRuntime, get_auth_routes
 from .session import SessionManager
 from .stats_api import (
     get_stats_routes,
+    set_checkpoint_readiness,
     set_component_readiness_cache,
     set_model_manager,
     set_runtime_readiness_context,
@@ -71,7 +75,12 @@ SINGING_SOCKET_MAX_BUFFER_BYTES = 96 * 1024 * 1024
 class WebSocketServer:
     """WebSocket server"""
 
-    def __init__(self, config: EffectiveConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: EffectiveConfig | None = None,
+        *,
+        redis_url: str | None = None,
+    ) -> None:
         """Initialize WebSocket server"""
         self.config = config
         translation_state.apply_runtime_config(config)
@@ -86,10 +95,15 @@ class WebSocketServer:
         self.observation_query: ObservationQuery
         self.observation_report_store: ObservationReportStore
         self._configure_observation_dependencies(config)
+        self.security = SecurityRuntime.from_effective_config(
+            config,
+            observation_recorder=self.observation_recorder,
+        )
+        self.checkpoint_runtime = RedisCheckpointRuntime(redis_url)
 
         self.sio = socketio.AsyncServer(
             async_mode="asgi",
-            cors_allowed_origins="*",
+            cors_allowed_origins=list(self.security.config.allowed_origins),
             cors_credentials=True,
             logger=False,
             engineio_logger=False,
@@ -131,8 +145,11 @@ class WebSocketServer:
         self.program_runner = ProgramScriptRunner(
             self.program_repository,
             memory_runtime=self.memory_runtime,
+            checkpoint_delete=self.checkpoint_runtime.delete_thread,
         )
-        self.program_replay = ProgramReplayCoordinator()
+        self.program_replay = ProgramReplayCoordinator(
+            checkpoint_delete=self.checkpoint_runtime.delete_thread,
+        )
         program_routes = get_program_script_routes(
             self.program_repository,
             self.program_runner,
@@ -243,13 +260,38 @@ class WebSocketServer:
 
         @asynccontextmanager
         async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+            checkpoint_health = await self.checkpoint_runtime.start()
+            set_checkpoint_readiness(checkpoint_health.public_dict())
             await self._start_observability()
             recovered = await self.command_inbox.start()
             if recovered:
                 logger.warning("[CommandInbox] Interrupted {} stale command(s)", recovered)
+            if checkpoint_health.available:
+                try:
+                    reconciled = await self.command_inbox.reconcile_waiting_approvals(
+                        self.checkpoint_runtime.has_thread
+                    )
+                    if reconciled:
+                        logger.warning(
+                            "[CommandInbox] Failed {} approval(s) without checkpoints",
+                            reconciled,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "[CommandInbox] Approval reconciliation deferred: error_type={}",
+                        type(exc).__name__,
+                    )
             self.supervise_background(
                 self._command_inbox_cleanup_loop(),
                 name="command_inbox_cleanup",
+            )
+            self.supervise_background(
+                self._approval_timeout_loop(),
+                name="approval_timeout",
+            )
+            self.supervise_background(
+                self._checkpoint_health_loop(),
+                name="checkpoint_health",
             )
             await self.component_readiness_cache.start()
             if self.route_handlers:
@@ -260,7 +302,8 @@ class WebSocketServer:
                 await self._cleanup_all_resources()
 
         self.asgi_app = Starlette(
-            routes=stats_routes
+            routes=get_auth_routes(self.security)
+            + stats_routes
             + metrics_route
             + singing_routes
             + config_routes
@@ -268,6 +311,14 @@ class WebSocketServer:
             + frontend_routes
             + [Mount("/", app=sio_app)],
             lifespan=lifespan,
+        )
+        self.asgi_app.add_middleware(AuthenticationMiddleware, security=self.security)
+        self.asgi_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(self.security.config.allowed_origins),
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
         )
         self.asgi_app.state.observation_query = self.observation_query
         self.asgi_app.state.program_repository = self.program_repository
@@ -290,6 +341,7 @@ class WebSocketServer:
             model_manager=self.model_manager,
             memory_runtime=self.memory_runtime,
             observation_recorder=self.observation_recorder,
+            checkpoint_runtime=self.checkpoint_runtime,
         )
         self.desktop_manager = DesktopClientManager()
         self.live2d_manager = Live2DManager()
@@ -298,7 +350,10 @@ class WebSocketServer:
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
         logger.info("[Socket.IO] Server created with async_mode='asgi'")
-        logger.info("[Socket.IO] CORS enabled: origins=*")
+        logger.info(
+            "[Socket.IO] CORS enabled for {} exact origin(s)",
+            len(self.security.config.allowed_origins),
+        )
 
     def _configure_observation_dependencies(
         self,
@@ -535,6 +590,7 @@ class WebSocketServer:
             observation_query=self.observation_query,
             observation_report_store=self.observation_report_store,
             command_inbox=self.command_inbox,
+            security=self.security,
         )
 
         async def dispatch_program(text: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -613,6 +669,18 @@ class WebSocketServer:
             if removed:
                 logger.info("[CommandInbox] Removed {} expired task(s)", removed)
 
+    async def _approval_timeout_loop(self) -> None:
+        while True:
+            await asyncio.sleep(1)
+            if self.route_handlers is not None:
+                await self.route_handlers.expire_tool_approvals()
+
+    async def _checkpoint_health_loop(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            health = await self.checkpoint_runtime.check_health()
+            set_checkpoint_readiness(health.public_dict())
+
     async def _stop_background_tasks(self) -> None:
         tasks = tuple(self._background_tasks)
         for task in tasks:
@@ -657,6 +725,8 @@ class WebSocketServer:
 
         await self.memory_runtime.shutdown()
         await self.command_inbox.close()
+        await self.checkpoint_runtime.close()
+        set_checkpoint_readiness(self.checkpoint_runtime.health.public_dict())
         await ServicePool.shutdown()
         if self.observation_ledger is not None:
             await self.observation_ledger.close()
@@ -681,9 +751,13 @@ class WebSocketServer:
         logger.info("WebSocket server stopped")
 
 
-def create_server(config: EffectiveConfig | None = None) -> WebSocketServer:
+def create_server(
+    config: EffectiveConfig | None = None,
+    *,
+    redis_url: str | None = None,
+) -> WebSocketServer:
     """Create a WebSocket server instance"""
-    server = WebSocketServer(config)
+    server = WebSocketServer(config, redis_url=redis_url)
     server.setup_routes()
     server.setup_lifecycle()
     # Pass config to route handlers

@@ -7,6 +7,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from animetta.config.runtime_reload import ReloadResult
+from animetta.config.security import SecurityConfig
 from animetta.orchestration.server.websocket import WebSocketServer
 
 
@@ -17,6 +18,8 @@ def _make_runtime_config(
     system_prompt: str = "test runtime prompt",
 ):
     return SimpleNamespace(
+        profile="test",
+        security=SecurityConfig(allowed_origins=("http://127.0.0.1:12394",)),
         persona=persona,
         agent=SimpleNamespace(llm_config=llm_config),
         get_system_prompt=lambda live2d_prompt=None: system_prompt,
@@ -90,7 +93,7 @@ def test_reload_config_endpoint_applies_reloaded_config_to_contexts():
 
 
 def test_reload_config_endpoint_returns_400_on_validation_failure():
-    server = WebSocketServer(config=MagicMock())
+    server = WebSocketServer(config=_make_runtime_config())
     server.runtime_reloader = MagicMock()
     server.runtime_reloader.reload.return_value = ReloadResult(
         ok=False,
@@ -110,7 +113,7 @@ def test_reload_config_endpoint_returns_400_on_validation_failure():
 
 @pytest.mark.asyncio
 async def test_apply_reloaded_config_updates_existing_contexts():
-    server = WebSocketServer(config=MagicMock())
+    server = WebSocketServer(config=_make_runtime_config())
     new_config = MagicMock()
     ctx = MagicMock()
     ctx.config = MagicMock()

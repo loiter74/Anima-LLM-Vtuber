@@ -27,6 +27,8 @@ export function useSocket() {
       reconnectionDelay: 3000,
       reconnectionAttempts: Infinity,
       timeout: 120000,
+      autoConnect: false,
+      withCredentials: true,
     })
 
     socket.on('connect', () => {
@@ -99,6 +101,7 @@ export function useSocket() {
   onMounted(() => {
     // Show connecting state until first connect/error event fires
     store.setStatus(socket?.connected ? 'connected' : 'connecting')
+    void ensureAuthenticatedSession()
   })
 
   return { socket, connectionStatus: store.status }
@@ -107,4 +110,21 @@ export function useSocket() {
 /** Get the global socket instance for use in composables */
 export function getSocket(): Socket | null {
   return socket
+}
+
+export async function ensureAuthenticatedSession(): Promise<boolean> {
+  if (!socket) return false
+  try {
+    const response = await fetch('/api/auth/session', { credentials: 'same-origin' })
+    if (!response.ok) {
+      window.dispatchEvent(new CustomEvent('animetta:auth-required'))
+      return false
+    }
+    socket.connect()
+    window.dispatchEvent(new CustomEvent('animetta:auth-ready'))
+    return true
+  } catch {
+    window.dispatchEvent(new CustomEvent('animetta:auth-required'))
+    return false
+  }
 }

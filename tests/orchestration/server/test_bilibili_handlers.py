@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from animetta.config import ReplyPolicyConfig
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.orchestration.server.handlers.bilibili_handlers import BilibiliHandlers
 from animetta.services.bilibili import DanmakuMessage, LivestreamEvent, LivestreamEventType
 from animetta.services.bilibili.livestream_session import StaleGenerationError
@@ -458,8 +459,12 @@ async def test_program_danmaku_uses_controlled_actor_probe_and_checkpoint_metada
             "program_beat_id": "q09",
             "is_probe": True,
             "memory_mode": "probe",
-            "checkpoint_thread_id": "program:run-1:q09",
-            "retention_policy": "ephemeral",
+            "checkpoint_request": CheckpointRequest(
+                thread_id="program:run-1:q09",
+                owner_kind="program",
+                owner_id="run-1",
+                retention="temporary",
+            ),
             "scene_guidance": scripted_guidance,
         },
         room_id=1,
@@ -471,6 +476,11 @@ async def test_program_danmaku_uses_controlled_actor_probe_and_checkpoint_metada
     assert kwargs["turn_id"] == "00000000-0000-4000-8000-000000000009"
     assert kwargs["is_probe"] is True
     assert kwargs["memory_mode"] == "probe"
-    assert kwargs["checkpoint_thread_id"] == "program:run-1:q09"
+    assert kwargs["checkpoint_request"] == CheckpointRequest(
+        thread_id="program:run-1:q09",
+        owner_kind="program",
+        owner_id="run-1",
+        retention="temporary",
+    )
     assert kwargs["scene_guidance"] == scripted_guidance
     assert scene_runtime.host_replies == []

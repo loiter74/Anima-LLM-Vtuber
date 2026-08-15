@@ -5,13 +5,21 @@ RouteHandlers acts as a facade that delegates to domain-specific handlers.
 """
 
 import asyncio
+import time
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+from socketio.exceptions import ConnectionRefusedError
 
 from animetta.config.manifest import EffectiveConfig
 from animetta.config.user import UserSettings
-from animetta.services.command_inbox import ACTIVE_STATUSES, CommandInbox, CommandKey
+from animetta.orchestration.graph.checkpointing import CheckpointRequest
+from animetta.services.command_inbox import (
+    ACTIVE_STATUSES,
+    CommandInbox,
+    CommandInboxError,
+    CommandKey,
+)
 
 from ..socket_events import EVENTS, event_aliases, event_name
 from .desktop import DesktopClientManager
@@ -27,6 +35,7 @@ from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
+from .security import RateLimitError, SecurityRuntime
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -257,6 +266,107 @@ class RouteHandlers:
         await self.sio.emit(EVENTS["task"]["snapshot"]["name"], snapshot, to=sid)
         return {"ok": True, "data": snapshot}
 
+    async def on_tool_approval_list(
+        self,
+        sid: str,
+        data: dict | None = None,
+    ) -> dict[str, Any]:
+        del sid, data
+        tasks = await self.command_inbox.waiting_approvals()
+        return {"ok": True, "approvals": [_approval_snapshot(task) for task in tasks]}
+
+    async def on_tool_approval_decide(self, sid: str, data: dict) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            return _task_error("INVALID_REQUEST", "approval decision must be an object")
+        if set(data) - {"approval_id", "decision"}:
+            return _task_error("INVALID_REQUEST", "approval parameters cannot be edited")
+        approval_id = str(data.get("approval_id") or "").strip()
+        decision = str(data.get("decision") or "").strip()
+        if not approval_id or decision not in {"approve", "reject"}:
+            return _task_error("INVALID_REQUEST", "approval_id and approve/reject are required")
+        task = next(
+            (
+                item
+                for item in await self.command_inbox.waiting_approvals()
+                if (item.progress or {}).get("approval_id") == approval_id
+            ),
+            None,
+        )
+        if task is None:
+            return _task_error("APPROVAL_NOT_FOUND", "approval is no longer pending")
+        approval = dict(task.progress or {})
+        expired = int(approval.get("expires_at") or 0) <= int(time.time())
+        approved = decision == "approve" and not expired
+        request = CheckpointRequest(
+            thread_id=str(approval["thread_id"]),
+            owner_kind=approval["owner_kind"],
+            owner_id=str(approval["owner_id"]),
+            retention=approval["retention"],
+        )
+        try:
+            await self.command_inbox.resume_after_approval(task.key)
+        except CommandInboxError:
+            return _task_error("APPROVAL_NOT_FOUND", "approval is no longer pending")
+        try:
+            orchestrator = await self.base.get_or_create_orchestrator(sid)
+            result = await orchestrator.resume_checkpoint(
+                request,
+                approval_id=approval_id,
+                approved=approved,
+            )
+            if not approved:
+                resolved = await self.command_inbox.cancel(
+                    task.key,
+                    message="Approval rejected",
+                )
+            elif result.get("error"):
+                resolved = await self.command_inbox.fail(
+                    task.key,
+                    error_code=str(result["error"]),
+                    error_message=str(result["error"]),
+                )
+            else:
+                resolved = await self.command_inbox.succeed(
+                    task.key,
+                    {
+                        "text": str(result.get("response_text") or ""),
+                        "approval_id": approval_id,
+                        "approved": approved,
+                    },
+                )
+        except Exception as exc:
+            resolved = await self.command_inbox.fail(
+                task.key,
+                error_code=str(getattr(exc, "code", "APPROVAL_RESUME_FAILED")),
+                error_message=str(exc),
+            )
+        payload = {
+            **resolved.snapshot(),
+            "approval_id": approval_id,
+            "decision": "approve" if approved else "reject",
+            "reason": "timeout" if expired else None,
+        }
+        await self.sio.emit(event_name("tool", "approval_resolved"), payload)
+        return {"ok": True, "data": payload}
+
+    async def expire_tool_approvals(self) -> int:
+        expired = 0
+        now = int(time.time())
+        for task in await self.command_inbox.waiting_approvals():
+            approval = dict(task.progress or {})
+            if int(approval.get("expires_at") or 0) > now:
+                continue
+            response = await self.on_tool_approval_decide(
+                str(approval.get("session_id") or "timeout"),
+                {
+                    "approval_id": str(approval.get("approval_id") or ""),
+                    "decision": "reject",
+                },
+            )
+            if response.get("ok") is True:
+                expired += 1
+        return expired
+
     # ── Connection events ─────────────────────────────────────────────
 
     async def on_connect(self, sid: str, environ: dict) -> None:
@@ -453,6 +563,7 @@ def register_routes(
     observation_query: "ObservationQuery | None" = None,
     observation_report_store: "ObservationReportStore | None" = None,
     command_inbox: CommandInbox | None = None,
+    security: SecurityRuntime | None = None,
 ) -> RouteHandlers:
     """Register all routes to the Socket.IO server."""
     handlers = RouteHandlers(
@@ -468,9 +579,39 @@ def register_routes(
 
     handlers.bilibili.configure(bilibili_config)
 
+    security = security or SecurityRuntime.from_effective_config(None)
+
     # Connection events
-    sio.on("connect", handlers.on_connect)
-    sio.on("disconnect", handlers.on_disconnect)
+    async def connect_adapter(
+        sid: str,
+        environ: dict[str, Any],
+        auth: dict[str, Any] | None = None,
+    ) -> bool | None:
+        ip = str(environ.get("REMOTE_ADDR") or "unknown")
+        try:
+            security.check_connection_limit(ip)
+        except RateLimitError as exc:
+            await security.record_error("RATE_LIMITED", surface="socket_connect")
+            raise ConnectionRefusedError(
+                {"code": "RATE_LIMITED", "retry_after": exc.retry_after}
+            ) from exc
+        principal = security.authenticate_socket(environ, auth)
+        if principal is None:
+            await security.record_error("UNAUTHORIZED", surface="socket_connect")
+            raise ConnectionRefusedError({"code": "UNAUTHORIZED"})
+        security.bind_socket(sid, principal)
+        await handlers.on_connect(sid, environ)
+        pending = await handlers.on_tool_approval_list(sid)
+        for approval in pending["approvals"]:
+            await sio.emit(event_name("tool", "approval_required"), approval, to=sid)
+        return None
+
+    async def disconnect_adapter(sid: str) -> None:
+        security.unbind_socket(sid)
+        await handlers.on_disconnect(sid)
+
+    sio.on("connect", connect_adapter)
+    sio.on("disconnect", disconnect_adapter)
 
     # Conversation events
     text_events = (event_name("chat", "text"), *event_aliases("chat", "text"))
@@ -480,36 +621,82 @@ def register_routes(
             sid: str,
             data: dict,
             _event: str = text_event,
-        ) -> None:
+        ) -> dict[str, Any] | None:
+            limited = await _chat_rate_error(security, sid)
+            if limited is not None:
+                return limited
             await handlers.chat.on_text_event(sid, _event, data)
+            return None
 
         sio.on(text_event, text_adapter)
     developer_text_event = event_name("chat", "developer_text")
 
-    async def developer_text_adapter(sid: str, data: dict) -> None:
+    async def developer_text_adapter(sid: str, data: dict) -> dict[str, Any] | None:
+        limited = await _chat_rate_error(security, sid)
+        if limited is not None:
+            return limited
         await handlers.chat.on_text_event(
             sid,
             developer_text_event,
             data,
             developer_console=True,
         )
+        return None
+
+    def chat_guard(handler: Any) -> Any:
+        async def adapter(sid: str, data: dict) -> Any:
+            limited = await _chat_rate_error(security, sid)
+            return limited if limited is not None else await handler(sid, data)
+
+        return adapter
+
+    def control_guard(handler: Any) -> Any:
+        async def adapter(sid: str, data: dict | None = None) -> Any:
+            limited = await _control_rate_error(security, sid)
+            return limited if limited is not None else await handler(sid, data or {})
+
+        return adapter
 
     sio.on(developer_text_event, developer_text_adapter)
-    sio.on(event_name("chat", "sandbox_request"), handlers.chat.on_sandbox_request)
-    sio.on(event_name("chat", "sandbox_cancel"), handlers.chat.on_sandbox_cancel)
+    sio.on(
+        event_name("chat", "sandbox_request"),
+        chat_guard(handlers.chat.on_sandbox_request),
+    )
+    sio.on(
+        event_name("chat", "sandbox_cancel"),
+        control_guard(handlers.chat.on_sandbox_cancel),
+    )
     sio.on(event_name("chat", "audio"), handlers.on_raw_audio_data)
-    sio.on(event_name("chat", "audio_end"), handlers.on_mic_audio_end)
-    sio.on(event_name("chat", "interrupt"), handlers.on_interrupt_signal)
+    sio.on(
+        event_name("chat", "audio_end"),
+        chat_guard(handlers.on_mic_audio_end),
+    )
+    sio.on(
+        event_name("chat", "interrupt"),
+        control_guard(handlers.on_interrupt_signal),
+    )
 
     # History events
     sio.on(event_name("history", "list"), handlers.on_fetch_history_list)
     sio.on(event_name("history", "fetch"), handlers.on_fetch_history)
-    sio.on(event_name("history", "clear"), handlers.on_clear_history)
-    sio.on(event_name("history", "create"), handlers.on_create_new_history)
+    sio.on(
+        event_name("history", "clear"),
+        control_guard(handlers.on_clear_history),
+    )
+    sio.on(
+        event_name("history", "create"),
+        control_guard(handlers.on_create_new_history),
+    )
 
     # Config events
-    sio.on(event_name("config", "switch"), handlers.on_switch_config)
-    sio.on(event_name("config", "log_level"), handlers.on_set_log_level)
+    sio.on(
+        event_name("config", "switch"),
+        control_guard(handlers.on_switch_config),
+    )
+    sio.on(
+        event_name("config", "log_level"),
+        control_guard(handlers.on_set_log_level),
+    )
     sio.on(event_name("config", "get"), handlers.on_get_config)
 
     # Heartbeat
@@ -518,58 +705,145 @@ def register_routes(
     # Durable task status
     sio.on(event_name("task", "status"), handlers.on_task_status)
 
+    async def approval_list_adapter(sid: str, data: dict | None = None) -> dict[str, Any]:
+        limited = await _control_rate_error(security, sid)
+        if limited is not None:
+            return limited
+        return await handlers.on_tool_approval_list(sid, data)
+
+    async def approval_decide_adapter(sid: str, data: dict) -> dict[str, Any]:
+        limited = await _control_rate_error(security, sid)
+        if limited is not None:
+            return limited
+        return await handlers.on_tool_approval_decide(sid, data)
+
+    sio.on(event_name("tool", "approval_list"), approval_list_adapter)
+    sio.on(event_name("tool", "approval_decide"), approval_decide_adapter)
+
     # Desktop client events
     sio.on(event_name("desktop", "register"), handlers.on_desktop_register)
-    sio.on(event_name("desktop", "live2d_action"), handlers.on_desktop_live2d_action)
-    sio.on(event_name("desktop", "chat_message"), handlers.on_desktop_chat_message)
-    sio.on(event_name("desktop", "voice_start"), handlers.on_desktop_voice_start)
-    sio.on(event_name("desktop", "voice_stop"), handlers.on_desktop_voice_stop)
+    sio.on(
+        event_name("desktop", "live2d_action"),
+        control_guard(handlers.on_desktop_live2d_action),
+    )
+    sio.on(
+        event_name("desktop", "chat_message"),
+        chat_guard(handlers.on_desktop_chat_message),
+    )
+    sio.on(
+        event_name("desktop", "voice_start"),
+        control_guard(handlers.on_desktop_voice_start),
+    )
+    sio.on(
+        event_name("desktop", "voice_stop"),
+        control_guard(handlers.on_desktop_voice_stop),
+    )
 
     # Bilibili frontend control events
-    sio.on(event_name("bilibili", "connect"), handlers.on_bilibili_connect)
-    sio.on(event_name("bilibili", "disconnect"), handlers.on_bilibili_disconnect)
-    sio.on(event_name("bilibili", "update_room"), handlers.on_bilibili_update_room)
+    sio.on(
+        event_name("bilibili", "connect"),
+        control_guard(handlers.on_bilibili_connect),
+    )
+    sio.on(
+        event_name("bilibili", "disconnect"),
+        control_guard(handlers.on_bilibili_disconnect),
+    )
+    sio.on(
+        event_name("bilibili", "update_room"),
+        control_guard(handlers.on_bilibili_update_room),
+    )
 
     # Minecraft bot control events
-    sio.on(event_name("minecraft", "connect"), handlers.on_minecraft_connect)
+    sio.on(
+        event_name("minecraft", "connect"),
+        control_guard(handlers.on_minecraft_connect),
+    )
     sio.on(event_name("minecraft", "status"), handlers.on_minecraft_status)
-    sio.on(event_name("minecraft", "disconnect"), handlers.on_minecraft_disconnect)
-    sio.on(event_name("minecraft", "shutdown"), handlers.on_minecraft_shutdown)
-    sio.on(event_name("minecraft", "reattach_viewer"), handlers.on_minecraft_reattach_viewer)
+    sio.on(
+        event_name("minecraft", "disconnect"),
+        control_guard(handlers.on_minecraft_disconnect),
+    )
+    sio.on(
+        event_name("minecraft", "shutdown"),
+        control_guard(handlers.on_minecraft_shutdown),
+    )
+    sio.on(
+        event_name("minecraft", "reattach_viewer"),
+        control_guard(handlers.on_minecraft_reattach_viewer),
+    )
 
     # Translation configuration events
-    sio.on(event_name("translation", "configure"), handlers.on_translation_configure)
+    sio.on(
+        event_name("translation", "configure"),
+        control_guard(handlers.on_translation_configure),
+    )
 
     # Persona runtime switching
     sio.on(event_name("persona", "list"), handlers.on_get_available_personas)
-    sio.on(event_name("persona", "set"), handlers.on_set_persona)
+    sio.on(
+        event_name("persona", "set"),
+        control_guard(handlers.on_set_persona),
+    )
 
     # Personality mode runtime switching
-    sio.on(event_name("persona", "set_mode"), handlers.on_set_personality_mode)
+    sio.on(
+        event_name("persona", "set_mode"),
+        control_guard(handlers.on_set_personality_mode),
+    )
 
     # Singing module events
-    sio.on(event_name("sing", "process"), handlers.on_sing_process)
-    sio.on(event_name("sing", "confirm_lyrics"), handlers.on_sing_confirm_lyrics)
-    sio.on(event_name("sing", "cancel"), handlers.on_sing_cancel)
+    sio.on(
+        event_name("sing", "process"),
+        control_guard(handlers.on_sing_process),
+    )
+    sio.on(
+        event_name("sing", "confirm_lyrics"),
+        control_guard(handlers.on_sing_confirm_lyrics),
+    )
+    sio.on(
+        event_name("sing", "cancel"),
+        control_guard(handlers.on_sing_cancel),
+    )
     sio.on(event_name("sing", "subtitle_sync"), handlers.on_sing_subtitle_sync)
 
     # Memory: wiki pages (legacy compat — delegates to V2)
-    sio.on(event_name("memory", "organize"), handlers.on_memory_organize)
+    sio.on(
+        event_name("memory", "organize"),
+        control_guard(handlers.on_memory_organize),
+    )
     sio.on(event_name("memory", "list"), handlers.on_memory_list)
     sio.on(event_name("memory", "get"), handlers.on_memory_get)
     sio.on(event_name("memory", "search"), handlers.on_memory_search)
-    sio.on(event_name("memory", "pin"), handlers.on_memory_pin)
-    sio.on(event_name("memory", "forget"), handlers.on_memory_forget)
-    sio.on(event_name("memory", "change"), handlers.on_memory_change)
+    sio.on(
+        event_name("memory", "pin"),
+        control_guard(handlers.on_memory_pin),
+    )
+    sio.on(
+        event_name("memory", "forget"),
+        control_guard(handlers.on_memory_forget),
+    )
+    sio.on(
+        event_name("memory", "change"),
+        control_guard(handlers.on_memory_change),
+    )
     sio.on(event_name("memory", "job"), handlers.on_memory_job)
     sio.on(event_name("memory", "list_pages"), handlers.on_get_wiki_pages)
 
     # Meme review
-    sio.on(event_name("meme", "add"), handlers.on_add_meme)
+    sio.on(
+        event_name("meme", "add"),
+        control_guard(handlers.on_add_meme),
+    )
     sio.on(event_name("meme", "list"), handlers.on_list_memes)
-    sio.on(event_name("meme", "review"), handlers.on_review_meme)
+    sio.on(
+        event_name("meme", "review"),
+        control_guard(handlers.on_review_meme),
+    )
     sio.on(event_name("meme", "dataset"), handlers.on_export_meme_dataset)
-    sio.on(event_name("meme", "collect"), handlers.on_collect_memes)
+    sio.on(
+        event_name("meme", "collect"),
+        control_guard(handlers.on_collect_memes),
+    )
 
     logger.info("WebSocket routes registered")
     return handlers
@@ -577,3 +851,46 @@ def register_routes(
 
 def _task_error(code: str, message: str) -> dict[str, Any]:
     return {"ok": False, "error": {"code": code, "message": message}}
+
+
+async def _control_rate_error(security: SecurityRuntime, sid: str) -> dict[str, Any] | None:
+    rate_owner = security.socket_rate_owner(sid)
+    if rate_owner is None:
+        await security.record_error("UNAUTHORIZED", surface="socket_control")
+        return _task_error("UNAUTHORIZED", "Authentication required")
+    try:
+        security.check_control_limit(rate_owner)
+    except RateLimitError as exc:
+        await security.record_error("RATE_LIMITED", surface="socket_control")
+        return {
+            **_task_error("RATE_LIMITED", "Control rate limit exceeded"),
+            "retry_after": exc.retry_after,
+        }
+    return None
+
+
+async def _chat_rate_error(security: SecurityRuntime, sid: str) -> dict[str, Any] | None:
+    rate_owner = security.socket_rate_owner(sid)
+    if rate_owner is None:
+        await security.record_error("UNAUTHORIZED", surface="socket_chat")
+        return _task_error("UNAUTHORIZED", "Authentication required")
+    try:
+        security.check_chat_limit(rate_owner)
+    except RateLimitError as exc:
+        await security.record_error("RATE_LIMITED", surface="socket_chat")
+        return {
+            **_task_error("RATE_LIMITED", "Chat rate limit exceeded"),
+            "retry_after": exc.retry_after,
+        }
+    return None
+
+
+def _approval_snapshot(task: Any) -> dict[str, Any]:
+    return {
+        **dict(task.progress or {}),
+        "kind": task.key.kind,
+        "task_id": task.key.task_id,
+        "status": task.status.value,
+        "created_at": task.created_at_ms,
+        "updated_at": task.updated_at_ms,
+    }

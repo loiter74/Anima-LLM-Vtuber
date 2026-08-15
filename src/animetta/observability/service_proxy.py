@@ -99,7 +99,11 @@ class InstrumentedServiceProxy:
                     raise
                 finally:
                     if completed:
-                        await self._finish(started, OperationStatus.SUCCESS)
+                        await self._finish(
+                            started,
+                            OperationStatus.SUCCESS,
+                            attributes=self._usage_attributes(),
+                        )
                     elif not started["finished"]:
                         await self._finish(started, OperationStatus.CANCELLED)
 
@@ -124,7 +128,11 @@ class InstrumentedServiceProxy:
                     raise
                 finally:
                     detach_observation_context(token)
-                await self._finish(started, OperationStatus.SUCCESS)
+                await self._finish(
+                    started,
+                    OperationStatus.SUCCESS,
+                    attributes=self._usage_attributes(),
+                )
                 return result
 
             return observed_call
@@ -178,6 +186,7 @@ class InstrumentedServiceProxy:
         *,
         error_type: str | None = None,
         error_summary: str | None = None,
+        attributes: dict[str, Any] | None = None,
     ) -> None:
         if started["finished"]:
             return
@@ -190,8 +199,16 @@ class InstrumentedServiceProxy:
                 time.time(),
                 error_type=error_type,
                 error_summary=error_summary,
+                attributes=attributes or {},
             )
         )
+
+    def _usage_attributes(self) -> dict[str, Any]:
+        target = object.__getattribute__(self, "_target")
+        consume = getattr(target, "consume_usage", None)
+        usage = consume() if callable(consume) else None
+        attributes = getattr(usage, "observation_attributes", None)
+        return attributes() if callable(attributes) else {}
 
     async def _finish_error(
         self,

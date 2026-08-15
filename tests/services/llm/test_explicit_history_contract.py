@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import AsyncIterator, Callable
+from contextvars import ContextVar
 from importlib import import_module
 from importlib.machinery import ModuleSpec
 from types import ModuleType, SimpleNamespace
@@ -59,6 +60,8 @@ def _openai(provider_identity: str) -> tuple[OpenAILLM, list[list[dict]]]:
     instance.extra_body = {}
     instance.history = [{"role": "assistant", "content": "shared-sentinel"}]
     instance._provider_identity = provider_identity
+    instance.pricing = None
+    instance._last_usage = ContextVar(f"test_usage_{provider_identity}", default=None)
     instance.client = SimpleNamespace(
         chat=SimpleNamespace(completions=SimpleNamespace(create=create))
     )

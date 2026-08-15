@@ -37,6 +37,12 @@ input_sets:
       - evaluations/livestream/**
       - tests/evaluations/livestream/**
       - src/animetta/services/bilibili/**
+  agent-evaluation-runtime:
+    paths:
+      - evaluations/agent/**
+      - tests/evaluations/agent/**
+      - src/animetta/services/llm/usage.py
+      - src/animetta/config/providers/llm/pricing.py
   frontend-toolchain:
     paths:
       - frontend/package.json
@@ -327,6 +333,79 @@ groups:
     resource_class: cpu
     resource_weight: 2
     input_sets: [python-toolchain]
+
+  agent-security-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/config/test_security_config.py
+      - tests/orchestration/server/test_security.py
+      - tests/orchestration/graph/test_tool_execution_policy.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
+
+  agent-recovery-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/core/test_redis_checkpoint.py
+      - tests/orchestration/graph/test_builder.py
+      - tests/orchestration/graph/test_orchestrator.py
+      - tests/services/test_command_inbox.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 240
+    cacheable: true
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [python-toolchain]
+
+  agent-approval-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/orchestration/graph/test_tool_approval.py
+      - tests/orchestration/server/test_tool_approval_routes.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain]
+
+  agent-trajectory-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets: [tests/evaluations/agent/test_agent_evaluation.py]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    include_in_nightly: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, agent-evaluation-runtime]
+
+  agent-cost-unit:
+    domain: backend
+    kind: contract
+    runner: pytest
+    targets:
+      - tests/services/llm/test_usage.py
+      - tests/evaluations/agent/test_agent_evaluation.py
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 180
+    include_in_nightly: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, agent-evaluation-runtime]
 
   persona-config-unit:
     domain: backend
@@ -673,7 +752,7 @@ groups:
       - --cov=src/animetta
       - --cov-report=term-missing
       - --cov-report=xml
-      - --cov-fail-under=67
+      - --cov-fail-under=75
     timeout_seconds: 1800
     artifacts: [coverage.xml]
     include_in_full: true
@@ -701,6 +780,11 @@ groups:
       - backend-acceptance-unit
       - livestream-continuity-contract
       - backend-avatar-unit
+      - agent-security-unit
+      - agent-recovery-unit
+      - agent-approval-unit
+      - agent-trajectory-unit
+      - agent-cost-unit
 
   backend-deadcode:
     domain: repository
@@ -828,7 +912,7 @@ groups:
     kind: smoke
     runner: docker
     isolation: hermetic
-    args: [compose, -f, docker-compose.yml, config, --quiet]
+    args: [compose, -f, docker-compose.yml, config, --quiet, --no-interpolate]
     capabilities: [docker]
     timeout_seconds: 180
     include_in_full: true
@@ -850,6 +934,69 @@ groups:
     input_sets: [operational-source]
 
 components:
+  agent-production-security:
+    domain: backend
+    paths:
+      - src/animetta/config/security.py
+      - src/animetta/orchestration/server/security.py
+      - src/animetta/orchestration/graph/tool_execution_policy.py
+      - tests/config/test_security_config.py
+      - tests/orchestration/server/test_security.py
+      - tests/orchestration/graph/test_tool_execution_policy.py
+    direct_groups:
+      - agent-security-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+      - security-secrets
+    impacts: [orchestration-server, orchestration-graph]
+    risk: high
+
+  agent-durable-execution:
+    domain: backend
+    paths:
+      - src/animetta/core/redis_checkpoint.py
+      - src/animetta/orchestration/graph/checkpointing.py
+      - src/animetta/orchestration/graph/builder.py
+      - src/animetta/orchestration/graph/orchestrator.py
+      - src/animetta/orchestration/graph/tool_node.py
+      - src/animetta/services/command_inbox.py
+      - tests/core/test_redis_checkpoint.py
+      - tests/orchestration/graph/test_builder.py
+      - tests/orchestration/graph/test_orchestrator.py
+      - tests/orchestration/graph/test_tool_approval.py
+      - tests/orchestration/server/test_tool_approval_routes.py
+      - tests/services/test_command_inbox.py
+    direct_groups:
+      - agent-recovery-unit
+      - agent-approval-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: [orchestration-server, orchestration-graph]
+    risk: high
+
+  agent-evaluation:
+    domain: backend
+    paths:
+      - evaluations/agent/**
+      - src/animetta/services/llm/usage.py
+      - src/animetta/config/providers/llm/pricing.py
+      - tests/evaluations/agent/**
+      - tests/services/llm/test_usage.py
+    direct_groups:
+      - agent-trajectory-unit
+      - agent-cost-unit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-support-typecheck
+      - backend-deadcode
+    impacts: [backend-services]
+    risk: high
+
   livestream-conversation-continuity:
     domain: backend
     paths:
