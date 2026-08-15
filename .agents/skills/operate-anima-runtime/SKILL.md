@@ -18,6 +18,17 @@ description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS、宿
 7. 只有协议全部通过后才报告运行时健康结论。
 8. 请求还包含打开或显示直播页面时，运行时 ready 后把页面解析与打开交给 `$review-anima-live`；组合顺序固定为运行时就绪、用户要求的 Anima 后台动作、直播页面交接。
 
+## 生产验收收敛
+
+只有明确要求 production 发布、恢复或持久化验收时执行以下顺序：
+
+1. 先用目标测试和最小能力探针消除已知风险，再冻结待部署差异；冻结前不得运行 affected、full 或正式生命周期。
+2. Redis 或外部镜像能力异常时，先复现 Compose 的实际启动命令并检查官方 entrypoint；替换镜像或自建镜像前，必须验证 `FT.CREATE`、`JSON.SET` 和官方 `AsyncRedisSaver` 初始化。不得从 `PING` 或绕过 entrypoint 的容器推断模块缺失。
+3. 在 affected 前覆盖正式入口的静态代理契约，至少包含 `/health`、`/ready`、`/metrics`、`/api/**` 和 Socket.IO，避免只验证直连后端。
+4. 差异冻结后只运行一次 affected 门禁；通过后才执行一次 production 生命周期和一次 interrupt → restart → `Command(resume=...)` 恢复验收。
+5. production 发现源码或配置缺陷时立即终止本轮验收；修复后重新冻结、运行相关目标测试和一次新的 affected，再使用新的生命周期 run ID。不得在代码继续变化时并行验收旧镜像。
+6. 临时 token 与密码必须在承载整个续跑和验收的同一子进程中生成并保留；禁止输出完整环境、`Config.Env`、密钥值或含密钥的 URL，只查询白名单状态字段。
+
 ## 约束
 
 - 不在主智能体中启动后端或 Compose。

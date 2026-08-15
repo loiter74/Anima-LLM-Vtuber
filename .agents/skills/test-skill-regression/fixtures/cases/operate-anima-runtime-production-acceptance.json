@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "operate-anima-runtime-production-acceptance",
+  "skill": "operate-anima-runtime",
+  "task": "使用 $operate-anima-runtime 读取 request.md，只生成 result/plan.md，不启动服务、Docker 或浏览器。严格按 request.md 的输出模板逐字填写，不增加解释。",
+  "baseline": "../baselines/operate-anima-runtime-production-acceptance",
+  "run_count": 3,
+  "allowed_paths": ["result/plan.md"],
+  "require_content_identical": true,
+  "invariants": [
+    {
+      "path": "result/plan.md",
+      "contains": [
+        "冻结: 目标测试和最小能力探针 -> 冻结差异 -> affected 一次",
+        "Redis: Compose 实际命令 -> 官方 entrypoint -> FT.CREATE + JSON.SET + AsyncRedisSaver",
+        "入口: /health + /ready + /metrics + /api/** + Socket.IO",
+        "恢复: production lifecycle 一次 -> interrupt -> restart -> Command(resume=...)",
+        "保密: 禁止输出完整环境, Config.Env, 密钥值或含密钥 URL"
+      ],
+      "not_contains": ["自建 Redis 镜像", "并行验收旧镜像", "docker inspect .Config.Env"]
+    }
+  ]
+}
