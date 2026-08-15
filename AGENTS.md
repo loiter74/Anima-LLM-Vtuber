@@ -154,6 +154,7 @@ py -3.13 -m tooling.quality verify --tier affected --paths <本次任务路径..
 完成用户要求且验证通过后，默认自动提交本任务修改并安全推送 `origin/main`，无需等待额外指令；用户明确要求不提交或不推送时除外。禁止使用破坏混合工作区的 `git clean`、`git reset --hard`、`git checkout --`。
 
 普通推送采用单次远端刷新路径：确认 `status` / 目标差异 → `fetch origin main` 一次并验证可快进 → 精确暂存 → 提交 → `push origin main`。提交后不得为同一推送重复 fetch；若远端随后变化，由普通 push 的非快进拒绝安全终止并报告。
+对混合行尾文件做部分暂存或构造 blob 时，用 Python 二进制读写生成目标内容，再 `git hash-object -w --no-filters` + `git update-index --cacheinfo` 入库；不得用 sed 管道改写 blob，也不得信任 MSYS 管道（`sed` / `od` / `cat -A`）显示的行尾。
 
 若无法安全隔离当前任务、远端 `main` 已变化、无法快进、分支受保护或推送失败，停止并报告，不得强推。
 
