@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.config.singing import load_singing_config
+from animetta.core.service_pool import ServicePool
 from animetta.services.command_inbox import (
     CommandDecision,
     CommandInbox,
@@ -141,7 +142,10 @@ class SingingHandlers(BaseSocketHandler):
             try:
                 config = load_singing_config()
 
-                pipeline = SVCPipeline(config)
+                pipeline = SVCPipeline(
+                    config,
+                    asr_engine=ServicePool.get_context().get("asr_engine"),
+                )
                 self._pipeline = pipeline
                 self._active_task_id = task_id
 

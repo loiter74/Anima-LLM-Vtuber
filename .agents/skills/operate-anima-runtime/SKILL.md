@@ -28,6 +28,7 @@ description: 安全操作和验收 Animetta 运行时、宿主机 Qwen TTS、宿
 4. 差异冻结后只运行一次 affected 门禁；通过后才执行一次 production 生命周期和一次 interrupt → restart → `Command(resume=...)` 恢复验收。
 5. production 发现源码或配置缺陷时立即终止本轮验收；修复后重新冻结、运行相关目标测试和一次新的 affected，再使用新的生命周期 run ID。不得在代码继续变化时并行验收旧镜像。
 6. 临时 token 与密码必须在承载整个续跑和验收的同一子进程中生成并保留；禁止输出完整环境、`Config.Env`、密钥值或含密钥的 URL，只查询白名单状态字段。
+7. 从隔离 Git 工作树部署时，`COMPOSE_ENV_FILES` 只负责 Compose 插值，不能代替生命周期前置宿主步骤所需的进程环境。启动前在同一专用子进程中安全导入 `QWEN_TTS_API_KEY`、`ANIMETTA_REDIS_PASSWORD`、`ANIMETTA_ACCESS_TOKEN` 等必需值，并先运行不回显配置的 `docker compose config --quiet`；缺值时一次性停止，不得逐项失败后重试。
 
 ## 约束
 

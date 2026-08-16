@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import re
+import tempfile
+import wave
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from animetta.services.asr.interface import ASRInterface
+
 from .interface import LyricLine
 
 
 class LyricsGenerator:
-    """Generate .ass subtitle from vocals audio using Whisper."""
+    """Generate .ass subtitles from vocals audio."""
 
     def __init__(
         self,
@@ -21,12 +25,14 @@ class LyricsGenerator:
         language: str | None = "zh",
         output_dir: str = "./data/singing/lyrics",
         download_root: str = "E:/anima_data/models/whisper",
+        asr_engine: ASRInterface | None = None,
     ):
         self.model_size = model_size
         self.language = language
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.download_root = download_root
+        self._asr_engine = asr_engine
         self._model = None
 
     def _get_model(self):
@@ -44,6 +50,9 @@ class LyricsGenerator:
         """Transcribe vocals audio and generate .ass subtitle content."""
         logger.info(f"Transcribing vocals: {audio_path}")
 
+        if self._asr_engine is not None:
+            return await self._transcribe_with_shared_asr(audio_path, self._asr_engine)
+
         model = self._get_model()
 
         def _do_transcribe():
@@ -60,6 +69,78 @@ class LyricsGenerator:
 
         logger.info(f"Transcription complete: {len(segments)} segments")
         return ass_content
+
+    async def _transcribe_with_shared_asr(
+        self,
+        audio_path: str,
+        asr_engine: ASRInterface,
+    ) -> str:
+        """Use the pooled ASR engine without transferring a large WAV payload."""
+        with tempfile.NamedTemporaryFile(
+            suffix=".mp3",
+            prefix="singing-asr-",
+            dir=self.output_dir,
+            delete=False,
+        ) as compact_file:
+            compact_path = Path(compact_file.name)
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                audio_path,
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-b:a",
+                "64k",
+                str(compact_path),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                detail = stderr.decode("utf-8", errors="replace").strip()
+                raise RuntimeError(f"Failed to compact vocals for ASR: {detail}")
+
+            transcript = (
+                await asr_engine.transcribe(
+                    str(compact_path),
+                    audio_format="mp3",
+                    language=self.language or "auto",
+                )
+            ).strip()
+            if not transcript:
+                raise RuntimeError("Shared ASR returned an empty singing transcript")
+
+            texts = [
+                part.strip()
+                for part in re.split(r"(?<=[。！？!?])|\r?\n+", transcript)
+                if part.strip()
+            ]
+            duration = await asyncio.to_thread(self._wav_duration_seconds, audio_path)
+            lines = [
+                LyricLine(
+                    text=text,
+                    start_ms=round(duration * index / len(texts) * 1000),
+                    end_ms=round(duration * (index + 1) / len(texts) * 1000),
+                )
+                for index, text in enumerate(texts)
+            ]
+            logger.info(f"Shared ASR transcription complete: {len(lines)} lines")
+            return self.build_ass(lines)
+        finally:
+            compact_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _wav_duration_seconds(audio_path: str) -> float:
+        with wave.open(audio_path, "rb") as wav:
+            return wav.getnframes() / wav.getframerate()
 
     def _build_ass_header(self) -> str:
         return """[Script Info]

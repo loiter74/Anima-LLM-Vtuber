@@ -2,8 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import wave
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 from animetta.services.singing.interface import LyricLine, PipelineStage, SongResult
 from animetta.services.singing.lyrics import LyricsGenerator
+
+
+class _FFmpegProcess:
+    returncode = 0
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return b"", b""
 
 
 class TestLyricLine:
@@ -83,3 +96,36 @@ class TestLyricsGenerator:
         content = gen.build_ass(expected)
 
         assert gen.parse_lyric_lines(content) == expected
+
+    async def test_transcribe_uses_shared_asr_without_local_whisper(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "vocals.wav"
+        with wave.open(str(source), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(8000)
+            wav.writeframes(b"\x00\x00" * 32000)
+        asr_engine = SimpleNamespace(transcribe=AsyncMock(return_value="第一行。\n第二行。"))
+
+        async def create_subprocess_exec(*command: str, **_kwargs) -> _FFmpegProcess:
+            assert command[0] == "ffmpeg"
+            Path(command[-1]).write_bytes(b"ID3compact-audio")
+            return _FFmpegProcess()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+        generator = LyricsGenerator(output_dir=str(tmp_path / "lyrics"), asr_engine=asr_engine)
+
+        content = await generator.transcribe(str(source))
+
+        call = asr_engine.transcribe.await_args
+        compact_path = Path(call.args[0])
+        assert compact_path.suffix == ".mp3"
+        assert call.kwargs == {"audio_format": "mp3", "language": "zh"}
+        assert not compact_path.exists()
+        lines = generator.parse_lyric_lines(content)
+        assert [line.text for line in lines] == ["第一行。", "第二行。"]
+        assert [(line.start_ms, line.end_ms) for line in lines] == [
+            (0, 2000),
+            (2000, 4000),
+        ]

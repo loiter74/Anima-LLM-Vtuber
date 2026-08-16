@@ -15,6 +15,7 @@ from loguru import logger
 
 from animetta.avatar.analyzers.audio import AudioAnalyzer
 from animetta.config.singing import SingingConfig
+from animetta.services.asr.interface import ASRInterface
 
 from .bilibili import BilibiliDownloader
 from .interface import (
@@ -34,7 +35,7 @@ from .svc_bridge import SVCBridge
 class SVCPipeline(SingingService):
     """Full SVC pipeline: download → separate → transcribe → SVC → mix."""
 
-    def __init__(self, config: SingingConfig):
+    def __init__(self, config: SingingConfig, *, asr_engine: ASRInterface | None = None):
         self.config = config
         self._stage = PipelineStage.IDLE
         self._progress = 0.0
@@ -74,6 +75,7 @@ class SVCPipeline(SingingService):
             language=config.asr.language,
             output_dir=config.asr.output_dir,
             download_root=config.asr.download_root,
+            asr_engine=asr_engine,
         )
         self._svc = SVCBridge(config.gpt_sovits)
         self._rvc = (

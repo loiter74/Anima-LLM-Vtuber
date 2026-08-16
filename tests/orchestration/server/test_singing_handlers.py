@@ -1,5 +1,6 @@
 """Singing Socket.IO delivery tests."""
 
+import asyncio
 import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -100,3 +101,53 @@ async def test_completed_song_request_replays_without_creating_a_pipeline() -> N
     sio.emit.assert_awaited_once_with("sing:complete", payload, to="retry-sid")
     assert handler._pipeline is None
     await inbox.close()
+
+
+async def test_url_song_reuses_the_pooled_asr_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asr_engine = object()
+    release = asyncio.Event()
+
+    async def process(_url: str, *, auto_confirm_lyrics: bool) -> SongResult:
+        assert auto_confirm_lyrics is True
+        await release.wait()
+        return SongResult(audio_path="data/singing/outputs/song.wav")
+
+    pipeline = SimpleNamespace(
+        set_progress_callback=MagicMock(),
+        process=AsyncMock(side_effect=process),
+        close=AsyncMock(),
+    )
+    captured: dict[str, object] = {}
+
+    def create_pipeline(config: object, *, asr_engine: object | None = None) -> object:
+        captured.update(config=config, asr_engine=asr_engine)
+        return pipeline
+
+    monkeypatch.setattr(singing_handlers, "load_singing_config", lambda: "singing-config")
+    monkeypatch.setattr(
+        singing_handlers,
+        "ServicePool",
+        SimpleNamespace(get_context=lambda: {"asr_engine": asr_engine}),
+        raising=False,
+    )
+    monkeypatch.setattr(singing_handlers, "SVCPipeline", create_pipeline)
+    handler = SingingHandlers(
+        SimpleNamespace(emit=AsyncMock()), MagicMock(), MagicMock(), MagicMock()
+    )
+
+    await handler.on_sing_process(
+        "singing-sid",
+        {
+            "task_id": "url-song-task",
+            "url": "https://www.bilibili.com/video/BV1xF3467Etw",
+            "auto_confirm": True,
+        },
+    )
+
+    assert captured == {"config": "singing-config", "asr_engine": asr_engine}
+    task = handler._run_task
+    assert task is not None
+    release.set()
+    await task
