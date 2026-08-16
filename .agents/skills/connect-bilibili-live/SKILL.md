@@ -9,7 +9,7 @@ description: 连接、切换、查询或断开 Animetta 后端持有的唯一真
 
 ## 流程
 
-1. Windows 首次执行前断言 Python 3.13，并设置当前进程 `PYTHONUTF8=1`。
+1. Windows 首次执行前断言 Python 3.13，并在当前进程设置 `PYTHONUTF8=1` 与运行时使用的 `ANIMETTA_ACCESS_TOKEN`。生产环境下，脚本以 Bearer 令牌检查 `/ready`，再通过 Socket.IO `auth.token` 建立控制连接；不得打印令牌。若令牌为临时值，生成、运行时操作、连接与验收必须保持在同一子进程内。
 2. 用户要求连接时先使用 `$operate-anima-runtime` 检查 `/ready`；未就绪时按其规范启动。冷启动耗时单独报告，不计入 60 秒热启动指标。
 3. 使用 `$review-anima-live` 的 `live` feature 解析并打开当前正式 `/live.html`；不得启动 OBS。记录：
    - `#audioStatus[data-playback-count]` 基线；

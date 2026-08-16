@@ -54,6 +54,7 @@ class FakeSocketIOClient:
         self.connected = False
         self.handlers: dict[str, Handler] = {}
         self.calls: list[tuple[str, dict[str, Any] | None, float]] = []
+        self.connect_kwargs: dict[str, Any] = {}
         self.command_hook: CommandHook | None = None
 
     def on(self, event: str, handler: Handler) -> Handler:
@@ -63,6 +64,7 @@ class FakeSocketIOClient:
     async def connect(self, url: str, **kwargs: Any) -> None:
         assert url.startswith("http://127.0.0.1")
         assert kwargs["wait_timeout"] <= 1.0
+        self.connect_kwargs = kwargs
         if self.connect_error is not None:
             raise self.connect_error
         self.connected = True
@@ -126,6 +128,18 @@ async def test_get_status_reports_backend_unavailable_without_exception_details(
         "status": None,
     }
     assert "SESSDATA" not in repr(result)
+
+
+async def test_transport_uses_access_token_as_socket_auth_without_exposing_it() -> None:
+    access_token = "private-access-token-that-is-long-enough"
+    client = FakeSocketIOClient(status("stopped", 0))
+    controller = BilibiliController(client=client, access_token=access_token)
+
+    result = await controller.get_status()
+
+    assert result["ok"] is True
+    assert client.connect_kwargs["auth"] == {"token": access_token}
+    assert access_token not in repr(controller)
 
 
 async def test_connect_sends_generation_and_accepts_prelive() -> None:

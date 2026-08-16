@@ -230,6 +230,33 @@ def test_runtime_unavailable_stops_before_the_room_command(tmp_path: Path) -> No
     assert controller.closed is False
 
 
+def test_readiness_probe_uses_access_token_as_bearer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli = load_cli()
+    access_token = "private-access-token-that-is-long-enough"
+    monkeypatch.setenv("ANIMETTA_ACCESS_TOKEN", access_token)
+
+    class ReadyResponse:
+        def __enter__(self) -> ReadyResponse:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"ready":true}'
+
+    def urlopen(request: Any, *, timeout: float) -> ReadyResponse:
+        assert timeout == 3.0
+        assert request.get_header("Authorization") == f"Bearer {access_token}"
+        return ReadyResponse()
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
+
+    assert cli.probe_readiness("http://127.0.0.1") is True
+
+
 def test_same_room_connect_remains_idempotent(tmp_path: Path) -> None:
     cli = load_cli()
     config = tmp_path / "bilibili.yaml"

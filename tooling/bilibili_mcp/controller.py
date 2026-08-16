@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
@@ -90,6 +91,7 @@ class BilibiliController:
         *,
         client: SocketIOClient | None = None,
         connection_timeout_seconds: float = 1.0,
+        access_token: str | None = None,
     ) -> None:
         self.server_url = validate_server_url(server_url)
         self.client: SocketIOClient = client or socketio.AsyncClient(
@@ -98,6 +100,10 @@ class BilibiliController:
             engineio_logger=False,
         )
         self.connection_timeout_seconds = connection_timeout_seconds
+        configured_token = (
+            os.environ.get("ANIMETTA_ACCESS_TOKEN", "") if access_token is None else access_token
+        )
+        self._socket_auth = {"token": configured_token} if configured_token else None
         self._status: StatusPayload | None = None
         self._events: deque[dict[str, Any]] = deque(maxlen=EVENT_BUFFER_CAPACITY)
         self._condition = asyncio.Condition()
@@ -289,10 +295,10 @@ class BilibiliController:
             if self._transport_connected and bool(getattr(self.client, "connected", True)):
                 return None
             try:
-                await self.client.connect(
-                    self.server_url,
-                    wait_timeout=self.connection_timeout_seconds,
-                )
+                options: dict[str, Any] = {"wait_timeout": self.connection_timeout_seconds}
+                if self._socket_auth is not None:
+                    options["auth"] = self._socket_auth
+                await self.client.connect(self.server_url, **options)
             except Exception:
                 self._transport_connected = False
                 return _failure(

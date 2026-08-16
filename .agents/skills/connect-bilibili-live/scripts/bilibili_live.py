@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 import time
@@ -78,11 +79,16 @@ def load_default_room(config_path: Path = DEFAULT_CONFIG_PATH) -> int:
 
 def probe_readiness(base_url: str, timeout_seconds: float = 3.0) -> bool:
     """Return whether the current formal runtime reports HTTP readiness."""
+    headers = {"Accept": "application/json"}
+    access_token = os.environ.get("ANIMETTA_ACCESS_TOKEN", "")
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/ready",
+        headers=headers,
+    )
     try:
-        with urllib.request.urlopen(
-            f"{base_url.rstrip('/')}/ready",
-            timeout=timeout_seconds,
-        ) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, urllib.error.URLError):
         return False
