@@ -1,525 +1,241 @@
-# Animetta 前端-后端接口文档
+# Animetta Socket.IO API
 
-**生成时间**: 2026-06-08
-**更新时间**: 2026-07-11
-**协议**: Socket.IO (WebSocket)
+本文是 Dashboard、`/live.html`、桌面客户端与 Animetta 后端之间的完整实时协议目录。默认命名空间为 `/`，Engine.IO 使用标准 `/socket.io` 路径。
 
----
+事件名和字段 schema 的唯一真相源是 `config/socket-events.json`；后端通过 `animetta.orchestration.socket_events` 读取，前端通过 `frontend/src/constants/socket-events.ts` 的 `Events` 使用。
 
-## 概述
+## 连接、认证与错误
 
-Animetta 使用 Socket.IO 进行前后端通信。所有事件都是异步的，支持回调和广播两种模式。
+非生产 profile 允许直接连接。`production` profile 可通过以下任一种方式认证：
 
-### ⚠️ 事件命名迁移 (v2.0)
+```ts
+io('/', { auth: { token: '<ANIMETTA_ACCESS_TOKEN>' } })
+```
 
-所有产品代码必须使用 `module:action` 格式。旧格式事件名仅是兼容适配器的输入/输出选择，不是可供业务代码调用的第二套 API。
+- Socket.IO `auth.token`；
+- 握手的 `Authorization: Bearer ...`；
+- HTTP 登录得到的 `animetta_session` Cookie。
 
-适配边界只有后端路由入口 `orchestration/server/routes.py` 和统一输出适配器 `orchestration/chat_delivery.py`。一次请求只选择 canonical 或 legacy 一种输出，禁止双发。`scripts/validate-events.py` 会拒绝适配边界外的 legacy Socket.IO 字面量。
+连接失败时，服务端以 `ConnectionRefusedError` 返回 `{code:"UNAUTHORIZED"}` 或 `{code:"RATE_LIMITED", retry_after:int}`。连接成功后收到 `system:connection_established`，同时会重发仍待处理的 `tool:approval_required`。
 
-黄金路径的命令、文本、控制、错误、字幕、表情、动作和音频事件都携带以下关联字段：
+受保护命令的回调错误形状为：
 
 ```json
 {
-  "message_id": "UUID",
-  "conversation_id": "UUID",
-  "task_id": "UUID",
-  "turn_id": "与 task_id 相同的 UUID"
+  "ok": false,
+  "error": { "code": "RATE_LIMITED", "message": "..." },
+  "retry_after": 5
 }
 ```
 
-前端每次发送生成新的 `message_id` 与 `task_id`，在本地持久化稳定的 `conversation_id`。服务端不得以空值、短 ID 或隐式默认值替代这些字段。
-
-**事件常量文件**: `config/socket-events.json` (后端) / `frontend/src/constants/socket-events.ts` (前端)
-
-| 旧格式 | 新格式 | 说明 |
-|--------|--------|------|
-| `text_input` | `chat:text` | 发送文本 |
-| `sentence` | `chat:sentence` | 接收回复 |
-| `control` | `chat:control` | 对话控制 |
-| `interrupt_signal` | `chat:interrupt` | 中断信号 |
-| `raw_audio_data` | `chat:audio` | 音频流 |
-| `mic_audio_end` | `chat:audio_end` | 录音结束 |
-| `transcript` | `chat:transcript` | ASR 识别结果 |
-| `stop_audio` | `chat:stop_audio` | 停止音频 |
-| `audio_with_expression` | `chat:audio_with_expression` | 带表情的音频 |
-| `memory_organize` | `memory:organize` | 整理记忆 |
-| `get_wiki_pages` | `memory:list_pages` | 获取记忆页面 |
-| `get_available_personas` | `persona:list` | 获取人格列表 |
-| `set_persona` | `persona:set` | 切换人格 |
-| `set_personality_mode` | `persona:set_mode` | 切换模式 |
-| `switch_config` | `config:switch` | 切换配置 |
-| `get_config` | `config:get` | 获取配置 |
-| `set_log_level` | `config:log_level` | 设置日志级别 |
-| `model_status` | `system:model_status` | 模型状态 |
-| `error` | `system:error` | 错误事件 |
-| `sing:process` | `sing:process` | (不变) |
-| `bilibili.connect` | `bilibili:connect` | (不变) |
-| `minecraft.connect` | `minecraft:connect` | 连接 mc-mcp profile |
-| `minecraft.status` | `minecraft:status` | 读取 server/bot/viewer 状态 |
-| `minecraft.disconnect` | `minecraft:disconnect` | 只断开 Bot |
-| `minecraft.shutdown` | `minecraft:shutdown` | 关闭 mc-mcp 自有托管资源 |
-| `minecraft.reattach_viewer` | `minecraft:reattach_viewer` | 请求 MC 侧重新附身 |
-
----
-
-## 1. 连接事件
-
-### `connect`
-- **方向**: 客户端 → 服务器
-- **触发**: 自动连接时
-- **数据**: 无
-
-### `disconnect`
-- **方向**: 客户端 → 服务器
-- **触发**: 断开连接时
-- **数据**: 无
-
----
-
-## 2. 聊天事件
-
-### `chat:text`
-- **方向**: 客户端 → 服务器
-- **触发**: 用户发送文本消息
-- **旧格式**: ~~`text_input`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "text": "消息内容",
-  "message_id": "8c113f5d-4eb8-43ea-a166-05a8c62cb8ea",
-  "conversation_id": "17a505b8-ea4d-49c3-ac55-edf174e93ddb",
-  "task_id": "2a18273f-c66d-40aa-b8f2-0e958f90ef3a",
-  "turn_id": "2a18273f-c66d-40aa-b8f2-0e958f90ef3a",
-  "source": "text",
-  "is_inspection": false,
-  "is_acceptance": false
-}
-```
-- **响应**: 通过 `chat:sentence` 事件流式返回
-
-### `chat:sentence`
-- **方向**: 服务器 → 客户端
-- **触发**: LLM 生成回复时
-- **旧格式**: ~~`sentence`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "text": "回复文本片段",
-  "seq": 0
-}
-```
-- **说明**: `seq=0` 表示开始，`text=""` 表示结束
-
-### `chat:control`
-- **方向**: 服务器 → 客户端
-- **触发**: 对话状态变化
-- **旧格式**: ~~`control`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "signal": "conversation-end"
-}
-```
-
-### `chat:interrupt`
-- **方向**: 客户端 → 服务器
-- **触发**: 用户中断 AI 回复
-- **旧格式**: ~~`interrupt_signal`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "heard_text": "已听到的文本"
-}
-```
-
----
-
-## 3. 语音事件
-
-### `chat:audio`
-- **方向**: 客户端 → 服务器
-- **触发**: 麦克风录音时（实时流）
-- **旧格式**: ~~`raw_audio_data`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "audio": [0.1, 0.2, ...]  // float32 音频数据
-}
-```
-
-### `chat:audio_end`
-- **方向**: 客户端 → 服务器
-- **触发**: 用户停止录音
-- **旧格式**: ~~`mic_audio_end`~~ [DEPRECATED]
-- **数据**: 无
-
-### `chat:transcript`
-- **方向**: 服务器 → 客户端
-- **触发**: ASR 识别完成
-- **旧格式**: ~~`transcript`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "text": "识别的文本",
-  "is_final": true
-}
-```
-
----
-
-## 4. 人格事件
-
-### `persona:list`
-- **方向**: 客户端 → 服务器
-- **触发**: 获取可用人格列表
-- **旧格式**: ~~`get_available_personas`~~ [DEPRECATED]
-- **数据**: `{}`（空对象）
-- **回调响应**:
-```json
-{
-  "personas": ["default", "anime", "assistant"]
-}
-```
-
-### `persona:set`
-- **方向**: 客户端 → 服务器
-- **触发**: 切换人格
-- **旧格式**: ~~`set_persona`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "persona_name": "anime"
-}
-```
-- **回调响应**:
-```json
-{
-  "error": null  // 或错误信息
-}
-```
-
-### `persona:set_mode`
-- **方向**: 客户端 → 服务器
-- **触发**: 切换人格模式
-- **旧格式**: ~~`set_personality_mode`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "mode": "default"  // 或 "streaming"
-}
-```
-
----
-
-## 5. 记忆事件
-
-### `memory:organize`
-- **方向**: 客户端 → 服务器
-- **触发**: 手动整理记忆
-- **旧格式**: ~~`memory_organize`~~ [DEPRECATED]
-- **数据**: `{}`（空对象）
-- **响应事件**:
-  - `memory.organize.progress`: 进度更新
-  - `memory.organize.result`: 完成结果
-
-### `memory.organize.progress`
-- **方向**: 服务器 → 客户端
-- **数据**:
-```json
-{
-  "text": "Running metabolism tick...",
-  "progress": 30
-}
-```
-
-### `memory.organize.result`
-- **方向**: 服务器 → 客户端
-- **数据**:
-```json
-{
-  "status": "ok",
-  "message": "Memory organized"
-}
-```
-
-### `memory:list_pages`
-- **方向**: 客户端 → 服务器
-- **触发**: 获取记忆页面列表
-- **旧格式**: ~~`get_wiki_pages`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "session_id": "default"
-}
-```
-- **回调响应**:
-```json
-{
-  "pages": [
-    {
-      "path": "atom_id",
-      "title": "页面标题",
-      "content": "页面内容",
-      "page_type": "entity",
-      "tags": ["tag1", "tag2"],
-      "updated_at": "2026-06-08T00:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-## 6. 音乐事件
-
-### `sing:process`
-- **方向**: 客户端 → 服务器
-- **触发**: 开始音乐处理
-- **数据**:
-```json
-{
-  "url": "bilibili视频URL",
-  "auto_confirm": true
-}
-```
-
-### `sing:progress`
-- **方向**: 服务器 → 客户端
-- **触发**: 处理进度更新
-- **数据**:
-```json
-{
-  "stage": "downloading",
-  "progress": 50,
-  "message": "Downloading..."
-}
-```
-
-### `sing:complete`
-- **方向**: 服务器 → 客户端
-- **触发**: 处理完成
-- **数据**:
-```json
-{
-  "audio_url": "/path/to/audio.wav",
-  "subtitle_url": "/path/to/subtitle.ass",
-  "tts_audio_url": "/path/to/tts.wav",
-  "vocals_url": "/path/to/vocals.wav",
-  "video_title": "歌曲名称",
-  "duration": 180.5,
-  "lyrics": [...],
-  "volumes": [...]
-}
-```
-
-### `sing:error`
-- **方向**: 服务器 → 客户端
-- **触发**: 处理出错
-- **数据**:
-```json
-{
-  "error": "错误信息"
-}
-```
-
-### `sing:confirm_lyrics`
-- **方向**: 客户端 → 服务器
-- **触发**: 确认歌词
-- **数据**:
-```json
-{
-  "ass_content": "ASS字幕内容"
-}
-```
-
-### `sing:cancel`
-- **方向**: 客户端 → 服务器
-- **触发**: 取消处理
-- **数据**: `{}`（空对象）
-
----
-
-## 7. Bilibili 直播事件
-
-### `bilibili.connect`
-- **方向**: 客户端 → 服务器
-- **触发**: 连接直播间
-- **数据**:
-```json
-{
-  "room_id": 123456
-}
-```
-
-### `bilibili.disconnect`
-- **方向**: 客户端 → 服务器
-- **触发**: 断开直播间
-- **数据**: 无
-
-### `bilibili.update_room`
-- **方向**: 客户端 → 服务器
-- **触发**: 更新房间号
-- **数据**:
-```json
-{
-  "room_id": 789012
-}
-```
-
----
-
-## 8. Minecraft 事件
-
-### `minecraft:connect`
-- **方向**: 客户端 → 服务器
-- **触发**: 连接 mc-mcp profile
-- **数据**: `{ "request_id": "string", "profile": "string" }`
-
-### `minecraft:disconnect`
-- **方向**: 客户端 → 服务器
-- **触发**: 只断开 Bot（保留托管资源）
-
-### `minecraft:shutdown`
-- **方向**: 客户端 → 服务器
-- **触发**: 关闭 mc-mcp 自有托管资源
-
-### `minecraft:reattach_viewer`
-- **方向**: 客户端 → 服务器
-- **触发**: 请求 MC 侧重新附身观众
-
-### `minecraft:status`
-- **方向**: 客户端 → 服务器
-- **触发**: 读取 server / bot / viewer 状态
-- **服务器回复**: `minecraft:status` / `minecraft:viewer_status`
-
----
-
-## 9. 配置事件
-
-### `config:switch`
-- **方向**: 客户端 → 服务器
-- **触发**: 切换配置文件
-- **旧格式**: ~~`switch_config`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "config_name": "config_name"
-}
-```
-
-### `config:get`
-- **方向**: 客户端 → 服务器
-- **触发**: 获取当前配置
-- **旧格式**: ~~`get_config`~~ [DEPRECATED]
-- **数据**: `{}`（空对象）
-
-### `config:log_level`
-- **方向**: 客户端 → 服务器
-- **触发**: 设置日志级别
-- **旧格式**: ~~`set_log_level`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "level": "DEBUG"
-}
-```
-
----
-
-## 10. 翻译事件
-
-### `translation.configure`
-- **方向**: 客户端 → 服务器
-- **触发**: 配置翻译设置
-- **数据**:
-```json
-{
-  "enabled": true,
-  "target_language": "zh"
-}
-```
-
----
-
-## 11. 模型状态事件
-
-### `system:model_status`
-- **方向**: 服务器 → 客户端
-- **触发**: 模型加载状态变化
-- **旧格式**: ~~`model_status`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "model_name": "faster_whisper",
-  "status": "loaded",
-  "progress": 100
-}
-```
-
----
-
-## 12. 错误事件
-
-### `system:error`
-- **方向**: 服务器 → 客户端
-- **触发**: 发生错误
-- **旧格式**: ~~`error`~~ [DEPRECATED]
-- **数据**:
-```json
-{
-  "type": "error",
-  "message": "错误信息"
-}
-```
-
----
-
-## 前端组件 → 事件映射
-
-### 左侧抽屉 (LeftDrawer)
-
-| 组件 | 按钮/开关 | 触发事件 | 旧格式 | 数据 |
-|------|----------|----------|--------|------|
-| QuickControls | 🔊 Voice 滑块 | 无（本地状态） | - | - |
-| QuickControls | 🎤 Microphone | `chat:audio` + `chat:audio_end` | ~~`raw_audio_data` + `mic_audio_end`~~ | 音频数据 |
-| QuickControls | 🧠 Auto Memory | 无（本地状态） | - | - |
-| PersonaCard | - | `persona:list` | ~~`get_available_personas`~~ | - |
-| SessionStats | - | 无（本地计算） | - | - |
-| MemoryCards | ▶ Send | `chat:text` | ~~`text_input`~~ | 话题文本 |
-| MemoryCards | ✕ Delete | 无（本地删除） | - | - |
-
-### 右侧面板 (InteractivePanel)
-
-| 组件 | 按钮/开关 | 触发事件 | 旧格式 | 数据 |
-|------|----------|----------|--------|------|
-| ChatPanel | 发送按钮 | `chat:text` | ~~`text_input`~~ | 消息文本 |
-| ChatPanel | 语音按钮 | `chat:audio` + `chat:audio_end` | ~~`raw_audio_data` + `mic_audio_end`~~ | 音频数据 |
-| ChatPanel | 整理记忆 | `memory:organize` | ~~`memory_organize`~~ | - |
-| SettingsPanel | 切换人格 | `persona:set` | ~~`set_persona`~~ | 人格名称 |
-| SettingsPanel | 切换模式 | `persona:set_mode` | ~~`set_personality_mode`~~ | 模式名称 |
-| MemoryPanel | 刷新 | `memory:list_pages` | ~~`get_wiki_pages`~~ | session_id |
-| PersonalityPanel | 切换人格 | `persona:set` | ~~`set_persona`~~ | 人格名称 |
-| MusicCard | 开始制作 | `sing:process` | (不变) | URL |
-| MusicCard | 确认歌词 | `sing:confirm_lyrics` | (不变) | ASS内容 |
-| MusicCard | 取消 | `sing:cancel` | (不变) | - |
-
-### 底部导航 (Mobile)
-
-| 标签 | 功能 |
-|------|------|
-| 💬 聊天 | 切换到聊天面板 |
-| 📺 直播 | 切换到直播面板 |
-| 🧠 记忆 | 切换到记忆面板 |
-| 🎭 人格 | 切换到人格面板 |
-| 🎵 音乐 | 切换到音乐面板 |
-| ⚙️ 设置 | 切换到设置面板 |
-
----
-
-## 注意事项
-
-1. **所有事件都是异步的** - 使用 `socket.emit()` 发送，`socket.on()` 接收
-2. **回调模式** - 某些事件支持回调函数作为第三个参数
-3. **错误处理** - 监听 `error` 事件处理全局错误
-4. **重连机制** - Socket.IO 自动重连，监听 `connect` / `disconnect` 事件
-5. **音频流** - `raw_audio_data` 是实时流，需要持续发送
+## Schema 记法
+
+- `C→S`：客户端发送；`S→C`：服务器推送；`C↔S`：同名事件既作为命令也作为结果推送。
+- 字段名后的 `?` 表示可选，`A|B` 表示联合类型，`enum(a/b)` 表示枚举。
+- `—` 表示 catalog 没有声明字段或 ack；它不表示实现一定忽略额外数据。
+- 表中 ack 只列 `config/socket-events.json` 明确定义的回调 schema。其他命令可能有 handler 返回值，但客户端不得把未声明形状当作稳定契约。
+
+黄金路径事件要求关联 ID。`chat:text` 与 `chat:developer_text` 必须提供 UUID 格式的 `message_id`、`conversation_id`、`task_id`；其余 correlated 事件还要求 `turn_id`。同一 turn 的 `turn_id` 与 `task_id` 应相同。
+
+## 事件目录
+
+### Chat
+
+| 事件 | 方向 | payload | ack |
+|------|------|---------|-----|
+| `chat:text` | C→S | `text:string`、`message_id:uuid`、`conversation_id:uuid`、`task_id:uuid`、`user_id?:string`、`from_name?:string`、`source?:enum(text/livestream)`、`is_inspection?:boolean`、`is_acceptance?:boolean` | — |
+| `chat:developer_text` | C→S | 与 `chat:text` 相同，但 `source` 只能为 `text` | — |
+| `chat:sandbox_request` | C→S | `text:string`、四个关联 UUID、`history?:object[]` | — |
+| `chat:sandbox_cancel` | C→S | 四个关联 UUID | — |
+| `chat:sandbox_chunk` | S→C | `text:string`、`seq:int`、四个关联 UUID、`provider:string`、`model?:string`、`is_complete?:boolean`、`error_code?:string` | — |
+| `chat:audio` | C→S | `audio:number[]` | — |
+| `chat:audio_end` | C→S | — | — |
+| `chat:interrupt` | C→S | 四个关联 UUID、`text?:string` | — |
+| `chat:sentence` | S→C | `text:string`、`seq:int`、`lang:string`、`is_complete?:boolean`、四个关联 UUID、`metadata?:object` | — |
+| `chat:control` | S→C | 四个关联 UUID；`signal?:conversation-start|conversation-end`；媒体降级时含 `type`、`status`、`component`、`phase`、`reason`、`retryable` | — |
+| `chat:transcript` | S→C | `text:string`、`is_final:boolean` | — |
+| `chat:stop_audio` | S→C | 四个关联 UUID | — |
+| `chat:audio_with_expression` | S→C | 四个关联 UUID、`audio_data:base64`、`format:wav`、`volumes:number[]`、`performance?:object` | — |
+| `chat:audio_stream_start` | S→C | 四个关联 UUID、`stream_id:uuid`、`format:pcm_s16le`、`sample_rate:24000`、`channels:1`、`emotion`、`performance?:object` | — |
+| `chat:audio_stream_chunk` | S→C | 四个关联 UUID、`stream_id:uuid`、`sequence:int`、`audio_data:base64` | — |
+| `chat:audio_stream_end` | S→C | 四个关联 UUID、`stream_id:uuid`、`final_sequence:int`、`status:completed|failed|cancelled`、`reason?:timeout|provider_error|cancelled` | — |
+| `chat:subtitle_translation` | S→C | 四个关联 UUID、`translation:string`、`target_lang:string` | — |
+| `chat:live2d_action` | S→C | 四个关联 UUID、`type:string`、`group:string`、`index:int` | — |
+| `chat:expression` | S→C | 四个关联 UUID、`emotion:string` | — |
+
+`chat:sentence` 的结束帧固定为 `text=""` 且 `is_complete=true`，并保留序号、语言和关联 ID。流式音频必须依次处理 start、递增 sequence 的 chunk、end；合成成功不等于客户端已播放，播放验收应记录实际消费证据。
+
+### History 与配置
+
+| 事件 | 方向 | payload | ack / 结果 |
+|------|------|---------|------------|
+| `history:list` | C→S | — | handler 返回历史摘要列表 |
+| `history:fetch` | C→S | `history_uid?:string` | handler 返回选定历史 |
+| `history:clear` | C→S | — | handler 返回清理结果 |
+| `history:create` | C→S | — | handler 返回新历史 |
+| `config:switch` | C→S | `config_name?:string`、`file?:string` | 结果事件 `config:switched` |
+| `config:log_level` | C→S | `level:string` | 结果事件 `config:log_level_changed` |
+| `config:get` | C→S | — | 结果事件 `config:data` |
+| `config:switched` | S→C | `type?:string`、`config_name:string`、`message:string` | — |
+| `config:log_level_changed` | S→C | `type?:string`、`success:boolean`、`level:string`、`message:string` | — |
+| `config:data` | S→C | 配置公开快照；catalog 不约束内部字段 | — |
+| `config:heartbeat_ack` | S→C | 心跳确认；catalog 不约束内部字段 | — |
+
+### System、任务与工具审批
+
+| 事件 | 方向 | payload | ack |
+|------|------|---------|-----|
+| `system:heartbeat` | C→S | — | 服务端心跳确认 |
+| `system:connection_established` | S→C | `message:string`、`sid:string`、`server_time:string` | — |
+| `system:model_status` | S→C | `service:string`、`name:string`、`status:string`、`error?:string` | — |
+| `system:error` | S→C | `type`、`message`、四个关联 UUID、`component`、`phase`、`retryable:boolean`、`terminal:boolean` | — |
+| `task:status` | C→S | `kind:string`、`task_id:string`、`scope_context?:object` | `{ok:boolean, data?:object, error?:object}` |
+| `task:snapshot` | S→C | `kind`、`task_id`、`status`、`progress?`、`result?`、`error?`、`reused:boolean`、`created_at:number`、`updated_at:number` | — |
+| `tool:approval_list` | C→S | — | `{ok:boolean, approvals?:object[], error?:object}` |
+| `tool:approval_decide` | C→S | `approval_id:string`、`decision:string` | `{ok:boolean, data?:object, error?:object}` |
+| `tool:approval_required` | S→C | `schema_version`、`approval_id`、`thread_id`、可选任务/会话 ID、owner、retention、`expires_at`、`tools[]`、可选 kind/status | — |
+| `tool:approval_resolved` | S→C | `approval_id`、`task_id`、`status`、`decision`、`reason?` | — |
+
+`system:error.type` 为 `validation_error`、`processing_error`、`timeout`、`interrupted` 或 `internal_error`。`component` 与 `phase` 是稳定分类字段，客户端不应通过错误文案判断恢复策略。
+
+### Desktop
+
+| 事件 | 方向 | payload |
+|------|------|---------|
+| `desktop:register` | C→S | `client_type:string` |
+| `desktop:live2d_action` | C→S | handler 定义的动作对象 |
+| `desktop:chat_message` | C→S | handler 定义的消息对象 |
+| `desktop:voice_start` | C→S | handler 定义的语音参数 |
+| `desktop:voice_stop` | C→S | handler 定义的语音参数 |
+| `desktop:registered` | S→C | `client_id:string`、`client_type:string` |
+| `desktop:action_queued` | S→C | 动作队列结果对象 |
+| `desktop:voice_started` | S→C | 语音启动结果对象 |
+| `desktop:voice_stopped` | S→C | 语音停止结果对象 |
+
+### Bilibili 直播
+
+| 事件 | 方向 | payload | ack |
+|------|------|---------|-----|
+| `bilibili:connect` | C→S | `room_id:number`、`expected_generation_id?:number` | `BilibiliCommandAck` |
+| `bilibili:disconnect` | C→S | `expected_generation_id?:number` | `BilibiliCommandAck` |
+| `bilibili:update_room` | C→S | `room_id:number`、`expected_generation_id?:number` | `BilibiliCommandAck` |
+| `bilibili:danmaku` | S→C | `text`、`user_name`、`user_id`、`timestamp`、`is_gift`、`is_super_chat`、`meta`、`source_message_id?` | — |
+| `bilibili:danmaku_status` | S→C | `state`、`connected`、`room_id`、`desired_room_id`、`retry_count`、`error_code`、`generation_id`、`message`、`updated_at` | — |
+| `bilibili:live_event` | S→C | `room_id`、`generation_id`、`sequence`、`offset_ms`、`event_type`、`actor_id`、`text`、`payload` | — |
+| `bilibili:danmaku_ai_reply` | S→C | `danmaku_text`、`reply_text`、`user_name`、`character_name`、`timestamp`、`source_message_id?`、`reply_id?` | — |
+
+`BilibiliCommandAck = {accepted:boolean, state:string, error_code:string|null, message:string}`。命令只表示已接受；调用方应继续等待 `bilibili:danmaku_status` 到达目标 generation 与状态。
+
+直播状态为 `stopped`、`connecting`、`prelive`、`live`、`reconnecting`、`stopping` 或 `error`。修改命令应携带最后观察到的 `expected_generation_id` 以进行乐观并发检查。
+
+### Minecraft
+
+| 事件 | 方向 | payload |
+|------|------|---------|
+| `minecraft:connect` | C→S | `request_id:string`、`profile?:string` |
+| `minecraft:status` | C↔S | 请求可含 `request_id?`；结果含 schema/generation/state/mode/profile/server/bot/viewer/error |
+| `minecraft:disconnect` | C→S | `request_id:string` |
+| `minecraft:shutdown` | C→S | `request_id:string` |
+| `minecraft:reattach_viewer` | C→S | `request_id:string` |
+| `minecraft:viewer_status` | S→C | `status`，以及可选 schema、username、error、mode、reason、binding_state、confirmed、target、attempt、retry_in_ms |
+| `minecraft:command_transition` | S→C | `event`、`event_id`、`transition_id`、`command_id`、`from_state?`、`to_state`、`reason_code`、`occurred_at_ms` |
+| `minecraft:skill_trust` | S→C | `event`、`event_id`、`revision_hash`、`environment_fingerprint`、`status`、`source_command_id` |
+| `minecraft:mission_projection` | S→C | 公共 projection envelope |
+| `minecraft:objective_projection` | S→C | 公共 projection envelope |
+| `minecraft:proposal_projection` | S→C | 公共 projection envelope |
+| `minecraft:discovery_projection` | S→C | 公共 projection envelope |
+| `minecraft:skill_validation` | S→C | 公共 projection envelope |
+| `minecraft:advancement_projection` | S→C | 公共 projection envelope |
+| `minecraft:stage_projection` | S→C | 公共 projection envelope |
+| `minecraft:bot_state` | S→C | 可选 health、food、position、dimension、biome、time、weather、action、action_target、held_item、inventory |
+
+公共 projection envelope 为 `schema_version`、`event`、`event_id`、`projection_kind`、`projection_version:number`、`occurred_at_ms:number`、`mission_id?:string`、`entity_id:string`、`payload:object`。连接类命令通过后续 `minecraft:status` 推送返回结果。
+
+### Translation 与 Persona
+
+| 事件 | 方向 | payload |
+|------|------|---------|
+| `translation:configure` | C→S | `enabled?:boolean`、`target_language?:string` |
+| `translation:status` | S→C | `target_language:string`、`enabled:boolean` |
+| `persona:list` | C→S | —；ack 返回可用人格 |
+| `persona:set` | C→S | `persona_name:string` |
+| `persona:set_mode` | C→S | `mode:string` |
+| `persona:updated` | S→C | `persona_name:string`、`mbti?:object` |
+| `persona:personality_updated` | S→C | `mode:string` |
+
+### Memory V2
+
+Memory 查询与变更使用统一 ack：成功 `{ok:true, data:object}`，失败 `{ok:false, error:{code,message}}`。常见错误码为 `INVALID_REQUEST`、`NOT_FOUND`、`UNAVAILABLE`、`IDEMPOTENCY_CONFLICT`、`RESOURCE_BUSY` 与 `STALE_MEMORY_VERSION`。
+
+| 事件 | 方向 | payload / 结果 |
+|------|------|----------------|
+| `memory:list` | C→S | `cursor?:string`、`limit?:number`、`scope?:string` |
+| `memory:get` | C→S | `id:string` |
+| `memory:search` | C→S | `query:string`、`limit?:number` |
+| `memory:pin` | C→S | `id:string`、`pinned:boolean` |
+| `memory:forget` | C→S | `id:string` |
+| `memory:change` | C→S | `id:string`、`summary:string`、`task_id?:string`、`expected_version:int` |
+| `memory:job` | C→S | `job_id:string` |
+| `memory:organize` | C→S | `task_id?:string`；ack 返回接受或复用的 job |
+| `memory:list_pages` | C→S | `session_id:string`；兼容页面列表 ack |
+| `memory:changed` | S→C | `revision:number`、`reason:string`、`atom_id?:string` |
+| `memory:organize_progress` | S→C | `job_id`、`text`、`progress`、`status` |
+| `memory:organize_result` | S→C | `job_id`、`status`、`message`、`revision?` |
+
+`memory:change` 使用 `task_id` 做幂等控制，并用 `expected_version` 做乐观并发控制。`memory:list_pages` 是兼容入口，新客户端优先使用 V2 查询事件。
+
+### Singing
+
+| 事件 | 方向 | payload |
+|------|------|---------|
+| `sing:process` | C→S | 输入来源四选一：`url?`、`file_data?`、`file_name?`、`local_path?`；另有 `task_id?`、`lyrics_text?`、`auto_confirm?` |
+| `sing:confirm_lyrics` | C→S | `ass_content:string`、`task_id?:string` |
+| `sing:cancel` | C→S | `task_id?:string` |
+| `sing:subtitle_sync` | C→S | — |
+| `sing:progress` | S→C | `stage`、`progress:number`、`message`、`task_id` |
+| `sing:complete` | S→C | `task_id`、媒体 URL、标题/时长、声音身份、`voice_conversion_applied`、`lyrics[]`、`volumes[]` |
+| `sing:error` | S→C | `task_id?:string`、`error:string` |
+| `sing:lyrics_ready` | S→C | `message:string` |
+| `sing:subtitle_line` | S→C | `text`、`translation`、`lang`、`target_lang` |
+
+`sing:complete` 的声音身份字段为 `voice_provider`、`voice_model`、`voice_revision`、`voice_name`；媒体字段为 `audio_url`、`subtitle_url`、`tts_audio_url`、`vocals_url` 与 `original_url`。
+
+### Meme review
+
+| 事件 | 方向 | payload / 结果 |
+|------|------|----------------|
+| `meme:add` | C→S | `text` 必填；可选 source、context_hint、tags、source_url、format 与 render 字段；ack `{ok,meme}` |
+| `meme:list` | C↔S | 请求 `source_platform?`、`limit?`；结果 `{memes:[...]}` |
+| `meme:review` | C↔S | 请求 `meme_id`、`status:good|bad`；结果 `{ok,feedback?|error?}` |
+| `meme:dataset` | C↔S | 请求无字段；结果 `{memes:[...]}` |
+| `meme:collect` | C↔S | `task_id?:string`、`source?:string`；结果含 ok、task_id、status/count/candidates 或 error |
+
+`meme:collect.task_id` 是幂等键；同键不同请求返回 `IDEMPOTENCY_CONFLICT`，已有任务可返回 `reused=true`。
+
+## 兼容别名
+
+以下别名只供协议迁移适配器使用。新代码必须发送 canonical 名称，服务器也只为单次请求选择 canonical 或 legacy 输出之一，禁止双发。
+
+| canonical | legacy alias |
+|-----------|--------------|
+| `chat:text` | `text_input` |
+| `chat:interrupt` | `interrupt_signal` |
+| `chat:sentence` | `sentence` |
+| `chat:control` | `control` |
+| `chat:stop_audio` | `stop_audio` |
+| `chat:audio_with_expression` | `audio_with_expression` |
+| `chat:audio_stream_start` | `audio_stream_start` |
+| `chat:audio_stream_chunk` | `audio_stream_chunk` |
+| `chat:audio_stream_end` | `audio_stream_end` |
+| `chat:subtitle_translation` | `subtitle.translation` |
+| `chat:live2d_action` | `live2d.action` |
+| `chat:expression` | `expression` |
+| `system:error` | `error` |
+
+## 客户端规则
+
+1. 从 `Events` 常量读取事件名，不复制字符串。
+2. 对声明 ack 的命令设置超时，并同时处理断线、malformed ack 与业务错误。
+3. 重连后重新查询 `task:status`、`tool:approval_list`、Bilibili status 或 memory job，不从最后一次 UI 状态猜测结果。
+4. 通过 `task_id`、`command_id`、`request_id` 与 `expected_version/generation_id` 使用服务端幂等和并发控制。
+5. 将 `system:error` 的 `retryable`、`terminal`、`component`、`phase` 作为恢复依据，不解析自然语言消息。

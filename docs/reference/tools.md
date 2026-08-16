@@ -1,272 +1,119 @@
-# Animetta 工具系统使用说明
+# Animetta 工具 API
 
-## 概述
+本文记录 LLM 可调用的产品工具、外部 MCP 桥接方式，以及开发智能体使用的 Bilibili MCP。工具实现存在不等于默认启用；运行时暴露集合由 `config/tools.yaml` 决定。
 
-Animetta 工具系统为 AI Agent 提供工具调用能力，支持 LLM（如 GLM-4）调用外部工具获取实时信息或执行操作。
+## 产品工具模型
 
-## 支持的功能
+工具由 LangChain `@tool` 声明，在 `src/animetta/tools/base.py` 中注册，并由 LangGraph 工具节点执行。当前配置限制每个 LLM turn 最多调用 5 次。
 
-1. **内置工具**: 预定义的工具（web_search, get_weather, read_file, get_current_time 等）
-2. **LangChain 集成**: 与 LangChain 工具生态无缝集成
-3. **MCP 桥接**: 通过 MCP 协议连接外部工具服务器（实验性）
+### 内置工具
 
-## 目录结构
+| 工具 | 参数 | 返回 | 默认启用 |
+|------|------|------|----------|
+| `web_search` | `query:string`、`num_results:int=5` | 格式化搜索结果字符串 | 是 |
+| `get_current_time` | `timezone:string="Asia/Shanghai"` | 带时区的时间字符串 | 是 |
+| `calculator` | `expression:string` | 基础算术结果或失败字符串 | 是 |
+| `get_weather` | `city:string` | 高德天气或有限 fallback 字符串 | 否 |
 
-```
-src/animetta/tools/
-├── __init__.py          # 模块导出
-├── base.py              # 内置工具定义和注册表
-├── config.py            # 工具配置加载器
-├── langchain_tools.py   # LangChain 工具适配
-├── mcp_bridge.py        # MCP 协议桥接（实验性）
-└── custom_tools.py      # 自定义工具示例
-```
+`web_search` 优先使用 `TAVILY_API_KEY`，失败后尝试 DuckDuckGo；结果数量最多 10。`calculator` 只支持数值常量、加减乘除、乘方和一元负号，不执行任意 Python。
 
-## 内置工具
+旧文档曾列出的 `read_file` 与 `list_directory` 已不是内置工具。文件访问由沙箱化 MCP filesystem 替代。
 
-| 工具名称 | 功能 | 参数 | 需要密钥 |
-|---------|------|------|---------|
-| `web_search` | 互联网搜索 | `query: str`, `num_results: int = 5` | ❌ |
-| `get_weather` | 查询天气 | `city: str` | ❌ |
-| `read_file` | 读取文件 | `file_path: str`, `max_length: int = 2000` | ❌ |
-| `get_current_time` | 获取当前时间 | `timezone: str = "Asia/Shanghai"` | ❌ |
-| `list_directory` | 列出目录 | `directory: str = "."` | ❌ |
-| `calculator` | 数学计算 | `expression: str` | ❌ |
+### 可选自定义工具
 
-> 注：所有内置工具都设计为不需要 API 密钥，使用公开数据源或模拟数据。
+| 工具 | 参数 | 外部依赖 | 默认启用 |
+|------|------|----------|----------|
+| `url_preview` | `url:string` | HTTP 网络 | 否 |
+| `send_email` | `to`、`subject`、`body` | `SMTP_USER`、`SMTP_PASSWORD`，可选 host/port | 否 |
+| `image_gen` | `prompt`、`size="1024x1024"` | `OPENAI_API_KEY` 或 `REPLICATE_API_TOKEN` | 否 |
 
-## 配置文件
+启用名称放入 `custom_tools.enabled`。这些工具返回字符串，不使用统一结构化错误对象。
 
-`config/tools.yaml`:
+## Minecraft 产品工具
 
-```yaml
-# 启用的内置工具
-builtin_tools:
-  - web_search
-  - get_current_time
-  - calculator
+Minecraft 对 LLM 只公开两个工具。它们通过独立 `mc-mcp` 服务操作资源；Animetta 不直接启动 Node/Minecraft 进程。
 
-# MCP 服务器配置（实验性）
-mcp_servers:
-  - name: "filesystem"
-    transport: "stdio"
-    command: "npx"
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
+### `mc_connection`
 
-# 工具调用设置
-tool_settings:
-  enable_tools: true  # 是否启用工具调用
-  max_tool_calls_per_turn: 5
-  tool_execution_timeout: 30
+```text
+operation: connect | status | disconnect | shutdown | reattach_viewer
+request_id: string，1..128，字符集 [A-Za-z0-9_.:-]
+profile?: string，仅 connect 可用
 ```
 
-## LangGraph 集成
+- `disconnect` 只断开 bot，保留托管资源。
+- `shutdown` 只关闭 `mc-mcp` 自己拥有的托管资源。
+- 返回 JSON 字符串形式的连接状态或错误。
 
-工具调用已完全集成到 LangGraph 状态图中。
+### `mc_operate_bot`
 
-### 数据流
+| operation | 允许字段 | 说明 |
+|-----------|----------|------|
+| `execute` | 仅 `execute`，顶层 `request_id?` 必须与内部一致 | 提交 `contract_version="2"` 的 mission 或 atomic 请求 |
+| `progress` | `request_id?` 或 `command_id?` 二选一，也可用 `cursor?`、`limit=20`、`projection_kind=commands|missions` | 读取持久化 projection，不直接查询实时世界 |
+| `cancel` | `request_id`、`reason="operator stop"` | 先写 durable stop barrier，再协作取消运行时 |
 
-```
-用户输入 → [route_input]
-              ↓
-          [llm_node] → LLM 决定是否调用工具
-              ↓
-         (有 tool_calls?)
-              ├─ 是 → [tool_node] → 执行工具 → 返回 ToolMessage
-              │                              ↓
-              └──────────────────────────────┤
-                                             ↓
-                                        [llm_node] → LLM 基于工具结果生成回复
-                                             ↓
-                                        [tts_node] → [output_node]
-```
+`execute` 对象：
 
-### 启用工具调用
-
-1. 在 `config/tools.yaml` 中设置 `enable_tools: true`
-2. 在 `builtin_tools` 中列出要启用的工具
-3. 重启后端
-
-### 配置说明
-
-工具配置通过 `SessionManager._load_tools_config()` 加载：
-
-```python
-# src/animetta/server/session.py
-tools_config = load_tools_config()
-enable_tools = tools_config.get("tool_settings", {}).get("enable_tools", False)
-
-# 存储到 ConfigStore 供 llm_node 使用
-ConfigStore.set(session_id, "enable_tools", enable_tools)
-ConfigStore.set(session_id, "chat_model", chat_model)
-```
-
-## 使用示例
-
-### 测试工具调用
-
-启动后端后，在聊天窗口输入：
-
-```
-现在几点了？
-```
-
-预期行为：
-1. LLM 返回 `tool_calls: [{"name": "get_current_time", ...}]`
-2. `tool_node` 执行工具，返回 `2026-03-22 14:30:00`
-3. LLM 基于工具结果回复：`现在是下午两点半...`
-
-### 代码示例
-
-```python
-from animetta.tools.base import create_tool_registry
-from animetta.tools.config import load_tools_config
-
-# 加载配置
-tools_config = load_tools_config()
-
-# 创建工具注册表
-tools, tools_map = create_tool_registry(
-    builtin_enabled=tools_config.get("builtin_tools", []),
-)
-
-# 直接调用工具
-result = await tools_map["calculator"].ainvoke({"expression": "2 + 2"})
-print(result)  # "4"
-```
-
-### 自定义工具
-
-```python
-from langchain_core.tools import tool
-from animetta.tools.base import create_tool_registry
-
-@tool
-async def my_custom_tool(param: str) -> str:
-    """自定义工具描述。
-
-    Args:
-        param: 参数说明
-    """
-    return f"结果: {param}"
-
-# 注册工具
-tools, tools_map = create_tool_registry(
-    builtin_enabled=["calculator"],
-    extra_tools=[my_custom_tool],
-)
-```
-
-## 技术实现
-
-### GLM-4 工具调用格式
-
-```python
-# 工具定义（发送给 LLM）
+```json
 {
-    "type": "function",
-    "function": {
-        "name": "get_current_time",
-        "description": "获取当前时间",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "timezone": {"type": "string", "description": "时区"}
-            },
-            "required": []
-        }
-    }
-}
-
-# 工具调用（LLM 返回）
-{
-    "id": "call_123",
-    "type": "function",
-    "function": {
-        "name": "get_current_time",
-        "arguments": "{\"timezone\": \"Asia/Shanghai\"}"
-    }
-}
-
-# 工具结果（发送回 LLM）
-{
-    "role": "tool",
-    "tool_call_id": "call_123",
-    "content": "2026-03-22 14:30:00"
+  "contract_version": "2",
+  "kind": "mission",
+  "request_id": "turn-123",
+  "mission": {},
+  "requested_budget": {},
+  "wait_seconds": 0
 }
 ```
 
-### 关键文件
+`kind="atomic"` 时使用 `action` 替代 `mission`，只供受信任内部探针。完整 mission、action 与 budget schema 由 `src/animetta/tools/minecraft/voyager/` 的 Pydantic 模型生成，额外字段会被拒绝。
 
-| 文件 | 功能 |
-|------|------|
-| `src/animetta/orchestration/graph/llm_node.py` | LLM 推理节点，处理工具调用 |
-| `src/animetta/orchestration/graph/tool_node.py` | 工具执行节点 |
-| `src/animetta/services/llm/glm_llm.py` | GLM-4 工具调用实现 |
-| `src/animetta/tools/base.py` | 内置工具定义 |
-| `config/tools.yaml` | 工具配置加载 |
+Minecraft 工具仅在 `minecraft.enabled=true` 且 `MC_MCP_AUTH_TOKEN` 存在或本地 `mc-mcp` CLI 可发现时加载。
 
-## 故障排除
+## 外部 MCP 桥
 
-### 问题：工具没有被调用
+产品运行时的 MCP 客户端支持三种 transport：
 
-**症状**：输入 "现在几点了？"，LLM 回复 "我无法获取当前时间"
+| transport | 必需配置 | 可选配置 |
+|-----------|----------|----------|
+| `stdio` | 原生模式使用 `command`；Docker 模式使用 `sandbox.type=docker` 与 `sandbox.image` | `args[]`、`env`；Docker 模式还支持 mounts、memory、cpus |
+| `sse` | `url` | `headers`、`timeout`、`sse_read_timeout` |
+| `streamable_http` | `url` | `headers`、`timeout` |
 
-**检查步骤**：
+`MCPManager` 会连接 `config/tools.yaml` 的 `mcp_servers`，读取工具 schema，并转换为 LangChain Tool。当前 filesystem 示例在 Docker 沙箱中只挂载 `./data:/data:rw`。开发智能体 MCP 不得放入这份产品配置。
 
-1. 检查配置是否启用：
-```bash
-# 查看日志
-grep "enable_tools" logs/animetta.log
-# 应该看到: enable_tools=True
+## Bilibili MCP
+
+`tooling/bilibili_mcp` 是开发智能体使用的 stdio MCP。它只控制本机 Animetta 后端持有的唯一直播会话，不启动 Animetta，也不直接连接 Bilibili。后端 URL 来自 `ANIMETTA_MCP_URL`，只允许 `127.0.0.1`、`localhost` 或 `::1` 的 HTTP(S) URL，禁止 URL 内凭据、query 和 fragment。
+
+| MCP 工具 | 参数 | 行为 |
+|----------|------|------|
+| `bilibili_get_status` | 无 | 返回最后一个权威 `bilibili:danmaku_status` |
+| `bilibili_connect` | `room_id:int`、`timeout_seconds=30` | 从 stopped/error 连接房间并等待 prelive/live/error |
+| `bilibili_switch_room` | `room_id:int`、`timeout_seconds=30` | 使用 generation 乐观并发原子切房 |
+| `bilibili_disconnect` | `timeout_seconds=10` | 停止后端直播会话，不关闭 MCP transport |
+| `bilibili_wait_for_state` | `target_state:string`、`timeout_seconds=30` | 等待指定状态推送 |
+| `bilibili_get_recent_events` | `limit=50`、`event_types?:string[]` | 返回当前 generation 最近的规范化直播事件；limit 1..100 |
+
+统一结果：
+
+```json
+{
+  "ok": true,
+  "error_code": null,
+  "message": "...",
+  "status": {},
+  "events": []
+}
 ```
 
-2. 检查工具是否加载：
-```bash
-# 查看日志
-grep "工具调用已启用" logs/animetta.log
-# 应该看到: 工具调用已启用，加载 X 个工具
-```
+失败时 `ok=false`，`error_code` 可能为 `backend_unavailable`、`status_unavailable`、`invalid_room_id`、`invalid_timeout`、`invalid_state`、`invalid_limit`、`invalid_event_types`、`protocol_error`、`command_rejected`、`timeout` 或后端会话错误码。
 
-3. 检查 LLM 模型：
-```bash
-# 确认 smoke/production 的 LLM 声明支持工具调用
-grep -A12 "deepseek:" config/animetta.yaml
-```
+房间命令的 Socket.IO ack 只代表“已接受”。MCP 会继续等待 generation 增加并到达目标状态后才返回成功，因此调用方不需要自行拼接 ack 与状态推送。
 
-### 问题：工具调用报错
+## 添加工具
 
-**错误**：`Error code: 400, {"error":{"code":"1214","message":"工具类型不能为空"}}`
-
-**原因**：tool_calls 格式不正确
-
-**解决**：确保使用最新版本，已修复 GLM API 格式问题
-
-### 问题：无限循环调用工具
-
-**症状**：LLM 不断请求调用同一个工具
-
-**原因**：工具结果没有正确传递回 LLM
-
-**解决**：检查 `_convert_langchain_message_to_glm()` 是否正确处理 ToolMessage
-
-## 依赖
-
-- `langchain-core >= 0.3.0`: LangChain 核心库
-- `zhipuai >= 2.0.0`: 智谱 AI SDK（GLM-4）
-- `mcp >= 0.1.0`: MCP 协议支持（可选）
-
-## 注意事项
-
-1. **工具安全性**: 工具可以访问文件系统和网络，请谨慎配置
-2. **LLM 限制**: 只有 GLM-4 系列模型支持工具调用
-3. **超时控制**: 建议为工具调用设置合理的超时时间
-4. **MCP 可选**: 如果未安装 `mcp` 包，MCP 功能会被跳过
-
-## 下一步
-
-- [ ] 添加更多内置工具
-- [ ] 完善 MCP 协议支持
-- [ ] 添加工具权限管理
-- [ ] 支持工具组合调用
-- [ ] 添加工具调用日志和监控
+1. 产品工具放在 `src/animetta/tools/`，使用 `@tool` 与精确 schema；按需加入 `config/tools.yaml`。
+2. Minecraft 能力必须保持 `mc_connection` 与 `mc_operate_bot` 两工具表面，扩展 typed 内部契约而不是增加随意命令。
+3. 开发能力放在 `tooling/<capability>_mcp/`，使用中文工具描述和用户消息，不注册到产品运行时。
+4. 对有副作用的工具提供幂等 ID、明确错误码和可查询进度，不把“请求已接收”描述成“操作已完成”。
