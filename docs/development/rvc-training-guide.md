@@ -88,7 +88,7 @@ After training completes, try checkpoints at different epochs:
 After training and testing:
 
 ```bash
-python scripts/train/deploy_to_anima.py
+python scripts/train/deploy.py
 ```
 
 This copies the model config into `config/singing.yaml` automatically.
@@ -129,5 +129,5 @@ python scripts/train/04_augment_pitch.py
 python scripts/train/05_split_dataset.py
 # 4. RVC WebUI — same steps, change experiment name
 # 5. Deploy
-python scripts/train/deploy_to_anima.py
+python scripts/train/deploy.py
 ```

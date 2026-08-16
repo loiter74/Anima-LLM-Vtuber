@@ -183,7 +183,7 @@ def step_deploy() -> None:
     """Step 6: Deploy model to Anima."""
     run_step(
         "Deploy to Anima",
-        [PYTHON, str(SCRIPT_DIR / "deploy_to_anima.py")],
+        [PYTHON, str(SCRIPT_DIR / "deploy.py")],
         cwd=str(SCRIPT_DIR),
     )
 
