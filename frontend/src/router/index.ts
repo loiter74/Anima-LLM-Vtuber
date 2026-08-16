@@ -13,6 +13,11 @@ const router = createRouter({
       component: () => import('../views/DashboardPage.vue'),
     },
     {
+      path: '/account',
+      name: 'account',
+      component: () => import('../views/AccountPage.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/dashboard',
     },

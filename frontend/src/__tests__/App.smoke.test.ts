@@ -11,13 +11,17 @@ const socketMocks = vi.hoisted(() => ({
   useSocket: vi.fn(() => ({})),
   ensureAuthenticatedSession: vi.fn(),
 }))
+const routerMocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+  route: { name: 'dashboard', path: '/dashboard' },
+}))
 
 vi.mock('@/composables/useSocket', () => socketMocks)
 
 // Mock router since App uses composables that depend on route
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ name: 'chat', path: '/' }),
+  useRouter: () => ({ replace: routerMocks.replace }),
+  useRoute: () => routerMocks.route,
   createRouter: vi.fn(),
   createMemoryHistory: vi.fn(),
 }))
@@ -76,6 +80,23 @@ describe('App', () => {
     })
 
     expect(wrapper.get('[data-testid="auth-gate"]').text()).toContain('登录服务不可用')
+    wrapper.unmount()
+  })
+
+  it('redirects a first-login session to the account page', async () => {
+    const pinia = createPinia()
+    useConnectionStore(pinia).applyAuthSession({
+      status: 'authenticated',
+      user: { id: 'user-1', username: 'admin', role: 'admin' },
+      passwordChangeRequired: true,
+    })
+
+    const wrapper = mount(App, {
+      global: { plugins: [pinia], stubs: { RouterView: true } },
+    })
+    await nextTick()
+
+    expect(routerMocks.replace).toHaveBeenCalledWith('/account')
     wrapper.unmount()
   })
 })

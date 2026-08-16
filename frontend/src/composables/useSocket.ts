@@ -6,7 +6,7 @@ import { useSingingStore } from '@/stores/singing'
 import type { ModelStatusPayload } from '@/types/model-loading'
 import type { PipelineStage } from '@/types/singing'
 import { Events, type SingCompletePayload } from '@/constants/socket-events'
-import { checkAuthenticatedSession, type AuthStatus } from '@/auth/session'
+import { fetchAuthenticatedSession, type AuthStatus } from '@/auth/session'
 
 let socket: Socket | null = null
 let _initialized = false
@@ -119,14 +119,14 @@ export async function ensureAuthenticatedSession(): Promise<AuthStatus> {
     store.setAuthStatus('unavailable')
     return 'unavailable'
   }
-  const authStatus = await checkAuthenticatedSession()
-  store.setAuthStatus(authStatus)
-  if (authStatus === 'authenticated') {
+  const session = await fetchAuthenticatedSession()
+  store.applyAuthSession(session)
+  if (session.status === 'authenticated' && !session.passwordChangeRequired) {
     store.setStatus(socket.connected ? 'connected' : 'connecting')
     socket.connect()
   } else {
     socket.disconnect()
     store.setStatus('disconnected')
   }
-  return authStatus
+  return session.status
 }

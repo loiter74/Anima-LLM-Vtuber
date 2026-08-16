@@ -34,6 +34,11 @@ _auth_session_readiness: dict[str, object | None] = {
     "ready": False,
     "reason": "not_started",
 }
+_auth_user_readiness: dict[str, object | None] = {
+    "state": "failed",
+    "ready": False,
+    "reason": "not_started",
+}
 _frontend_readiness: dict[str, str | bool | None] = {
     "state": "failed",
     "ready": False,
@@ -73,6 +78,12 @@ def set_auth_session_readiness(value: dict[str, object | None]) -> None:
     """Cache the dedicated browser-session store status."""
     global _auth_session_readiness
     _auth_session_readiness = dict(value)
+
+
+def set_auth_user_readiness(value: dict[str, object | None]) -> None:
+    """Cache the persistent browser-user store status."""
+    global _auth_user_readiness
+    _auth_user_readiness = dict(value)
 
 
 async def stats_overview(request: Request) -> JSONResponse:
@@ -259,6 +270,7 @@ def _merge_component_readiness(payload: dict[str, Any]) -> None:
     components = payload.setdefault("components", {})
     components["checkpoint"] = {**_checkpoint_readiness, "required": False}
     components["auth_session"] = {**_auth_session_readiness, "required": True}
+    components["auth_user"] = {**_auth_user_readiness, "required": True}
     payload["degraded"] = _checkpoint_readiness.get("degraded") is True
     local_components = local_snapshot.get("components", {})
     local_ready = True
@@ -274,7 +286,10 @@ def _merge_component_readiness(payload: dict[str, Any]) -> None:
         local_ready = local_ready and component.get("ready") is True
     payload["component_status_age_seconds"] = local_snapshot.get("age_seconds")
     payload["ready"] = bool(
-        payload.get("ready") and local_ready and _auth_session_readiness.get("ready") is True
+        payload.get("ready")
+        and local_ready
+        and _auth_session_readiness.get("ready") is True
+        and _auth_user_readiness.get("ready") is True
     )
     payload["status"] = "ready" if payload["ready"] else "not_ready"
 

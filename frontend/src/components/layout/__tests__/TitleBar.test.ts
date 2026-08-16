@@ -16,7 +16,7 @@ describe('TitleBar', () => {
     route.name = 'dashboard'
   })
 
-  it('exposes only the public live view and backstage dashboard', () => {
+  it('exposes the live view, backstage dashboard, and account page', () => {
     const wrapper = mount(TitleBar, {
       global: {
         plugins: [createPinia()],
@@ -25,7 +25,8 @@ describe('TitleBar', () => {
 
     expect(wrapper.get('[data-testid="nav-live"]').attributes('href')).toBe('/live.html')
     expect(wrapper.get('[data-testid="nav-dashboard"]').attributes('href')).toBe('/dashboard')
-    expect(wrapper.findAll('.nav-btn')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="nav-account"]').attributes('href')).toBe('/account')
+    expect(wrapper.findAll('.nav-btn')).toHaveLength(3)
     expect(wrapper.find('.nav-btn.active').text()).toBe('后台控制')
   })
 
@@ -42,5 +43,20 @@ describe('TitleBar', () => {
 
     expect(wrapper.get('.status-text').text()).toBe(label)
     expect(wrapper.get('.status-text').text()).not.toBe('服务已断开')
+  })
+
+  it('shows the password requirement independently from socket state', () => {
+    const pinia = createPinia()
+    const store = useConnectionStore(pinia)
+    store.applyAuthSession({
+      status: 'authenticated',
+      user: { id: 'user-1', username: 'admin', role: 'admin' },
+      passwordChangeRequired: true,
+    })
+    store.setStatus('disconnected')
+
+    const wrapper = mount(TitleBar, { global: { plugins: [pinia] } })
+
+    expect(wrapper.get('.status-text').text()).toBe('需修改密码')
   })
 })

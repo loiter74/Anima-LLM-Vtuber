@@ -15,6 +15,10 @@ describe('Router', () => {
     expect(route.name).toBe('dashboard')
   })
 
+  it('resolves the account management route', () => {
+    expect(router.resolve('/account').name).toBe('account')
+  })
+
   it('redirects removed and unknown SPA pages to the dashboard', () => {
     const route = router.resolve('/music')
     expect(route.matched[0]?.redirect).toBe('/dashboard')
@@ -26,6 +30,6 @@ describe('Router', () => {
         .getRoutes()
         .map(({ name }) => name)
         .filter(Boolean),
-    ).toEqual(['dashboard'])
+    ).toEqual(['dashboard', 'account'])
   })
 })

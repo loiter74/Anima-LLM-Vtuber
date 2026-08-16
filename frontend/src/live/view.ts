@@ -98,6 +98,7 @@ export function createDomLiveView(document: Document): LiveView {
         checking: '正在检查登录状态',
         unauthenticated: '未登录',
         'auth-unavailable': '登录服务不可用',
+        'password-required': '需修改密码',
         connected: '服务已连接',
         connecting: '服务连接中',
         disconnected: '服务已断开',

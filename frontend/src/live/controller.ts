@@ -24,6 +24,7 @@ export interface LiveView {
       | 'checking'
       | 'unauthenticated'
       | 'auth-unavailable'
+      | 'password-required'
       | 'connecting'
       | 'connected'
       | 'disconnected'

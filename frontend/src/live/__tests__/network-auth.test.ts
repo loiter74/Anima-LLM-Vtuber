@@ -22,10 +22,30 @@ describe('standalone live network authentication', () => {
     const view = { setSocketState: vi.fn() }
 
     await startAuthenticatedLiveSocket(socket, view, {
-      request: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+      request: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ password_change_required: false }),
+      }),
     })
 
     expect(view.setSocketState).toHaveBeenCalledWith('connecting')
     expect(socket.connect).toHaveBeenCalledOnce()
+  })
+
+  it('shows the password requirement without starting reconnects', async () => {
+    const socket = { connect: vi.fn() }
+    const view = { setSocketState: vi.fn() }
+
+    await startAuthenticatedLiveSocket(socket, view, {
+      request: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ password_change_required: true }),
+      }),
+    })
+
+    expect(socket.connect).not.toHaveBeenCalled()
+    expect(view.setSocketState).toHaveBeenCalledWith('password-required')
   })
 })

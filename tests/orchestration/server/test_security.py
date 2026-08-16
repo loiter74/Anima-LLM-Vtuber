@@ -12,6 +12,10 @@ from starlette.testclient import TestClient
 
 from animetta.config.security import SecurityConfig
 from animetta.orchestration.server.auth_session import RedisAuthSessionStore
+from animetta.orchestration.server.auth_user import (
+    AuthUserStore,
+    AuthUserStoreUnavailableError,
+)
 from animetta.orchestration.server.routes import register_routes
 from animetta.orchestration.server.security import (
     AuthenticationMiddleware,
@@ -34,6 +38,7 @@ DEFAULT_PASSWORD_HASH = (
 class FakeRedis:
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
+        self.sets: dict[str, set[str]] = {}
         self.unavailable = False
 
     async def ping(self) -> bool:
@@ -49,9 +54,37 @@ class FakeRedis:
         self._check()
         return self.values.get(key)
 
-    async def delete(self, key: str) -> int:
+    async def delete(self, *keys: str) -> int:
         self._check()
-        return int(self.values.pop(key, None) is not None)
+        deleted = 0
+        for key in keys:
+            deleted += int(self.values.pop(key, None) is not None)
+            deleted += int(self.sets.pop(key, None) is not None)
+        return deleted
+
+    async def sadd(self, key: str, value: str) -> int:
+        self._check()
+        before = len(self.sets.setdefault(key, set()))
+        self.sets[key].add(value)
+        return int(len(self.sets[key]) > before)
+
+    async def expire(self, key: str, _seconds: int) -> bool:
+        self._check()
+        return key in self.sets
+
+    async def srem(self, key: str, value: str) -> int:
+        self._check()
+        before = len(self.sets.setdefault(key, set()))
+        self.sets[key].discard(value)
+        return int(len(self.sets[key]) < before)
+
+    async def smembers(self, key: str) -> set[str]:
+        self._check()
+        return set(self.sets.get(key, set()))
+
+    async def scard(self, key: str) -> int:
+        self._check()
+        return len(self.sets.get(key, set()))
 
     def _check(self) -> None:
         if self.unavailable:
@@ -77,6 +110,11 @@ def _runtime(
         },
         observation_recorder=recorder,
         session_store=RedisAuthSessionStore(None, ttl_seconds=8 * 3600, client=client),
+        user_store=AuthUserStore(
+            ":memory:",
+            bootstrap_username=username,
+            bootstrap_password_hash=password_hash,
+        ),
     )
 
 
@@ -108,15 +146,16 @@ def test_production_rejects_missing_or_invalid_account_credentials(
         _runtime(username=username, password_hash=password_hash)
 
 
-def test_compose_default_password_hash_accepts_animetta_and_is_salted() -> None:
+@pytest.mark.asyncio
+async def test_compose_default_password_hash_accepts_animetta_and_is_salted() -> None:
     first = hash_password("animetta")
     second = hash_password("animetta")
     security = _runtime(password_hash=DEFAULT_PASSWORD_HASH)
 
     assert first.startswith("scrypt-v1:")
     assert first != second
-    assert security.verify_account_credentials("admin", "animetta") is True
-    assert security.verify_account_credentials("admin", "wrong") is False
+    assert await security.verify_account_credentials("admin", "animetta") is True
+    assert await security.verify_account_credentials("admin", "wrong") is False
     compose = Path("docker-compose.yml").read_text(encoding="utf-8")
     assert "ANIMETTA_AUTH_USERNAME=${ANIMETTA_AUTH_USERNAME:-admin}" in compose
     assert (
@@ -150,13 +189,177 @@ def test_login_issues_strict_httponly_session_and_protects_api() -> None:
         original_cookie = client.cookies.get("animetta_session")
         assert original_cookie
         assert "." not in original_cookie
-        assert client.get("/api/auth/session").json()["authenticated"] is True
+        session = client.get("/api/auth/session").json()
+        assert session["authenticated"] is True
+        assert session["password_change_required"] is True
+        assert session["user"] == {
+            "id": session["user"]["id"],
+            "username": TEST_USERNAME,
+            "role": "admin",
+        }
 
         logout = client.post("/api/auth/logout")
         assert logout.status_code == 200
         assert client.get("/api/auth/session").status_code == 401
         client.cookies.set("animetta_session", original_cookie)
         assert client.get("/api/auth/session").status_code == 401
+
+
+def test_first_login_requires_password_change_and_replaces_all_sessions() -> None:
+    security = _runtime()
+
+    async def ok(_request):
+        return JSONResponse({"ok": True})
+
+    app = Starlette(
+        routes=get_auth_routes(security) + [Route("/api/private", ok)],
+    )
+    app.add_middleware(AuthenticationMiddleware, security=security)
+
+    with TestClient(app, base_url="https://animetta.example") as first:
+        first_login = first.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        )
+        assert first_login.json()["password_change_required"] is True
+        original_cookie = first.cookies.get("animetta_session")
+        assert original_cookie
+        assert first.get("/api/private").json()["error"]["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+        with TestClient(app, base_url="https://animetta.example") as second:
+            assert (
+                second.post(
+                    "/api/auth/login",
+                    json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+                ).status_code
+                == 200
+            )
+            second_cookie = second.cookies.get("animetta_session")
+            assert second_cookie
+
+            changed = first.post(
+                "/api/auth/password",
+                json={
+                    "current_password": TEST_PASSWORD,
+                    "new_password": "a-new-secure-password",
+                },
+            )
+            assert changed.status_code == 200
+            replacement_cookie = first.cookies.get("animetta_session")
+            assert replacement_cookie not in {None, original_cookie, second_cookie}
+            assert first.get("/api/private").status_code == 200
+            assert first.get("/api/auth/session").json()["password_change_required"] is False
+            assert second.get("/api/auth/session").status_code == 401
+
+        replay = TestClient(app, base_url="https://animetta.example")
+        replay.cookies.set("animetta_session", original_cookie)
+        assert replay.get("/api/auth/session").status_code == 401
+
+
+def test_admin_manages_users_while_regular_users_and_bearer_are_forbidden() -> None:
+    security = _runtime()
+    app = Starlette(routes=get_auth_routes(security))
+    app.add_middleware(AuthenticationMiddleware, security=security)
+
+    with TestClient(app, base_url="https://animetta.example") as admin:
+        admin.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        )
+        admin.post(
+            "/api/auth/password",
+            json={
+                "current_password": TEST_PASSWORD,
+                "new_password": "admin-permanent-password",
+            },
+        )
+        created = admin.post(
+            "/api/auth/users",
+            json={
+                "username": "Viewer",
+                "role": "user",
+                "temporary_password": "viewer-temporary-password",
+            },
+        )
+        assert created.status_code == 201
+        user_id = created.json()["user"]["id"]
+        listed = admin.get("/api/auth/users")
+        assert listed.status_code == 200
+        assert {user["username"] for user in listed.json()["users"]} == {"admin", "Viewer"}
+
+        bearer = admin.get(
+            "/api/auth/users",
+            headers={"Authorization": f"Bearer {'s' * 32}"},
+        )
+        assert bearer.status_code == 403
+        assert bearer.json()["error"]["code"] == "ACCOUNT_ADMIN_REQUIRED"
+
+        with TestClient(app, base_url="https://animetta.example") as viewer:
+            login = viewer.post(
+                "/api/auth/login",
+                json={"username": "viewer", "password": "viewer-temporary-password"},
+            )
+            assert login.json()["password_change_required"] is True
+            assert (
+                viewer.get("/api/auth/users").json()["error"]["code"] == "PASSWORD_CHANGE_REQUIRED"
+            )
+            viewer.post(
+                "/api/auth/password",
+                json={
+                    "current_password": "viewer-temporary-password",
+                    "new_password": "viewer-permanent-password",
+                },
+            )
+            assert viewer.get("/api/auth/users").json()["error"]["code"] == "ACCOUNT_ADMIN_REQUIRED"
+
+            disabled = admin.patch(f"/api/auth/users/{user_id}", json={"enabled": False})
+            assert disabled.status_code == 200
+            assert viewer.get("/api/auth/session").json()["error"]["code"] == "UNAUTHORIZED"
+
+        assert (
+            admin.post(
+                "/api/auth/login",
+                json={"username": "viewer", "password": "viewer-permanent-password"},
+            ).json()["error"]["code"]
+            == "ACCOUNT_DISABLED"
+        )
+        assert admin.patch(f"/api/auth/users/{user_id}", json={"enabled": True}).status_code == 200
+        reset = admin.post(
+            f"/api/auth/users/{user_id}/reset-password",
+            json={"temporary_password": "viewer-reset-password"},
+        )
+        assert reset.status_code == 200
+        assert reset.json()["user"]["must_change_password"] is True
+
+
+def test_admin_cannot_mutate_own_access_or_reuse_username() -> None:
+    security = _runtime()
+    app = Starlette(routes=get_auth_routes(security))
+    app.add_middleware(AuthenticationMiddleware, security=security)
+
+    with TestClient(app, base_url="https://animetta.example") as client:
+        client.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        )
+        client.post(
+            "/api/auth/password",
+            json={"current_password": TEST_PASSWORD, "new_password": "new-admin-password"},
+        )
+        user_id = client.get("/api/auth/session").json()["user"]["id"]
+        self_mutation = client.patch(f"/api/auth/users/{user_id}", json={"role": "user"})
+        assert self_mutation.status_code == 409
+        assert self_mutation.json()["error"]["code"] == "SELF_ADMIN_MUTATION_FORBIDDEN"
+        conflict = client.post(
+            "/api/auth/users",
+            json={
+                "username": " ADMIN ",
+                "role": "user",
+                "temporary_password": "temporary-password",
+            },
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["error"]["code"] == "USERNAME_CONFLICT"
 
 
 def test_browser_auth_fails_closed_when_session_store_is_unavailable() -> None:
@@ -191,6 +394,37 @@ def test_browser_auth_fails_closed_when_session_store_is_unavailable() -> None:
         assert response.json()["error"]["code"] == "AUTH_SESSION_STORE_UNAVAILABLE"
     assert bearer.status_code == 200
     assert "max-age=0" in logout.headers["set-cookie"].lower()
+
+
+def test_browser_auth_fails_closed_when_user_store_is_unavailable(monkeypatch) -> None:
+    security = _runtime()
+    monkeypatch.setattr(
+        security._user_store,
+        "authenticate",
+        AsyncMock(side_effect=AuthUserStoreUnavailableError("database unavailable")),
+    )
+
+    async def ok(_request):
+        return JSONResponse({"ok": True})
+
+    app = Starlette(
+        routes=get_auth_routes(security) + [Route("/api/private", ok)],
+    )
+    app.add_middleware(AuthenticationMiddleware, security=security)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        )
+        bearer = client.get(
+            "/api/private",
+            headers={"Authorization": f"Bearer {'s' * 32}"},
+        )
+
+    assert login.status_code == 503
+    assert login.json()["error"]["code"] == "AUTH_USER_STORE_UNAVAILABLE"
+    assert bearer.status_code == 200
 
 
 def test_login_rate_limit_returns_retry_after() -> None:
@@ -238,15 +472,16 @@ def test_auth_failures_are_written_as_content_free_ledger_records() -> None:
     assert finished.error_type == "UNAUTHORIZED"
 
 
-def test_token_is_not_present_in_runtime_representation() -> None:
+@pytest.mark.asyncio
+async def test_token_is_not_present_in_runtime_representation() -> None:
     security = _runtime("private-token-that-is-long-enough-123")
 
     assert "private-token" not in repr(security)
     assert TEST_PASSWORD not in repr(security)
     assert security.verify_shared_token("private-token-that-is-long-enough-123") is True
     assert security.verify_shared_token("private-token-that-is-long-enough-124") is False
-    assert security.verify_account_credentials(TEST_USERNAME, TEST_PASSWORD) is True
-    assert security.verify_account_credentials(TEST_USERNAME, "wrong") is False
+    assert await security.verify_account_credentials(TEST_USERNAME, TEST_PASSWORD) is True
+    assert await security.verify_account_credentials(TEST_USERNAME, "wrong") is False
 
 
 def test_health_is_public_while_ready_metrics_and_api_require_authentication() -> None:
@@ -330,6 +565,34 @@ async def test_socket_requires_auth_and_chat_aliases_cannot_bypass_rate_limit(
     assert limited["error"]["code"] == "RATE_LIMITED"
     assert limited["retry_after"] >= 1
     assert handlers.chat.on_text_event.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_socket_rejects_session_until_required_password_change(
+    mock_socketio,
+) -> None:
+    security = _runtime()
+    token, _, _ = await security.login(TEST_USERNAME, TEST_PASSWORD)
+    handlers = register_routes(mock_socketio, MagicMock(), security=security)
+    handlers.on_connect = AsyncMock()
+    registered = {call.args[0]: call.args[1] for call in mock_socketio.on.call_args_list}
+
+    with pytest.raises(ConnectionRefusedError) as refused:
+        await registered["connect"](
+            "restricted",
+            {
+                "REMOTE_ADDR": "127.0.0.3",
+                "asgi.scope": {
+                    "headers": [
+                        (b"cookie", f"animetta_session={token}".encode()),
+                    ]
+                },
+            },
+            None,
+        )
+
+    assert "PASSWORD_CHANGE_REQUIRED" in str(refused.value)
+    assert security.socket_principal("restricted") is None
 
 
 @pytest.mark.asyncio

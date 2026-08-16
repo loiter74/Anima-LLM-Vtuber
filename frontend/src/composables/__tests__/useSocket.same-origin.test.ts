@@ -49,7 +49,17 @@ describe('useSocket same-origin bootstrap', () => {
   })
 
   it('connects after the browser session is authenticated', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          user: { id: 'user-1', username: 'admin', role: 'admin' },
+          password_change_required: false,
+        }),
+      }),
+    )
     const pinia = createPinia()
     const { useSocket } = await import('../useSocket')
     const { useConnectionStore } = await import('@/stores/connection')
@@ -65,6 +75,35 @@ describe('useSocket same-origin bootstrap', () => {
 
     expect(socket.connect).toHaveBeenCalledOnce()
     expect(useConnectionStore(pinia).authStatus).toBe('authenticated')
+  })
+
+  it('keeps Socket.IO disconnected until the first-login password is changed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          user: { id: 'user-1', username: 'admin', role: 'admin' },
+          password_change_required: true,
+        }),
+      }),
+    )
+    const pinia = createPinia()
+    const { useSocket } = await import('../useSocket')
+    const { useConnectionStore } = await import('@/stores/connection')
+    const Host = defineComponent({
+      setup() {
+        useSocket()
+        return () => null
+      },
+    })
+
+    mount(Host, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    expect(socket.connect).not.toHaveBeenCalled()
+    expect(useConnectionStore(pinia).passwordChangeRequired).toBe(true)
   })
 
   it('connects Socket.IO to window.location.origin', async () => {

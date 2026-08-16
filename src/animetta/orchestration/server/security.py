@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
+import asyncio
 import hmac
-import json
 import os
 import secrets
 import time
@@ -32,27 +30,59 @@ from animetta.observability.domain import (
     TraceStarted,
 )
 from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
+from animetta.utils.env_helper import get_data_dir
 
+from .auth_password import (
+    PASSWORD_HASH_SCHEME,
+    hash_password,
+    parse_password_hash,
+    validate_password,
+    verify_password,
+)
 from .auth_session import (
     AuthSessionHealth,
     AuthSessionStore,
     AuthSessionStoreUnavailableError,
     RedisAuthSessionStore,
 )
+from .auth_user import (
+    AuthUserHealth,
+    AuthUserStore,
+    AuthUserStoreUnavailableError,
+    UserAccount,
+    UserNotFoundError,
+    UserRole,
+)
 
 SESSION_COOKIE = "animetta_session"
-PASSWORD_HASH_SCHEME = "scrypt-v1"
-PASSWORD_SALT_BYTES = 16
-PASSWORD_DIGEST_BYTES = 32
-PASSWORD_MIN_BYTES = 8
-PASSWORD_MAX_BYTES = 1024
-PASSWORD_SCRYPT_N = 2**14
-PASSWORD_SCRYPT_R = 8
-PASSWORD_SCRYPT_P = 1
 
 
 class SecurityConfigurationError(RuntimeError):
     """Raised before serving when production security is unsafe."""
+
+
+class AccountDisabledError(RuntimeError):
+    """Raised when a disabled account attempts to authenticate."""
+
+
+class PasswordChangeRequiredError(RuntimeError):
+    """Raised when a restricted first-login session reaches product APIs."""
+
+
+class CurrentPasswordInvalidError(RuntimeError):
+    """Raised when a self-service password check fails."""
+
+
+class SamePasswordError(RuntimeError):
+    """Raised when a password change would keep the current credential."""
+
+
+class AccountAdminRequiredError(RuntimeError):
+    """Raised when a browser principal lacks account-administration rights."""
+
+
+class SelfAdminMutationError(RuntimeError):
+    """Raised when an administrator attempts a prohibited self-mutation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +91,11 @@ class AuthPrincipal:
 
     session_id: str
     source: str
+    user_id: str | None = None
+    username: str | None = None
+    role: UserRole | None = None
+    password_change_required: bool = False
+    credential_version: int | None = None
 
 
 class RateLimitError(RuntimeError):
@@ -107,18 +142,6 @@ class TokenBucketLimiter:
         bucket.tokens -= 1.0
 
 
-def hash_password(password: str) -> str:
-    """Return the environment-safe password hash used by browser account login."""
-    password_bytes = password.encode("utf-8")
-    if not PASSWORD_MIN_BYTES <= len(password_bytes) <= PASSWORD_MAX_BYTES:
-        raise ValueError(
-            f"password must contain between {PASSWORD_MIN_BYTES} and {PASSWORD_MAX_BYTES} bytes"
-        )
-    password_salt = secrets.token_bytes(PASSWORD_SALT_BYTES)
-    digest = _derive_password(password_bytes, password_salt)
-    return f"{PASSWORD_HASH_SCHEME}:{_b64url(password_salt)}:{_b64url(digest)}"
-
-
 class SecurityRuntime:
     """Runtime-only secret boundary. Credentials never enter Pydantic snapshots."""
 
@@ -131,6 +154,7 @@ class SecurityRuntime:
         observation_recorder: ObservationRecorder | None = None,
         redis_url: str | None = None,
         session_store: AuthSessionStore | None = None,
+        user_store: AuthUserStore | None = None,
     ) -> None:
         self.profile = profile
         self.config = config
@@ -151,20 +175,21 @@ class SecurityRuntime:
                 f"{config.account_username_env} must contain between 1 and 128 bytes in production"
             )
         try:
-            password_salt, password_digest = _parse_password_hash(account_password_hash)
+            parse_password_hash(account_password_hash)
         except ValueError as exc:
             if self.enabled:
                 raise SecurityConfigurationError(
                     f"{config.account_password_hash_env} must contain a valid {PASSWORD_HASH_SCHEME} hash in production"
                 ) from exc
-            password_salt, password_digest = b"", b""
         self._token = token.encode("utf-8")
-        self._account_username = account_username.encode("utf-8")
-        self._password_salt = password_salt
-        self._password_digest = password_digest
         self._session_store = session_store or RedisAuthSessionStore(
             redis_url or runtime_environment.get("ANIMETTA_REDIS_URL"),
             ttl_seconds=config.session_hours * 3600,
+        )
+        self._user_store = user_store or AuthUserStore(
+            get_data_dir() / "auth.db",
+            bootstrap_username=account_username,
+            bootstrap_password_hash=account_password_hash,
         )
 
     @classmethod
@@ -195,19 +220,34 @@ class SecurityRuntime:
             return AuthSessionHealth(True, None)
         return self._session_store.health
 
-    async def start(self) -> AuthSessionHealth:
+    @property
+    def user_health(self) -> AuthUserHealth:
         if not self.enabled:
-            return self.session_health
-        return await self._session_store.start()
+            return AuthUserHealth(True, None)
+        return self._user_store.health
+
+    async def start(self) -> tuple[AuthSessionHealth, AuthUserHealth]:
+        if not self.enabled:
+            return self.session_health, self.user_health
+        session_health, user_health = await asyncio.gather(
+            self._session_store.start(),
+            self._user_store.start(),
+        )
+        return session_health, user_health
 
     async def check_session_health(self) -> AuthSessionHealth:
         if not self.enabled:
             return self.session_health
         return await self._session_store.check_health()
 
+    async def check_user_health(self) -> AuthUserHealth:
+        if not self.enabled:
+            return self.user_health
+        return await self._user_store.check_health()
+
     async def close(self) -> None:
         if self.enabled:
-            await self._session_store.close()
+            await asyncio.gather(self._session_store.close(), self._user_store.close())
 
     async def record_error(self, code: str, *, surface: str) -> None:
         """Persist a content-free security failure without weakening request handling."""
@@ -267,6 +307,10 @@ class SecurityRuntime:
         if self.enabled:
             self._limiter.consume("login", ip, rate=5, period_seconds=300, burst=5)
 
+    def check_password_limit(self, user_id: str) -> None:
+        if self.enabled:
+            self._limiter.consume("password", user_id, rate=5, period_seconds=900, burst=5)
+
     def check_connection_limit(self, ip: str) -> None:
         if self.enabled:
             self._limiter.consume("connection", ip, rate=10, period_seconds=60, burst=10)
@@ -299,26 +343,64 @@ class SecurityRuntime:
             return not self.enabled
         return hmac.compare_digest(supplied.encode("utf-8"), self._token)
 
-    def verify_account_credentials(self, username: str, password: str) -> bool:
+    async def verify_account_credentials(self, username: str, password: str) -> bool:
         if not self.enabled:
             return True
-        password_bytes = password.encode("utf-8")
-        if len(password_bytes) > PASSWORD_MAX_BYTES:
-            return False
-        supplied_digest = _derive_password(password_bytes, self._password_salt)
-        username_matches = hmac.compare_digest(
-            username.encode("utf-8"),
-            self._account_username,
-        )
-        password_matches = hmac.compare_digest(supplied_digest, self._password_digest)
-        return username_matches and password_matches
+        return await self._user_store.authenticate(username, password) is not None
 
-    async def issue_session(self, *, now: int | None = None) -> tuple[str, int]:
+    async def login(
+        self,
+        username: str,
+        password: str,
+        *,
+        now: int | None = None,
+    ) -> tuple[str, int, UserAccount]:
+        if not self.enabled:
+            expires_at = (
+                int(time.time()) if now is None else now
+            ) + self.config.session_hours * 3600
+            account = UserAccount(
+                id="nonproduction",
+                username=username or "nonproduction",
+                password_hash="",
+                role="admin",
+                enabled=True,
+                must_change_password=False,
+                credential_version=1,
+                created_at=0,
+                updated_at=0,
+                last_login_at=None,
+                created_by=None,
+            )
+            return secrets.token_urlsafe(32), expires_at, account
+        account = await self._user_store.authenticate(username, password)
+        if account is None:
+            raise CurrentPasswordInvalidError("UNAUTHORIZED")
+        if not account.enabled:
+            raise AccountDisabledError("ACCOUNT_DISABLED")
+        account = await self._user_store.record_login(account.id)
+        token, session = await self._session_store.issue(
+            user_id=account.id,
+            credential_version=account.credential_version,
+            now=now,
+        )
+        return token, session.expires_at, account
+
+    async def issue_session(
+        self,
+        account: UserAccount,
+        *,
+        now: int | None = None,
+    ) -> tuple[str, int]:
         issued_at = int(time.time()) if now is None else now
         expires_at = issued_at + self.config.session_hours * 3600
         if not self.enabled:
             return secrets.token_urlsafe(32), expires_at
-        value, session = await self._session_store.issue(now=issued_at)
+        value, session = await self._session_store.issue(
+            user_id=account.id,
+            credential_version=account.credential_version,
+            now=issued_at,
+        )
         return value, session.expires_at
 
     async def verify_session(
@@ -328,19 +410,164 @@ class SecurityRuntime:
         now: int | None = None,
     ) -> AuthPrincipal | None:
         if not self.enabled:
-            return AuthPrincipal(session_id="nonproduction", source="disabled")
+            return AuthPrincipal(
+                session_id="nonproduction",
+                source="disabled",
+                user_id="nonproduction",
+                username="nonproduction",
+                role="admin",
+            )
         session = await self._session_store.verify(value, now=now)
         if session is None:
             return None
-        return AuthPrincipal(session_id=session.session_id, source="cookie")
+        account = await self._user_store.get_by_id(session.user_id)
+        if account is None or account.credential_version != session.credential_version:
+            return None
+        if not account.enabled:
+            raise AccountDisabledError("ACCOUNT_DISABLED")
+        return self._principal_for_account(session.session_id, account)
 
     async def revoke_session(self, value: str) -> None:
         if self.enabled:
             await self._session_store.revoke(value)
 
+    async def change_password(
+        self,
+        principal: AuthPrincipal,
+        *,
+        current_password: str,
+        new_password: str,
+        now: int | None = None,
+    ) -> tuple[str, int, UserAccount]:
+        account = await self._browser_account(principal)
+        self.check_password_limit(account.id)
+        if not verify_password(current_password, account.password_hash):
+            raise CurrentPasswordInvalidError("CURRENT_PASSWORD_INVALID")
+        validate_password(new_password)
+        if verify_password(new_password, account.password_hash):
+            raise SamePasswordError("PASSWORD_UNCHANGED")
+        account = await self._user_store.update_password(
+            account.id,
+            password_hash=hash_password(new_password),
+            must_change_password=False,
+            actor_user_id=account.id,
+            action="password_changed",
+        )
+        await self._session_store.revoke_user(account.id)
+        token, expires_at = await self.issue_session(account, now=now)
+        return token, expires_at, account
+
+    async def list_users(self, principal: AuthPrincipal) -> list[dict[str, object]]:
+        await self._require_admin(principal)
+        users = await self._user_store.list_users()
+        counts = await self._session_store.count_user_sessions(
+            {user.id: user.credential_version for user in users}
+        )
+        return [user.public_dict(active_sessions=counts[user.id]) for user in users]
+
+    async def create_user(
+        self,
+        principal: AuthPrincipal,
+        *,
+        username: str,
+        role: UserRole,
+        temporary_password: str,
+    ) -> UserAccount:
+        actor = await self._require_admin(principal)
+        validate_password(temporary_password)
+        return await self._user_store.create_user(
+            username=username,
+            password_hash=hash_password(temporary_password),
+            role=role,
+            actor_user_id=actor.id,
+        )
+
+    async def update_user_access(
+        self,
+        principal: AuthPrincipal,
+        user_id: str,
+        *,
+        role: UserRole | None,
+        enabled: bool | None,
+    ) -> UserAccount:
+        actor = await self._require_admin(principal)
+        if actor.id == user_id and (role is not None or enabled is not None):
+            raise SelfAdminMutationError("SELF_ADMIN_MUTATION_FORBIDDEN")
+        account, changed = await self._user_store.update_access(
+            user_id,
+            role=role,
+            enabled=enabled,
+            actor_user_id=actor.id,
+        )
+        if changed:
+            await self._session_store.revoke_user(account.id)
+        return account
+
+    async def reset_user_password(
+        self,
+        principal: AuthPrincipal,
+        user_id: str,
+        *,
+        temporary_password: str,
+    ) -> UserAccount:
+        actor = await self._require_admin(principal)
+        if actor.id == user_id:
+            raise SelfAdminMutationError("SELF_ADMIN_MUTATION_FORBIDDEN")
+        validate_password(temporary_password)
+        account = await self._user_store.update_password(
+            user_id,
+            password_hash=hash_password(temporary_password),
+            must_change_password=True,
+            actor_user_id=actor.id,
+            action="password_reset",
+        )
+        await self._session_store.revoke_user(account.id)
+        return account
+
+    async def revoke_user_sessions(self, principal: AuthPrincipal, user_id: str) -> None:
+        actor = await self._require_admin(principal)
+        if await self._user_store.get_by_id(user_id) is None:
+            raise UserNotFoundError("USER_NOT_FOUND")
+        await self._session_store.revoke_user(user_id)
+        await self._user_store.record_event(
+            actor_user_id=actor.id,
+            target_user_id=user_id,
+            action="sessions_revoked",
+        )
+
+    async def _browser_account(self, principal: AuthPrincipal) -> UserAccount:
+        if principal.source != "cookie" or principal.user_id is None:
+            raise AccountAdminRequiredError("ACCOUNT_ADMIN_REQUIRED")
+        account = await self._user_store.get_by_id(principal.user_id)
+        if account is None:
+            raise UserNotFoundError("USER_NOT_FOUND")
+        if not account.enabled:
+            raise AccountDisabledError("ACCOUNT_DISABLED")
+        return account
+
+    async def _require_admin(self, principal: AuthPrincipal) -> UserAccount:
+        account = await self._browser_account(principal)
+        if account.must_change_password:
+            raise PasswordChangeRequiredError("PASSWORD_CHANGE_REQUIRED")
+        if account.role != "admin":
+            raise AccountAdminRequiredError("ACCOUNT_ADMIN_REQUIRED")
+        return account
+
+    @staticmethod
+    def _principal_for_account(session_id: str, account: UserAccount) -> AuthPrincipal:
+        return AuthPrincipal(
+            session_id=session_id,
+            source="cookie",
+            user_id=account.id,
+            username=account.username,
+            role=account.role,
+            password_change_required=account.must_change_password,
+            credential_version=account.credential_version,
+        )
+
     async def authenticate_http(self, request: Request) -> AuthPrincipal | None:
         if not self.enabled:
-            return AuthPrincipal(session_id="nonproduction", source="disabled")
+            return AuthPrincipal(session_id="nonproduction", source="disabled", role="admin")
         bearer = _bearer_token(request.headers)
         if bearer is not None and self.verify_shared_token(bearer):
             return AuthPrincipal(session_id="shared-token", source="bearer")
@@ -353,7 +580,7 @@ class SecurityRuntime:
         auth: dict[str, Any] | None,
     ) -> AuthPrincipal | None:
         if not self.enabled:
-            return AuthPrincipal(session_id="nonproduction", source="disabled")
+            return AuthPrincipal(session_id="nonproduction", source="disabled", role="admin")
         token = str((auth or {}).get("token") or "")
         if token and self.verify_shared_token(token):
             return AuthPrincipal(session_id="shared-token", source="socket-auth")
@@ -383,86 +610,28 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             principal = await self._security.authenticate_http(request)
         except AuthSessionStoreUnavailableError:
             return await _session_store_unavailable_response(self._security, "http")
+        except AuthUserStoreUnavailableError:
+            return await _user_store_unavailable_response(self._security, "http")
+        except AccountDisabledError:
+            return error_response("ACCOUNT_DISABLED", "Account disabled", status_code=403)
         if principal is None:
             await self._security.record_error("UNAUTHORIZED", surface="http")
             return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
+        if principal.password_change_required:
+            return error_response(
+                "PASSWORD_CHANGE_REQUIRED",
+                "Password change required",
+                status_code=403,
+            )
         request.state.auth_principal = principal
         return await call_next(request)
 
 
 def get_auth_routes(security: SecurityRuntime) -> list[Any]:
-    """Build login/session/logout routes without exposing the configured secret."""
+    """Build browser auth routes while preserving the historical import path."""
+    from .auth_routes import get_auth_routes as build_auth_routes
 
-    from starlette.routing import Route
-
-    async def login(request: Request) -> JSONResponse:
-        ip = request.client.host if request.client else "unknown"
-        try:
-            security.check_login_limit(ip)
-        except RateLimitError as exc:
-            await security.record_error("RATE_LIMITED", surface="login")
-            return error_response(
-                "RATE_LIMITED",
-                "Too many login attempts",
-                status_code=429,
-                retry_after=exc.retry_after,
-            )
-        try:
-            data = await request.json()
-        except (json.JSONDecodeError, TypeError):
-            data = {}
-        username = str(data.get("username") or "") if isinstance(data, dict) else ""
-        password = str(data.get("password") or "") if isinstance(data, dict) else ""
-        if not security.verify_account_credentials(username, password):
-            await security.record_error("UNAUTHORIZED", surface="login")
-            return error_response("UNAUTHORIZED", "Invalid credentials", status_code=401)
-        try:
-            session, expires_at = await security.issue_session()
-        except AuthSessionStoreUnavailableError:
-            return await _session_store_unavailable_response(security, "login")
-        response = JSONResponse({"ok": True, "expires_at": expires_at})
-        response.set_cookie(
-            SESSION_COOKIE,
-            session,
-            max_age=security.config.session_hours * 3600,
-            httponly=True,
-            secure=request.url.scheme == "https",
-            samesite="strict",
-            path="/",
-        )
-        return response
-
-    async def session(request: Request) -> JSONResponse:
-        try:
-            principal = await security.authenticate_http(request)
-        except AuthSessionStoreUnavailableError:
-            return await _session_store_unavailable_response(security, "session")
-        if principal is None:
-            await security.record_error("UNAUTHORIZED", surface="session")
-            return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
-        return JSONResponse({"ok": True, "authenticated": True, "source": principal.source})
-
-    async def logout(request: Request) -> JSONResponse:
-        unavailable = False
-        cookie = request.cookies.get(SESSION_COOKIE)
-        if cookie:
-            try:
-                await security.revoke_session(cookie)
-            except AuthSessionStoreUnavailableError:
-                unavailable = True
-        response = (
-            await _session_store_unavailable_response(security, "logout")
-            if unavailable
-            else JSONResponse({"ok": True})
-        )
-        response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
-        return response
-
-    return [
-        Route("/api/auth/login", login, methods=["POST"]),
-        Route("/api/auth/session", session, methods=["GET"]),
-        Route("/api/auth/logout", logout, methods=["POST"]),
-    ]
+    return build_auth_routes(security)
 
 
 def error_response(
@@ -492,6 +661,18 @@ async def _session_store_unavailable_response(
     )
 
 
+async def _user_store_unavailable_response(
+    security: SecurityRuntime,
+    surface: str,
+) -> JSONResponse:
+    await security.record_error("AUTH_USER_STORE_UNAVAILABLE", surface=surface)
+    return error_response(
+        "AUTH_USER_STORE_UNAVAILABLE",
+        "Authentication user store unavailable",
+        status_code=503,
+    )
+
+
 def _requires_authentication(path: str) -> bool:
     if path == "/health" or path.startswith("/api/auth/"):
         return False
@@ -504,39 +685,3 @@ def _bearer_token(headers: Headers) -> str | None:
     if separator and scheme.lower() == "bearer" and value:
         return value
     return None
-
-
-def _b64url(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
-
-
-def _b64url_decode(value: str) -> bytes:
-    padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(value + padding)
-
-
-def _derive_password(password: bytes, salt: bytes) -> bytes:
-    return hashlib.scrypt(
-        password,
-        salt=salt,
-        n=PASSWORD_SCRYPT_N,
-        r=PASSWORD_SCRYPT_R,
-        p=PASSWORD_SCRYPT_P,
-        dklen=PASSWORD_DIGEST_BYTES,
-    )
-
-
-def _parse_password_hash(value: str) -> tuple[bytes, bytes]:
-    try:
-        scheme, salt_value, digest_value = value.split(":", maxsplit=2)
-        salt = _b64url_decode(salt_value)
-        digest = _b64url_decode(digest_value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("invalid password hash") from exc
-    if (
-        scheme != PASSWORD_HASH_SCHEME
-        or len(salt) != PASSWORD_SALT_BYTES
-        or len(digest) != PASSWORD_DIGEST_BYTES
-    ):
-        raise ValueError("invalid password hash")
-    return salt, digest

@@ -25,9 +25,9 @@ Socket.IO 实时协议见 [socket-api.md](socket-api.md)，全部公开表面见
 Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 ```
 
-`ANIMETTA_ACCESS_TOKEN` 仅用于机器客户端。浏览器默认账号为 `admin / animetta`；Compose 只把预计算、随机盐的 `scrypt-v1` 哈希注入容器，不传递明文密码。`ANIMETTA_AUTH_USERNAME` 和 `ANIMETTA_AUTH_PASSWORD_HASH` 可覆盖默认账号，密码哈希由后端 `hash_password` 生成。局域网或公网暴露前必须覆盖默认密码哈希。
+`ANIMETTA_ACCESS_TOKEN` 仅用于机器客户端。浏览器默认账号为 `admin / animetta`，首次登录必须在 `/account` 修改密码；局域网或公网暴露前必须完成该步骤。Compose 只把预计算、随机盐的 `scrypt-v1` 哈希注入容器，不传递明文密码。`ANIMETTA_AUTH_USERNAME` 和 `ANIMETTA_AUTH_PASSWORD_HASH` 只在 `/app/data/auth.db` 为空时引导初始管理员，数据库创建后环境变量不会覆盖已有用户。
 
-登录成功后，浏览器得到 HttpOnly、SameSite=Strict `animetta_session` Cookie。Cookie 值是不可预测的不透明 token；Redis 仅在 `animetta:auth:session:v1:` 命名空间保存 token 的 SHA-256 摘要及签发/过期元数据，固定 8 小时过期且不会滑动续期。登出会撤销当前 Session，多个浏览器 Session 彼此独立。Redis Session 存储不可用时浏览器登录、Cookie HTTP 与 Cookie Socket 以 `AUTH_SESSION_STORE_UNAVAILABLE` 故障关闭，机器 Bearer/Socket token 不受影响。非生产 profile 下认证关闭。
+用户、角色、启用状态、凭据版本和加盐哈希保存在独立 SQLite 用户库；密码和 Session token 都不以明文落盘。登录成功后，浏览器得到 HttpOnly、SameSite=Strict `animetta_session` Cookie。Redis 在 `animetta:auth:session:v2:` 保存 token 的 SHA-256 摘要及用户/签发/过期元数据，并用 `animetta:auth:user_sessions:v1:` 维护每个用户的摘要索引；固定 8 小时过期且不会滑动续期。改密、重置、角色变更或禁用会撤销对应会话。Redis 或用户库不可用时浏览器认证分别以 `AUTH_SESSION_STORE_UNAVAILABLE` 或 `AUTH_USER_STORE_UNAVAILABLE` 故障关闭，机器 Bearer/Socket token 不受影响，但机器 token 无权调用用户管理 API。非生产 profile 下认证关闭。
 
 认证错误统一为：
 
@@ -42,7 +42,7 @@ Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 
 ### CORS 与内容类型
 
-允许来源来自有效配置的 `security.allowed_origins`，允许凭据以及 `GET`、`POST`、`PUT`、`DELETE`、`OPTIONS`。JSON 请求使用 `Content-Type: application/json`。除文件与指标端点外，响应为 JSON。
+允许来源来自有效配置的 `security.allowed_origins`，允许凭据以及 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS`。Cookie 写操作拒绝不匹配的 `Origin`。JSON 请求使用 `Content-Type: application/json`。除文件与指标端点外，响应为 JSON。
 
 ## 核心服务 API
 
@@ -51,14 +51,21 @@ Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 | 方法 | 路径 | 请求 | 成功响应 | 失败 |
 |------|------|------|----------|------|
 | GET | `/health` | 无 | `200 {status:"ok", service:"anima", timestamp:number}` | 无远程探测；它只证明进程存活 |
-| GET | `/ready` | 无 | 运行时、前端、Provider、内存、观测、必需的 `auth_session` 与 checkpoint 缓存快照 | 未就绪 `503`；快照不可用时 `reason=snapshot_unavailable` |
+| GET | `/ready` | 无 | 运行时、前端、Provider、内存、观测、必需的 `auth_session`、`auth_user` 与 checkpoint 缓存快照 | 未就绪 `503`；快照不可用时 `reason=snapshot_unavailable` |
 | GET | `/metrics` | 无 | Prometheus text exposition | production 未认证 `401` |
-| POST | `/api/auth/login` | `{username:string,password:string}` | `{ok:true, expires_at:int}` 并设置会话 Cookie | `401`、`429`、`503` |
-| GET | `/api/auth/session` | 无 | `{ok:true, authenticated:true, source:string}` | `401`、Session 存储不可用 `503` |
+| POST | `/api/auth/login` | `{username:string,password:string}` | `{ok:true, expires_at:int, user, password_change_required}` 并设置会话 Cookie | `401`、禁用 `403`、`429`、`503` |
+| GET | `/api/auth/session` | 无 | `{ok:true, authenticated:true, source:string, user, password_change_required}` | `401`、认证存储不可用 `503` |
 | POST | `/api/auth/logout` | 无 | `{ok:true}` 并撤销 Session、删除 Cookie | Session 存储不可用 `503`（仍删除 Cookie） |
+| POST | `/api/auth/password` | `{current_password,new_password}` | 修改本人密码、撤销旧 Session 并设置替代 Cookie | `401`、`422`、`429`、`503` |
+| GET/POST | `/api/auth/users` | 管理员列出用户，或提交 `{username,role,temporary_password}` 创建用户 | 用户列表或 `201 user` | 非管理员 `403`、冲突 `409`、`422`、`503` |
+| PATCH | `/api/auth/users/{user_id}` | `{role?,enabled?}` | 更新角色或启用状态并撤销会话 | `403`、自操作/最后管理员 `409`、`503` |
+| POST | `/api/auth/users/{user_id}/reset-password` | `{temporary_password}` | 设置临时密码并强制首次改密 | `403`、`409`、`422`、`503` |
+| POST | `/api/auth/users/{user_id}/revoke-sessions` | 无 | 撤销目标用户全部浏览器 Session | `403`、`404`、`503` |
 | GET | `/app/*` | 静态路径 | 前端生产构建；仅在 `frontend/dist` 存在时挂载 | `404` |
 
 `/ready` 是发布与依赖就绪门禁；不要把 `/health` 当作 Provider、模型或数据库已就绪的证据。
+
+管理员恢复使用 `py -3.13 scripts/manage_users.py reset-admin-password --username <name>`；命令在运行中的 Animetta 容器内更新命名卷，并以隐藏输入读取临时密码。需要同时恢复已禁用管理员时显式添加 `--enable`。
 
 ### 运行时配置
 

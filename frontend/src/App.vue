@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ensureAuthenticatedSession, useSocket } from '@/composables/useSocket'
 import { useConnectionStore } from '@/stores/connection'
 
 useSocket() // Initialize Socket.IO connection
 const connectionStore = useConnectionStore()
+const route = useRoute()
+const router = useRouter()
 
 const STORAGE_KEY = 'animetta_background'
 const bgSrc = ref('')
@@ -33,6 +36,16 @@ onMounted(() => {
   if (saved) bgSrc.value = saved
 })
 
+watch(
+  () => [connectionStore.authStatus, connectionStore.passwordChangeRequired, route.path] as const,
+  ([status, passwordChangeRequired, path]) => {
+    if (status === 'authenticated' && passwordChangeRequired && path !== '/account') {
+      void router.replace('/account')
+    }
+  },
+  { immediate: true },
+)
+
 async function login(): Promise<void> {
   authBusy.value = true
   authError.value = ''
@@ -48,9 +61,11 @@ async function login(): Promise<void> {
       authError.value =
         response.status === 429
           ? '尝试过于频繁，请稍后再试。'
-          : response.status === 503
-            ? '登录服务不可用。'
-            : '用户名或密码错误。'
+          : response.status === 403
+            ? '账号已被禁用。'
+            : response.status === 503
+              ? '登录服务不可用。'
+              : '用户名或密码错误。'
       return
     }
     const status = await ensureAuthenticatedSession()

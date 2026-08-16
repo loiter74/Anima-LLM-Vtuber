@@ -14,6 +14,7 @@ from animetta.orchestration.server.stats_api import (
     _get_gpu_info,
     get_stats_routes,
     set_auth_session_readiness,
+    set_auth_user_readiness,
     set_component_readiness_cache,
     set_runtime_readiness_context,
 )
@@ -24,6 +25,7 @@ from animetta.orchestration.server.stats_api import (
 @pytest.fixture(autouse=True)
 def _ready_auth_session_store():
     set_auth_session_readiness({"state": "ready", "ready": True, "reason": None})
+    set_auth_user_readiness({"state": "ready", "ready": True, "reason": None})
     yield
 
 
@@ -390,7 +392,8 @@ class TestHealthEndpoint:
         assert payload["ready"] is False
         assert payload["components"][failed_component]["ready"] is False
 
-    def test_ready_requires_auth_session_store(self):
+    @pytest.mark.parametrize("failed_component", ["auth_session", "auth_user"])
+    def test_ready_requires_auth_stores(self, failed_component: str):
         snapshot = MagicMock()
         snapshot.to_dict.return_value = {
             "status": "ready",
@@ -421,13 +424,15 @@ class TestHealthEndpoint:
             {"state": "ready", "ready": True, "reason": None},
         )
         set_component_readiness_cache(cache)
-        set_auth_session_readiness(
-            {
-                "state": "failed",
-                "ready": False,
-                "reason": "auth_session_unavailable",
-            }
-        )
+        failed_readiness = {
+            "state": "failed",
+            "ready": False,
+            "reason": f"{failed_component}_unavailable",
+        }
+        if failed_component == "auth_session":
+            set_auth_session_readiness(failed_readiness)
+        else:
+            set_auth_user_readiness(failed_readiness)
         try:
             with patch(
                 "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
@@ -440,11 +445,11 @@ class TestHealthEndpoint:
             set_component_readiness_cache(None)
 
         assert response.status_code == 503
-        component = response.json()["components"]["auth_session"]
+        component = response.json()["components"][failed_component]
         assert component == {
             "state": "failed",
             "ready": False,
-            "reason": "auth_session_unavailable",
+            "reason": f"{failed_component}_unavailable",
             "required": True,
         }
 

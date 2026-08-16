@@ -23,6 +23,7 @@ from animetta.services.command_inbox import (
 
 from ..socket_events import EVENTS, event_aliases, event_name
 from .auth_session import AuthSessionStoreUnavailableError
+from .auth_user import AuthUserStoreUnavailableError
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -36,7 +37,11 @@ from .handlers.minecraft_handlers import MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
-from .security import RateLimitError, SecurityRuntime
+from .security import (
+    AccountDisabledError,
+    RateLimitError,
+    SecurityRuntime,
+)
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
@@ -604,9 +609,16 @@ def register_routes(
                 surface="socket_connect",
             )
             raise ConnectionRefusedError({"code": "AUTH_SESSION_STORE_UNAVAILABLE"}) from exc
+        except AuthUserStoreUnavailableError as exc:
+            await security.record_error("AUTH_USER_STORE_UNAVAILABLE", surface="socket_connect")
+            raise ConnectionRefusedError({"code": "AUTH_USER_STORE_UNAVAILABLE"}) from exc
+        except AccountDisabledError as exc:
+            raise ConnectionRefusedError({"code": "ACCOUNT_DISABLED"}) from exc
         if principal is None:
             await security.record_error("UNAUTHORIZED", surface="socket_connect")
             raise ConnectionRefusedError({"code": "UNAUTHORIZED"})
+        if principal.password_change_required:
+            raise ConnectionRefusedError({"code": "PASSWORD_CHANGE_REQUIRED"})
         security.bind_socket(sid, principal)
         await handlers.on_connect(sid, environ)
         pending = await handlers.on_tool_approval_list(sid)

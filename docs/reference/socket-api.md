@@ -16,7 +16,7 @@ io('/', { auth: { token: '<ANIMETTA_ACCESS_TOKEN>' } })
 - 握手的 `Authorization: Bearer ...`；
 - HTTP 登录得到的 `animetta_session` Cookie。
 
-连接失败时，服务端以 `ConnectionRefusedError` 返回 `{code:"UNAUTHORIZED"}` 或 `{code:"RATE_LIMITED", retry_after:int}`。连接成功后收到 `system:connection_established`，同时会重发仍待处理的 `tool:approval_required`。
+连接失败时，服务端以 `ConnectionRefusedError` 返回 `UNAUTHORIZED`、`RATE_LIMITED`、`PASSWORD_CHANGE_REQUIRED`、`ACCOUNT_DISABLED`、`AUTH_SESSION_STORE_UNAVAILABLE` 或 `AUTH_USER_STORE_UNAVAILABLE`。首次改密会话不会建立 Socket；机器 token 不受浏览器用户库与 Session 故障影响。连接成功后收到 `system:connection_established`，同时会重发仍待处理的 `tool:approval_required`。
 
 受保护命令的回调错误形状为：
 

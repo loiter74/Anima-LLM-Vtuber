@@ -10,6 +10,7 @@ const statusColors: Record<string, string> = {
   checking: 'bg-c-warning animate-pulse',
   unauthenticated: 'bg-c-warning',
   unavailable: 'bg-c-error',
+  'password-required': 'bg-c-warning',
   connected: 'bg-c-success shadow-[0_0_8px_rgba(74,222,128,0.6)]',
   disconnected: 'bg-c-error',
   connecting: 'bg-c-warning animate-pulse',
@@ -20,19 +21,22 @@ const statusLabels: Record<string, string> = {
   checking: '正在检查登录状态',
   unauthenticated: '未登录',
   unavailable: '登录服务不可用',
+  'password-required': '需修改密码',
   connected: '服务已连接',
   disconnected: '服务已断开',
   connecting: '服务连接中',
   error: '服务连接异常',
 }
 
-const displayStatus = computed(() =>
-  store.authStatus === 'authenticated' ? store.status : store.authStatus,
-)
+const displayStatus = computed(() => {
+  if (store.authStatus !== 'authenticated') return store.authStatus
+  return store.passwordChangeRequired ? 'password-required' : store.status
+})
 
 const navItems = [
   { key: 'live', label: '直播画面', path: '/live.html' },
   { key: 'dashboard', label: '后台控制', routeName: 'dashboard', path: '/dashboard' },
+  { key: 'account', label: '账号', routeName: 'account', path: '/account' },
 ] as const
 
 function isActive(item: (typeof navItems)[number]) {

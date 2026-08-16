@@ -1,4 +1,4 @@
-import { checkAuthenticatedSession, type AuthStatus } from '@/auth/session'
+import { fetchAuthenticatedSession, type AuthStatus } from '@/auth/session'
 import type { LiveView } from './controller'
 
 export async function startAuthenticatedLiveSocket(
@@ -9,13 +9,17 @@ export async function startAuthenticatedLiveSocket(
     isDisposed?: () => boolean
   } = {},
 ): Promise<Exclude<AuthStatus, 'checking'>> {
-  const status = await checkAuthenticatedSession(options.request)
-  if (options.isDisposed?.()) return status
-  if (status === 'authenticated') {
+  const session = await fetchAuthenticatedSession(options.request)
+  if (options.isDisposed?.()) return session.status
+  if (session.status === 'authenticated' && !session.passwordChangeRequired) {
     view.setSocketState('connecting')
     socket.connect()
+  } else if (session.passwordChangeRequired) {
+    view.setSocketState('password-required')
   } else {
-    view.setSocketState(status === 'unauthenticated' ? 'unauthenticated' : 'auth-unavailable')
+    view.setSocketState(
+      session.status === 'unauthenticated' ? 'unauthenticated' : 'auth-unavailable',
+    )
   }
-  return status
+  return session.status
 }

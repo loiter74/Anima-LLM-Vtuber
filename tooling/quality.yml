@@ -937,10 +937,19 @@ components:
   agent-production-security:
     domain: backend
     paths:
+      - scripts/manage_users.py
       - src/animetta/config/security.py
+      - src/animetta/orchestration/server/auth_admin_cli.py
+      - src/animetta/orchestration/server/auth_password.py
+      - src/animetta/orchestration/server/auth_routes.py
+      - src/animetta/orchestration/server/auth_session.py
+      - src/animetta/orchestration/server/auth_user.py
       - src/animetta/orchestration/server/security.py
       - src/animetta/orchestration/graph/tool_execution_policy.py
+      - tests/scripts/test_manage_users.py
       - tests/config/test_security_config.py
+      - tests/orchestration/server/test_auth_session.py
+      - tests/orchestration/server/test_auth_user.py
       - tests/orchestration/server/test_security.py
       - tests/orchestration/graph/test_tool_execution_policy.py
     direct_groups:

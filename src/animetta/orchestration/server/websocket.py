@@ -65,6 +65,7 @@ from .session import SessionManager
 from .stats_api import (
     get_stats_routes,
     set_auth_session_readiness,
+    set_auth_user_readiness,
     set_checkpoint_readiness,
     set_component_readiness_cache,
     set_model_manager,
@@ -273,8 +274,9 @@ class WebSocketServer:
 
         @asynccontextmanager
         async def lifespan(_app: Starlette) -> AsyncIterator[None]:
-            auth_session_health = await self.security.start()
+            auth_session_health, auth_user_health = await self.security.start()
             set_auth_session_readiness(auth_session_health.public_dict())
+            set_auth_user_readiness(auth_user_health.public_dict())
             checkpoint_health = await self.checkpoint_runtime.start()
             set_checkpoint_readiness(checkpoint_health.public_dict())
             await self._start_observability()
@@ -312,6 +314,10 @@ class WebSocketServer:
                 self._auth_session_health_loop(),
                 name="auth_session_health",
             )
+            self.supervise_background(
+                self._auth_user_health_loop(),
+                name="auth_user_health",
+            )
             await self.component_readiness_cache.start()
             if self.route_handlers:
                 await self.route_handlers.start_runtime()
@@ -336,7 +342,7 @@ class WebSocketServer:
             CORSMiddleware,
             allow_origins=list(self.security.config.allowed_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type"],
         )
         self.asgi_app.state.observation_query = self.observation_query
@@ -706,6 +712,12 @@ class WebSocketServer:
             health = await self.security.check_session_health()
             set_auth_session_readiness(health.public_dict())
 
+    async def _auth_user_health_loop(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            health = await self.security.check_user_health()
+            set_auth_user_readiness(health.public_dict())
+
     async def _stop_background_tasks(self) -> None:
         tasks = tuple(self._background_tasks)
         for task in tasks:
@@ -752,6 +764,7 @@ class WebSocketServer:
         await self.command_inbox.close()
         await self.security.close()
         set_auth_session_readiness(self.security.session_health.public_dict())
+        set_auth_user_readiness(self.security.user_health.public_dict())
         await self.checkpoint_runtime.close()
         set_checkpoint_readiness(self.checkpoint_runtime.health.public_dict())
         await ServicePool.shutdown()
