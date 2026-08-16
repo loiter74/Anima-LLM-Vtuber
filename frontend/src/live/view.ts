@@ -27,6 +27,13 @@ export function createDomLiveView(document: Document): LiveView {
   const background = requiredElement<HTMLDivElement>(document, 'liveBackground')
   const subtitle = requiredElement<HTMLElement>(document, 'subtitleOverlay')
   const subtitleText = requiredElement<HTMLParagraphElement>(document, 'subtitleText')
+  const pairingOverlay = requiredElement<HTMLElement>(document, 'displayPairingOverlay')
+  const pairingCode = requiredElement<HTMLOutputElement>(document, 'displayPairingCode')
+  const pairingCountdown = requiredElement<HTMLParagraphElement>(
+    document,
+    'displayPairingCountdown',
+  )
+  const pairingMessage = requiredElement<HTMLParagraphElement>(document, 'displayPairingMessage')
 
   const createMessageElement = (message: DanmakuItem): HTMLElement => {
     const item = document.createElement('article')
@@ -99,6 +106,9 @@ export function createDomLiveView(document: Document): LiveView {
         unauthenticated: '未登录',
         'auth-unavailable': '登录服务不可用',
         'password-required': '需修改密码',
+        'pairing-expired': '配对码已过期',
+        'display-revoked': '直播场景授权已失效',
+        'display-limit': '直播设备已达上限',
         connected: '服务已连接',
         connecting: '服务连接中',
         disconnected: '服务已断开',
@@ -106,6 +116,18 @@ export function createDomLiveView(document: Document): LiveView {
       } as const
       socketStatus.textContent = labels[state]
       socketStatus.dataset.state = state
+    },
+    showDisplayPairing(code: string, message = '请在账号页批准'): void {
+      pairingCode.textContent = code
+      pairingMessage.textContent = message
+      pairingOverlay.hidden = false
+    },
+    updateDisplayPairing(secondsRemaining: number, message?: string): void {
+      pairingCountdown.textContent = `配对码将在 ${Math.max(0, secondsRemaining)} 秒后过期`
+      if (message) pairingMessage.textContent = message
+    },
+    hideDisplayPairing(): void {
+      pairingOverlay.hidden = true
     },
     setLivestreamStatus(status: BilibiliStatusPayload): void {
       const labels: Record<BilibiliStatusPayload['state'], string> = {

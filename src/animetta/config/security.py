@@ -7,6 +7,27 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class DisplaySecurityConfig(BaseModel):
+    """Local browser-source pairing policy without any secret material."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    allowed_origins: tuple[str, ...] = (
+        "http://127.0.0.1",
+        "http://localhost",
+    )
+    pairing_ttl_seconds: int = Field(default=300, ge=60, le=1800)
+    credential_days: int = Field(default=30, ge=1, le=365)
+    poll_interval_seconds: int = Field(default=3, ge=1, le=30)
+    max_active_credentials: int = Field(default=5, ge=1, le=20)
+
+    @field_validator("allowed_origins")
+    @classmethod
+    def validate_allowed_origins(cls, origins: tuple[str, ...]) -> tuple[str, ...]:
+        return _validate_origins(origins)
+
+
 class SecurityConfig(BaseModel):
     """Non-secret security policy; machine and account secrets stay environment-only."""
 
@@ -23,25 +44,30 @@ class SecurityConfig(BaseModel):
         pattern=r"^[A-Z][A-Z0-9_]+$",
     )
     session_hours: int = Field(default=8, ge=1, le=24)
+    display: DisplaySecurityConfig = Field(default_factory=DisplaySecurityConfig)
 
     @field_validator("allowed_origins")
     @classmethod
     def validate_allowed_origins(cls, origins: tuple[str, ...]) -> tuple[str, ...]:
-        normalized: list[str] = []
-        for origin in origins:
-            if origin == "*":
-                raise ValueError("wildcard origins are forbidden")
-            parsed = urlsplit(origin)
-            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-                raise ValueError(f"invalid origin: {origin}")
-            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-                raise ValueError(f"origin must not contain a path, query, or fragment: {origin}")
-            host = parsed.hostname.lower()
-            is_loopback = host in {"localhost", "127.0.0.1", "::1"}
-            if not is_loopback and parsed.scheme != "https":
-                raise ValueError(f"non-loopback origin must use HTTPS: {origin}")
-            canonical = origin.rstrip("/")
-            if canonical in normalized:
-                raise ValueError(f"duplicate origin: {canonical}")
-            normalized.append(canonical)
-        return tuple(normalized)
+        return _validate_origins(origins)
+
+
+def _validate_origins(origins: tuple[str, ...]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    for origin in origins:
+        if origin == "*":
+            raise ValueError("wildcard origins are forbidden")
+        parsed = urlsplit(origin)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError(f"invalid origin: {origin}")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError(f"origin must not contain a path, query, or fragment: {origin}")
+        host = parsed.hostname.lower()
+        is_loopback = host in {"localhost", "127.0.0.1", "::1"}
+        if not is_loopback and parsed.scheme != "https":
+            raise ValueError(f"non-loopback origin must use HTTPS: {origin}")
+        canonical = origin.rstrip("/")
+        if canonical in normalized:
+            raise ValueError(f"duplicate origin: {canonical}")
+        normalized.append(canonical)
+    return tuple(normalized)

@@ -25,6 +25,9 @@ export interface LiveView {
       | 'unauthenticated'
       | 'auth-unavailable'
       | 'password-required'
+      | 'pairing-expired'
+      | 'display-revoked'
+      | 'display-limit'
       | 'connecting'
       | 'connected'
       | 'disconnected'
@@ -34,6 +37,9 @@ export interface LiveView {
   setBilibiliReplyEvidence(reply: BilibiliReplyEvidence): void
   setBackground(config: BackgroundConfig): void
   setSubtitle(text: string | null): void
+  showDisplayPairing?(code: string, message?: string): void
+  updateDisplayPairing?(secondsRemaining: number, message?: string): void
+  hideDisplayPairing?(): void
 }
 
 export interface LiveControllerOptions {

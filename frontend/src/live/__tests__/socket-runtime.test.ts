@@ -16,11 +16,11 @@ function networkRuntime(): LiveSocketRuntime {
 }
 
 describe('live socket runtime selection', () => {
-  it('does not construct the network client for review mode', () => {
+  it('does not construct the network or pairing client for review mode', () => {
     const createNetworkRuntime = vi.fn(networkRuntime)
 
     const runtime = createLiveSocketRuntime(
-      new URLSearchParams('review=1&scene=empty'),
+      new URLSearchParams('review=1&scene=empty&pair=1'),
       createNetworkRuntime,
     )
 

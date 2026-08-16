@@ -27,6 +27,12 @@ def test_security_config_accepts_exact_https_and_loopback_http() -> None:
         "https://animetta.example",
         "http://127.0.0.1:8000",
     )
+    assert config.display.allowed_origins == (
+        "http://127.0.0.1",
+        "http://localhost",
+    )
+    assert config.display.pairing_ttl_seconds == 300
+    assert config.display.credential_days == 30
 
 
 def test_schema_v1_is_rejected_for_production(
@@ -63,3 +69,4 @@ def test_production_manifest_serializes_typed_pricing_date(monkeypatch) -> None:
     assert pricing["verified_on"] == "2026-08-15"
     assert effective.runtime.enable_tools is True
     assert "http://127.0.0.1:12394" in effective.security.allowed_origins
+    assert effective.security.display.max_active_credentials == 5

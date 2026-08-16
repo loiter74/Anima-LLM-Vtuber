@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import UserManagementPanel from '@/components/account/UserManagementPanel.vue'
+import DisplayCredentialsPanel from '@/components/account/DisplayCredentialsPanel.vue'
 import TitleBar from '@/components/layout/TitleBar.vue'
 import { AuthApiError, changePassword, logout } from '@/auth/api'
 import { ensureAuthenticatedSession } from '@/composables/useSocket'
@@ -174,6 +175,7 @@ async function signOut(): Promise<void> {
         </div>
 
         <UserManagementPanel v-if="isAdmin && currentUser" :current-user-id="currentUser.id" />
+        <DisplayCredentialsPanel v-if="isAdmin" />
       </div>
     </main>
   </div>

@@ -66,4 +66,25 @@ describe('AccountPage', () => {
     expect(passwords.every((input) => (input.element as HTMLInputElement).value === '')).toBe(true)
     expect(wrapper.text()).not.toContain('用户管理')
   })
+
+  it('shows livestream device administration only to an unrestricted administrator', () => {
+    const pinia = createPinia()
+    useConnectionStore(pinia).applyAuthSession({
+      status: 'authenticated',
+      user: { id: 'admin-1', username: 'admin', role: 'admin' },
+      passwordChangeRequired: false,
+    })
+    const wrapper = mount(AccountPage, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          TitleBar: true,
+          UserManagementPanel: true,
+          DisplayCredentialsPanel: { template: '<section>直播设备</section>' },
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('直播设备')
+  })
 })

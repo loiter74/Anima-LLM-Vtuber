@@ -9,6 +9,16 @@ export interface ManagedUser extends AuthUser {
   active_sessions: number
 }
 
+export interface DisplayCredential {
+  id: string
+  name: string
+  approved_by_user_id: string
+  bound_origin: string
+  issued_at: number
+  expires_at: number
+  last_seen_at: number | null
+}
+
 export class AuthApiError extends Error {
   constructor(
     readonly code: string,
@@ -71,6 +81,26 @@ export async function resetUserPassword(userId: string, temporaryPassword: strin
 export async function revokeUserSessions(userId: string): Promise<void> {
   await requestJson(`/api/auth/users/${encodeURIComponent(userId)}/revoke-sessions`, {
     method: 'POST',
+  })
+}
+
+export async function approveDisplayPairing(code: string, name: string): Promise<void> {
+  await requestJson('/api/auth/display/pairings/approve', {
+    method: 'POST',
+    body: JSON.stringify({ code, name }),
+  })
+}
+
+export async function listDisplayCredentials(): Promise<DisplayCredential[]> {
+  const response = await requestJson<{ credentials: DisplayCredential[] }>(
+    '/api/auth/display/credentials',
+  )
+  return response.credentials
+}
+
+export async function revokeDisplayCredential(deviceId: string): Promise<void> {
+  await requestJson(`/api/auth/display/credentials/${encodeURIComponent(deviceId)}`, {
+    method: 'DELETE',
   })
 }
 

@@ -78,7 +78,10 @@ function createNetworkRuntime(): LiveSocketRuntime {
     mode: 'network',
     socket: liveSocket,
     start() {
-      void startAuthenticatedLiveSocket(socket, liveView, { isDisposed: () => disposed })
+      void startAuthenticatedLiveSocket(socket, liveView, {
+        isDisposed: () => disposed,
+        search,
+      })
     },
     dispose() {
       disposed = true
