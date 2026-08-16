@@ -151,3 +151,35 @@ async def test_url_song_reuses_the_pooled_asr_engine(
     assert task is not None
     release.set()
     await task
+
+
+async def test_pipeline_error_with_json_braces_reaches_terminal_state() -> None:
+    message = 'status=401, body={"error":"unauthorized"}'
+    sio = SimpleNamespace(emit=AsyncMock())
+    inbox = CommandInbox(":memory:")
+    handler = SingingHandlers(sio, MagicMock(), MagicMock(), MagicMock(), inbox)
+    pipeline = SimpleNamespace(
+        process=AsyncMock(side_effect=RuntimeError(message)),
+        close=AsyncMock(),
+    )
+    handler._pipeline = pipeline
+    handler._subscribers["failed-song"] = {"subscriber-sid"}
+
+    await handler._run_pipeline(
+        "initiator-sid",
+        url="https://www.bilibili.com/video/BV1xF3467Etw",
+        auto_confirm=True,
+        task_id="failed-song",
+    )
+
+    state = await inbox.get(CommandKey("dashboard", "singing.process", "failed-song"))
+    assert state.task is not None
+    assert state.task.status.value == "failed"
+    assert state.task.error_message == message
+    sio.emit.assert_awaited_once_with(
+        "sing:error",
+        {"task_id": "failed-song", "error": message},
+        to="subscriber-sid",
+    )
+    pipeline.close.assert_awaited_once()
+    await inbox.close()

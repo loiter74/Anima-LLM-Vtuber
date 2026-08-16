@@ -220,6 +220,7 @@ class SVCPipeline(SingingService):
         # Stage 2.5: Try B站 native lyrics first
         lrc = None
         lyric_lines: list[LyricLine]
+        lyrics_available = True
         has_provided_lyrics = bool(provided_lyrics.strip())
         if has_provided_lyrics:
             duration = await self._mixer._get_duration(audio_path)
@@ -242,11 +243,8 @@ class SVCPipeline(SingingService):
             ass_content = self._lyrics_gen.build_ass(lyric_lines)
             self._confirmed_ass = ass_content
         else:
-            # Stage 3: whisper transcription (fallback)
-            self._update_progress(PipelineStage.TRANSCRIBING, 0, "Transcribing lyrics...")
-            ass_content = await self._lyrics_gen.transcribe(vocals_path)
-            self._check_cancelled()
-            self._update_progress(PipelineStage.TRANSCRIBING, 100, "Lyrics ready")
+            # Stage 3: ASR transcription (optional enrichment)
+            ass_content, lyrics_available = await self._transcribe_lyrics(vocals_path)
 
         # Save .ass file
         ass_path = session_dir / "lyrics.ass"
@@ -257,8 +255,8 @@ class SVCPipeline(SingingService):
         self._message = f"Lyrics saved to {ass_path}"
 
         # Stage 4: Wait for user confirmation (or auto-confirm)
-        if has_provided_lyrics or lrc:
-            # B站 native lyrics — already confirmed, skip wait
+        if has_provided_lyrics or lrc or not lyrics_available:
+            # Provided/native lyrics and unavailable ASR need no review wait.
             pass
         elif self._auto_confirm:
             self._confirmed_ass = ass_content
@@ -334,6 +332,29 @@ class SVCPipeline(SingingService):
             voice_revision=voice_identity.get("revision", ""),
             voice_name=voice_identity.get("voice", ""),
         )
+
+    async def _transcribe_lyrics(self, vocals_path: str) -> tuple[str, bool]:
+        """Generate subtitles when ASR is available without blocking the song mix."""
+        self._update_progress(PipelineStage.TRANSCRIBING, 0, "Transcribing lyrics...")
+        try:
+            ass_content = await self._lyrics_gen.transcribe(vocals_path)
+        except Exception as error:
+            logger.warning(
+                "Lyrics transcription unavailable; continuing without subtitles: {}",
+                error,
+            )
+            ass_content = self._lyrics_gen.build_ass([])
+            self._confirmed_ass = ass_content
+            self._update_progress(
+                PipelineStage.TRANSCRIBING,
+                100,
+                "Lyrics unavailable; continuing without subtitles",
+            )
+            return ass_content, False
+
+        self._check_cancelled()
+        self._update_progress(PipelineStage.TRANSCRIBING, 100, "Lyrics ready")
+        return ass_content, True
 
     async def _convert_voice(
         self,

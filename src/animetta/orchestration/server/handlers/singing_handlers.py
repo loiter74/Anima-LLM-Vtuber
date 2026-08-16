@@ -317,7 +317,7 @@ class SingingHandlers(BaseSocketHandler):
             await self._command_inbox.cancel(key)
             await self._emit_error(task_id, "CANCELLED")
         except Exception as e:
-            logger.error(f"Pipeline failed: {e}", exc_info=True)
+            logger.exception("Pipeline failed: {}", e)
             await self._command_inbox.fail(
                 key,
                 error_code="SINGING_FAILED",

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from animetta.config.singing import SingingConfig
+from animetta.services.singing.interface import PipelineStage
 from animetta.services.singing.svc_pipeline import SVCPipeline
 
 
@@ -77,3 +78,20 @@ def test_lip_sync_uses_isolated_vocals_with_absolute_noise_gate() -> None:
         use_peak=False,
         noise_floor=0.025,
     )
+
+
+async def test_asr_failure_keeps_the_rvc_song_pipeline_available() -> None:
+    pipeline = _pipeline(required=True, rvc=object())
+    pipeline._lyrics_gen = SimpleNamespace(
+        transcribe=AsyncMock(side_effect=RuntimeError('status=401, body={"error":"unauthorized"}')),
+        build_ass=MagicMock(return_value="[Events]\n"),
+    )
+
+    content, lyrics_available = await pipeline._transcribe_lyrics("vocals.wav")
+
+    assert content == "[Events]\n"
+    assert lyrics_available is False
+    pipeline._lyrics_gen.build_ass.assert_called_once_with([])
+    assert pipeline._stage is PipelineStage.TRANSCRIBING
+    assert pipeline._progress == 100
+    assert pipeline._message == "Lyrics unavailable; continuing without subtitles"
