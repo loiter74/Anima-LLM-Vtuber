@@ -1,20 +1,17 @@
 # ── Zeabur Auto-Deploy Workflow ──────────────────────────────────────
-# Consumes the successful Quality result for the exact main-branch commit.
+# Manual deployment kept separate from the minimal CI workflow.
 
 name: Deploy to Zeabur
 
 on:
-  workflow_run:
-    workflows: [Quality]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 # Cancel in-progress runs for the same branch
 concurrency:
-  group: deploy-zeabur-${{ github.event.workflow_run.head_sha || github.ref }}
+  group: deploy-zeabur-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,16 +19,10 @@ jobs:
   deploy:
     name: Deploy to Zeabur
     runs-on: ubuntu-latest
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Deploy to Zeabur
         uses: zeabur/deploy-action@v1
