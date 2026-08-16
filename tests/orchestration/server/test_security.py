@@ -18,14 +18,29 @@ from animetta.orchestration.server.security import (
     SecurityConfigurationError,
     SecurityRuntime,
     get_auth_routes,
+    hash_password,
 )
 
+TEST_USERNAME = "admin"
+TEST_PASSWORD = "correct horse battery staple"
+TEST_PASSWORD_HASH = hash_password(TEST_PASSWORD)
 
-def _runtime(token: str = "s" * 32, *, recorder=None) -> SecurityRuntime:
+
+def _runtime(
+    token: str = "s" * 32,
+    *,
+    username: str = TEST_USERNAME,
+    password_hash: str = TEST_PASSWORD_HASH,
+    recorder=None,
+) -> SecurityRuntime:
     return SecurityRuntime(
         profile="production",
         config=SecurityConfig(allowed_origins=("https://animetta.example",)),
-        environ={"ANIMETTA_ACCESS_TOKEN": token},
+        environ={
+            "ANIMETTA_ACCESS_TOKEN": token,
+            "ANIMETTA_AUTH_USERNAME": username,
+            "ANIMETTA_AUTH_PASSWORD_HASH": password_hash,
+        },
         observation_recorder=recorder,
     )
 
@@ -40,6 +55,24 @@ def test_production_rejects_missing_or_weak_access_token() -> None:
             raise AssertionError("weak production token was accepted")
 
 
+@pytest.mark.parametrize(
+    ("username", "password_hash", "message"),
+    [
+        ("", TEST_PASSWORD_HASH, "ANIMETTA_AUTH_USERNAME"),
+        (TEST_USERNAME, "", "ANIMETTA_AUTH_PASSWORD_HASH"),
+        (TEST_USERNAME, "invalid", "ANIMETTA_AUTH_PASSWORD_HASH"),
+    ],
+    ids=("missing-username", "missing-password-hash", "malformed-password-hash"),
+)
+def test_production_rejects_missing_or_invalid_account_credentials(
+    username: str,
+    password_hash: str,
+    message: str,
+) -> None:
+    with pytest.raises(SecurityConfigurationError, match=message):
+        _runtime(username=username, password_hash=password_hash)
+
+
 def test_login_issues_strict_httponly_session_and_protects_api() -> None:
     security = _runtime()
     app = Starlette(routes=get_auth_routes(security))
@@ -50,7 +83,13 @@ def test_login_issues_strict_httponly_session_and_protects_api() -> None:
         assert unauthorized.status_code == 401
         assert unauthorized.json()["error"]["code"] == "UNAUTHORIZED"
 
-        login = client.post("/api/auth/login", json={"token": "s" * 32})
+        machine_token_login = client.post("/api/auth/login", json={"token": "s" * 32})
+        assert machine_token_login.status_code == 401
+
+        login = client.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        )
         assert login.status_code == 200
         cookie = login.headers["set-cookie"].lower()
         assert "httponly" in cookie
@@ -70,8 +109,17 @@ def test_login_rate_limit_returns_retry_after() -> None:
 
     with TestClient(app) as client:
         for _ in range(5):
-            assert client.post("/api/auth/login", json={"token": "wrong"}).status_code == 401
-        limited = client.post("/api/auth/login", json={"token": "wrong"})
+            assert (
+                client.post(
+                    "/api/auth/login",
+                    json={"username": TEST_USERNAME, "password": "wrong"},
+                ).status_code
+                == 401
+            )
+        limited = client.post(
+            "/api/auth/login",
+            json={"username": TEST_USERNAME, "password": "wrong"},
+        )
 
     assert limited.status_code == 429
     assert limited.json()["error"]["code"] == "RATE_LIMITED"
@@ -103,8 +151,11 @@ def test_token_is_not_present_in_runtime_representation() -> None:
     security = _runtime("private-token-that-is-long-enough-123")
 
     assert "private-token" not in repr(security)
+    assert TEST_PASSWORD not in repr(security)
     assert security.verify_shared_token("private-token-that-is-long-enough-123") is True
     assert security.verify_shared_token("private-token-that-is-long-enough-124") is False
+    assert security.verify_account_credentials(TEST_USERNAME, TEST_PASSWORD) is True
+    assert security.verify_account_credentials(TEST_USERNAME, "wrong") is False
 
 
 def test_health_is_public_while_ready_metrics_and_api_require_authentication() -> None:

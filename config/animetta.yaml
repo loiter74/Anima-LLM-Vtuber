@@ -14,6 +14,8 @@ application:
       - http://127.0.0.1:12394
       - http://localhost:12394
     access_token_env: ANIMETTA_ACCESS_TOKEN
+    account_username_env: ANIMETTA_AUTH_USERNAME
+    account_password_hash_env: ANIMETTA_AUTH_PASSWORD_HASH
     session_hours: 8
   observability:
     enabled: true

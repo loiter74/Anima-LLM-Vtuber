@@ -13,7 +13,7 @@ Socket.IO 实时协议见 [socket-api.md](socket-api.md)，全部公开表面见
 | 路径 | production 认证 |
 |------|-----------------|
 | `GET /health` | 不需要 |
-| `POST /api/auth/login` | 不需要，以 JSON token 换取 Cookie |
+| `POST /api/auth/login` | 不需要，以账号密码换取 Cookie |
 | `GET /ready`、`GET /metrics` | 需要 |
 | 其他 `/api/*` | 需要 |
 | `/app/*`、Socket.IO 握手 | 分别由静态路由与 Socket.IO 认证规则处理 |
@@ -24,7 +24,7 @@ Socket.IO 实时协议见 [socket-api.md](socket-api.md)，全部公开表面见
 Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 ```
 
-或登录成功后服务器设置的 HttpOnly、SameSite=Strict `animetta_session` Cookie。非生产 profile 下认证关闭。
+`ANIMETTA_ACCESS_TOKEN` 仅用于机器客户端。浏览器以 `ANIMETTA_AUTH_USERNAME` 对应的用户名和 `ANIMETTA_AUTH_PASSWORD_HASH` 对应的密码登录，成功后使用服务器设置的 HttpOnly、SameSite=Strict `animetta_session` Cookie。密码哈希使用后端 `hash_password` 生成的 `scrypt-v1` 格式，容器不接收明文密码。非生产 profile 下认证关闭。
 
 认证错误统一为：
 
@@ -50,7 +50,7 @@ Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 | GET | `/health` | 无 | `200 {status:"ok", service:"anima", timestamp:number}` | 无远程探测；它只证明进程存活 |
 | GET | `/ready` | 无 | 运行时、前端、Provider、内存、观测与 checkpoint 的缓存快照 | 未就绪 `503`；快照不可用时 `reason=snapshot_unavailable` |
 | GET | `/metrics` | 无 | Prometheus text exposition | production 未认证 `401` |
-| POST | `/api/auth/login` | `{token:string}` | `{ok:true, expires_at:int}` 并设置会话 Cookie | `401`、`429` |
+| POST | `/api/auth/login` | `{username:string,password:string}` | `{ok:true, expires_at:int}` 并设置会话 Cookie | `401`、`429` |
 | GET | `/api/auth/session` | 无 | `{ok:true, authenticated:true, source:string}` | `401` |
 | POST | `/api/auth/logout` | 无 | `{ok:true}` 并删除会话 Cookie | production 未认证 `401` |
 | GET | `/app/*` | 静态路径 | 前端生产构建；仅在 `frontend/dist` 存在时挂载 | `404` |

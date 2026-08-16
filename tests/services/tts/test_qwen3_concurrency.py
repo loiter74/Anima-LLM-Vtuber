@@ -18,7 +18,7 @@ from animetta.services.tts.qwen3_tts import Qwen3TTSTTS
 
 
 @pytest.fixture(autouse=True)
-def _fake_soundfile(monkeypatch: pytest.MonkeyPatch):
+def _fake_optional_runtime_modules(monkeypatch: pytest.MonkeyPatch):
     def write(target, _audio_data, _sample_rate, **_kwargs) -> None:
         payload = b"RIFF\x00\x00\x00\x00WAVE"
         if hasattr(target, "write"):
@@ -27,6 +27,11 @@ def _fake_soundfile(monkeypatch: pytest.MonkeyPatch):
             Path(target).write_bytes(payload)
 
     monkeypatch.setitem(sys.modules, "soundfile", SimpleNamespace(write=write))
+    monkeypatch.setitem(
+        sys.modules,
+        "torch",
+        SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False)),
+    )
 
 
 def _write_valid_wav(path: Path) -> None:

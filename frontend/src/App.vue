@@ -7,7 +7,8 @@ useSocket() // Initialize Socket.IO connection
 const STORAGE_KEY = 'animetta_background'
 const bgSrc = ref('')
 const authRequired = ref(false)
-const accessToken = ref('')
+const username = ref('')
+const password = ref('')
 const authError = ref('')
 const authBusy = ref(false)
 
@@ -50,11 +51,12 @@ async function login(): Promise<void> {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: accessToken.value }),
+      body: JSON.stringify({ username: username.value, password: password.value }),
     })
-    accessToken.value = ''
+    password.value = ''
     if (!response.ok || !(await ensureAuthenticatedSession())) {
-      authError.value = response.status === 429 ? '尝试过于频繁，请稍后再试。' : '访问令牌无效。'
+      authError.value =
+        response.status === 429 ? '尝试过于频繁，请稍后再试。' : '用户名或密码错误。'
     }
   } catch {
     authError.value = '无法连接到 Animetta 服务。'
@@ -92,14 +94,25 @@ window.__setAppBg = (url: string) => {
         <p class="text-10px font-semibold tracking-[0.18em] text-c-accent">PRODUCTION ACCESS</p>
         <h1 class="mt-2 text-xl font-semibold">进入 Animetta 后台</h1>
         <p class="mt-2 text-sm text-c-text-muted">
-          令牌仅用于换取 8 小时 HttpOnly 会话，不会保存在浏览器存储中。
+          账号密码仅用于换取 8 小时 HttpOnly 会话，不会保存在浏览器存储中。
         </p>
-        <label class="mt-5 block text-xs text-c-text-dim" for="access-token">共享访问令牌</label>
+        <label class="mt-5 block text-xs text-c-text-dim" for="auth-username">用户名</label>
         <input
-          id="access-token"
-          v-model="accessToken"
+          id="auth-username"
+          v-model="username"
+          class="input-field mt-2 w-full"
+          type="text"
+          name="username"
+          autocomplete="username"
+          required
+        />
+        <label class="mt-4 block text-xs text-c-text-dim" for="auth-password">密码</label>
+        <input
+          id="auth-password"
+          v-model="password"
           class="input-field mt-2 w-full"
           type="password"
+          name="password"
           autocomplete="current-password"
           required
         />
