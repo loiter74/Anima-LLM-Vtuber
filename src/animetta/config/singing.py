@@ -2,7 +2,9 @@
 
 import os
 import re
+from pathlib import Path
 
+import yaml
 from pydantic import BaseModel, Field, field_validator
 
 _ENV_TEMPLATE = re.compile(r"^\$\{([A-Z_][A-Z0-9_]*):(.*)\}$")
@@ -86,12 +88,46 @@ class RVCConfig(BaseModel):
         return _expand_env_template(value)
 
 
+class SingingPlaylistEntry(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    title: str = Field(min_length=1, max_length=100)
+    performer: str = Field(min_length=1, max_length=100)
+    role: str = Field(min_length=1, max_length=20)
+    note: str = Field(default="", max_length=200)
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def require_bilibili_url(cls, value: str) -> str:
+        if not re.match(r"^https://(?:www\.)?(?:bilibili\.com|b23\.tv)/", value):
+            raise ValueError("playlist URL must use bilibili.com or b23.tv")
+        return value
+
+
 class SingingConfig(BaseModel):
     gpt_sovits: GPTSoVITSConfig = Field(default_factory=GPTSoVITSConfig)
     bilibili: BilibiliConfig = Field(default_factory=BilibiliConfig)
     separation: SeparationConfig = Field(default_factory=SeparationConfig)
     asr: ASRConfig = Field(default_factory=ASRConfig)
     svc: SVCConfig = Field(default_factory=SVCConfig)
+    playlist: list[SingingPlaylistEntry] = Field(default_factory=list)
     rvc: RVCConfig = Field(default_factory=RVCConfig)
     output_dir: str = "./data/singing/outputs"
     max_file_age_days: int = 7
+
+
+def load_singing_config(path: str | Path | None = None) -> SingingConfig:
+    """Load and validate the repository singing configuration."""
+    config_path = (
+        Path(__file__).resolve().parents[3] / "config" / "singing.yaml"
+        if path is None
+        else Path(path)
+    )
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as error:
+        raise ValueError(f"invalid singing YAML: {config_path}") from error
+    singing = raw.get("singing", {}) if isinstance(raw, dict) else {}
+    if not isinstance(singing, dict):
+        raise ValueError("singing configuration must be a YAML object")
+    return SingingConfig.model_validate(singing)

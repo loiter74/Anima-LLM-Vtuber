@@ -24,6 +24,55 @@ singing:
     top_p: 1.0
   max_file_age_days: 7
   output_dir: ./data/singing/outputs
+  playlist:
+    - id: make-debut
+      title: Make debut!
+      performer: 待兼诗歌剧
+      role: 开场
+      note: 轻快入场，适合建立第一轮互动。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=1
+    - id: pyoi-hareluya
+      title: ぴょいっと♪はれるや!
+      performer: 待兼诗歌剧
+      role: 热场
+      note: 节奏明亮，放在开场后继续升温。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=6
+    - id: tailwind
+      title: TAILWIND
+      performer: 待兼诗歌剧
+      role: 主打
+      note: 角色独唱，作为整场核心曲目。
+      url: https://www.bilibili.com/video/BV1ow411P7sz
+    - id: uma-pyoi-densetsu
+      title: うまぴょい伝説!
+      performer: 待兼诗歌剧
+      role: 互动
+      note: 适合弹幕跟唱和中段互动。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=2
+    - id: girls-legend-u
+      title: GIRLS' LEGEND U!
+      performer: 待兼诗歌剧
+      role: 推进
+      note: 加快节奏，承接中段互动。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=5
+    - id: yume-wo-kakeru
+      title: ユメヲカケル!
+      performer: 待兼诗歌剧
+      role: 高潮
+      note: 情绪上扬，适合后半场高潮。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=3
+    - id: gaze-on-me
+      title: Gaze on Me!
+      performer: 待兼诗歌剧
+      role: 舞台
+      note: 舞台感强，用于高潮后的变化段。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=4
+    - id: iro-dori-phantasia
+      title: 彩 Phantasia
+      performer: 待兼诗歌剧
+      role: 收尾
+      note: 旋律舒展，作为歌单收束。
+      url: https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=8
   rvc:
     api_key_env: QWEN_TTS_API_KEY
     base_url: '${RVC_HOST_URL:http://host.docker.internal:8769}'

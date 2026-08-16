@@ -76,21 +76,24 @@ describe('MusicCard live playback control', () => {
   })
 
   it('clears a stale URL validation error when a recent work is loaded', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => [
-        {
-          session_id: 'recent-song',
-          audio_url: '/recent_final.wav',
-          vocals_url: '/recent_vocals.wav',
-          original_url: '/recent_original.wav',
-          subtitle_url: '/recent.ass',
-          tts_audio_url: '',
-          created_at: '2026-08-12T00:00:00Z',
-          duration_sec: 60,
-        },
-      ],
-    } as Response)
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const items =
+        url === '/api/singing/recent'
+          ? [
+              {
+                session_id: 'recent-song',
+                audio_url: '/recent_final.wav',
+                vocals_url: '/recent_vocals.wav',
+                original_url: '/recent_original.wav',
+                subtitle_url: '/recent.ass',
+                tts_audio_url: '',
+                created_at: '2026-08-12T00:00:00Z',
+                duration_sec: 60,
+              },
+            ]
+          : []
+      return { ok: true, json: async () => items } as Response
+    })
     const wrapper = mount(MusicCard, {
       global: {
         plugins: [pinia],
@@ -110,6 +113,51 @@ describe('MusicCard live playback control', () => {
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(useSingingStore().result?.audio_url).toBe('/recent_final.wav')
+    wrapper.unmount()
+  })
+
+  it('renders the curated set list and fills the selected song URL', async () => {
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const items =
+        url === '/api/singing/playlist'
+          ? [
+              {
+                id: 'make-debut',
+                title: 'Make debut!',
+                performer: '待兼诗歌剧',
+                role: '开场',
+                note: '轻快入场',
+                url: 'https://www.bilibili.com/video/BV1Lr4y1W7Gn?p=1',
+              },
+              {
+                id: 'tailwind',
+                title: 'TAILWIND',
+                performer: '待兼诗歌剧',
+                role: '主打',
+                note: '角色独唱',
+                url: 'https://www.bilibili.com/video/BV1ow411P7sz',
+              },
+            ]
+          : []
+      return { ok: true, json: async () => items } as Response
+    })
+    const wrapper = mount(MusicCard, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          WaveformDisplay: { template: '<div />', methods: { connectAudio: vi.fn() } },
+          ProcessTimeline: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2 首')
+    expect(wrapper.text()).toContain('TAILWIND')
+    await wrapper.get('[data-playlist-id="tailwind"]').trigger('click')
+
+    const input = wrapper.get('input[placeholder="粘贴 Bilibili 视频地址"]').element
+    expect((input as HTMLInputElement).value).toBe('https://www.bilibili.com/video/BV1ow411P7sz')
     wrapper.unmount()
   })
 })

@@ -257,6 +257,27 @@ class TestSingingMediaRoutes:
         assert response.status_code == 200
         assert response.json() == []
 
+    def test_singing_playlist_returns_curated_set_order(self):
+        server = self._server_with_real_routes()
+
+        with TestClient(server.get_app()) as client:
+            response = client.get("/api/singing/playlist")
+
+        assert response.status_code == 200
+        playlist = response.json()
+        assert len(playlist) == 8
+        assert [entry["role"] for entry in playlist] == [
+            "开场",
+            "热场",
+            "主打",
+            "互动",
+            "推进",
+            "高潮",
+            "舞台",
+            "收尾",
+        ]
+        assert playlist[2]["title"] == "TAILWIND"
+
     def test_singing_subtitle_missing_file_returns_404(self):
         """GET /api/singing/subtitle/{filename} returns 404 for missing files."""
         server = self._server_with_real_routes()

@@ -9,10 +9,9 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
 from loguru import logger
 
-from animetta.config.singing import SingingConfig
+from animetta.config.singing import load_singing_config
 from animetta.services.command_inbox import (
     CommandDecision,
     CommandInbox,
@@ -140,12 +139,7 @@ class SingingHandlers(BaseSocketHandler):
                 return
             await self._command_inbox.mark_processing(key)
             try:
-                config_path = os.path.join(
-                    os.path.dirname(__file__), "../../../../../config/singing.yaml"
-                )
-                with open(config_path, encoding="utf-8") as f:
-                    raw = yaml.safe_load(f)
-                config = SingingConfig(**raw.get("singing", {}))
+                config = load_singing_config()
 
                 pipeline = SVCPipeline(config)
                 self._pipeline = pipeline

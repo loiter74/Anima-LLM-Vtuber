@@ -135,27 +135,40 @@ interface RecentItem {
   duration_sec: number
 }
 
-const recentItems = ref<RecentItem[]>([])
-const loadingRecent = ref(false)
+interface PlaylistItem {
+  id: string
+  title: string
+  performer: string
+  role: string
+  note: string
+  url: string
+}
 
-async function loadRecent() {
-  loadingRecent.value = true
+const playlistItems = ref<PlaylistItem[]>([])
+const recentItems = ref<RecentItem[]>([])
+
+async function loadLibrary() {
   try {
-    const res = await fetch('/api/singing/recent')
-    if (res.ok) {
-      recentItems.value = await res.json()
-    }
+    const [playlistResponse, recentResponse] = await Promise.all([
+      fetch('/api/singing/playlist'),
+      fetch('/api/singing/recent'),
+    ])
+    if (playlistResponse.ok) playlistItems.value = await playlistResponse.json()
+    if (recentResponse.ok) recentItems.value = await recentResponse.json()
   } catch {
     // silently fail
-  } finally {
-    loadingRecent.value = false
   }
 }
 
 onMounted(() => {
-  void loadRecent()
+  void loadLibrary()
   void recover()
 })
+
+function selectPlaylistItem(item: PlaylistItem) {
+  inputUrl.value = item.url
+  inputError.value = ''
+}
 
 // session_ids are path-derived (data_singing_uploads_sing-<uuid>-<short>) and
 // unreadable when shown verbatim. Surface the creation time as the primary
@@ -232,6 +245,51 @@ function playRecent(item: RecentItem) {
       </button>
     </div>
     <p v-if="inputError" class="text-xs text-c-error" role="alert">{{ inputError }}</p>
+
+    <!-- Curated playlist -->
+    <section
+      v-if="playlistItems.length > 0 && (store.status === 'idle' || store.status === 'error')"
+      class="flex flex-col gap-2"
+      aria-labelledby="singing-playlist-title"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div id="singing-playlist-title" class="text-xs font-medium text-c-text-dim">
+            推荐歌单
+          </div>
+          <p class="mt-1 text-10px text-c-text-muted">按直播节奏排序，选中后可直接开始制作</p>
+        </div>
+        <span class="rounded-lg bg-c-panel/45 px-2 py-1 text-10px text-c-text-muted">
+          {{ playlistItems.length }} 首
+        </span>
+      </div>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <button
+          v-for="item in playlistItems"
+          :key="item.id"
+          type="button"
+          class="rounded-xl border px-3 py-2 text-left transition-colors duration-200"
+          :class="
+            inputUrl === item.url
+              ? 'border-c-border-accent bg-c-accent-soft'
+              : 'border-c-border bg-c-panel/35 hover:bg-c-panel/55'
+          "
+          :data-playlist-id="item.id"
+          :aria-pressed="inputUrl === item.url"
+          @click="selectPlaylistItem(item)"
+        >
+          <span class="flex items-center justify-between gap-2">
+            <span class="truncate text-xs font-medium text-c-text">{{ item.title }}</span>
+            <span class="shrink-0 rounded-lg bg-c-bg/50 px-1.5 py-0.5 text-10px text-c-accent">
+              {{ item.role }}
+            </span>
+          </span>
+          <span class="mt-1 block truncate text-10px text-c-text-muted">
+            {{ item.performer }} · {{ item.note }}
+          </span>
+        </button>
+      </div>
+    </section>
 
     <!-- Recent works -->
     <div v-if="recentItems.length > 0 && store.status === 'idle'" class="flex flex-col gap-2 mt-2">

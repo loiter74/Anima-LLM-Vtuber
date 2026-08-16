@@ -24,6 +24,7 @@ from animetta.config.runtime_reload import (
     apply_runtime_config_to_contexts,
     build_runtime_system_prompt,
 )
+from animetta.config.singing import load_singing_config
 from animetta.config.user import UserSettings
 from animetta.core.component_readiness import ComponentReadinessCache
 from animetta.core.model_loading_manager import ModelLoadingManager
@@ -212,9 +213,19 @@ class WebSocketServer:
                 )
             return JSONResponse(result)
 
+        async def serve_singing_playlist(request: Request) -> JSONResponse:
+            del request
+            try:
+                playlist = load_singing_config().playlist
+            except (OSError, ValueError) as error:
+                logger.error(f"Failed to load singing playlist: {error}")
+                return JSONResponse({"error": "Singing playlist unavailable"}, status_code=500)
+            return JSONResponse([entry.model_dump() for entry in playlist])
+
         singing_routes = [
             Route("/api/singing/audio/{filename:str}", serve_singing_audio),
             Route("/api/singing/subtitle/{filename:str}", serve_singing_subtitle),
+            Route("/api/singing/playlist", serve_singing_playlist),
             Route("/api/singing/recent", serve_singing_recent),
         ]
 

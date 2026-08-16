@@ -71,7 +71,10 @@ Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 |------|------|------|
 | GET | `/api/singing/audio/{filename}` | 音频文件，按扩展名推断媒体类型；不存在时 404 |
 | GET | `/api/singing/subtitle/{filename}` | `text/plain` 附件；不存在时 404 |
+| GET | `/api/singing/playlist` | 按直播顺序排列的配置歌单；配置不可用时 500 |
 | GET | `/api/singing/recent` | 最近 5 个 `*_final.wav` 结果 |
+
+`/api/singing/playlist` 返回数组，每个条目包含稳定的 `id`、`title`、`performer`、编排位置 `role`、制作提示 `note` 与 Bilibili `url`。数组顺序就是推荐演出顺序，真相源为 `config/singing.yaml`。
 
 `/api/singing/recent` 的每个条目包含 `session_id`、`audio_url`、可为空的 `vocals_url`、`original_url`、`subtitle_url`、`tts_audio_url`、本地 ISO 时间 `created_at` 和当前固定为 `0.0` 的 `duration_sec`。
 

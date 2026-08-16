@@ -111,6 +111,25 @@ def test_singing_config_defaults():
     assert cfg.gpt_sovits.base_url == "http://127.0.0.1:9880"
 
 
+def test_repository_singing_playlist_is_ordered_and_unique():
+    from animetta.config.singing import load_singing_config
+
+    playlist = load_singing_config().playlist
+
+    assert len(playlist) == 8
+    assert [entry.role for entry in playlist] == [
+        "开场",
+        "热场",
+        "主打",
+        "互动",
+        "推进",
+        "高潮",
+        "舞台",
+        "收尾",
+    ]
+    assert len({entry.id for entry in playlist}) == len(playlist)
+
+
 def test_rvc_config_disabled_by_default():
     """RVC should be opt-in only."""
     from animetta.config.singing import RVCConfig
