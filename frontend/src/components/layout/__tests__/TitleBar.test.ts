@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import TitleBar from '@/components/layout/TitleBar.vue'
+import { useConnectionStore } from '@/stores/connection'
 
 const route = vi.hoisted(() => ({ name: 'dashboard' }))
 
@@ -26,5 +27,20 @@ describe('TitleBar', () => {
     expect(wrapper.get('[data-testid="nav-dashboard"]').attributes('href')).toBe('/dashboard')
     expect(wrapper.findAll('.nav-btn')).toHaveLength(2)
     expect(wrapper.find('.nav-btn.active').text()).toBe('后台控制')
+  })
+
+  it.each([
+    ['unauthenticated', '未登录'],
+    ['unavailable', '登录服务不可用'],
+  ] as const)('shows %s without calling it disconnected', (authStatus, label) => {
+    const pinia = createPinia()
+    const store = useConnectionStore(pinia)
+    store.setAuthStatus(authStatus)
+    store.setStatus('disconnected')
+
+    const wrapper = mount(TitleBar, { global: { plugins: [pinia] } })
+
+    expect(wrapper.get('.status-text').text()).toBe(label)
+    expect(wrapper.get('.status-text').text()).not.toBe('服务已断开')
   })
 })

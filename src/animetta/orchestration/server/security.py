@@ -33,11 +33,18 @@ from animetta.observability.domain import (
 )
 from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 
+from .auth_session import (
+    AuthSessionHealth,
+    AuthSessionStore,
+    AuthSessionStoreUnavailableError,
+    RedisAuthSessionStore,
+)
+
 SESSION_COOKIE = "animetta_session"
 PASSWORD_HASH_SCHEME = "scrypt-v1"
 PASSWORD_SALT_BYTES = 16
 PASSWORD_DIGEST_BYTES = 32
-PASSWORD_MIN_BYTES = 12
+PASSWORD_MIN_BYTES = 8
 PASSWORD_MAX_BYTES = 1024
 PASSWORD_SCRYPT_N = 2**14
 PASSWORD_SCRYPT_R = 8
@@ -122,6 +129,8 @@ class SecurityRuntime:
         config: SecurityConfig,
         environ: dict[str, str] | None = None,
         observation_recorder: ObservationRecorder | None = None,
+        redis_url: str | None = None,
+        session_store: AuthSessionStore | None = None,
     ) -> None:
         self.profile = profile
         self.config = config
@@ -153,7 +162,10 @@ class SecurityRuntime:
         self._account_username = account_username.encode("utf-8")
         self._password_salt = password_salt
         self._password_digest = password_digest
-        self._signing_key = hashlib.sha256(b"animetta-session\0" + self._token).digest()
+        self._session_store = session_store or RedisAuthSessionStore(
+            redis_url or runtime_environment.get("ANIMETTA_REDIS_URL"),
+            ttl_seconds=config.session_hours * 3600,
+        )
 
     @classmethod
     def from_effective_config(
@@ -161,18 +173,41 @@ class SecurityRuntime:
         config: EffectiveConfig | None,
         *,
         observation_recorder: ObservationRecorder | None = None,
+        redis_url: str | None = None,
     ) -> SecurityRuntime:
         if config is None:
             return cls(
                 profile="test",
                 config=SecurityConfig(allowed_origins=("http://127.0.0.1:8000",)),
                 observation_recorder=observation_recorder,
+                redis_url=redis_url,
             )
         return cls(
             profile=config.profile,
             config=config.security,
             observation_recorder=observation_recorder,
+            redis_url=redis_url,
         )
+
+    @property
+    def session_health(self) -> AuthSessionHealth:
+        if not self.enabled:
+            return AuthSessionHealth(True, None)
+        return self._session_store.health
+
+    async def start(self) -> AuthSessionHealth:
+        if not self.enabled:
+            return self.session_health
+        return await self._session_store.start()
+
+    async def check_session_health(self) -> AuthSessionHealth:
+        if not self.enabled:
+            return self.session_health
+        return await self._session_store.check_health()
+
+    async def close(self) -> None:
+        if self.enabled:
+            await self._session_store.close()
 
     async def record_error(self, code: str, *, surface: str) -> None:
         """Persist a content-free security failure without weakening request handling."""
@@ -278,46 +313,41 @@ class SecurityRuntime:
         password_matches = hmac.compare_digest(supplied_digest, self._password_digest)
         return username_matches and password_matches
 
-    def issue_session(self, *, now: int | None = None) -> tuple[str, int]:
+    async def issue_session(self, *, now: int | None = None) -> tuple[str, int]:
         issued_at = int(time.time()) if now is None else now
         expires_at = issued_at + self.config.session_hours * 3600
-        payload = _b64url(
-            json.dumps(
-                {"iat": issued_at, "exp": expires_at},
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-        )
-        signature = _b64url(hmac.digest(self._signing_key, payload.encode("ascii"), "sha256"))
-        return f"{payload}.{signature}", expires_at
+        if not self.enabled:
+            return secrets.token_urlsafe(32), expires_at
+        value, session = await self._session_store.issue(now=issued_at)
+        return value, session.expires_at
 
-    def verify_session(self, value: str, *, now: int | None = None) -> AuthPrincipal | None:
-        try:
-            payload, supplied_signature = value.split(".", 1)
-            expected_signature = _b64url(
-                hmac.digest(self._signing_key, payload.encode("ascii"), "sha256")
-            )
-            if not hmac.compare_digest(supplied_signature, expected_signature):
-                return None
-            decoded = json.loads(_b64url_decode(payload))
-            current = int(time.time()) if now is None else now
-            if current >= int(decoded["exp"]):
-                return None
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    async def verify_session(
+        self,
+        value: str,
+        *,
+        now: int | None = None,
+    ) -> AuthPrincipal | None:
+        if not self.enabled:
+            return AuthPrincipal(session_id="nonproduction", source="disabled")
+        session = await self._session_store.verify(value, now=now)
+        if session is None:
             return None
-        session_id = hashlib.sha256(value.encode("ascii")).hexdigest()[:24]
-        return AuthPrincipal(session_id=session_id, source="cookie")
+        return AuthPrincipal(session_id=session.session_id, source="cookie")
 
-    def authenticate_http(self, request: Request) -> AuthPrincipal | None:
+    async def revoke_session(self, value: str) -> None:
+        if self.enabled:
+            await self._session_store.revoke(value)
+
+    async def authenticate_http(self, request: Request) -> AuthPrincipal | None:
         if not self.enabled:
             return AuthPrincipal(session_id="nonproduction", source="disabled")
         bearer = _bearer_token(request.headers)
         if bearer is not None and self.verify_shared_token(bearer):
             return AuthPrincipal(session_id="shared-token", source="bearer")
         cookie = request.cookies.get(SESSION_COOKIE)
-        return self.verify_session(cookie) if cookie else None
+        return await self.verify_session(cookie) if cookie else None
 
-    def authenticate_socket(
+    async def authenticate_socket(
         self,
         environ: dict[str, Any],
         auth: dict[str, Any] | None,
@@ -336,7 +366,7 @@ class SecurityRuntime:
         cookies = SimpleCookie()
         cookies.load(headers.get("cookie", ""))
         morsel = cookies.get(SESSION_COOKIE)
-        return self.verify_session(morsel.value) if morsel else None
+        return await self.verify_session(morsel.value) if morsel else None
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -349,7 +379,10 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not self._security.enabled or not _requires_authentication(request.url.path):
             return await call_next(request)
-        principal = self._security.authenticate_http(request)
+        try:
+            principal = await self._security.authenticate_http(request)
+        except AuthSessionStoreUnavailableError:
+            return await _session_store_unavailable_response(self._security, "http")
         if principal is None:
             await self._security.record_error("UNAUTHORIZED", surface="http")
             return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
@@ -383,7 +416,10 @@ def get_auth_routes(security: SecurityRuntime) -> list[Any]:
         if not security.verify_account_credentials(username, password):
             await security.record_error("UNAUTHORIZED", surface="login")
             return error_response("UNAUTHORIZED", "Invalid credentials", status_code=401)
-        session, expires_at = security.issue_session()
+        try:
+            session, expires_at = await security.issue_session()
+        except AuthSessionStoreUnavailableError:
+            return await _session_store_unavailable_response(security, "login")
         response = JSONResponse({"ok": True, "expires_at": expires_at})
         response.set_cookie(
             SESSION_COOKIE,
@@ -397,15 +433,28 @@ def get_auth_routes(security: SecurityRuntime) -> list[Any]:
         return response
 
     async def session(request: Request) -> JSONResponse:
-        principal = security.authenticate_http(request)
+        try:
+            principal = await security.authenticate_http(request)
+        except AuthSessionStoreUnavailableError:
+            return await _session_store_unavailable_response(security, "session")
         if principal is None:
             await security.record_error("UNAUTHORIZED", surface="session")
             return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
         return JSONResponse({"ok": True, "authenticated": True, "source": principal.source})
 
     async def logout(request: Request) -> JSONResponse:
-        del request
-        response = JSONResponse({"ok": True})
+        unavailable = False
+        cookie = request.cookies.get(SESSION_COOKIE)
+        if cookie:
+            try:
+                await security.revoke_session(cookie)
+            except AuthSessionStoreUnavailableError:
+                unavailable = True
+        response = (
+            await _session_store_unavailable_response(security, "logout")
+            if unavailable
+            else JSONResponse({"ok": True})
+        )
         response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
         return response
 
@@ -431,8 +480,20 @@ def error_response(
     )
 
 
+async def _session_store_unavailable_response(
+    security: SecurityRuntime,
+    surface: str,
+) -> JSONResponse:
+    await security.record_error("AUTH_SESSION_STORE_UNAVAILABLE", surface=surface)
+    return error_response(
+        "AUTH_SESSION_STORE_UNAVAILABLE",
+        "Authentication session store unavailable",
+        status_code=503,
+    )
+
+
 def _requires_authentication(path: str) -> bool:
-    if path in {"/health", "/api/auth/login"}:
+    if path == "/health" or path.startswith("/api/auth/"):
         return False
     return path in {"/ready", "/metrics"} or path.startswith("/api/")
 

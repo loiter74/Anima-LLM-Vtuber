@@ -22,6 +22,7 @@ from animetta.services.command_inbox import (
 )
 
 from ..socket_events import EVENTS, event_aliases, event_name
+from .auth_session import AuthSessionStoreUnavailableError
 from .desktop import DesktopClientManager
 from .handlers.base_handler import BaseSocketHandler
 from .handlers.bilibili_handlers import BilibiliHandlers
@@ -595,7 +596,14 @@ def register_routes(
             raise ConnectionRefusedError(
                 {"code": "RATE_LIMITED", "retry_after": exc.retry_after}
             ) from exc
-        principal = security.authenticate_socket(environ, auth)
+        try:
+            principal = await security.authenticate_socket(environ, auth)
+        except AuthSessionStoreUnavailableError as exc:
+            await security.record_error(
+                "AUTH_SESSION_STORE_UNAVAILABLE",
+                surface="socket_connect",
+            )
+            raise ConnectionRefusedError({"code": "AUTH_SESSION_STORE_UNAVAILABLE"}) from exc
         if principal is None:
             await security.record_error("UNAUTHORIZED", surface="socket_connect")
             raise ConnectionRefusedError({"code": "UNAUTHORIZED"})

@@ -24,6 +24,20 @@ describe('standalone live DOM view', () => {
     expect('setCollapsed' in view).toBe(false)
   })
 
+  it.each([
+    ['unauthenticated', '未登录'],
+    ['auth-unavailable', '登录服务不可用'],
+    ['disconnected', '服务已断开'],
+  ] as const)('renders %s as %s', (state, label) => {
+    const view = mountLiveView()
+
+    view.setSocketState(state)
+
+    const status = document.getElementById('socketStatus')!
+    expect(status.dataset.state).toBe(state)
+    expect(status.textContent).toBe(label)
+  })
+
   it('labels gift and super-chat messages while preserving their content', () => {
     const view = mountLiveView()
 

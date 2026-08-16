@@ -15,6 +15,7 @@ Socket.IO 实时协议见 [socket-api.md](socket-api.md)，全部公开表面见
 | `GET /health` | 不需要 |
 | `POST /api/auth/login` | 不需要，以账号密码换取 Cookie |
 | `GET /ready`、`GET /metrics` | 需要 |
+| 其他 `/api/auth/*` | 各端点自行处理账号或 Cookie |
 | 其他 `/api/*` | 需要 |
 | `/app/*`、Socket.IO 握手 | 分别由静态路由与 Socket.IO 认证规则处理 |
 
@@ -24,7 +25,9 @@ Socket.IO 实时协议见 [socket-api.md](socket-api.md)，全部公开表面见
 Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 ```
 
-`ANIMETTA_ACCESS_TOKEN` 仅用于机器客户端。浏览器以 `ANIMETTA_AUTH_USERNAME` 对应的用户名和 `ANIMETTA_AUTH_PASSWORD_HASH` 对应的密码登录，成功后使用服务器设置的 HttpOnly、SameSite=Strict `animetta_session` Cookie。密码哈希使用后端 `hash_password` 生成的 `scrypt-v1` 格式，容器不接收明文密码。非生产 profile 下认证关闭。
+`ANIMETTA_ACCESS_TOKEN` 仅用于机器客户端。浏览器默认账号为 `admin / animetta`；Compose 只把预计算、随机盐的 `scrypt-v1` 哈希注入容器，不传递明文密码。`ANIMETTA_AUTH_USERNAME` 和 `ANIMETTA_AUTH_PASSWORD_HASH` 可覆盖默认账号，密码哈希由后端 `hash_password` 生成。局域网或公网暴露前必须覆盖默认密码哈希。
+
+登录成功后，浏览器得到 HttpOnly、SameSite=Strict `animetta_session` Cookie。Cookie 值是不可预测的不透明 token；Redis 仅在 `animetta:auth:session:v1:` 命名空间保存 token 的 SHA-256 摘要及签发/过期元数据，固定 8 小时过期且不会滑动续期。登出会撤销当前 Session，多个浏览器 Session 彼此独立。Redis Session 存储不可用时浏览器登录、Cookie HTTP 与 Cookie Socket 以 `AUTH_SESSION_STORE_UNAVAILABLE` 故障关闭，机器 Bearer/Socket token 不受影响。非生产 profile 下认证关闭。
 
 认证错误统一为：
 
@@ -48,11 +51,11 @@ Authorization: Bearer <ANIMETTA_ACCESS_TOKEN>
 | 方法 | 路径 | 请求 | 成功响应 | 失败 |
 |------|------|------|----------|------|
 | GET | `/health` | 无 | `200 {status:"ok", service:"anima", timestamp:number}` | 无远程探测；它只证明进程存活 |
-| GET | `/ready` | 无 | 运行时、前端、Provider、内存、观测与 checkpoint 的缓存快照 | 未就绪 `503`；快照不可用时 `reason=snapshot_unavailable` |
+| GET | `/ready` | 无 | 运行时、前端、Provider、内存、观测、必需的 `auth_session` 与 checkpoint 缓存快照 | 未就绪 `503`；快照不可用时 `reason=snapshot_unavailable` |
 | GET | `/metrics` | 无 | Prometheus text exposition | production 未认证 `401` |
-| POST | `/api/auth/login` | `{username:string,password:string}` | `{ok:true, expires_at:int}` 并设置会话 Cookie | `401`、`429` |
-| GET | `/api/auth/session` | 无 | `{ok:true, authenticated:true, source:string}` | `401` |
-| POST | `/api/auth/logout` | 无 | `{ok:true}` 并删除会话 Cookie | production 未认证 `401` |
+| POST | `/api/auth/login` | `{username:string,password:string}` | `{ok:true, expires_at:int}` 并设置会话 Cookie | `401`、`429`、`503` |
+| GET | `/api/auth/session` | 无 | `{ok:true, authenticated:true, source:string}` | `401`、Session 存储不可用 `503` |
+| POST | `/api/auth/logout` | 无 | `{ok:true}` 并撤销 Session、删除 Cookie | Session 存储不可用 `503`（仍删除 Cookie） |
 | GET | `/app/*` | 静态路径 | 前端生产构建；仅在 `frontend/dist` 存在时挂载 | `404` |
 
 `/ready` 是发布与依赖就绪门禁；不要把 `/health` 当作 Provider、模型或数据库已就绪的证据。

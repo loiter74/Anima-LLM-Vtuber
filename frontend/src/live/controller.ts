@@ -19,7 +19,16 @@ export interface BilibiliReplyEvidence {
 
 export interface LiveView {
   renderMessages(messages: readonly DanmakuItem[]): void
-  setSocketState(state: 'connecting' | 'connected' | 'disconnected' | 'error'): void
+  setSocketState(
+    state:
+      | 'checking'
+      | 'unauthenticated'
+      | 'auth-unavailable'
+      | 'connecting'
+      | 'connected'
+      | 'disconnected'
+      | 'error',
+  ): void
   setLivestreamStatus(status: BilibiliStatusPayload): void
   setBilibiliReplyEvidence(reply: BilibiliReplyEvidence): void
   setBackground(config: BackgroundConfig): void
@@ -197,7 +206,6 @@ export function createLiveController(options: LiveControllerOptions) {
   socket.on(Events.BILIBILI.DANMAKU_AI_REPLY, onBilibiliReply)
   socket.on(Events.CHAT.SENTENCE, onSentence)
   socket.on(Events.CHAT.CONTROL, onControl)
-  view.setSocketState('connecting')
   view.setBackground(backgroundFrom(search))
 
   return {

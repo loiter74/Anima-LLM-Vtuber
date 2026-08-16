@@ -5,6 +5,7 @@ import { createPinia } from 'pinia'
 import { nextTick } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import App from '@/App.vue'
+import { useConnectionStore } from '@/stores/connection'
 
 const socketMocks = vi.hoisted(() => ({
   useSocket: vi.fn(() => ({})),
@@ -39,13 +40,16 @@ describe('App', () => {
   it('submits account credentials and clears the password', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
-    socketMocks.ensureAuthenticatedSession.mockResolvedValue(true)
+    socketMocks.ensureAuthenticatedSession.mockResolvedValue('authenticated')
+    const pinia = createPinia()
+    useConnectionStore(pinia).setAuthStatus('unauthenticated')
     const wrapper = mount(App, {
-      global: { plugins: [createPinia()], stubs: { RouterView: true } },
+      global: { plugins: [pinia], stubs: { RouterView: true } },
     })
 
-    window.dispatchEvent(new CustomEvent('animetta:auth-required'))
     await nextTick()
+    expect(wrapper.get('[data-testid="auth-gate"]').text()).toContain('未登录')
+    expect(wrapper.get<HTMLInputElement>('#auth-username').element.value).toBe('admin')
     await wrapper.get('#auth-username').setValue('admin')
     await wrapper.get('#auth-password').setValue('correct horse battery staple')
     await wrapper.get('form').trigger('submit')
@@ -61,6 +65,17 @@ describe('App', () => {
       }),
     )
     expect(wrapper.get<HTMLInputElement>('#auth-password').element.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('shows a distinct session-store failure state', async () => {
+    const pinia = createPinia()
+    useConnectionStore(pinia).setAuthStatus('unavailable')
+    const wrapper = mount(App, {
+      global: { plugins: [pinia], stubs: { RouterView: true } },
+    })
+
+    expect(wrapper.get('[data-testid="auth-gate"]').text()).toContain('登录服务不可用')
     wrapper.unmount()
   })
 })

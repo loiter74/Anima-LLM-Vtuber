@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import { computed } from 'vue'
 import { useConnectionStore } from '@/stores/connection'
 
 const route = useRoute()
 const store = useConnectionStore()
 
 const statusColors: Record<string, string> = {
+  checking: 'bg-c-warning animate-pulse',
+  unauthenticated: 'bg-c-warning',
+  unavailable: 'bg-c-error',
   connected: 'bg-c-success shadow-[0_0_8px_rgba(74,222,128,0.6)]',
   disconnected: 'bg-c-error',
   connecting: 'bg-c-warning animate-pulse',
@@ -13,11 +17,18 @@ const statusColors: Record<string, string> = {
 }
 
 const statusLabels: Record<string, string> = {
-  connected: 'CONNECTED',
-  disconnected: 'DISCONNECTED',
-  connecting: 'CONNECTING',
-  error: 'CONNECTION ERROR',
+  checking: '正在检查登录状态',
+  unauthenticated: '未登录',
+  unavailable: '登录服务不可用',
+  connected: '服务已连接',
+  disconnected: '服务已断开',
+  connecting: '服务连接中',
+  error: '服务连接异常',
 }
+
+const displayStatus = computed(() =>
+  store.authStatus === 'authenticated' ? store.status : store.authStatus,
+)
 
 const navItems = [
   { key: 'live', label: '直播画面', path: '/live.html' },
@@ -51,8 +62,8 @@ function isActive(item: (typeof navItems)[number]) {
     <!-- Right: connection status -->
     <div class="titlebar-right">
       <div class="status-indicator">
-        <span class="status-dot" :class="statusColors[store.status]"></span>
-        <span class="status-text">{{ statusLabels[store.status] }}</span>
+        <span class="status-dot" :class="statusColors[displayStatus]"></span>
+        <span class="status-text">{{ statusLabels[displayStatus] }}</span>
       </div>
     </div>
   </header>

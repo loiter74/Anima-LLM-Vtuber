@@ -10,8 +10,21 @@ describe('useConnectionStore', () => {
   it('starts disconnected with empty error', () => {
     const store = useConnectionStore()
     expect(store.status).toBe('disconnected')
+    expect(store.authStatus).toBe('checking')
     expect(store.errorMessage).toBe('')
   })
+
+  it.each(['authenticated', 'unauthenticated', 'unavailable'] as const)(
+    'tracks %s authentication separately from the socket',
+    (authStatus) => {
+      const store = useConnectionStore()
+      store.setStatus('connected')
+      store.setAuthStatus(authStatus)
+
+      expect(store.authStatus).toBe(authStatus)
+      expect(store.status).toBe('connected')
+    },
+  )
 
   it('setStatus updates to connected', () => {
     const store = useConnectionStore()

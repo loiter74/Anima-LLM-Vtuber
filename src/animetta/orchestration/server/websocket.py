@@ -64,6 +64,7 @@ from .security import AuthenticationMiddleware, SecurityRuntime, get_auth_routes
 from .session import SessionManager
 from .stats_api import (
     get_stats_routes,
+    set_auth_session_readiness,
     set_checkpoint_readiness,
     set_component_readiness_cache,
     set_model_manager,
@@ -99,6 +100,7 @@ class WebSocketServer:
         self.security = SecurityRuntime.from_effective_config(
             config,
             observation_recorder=self.observation_recorder,
+            redis_url=redis_url,
         )
         self.checkpoint_runtime = RedisCheckpointRuntime(redis_url)
 
@@ -271,6 +273,8 @@ class WebSocketServer:
 
         @asynccontextmanager
         async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+            auth_session_health = await self.security.start()
+            set_auth_session_readiness(auth_session_health.public_dict())
             checkpoint_health = await self.checkpoint_runtime.start()
             set_checkpoint_readiness(checkpoint_health.public_dict())
             await self._start_observability()
@@ -303,6 +307,10 @@ class WebSocketServer:
             self.supervise_background(
                 self._checkpoint_health_loop(),
                 name="checkpoint_health",
+            )
+            self.supervise_background(
+                self._auth_session_health_loop(),
+                name="auth_session_health",
             )
             await self.component_readiness_cache.start()
             if self.route_handlers:
@@ -692,6 +700,12 @@ class WebSocketServer:
             health = await self.checkpoint_runtime.check_health()
             set_checkpoint_readiness(health.public_dict())
 
+    async def _auth_session_health_loop(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            health = await self.security.check_session_health()
+            set_auth_session_readiness(health.public_dict())
+
     async def _stop_background_tasks(self) -> None:
         tasks = tuple(self._background_tasks)
         for task in tasks:
@@ -736,6 +750,8 @@ class WebSocketServer:
 
         await self.memory_runtime.shutdown()
         await self.command_inbox.close()
+        await self.security.close()
+        set_auth_session_readiness(self.security.session_health.public_dict())
         await self.checkpoint_runtime.close()
         set_checkpoint_readiness(self.checkpoint_runtime.health.public_dict())
         await ServicePool.shutdown()

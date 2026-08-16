@@ -13,11 +13,18 @@ from starlette.testclient import TestClient
 from animetta.orchestration.server.stats_api import (
     _get_gpu_info,
     get_stats_routes,
+    set_auth_session_readiness,
     set_component_readiness_cache,
     set_runtime_readiness_context,
 )
 
 # ── Helpers ────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _ready_auth_session_store():
+    set_auth_session_readiness({"state": "ready", "ready": True, "reason": None})
+    yield
 
 
 def _build_test_app(store_mock=None):
@@ -366,6 +373,7 @@ class TestHealthEndpoint:
             {"state": "ready", "ready": True, "reason": None},
         )
         set_component_readiness_cache(cache)
+        set_auth_session_readiness({"state": "ready", "ready": True, "reason": None})
         try:
             with patch(
                 "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
@@ -381,6 +389,64 @@ class TestHealthEndpoint:
         payload = response.json()
         assert payload["ready"] is False
         assert payload["components"][failed_component]["ready"] is False
+
+    def test_ready_requires_auth_session_store(self):
+        snapshot = MagicMock()
+        snapshot.to_dict.return_value = {
+            "status": "ready",
+            "ready": True,
+            "profile": "production",
+            "acceptance_eligible": True,
+            "components": {},
+        }
+        cache = SimpleNamespace(
+            snapshot=lambda: {
+                "ready": True,
+                "components": {
+                    "memory_runtime": {
+                        "state": "ready",
+                        "ready": True,
+                        "reason": None,
+                    }
+                },
+                "age_seconds": 0.1,
+            }
+        )
+        set_runtime_readiness_context(
+            SimpleNamespace(
+                profile="production",
+                observability=SimpleNamespace(enabled=False),
+                providers={},
+            ),
+            {"state": "ready", "ready": True, "reason": None},
+        )
+        set_component_readiness_cache(cache)
+        set_auth_session_readiness(
+            {
+                "state": "failed",
+                "ready": False,
+                "reason": "auth_session_unavailable",
+            }
+        )
+        try:
+            with patch(
+                "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",
+                return_value=snapshot,
+            ):
+                app = _build_test_app()
+                with TestClient(app) as client:
+                    response = client.get("/ready")
+        finally:
+            set_component_readiness_cache(None)
+
+        assert response.status_code == 503
+        component = response.json()["components"]["auth_session"]
+        assert component == {
+            "state": "failed",
+            "ready": False,
+            "reason": "auth_session_unavailable",
+            "required": True,
+        }
 
     def test_ready_fails_closed_and_redacts_snapshot_errors(self):
         with patch(

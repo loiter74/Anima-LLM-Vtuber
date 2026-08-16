@@ -11,6 +11,7 @@ import { createLive2DStage } from './live2d-stage'
 import { parseReviewMouthTimeline } from './review-lip-sync'
 import { mountLive2DPerformanceReview } from '@/live2d-performance/main'
 import type { LiveSocketRuntime } from './socket-runtime'
+import { startAuthenticatedLiveSocket } from './network-auth'
 import { createDomLiveView } from './view'
 import 'virtual:uno.css'
 import './styles.css'
@@ -26,6 +27,7 @@ declare global {
 window.PIXI = PIXI
 applyLiveReviewLayout(document.documentElement)
 const search = new URLSearchParams(window.location.search)
+const liveView = createDomLiveView(document)
 
 function createNetworkRuntime(): LiveSocketRuntime {
   const socket = io(window.location.origin, {
@@ -35,8 +37,10 @@ function createNetworkRuntime(): LiveSocketRuntime {
     reconnectionDelay: 3000,
     reconnectionAttempts: Infinity,
     timeout: 120000,
+    autoConnect: false,
     withCredentials: true,
   })
+  let disposed = false
   const liveSocket: LiveSocket = {
     on(event, handler) {
       socket.on(event, handler)
@@ -73,8 +77,11 @@ function createNetworkRuntime(): LiveSocketRuntime {
   return {
     mode: 'network',
     socket: liveSocket,
-    start() {},
+    start() {
+      void startAuthenticatedLiveSocket(socket, liveView, { isDisposed: () => disposed })
+    },
     dispose() {
+      disposed = true
       socket.disconnect()
       approvalStatus.remove()
     },
@@ -83,7 +90,7 @@ function createNetworkRuntime(): LiveSocketRuntime {
 
 const session = bootstrapLiveSession({
   search,
-  view: createDomLiveView(document),
+  view: liveView,
   createNetworkRuntime,
 })
 

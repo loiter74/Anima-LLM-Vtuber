@@ -1,11 +1,13 @@
 import { createPinia } from 'pinia'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const socketHandlers = new Map<string, (payload: unknown) => void>()
 const socket = {
   connected: false,
+  connect: vi.fn(),
+  disconnect: vi.fn(),
   on: vi.fn((event: string, handler: (payload: unknown) => void) => {
     socketHandlers.set(event, handler)
     return socket
@@ -20,7 +22,49 @@ describe('useSocket same-origin bootstrap', () => {
     vi.resetModules()
     io.mockClear()
     socket.on.mockClear()
+    socket.connect.mockClear()
+    socket.disconnect.mockClear()
     socketHandlers.clear()
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+  })
+
+  it('does not connect while the browser is unauthenticated', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+    const pinia = createPinia()
+    const { useSocket } = await import('../useSocket')
+    const { useConnectionStore } = await import('@/stores/connection')
+    const Host = defineComponent({
+      setup() {
+        useSocket()
+        return () => null
+      },
+    })
+
+    mount(Host, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    expect(socket.connect).not.toHaveBeenCalled()
+    expect(useConnectionStore(pinia).authStatus).toBe('unauthenticated')
+  })
+
+  it('connects after the browser session is authenticated', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
+    const pinia = createPinia()
+    const { useSocket } = await import('../useSocket')
+    const { useConnectionStore } = await import('@/stores/connection')
+    const Host = defineComponent({
+      setup() {
+        useSocket()
+        return () => null
+      },
+    })
+
+    mount(Host, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    expect(socket.connect).toHaveBeenCalledOnce()
+    expect(useConnectionStore(pinia).authStatus).toBe('authenticated')
   })
 
   it('connects Socket.IO to window.location.origin', async () => {

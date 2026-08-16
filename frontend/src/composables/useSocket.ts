@@ -6,6 +6,7 @@ import { useSingingStore } from '@/stores/singing'
 import type { ModelStatusPayload } from '@/types/model-loading'
 import type { PipelineStage } from '@/types/singing'
 import { Events, type SingCompletePayload } from '@/constants/socket-events'
+import { checkAuthenticatedSession, type AuthStatus } from '@/auth/session'
 
 let socket: Socket | null = null
 let _initialized = false
@@ -99,8 +100,8 @@ export function useSocket() {
   }
 
   onMounted(() => {
-    // Show connecting state until first connect/error event fires
-    store.setStatus(socket?.connected ? 'connected' : 'connecting')
+    store.setAuthStatus('checking')
+    store.setStatus(socket?.connected ? 'connected' : 'disconnected')
     void ensureAuthenticatedSession()
   })
 
@@ -112,19 +113,20 @@ export function getSocket(): Socket | null {
   return socket
 }
 
-export async function ensureAuthenticatedSession(): Promise<boolean> {
-  if (!socket) return false
-  try {
-    const response = await fetch('/api/auth/session', { credentials: 'same-origin' })
-    if (!response.ok) {
-      window.dispatchEvent(new CustomEvent('animetta:auth-required'))
-      return false
-    }
-    socket.connect()
-    window.dispatchEvent(new CustomEvent('animetta:auth-ready'))
-    return true
-  } catch {
-    window.dispatchEvent(new CustomEvent('animetta:auth-required'))
-    return false
+export async function ensureAuthenticatedSession(): Promise<AuthStatus> {
+  const store = useConnectionStore()
+  if (!socket) {
+    store.setAuthStatus('unavailable')
+    return 'unavailable'
   }
+  const authStatus = await checkAuthenticatedSession()
+  store.setAuthStatus(authStatus)
+  if (authStatus === 'authenticated') {
+    store.setStatus(socket.connected ? 'connected' : 'connecting')
+    socket.connect()
+  } else {
+    socket.disconnect()
+    store.setStatus('disconnected')
+  }
+  return authStatus
 }

@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { ensureAuthenticatedSession, useSocket } from '@/composables/useSocket'
+import { useConnectionStore } from '@/stores/connection'
 
 useSocket() // Initialize Socket.IO connection
+const connectionStore = useConnectionStore()
 
 const STORAGE_KEY = 'animetta_background'
 const bgSrc = ref('')
-const authRequired = ref(false)
-const username = ref('')
+const authRequired = computed(
+  () =>
+    connectionStore.authStatus === 'unauthenticated' ||
+    connectionStore.authStatus === 'unavailable',
+)
+const username = ref('admin')
 const password = ref('')
 const authError = ref('')
 const authBusy = ref(false)
@@ -25,23 +31,7 @@ const bgStyle = computed(() => {
 onMounted(() => {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved) bgSrc.value = saved
-  window.addEventListener('animetta:auth-required', showLogin)
-  window.addEventListener('animetta:auth-ready', hideLogin)
 })
-
-onBeforeUnmount(() => {
-  window.removeEventListener('animetta:auth-required', showLogin)
-  window.removeEventListener('animetta:auth-ready', hideLogin)
-})
-
-function showLogin(): void {
-  authRequired.value = true
-}
-
-function hideLogin(): void {
-  authRequired.value = false
-  authError.value = ''
-}
 
 async function login(): Promise<void> {
   authBusy.value = true
@@ -53,14 +43,25 @@ async function login(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: username.value, password: password.value }),
     })
-    password.value = ''
-    if (!response.ok || !(await ensureAuthenticatedSession())) {
+    if (!response.ok) {
+      connectionStore.setAuthStatus(response.status === 503 ? 'unavailable' : 'unauthenticated')
       authError.value =
-        response.status === 429 ? '尝试过于频繁，请稍后再试。' : '用户名或密码错误。'
+        response.status === 429
+          ? '尝试过于频繁，请稍后再试。'
+          : response.status === 503
+            ? '登录服务不可用。'
+            : '用户名或密码错误。'
+      return
+    }
+    const status = await ensureAuthenticatedSession()
+    if (status !== 'authenticated') {
+      authError.value = status === 'unavailable' ? '登录服务不可用。' : '登录会话无效。'
     }
   } catch {
-    authError.value = '无法连接到 Animetta 服务。'
+    connectionStore.setAuthStatus('unavailable')
+    authError.value = '登录服务不可用。'
   } finally {
+    password.value = ''
     authBusy.value = false
   }
 }
@@ -92,7 +93,9 @@ window.__setAppBg = (url: string) => {
     >
       <form class="glass w-full max-w-md rounded-xl p-6" @submit.prevent="login">
         <p class="text-10px font-semibold tracking-[0.18em] text-c-accent">PRODUCTION ACCESS</p>
-        <h1 class="mt-2 text-xl font-semibold">进入 Animetta 后台</h1>
+        <h1 class="mt-2 text-xl font-semibold">
+          {{ connectionStore.authStatus === 'unavailable' ? '登录服务不可用' : '未登录' }}
+        </h1>
         <p class="mt-2 text-sm text-c-text-muted">
           账号密码仅用于换取 8 小时 HttpOnly 会话，不会保存在浏览器存储中。
         </p>
