@@ -32,13 +32,6 @@ from animetta.observability.domain import (
 from animetta.observability.ports import NoOpObservationRecorder, ObservationRecorder
 from animetta.utils.env_helper import get_data_dir
 
-from .auth_display import (
-    AuthDisplayHealth,
-    AuthDisplayStore,
-    DisplayCredential,
-    PendingPairing,
-    RedisAuthDisplayStore,
-)
 from .auth_password import (
     PASSWORD_HASH_SCHEME,
     hash_password,
@@ -62,8 +55,7 @@ from .auth_user import (
 )
 
 SESSION_COOKIE = "animetta_session"
-DISPLAY_PAIRING_COOKIE = "animetta_display_pairing"
-DISPLAY_COOKIE = "animetta_display"
+PUBLIC_LIVE_SOURCE = "public-live"
 
 
 class SecurityConfigurationError(RuntimeError):
@@ -105,8 +97,6 @@ class AuthPrincipal:
     role: UserRole | None = None
     password_change_required: bool = False
     credential_version: int | None = None
-    device_id: str | None = None
-    expires_at: int | None = None
 
 
 class RateLimitError(RuntimeError):
@@ -166,7 +156,6 @@ class SecurityRuntime:
         redis_url: str | None = None,
         session_store: AuthSessionStore | None = None,
         user_store: AuthUserStore | None = None,
-        display_store: AuthDisplayStore | None = None,
     ) -> None:
         self.profile = profile
         self.config = config
@@ -203,14 +192,6 @@ class SecurityRuntime:
             bootstrap_username=account_username,
             bootstrap_password_hash=account_password_hash,
         )
-        display = config.display
-        self._display_store = display_store or RedisAuthDisplayStore(
-            redis_url or runtime_environment.get("ANIMETTA_REDIS_URL"),
-            pairing_ttl_seconds=display.pairing_ttl_seconds,
-            credential_ttl_seconds=display.credential_days * 86400,
-            poll_interval_seconds=display.poll_interval_seconds,
-            max_active_credentials=display.max_active_credentials,
-        )
 
     @classmethod
     def from_effective_config(
@@ -246,27 +227,14 @@ class SecurityRuntime:
             return AuthUserHealth(True, None)
         return self._user_store.health
 
-    @property
-    def display_health(self) -> AuthDisplayHealth:
-        if not self.enabled or not self.config.display.enabled:
-            return AuthDisplayHealth(True, None)
-        return self._display_store.health
-
-    async def start(self) -> tuple[AuthSessionHealth, AuthUserHealth, AuthDisplayHealth]:
+    async def start(self) -> tuple[AuthSessionHealth, AuthUserHealth]:
         if not self.enabled:
-            return self.session_health, self.user_health, self.display_health
-        if not self.config.display.enabled:
-            session_health, user_health = await asyncio.gather(
-                self._session_store.start(),
-                self._user_store.start(),
-            )
-            return session_health, user_health, self.display_health
-        session_health, user_health, display_health = await asyncio.gather(
+            return self.session_health, self.user_health
+        session_health, user_health = await asyncio.gather(
             self._session_store.start(),
             self._user_store.start(),
-            self._display_store.start(),
         )
-        return session_health, user_health, display_health
+        return session_health, user_health
 
     async def check_session_health(self) -> AuthSessionHealth:
         if not self.enabled:
@@ -278,34 +246,12 @@ class SecurityRuntime:
             return self.user_health
         return await self._user_store.check_health()
 
-    async def check_display_health(self) -> AuthDisplayHealth:
-        if not self.enabled or not self.config.display.enabled:
-            return self.display_health
-        return await self._display_store.check_health()
-
     async def close(self) -> None:
         if self.enabled:
-            await asyncio.gather(
-                self._session_store.close(),
-                self._user_store.close(),
-                self._display_store.close(),
-            )
+            await asyncio.gather(self._session_store.close(), self._user_store.close())
 
     async def record_error(self, code: str, *, surface: str) -> None:
         """Persist a content-free security failure without weakening request handling."""
-        await self._record_security_observation(code, surface=surface, failed=True)
-
-    async def record_event(self, action: str, *, surface: str) -> None:
-        """Persist a content-free successful security event."""
-        await self._record_security_observation(action, surface=surface, failed=False)
-
-    async def _record_security_observation(
-        self,
-        action: str,
-        *,
-        surface: str,
-        failed: bool,
-    ) -> None:
         recorder = self._observation_recorder
         trace_id = uuid.uuid4().hex
         operation_id = uuid.uuid4().hex
@@ -341,22 +287,19 @@ class SecurityRuntime:
             await recorder.finish_operation(
                 OperationFinished(
                     operation_id=operation_id,
-                    status=OperationStatus.ERROR if failed else OperationStatus.SUCCESS,
+                    status=OperationStatus.ERROR,
                     finished_at=time.time(),
-                    error_type=action if failed else None,
-                    error_summary=action if failed else None,
+                    error_type=code,
+                    error_summary=code,
                 )
             )
             await recorder.finish_trace(
                 trace_id,
-                TraceOutcome.FAILED if failed else TraceOutcome.SUCCESS,
+                TraceOutcome.FAILED,
                 finished_at=time.time(),
-                error_type=action if failed else None,
-                error_summary=action if failed else None,
-                attributes={
-                    "source": surface,
-                    **({} if failed else {"action": action}),
-                },
+                error_type=code,
+                error_summary=code,
+                attributes={"source": surface},
             )
         except Exception:
             return
@@ -368,16 +311,6 @@ class SecurityRuntime:
     def check_password_limit(self, user_id: str) -> None:
         if self.enabled:
             self._limiter.consume("password", user_id, rate=5, period_seconds=900, burst=5)
-
-    def check_pairing_create_limit(self, owner: str) -> None:
-        if self.enabled:
-            self._limiter.consume("display_pairing", owner, rate=3, period_seconds=300, burst=3)
-
-    def check_pairing_approve_limit(self, session_id: str) -> None:
-        if self.enabled:
-            self._limiter.consume(
-                "display_approve", session_id, rate=5, period_seconds=300, burst=5
-            )
 
     def check_connection_limit(self, ip: str) -> None:
         if self.enabled:
@@ -396,13 +329,6 @@ class SecurityRuntime:
 
     def unbind_socket(self, sid: str) -> None:
         self._socket_principals.pop(sid, None)
-
-    def display_socket_ids(self, device_id: str) -> tuple[str, ...]:
-        return tuple(
-            sid
-            for sid, principal in self._socket_principals.items()
-            if principal.source == "display" and principal.device_id == device_id
-        )
 
     def socket_principal(self, sid: str) -> AuthPrincipal | None:
         return self._socket_principals.get(sid)
@@ -610,106 +536,6 @@ class SecurityRuntime:
             action="sessions_revoked",
         )
 
-    async def create_display_pairing(
-        self,
-        *,
-        origin: str,
-        now: int | None = None,
-    ) -> PendingPairing:
-        self.require_display_origin(origin)
-        return await self._display_store.create_pairing(origin=origin, now=now)
-
-    async def approve_display_pairing(
-        self,
-        principal: AuthPrincipal,
-        *,
-        code: str,
-        name: str,
-        now: int | None = None,
-    ) -> dict[str, Any]:
-        actor = await self._require_admin(principal)
-        self.check_pairing_approve_limit(principal.session_id)
-        return await self._display_store.approve_pairing(
-            code,
-            name=name,
-            approved_by_user_id=actor.id,
-            now=now,
-        )
-
-    async def exchange_display_pairing(
-        self,
-        token: str,
-        *,
-        origin: str,
-        now: int | None = None,
-    ) -> tuple[str, DisplayCredential] | None:
-        self.require_display_origin(origin)
-        return await self._display_store.exchange_pairing(token, origin=origin, now=now)
-
-    async def list_display_credentials(
-        self,
-        principal: AuthPrincipal,
-        *,
-        now: int | None = None,
-    ) -> list[DisplayCredential]:
-        await self._require_admin(principal)
-        return await self._display_store.list_credentials(now=now)
-
-    async def revoke_display_credential(
-        self,
-        principal: AuthPrincipal,
-        device_id: str,
-    ) -> bool:
-        await self._require_admin(principal)
-        return await self._display_store.revoke_credential(device_id)
-
-    async def verify_display_credential(
-        self,
-        token: str,
-        *,
-        origin: str,
-        touch: bool = False,
-        now: int | None = None,
-    ) -> AuthPrincipal | None:
-        self.require_display_origin(origin)
-        credential = await self._display_store.verify_credential(
-            token,
-            origin=origin,
-            now=now,
-            touch=touch,
-        )
-        if credential is None:
-            return None
-        return AuthPrincipal(
-            session_id=credential.session_id,
-            source="display",
-            device_id=credential.id,
-            expires_at=credential.expires_at,
-        )
-
-    async def authenticate_live_http(self, request: Request) -> AuthPrincipal | None:
-        if not self.enabled:
-            return AuthPrincipal(session_id="nonproduction", source="disabled", role="admin")
-        user_cookie = request.cookies.get(SESSION_COOKIE)
-        if user_cookie:
-            principal = await self.verify_session(user_cookie)
-            if principal is not None:
-                return principal
-        display_cookie = request.cookies.get(DISPLAY_COOKIE)
-        if not display_cookie or not self.config.display.enabled:
-            return None
-        return await self.verify_display_credential(
-            display_cookie,
-            origin=request_origin(request),
-        )
-
-    def require_display_origin(self, origin: str) -> None:
-        if (
-            not self.config.display.enabled
-            or origin.rstrip("/") not in self.config.display.allowed_origins
-        ):
-            raise ValueError("ORIGIN_NOT_ALLOWED")
-
     async def _browser_account(self, principal: AuthPrincipal) -> UserAccount:
         if principal.source != "cookie" or principal.user_id is None:
             raise AccountAdminRequiredError("ACCOUNT_ADMIN_REQUIRED")
@@ -754,32 +580,29 @@ class SecurityRuntime:
         environ: dict[str, Any],
         auth: dict[str, Any] | None,
     ) -> AuthPrincipal | None:
-        if not self.enabled:
-            return AuthPrincipal(session_id="nonproduction", source="disabled", role="admin")
-        token = str((auth or {}).get("token") or "")
-        if token and self.verify_shared_token(token):
-            return AuthPrincipal(session_id="shared-token", source="socket-auth")
+        auth_payload = auth if isinstance(auth, dict) else {}
         scope = dict(environ.get("asgi.scope") or {})
         scope.setdefault("headers", [])
         headers = Headers(scope=scope)
+        public_live = _public_live_principal(auth_payload, headers, self.config.allowed_origins)
+        if not self.enabled:
+            return public_live or AuthPrincipal(
+                session_id="nonproduction",
+                source="disabled",
+                role="admin",
+            )
+        token = str(auth_payload.get("token") or "")
+        if token and self.verify_shared_token(token):
+            return AuthPrincipal(session_id="shared-token", source="socket-auth")
         bearer = _bearer_token(headers)
         if bearer is not None and self.verify_shared_token(bearer):
             return AuthPrincipal(session_id="shared-token", source="bearer")
+        if public_live is not None:
+            return public_live
         cookies = SimpleCookie()
         cookies.load(headers.get("cookie", ""))
         morsel = cookies.get(SESSION_COOKIE)
-        if morsel:
-            principal = await self.verify_session(morsel.value)
-            if principal is not None:
-                return principal
-        display = cookies.get(DISPLAY_COOKIE)
-        if display is None or not self.config.display.enabled:
-            return None
-        return await self.verify_display_credential(
-            display.value,
-            origin=headers.get("origin", "").rstrip("/"),
-            touch=True,
-        )
+        return await self.verify_session(morsel.value) if morsel else None
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -813,15 +636,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def get_auth_routes(
-    security: SecurityRuntime,
-    *,
-    disconnect_display: Any | None = None,
-) -> list[Any]:
+def get_auth_routes(security: SecurityRuntime) -> list[Any]:
     """Build browser auth routes while preserving the historical import path."""
     from .auth_routes import get_auth_routes as build_auth_routes
 
-    return build_auth_routes(security, disconnect_display=disconnect_display)
+    return build_auth_routes(security)
 
 
 def error_response(
@@ -877,10 +696,12 @@ def _bearer_token(headers: Headers) -> str | None:
     return None
 
 
-def request_origin(request: Request) -> str:
-    """Return the browser origin even when a credentialed GET omits Origin."""
-    supplied = request.headers.get("origin")
-    if supplied:
-        return supplied.rstrip("/")
-    host = request.headers.get("host") or request.url.netloc
-    return f"{request.url.scheme}://{host}".rstrip("/")
+def _public_live_principal(
+    auth: dict[str, Any],
+    headers: Headers,
+    allowed_origins: tuple[str, ...],
+) -> AuthPrincipal | None:
+    origin = headers.get("origin", "").rstrip("/")
+    if auth.get("surface") != "live" or origin not in allowed_origins:
+        return None
+    return AuthPrincipal(session_id=f"public-live:{origin}", source=PUBLIC_LIVE_SOURCE)

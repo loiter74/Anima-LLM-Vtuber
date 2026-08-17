@@ -932,6 +932,25 @@ class TestRouteHandlersConnection:
                 assert call_args[0][1].get("text") != "start-mic"
 
     @pytest.mark.asyncio
+    async def test_on_connect_public_live_no_start_mic(self, mock_socketio, mock_session_manager):
+        """Public live clients receive status snapshots without microphone control."""
+        mock_socketio.save_session = AsyncMock()
+        handlers = RouteHandlers(mock_socketio, mock_session_manager)
+
+        await handlers.on_connect(
+            "live-sid",
+            {"HTTP_USER_AGENT": "Mozilla/5.0"},
+            read_only=True,
+        )
+
+        events = [call.args[0] for call in mock_socketio.emit.call_args_list]
+        assert "system:connection_established" in events
+        assert "bilibili:danmaku_status" in events
+        for call in mock_socketio.emit.call_args_list:
+            if call.args[0] == "chat:control":
+                assert call.args[1].get("text") != "start-mic"
+
+    @pytest.mark.asyncio
     async def test_on_disconnect_detaches_transport_without_cancelling_task(
         self, mock_socketio, mock_session_manager
     ):

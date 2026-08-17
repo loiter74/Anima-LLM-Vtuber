@@ -36,7 +36,7 @@ class LifecycleHandlers(BaseSocketHandler):
 
     # ── Connection events ────────────────────────────────────────────
 
-    async def on_connect(self, sid: str, environ: dict) -> None:
+    async def on_connect(self, sid: str, environ: dict, *, read_only: bool = False) -> None:
         """Client connection event."""
         client_type = environ.get("HTTP_USER_AGENT", "")
         is_electron = "electron" in client_type.lower()
@@ -59,7 +59,7 @@ class LifecycleHandlers(BaseSocketHandler):
             to=sid,
         )
 
-        if not is_electron:
+        if not is_electron and not read_only:
             await self.sio.emit(
                 EVENTS["chat"]["control"]["name"], {"type": "control", "text": "start-mic"}, to=sid
             )

@@ -17,15 +17,6 @@ application:
     account_username_env: ANIMETTA_AUTH_USERNAME
     account_password_hash_env: ANIMETTA_AUTH_PASSWORD_HASH
     session_hours: 8
-    display:
-      enabled: true
-      allowed_origins:
-        - http://127.0.0.1
-        - http://localhost
-      pairing_ttl_seconds: 300
-      credential_days: 30
-      poll_interval_seconds: 3
-      max_active_credentials: 5
   observability:
     enabled: true
     database_path: data/observations.db

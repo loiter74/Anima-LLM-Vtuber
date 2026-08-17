@@ -91,6 +91,7 @@ describe('standalone live bootstrap', () => {
       view,
       createNetworkRuntime: () => runtime,
     })
+    expect(view.setSocketState).toHaveBeenCalledWith('connecting')
     startSession(session)
     startSession(session)
 

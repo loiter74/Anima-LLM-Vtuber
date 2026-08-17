@@ -19,27 +19,11 @@ export interface BilibiliReplyEvidence {
 
 export interface LiveView {
   renderMessages(messages: readonly DanmakuItem[]): void
-  setSocketState(
-    state:
-      | 'checking'
-      | 'unauthenticated'
-      | 'auth-unavailable'
-      | 'password-required'
-      | 'pairing-expired'
-      | 'display-revoked'
-      | 'display-limit'
-      | 'connecting'
-      | 'connected'
-      | 'disconnected'
-      | 'error',
-  ): void
+  setSocketState(state: 'connecting' | 'connected' | 'disconnected' | 'error'): void
   setLivestreamStatus(status: BilibiliStatusPayload): void
   setBilibiliReplyEvidence(reply: BilibiliReplyEvidence): void
   setBackground(config: BackgroundConfig): void
   setSubtitle(text: string | null): void
-  showDisplayPairing?(code: string, message?: string): void
-  updateDisplayPairing?(secondsRemaining: number, message?: string): void
-  hideDisplayPairing?(): void
 }
 
 export interface LiveControllerOptions {

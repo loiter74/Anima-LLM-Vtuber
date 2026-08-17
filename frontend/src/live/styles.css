@@ -91,66 +91,6 @@ button {
   text-align: center;
   overflow-wrap: anywhere;
 }
-.pairing-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--c-bg) 86%, transparent);
-  backdrop-filter: blur(20px);
-}
-.pairing-overlay[hidden] {
-  display: none;
-}
-.pairing-card {
-  width: min(480px, 100%);
-  padding: 28px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--c-panel) 92%, transparent);
-  box-shadow: 0 18px 60px color-mix(in srgb, var(--c-bg) 70%, transparent);
-  text-align: center;
-}
-.pairing-kicker {
-  margin: 0;
-  color: var(--c-accent);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-}
-.pairing-card h1 {
-  margin: 10px 0 0;
-  font-size: 28px;
-}
-.pairing-description,
-.pairing-countdown,
-.pairing-message {
-  color: var(--c-text-muted);
-}
-.pairing-code {
-  display: block;
-  margin: 24px 0 12px;
-  color: var(--c-text);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: clamp(38px, 8vw, 56px);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.pairing-link {
-  display: inline-flex;
-  margin-top: 12px;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: var(--c-accent);
-  color: var(--c-bg);
-  text-decoration: none;
-  transition: opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.pairing-link:hover {
-  opacity: 0.86;
-}
 .status-rail {
   position: absolute;
   top: 28px;
@@ -177,11 +117,6 @@ button {
 }
 .status-pill[data-state='error'] {
   color: var(--c-error);
-}
-.status-pill[data-state='pairing-expired'],
-.status-pill[data-state='display-revoked'],
-.status-pill[data-state='display-limit'] {
-  color: var(--c-warning);
 }
 .danmaku-panel {
   position: absolute;
@@ -331,18 +266,4 @@ button {
     bottom: 16px;
     width: calc(100vw - 32px);
   }
-}
-.tool-approval-status {
-  position: fixed;
-  left: 50%;
-  top: 2rem;
-  z-index: 40;
-  transform: translateX(-50%);
-  border: 1px solid var(--c-warning);
-  border-radius: 0.75rem;
-  background: var(--c-panel);
-  color: var(--c-text);
-  padding: 0.75rem 1rem;
-  font-size: 0.75rem;
-  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--c-bg) 70%, transparent);
 }

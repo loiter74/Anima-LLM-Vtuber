@@ -107,7 +107,7 @@ pnpm test:run                # Frontend tests (Vitest + happy-dom)
 
 ## NOTES
 
-- **72 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
+- **71 Vitest test files exist** under `src/` — use `pnpm test:run` for the happy-dom suite.
 - 新增、删除或重命名 `src/**/*.test.ts` 时，同批更新上一行的数量；`tests/smoke/test_frontend_agents_docs.py` 会校验该不变量。
 - happy-dom 不保证提供 `window.confirm`；覆盖确认操作时用 `vi.stubGlobal` 并在测试后恢复。异步刷新会替换列表 DOM，`flushPromises()` 后必须重新查询元素，不得复用刷新前的 wrapper。
 - Live2D model files (`.moc3`, textures) are loaded from `assets/` at runtime.

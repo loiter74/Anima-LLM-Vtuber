@@ -10,8 +10,8 @@ import { applyLiveReviewLayout } from './layout'
 import { createLive2DStage } from './live2d-stage'
 import { parseReviewMouthTimeline } from './review-lip-sync'
 import { mountLive2DPerformanceReview } from '@/live2d-performance/main'
+import { PUBLIC_LIVE_SOCKET_AUTH, startPublicLiveSocket } from './public-live-socket'
 import type { LiveSocketRuntime } from './socket-runtime'
-import { startAuthenticatedLiveSocket } from './network-auth'
 import { createDomLiveView } from './view'
 import 'virtual:uno.css'
 import './styles.css'
@@ -39,8 +39,8 @@ function createNetworkRuntime(): LiveSocketRuntime {
     timeout: 120000,
     autoConnect: false,
     withCredentials: true,
+    auth: PUBLIC_LIVE_SOCKET_AUTH,
   })
-  let disposed = false
   const liveSocket: LiveSocket = {
     on(event, handler) {
       socket.on(event, handler)
@@ -51,42 +51,14 @@ function createNetworkRuntime(): LiveSocketRuntime {
       return liveSocket
     },
   }
-  const approvalStatus = document.createElement('div')
-  approvalStatus.id = 'toolApprovalStatus'
-  approvalStatus.className = 'tool-approval-status'
-  approvalStatus.hidden = true
-  document.body.appendChild(approvalStatus)
-  socket.on('tool:approval_required', () => {
-    approvalStatus.hidden = false
-    approvalStatus.dataset.state = 'waiting'
-    approvalStatus.textContent = 'Minecraft 操作等待后台审批'
-  })
-  socket.on('tool:approval_resolved', (payload: { decision?: string; reason?: string | null }) => {
-    approvalStatus.hidden = false
-    approvalStatus.dataset.state = payload.decision === 'approve' ? 'continued' : 'rejected'
-    approvalStatus.textContent =
-      payload.decision === 'approve'
-        ? 'Minecraft 操作已批准，正在继续'
-        : payload.reason === 'timeout'
-          ? 'Minecraft 操作审批超时，已拒绝'
-          : 'Minecraft 操作已拒绝'
-    window.setTimeout(() => {
-      approvalStatus.hidden = true
-    }, 5000)
-  })
   return {
     mode: 'network',
     socket: liveSocket,
     start() {
-      void startAuthenticatedLiveSocket(socket, liveView, {
-        isDisposed: () => disposed,
-        search,
-      })
+      startPublicLiveSocket(socket, liveView)
     },
     dispose() {
-      disposed = true
       socket.disconnect()
-      approvalStatus.remove()
     },
   }
 }

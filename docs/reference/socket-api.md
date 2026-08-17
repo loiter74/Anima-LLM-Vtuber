@@ -6,7 +6,7 @@
 
 ## 连接、认证与错误
 
-非生产 profile 允许直接连接。`production` profile 可通过以下任一种方式认证：
+Dashboard、桌面端和机器客户端在 `production` profile 可通过以下任一种方式认证：
 
 ```ts
 io('/', { auth: { token: '<ANIMETTA_ACCESS_TOKEN>' } })
@@ -15,11 +15,16 @@ io('/', { auth: { token: '<ANIMETTA_ACCESS_TOKEN>' } })
 - Socket.IO `auth.token`；
 - 握手的 `Authorization: Bearer ...`；
 - HTTP 登录得到的 `animetta_session` Cookie。
-- 本机 `/live.html?pair=1` 配对得到的 `animetta_display` 展示 Cookie。
 
-连接失败时，服务端以 `ConnectionRefusedError` 返回 `UNAUTHORIZED`、`RATE_LIMITED`、`PASSWORD_CHANGE_REQUIRED`、`ACCOUNT_DISABLED`、`AUTH_SESSION_STORE_UNAVAILABLE`、`AUTH_USER_STORE_UNAVAILABLE` 或 `AUTH_DISPLAY_STORE_UNAVAILABLE`。首次改密会话不会建立 Socket；机器 token 不受浏览器用户库与 Session 故障影响。连接成功后收到 `system:connection_established`；真人与机器连接会重发仍待处理的 `tool:approval_required`。
+`/live.html` 使用同一默认命名空间，但无需账号：
 
-展示连接只能接收 `/live.html` 使用的直播、音频、字幕、Live2D 与状态广播。它向服务器发送任意已注册业务事件都会收到 `DISPLAY_READ_ONLY`；凭证撤销或到期时服务器主动断开对应 SID，客户端不得无限认证重连。展示凭证不是 Dashboard、用户管理、Bilibili 控制、Minecraft、聊天或唱歌权限。
+```ts
+io('/', { auth: { surface: 'live' } })
+```
+
+该握手只有在 `Origin` 精确匹配 `security.allowed_origins` 时才建立 `public-live` 身份。机器 token 优先于 Live 标记；Live 标记优先于用户 Cookie，因此从已登录浏览器打开 Live 也不会提升权限。`public-live` 可以接收现有直播广播，但任何客户端主动业务事件都返回 `LIVE_READ_ONLY`，并且不会收到工具审批列表或麦克风启动控制。
+
+连接失败时，服务端以 `ConnectionRefusedError` 返回 `UNAUTHORIZED`、`RATE_LIMITED`、`PASSWORD_CHANGE_REQUIRED`、`ACCOUNT_DISABLED`、`AUTH_SESSION_STORE_UNAVAILABLE` 或 `AUTH_USER_STORE_UNAVAILABLE`。首次改密会话不会建立 Dashboard Socket；机器 token 不受浏览器用户库与 Session 故障影响。认证连接成功后收到 `system:connection_established`，并重发仍待处理的 `tool:approval_required`；匿名 Live 只收到连接确认和直播状态快照。
 
 受保护命令的回调错误形状为：
 

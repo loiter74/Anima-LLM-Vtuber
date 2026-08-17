@@ -25,7 +25,7 @@ export function bootstrapLiveSession(options: BootstrapLiveSessionOptions): Live
     view: options.view,
     search: options.search,
   })
-  options.view.setSocketState(runtime.mode === 'network' ? 'checking' : 'connecting')
+  options.view.setSocketState('connecting')
   disposers.add(() => runtime.dispose())
   disposers.add(() => controller.dispose())
 

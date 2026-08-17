@@ -11,7 +11,6 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from animetta.config.security import SecurityConfig
-from animetta.orchestration.server.auth_display import RedisAuthDisplayStore
 from animetta.orchestration.server.auth_session import RedisAuthSessionStore
 from animetta.orchestration.server.auth_user import (
     AuthUserStore,
@@ -99,8 +98,6 @@ def _runtime(
     password_hash: str = TEST_PASSWORD_HASH,
     recorder=None,
     session_client: FakeRedis | None = None,
-    display_client: FakeRedis | None = None,
-    display_store: RedisAuthDisplayStore | None = None,
 ) -> SecurityRuntime:
     client = session_client or FakeRedis()
     return SecurityRuntime(
@@ -118,99 +115,7 @@ def _runtime(
             bootstrap_username=username,
             bootstrap_password_hash=password_hash,
         ),
-        display_store=display_store
-        or RedisAuthDisplayStore(
-            None,
-            pairing_ttl_seconds=300,
-            credential_ttl_seconds=30 * 86400,
-            poll_interval_seconds=3,
-            max_active_credentials=5,
-            client=display_client or FakeRedis(),
-            code_hmac_key=b"display-route-test-key" * 2,
-        ),
     )
-
-
-def test_display_pairing_uses_separate_read_only_browser_credential() -> None:
-    display_redis = FakeRedis()
-    security = _runtime(display_client=display_redis)
-    disconnect_display = AsyncMock()
-    app = Starlette(routes=get_auth_routes(security, disconnect_display=disconnect_display))
-    app.add_middleware(AuthenticationMiddleware, security=security)
-    admin = TestClient(app, base_url="http://127.0.0.1")
-    display = TestClient(app, base_url="http://127.0.0.1")
-    machine = TestClient(app, base_url="http://127.0.0.1")
-
-    assert (
-        machine.get(
-            "/api/auth/live-session",
-            headers={"Authorization": f"Bearer {'s' * 32}"},
-        ).status_code
-        == 401
-    )
-    machine_approval = machine.post(
-        "/api/auth/display/pairings/approve",
-        headers={"Authorization": f"Bearer {'s' * 32}"},
-        json={"code": "ABCD-EFGH", "name": "machine"},
-    )
-    assert machine_approval.status_code == 403
-    assert machine_approval.json()["error"]["code"] == "ACCOUNT_ADMIN_REQUIRED"
-
-    login = admin.post(
-        "/api/auth/login",
-        json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
-    )
-    assert login.status_code == 200
-    changed = admin.post(
-        "/api/auth/password",
-        json={"current_password": TEST_PASSWORD, "new_password": "permanent-password"},
-    )
-    assert changed.status_code == 200
-
-    pairing = display.post(
-        "/api/auth/display/pairings",
-        headers={"Origin": "http://127.0.0.1"},
-    )
-    assert pairing.status_code == 201
-    assert "animetta_display_pairing=" in pairing.headers["set-cookie"]
-    code = pairing.json()["pairing"]["code"]
-    approved = admin.post(
-        "/api/auth/display/pairings/approve",
-        json={"code": code, "name": "B站直播场景"},
-    )
-    assert approved.status_code == 200
-
-    exchanged = display.post(
-        "/api/auth/display/pairings/exchange",
-        headers={"Origin": "http://127.0.0.1"},
-    )
-    assert exchanged.status_code == 200
-    assert "animetta_display=" in exchanged.headers["set-cookie"]
-    device_id = exchanged.json()["display"]["id"]
-    live_session = display.get("/api/auth/live-session")
-    assert live_session.status_code == 200
-    assert live_session.json()["auth_kind"] == "display"
-    assert display.get("/api/auth/session").status_code == 401
-    assert display.get("/api/auth/users").status_code == 401
-
-    credentials = admin.get("/api/auth/display/credentials")
-    assert credentials.status_code == 200
-    assert [item["id"] for item in credentials.json()["credentials"]] == [device_id]
-    security.bind_socket(
-        "display-sid",
-        AuthPrincipal(
-            session_id="display-session",
-            source="display",
-            device_id=device_id,
-            expires_at=9_999_999_999,
-        ),
-    )
-    revoked = admin.delete(
-        f"/api/auth/display/credentials/{device_id}",
-    )
-    assert revoked.status_code == 200
-    disconnect_display.assert_awaited_once_with("display-sid")
-    assert display.get("/api/auth/live-session").status_code == 401
 
 
 def test_production_rejects_missing_or_weak_access_token() -> None:
@@ -663,86 +568,57 @@ async def test_socket_requires_auth_and_chat_aliases_cannot_bypass_rate_limit(
 
 
 @pytest.mark.asyncio
-async def test_display_socket_is_read_only_for_every_registered_business_event(
+async def test_public_live_socket_requires_allowed_origin_and_blocks_every_business_event(
     mock_socketio,
 ) -> None:
-    security = _runtime()
+    session_client = FakeRedis()
+    security = _runtime(session_client=session_client)
+    session_token, _, _ = await security.login(TEST_USERNAME, TEST_PASSWORD)
     handlers = register_routes(mock_socketio, MagicMock(), security=security)
-    handlers.chat.on_text_event = AsyncMock()
-    security.bind_socket(
-        "display-sid",
-        AuthPrincipal(
-            session_id="display-session",
-            source="display",
-            device_id="device-id",
-            expires_at=9_999_999_999,
-        ),
-    )
+    handlers.on_connect = AsyncMock()
+    handlers.on_tool_approval_list = AsyncMock()
     registered = {call.args[0]: call.args[1] for call in mock_socketio.on.call_args_list}
 
-    for event, payload in (
-        ("chat:text", {"text": "forbidden"}),
-        ("config:get", {}),
-        ("bilibili:connect", {}),
-        ("minecraft:status", {}),
-        ("sing:process", {}),
-    ):
-        result = await registered[event]("display-sid", payload)
-        assert result == {
-            "ok": False,
-            "error": {
-                "code": "DISPLAY_READ_ONLY",
-                "message": "Display credentials are read-only",
+    with pytest.raises(ConnectionRefusedError) as refused:
+        await registered["connect"](
+            "wrong-origin",
+            {
+                "REMOTE_ADDR": "127.0.0.4",
+                "asgi.scope": {"headers": [(b"origin", b"https://other.example")]},
             },
-        }
-    handlers.chat.on_text_event.assert_not_awaited()
+            {"surface": "live"},
+        )
+    assert "UNAUTHORIZED" in str(refused.value)
 
-
-@pytest.mark.asyncio
-async def test_display_cookie_authenticates_only_from_its_bound_socket_origin() -> None:
-    display_store = RedisAuthDisplayStore(
-        None,
-        pairing_ttl_seconds=300,
-        credential_ttl_seconds=30 * 86400,
-        poll_interval_seconds=3,
-        max_active_credentials=5,
-        client=FakeRedis(),
-        code_hmac_key=b"display-socket-test-key" * 2,
-    )
-    security = _runtime(display_store=display_store)
-    pairing = await display_store.create_pairing(origin="http://127.0.0.1", now=2_000_000_000)
-    await display_store.approve_pairing(
-        pairing.code,
-        name="B站直播场景",
-        approved_by_user_id="admin-id",
-        now=2_000_000_001,
-    )
-    exchanged = await display_store.exchange_pairing(
-        pairing.token,
-        origin="http://127.0.0.1",
-        now=2_000_000_002,
-    )
-    assert exchanged is not None
-    token, credential = exchanged
-    environ = {
+    session_client.unavailable = True
+    live_environ = {
+        "REMOTE_ADDR": "127.0.0.5",
         "asgi.scope": {
             "headers": [
-                (b"origin", b"http://127.0.0.1"),
-                (b"cookie", f"animetta_display={token}".encode()),
+                (b"origin", b"https://animetta.example"),
+                (b"cookie", f"animetta_session={session_token}".encode()),
             ]
-        }
+        },
     }
+    await registered["connect"]("public-live", live_environ, {"surface": "live"})
 
-    principal = await security.authenticate_socket(environ, None)
-
-    assert principal == AuthPrincipal(
-        session_id=credential.session_id,
-        source="display",
-        device_id=credential.id,
-        expires_at=credential.expires_at,
+    assert security.socket_principal("public-live") == AuthPrincipal(
+        session_id="public-live:https://animetta.example",
+        source="public-live",
     )
-    environ["asgi.scope"]["headers"][0] = (b"origin", b"http://localhost")
-    assert await security.authenticate_socket(environ, None) is None
+    handlers.on_connect.assert_awaited_once_with("public-live", live_environ, read_only=True)
+    handlers.on_tool_approval_list.assert_not_awaited()
+    for event, handler in registered.items():
+        if event in {"connect", "disconnect"}:
+            continue
+        response = await handler("public-live")
+        assert response == {
+            "ok": False,
+            "error": {
+                "code": "LIVE_READ_ONLY",
+                "message": "Public live connections are read-only",
+            },
+        }, event
 
 
 @pytest.mark.asyncio
@@ -798,8 +674,11 @@ async def test_cookie_socket_fails_closed_but_machine_token_ignores_redis_failur
     assert "AUTH_SESSION_STORE_UNAVAILABLE" in str(refused.value)
     await registered["connect"](
         "machine",
-        {"REMOTE_ADDR": "127.0.0.2"},
-        {"token": "s" * 32},
+        {
+            "REMOTE_ADDR": "127.0.0.2",
+            "asgi.scope": {"headers": [(b"origin", b"https://animetta.example")]},
+        },
+        {"token": "s" * 32, "surface": "live"},
     )
     assert security.socket_principal("machine") == AuthPrincipal(
         session_id="shared-token",

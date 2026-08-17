@@ -13,11 +13,6 @@ describe('standalone live DOM view', () => {
       <span id="livestreamStatus"></span>
       <div id="liveBackground"></div>
       <section id="subtitleOverlay" hidden><p id="subtitleText"></p></section>
-      <section id="displayPairingOverlay" hidden>
-        <output id="displayPairingCode"></output>
-        <p id="displayPairingCountdown"></p>
-        <p id="displayPairingMessage"></p>
-      </section>
     `
     return createDomLiveView(document)
   }
@@ -30,11 +25,8 @@ describe('standalone live DOM view', () => {
   })
 
   it.each([
-    ['unauthenticated', '未登录'],
-    ['auth-unavailable', '登录服务不可用'],
-    ['pairing-expired', '配对码已过期'],
-    ['display-revoked', '直播场景授权已失效'],
-    ['display-limit', '直播设备已达上限'],
+    ['connecting', '服务连接中'],
+    ['connected', '服务已连接'],
     ['disconnected', '服务已断开'],
   ] as const)('renders %s as %s', (state, label) => {
     const view = mountLiveView()
@@ -74,20 +66,6 @@ describe('standalone live DOM view', () => {
     expect(superChat?.querySelector('.danmaku-kind')?.textContent).toBe('醒目留言')
     expect(superChat?.textContent).toContain('测试组阿灯')
     expect(superChat?.textContent).toContain('今天的需求真的不会再改了（大概）')
-  })
-
-  it('shows, updates, and hides the local display pairing layer', () => {
-    const view = mountLiveView()
-
-    view.showDisplayPairing?.('ABCD-EFGH')
-    view.updateDisplayPairing?.(287)
-
-    expect(document.getElementById('displayPairingOverlay')?.hidden).toBe(false)
-    expect(document.getElementById('displayPairingCode')?.textContent).toBe('ABCD-EFGH')
-    expect(document.getElementById('displayPairingCountdown')?.textContent).toContain('287 秒')
-
-    view.hideDisplayPairing?.()
-    expect(document.getElementById('displayPairingOverlay')?.hidden).toBe(true)
   })
 
   it('shows and clears public subtitles without interpreting reply markup', () => {

@@ -22,7 +22,6 @@ from animetta.services.command_inbox import (
 )
 
 from ..socket_events import EVENTS, event_aliases, event_name
-from .auth_display import AuthDisplayStoreUnavailableError
 from .auth_session import AuthSessionStoreUnavailableError
 from .auth_user import AuthUserStoreUnavailableError
 from .desktop import DesktopClientManager
@@ -39,6 +38,7 @@ from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
 from .security import (
+    PUBLIC_LIVE_SOURCE,
     AccountDisabledError,
     RateLimitError,
     SecurityRuntime,
@@ -376,8 +376,8 @@ class RouteHandlers:
 
     # ── Connection events ─────────────────────────────────────────────
 
-    async def on_connect(self, sid: str, environ: dict) -> None:
-        await self.lifecycle.on_connect(sid, environ)
+    async def on_connect(self, sid: str, environ: dict, *, read_only: bool = False) -> None:
+        await self.lifecycle.on_connect(sid, environ, read_only=read_only)
         await self.bilibili.emit_current_snapshot(sid)
 
     async def on_disconnect(self, sid: str) -> None:
@@ -587,10 +587,9 @@ def register_routes(
     handlers.bilibili.configure(bilibili_config)
 
     security = security or SecurityRuntime.from_effective_config(None)
-    expiration_tasks: dict[str, asyncio.Task[None]] = {}
 
     class ReadOnlyRegistrationServer:
-        """Wrap registrations so display principals cannot invoke product handlers."""
+        """Reject every client business event from the public live surface."""
 
         def __init__(self, server: Any) -> None:
             self._server = server
@@ -610,12 +609,12 @@ def register_routes(
 
             async def read_only_adapter(sid: str, *args: Any) -> Any:
                 principal = security.socket_principal(sid)
-                if principal is not None and principal.source == "display":
+                if principal is not None and principal.source == PUBLIC_LIVE_SOURCE:
                     return {
                         "ok": False,
                         "error": {
-                            "code": "DISPLAY_READ_ONLY",
-                            "message": "Display credentials are read-only",
+                            "code": "LIVE_READ_ONLY",
+                            "message": "Public live connections are read-only",
                         },
                     }
                 return await handler(sid, *args)
@@ -653,14 +652,6 @@ def register_routes(
         except AuthUserStoreUnavailableError as exc:
             await security.record_error("AUTH_USER_STORE_UNAVAILABLE", surface="socket_connect")
             raise ConnectionRefusedError({"code": "AUTH_USER_STORE_UNAVAILABLE"}) from exc
-        except AuthDisplayStoreUnavailableError as exc:
-            await security.record_error(
-                "AUTH_DISPLAY_STORE_UNAVAILABLE",
-                surface="socket_connect",
-            )
-            raise ConnectionRefusedError({"code": "AUTH_DISPLAY_STORE_UNAVAILABLE"}) from exc
-        except ValueError as exc:
-            raise ConnectionRefusedError({"code": "UNAUTHORIZED"}) from exc
         except AccountDisabledError as exc:
             raise ConnectionRefusedError({"code": "ACCOUNT_DISABLED"}) from exc
         if principal is None:
@@ -669,26 +660,15 @@ def register_routes(
         if principal.password_change_required:
             raise ConnectionRefusedError({"code": "PASSWORD_CHANGE_REQUIRED"})
         security.bind_socket(sid, principal)
-        await handlers.on_connect(sid, environ)
-        if principal.source != "display":
+        public_live = principal.source == PUBLIC_LIVE_SOURCE
+        await handlers.on_connect(sid, environ, read_only=public_live)
+        if not public_live:
             pending = await handlers.on_tool_approval_list(sid)
             for approval in pending["approvals"]:
                 await sio.emit(event_name("tool", "approval_required"), approval, to=sid)
-        if principal.source == "display" and principal.expires_at is not None:
-
-            async def expire_display() -> None:
-                await asyncio.sleep(max(0, principal.expires_at - int(time.time())))
-                current = security.socket_principal(sid)
-                if current is not None and current.source == "display":
-                    await sio.disconnect(sid)
-
-            expiration_tasks[sid] = asyncio.create_task(expire_display())
         return None
 
     async def disconnect_adapter(sid: str) -> None:
-        task = expiration_tasks.pop(sid, None)
-        if task is not None:
-            task.cancel()
         security.unbind_socket(sid)
         await handlers.on_disconnect(sid)
 

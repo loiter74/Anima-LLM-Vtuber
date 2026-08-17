@@ -13,7 +13,6 @@ from starlette.testclient import TestClient
 from animetta.orchestration.server.stats_api import (
     _get_gpu_info,
     get_stats_routes,
-    set_auth_display_readiness,
     set_auth_session_readiness,
     set_auth_user_readiness,
     set_component_readiness_cache,
@@ -27,7 +26,6 @@ from animetta.orchestration.server.stats_api import (
 def _ready_auth_session_store():
     set_auth_session_readiness({"state": "ready", "ready": True, "reason": None})
     set_auth_user_readiness({"state": "ready", "ready": True, "reason": None})
-    set_auth_display_readiness({"state": "ready", "ready": True, "reason": None})
     yield
 
 
@@ -394,7 +392,7 @@ class TestHealthEndpoint:
         assert payload["ready"] is False
         assert payload["components"][failed_component]["ready"] is False
 
-    @pytest.mark.parametrize("failed_component", ["auth_session", "auth_user", "auth_display"])
+    @pytest.mark.parametrize("failed_component", ["auth_session", "auth_user"])
     def test_ready_requires_auth_stores(self, failed_component: str):
         snapshot = MagicMock()
         snapshot.to_dict.return_value = {
@@ -433,10 +431,8 @@ class TestHealthEndpoint:
         }
         if failed_component == "auth_session":
             set_auth_session_readiness(failed_readiness)
-        elif failed_component == "auth_user":
-            set_auth_user_readiness(failed_readiness)
         else:
-            set_auth_display_readiness(failed_readiness)
+            set_auth_user_readiness(failed_readiness)
         try:
             with patch(
                 "animetta.orchestration.server.stats_api.ServicePool.get_readiness_snapshot",

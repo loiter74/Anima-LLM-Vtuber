@@ -3,19 +3,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from .auth_display import (
-    AuthDisplayStoreUnavailableError,
-    DisplayCredentialLimitError,
-    DisplayPairingExpiredError,
-    DisplayPairingInvalidError,
-)
 from .auth_session import AuthSessionStoreUnavailableError
 from .auth_user import (
     AuthUserStoreUnavailableError,
@@ -24,8 +17,6 @@ from .auth_user import (
     UserNotFoundError,
 )
 from .security import (
-    DISPLAY_COOKIE,
-    DISPLAY_PAIRING_COOKIE,
     SESSION_COOKIE,
     AccountAdminRequiredError,
     AccountDisabledError,
@@ -42,11 +33,7 @@ from .security import (
 )
 
 
-def get_auth_routes(
-    security: SecurityRuntime,
-    *,
-    disconnect_display: Callable[[str], Awaitable[None]] | None = None,
-) -> list[Route]:
+def get_auth_routes(security: SecurityRuntime) -> list[Route]:
     """Build browser auth and administrator routes without exposing secrets."""
 
     async def login(request: Request) -> JSONResponse:
@@ -274,227 +261,6 @@ def get_auth_routes(
             response.delete_cookie(SESSION_COOKIE, path="/", samesite="strict")
         return response
 
-    async def live_session(request: Request) -> JSONResponse:
-        try:
-            principal = await security.authenticate_live_http(request)
-        except AuthSessionStoreUnavailableError:
-            return await _session_store_unavailable_response(security, "live_session")
-        except AuthUserStoreUnavailableError:
-            return await _user_store_unavailable_response(security, "live_session")
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "live_session")
-        except (AccountDisabledError, ValueError):
-            principal = None
-        if principal is None:
-            return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
-        if principal.source == "display":
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "authenticated": True,
-                    "auth_kind": "display",
-                    "display": {
-                        "id": principal.device_id,
-                        "expires_at": principal.expires_at,
-                    },
-                    "password_change_required": False,
-                }
-            )
-        return JSONResponse(
-            {
-                "ok": True,
-                "authenticated": True,
-                "auth_kind": "user",
-                "user": _principal_user(principal.user_id, principal.username, principal.role),
-                "password_change_required": principal.password_change_required,
-            }
-        )
-
-    async def create_display_pairing(request: Request) -> JSONResponse:
-        origin = _display_origin(request, security)
-        if isinstance(origin, JSONResponse):
-            return origin
-        owner = request.client.host if request.client else origin
-        try:
-            security.check_pairing_create_limit(owner)
-            pairing = await security.create_display_pairing(origin=origin)
-        except RateLimitError as exc:
-            return error_response(
-                "RATE_LIMITED",
-                "Too many pairing requests",
-                status_code=429,
-                retry_after=exc.retry_after,
-            )
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "display_pairing_create")
-        response = JSONResponse(
-            {
-                "ok": True,
-                "pairing": {
-                    "code": pairing.code,
-                    "expires_at": pairing.expires_at,
-                    "poll_interval_seconds": pairing.poll_interval_seconds,
-                },
-            },
-            status_code=201,
-        )
-        _set_cookie(
-            response,
-            request,
-            name=DISPLAY_PAIRING_COOKIE,
-            value=pairing.token,
-            max_age=security.config.display.pairing_ttl_seconds,
-        )
-        return response
-
-    async def exchange_display_pairing(request: Request) -> JSONResponse:
-        origin = _display_origin(request, security)
-        if isinstance(origin, JSONResponse):
-            return origin
-        token = request.cookies.get(DISPLAY_PAIRING_COOKIE, "")
-        try:
-            exchanged = await security.exchange_display_pairing(token, origin=origin)
-        except DisplayPairingExpiredError:
-            await security.record_error(
-                "DISPLAY_PAIRING_EXPIRED", surface="display_pairing_exchange"
-            )
-            response = error_response(
-                "DISPLAY_PAIRING_EXPIRED", "Display pairing expired", status_code=410
-            )
-            response.delete_cookie(DISPLAY_PAIRING_COOKIE, path="/", samesite="strict")
-            return response
-        except DisplayPairingInvalidError:
-            await security.record_error(
-                "DISPLAY_PAIRING_INVALID", surface="display_pairing_exchange"
-            )
-            return error_response(
-                "DISPLAY_PAIRING_INVALID", "Display pairing invalid", status_code=404
-            )
-        except DisplayCredentialLimitError:
-            await security.record_error(
-                "DISPLAY_CREDENTIAL_LIMIT", surface="display_pairing_exchange"
-            )
-            return error_response(
-                "DISPLAY_CREDENTIAL_LIMIT", "Display credential limit reached", status_code=409
-            )
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "display_pairing_exchange")
-        if exchanged is None:
-            return JSONResponse({"ok": True, "status": "pending"}, status_code=202)
-        credential_token, credential = exchanged
-        response = JSONResponse(
-            {
-                "ok": True,
-                "status": "approved",
-                "display": credential.public_dict(),
-            }
-        )
-        response.delete_cookie(DISPLAY_PAIRING_COOKIE, path="/", samesite="strict")
-        _set_cookie(
-            response,
-            request,
-            name=DISPLAY_COOKIE,
-            value=credential_token,
-            max_age=security.config.display.credential_days * 86400,
-        )
-        return response
-
-    async def approve_display_pairing(request: Request) -> JSONResponse:
-        if response := _origin_error(request, security):
-            return response
-        principal = await _authenticate(request, security, surface="display_pairing_approve")
-        if isinstance(principal, JSONResponse):
-            return principal
-        if principal is None:
-            return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
-        data = await _json_object(request)
-        try:
-            pairing = await security.approve_display_pairing(
-                principal,
-                code=str(data.get("code") or ""),
-                name=str(data.get("name") or ""),
-            )
-        except DisplayCredentialLimitError:
-            await security.record_error(
-                "DISPLAY_CREDENTIAL_LIMIT", surface="display_pairing_approve"
-            )
-            return error_response(
-                "DISPLAY_CREDENTIAL_LIMIT", "Display credential limit reached", status_code=409
-            )
-        except DisplayPairingExpiredError:
-            await security.record_error(
-                "DISPLAY_PAIRING_EXPIRED", surface="display_pairing_approve"
-            )
-            return error_response(
-                "DISPLAY_PAIRING_EXPIRED", "Display pairing expired", status_code=410
-            )
-        except DisplayPairingInvalidError:
-            await security.record_error(
-                "DISPLAY_PAIRING_INVALID", surface="display_pairing_approve"
-            )
-            return error_response(
-                "DISPLAY_PAIRING_INVALID", "Display pairing invalid", status_code=404
-            )
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "display_pairing_approve")
-        except ValueError:
-            return error_response("INVALID_REQUEST", "Invalid display name", status_code=422)
-        except Exception as exc:
-            return await _admin_error(security, exc, "display_pairing_approve")
-        await security.record_event("display_pairing_approved", surface="display_pairing_approve")
-        return JSONResponse(
-            {
-                "ok": True,
-                "pairing": {
-                    "id": pairing["device_id"],
-                    "name": pairing["name"],
-                },
-            }
-        )
-
-    async def list_display_credentials(request: Request) -> JSONResponse:
-        principal = await _authenticate(request, security, surface="display_credentials_list")
-        if isinstance(principal, JSONResponse):
-            return principal
-        if principal is None:
-            return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
-        try:
-            credentials = await security.list_display_credentials(principal)
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "display_credentials_list")
-        except Exception as exc:
-            return await _admin_error(security, exc, "display_credentials_list")
-        return JSONResponse(
-            {"ok": True, "credentials": [item.public_dict() for item in credentials]}
-        )
-
-    async def revoke_display_credential(request: Request) -> JSONResponse:
-        if response := _origin_error(request, security):
-            return response
-        principal = await _authenticate(request, security, surface="display_credentials_revoke")
-        if isinstance(principal, JSONResponse):
-            return principal
-        if principal is None:
-            return error_response("UNAUTHORIZED", "Authentication required", status_code=401)
-        device_id = str(request.path_params["device_id"])
-        try:
-            revoked = await security.revoke_display_credential(principal, device_id)
-        except AuthDisplayStoreUnavailableError:
-            return await _display_store_unavailable_response(security, "display_credentials_revoke")
-        except Exception as exc:
-            return await _admin_error(security, exc, "display_credentials_revoke")
-        if not revoked:
-            return error_response(
-                "DISPLAY_CREDENTIAL_NOT_FOUND", "Display not found", status_code=404
-            )
-        if disconnect_display is not None:
-            for sid in security.display_socket_ids(device_id):
-                await disconnect_display(sid)
-        await security.record_event(
-            "display_credential_revoked", surface="display_credentials_revoke"
-        )
-        return JSONResponse({"ok": True})
-
     return [
         Route("/api/auth/login", login, methods=["POST"]),
         Route("/api/auth/session", session, methods=["GET"]),
@@ -512,28 +278,6 @@ def get_auth_routes(
             "/api/auth/users/{user_id:str}/revoke-sessions",
             revoke_sessions,
             methods=["POST"],
-        ),
-        Route("/api/auth/live-session", live_session, methods=["GET"]),
-        Route("/api/auth/display/pairings", create_display_pairing, methods=["POST"]),
-        Route(
-            "/api/auth/display/pairings/exchange",
-            exchange_display_pairing,
-            methods=["POST"],
-        ),
-        Route(
-            "/api/auth/display/pairings/approve",
-            approve_display_pairing,
-            methods=["POST"],
-        ),
-        Route(
-            "/api/auth/display/credentials",
-            list_display_credentials,
-            methods=["GET"],
-        ),
-        Route(
-            "/api/auth/display/credentials/{device_id:str}",
-            revoke_display_credential,
-            methods=["DELETE"],
         ),
     ]
 
@@ -618,55 +362,14 @@ def _set_session_cookie(
     security: SecurityRuntime,
     token: str,
 ) -> None:
-    _set_cookie(
-        response,
-        request,
-        name=SESSION_COOKIE,
-        value=token,
-        max_age=security.config.session_hours * 3600,
-    )
-
-
-def _set_cookie(
-    response: JSONResponse,
-    request: Request,
-    *,
-    name: str,
-    value: str,
-    max_age: int,
-) -> None:
     response.set_cookie(
-        name,
-        value,
-        max_age=max_age,
+        SESSION_COOKIE,
+        token,
+        max_age=security.config.session_hours * 3600,
         httponly=True,
         secure=request.url.scheme == "https",
         samesite="strict",
         path="/",
-    )
-
-
-def _display_origin(request: Request, security: SecurityRuntime) -> str | JSONResponse:
-    origin = request.headers.get("origin")
-    if origin is None:
-        return error_response("ORIGIN_NOT_ALLOWED", "Origin is required", status_code=403)
-    origin = origin.rstrip("/")
-    try:
-        security.require_display_origin(origin)
-    except ValueError:
-        return error_response("ORIGIN_NOT_ALLOWED", "Origin is not allowed", status_code=403)
-    return origin
-
-
-async def _display_store_unavailable_response(
-    security: SecurityRuntime,
-    surface: str,
-) -> JSONResponse:
-    await security.record_error("AUTH_DISPLAY_STORE_UNAVAILABLE", surface=surface)
-    return error_response(
-        "AUTH_DISPLAY_STORE_UNAVAILABLE",
-        "Display authorization store unavailable",
-        status_code=503,
     )
 
 

@@ -24,25 +24,8 @@
       >
         <p id="subtitleText"></p>
       </section>
-      <section
-        class="pairing-overlay"
-        id="displayPairingOverlay"
-        aria-labelledby="displayPairingTitle"
-        aria-live="polite"
-        hidden
-      >
-        <div class="pairing-card">
-          <p class="pairing-kicker">LOCAL DISPLAY PAIRING</p>
-          <h1 id="displayPairingTitle">配对直播场景</h1>
-          <p class="pairing-description">请在已登录的账号页批准这个一次性配对码。</p>
-          <output class="pairing-code" id="displayPairingCode">----</output>
-          <p class="pairing-countdown" id="displayPairingCountdown"></p>
-          <p class="pairing-message" id="displayPairingMessage">请在账号页批准</p>
-          <a class="pairing-link" href="/account" target="_blank" rel="noopener">打开账号页</a>
-        </div>
-      </section>
       <aside class="status-rail" aria-label="直播状态">
-        <span class="status-pill" id="socketStatus" data-state="checking">正在检查登录状态</span>
+        <span class="status-pill" id="socketStatus" data-state="connecting">服务连接中</span>
         <span class="status-pill" id="livestreamStatus" data-state="stopped">直播未启动</span>
         <span class="status-pill" id="modelStatus" data-state="connecting">Live2D 加载中</span>
         <span
