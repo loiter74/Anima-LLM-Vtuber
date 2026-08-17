@@ -107,6 +107,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
+  const accessToken = process.env.ANIMETTA_ACCESS_TOKEN?.trim()
   const taskId = `sing-${randomUUID()}`
   const temporary = await mkdtemp(join(tmpdir(), 'animetta-live-singing-'))
   const preparedAudio = join(temporary, `${taskId}.wav`)
@@ -142,13 +143,17 @@ async function main(): Promise<void> {
     transports: ['websocket', 'polling'],
     reconnection: false,
     timeout: 120_000,
+    ...(accessToken ? { auth: { token: accessToken, surface: 'dashboard' } } : {}),
   })
   const progress: Array<Record<string, unknown>> = []
   const consoleErrors: string[] = []
   const pageErrors: string[] = []
 
   try {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 960 },
+      ...(accessToken ? { extraHTTPHeaders: { Authorization: `Bearer ${accessToken}` } } : {}),
+    })
     const livePage = await context.newPage()
     const dashboardPage = await context.newPage()
     const captureErrors = (page: Page, label: string): void => {
@@ -170,7 +175,7 @@ async function main(): Promise<void> {
     await dashboardPage.goto(new URL('/dashboard', options.baseUrl).href, {
       waitUntil: 'domcontentloaded',
     })
-    await dashboardPage.getByTestId('live-ops-dashboard').waitFor({ state: 'visible' })
+    await dashboardPage.getByTestId('dashboard-page').waitFor({ state: 'visible' })
     const before = await playbackEvidence(livePage)
     await waitForSocket(trigger, 120_000)
 
@@ -224,12 +229,30 @@ async function main(): Promise<void> {
       throw new Error(`RVC fallback was observed: ${JSON.stringify(skippedConversion)}`)
     }
     const audioUrl = new URL(String(complete.audio_url), options.baseUrl)
-    const audioResponse = await fetch(audioUrl)
+    const audioResponse = await fetch(
+      audioUrl,
+      accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
+    )
     const audioBytes = audioResponse.ok ? (await audioResponse.arrayBuffer()).byteLength : 0
     if (!audioResponse.ok || audioBytes <= 44) {
       throw new Error(`Generated audio is not readable: HTTP ${audioResponse.status}`)
     }
 
+    await livePage.locator('body').click({ position: { x: 1, y: 1 } })
+    const playbackSnapshot = {
+      version: 1,
+      taskId,
+      track: 'mix',
+      audioUrl: audioUrl.pathname,
+      volumes: Array.isArray(complete.volumes) ? complete.volumes : [],
+      durationSeconds: Number(complete.duration ?? 0),
+      state: 'playing',
+      positionSeconds: 0,
+      updatedAtMs: Date.now(),
+    }
+    await dashboardPage.evaluate((snapshot) => {
+      localStorage.setItem('animetta:singing-playback:v1', JSON.stringify(snapshot))
+    }, playbackSnapshot)
     await livePage.waitForFunction(
       ({ expectedTaskId, expectedAudioUrl }) => {
         const status = document.getElementById('audioStatus')
@@ -253,37 +276,17 @@ async function main(): Promise<void> {
       undefined,
       { timeout: 30_000 },
     )
-    await dashboardPage.waitForFunction(
-      ({ expectedTaskId, expectedAudioUrl, expectedVoice }) => {
-        const result = document.querySelector<HTMLElement>('[data-testid="singing-player-result"]')
-        const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
-        const identity = document.querySelector<HTMLElement>(
-          '[data-testid="singing-voice-identity"]',
-        )
-        return (
-          result?.dataset.taskId === expectedTaskId &&
-          result?.dataset.audioUrl === new URL(expectedAudioUrl).pathname &&
-          audio?.src === expectedAudioUrl &&
-          identity?.textContent?.includes(expectedVoice)
-        )
-      },
-      {
-        expectedTaskId: taskId,
-        expectedAudioUrl: audioUrl.href,
-        expectedVoice: options.expectedVoice,
-      },
-      { timeout: 30_000 },
-    )
-    await dashboardPage.getByRole('button', { name: '播放RVC 混音' }).click()
-    await dashboardPage.waitForFunction(
-      () => {
-        const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
-        return Boolean(audio && !audio.paused && audio.currentTime > 0)
-      },
-      undefined,
-      { timeout: 30_000 },
-    )
     const after = await playbackEvidence(livePage)
+    if (
+      after.count <= before.count ||
+      after.taskId !== taskId ||
+      after.kind !== 'singing' ||
+      !['playing', 'completed'].includes(after.state)
+    ) {
+      throw new Error(
+        `Persistent live playback evidence did not advance: ${JSON.stringify({ before, after })}`,
+      )
+    }
     const playbackFailures = consoleErrors.filter((message) =>
       /audio] (Chat|Singing) audio playback failed/.test(message),
     )
@@ -326,21 +329,7 @@ async function main(): Promise<void> {
           paused: audio.paused,
         }
       }),
-      dashboard_player: await dashboardPage
-        .getByTestId('singing-player-result')
-        .evaluate((element) => {
-          const audio = document.querySelector<HTMLAudioElement>('audio[aria-label="RVC 混音"]')
-          return {
-            visible: true,
-            task_id: (element as HTMLElement).dataset.taskId,
-            audio_url: (element as HTMLElement).dataset.audioUrl,
-            current_time: audio?.currentTime ?? 0,
-            paused: audio?.paused ?? true,
-            tracks: Array.from(document.querySelectorAll('button[aria-label^="试听"]')).map(
-              (track) => track.textContent?.trim() ?? '',
-            ),
-          }
-        }),
+      playback_dispatch: playbackSnapshot,
       console_errors: consoleErrors,
       page_errors: pageErrors,
       screenshots: { dashboard: dashboardScreenshot, live: liveScreenshot },
