@@ -104,6 +104,15 @@ LLM / ASR / TTS Provider 遵循 `interface.py → implementation → factory →
 
 Qwen TTS 仅作为 Windows 宿主机服务运行在 `127.0.0.1:8767`；不得恢复 Qwen Dockerfile、Compose service 或容器生命周期。RVC 唱歌声线推理仅运行在宿主机 `127.0.0.1:8769`；不得新增 RVC Compose service 或把 GPU 推理依赖装入主容器。
 
+### GPU 密集型任务
+
+模型训练、批量推理、长音频分离/转换等持续 GPU 任务启动前必须：
+
+* 用 `nvidia-smi` 记录 GPU 型号、`memory.total`、`memory.used`、`memory.free`，并核对计算进程 PID 与完整命令行；总显存不得当作可用显存，无法确认进程归属时停止；
+* 保证同类任务只有一个实例；停止或重启前必须终止目标进程树并复核精确命令行已消失，外层终端、包装脚本退出或 `Ctrl+C` 不构成停止证据；
+* 先用保守 batch 执行有界峰值探针并持续采样显存，只有实测峰值仍保留 `max(总显存的 25%, 6 GiB)` 空闲时才可开始长任务；不满足时降低 batch、精度或任务规模后重新探针；
+* 不得仅因启动前空闲显存看似充足就提高 batch；每次提高都必须重新执行峰值探针。长任务使用可恢复检查点，并在显存预算越界时终止目标进程树。
+
 生命周期统一通过 `py -3.13 scripts/runtime_lifecycle.py` 执行。`anima-down` 必须保留宿主机 Qwen 与 RVC；只有 `host-tts-stop`、`host-rvc-stop` 可分别停止它们。
 
 LangGraph Redis checkpointer 依赖 RediSearch 与 RedisJSON。Redis 8 官方镜像通过 `docker-entrypoint.sh redis-server` 自动加载捆绑模块；Compose 使用 shell 展开密码时必须重新进入该官方入口，不能直接从 shell 启动 `redis-server`。变更 Redis 版本或启动方式时，必须同时验证 `FT.CREATE`、`JSON.SET` 和官方 `AsyncRedisSaver` 索引初始化，不能只以 `PING` 判定可用。
