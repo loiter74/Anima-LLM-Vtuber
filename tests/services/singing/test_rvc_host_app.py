@@ -64,6 +64,8 @@ def test_host_rvc_publishes_identity_and_converted_audio() -> None:
         revision="f8e22f8c",
         voice="shige_utage",
         sample_rate=40000,
+        index="added_IVF677_shige_utage.index",
+        index_revision="index-sha256",
     )
     service = RVCService(settings, engine)
 
@@ -82,6 +84,8 @@ def test_host_rvc_publishes_identity_and_converted_audio() -> None:
     assert ready.status_code == 200
     assert ready.json()["ready"] is True
     assert ready.json()["revision"] == "f8e22f8c"
+    assert ready.json()["index"] == "added_IVF677_shige_utage.index"
+    assert ready.json()["index_revision"] == "index-sha256"
     assert converted.status_code == 200
     assert converted.content == b"RIFF" + (b"x" * 64)
     assert converted.headers["x-rvc-model"] == "shige_utage.pth"

@@ -48,6 +48,8 @@ class RVCServiceSettings:
     revision: str
     voice: str
     sample_rate: int
+    index: str = ""
+    index_revision: str = ""
     conversion_timeout_seconds: float = 1200.0
     separation_model: str = ""
 
@@ -57,15 +59,21 @@ class RVCServiceSettings:
             raise ValueError("RVC service identity and API key must be non-empty")
         if self.sample_rate <= 0 or self.conversion_timeout_seconds <= 0:
             raise ValueError("RVC service numeric settings must be positive")
+        if bool(self.index.strip()) != bool(self.index_revision.strip()):
+            raise ValueError("RVC index identity fields must be configured together")
 
     def identity_fields(self) -> dict[str, str | int]:
-        return {
+        identity: dict[str, str | int] = {
             "provider": self.provider,
             "model": self.model,
             "revision": self.revision,
             "voice": self.voice,
             "sample_rate": self.sample_rate,
         }
+        if self.index and self.index_revision:
+            identity["index"] = self.index
+            identity["index_revision"] = self.index_revision
+        return identity
 
 
 class RVCService:

@@ -2,10 +2,10 @@ schema_version: 1
 
 identity:
   provider: rvc-webui-host
-  model: shige_utage.pth
-  revision: f8e22f8ca45a8855ef0deb331ebc8c9d7f19176d030beaabab4271065e791843
-  voice: shige_utage
-  sample_rate: 40000
+  model: tosaka_rin_tts_v1.pth
+  revision: e2714bf076547117a24352943cb67d7766d6b512a163c4ecd26bd1e6abb54536
+  voice: tosaka-rin-cn
+  sample_rate: 48000
 
 client:
   timeout_seconds: 1200.0
@@ -19,7 +19,9 @@ separation:
 runtime:
   root: C:\Users\30262\RVC20240604Nvidia
   python: C:\Users\30262\RVC20240604Nvidia\runtime\Scripts\python.exe
-  model_sha256: B03F8A7E6081F78FDBF1A6E1602853481497E640017023D29EC12C41C8AAD060
+  model_sha256: C033C49457043ED9FD95D60FFF61AB98760A5516C7E79331ED7876D1F407D734
+  index_path: logs/tosaka_rin_tts_v1/added_IVF2143_Flat_nprobe_1_tosaka_rin_tts_v1_v2.index
+  index_sha256: 0E158DE97F5EF766D4991F80E94C954E4351A88D096B7850BFEB03D3A7864E79
   hubert_model_dir: C:\Users\30262\RVC20240604Nvidia\assets\hubert\hubert_base
   hubert_sha256: CC8C20F4B90A520757260197A3FF2505705A7ADBD20AD9EEAA4E1A9B38442EF5
   hubert_repo: lj1995/VoiceConversionWebUI

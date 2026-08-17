@@ -27,8 +27,13 @@ def build_host_service_from_env(
 ) -> RVCService:
     runtime_root = Path(os.getenv("RVC_HOST_RUNTIME_ROOT", str(contract.runtime_root)))
     model_path = runtime_root / "assets" / "weights" / contract.model
+    index_path = contract.index_path
+    if index_path is not None and not index_path.is_absolute():
+        index_path = runtime_root / index_path
     hubert_model_dir = Path(os.getenv("RVC_HOST_HUBERT_MODEL_DIR", str(contract.hubert_model_dir)))
     _require_hash(model_path, contract.model_sha256, "voice model")
+    if index_path is not None and contract.index_sha256 is not None:
+        _require_hash(index_path, contract.index_sha256, "feature index")
     _require_hash(
         hubert_model_dir / "pytorch_model.bin",
         contract.hubert_sha256,
@@ -46,6 +51,8 @@ def build_host_service_from_env(
         revision=contract.revision,
         voice=contract.voice,
         sample_rate=contract.sample_rate,
+        index=index_path.name if index_path is not None else "",
+        index_revision=contract.index_sha256 or "",
         conversion_timeout_seconds=contract.timeout_seconds,
         separation_model=contract.separation_model,
     )
@@ -53,6 +60,7 @@ def build_host_service_from_env(
         runtime_root=runtime_root,
         model_name=contract.model,
         hubert_model_dir=hubert_model_dir,
+        index_path=index_path,
         device=os.getenv("RVC_HOST_DEVICE", contract.device),
         is_half=contract.is_half,
     )
