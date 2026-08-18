@@ -6,12 +6,13 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.services.bilibili.response_policy import is_proactive_topic_turn
 from animetta.services.dialogue import AnimaComposer, DialogueServiceError, Reasoner
 from animetta.services.dialogue.contracts import ComposerResult, ReasonerResult
 from animetta.services.dialogue.guard import select_final_response
 from animetta.services.dialogue.models import ComposerRequest, ReasonerRequest
 
-from .conversation_session import ConversationSessionState
+from .conversation_session import PROACTIVE_TOPIC_HISTORY_LABEL, ConversationSessionState
 from .output_node import _is_unpersistable_response
 from .persistence_policy import PersistenceMode, PersistenceRequest, decide_persistence
 from .state import AgentState, log_timing
@@ -193,18 +194,26 @@ async def conversation_finalizer_node(
         )
     )
     committed = False
+    proactive_topic = is_proactive_topic_turn(metadata)
     if policy.allowed:
         composer = scratch.get("composer")
         committed = session.commit(
             task_id=task_id,
-            user_text=state.get("user_text", ""),
+            user_text=(
+                PROACTIVE_TOPIC_HISTORY_LABEL if proactive_topic else state.get("user_text", "")
+            ),
             final_response=response,
             actor_role=metadata.get("actor_role"),
             source=metadata.get("source"),
             mood=composer.mood if isinstance(composer, ComposerResult) else None,
             affinity_delta=(composer.affinity_delta if isinstance(composer, ComposerResult) else 0),
+            update_viewer_state=not proactive_topic,
         )
-    if committed and metadata.get("dialogue_status") in {"composer", "composer_fallback"}:
+    if (
+        committed
+        and not proactive_topic
+        and metadata.get("dialogue_status") in {"composer", "composer_fallback"}
+    ):
         await _persist_selected_final(state, config)
     return {
         "turn_scratch": {},

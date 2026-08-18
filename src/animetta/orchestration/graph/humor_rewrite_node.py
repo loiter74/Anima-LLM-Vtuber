@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from animetta.services.bilibili.response_policy import is_proactive_topic_turn
 from animetta.services.humor import HumorAgent, HumorRewriteRequest
 from animetta.services.humor.metadata import record_humor_candidate
 from animetta.services.scene_analysis.validation import validate_scene_guidance
@@ -24,7 +25,7 @@ async def humor_rewrite_node(
     metadata = {**state.get("metadata", {})}
 
     scene_guidance, _ = validate_scene_guidance(metadata.get("scene_guidance"))
-    if scene_guidance is not None:
+    if is_proactive_topic_turn(metadata) or scene_guidance is not None:
         return {
             "response_text": normal_response,
             "response_chunks": response_chunks,

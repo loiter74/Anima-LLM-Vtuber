@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from animetta.orchestration.graph.conversation_session import (
+    PROACTIVE_TOPIC_HISTORY_LABEL,
     ConversationScope,
     ConversationSessionRegistry,
     ConversationSessionState,
@@ -74,6 +75,25 @@ def test_state_values_are_clamped_and_reset() -> None:
     assert session.mood == "neutral"
     assert session.fatigue == 0
     assert session.affinity == 50
+
+
+def test_proactive_host_turn_keeps_context_without_changing_viewer_state() -> None:
+    session = ConversationSessionState(mood="bright", fatigue=20, affinity=71)
+
+    assert session.commit(
+        task_id="proactive-task",
+        user_text=PROACTIVE_TOPIC_HISTORY_LABEL,
+        final_response="企鹅不会飞，因为没有买机票。",
+        actor_role="host",
+        source="bilibili:proactive_topic",
+        mood="irritated",
+        affinity_delta=2,
+        update_viewer_state=False,
+    )
+
+    assert session.completed_window[0][0] == PROACTIVE_TOPIC_HISTORY_LABEL
+    assert session.prompt_window[0][0] == PROACTIVE_TOPIC_HISTORY_LABEL
+    assert (session.mood, session.fatigue, session.affinity) == ("bright", 20, 71)
 
 
 def test_scope_resolution_shares_livestream_and_isolates_private_conversations() -> None:

@@ -27,19 +27,21 @@ from animetta.orchestration.socket_events import (
     event_name,
     validate_event_field_value,
 )
+from animetta.services.bilibili.response_policy import is_proactive_topic_turn
 
 _CORRELATED_FIELDS = (*IDENTITY_FIELDS, "turn_id")
 
 
 def resolve_delivery_target(state: Mapping[str, Any]) -> str | None:
-    """Broadcast only server-trusted developer livestream replies."""
+    """Broadcast only server-trusted public livestream replies."""
 
     metadata = state.get("metadata")
     if (
         isinstance(metadata, Mapping)
         and metadata.get("audience") == "livestream"
         and (
-            (
+            is_proactive_topic_turn(metadata)
+            or (
                 metadata.get("source") == "developer_console"
                 and metadata.get("actor_role") == "developer"
             )

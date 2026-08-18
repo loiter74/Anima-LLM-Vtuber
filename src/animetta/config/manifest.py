@@ -28,6 +28,7 @@ from .core.base import ProviderConfig
 from .core.registry import ProviderRegistry
 from .humor import HumorConfig
 from .observability import ObservabilityConfig
+from .proactive_topics import ProactiveTopicsConfig
 from .scene_analysis import SceneAnalysisConfig
 from .security import SecurityConfig
 
@@ -125,6 +126,12 @@ class ApplicationManifest(StrictFrozenModel):
         exclude=True,
         repr=False,
     )
+    proactive_topics_snapshot_json: str = Field(
+        default_factory=lambda: _canonical_model_json(ProactiveTopicsConfig()),
+        alias="proactive_topics",
+        exclude=True,
+        repr=False,
+    )
 
     @field_validator("observability_snapshot_json", mode="before")
     @classmethod
@@ -146,6 +153,11 @@ class ApplicationManifest(StrictFrozenModel):
     def validate_scene_analysis_snapshot(cls, value: Any) -> str:
         return _validated_snapshot_json(value, SceneAnalysisConfig)
 
+    @field_validator("proactive_topics_snapshot_json", mode="before")
+    @classmethod
+    def validate_proactive_topics_snapshot(cls, value: Any) -> str:
+        return _validated_snapshot_json(value, ProactiveTopicsConfig)
+
     @property
     def observability(self) -> Mapping[str, Any]:
         return cast(Mapping[str, Any], _freeze_json(json.loads(self.observability_snapshot_json)))
@@ -162,6 +174,13 @@ class ApplicationManifest(StrictFrozenModel):
         )
 
     @property
+    def proactive_topics(self) -> Mapping[str, Any]:
+        return cast(
+            Mapping[str, Any],
+            _freeze_json(json.loads(self.proactive_topics_snapshot_json)),
+        )
+
+    @property
     def security(self) -> Mapping[str, Any]:
         return cast(Mapping[str, Any], _freeze_json(json.loads(self.security_snapshot_json)))
 
@@ -174,6 +193,7 @@ class ApplicationManifest(StrictFrozenModel):
             "observability": json.loads(self.observability_snapshot_json),
             "humor": json.loads(self.humor_snapshot_json),
             "scene_analysis": json.loads(self.scene_analysis_snapshot_json),
+            "proactive_topics": json.loads(self.proactive_topics_snapshot_json),
         }
 
 
@@ -369,6 +389,12 @@ class EffectiveConfig(StrictFrozenModel):
     def scene_analysis(self) -> SceneAnalysisConfig:
         return SceneAnalysisConfig.model_validate_json(
             self.application.scene_analysis_snapshot_json
+        )
+
+    @property
+    def proactive_topics(self) -> ProactiveTopicsConfig:
+        return ProactiveTopicsConfig.model_validate_json(
+            self.application.proactive_topics_snapshot_json
         )
 
     @property

@@ -46,6 +46,12 @@ application:
     guidance_wait_seconds: 0.3
     model_timeout_seconds: 5
     model_max_tokens: 800
+  proactive_topics:
+    enabled: true
+    initial_silence_seconds: 60
+    interval_min_seconds: 90
+    interval_max_seconds: 180
+    max_chars: 36
 
 providers:
   llm:

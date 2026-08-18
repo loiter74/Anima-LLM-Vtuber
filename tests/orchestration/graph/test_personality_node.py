@@ -94,6 +94,21 @@ class TestPersonalityNode:
         assert "弹幕互动" in overlay
 
     @pytest.mark.asyncio
+    async def test_trusted_proactive_turn_gets_only_the_36_character_overlay(self):
+        state = create_initial_state(session_id="test", channel_id="bilibili")
+        state["metadata"] = {
+            "source": "bilibili:proactive_topic",
+            "actor_role": "host",
+            "audience": "livestream",
+        }
+
+        result = await personality_node(state)
+
+        overlay = result["metadata"]["personality_overlay"]
+        assert "36" in overlay
+        assert "18" not in overlay
+
+    @pytest.mark.asyncio
     async def test_case_insensitive_bilibili_check(self):
         """Channel matching for bilibili is case-insensitive."""
 

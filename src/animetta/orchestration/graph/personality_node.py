@@ -9,6 +9,8 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from animetta.services.bilibili.response_policy import is_proactive_topic_turn
+
 from .state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -60,7 +62,13 @@ async def personality_node(
     overlay_parts = []
 
     if personality_mode == "streaming":
-        overlay_parts.append("当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。")
+        if is_proactive_topic_turn(metadata):
+            max_chars = int(metadata.get("proactive_topic_max_chars", 36))
+            overlay_parts.append(f"当前为直播主持人自主发言。回复不超过{max_chars}个字、最多一句。")
+        else:
+            overlay_parts.append(
+                "当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。"
+            )
 
     if personality_mood:
         mood_descriptions = {

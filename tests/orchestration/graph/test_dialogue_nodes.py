@@ -266,6 +266,43 @@ async def test_finalizer_writes_only_selected_final_in_read_write_mode() -> None
     )
 
 
+@pytest.mark.asyncio
+async def test_proactive_finalizer_keeps_only_safe_session_context() -> None:
+    memory = SimpleNamespace(encode=AsyncMock())
+    provider = SequencedLLM([])
+    session = ConversationSessionState(mood="bright", fatigue=20, affinity=71)
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(
+                llm_engine=provider,
+                memory_system=memory,
+                config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write")),
+            ),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["user_text"] = "生成本轮直播主动话题。"
+    current["response_text"] = "企鹅不会飞，因为没有买机票。"
+    current["metadata"] = {
+        "dialogue_status": "direct",
+        "text_ready_at": 1.0,
+        "source": "bilibili:proactive_topic",
+        "actor_role": "host",
+        "audience": "livestream",
+    }
+
+    result = await conversation_finalizer_node(current, runtime)
+
+    assert result["metadata"]["conversation_committed"] is True
+    assert session.completed_window == (
+        ("[直播主持人自主发言触发，不是观众弹幕]", "企鹅不会飞，因为没有买机票。"),
+    )
+    assert "生成本轮直播主动话题" not in repr(session.completed_turns)
+    assert (session.mood, session.fatigue, session.affinity) == ("bright", 20, 71)
+    memory.encode.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("response", "metadata", "is_mock", "expected_commit"),
     [

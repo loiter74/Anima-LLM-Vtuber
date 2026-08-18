@@ -365,3 +365,41 @@ async def test_runtime_counts_evicted_admitted_candidate_as_terminal_drop() -> N
     assert runtime.metrics.reply_success == 1
     assert runtime.metrics.terminal_count == runtime.metrics.admitted
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_reports_busy_while_reply_is_queued_or_processing() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def processor(_candidate: ReplyCandidate) -> None:
+        started.set()
+        await release.wait()
+
+    runtime = DanmakuReplyRuntime(
+        ReplyPolicyConfig(
+            ordinary_sample_rate=1.0,
+            per_user_cooldown_seconds=0,
+            duplicate_window_seconds=0,
+        ),
+        processor,
+    )
+    await runtime.switch_generation(1)
+
+    result = await runtime.submit(
+        DanmakuMessage(text="正在处理", user_id=1),
+        room_id=7,
+        generation_id=1,
+    )
+    assert result.admitted is True
+    assert runtime.busy is True
+
+    await started.wait()
+    assert runtime.busy is True
+    release.set()
+    for _ in range(20):
+        if not runtime.busy:
+            break
+        await asyncio.sleep(0)
+    assert runtime.busy is False
+    await runtime.close()

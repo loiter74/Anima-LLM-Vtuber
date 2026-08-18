@@ -218,7 +218,9 @@ describe('standalone live audio', () => {
     handlers.get(Events.CHAT.AUDIO_STREAM_START)!(start)
     handlers.get(Events.CHAT.AUDIO_STREAM_CHUNK)!(chunk)
     handlers.get(Events.CHAT.AUDIO_STREAM_END)!(end)
-    handlers.get(Events.CHAT.STOP_AUDIO)!({})
+    handlers.get(Events.CHAT.STOP_AUDIO)!({ ...identity, task_id: 'stale', turn_id: 'stale' })
+    expect(playback.stopAudio).not.toHaveBeenCalled()
+    handlers.get(Events.CHAT.STOP_AUDIO)!(identity)
 
     expect(playback.playAudio).toHaveBeenCalledWith(
       complete,

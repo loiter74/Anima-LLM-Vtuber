@@ -7,6 +7,7 @@ from typing import Any
 from langgraph.types import RunnableConfig
 
 from animetta.config.runtime_reload import build_runtime_system_prompt
+from animetta.services.bilibili.response_policy import is_proactive_topic_turn
 from animetta.services.scene_analysis.validation import validate_scene_guidance
 
 from .types import PromptContext
@@ -26,6 +27,10 @@ def build_context(
     service_context = _get_service_context(config)
     base_system_prompt, base_warnings = _build_base_system_prompt(state, service_context)
     scene_guidance, scene_warnings = validate_scene_guidance(metadata.get("scene_guidance"))
+    proactive = is_proactive_topic_turn(metadata)
+    seed = metadata.get("proactive_topic_seed")
+    recent = metadata.get("proactive_recent_outputs")
+    max_chars = metadata.get("proactive_topic_max_chars", 36)
     return PromptContext(
         session_id=state.get("session_id", "unknown"),
         base_system_prompt=base_system_prompt,
@@ -59,6 +64,16 @@ def build_context(
         source=metadata.get("source"),
         audience=metadata.get("audience"),
         has_private_developer_context=bool(metadata.get("has_private_developer_context")),
+        is_proactive_topic=proactive,
+        proactive_topic_seed=(dict(seed) if proactive and isinstance(seed, dict) else None),
+        proactive_recent_outputs=(
+            tuple(str(item) for item in recent[:8])
+            if proactive and isinstance(recent, list)
+            else ()
+        ),
+        proactive_topic_max_chars=(
+            int(max_chars) if proactive and isinstance(max_chars, int) else 36
+        ),
     )
 
 

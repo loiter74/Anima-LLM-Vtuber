@@ -27,6 +27,7 @@ from .persona import (
     PersonaConfig,
     PersonalityTraits,
 )
+from .proactive_topics import ProactiveTopicsConfig
 
 # Providers - ASR
 from .providers.asr import (
@@ -107,6 +108,7 @@ __all__ = [
     "TemperatureMixin",
     "HumorConfig",
     "SceneAnalysisConfig",
+    "ProactiveTopicsConfig",
     # LLM Providers
     "LLMConfig",
     "LLMBaseConfig",

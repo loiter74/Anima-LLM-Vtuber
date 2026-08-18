@@ -18,6 +18,7 @@ from animetta.orchestration.graph.llm_node import (
     FALLBACK_RESPONSE,
     _enforce_persona_verbal_tics,
     _get_recall_emotion,
+    _response_for_delivery,
     _retrieve_memory_context,
 )
 from animetta.orchestration.graph.state import create_initial_state
@@ -50,6 +51,36 @@ def _humor_json(candidate: str, *, risk: str = "safe") -> str:
             "risk": risk,
         },
         ensure_ascii=False,
+    )
+
+
+def test_delivery_policy_keeps_ordinary_live_reply_at_eighteen_characters() -> None:
+    result = _response_for_delivery(
+        {"personality_mode": "streaming", "metadata": {}},
+        "这是一个普通直播回复，它必须继续遵守十八字的限制。",
+    )
+
+    assert len(result) <= 18
+
+
+def test_delivery_policy_allows_only_trusted_proactive_turn_up_to_thirty_six() -> None:
+    metadata = {
+        "source": "bilibili:proactive_topic",
+        "actor_role": "host",
+        "audience": "livestream",
+        "proactive_topic_max_chars": 36,
+        "proactive_recent_outputs": [],
+    }
+    text = "如果每天睡八小时，那么三天就能睡满一天。"
+
+    assert (
+        _response_for_delivery({"personality_mode": "streaming", "metadata": metadata}, text)
+        == text
+    )
+    forged = {**metadata, "actor_role": "viewer"}
+    assert (
+        len(_response_for_delivery({"personality_mode": "streaming", "metadata": forged}, text))
+        <= 18
     )
 
 

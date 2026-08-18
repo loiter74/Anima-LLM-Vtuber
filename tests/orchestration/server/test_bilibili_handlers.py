@@ -3,13 +3,19 @@ from __future__ import annotations
 import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 
 from animetta.config import ReplyPolicyConfig
 from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.orchestration.server.handlers.bilibili_handlers import BilibiliHandlers
-from animetta.services.bilibili import DanmakuMessage, LivestreamEvent, LivestreamEventType
+from animetta.services.bilibili import (
+    DanmakuMessage,
+    LivestreamEvent,
+    LivestreamEventType,
+    TopicSeed,
+)
 from animetta.services.bilibili.livestream_session import StaleGenerationError
 from animetta.services.scene_analysis.models import SceneGuidance
 
@@ -416,6 +422,78 @@ async def test_active_scene_guidance_enters_turn_metadata_and_host_reply_feeds_b
     assert kwargs["received_at"] > 0
     assert not [call for call in sio.emit.await_args_list if call.args[0].startswith("chat:")]
     assert scene_runtime.host_replies == ["接住了，这波是穿模艺术。"]
+
+
+async def test_proactive_topic_uses_trusted_host_identity_without_fake_danmaku() -> None:
+    sio = MagicMock()
+    sio.emit = AsyncMock()
+    session = MagicMock()
+    session.snapshot.return_value = _snapshot("live")
+    scene_runtime = ActiveSceneRuntime(
+        SceneGuidance(
+            scene_revision=2,
+            scene_summary="A room joke is rising.",
+            response_objective="Stay on topic.",
+            confidence=0.9,
+            expires_at=time.time() + 60,
+        )
+    )
+    orchestrator = MagicMock()
+    orchestrator.process_text = AsyncMock(
+        return_value={"response_text": "企鹅不会飞，因为没有买机票。"}
+    )
+    admin = MagicMock()
+    admin.live_session_id = "live-session-1"
+    admin._get_or_create_orchestrator = AsyncMock(return_value=orchestrator)
+    handler = BilibiliHandlers(
+        sio,
+        MagicMock(),
+        admin,
+        session=session,
+        scene_runtime=scene_runtime,
+    )
+    task_id = str(uuid4())
+
+    response = await handler._process_proactive_topic(
+        TopicSeed(
+            kind="scene",
+            subject="企鹅",
+            dedupe_key="scene:企鹅:2",
+            provenance="scene_runtime",
+        ),
+        task_id,
+        123,
+        1,
+        ("鲨鱼生活在海里，因为陆地很难游泳。",),
+    )
+
+    kwargs = orchestrator.process_text.await_args.kwargs
+    assert response == "企鹅不会飞，因为没有买机票。"
+    assert kwargs["source"] == "bilibili:proactive_topic"
+    assert kwargs["actor_role"] == "host"
+    assert kwargs["audience"] == "livestream"
+    assert kwargs["task_id"] == kwargs["turn_id"] == task_id
+    assert kwargs["proactive_topic_max_chars"] == 36
+    assert kwargs["proactive_recent_outputs"] == ["鲨鱼生活在海里，因为陆地很难游泳。"]
+    assert scene_runtime.host_replies == ["企鹅不会飞，因为没有买机票。"]
+    assert not [call for call in sio.emit.await_args_list if call.args[0] == "danmaku_ai_reply"]
+
+
+async def test_proactive_audio_stop_is_correlated_to_the_owned_task(handler_harness) -> None:
+    handler, sio, _ = handler_harness
+    task_id = str(uuid4())
+
+    await handler._interrupt_proactive_audio(task_id)
+
+    sio.emit.assert_awaited_once()
+    event, payload = sio.emit.await_args.args[:2]
+    assert event == "chat:stop_audio"
+    assert payload == {
+        "message_id": task_id,
+        "conversation_id": task_id,
+        "task_id": task_id,
+        "turn_id": task_id,
+    }
 
 
 async def test_program_danmaku_uses_controlled_actor_probe_and_checkpoint_metadata() -> None:

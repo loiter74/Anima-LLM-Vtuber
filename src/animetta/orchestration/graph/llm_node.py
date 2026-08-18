@@ -17,7 +17,11 @@ from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
 from animetta.orchestration.prompting.reasoning_classifier import is_english_meta_reasoning
-from animetta.services.bilibili.response_policy import constrain_livestream_response
+from animetta.services.bilibili.response_policy import (
+    constrain_livestream_response,
+    constrain_proactive_topic_response,
+    is_proactive_topic_turn,
+)
 from animetta.services.llm.token_counting import make_trim_token_counter
 
 from .conversation_session import ConversationSessionState
@@ -178,6 +182,15 @@ _UNTAGGED_REASONING_PREFIX_RE = re.compile(
 def _response_for_delivery(state: AgentState, text: str) -> str:
     """Apply the service-owned delivery policy selected by graph state."""
     visible = _strip_emotion_tags(text)
+    metadata = state.get("metadata", {})
+    if is_proactive_topic_turn(metadata):
+        max_chars = metadata.get("proactive_topic_max_chars", 36)
+        recent = metadata.get("proactive_recent_outputs", [])
+        return constrain_proactive_topic_response(
+            visible,
+            max_chars=int(max_chars) if isinstance(max_chars, int) else 36,
+            recent_outputs=(recent if isinstance(recent, list) else ()),
+        )
     if state.get("personality_mode") == "streaming":
         return constrain_livestream_response(visible)
     return visible
@@ -617,18 +630,23 @@ async def llm_node(
     current_emotion = _get_recall_emotion(state)
     t_rag = time_module.perf_counter()
     _meta = state.get("metadata", {})
-    retrieval_result = await _retrieve_memory_context(
-        session_id=session_id,
-        query=user_text,
-        config=config,
-        current_emotion=current_emotion,
-        character_known=_meta.get("character_known"),
-        character_unknown=_meta.get("character_unknown"),
-        mbti_ei=_meta.get("mbti_ei", 50),
-        mbti_sn=_meta.get("mbti_sn", 50),
-        mbti_tf=_meta.get("mbti_tf", 50),
-        mbti_jp=_meta.get("mbti_jp", 50),
-        context=_build_memory_context(state),
+    proactive_topic = is_proactive_topic_turn(_meta)
+    retrieval_result = (
+        ("", {})
+        if proactive_topic
+        else await _retrieve_memory_context(
+            session_id=session_id,
+            query=user_text,
+            config=config,
+            current_emotion=current_emotion,
+            character_known=_meta.get("character_known"),
+            character_unknown=_meta.get("character_unknown"),
+            mbti_ei=_meta.get("mbti_ei", 50),
+            mbti_sn=_meta.get("mbti_sn", 50),
+            mbti_tf=_meta.get("mbti_tf", 50),
+            mbti_jp=_meta.get("mbti_jp", 50),
+            context=_build_memory_context(state),
+        )
     )
     memory_context, rag_metadata = (
         retrieval_result if isinstance(retrieval_result, tuple) else (retrieval_result, {})
@@ -637,7 +655,7 @@ async def llm_node(
     log_timing(state, "llm.rag_retrieval", rag_duration, f"query='{user_text[:50]}'")
 
     # Check if tools are enabled
-    enable_tools = _get_config_value(config, "enable_tools", False)
+    enable_tools = _get_config_value(config, "enable_tools", False) and not proactive_topic
     chat_model = _get_config_value(config, "chat_model", None)
 
     if enable_tools and chat_model:
@@ -861,8 +879,10 @@ async def _llm_without_tools(
             f"[{session_id}] [LLMNode] LLM timeout after {timeout_seconds}s, using fallback"
         )
         await log_node_error(session_id, "llm_node", "timeout", duration_ms=llm_duration)
-        full_response = FALLBACK_RESPONSE
-        chunks = [FALLBACK_RESPONSE]
+        full_response = (
+            "" if is_proactive_topic_turn(state.get("metadata", {})) else FALLBACK_RESPONSE
+        )
+        chunks = [full_response] if full_response else []
 
         # Note: no affinity marker in the FALLBACK_RESPONSE, so the value
         # carries over from the previous turn (correct behavior — we did not
@@ -904,9 +924,14 @@ async def _llm_without_tools(
     )
 
     # after_llm_call notification (non-blocking)
-    _notify_middleware_after(session_id, user_text, full_response, config)
+    if not is_proactive_topic_turn(state.get("metadata", {})):
+        _notify_middleware_after(session_id, user_text, full_response, config)
 
-    delivery_response = _response_for_delivery(state, full_response)
+    delivery_response = (
+        ""
+        if response_fallback and is_proactive_topic_turn(state.get("metadata", {}))
+        else _response_for_delivery(state, full_response)
+    )
     if state.get("personality_mode") == "streaming":
         chunks = [delivery_response]
     return {

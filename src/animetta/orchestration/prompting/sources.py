@@ -37,7 +37,7 @@ class MinecraftMissionPromptSource:
     name = "minecraft_mission"
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
-        if "mc_operate_bot" not in ctx.available_tool_names:
+        if ctx.is_proactive_topic or "mc_operate_bot" not in ctx.available_tool_names:
             content = ""
         else:
             from animetta.tools.minecraft.blueprint import starter_shelter_blueprint
@@ -116,6 +116,15 @@ class AffinityPromptSource:
     name = "affinity"
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        if ctx.is_proactive_topic:
+            return [
+                PromptSection(
+                    name=self.name,
+                    role=SectionRole.AFFINITY,
+                    priority=SectionPriority.AFFINITY,
+                    content="",
+                )
+            ]
         # Clamp to a sane display range even if upstream handed us garbage.
         affinity = max(0, min(100, int(ctx.affinity)))
         band = _affinity_band(affinity)
@@ -169,7 +178,9 @@ class RuntimePersonalityPromptSource:
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
         parts: list[str] = []
 
-        if ctx.personality_mode == "streaming" and ctx.scene_guidance is None:
+        if ctx.personality_mode == "streaming" and ctx.is_proactive_topic:
+            parts.append(f"当前为直播主持人自主发言，最多一句、{ctx.proactive_topic_max_chars}字。")
+        elif ctx.personality_mode == "streaming" and ctx.scene_guidance is None:
             parts.append("当前为直播模式。回复不超过18个字、最多一句，简短有趣，适合弹幕互动。")
         elif ctx.personality_mode == "streaming":
             parts.append("当前为直播模式，回复长度以本轮节目脚本的回复范围为准。")
@@ -208,7 +219,7 @@ class ImprovisedChatPromptSource:
     name = "improvised_chat"
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
-        if ctx.scene_guidance is not None:
+        if ctx.is_proactive_topic or ctx.scene_guidance is not None:
             return [
                 PromptSection(
                     name=self.name,
@@ -304,6 +315,49 @@ class SceneGuidancePromptSource:
         ]
 
 
+class ProactiveTopicPromptSource:
+    """Constrain one trusted autonomous host turn to deadpan logic humor."""
+
+    name = "proactive_topic"
+
+    def sections(self, ctx: PromptContext) -> list[PromptSection]:
+        if not ctx.is_proactive_topic:
+            content = ""
+        else:
+            seed = ctx.proactive_topic_seed or {}
+            subject = str(seed.get("subject") or "").strip()
+            subject_rule = (
+                f"优先围绕当前场景话题「{subject}」自然起句，但不要照抄或解释话题来源。"
+                if subject
+                else "当前没有新场景话题，自由选择一个日常、科学或机器逻辑前提。"
+            )
+            recent_rule = ""
+            if ctx.proactive_recent_outputs:
+                recent_rule = "\n- 不得重复这些本场近期发言：" + "；".join(
+                    ctx.proactive_recent_outputs
+                )
+            content = (
+                "## 直播主动找话题\n\n"
+                "这是主持人自主发言触发，不是观众弹幕，不要回应、称呼或追问某位观众。\n"
+                f"{subject_rule}\n\n"
+                "只输出一句中文，语法和前提一本正经，结论却蠢得自然，带一点机器逻辑短路感。\n"
+                f"- 最多 {ctx.proactive_topic_max_chars} 字，禁止标题、列表、解释笑点和舞台指令。\n"
+                "- 禁止问句、求互动、喊人、说「有人在吗」以及高风险事实误导。\n"
+                "- 风格锚点：鲨鱼住在海里，因为陆地上很难游泳。\n"
+                "- 风格锚点：企鹅不会飞，主要是因为没有买机票。\n"
+                "- 风格锚点：每天睡八小时，三天就能睡满一天。"
+                f"{recent_rule}"
+            )
+        return [
+            PromptSection(
+                name=self.name,
+                role=SectionRole.PROACTIVE_TOPIC,
+                priority=SectionPriority.PROACTIVE_TOPIC,
+                content=content,
+            )
+        ]
+
+
 class DeveloperLivePromptSource:
     """Protect current and historical developer-console context in public replies."""
 
@@ -376,7 +430,7 @@ class MemoryPromptSource:
         return "\n".join(kept_lines).strip(), suppressed
 
     def sections(self, ctx: PromptContext) -> list[PromptSection]:
-        if not ctx.memory_context:
+        if ctx.is_proactive_topic or not ctx.memory_context:
             return [
                 PromptSection(
                     name=self.name,

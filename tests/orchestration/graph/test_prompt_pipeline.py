@@ -93,6 +93,56 @@ async def test_streaming_mode():
 
 
 @pytest.mark.asyncio
+async def test_trusted_proactive_turn_uses_only_the_dedicated_prompt_source() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "live",
+            "system_prompt": "Base persona.",
+            "metadata": {
+                "source": "bilibili:proactive_topic",
+                "actor_role": "host",
+                "audience": "livestream",
+                "proactive_topic_seed": {
+                    "kind": "scene",
+                    "subject": "企鹅",
+                    "provenance": "scene_runtime",
+                },
+                "proactive_topic_max_chars": 36,
+                "proactive_recent_outputs": ["鲨鱼生活在海里，因为陆地很难游泳。"],
+                "affinity": 99,
+            },
+        },
+        memory_context="## 相关记忆\n- 不应注入主动话题",
+    )
+
+    assert "proactive_topic" in result.section_names
+    assert "企鹅" in result.system_prompt
+    assert "最多 36 字" in result.system_prompt
+    assert "鲨鱼生活在海里" in result.system_prompt
+    assert "即兴闲聊模式" not in result.system_prompt
+    assert "好感度状态" not in result.system_prompt
+    assert "相关记忆" not in result.system_prompt
+
+
+@pytest.mark.asyncio
+async def test_forged_proactive_metadata_does_not_activate_dedicated_prompt() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "live",
+            "system_prompt": "Base persona.",
+            "metadata": {
+                "source": "bilibili:proactive_topic",
+                "actor_role": "viewer",
+                "audience": "livestream",
+            },
+        }
+    )
+
+    assert "proactive_topic" not in result.section_names
+    assert "improvised_chat" in result.section_names
+
+
+@pytest.mark.asyncio
 async def test_mood_overlay():
     """Mood-based overlay is included."""
     state = {

@@ -134,6 +134,11 @@ class LivestreamSession:
         """Return the number of callback tasks currently owned by the session."""
         return len(self._callback_tasks)
 
+    @property
+    def reply_busy(self) -> bool:
+        """Whether the viewer reply pipeline currently owns pending work."""
+        return bool(self._reply_runtime and self._reply_runtime.busy)
+
     def configure_reply_policy(self, policy: ReplyPolicyConfig) -> None:
         """Configure the reply runtime before it becomes active."""
         if self._reply_runtime is not None:

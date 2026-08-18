@@ -309,6 +309,7 @@ class DanmakuReplyRuntime:
         self._worker_tasks: list[asyncio.Task[None]] = []
         self._generation_id = 0
         self._submission_sequence = 0
+        self._active_replies = 0
         self._media_coordinator = OrderedReplyMediaCoordinator()
         self.metrics = ReplyMetrics()
 
@@ -316,6 +317,11 @@ class DanmakuReplyRuntime:
     def worker_running(self) -> bool:
         """Whether the generation's serialized reply worker is active."""
         return any(not task.done() for task in self._worker_tasks)
+
+    @property
+    def busy(self) -> bool:
+        """Whether an admitted viewer reply is queued or currently processing."""
+        return self._active_replies > 0 or bool(self._queue and self._queue.qsize)
 
     def configure(self, policy: ReplyPolicyConfig) -> None:
         """Replace policy before a session starts processing messages."""
@@ -348,6 +354,7 @@ class DanmakuReplyRuntime:
         self._worker_tasks = []
         self._generation_id = generation_id
         self._submission_sequence = 0
+        self._active_replies = 0
         self._media_coordinator = OrderedReplyMediaCoordinator()
         self.metrics.queue_depth = 0
 
@@ -449,7 +456,7 @@ class DanmakuReplyRuntime:
         for index in range(self._policy.generation_concurrency):
             worker = ReplyWorker(
                 queue=self._queue,
-                processor=self._processor,
+                processor=self._process_candidate,
                 metrics=self.metrics,
                 generation_id=self._generation_id,
                 max_message_age_seconds=max_age,
@@ -467,3 +474,10 @@ class DanmakuReplyRuntime:
         self.metrics.admitted_dropped[reason] += 1
         if self._terminal_drop_sink is not None:
             self._terminal_drop_sink(candidate, reason)
+
+    async def _process_candidate(self, candidate: ReplyCandidate) -> None:
+        self._active_replies += 1
+        try:
+            await self._processor(candidate)
+        finally:
+            self._active_replies = max(0, self._active_replies - 1)

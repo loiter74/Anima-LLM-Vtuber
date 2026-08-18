@@ -329,6 +329,41 @@ async def test_livestream_continuity_contract_across_dashboard_and_replay(
         assert provider.get_history() == original_history
         assert manager.conversation_registry.scope_count == 1
 
+        proactive_before = _scope_count(manager, live_session_id)
+        fatigue_before = live_state.fatigue
+        affinity_before = live_state.affinity
+        proactive_task_id = str(uuid4())
+        proactive = await manager.get_orchestrator("bilibili").process_text(
+            "生成本轮直播主动话题。",
+            user_id="bilibili:host",
+            channel_id="bilibili",
+            message_id=proactive_task_id,
+            conversation_id=proactive_task_id,
+            task_id=proactive_task_id,
+            turn_id=proactive_task_id,
+            channel="bilibili",
+            source="bilibili:proactive_topic",
+            live_session_id=live_session_id,
+            actor_role="host",
+            audience="livestream",
+            proactive_topic_seed={
+                "kind": "deadpan_logic",
+                "subject": None,
+                "provenance": "deadpan_logic",
+            },
+            proactive_recent_outputs=[],
+            proactive_topic_max_chars=36,
+        )
+        assert proactive.get("response_text")
+        assert _scope_count(manager, live_session_id) == proactive_before + 1
+        proactive_turn = live_state.completed_turns[-1]
+        assert proactive_turn.actor_role == "host"
+        assert proactive_turn.source == "bilibili:proactive_topic"
+        assert proactive_turn.user_text == "[直播主持人自主发言触发，不是观众弹幕]"
+        assert "生成本轮直播主动话题" not in proactive_turn.user_text
+        assert live_state.fatigue == fatigue_before
+        assert live_state.affinity == affinity_before
+
         relevant_calls = [
             call
             for call in provider.calls
@@ -370,7 +405,7 @@ async def test_livestream_continuity_contract_across_dashboard_and_replay(
             source="bilibili:danmaku",
         )
         assert isolated.get("response_text")
-        assert _scope_count(manager, live_session_id) == 3
+        assert _scope_count(manager, live_session_id) == 4
         assert _scope_count(manager, isolated_live) == 1
 
         normal_conversation_id = str(uuid4())
@@ -385,7 +420,7 @@ async def test_livestream_continuity_contract_across_dashboard_and_replay(
             )
             is not None
         )
-        assert _scope_count(manager, live_session_id) == 3
+        assert _scope_count(manager, live_session_id) == 4
 
         sandbox_call_count = len(provider.calls)
         sandbox = SandboxConversationService(provider)
@@ -403,7 +438,7 @@ async def test_livestream_continuity_contract_across_dashboard_and_replay(
             == "CONTEXT_MISSING"
         )
         assert len(provider.calls) == sandbox_call_count + 1
-        assert _scope_count(manager, live_session_id) == 3
+        assert _scope_count(manager, live_session_id) == 4
 
         rebuilt = SessionManager()
         assert rebuilt.conversation_registry.scope_count == 0

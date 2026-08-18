@@ -52,6 +52,26 @@ def test_server_admitted_bilibili_reply_broadcasts_to_the_live_page() -> None:
     assert resolve_delivery_target(state) is None
 
 
+def test_only_trusted_proactive_host_turn_broadcasts_to_the_live_page() -> None:
+    trusted = {
+        "session_id": "bilibili-session",
+        "channel_id": "bilibili",
+        "metadata": {
+            "source": "bilibili:proactive_topic",
+            "actor_role": "host",
+            "audience": "livestream",
+        },
+    }
+
+    assert resolve_delivery_target(trusted) is None
+    assert (
+        resolve_delivery_target(
+            {**trusted, "metadata": {**trusted["metadata"], "actor_role": "viewer"}}
+        )
+        == "bilibili"
+    )
+
+
 @pytest.mark.asyncio
 async def test_canonical_delivery_attaches_identity_and_emits_once() -> None:
     sio = MagicMock()

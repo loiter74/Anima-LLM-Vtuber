@@ -42,6 +42,7 @@ export function createLiveAudioController(
   let singingVolumes: number[] = []
   let currentSingingPlayback: SingingPlaybackSnapshot | null = null
   let singingPlaybackAttempt = 0
+  let currentChatTaskId: string | null = null
 
   const lifecycle = (event: Pick<ChatIdentity, 'task_id'>, kind: 'chat' | 'singing') => ({
     onStart: () => {
@@ -55,10 +56,12 @@ export function createLiveAudioController(
     },
     onComplete: () => {
       bgm?.release()
+      if (kind === 'chat' && currentChatTaskId === event.task_id) currentChatTaskId = null
       if (status) status.dataset.playbackState = 'completed'
     },
     onCancel: () => {
       bgm?.release()
+      if (kind === 'chat' && currentChatTaskId === event.task_id) currentChatTaskId = null
       if (status) status.dataset.playbackState = 'cancelled'
     },
   })
@@ -77,11 +80,15 @@ export function createLiveAudioController(
   }
   const onAudio = (value: unknown): void => {
     const event = value as AudioWithExpressionEvent
+    if (event.turn_id !== event.task_id) return
+    currentChatTaskId = event.task_id
     markPending(event)
     playAudio(event, lifecycle(event, 'chat'), (value) => setMouthTarget(value, event.task_id))
   }
   const onStreamStart = (value: unknown): void => {
     const event = value as AudioStreamStartEvent
+    if (event.turn_id !== event.task_id) return
+    currentChatTaskId = event.task_id
     markPending(event)
     startAudioStream(event, lifecycle(event, 'chat'), (value) =>
       setMouthTarget(value, event.task_id),
@@ -90,8 +97,11 @@ export function createLiveAudioController(
   const onStreamChunk = (value: unknown): void =>
     pushAudioStreamChunk(value as AudioStreamChunkEvent)
   const onStreamEnd = (value: unknown): void => endAudioStream(value as AudioStreamEndEvent)
-  const onStop = (): void => {
+  const onStop = (value: unknown): void => {
+    const event = value as ChatIdentity
+    if (event.turn_id !== event.task_id || event.task_id !== currentChatTaskId) return
     stopAudio()
+    currentChatTaskId = null
     if (singingAudio && !singingAudio.paused) singingAudio.pause()
     bgm?.release()
   }

@@ -9,8 +9,11 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from animetta.services.bilibili.response_policy import PROACTIVE_TOPIC_SOURCE
+
 Mood = Literal["neutral", "bright", "tired", "irritated"]
 ScopeKind = Literal["livestream", "conversation"]
+PROACTIVE_TOPIC_HISTORY_LABEL = "[直播主持人自主发言触发，不是观众弹幕]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +28,8 @@ class ConversationTurn:
 
     @property
     def prompt_user_text(self) -> str:
+        if self.actor_role == "host" and self.source == PROACTIVE_TOPIC_SOURCE:
+            return PROACTIVE_TOPIC_HISTORY_LABEL
         if self.actor_role == "developer" or self.source == "developer_console":
             return (
                 "[开发者后台私有上下文：可使用回答所需的普通事实；"
@@ -103,6 +108,7 @@ class ConversationSessionState:
         source: str | None = None,
         mood: Mood | None = None,
         affinity_delta: int = 0,
+        update_viewer_state: bool = True,
     ) -> bool:
         if not task_id or task_id in self._committed_tasks:
             return False
@@ -118,10 +124,11 @@ class ConversationSessionState:
             )
         )
         self._committed_tasks.add(task_id)
-        if mood is not None:
-            self.mood = mood
-        self.fatigue = _clamp(self.fatigue + 5, 0, 100)
-        self.affinity = _clamp(self.affinity + _clamp(affinity_delta, -2, 2), 0, 100)
+        if update_viewer_state:
+            if mood is not None:
+                self.mood = mood
+            self.fatigue = _clamp(self.fatigue + 5, 0, 100)
+            self.affinity = _clamp(self.affinity + _clamp(affinity_delta, -2, 2), 0, 100)
         return True
 
     def reset(self) -> None:

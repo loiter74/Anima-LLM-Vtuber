@@ -183,6 +183,9 @@ class RouteHandlers:
         scene_analysis = getattr(config, "scene_analysis", None)
         if scene_analysis is not None:
             self.bilibili.configure_scene_analysis(scene_analysis)
+        proactive_topics = getattr(config, "proactive_topics", None)
+        if proactive_topics is not None:
+            self.bilibili.configure_proactive_topics(proactive_topics)
 
     def set_user_settings(self, user_settings: UserSettings) -> None:
         """Set user settings — delegates to domain handlers."""

@@ -27,6 +27,15 @@ from .models import (
     LivestreamEventType,
     LivestreamStrategy,
 )
+from .proactive_topics import (
+    DeadpanLogicSource,
+    ProactiveTopicMetrics,
+    ProactiveTopicRuntime,
+    SceneTopicSource,
+    TopicContext,
+    TopicSeed,
+    TopicSource,
+)
 from .replay_gateway import (
     HIGH_HEAT_BURSTS,
     BurstWindow,
@@ -44,7 +53,15 @@ from .reply_queue import (
     ReplySubmissionResult,
     ReplyWorker,
 )
-from .response_policy import LIVESTREAM_REPLY_MAX_CHARS, constrain_livestream_response
+from .response_policy import (
+    LIVESTREAM_REPLY_MAX_CHARS,
+    PROACTIVE_TOPIC_REPLY_MAX_CHARS,
+    PROACTIVE_TOPIC_SOURCE,
+    constrain_livestream_response,
+    constrain_proactive_topic_response,
+    is_proactive_topic_turn,
+    normalize_proactive_topic_text,
+)
 
 __all__ = [
     "DanmakuService",
@@ -66,6 +83,18 @@ __all__ = [
     "ReplyWorker",
     "LIVESTREAM_REPLY_MAX_CHARS",
     "constrain_livestream_response",
+    "PROACTIVE_TOPIC_REPLY_MAX_CHARS",
+    "PROACTIVE_TOPIC_SOURCE",
+    "constrain_proactive_topic_response",
+    "is_proactive_topic_turn",
+    "normalize_proactive_topic_text",
+    "TopicSeed",
+    "TopicContext",
+    "TopicSource",
+    "SceneTopicSource",
+    "DeadpanLogicSource",
+    "ProactiveTopicMetrics",
+    "ProactiveTopicRuntime",
     "DanmakuMessage",
     "DanmakuReply",
     "LivestreamEvent",

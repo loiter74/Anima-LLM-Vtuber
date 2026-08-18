@@ -7,17 +7,22 @@ from uuid import uuid4
 
 from loguru import logger
 
-from animetta.config import ReplyPolicyConfig, SceneAnalysisConfig
+from animetta.config import ProactiveTopicsConfig, ReplyPolicyConfig, SceneAnalysisConfig
 from animetta.memory.v2.context import normalize_actor_id
+from animetta.orchestration.chat_contracts import ChatIdentity
+from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.bilibili import (
+    PROACTIVE_TOPIC_SOURCE,
     DanmakuBuffer,
     DanmakuMessage,
     DanmakuReplyRuntime,
     LivestreamEvent,
     LivestreamSession,
+    ProactiveTopicRuntime,
     ReplyCandidate,
     ReplyMetrics,
+    TopicSeed,
 )
 from animetta.services.bilibili.livestream_session import StaleGenerationError
 from animetta.services.bilibili.reply_media import bind_reply_media_turn
@@ -93,6 +98,14 @@ class BilibiliHandlers:
             configure_runtime = getattr(self.scene_runtime, "configure", None)
             if callable(configure_runtime):
                 configure_runtime(self._scene_config)
+        self._proactive_config = ProactiveTopicsConfig()
+        self._proactive_topics = ProactiveTopicRuntime(
+            self._proactive_config,
+            self._process_proactive_topic,
+            self._interrupt_proactive_audio,
+            scene_snapshot=self._scene_snapshot,
+            busy=lambda: bool(getattr(self.session, "reply_busy", False)),
+        )
 
         # Deprecated compatibility attributes. Lifecycle ownership lives in session.
         self._bilibili_service = None
@@ -126,6 +139,11 @@ class BilibiliHandlers:
             if callable(configure_runtime):
                 configure_runtime(config)
 
+    def configure_proactive_topics(self, config: ProactiveTopicsConfig) -> None:
+        """Apply the application-owned proactive topic controls."""
+        self._proactive_config = config
+        self._proactive_topics.configure(config)
+
     async def start_configured(self) -> dict[str, Any]:
         """Start the configured room during the ASGI lifespan."""
         if not self._configured_enabled or self._configured_room_id <= 0:
@@ -153,12 +171,15 @@ class BilibiliHandlers:
         expected_generation_id: int | None = None,
     ) -> dict[str, Any]:
         """Stop the shared session and cancel pending AI reply work."""
-        return await self.session.stop(expected_generation_id=expected_generation_id)
+        snapshot = await self.session.stop(expected_generation_id=expected_generation_id)
+        await self._proactive_topics.update_status(snapshot)
+        return snapshot
 
     # ── Status broadcast ──────────────────────────────────────────────
 
     async def emit_status_snapshot(self, payload: dict[str, object]) -> None:
         """Broadcast one authoritative session snapshot to all clients."""
+        await self._proactive_topics.update_status(payload)
         await self.sio.emit(
             EVENTS["bilibili"]["danmaku_status"]["name"],
             payload,
@@ -180,6 +201,7 @@ class BilibiliHandlers:
         _room_id: int,
     ) -> None:
         """Broadcast every raw message independently of AI admission."""
+        await self._proactive_topics.notify_activity()
         await self.sio.emit(EVENTS["bilibili"]["danmaku"]["name"], msg.to_dict())
 
     async def _broadcast_live_event(
@@ -207,6 +229,89 @@ class BilibiliHandlers:
             )
         if candidate.media_turn is not None:
             await candidate.media_turn.finish()
+        await self._proactive_topics.reset_after_viewer_reply()
+
+    def _scene_snapshot(self):
+        if self.scene_runtime is None:
+            return None
+        snapshot = getattr(self.scene_runtime, "snapshot", None)
+        return snapshot() if callable(snapshot) else None
+
+    async def _process_proactive_topic(
+        self,
+        seed: TopicSeed,
+        task_id: str,
+        room_id: int,
+        generation_id: int,
+        recent_outputs: tuple[str, ...],
+    ) -> str:
+        """Generate one host-only turn through the canonical chat and TTS path."""
+        if not self._is_current_live_identity(room_id, generation_id):
+            raise StaleGenerationError("livestream generation changed")
+        orchestrator = await self.admin._get_or_create_orchestrator("bilibili")
+        result = await orchestrator.process_text(
+            text="生成本轮直播主动话题。",
+            user_id="bilibili:host",
+            channel_id="bilibili",
+            source=PROACTIVE_TOPIC_SOURCE,
+            message_id=task_id,
+            conversation_id=task_id,
+            task_id=task_id,
+            turn_id=task_id,
+            transport_mode=ChatTransportMode.CANONICAL.value,
+            channel="bilibili",
+            stream_id=f"bilibili:{room_id}",
+            live_session_id=self.admin.live_session_id,
+            actor_role="host",
+            audience="livestream",
+            reply_id=task_id,
+            received_at=time.time(),
+            proactive_topic_seed={
+                "kind": seed.kind,
+                "subject": seed.subject,
+                "provenance": seed.provenance,
+            },
+            proactive_recent_outputs=list(recent_outputs),
+            proactive_topic_max_chars=self._proactive_config.max_chars,
+            proactive_generation_id=generation_id,
+        )
+        response = str(result.get("response_text") or "").strip()
+        if result.get("error") or not response:
+            raise RuntimeError(str(result.get("error") or "empty proactive topic"))
+        if not self._is_current_live_identity(room_id, generation_id):
+            await self._interrupt_proactive_audio(task_id)
+            raise StaleGenerationError("livestream generation changed")
+        if self.scene_runtime is not None:
+            try:
+                await self.scene_runtime.record_host_reply(response)
+            except Exception as exc:
+                logger.warning(
+                    "Proactive scene feedback failed: error_type={}",
+                    type(exc).__name__,
+                )
+        return response
+
+    async def _interrupt_proactive_audio(self, task_id: str) -> None:
+        """Stop only the correlated proactive task on public live clients."""
+        identity = ChatIdentity(
+            message_id=task_id,
+            conversation_id=task_id,
+            task_id=task_id,
+            turn_id=task_id,
+        )
+        await ChatDelivery(
+            self.sio,
+            identity,
+            ChatTransportMode.CANONICAL,
+        ).emit("chat", "stop_audio", {}, to=None)
+
+    def _is_current_live_identity(self, room_id: int, generation_id: int) -> bool:
+        snapshot = self.session.snapshot()
+        return bool(
+            snapshot.get("state") == "live"
+            and snapshot.get("generation_id") == generation_id
+            and (snapshot.get("room_id") or snapshot.get("desired_room_id")) == room_id
+        )
 
     async def _prepare_scene_runtime(self) -> None:
         """Bind the selected profile LLM before room events can trigger reflection."""

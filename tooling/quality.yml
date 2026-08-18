@@ -1274,6 +1274,7 @@ components:
       - src/animetta/config/humor.py
       - src/animetta/config/live2d.py
       - src/animetta/config/observability.py
+      - src/animetta/config/proactive_topics.py
       - src/animetta/config/runtime_reload.py
       - src/animetta/config/scene_analysis.py
       - src/animetta/config/system.py

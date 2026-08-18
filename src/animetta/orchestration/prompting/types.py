@@ -18,6 +18,7 @@ class SectionRole:
     IMPROVISATION = "improvisation"
     SCENE_GUIDANCE = "scene_guidance"
     DEVELOPER_LIVE = "developer_live"
+    PROACTIVE_TOPIC = "proactive_topic"
     CORRECTION = "correction"
     MEMORY = "memory"
     TOOL_INSTRUCTION = "tool_instruction"
@@ -32,6 +33,7 @@ class SectionPriority(IntEnum):
     IMPROVISATION = 225
     SCENE_GUIDANCE = 225
     DEVELOPER_LIVE = 240
+    PROACTIVE_TOPIC = 230
     CORRECTION = 250  # After runtime personality, before memory
     MEMORY = 300
     TOOL_INSTRUCTION = 400
@@ -78,6 +80,10 @@ class PromptContext:
     source: str | None = None
     audience: str | None = None
     has_private_developer_context: bool = False
+    is_proactive_topic: bool = False
+    proactive_topic_seed: dict[str, Any] | None = None
+    proactive_recent_outputs: tuple[str, ...] = ()
+    proactive_topic_max_chars: int = 36
 
 
 class PromptSource(Protocol):
