@@ -1,0 +1,56 @@
+schema_version = 1
+project_id = "character-cn-cover"
+display_name = "待填写角色中文翻唱"
+
+[data]
+sample_rate = 48000
+channels = 1
+audio_format = "wav_pcm_s16le"
+min_duration_s = 2.0
+max_duration_s = 15.0
+validation_ratio = 0.15
+split_seed = "animetta-character-cover-v1"
+
+[qc]
+silence_threshold_dbfs = -45.0
+max_silence_ratio = 0.35
+max_clipping_ratio = 0.001
+min_snr_db = 18.0
+f0_min_hz = 50.0
+f0_max_hz = 1100.0
+
+[baseline]
+engine = "rvc"
+version = "v2"
+f0_method = "rmvpe"
+epochs = 300
+save_every_epochs = 25
+batch_size = 4
+workers = 4
+pitch_augmentation = false
+
+[runtime]
+rvc_root = "C:/Users/30262/RVC20240604Nvidia"
+rvc_python = "C:/Users/30262/RVC20240604Nvidia/runtime/Scripts/python.exe"
+gpu = "0"
+
+[inference]
+f0_up_key = 0
+index_rate = 0.30
+filter_radius = 5
+rms_mix_rate = 0.50
+protect = 0.50
+
+[evaluation]
+required_ranges = ["low", "mid", "high"]
+pitch_weight = 0.25
+timbre_weight = 0.25
+diction_weight = 0.20
+stability_weight = 0.15
+artifact_weight = 0.15
+minimum_overall_score = 3.5
+
+[upgrade_gate]
+minimum_overall_gain = 0.25
+maximum_regressed_cases = 0
+require_same_evaluation_revision = true

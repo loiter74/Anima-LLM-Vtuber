@@ -1,233 +1,248 @@
-#!/usr/bin/env python3
-"""一键数据预处理：切片 → 归一化 → 音高增强 → 数据集划分.
+"""统一角色语音格式并生成待人工复核的音频质检清单。"""
 
-Input:  data/training/raw/*.wav
-Output: data/training/{ready/{train,val}, processed, augmented}
+from __future__ import annotations
 
-Usage:
-    python scripts/train/prepare_data.py
-    python scripts/train/prepare_data.py --raw-dir ./my_audio --output ./my_dataset
-"""
-
-import random
-import shutil
+import argparse
+import csv
+import hashlib
+import math
+import re
+import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import librosa
 import numpy as np
-import pyloudnorm as pyln
-import pyworld as pw
 import soundfile as sf
-import yaml
-from loguru import logger
+
+from scripts.train.workspace import MANIFEST_COLUMNS, load_project, validate_workspace
+
+SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
-def load_config() -> dict:
-    p = Path(__file__).parent / "config.yaml"
-    with open(p, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def _resolve_inside(root: Path, relative: str) -> Path:
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as error:
+        raise ValueError(f"路径越出工作区：{relative}") from error
+    return candidate
 
 
-# ── Step 1: Slice ────────────────────────────────────────────────
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
-def _detect_silence(
+def _dbfs(amplitude: float) -> float:
+    return 20.0 * math.log10(max(amplitude, 1e-12))
+
+
+def _format(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def analyze_audio(
     audio: np.ndarray,
-    sr: int,
-    threshold_db: float,
-    min_silence_s: float,
-) -> list[tuple[int, int]]:
-    """Find silent regions. Returns list of (start_sample, end_sample)."""
-    fl = int(sr * 0.05)
-    hl = fl // 2
-    rms = librosa.feature.rms(y=audio, frame_length=fl, hop_length=hl)[0]
-    thresh = 10 ** (threshold_db / 20)
-    is_silent = rms < thresh
-    min_frames = int(min_silence_s * sr / hl)
-    regions = []
-    start = None
-    for i, s in enumerate(is_silent):
-        if s and start is None:
-            start = i
-        elif not s and start is not None:
-            if i - start >= min_frames:
-                regions.append((start * hl, i * hl))
-            start = None
-    if start is not None and len(is_silent) - start >= min_frames:
-        regions.append((start * hl, len(is_silent) * hl))
-    return regions
+    sample_rate: int,
+    *,
+    source_clipping_ratio: float,
+    qc: Mapping[str, Any],
+) -> tuple[dict[str, str], list[str]]:
+    """计算供筛选使用的确定性代理指标；最终判断仍由人工听审。"""
+    duration = len(audio) / sample_rate
+    peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+    frame_length = min(2048, max(256, 2 ** int(math.log2(max(len(audio), 256)))))
+    hop_length = max(64, frame_length // 4)
+    rms = librosa.feature.rms(
+        y=audio,
+        frame_length=frame_length,
+        hop_length=hop_length,
+        center=True,
+    )[0]
+    rms_db = 20.0 * np.log10(np.maximum(rms, 1e-12))
+    silence_threshold = float(qc["silence_threshold_dbfs"])
+    silence_ratio = float(np.mean(rms_db < silence_threshold))
+    noise_floor = float(np.percentile(rms_db, 10))
+    signal_level = float(np.percentile(rms_db, 90))
+    snr = signal_level - noise_floor
 
-
-def _slice(input_path: Path, output_dir: Path, cfg: dict) -> list[Path]:
-    """Slice audio into non-silent segments (4-15s)."""
-    sr = cfg["target_sr"]
-    threshold = cfg["silence_threshold"]
-    min_dur = cfg["min_duration"]
-    max_dur = cfg["max_duration"]
-
-    audio, orig_sr = librosa.load(str(input_path), sr=None, mono=True)
-    if orig_sr != sr:
-        audio = librosa.resample(audio, orig_sr=orig_sr, target_sr=sr)
-
-    silences = _detect_silence(audio, sr, threshold, 0.5)
-    if not silences:
-        if len(audio) / sr >= min_dur:
-            out = output_dir / f"{input_path.stem}.wav"
-            sf.write(str(out), audio, sr)
-            return [out]
-        return []
-
-    outputs = []
-    prev = 0
-    for idx, (start, end) in enumerate(silences):
-        seg = audio[prev:start]
-        dur = len(seg) / sr
-        if dur >= min_dur:
-            if dur > max_dur:
-                mid = len(seg) // 2
-                for pi, sp in enumerate([0, mid]):
-                    part = seg[sp : sp + mid]
-                    if len(part) / sr >= min_dur:
-                        out = output_dir / f"{input_path.stem}_seg{idx}_p{pi}.wav"
-                        sf.write(str(out), part, sr)
-                        outputs.append(out)
-            else:
-                out = output_dir / f"{input_path.stem}_seg{idx}.wav"
-                sf.write(str(out), seg, sr)
-                outputs.append(out)
-        prev = end
-    trail = audio[prev:]
-    if len(trail) / sr >= min_dur:
-        out = output_dir / f"{input_path.stem}_trail.wav"
-        sf.write(str(out), trail, sr)
-        outputs.append(out)
-    return outputs
-
-
-# ── Step 2: Normalize ────────────────────────────────────────────
-
-
-def _normalize(input_path: Path, sr: int, target_loudness: float):
-    """Resample + loudness normalize in-place."""
-    audio, orig_sr = librosa.load(str(input_path), sr=None, mono=True)
-    if orig_sr != sr:
-        audio = librosa.resample(audio, orig_sr=orig_sr, target_sr=sr)
-    meter = pyln.Meter(sr)
-    loudness = meter.integrated_loudness(audio)
-    audio = pyln.normalize.loudness(audio, loudness, target_loudness)
-    peak = np.max(np.abs(audio))
-    if peak > 0.99:
-        audio = audio * (0.99 / peak)
-    sf.write(str(input_path), audio, sr)
-    return float(librosa.get_duration(y=audio, sr=sr))
-
-
-# ── Step 3: Pitch Augment ────────────────────────────────────────
-
-
-def _pitch_shift(audio: np.ndarray, sr: int, semitones: float) -> np.ndarray:
-    """WORLD vocoder pitch shift (preserves formants)."""
-    f0, t = pw.harvest(audio.astype(np.float64), sr)
-    f0 = pw.stonemask(audio.astype(np.float64), f0, t, sr)
-    sp = pw.cheaptrick(audio.astype(np.float64), f0, t, sr)
-    ap = pw.d4c(audio.astype(np.float64), f0, t, sr)
-    f0_shifted = f0.copy()
-    mask = f0 > 0
-    f0_shifted[mask] = f0[mask] * (2 ** (semitones / 12))
-    return pw.synthesize(f0_shifted, sp, ap, sr).astype(np.float32)
-
-
-def _augment(input_dir: Path, output_dir: Path, cfg: dict) -> list[Path]:
-    """Generate pitch-shifted copies."""
-    shifts = cfg["pitch_shifts"]  # [0, -2, +2]
-    low_shift = cfg["extend_low_shift"]  # +4
-    low_thresh = cfg["low_pitch_threshold"]  # 400 Hz
-
-    outputs = []
-    for wav in sorted(input_dir.glob("*.wav")):
-        audio, loaded_sr = librosa.load(str(wav), sr=None, mono=True)
-        sr = int(loaded_sr)
-        f0, _ = pw.dio(audio.astype(np.float64), sr)
-        median_pitch = float(np.median(f0[f0 > 0])) if np.any(f0 > 0) else 0
-
-        for shift in shifts:
-            out = output_dir / f"{wav.stem}_shift{shift:+d}.wav"
-            if shift == 0:
-                sf.write(str(out), audio, sr)
-            else:
-                sf.write(str(out), _pitch_shift(audio, sr, float(shift)), sr)
-            outputs.append(out)
-
-        if 0 < median_pitch < low_thresh:
-            out = output_dir / f"{wav.stem}_shift+{low_shift}.wav"
-            sf.write(str(out), _pitch_shift(audio, sr, float(low_shift)), sr)
-            outputs.append(out)
-
-    return outputs
-
-
-# ── Main ─────────────────────────────────────────────────────────
-
-
-def main() -> None:
-    config = load_config()
-    raw_dir = Path(config["data"]["raw_dir"])
-    processed_dir = Path(config["data"]["processed_dir"])
-    augmented_dir = Path(config["data"]["augmented_dir"])
-    ready_dir = processed_dir.parent / "ready"
-
-    audio_cfg = config["audio"]
-    aug_cfg = config["augmentation"]
-    sr = audio_cfg["target_sr"]
-
-    # Ensure dirs
-    for d in [processed_dir, augmented_dir, ready_dir / "train", ready_dir / "val"]:
-        d.mkdir(parents=True, exist_ok=True)
-
-    # Find input audio
-    audio_files = (
-        list(raw_dir.rglob("*.wav")) + list(raw_dir.rglob("*.flac")) + list(raw_dir.rglob("*.mp3"))
-    )
-    if not audio_files:
-        logger.warning(f"No audio files in {raw_dir}")
-        return
-
-    # Step 1-2: Slice + Normalize (done together per file)
-    logger.info(f"📂 Found {len(audio_files)} files in {raw_dir}")
-    all_sliced = []
-    for fpath in audio_files:
+    f0_values = np.array([], dtype=np.float64)
+    voiced_ratio = 0.0
+    if len(audio) >= frame_length:
         try:
-            sliced = _slice(fpath, processed_dir, audio_cfg)
-            for s in sliced:
-                _normalize(s, sr, audio_cfg["target_loudness"])
-            all_sliced.extend(sliced)
-        except Exception as e:
-            logger.error(f"  ✗ {fpath.name}: {e}")
+            f0, voiced, _ = librosa.pyin(
+                audio,
+                fmin=float(qc["f0_min_hz"]),
+                fmax=float(qc["f0_max_hz"]),
+                sr=sample_rate,
+                frame_length=frame_length,
+                hop_length=hop_length,
+            )
+            valid = voiced & np.isfinite(f0)
+            f0_values = f0[valid]
+            voiced_ratio = float(np.mean(valid))
+        except (librosa.util.exceptions.ParameterError, ValueError):
+            pass
 
-    total_dur = (
-        sum(float(librosa.get_duration(path=str(p))) for p in all_sliced) if all_sliced else 0
+    metrics = {
+        "duration_s": _format(duration),
+        "sample_rate": str(sample_rate),
+        "channels": "1",
+        "peak_dbfs": _format(_dbfs(peak)),
+        "noise_floor_dbfs": _format(noise_floor),
+        "snr_db": _format(snr),
+        "silence_ratio": _format(silence_ratio),
+        "clipping_ratio": _format(source_clipping_ratio),
+        "voiced_ratio": _format(voiced_ratio),
+        "f0_min_hz": _format(float(np.min(f0_values))) if f0_values.size else "",
+        "f0_median_hz": _format(float(np.median(f0_values))) if f0_values.size else "",
+        "f0_max_hz": _format(float(np.max(f0_values))) if f0_values.size else "",
+    }
+    flags: list[str] = []
+    if duration < float(qc["min_duration_s"]):
+        flags.append("too_short")
+    if duration > float(qc["max_duration_s"]):
+        flags.append("too_long")
+    if silence_ratio > float(qc["max_silence_ratio"]):
+        flags.append("excess_silence")
+    if source_clipping_ratio > float(qc["max_clipping_ratio"]):
+        flags.append("clipping")
+    if snr < float(qc["min_snr_db"]):
+        flags.append("low_snr_proxy")
+    if not f0_values.size:
+        flags.append("pitch_unresolved")
+    return metrics, flags
+
+
+def _process_source(
+    root: Path,
+    row: Mapping[str, str],
+    *,
+    project: Mapping[str, Any],
+    existing: Mapping[str, str] | None,
+) -> dict[str, str]:
+    source_id = row["source_id"].strip()
+    if not SAFE_ID.fullmatch(source_id):
+        raise ValueError(f"source_id 只能包含字母、数字、点、下划线和连字符：{source_id}")
+    source_path = _resolve_inside(root, row["audio_relpath"].strip())
+    if not source_path.is_file():
+        raise FileNotFoundError(f"原始音频不存在：{source_path}")
+    samples, source_rate = sf.read(source_path, dtype="float32", always_2d=True)
+    source_clipping_ratio = float(np.mean(np.abs(samples) >= 0.999))
+    mono = np.asarray(np.mean(samples, axis=1, dtype=np.float32), dtype=np.float32)
+    target_rate = int(project["data"]["sample_rate"])
+    if source_rate != target_rate:
+        mono = librosa.resample(mono, orig_sr=source_rate, target_sr=target_rate)
+    peak = float(np.max(np.abs(mono))) if mono.size else 0.0
+    peak_cap = 10 ** (-1.0 / 20.0)
+    if peak > peak_cap:
+        mono = mono * (peak_cap / peak)
+
+    output = root / "audio" / "processed" / f"{source_id}.wav"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(output, mono, target_rate, subtype="PCM_16")
+    normalized, _ = sf.read(output, dtype="float32", always_2d=False)
+    metrics, flags = analyze_audio(
+        np.asarray(normalized, dtype=np.float32),
+        target_rate,
+        source_clipping_ratio=source_clipping_ratio,
+        qc={
+            **project["qc"],
+            "min_duration_s": project["data"]["min_duration_s"],
+            "max_duration_s": project["data"]["max_duration_s"],
+        },
     )
-    logger.info(f"✅ Slice+Normalize: {len(all_sliced)} clips, {total_dur:.0f}s")
-
-    # Step 3: Pitch Augmentation
-    augmented = _augment(processed_dir, augmented_dir, aug_cfg)
-    logger.info(
-        f"✅ Pitch Augment: {len(augmented)} clips (+{len(augmented) - len(all_sliced)} shifted)"
+    digest = _sha256(output)
+    preserve_review = existing is not None and existing.get("audio_sha256", "") == digest
+    review_status = existing.get("review_status", "pending") if preserve_review else "pending"
+    reviewer = existing.get("reviewer", "") if preserve_review else ""
+    previous_notes = existing.get("review_notes", "") if preserve_review else ""
+    automatic_notes = "auto_flags=" + ("|".join(flags) if flags else "none")
+    review_notes = previous_notes or automatic_notes
+    result = dict.fromkeys(MANIFEST_COLUMNS["clips.csv"], "")
+    result.update(
+        {
+            "clip_id": source_id,
+            "source_id": source_id,
+            "audio_relpath": output.relative_to(root).as_posix(),
+            "transcript": row["transcript"].strip(),
+            **metrics,
+            "audio_sha256": digest,
+            "review_status": review_status,
+            "reviewer": reviewer,
+            "review_notes": review_notes,
+        }
     )
+    return result
 
-    # Step 4: Train/Val Split
-    source = augmented_dir if augmented else processed_dir
-    wavs = list(source.glob("*.wav"))
-    random.Random(42).shuffle(wavs)
-    split = int(len(wavs) * 0.9)
-    for f in wavs[:split]:
-        shutil.copy2(str(f), str(ready_dir / "train" / f.name))
-    for f in wavs[split:]:
-        shutil.copy2(str(f), str(ready_dir / "val" / f.name))
 
-    logger.info(f"✅ Dataset ready: {len(wavs)} files → {ready_dir}")
-    logger.info(f"   Train: {split}  |  Val: {len(wavs) - split}")
+def _read_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def prepare_workspace(root: Path) -> int:
+    errors = validate_workspace(root, stage="scaffold")
+    if errors:
+        for error in errors:
+            print(f"[ERROR] {error}", file=sys.stderr)
+        return 1
+    project = load_project(root)
+    sources = _read_rows(root / "manifests" / "sources.csv")
+    if not sources:
+        print("[ERROR] sources.csv 还没有数据", file=sys.stderr)
+        return 1
+    existing = {
+        row["clip_id"].strip(): row
+        for row in _read_rows(root / "manifests" / "clips.csv")
+        if row.get("clip_id", "").strip()
+    }
+    processed: list[dict[str, str]] = []
+    failures: list[str] = []
+    for row in sources:
+        try:
+            processed.append(
+                _process_source(root, row, project=project, existing=existing.get(row["source_id"]))
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            failures.append(f"{row.get('source_id', '<missing>')}: {error}")
+    if failures:
+        for failure in failures:
+            print(f"[ERROR] {failure}", file=sys.stderr)
+        print("clips.csv 未更新；修复全部来源后重试。", file=sys.stderr)
+        return 1
+
+    destination = root / "manifests" / "clips.csv"
+    temporary = destination.with_suffix(".csv.tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=MANIFEST_COLUMNS["clips.csv"],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(sorted(processed, key=lambda row: row["clip_id"]))
+    temporary.replace(destination)
+    flagged = sum("auto_flags=none" not in row["review_notes"] for row in processed)
+    print(f"已处理 {len(processed)} 条语音，其中 {flagged} 条需优先人工复核。")
+    return 0
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="统一角色语音格式并生成 QC 清单")
+    parser.add_argument("--project", type=Path, default=Path("songs"))
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    return prepare_workspace(args.project.resolve())
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

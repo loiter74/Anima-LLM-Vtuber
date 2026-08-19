@@ -1,1 +1,1 @@
-"""Character singing model training paradigm — scripts and utilities."""
+"""Animetta 角色中文翻唱的离线训练与晋级候选工具。"""

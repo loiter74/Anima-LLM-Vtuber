@@ -1,355 +1,182 @@
-#!/usr/bin/env python3
-"""Anima Train CLI — 一键训练 RVC v2 歌声模型.
+"""Fail-fast RVC baseline runner for the tracked ``songs`` workspace."""
 
-一键完成：数据预处理 → 特征提取 → 模型训练 → 建索引 → 部署到 Anima
-
-Usage:
-    # 标准训练（使用现有数据或下载）
-    python -m scripts.train.cli --character shige_utage
-
-    # 指定数据目录
-    python -m scripts.train.cli --character shige_utage --data ./data/training/ready
-
-    # 仅预处理（不训练）
-    python -m scripts.train.cli --character shige_utage --preprocess-only
-
-    # 仅部署已有模型
-    python -m scripts.train.cli --character shige_utage --deploy-only
-"""
+from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import yaml
-
-# ── Paths ────────────────────────────────────────────────────────
-
-RVC_ROOT = Path("C:/Users/30262/RVC20240604Nvidia")
-PYTHON = sys.executable
-SCRIPT_DIR = Path(__file__).parent
-NOW_DIR = str(RVC_ROOT)
+from scripts.train.workspace import TrainingStep, build_rvc_plan, validate_workspace
 
 
-def load_config() -> dict:
-    config_path = SCRIPT_DIR / "config.yaml"
-    with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def run_step(step_name: str, cmd: list[str], cwd: str = NOW_DIR) -> None:
-    """Run a CLI step with logging."""
-    print(f"\n{'=' * 60}")
-    print(f"  [{step_name}]")
-    print(f"  {' '.join(cmd)}")
-    print(f"{'=' * 60}")
-    t0 = time.time()
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    elapsed = time.time() - t0
-    if result.returncode != 0:
-        print(f"  [!] Return code: {result.returncode}")
-        if result.stderr:
-            print(f"  Error: {result.stderr[-500:]}")
-    else:
-        print(f"  Done in {elapsed:.1f}s")
-    if result.stdout and "Error" not in result.stdout[-200:]:
-        for line in result.stdout.strip().split("\n")[-3:]:
-            if line.strip():
-                print(f"  {line}")
-    print()
-
-
-# ── Steps ────────────────────────────────────────────────────────
-
-
-def step_preprocess_data() -> None:
-    """Run data prep: slice → normalize → pitch augment → split."""
-    run_step("Prepare Data", [PYTHON, str(SCRIPT_DIR / "prepare_data.py")], cwd=str(SCRIPT_DIR))
-
-
-def step_rvc_preprocess(exp_dir: str, dataset_dir: str, sr: str, version: str) -> None:
-    """Step 1: RVC audio preprocessing (resample + slice)."""
-    cmd = [
-        PYTHON,
-        "infer/modules/train/preprocess.py",
-        dataset_dir,
-        sr,
-        "4",  # n_p (CPU cores for preprocessing)
-        f"{RVC_ROOT}/logs/{exp_dir}",
-        version,
-    ]
-    run_step("RVC: Audio Preprocessing", cmd)
-
-
-def step_rvc_extract_f0(exp_dir: str, f0_method: str) -> None:
-    """Step 2: Extract F0 using rmvpe."""
-    cmd = [
-        PYTHON,
-        "infer/modules/train/extract/extract_f0_rmvpe.py",
-        "4",  # n_p
-        "0",  # gpu
-        "1",  # f0_flag
-        f"{RVC_ROOT}/logs/{exp_dir}",
-        "4",  # num_processes
-    ]
-    run_step("RVC: F0 Extraction (rmvpe)", cmd)
-
-
-def step_rvc_extract_features(exp_dir: str, version: str) -> None:
-    """Step 3: Extract HuBERT/ContentVec features."""
-    if version == "v2":
-        cmd = [
-            PYTHON,
-            "infer/modules/train/extract_feature_print.py",
-            "4",  # n_p
-            "0",  # gpu
-            f"{RVC_ROOT}/logs/{exp_dir}",
-            version,
-        ]
-    else:
-        cmd = [
-            PYTHON,
-            "infer/modules/train/extract_feature_print.py",
-            "4",  # n_p
-            "0",  # gpu
-            f"{RVC_ROOT}/logs/{exp_dir}",
-            "0",  # v1 needs 0/1 param
-        ]
-    run_step("RVC: Feature Extraction (ContentVec)", cmd)
-
-
-def step_rvc_train(
-    exp_dir: str,
-    sr: str,
-    f0: int,
-    batch_size: int,
-    total_epoch: int,
-    save_epoch: int,
-    version: str,
-    pretrained_g: str = "",
-    pretrained_d: str = "",
-    gpu: str = "0",
+def run_step(
+    step_name: str,
+    command: Sequence[str],
+    *,
+    cwd: str | Path,
+    success_exit_codes: Sequence[int] = (0,),
 ) -> None:
-    """Step 4: Train the RVC model."""
-    cmd = [
-        PYTHON,
-        "infer/modules/train/train.py",
-        "-e",
-        exp_dir,
-        "-sr",
-        sr,
-        "-f0",
-        str(f0),
-        "-bs",
-        str(batch_size),
-        "-g",
-        gpu,
-        "-te",
-        str(total_epoch),
-        "-se",
-        str(save_epoch),
-        "-l",
-        "1",  # save latest
-        "-c",
-        "0",  # cache in GPU
-        "-sw",
-        "1",  # save every weight
-        "-v",
-        version,
-    ]
-    if pretrained_g:
-        cmd.extend(["-pg", pretrained_g])
-    if pretrained_d:
-        cmd.extend(["-pd", pretrained_d])
-    run_step("RVC: Model Training", cmd)
+    """Run one step and stop the pipeline immediately on a non-zero exit."""
+    started = time.monotonic()
+    print(f"[{step_name}] cwd={cwd}")
+    print(subprocess.list2cmdline(list(command)))
+    result = subprocess.run(list(command), cwd=cwd, check=False)  # noqa: S603 - reviewed RVC argv
+    if result.returncode not in success_exit_codes:
+        print(f"[{step_name}] 失败，已停止后续步骤。", file=sys.stderr)
+        raise subprocess.CalledProcessError(result.returncode, list(command))
+    print(f"[{step_name}] 完成，用时 {time.monotonic() - started:.1f}s")
 
 
-def step_rvc_build_index(exp_dir: str, version: str) -> None:
-    """Step 5: Build FAISS feature index."""
-    cmd = [
-        PYTHON,
-        "tools/infer/train-index-v2.py",
-        "-e",
-        exp_dir,
-        "-v",
-        version,
-    ]
-    run_step("RVC: Build FAISS Index", cmd)
+def _validate_gpu_evidence(path: Path, *, run_id: str, batch_size: int) -> None:
+    try:
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"无法读取 GPU 峰值探针证据：{path}") from error
+    if evidence.get("schema_version") != 1 or evidence.get("run_id") != run_id:
+        raise ValueError("GPU 证据版本或 run_id 不匹配")
+    if evidence.get("batch_size") != batch_size:
+        raise ValueError("GPU 证据 batch_size 与本次训练不一致")
+    total = evidence.get("memory_total_mib")
+    peak = evidence.get("memory_peak_used_mib")
+    if not isinstance(total, int) or not isinstance(peak, int) or peak <= 0 or total <= peak:
+        raise ValueError("GPU 证据缺少有效的总显存或峰值显存")
+    required_free = max(round(total * 0.25), 6144)
+    if total - peak < required_free:
+        raise ValueError(f"GPU 峰值探针只剩 {total - peak} MiB，要求至少 {required_free} MiB")
+    if evidence.get("competing_processes") != []:
+        raise ValueError("GPU 证据仍包含同类竞争进程")
+    if evidence.get("workspace_lifecycle_clear") is not True:
+        raise ValueError("GPU 证据未确认同工作区生命周期任务已清空")
+    if not str(evidence.get("gpu_name", "")).strip():
+        raise ValueError("GPU 证据缺少显卡型号")
+    probe_command = evidence.get("probe_command")
+    if (
+        not isinstance(probe_command, list)
+        or not probe_command
+        or not all(isinstance(part, str) and part.strip() for part in probe_command)
+    ):
+        raise ValueError("GPU 证据缺少有界峰值探针完整 argv")
+    try:
+        observed_at = datetime.fromisoformat(str(evidence["observed_at"]))
+    except (KeyError, ValueError) as error:
+        raise ValueError("GPU 证据 observed_at 必须是 ISO-8601 时间") from error
+    if observed_at.tzinfo is None:
+        raise ValueError("GPU 证据 observed_at 必须包含时区")
+    age = datetime.now(UTC) - observed_at.astimezone(UTC)
+    if age < timedelta(0) or age > timedelta(hours=4):
+        raise ValueError("GPU 峰值探针证据必须在最近 4 小时内生成")
 
 
-def step_deploy() -> None:
-    """Step 6: Deploy model to Anima."""
-    run_step(
-        "Deploy to Anima",
-        [PYTHON, str(SCRIPT_DIR / "deploy.py")],
-        cwd=str(SCRIPT_DIR),
+def _preflight(
+    project: Path,
+    run_id: str,
+    evidence_path: Path,
+    *,
+    resume: bool,
+) -> list[TrainingStep]:
+    errors = validate_workspace(project, stage="dataset")
+    if errors:
+        raise ValueError("数据集未就绪：" + "; ".join(errors))
+    plan = build_rvc_plan(project, run_id=run_id)
+    train_step = next(step for step in plan if step.name == "train")
+    batch_index = train_step.command.index("-bs") + 1
+    _validate_gpu_evidence(
+        evidence_path,
+        run_id=run_id,
+        batch_size=int(train_step.command[batch_index]),
     )
+    dataset_dir = project / "audio" / "dataset" / "train"
+    if not any(dataset_dir.glob("*.wav")):
+        raise ValueError("训练目录为空；请先运行 materialize_dataset")
+    experiment_dir = Path(train_step.cwd) / "logs" / run_id
+    if resume:
+        for required in (experiment_dir / "config.json", experiment_dir / "filelist.txt"):
+            if not required.is_file():
+                raise ValueError(f"无法恢复；缺少 RVC checkpoint 上下文：{required}")
+    elif experiment_dir.exists() and any(experiment_dir.iterdir()):
+        raise ValueError("同名 RVC experiment 已存在；使用新的 run-id 或显式 --resume")
+    for flag in ("-pg", "-pd"):
+        dependency = Path(train_step.command[train_step.command.index(flag) + 1])
+        if not dependency.is_file():
+            raise ValueError(f"RVC 预训练权重不存在：{dependency}")
+    for step in plan:
+        if not Path(step.command[0]).is_file():
+            raise ValueError(f"RVC Python 不存在：{step.command[0]}")
+        configured_entrypoint = Path(step.command[1])
+        entrypoint = (
+            configured_entrypoint
+            if configured_entrypoint.is_absolute()
+            else Path(step.cwd) / configured_entrypoint
+        )
+        if not entrypoint.is_file():
+            raise ValueError(f"RVC 入口不存在：{entrypoint}")
+    return plan
 
 
-# ── CLI ──────────────────────────────────────────────────────────
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="执行 RVC v2 + RMVPE baseline")
+    parser.add_argument("--project", type=Path, default=Path("songs"))
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--execute", action="store_true", help="实际执行；默认只输出计划")
+    parser.add_argument("--gpu-probe-evidence", type=Path)
+    parser.add_argument("--preprocess-only", action="store_true")
+    parser.add_argument("--resume", action="store_true", help="从同 run-id 的 RVC checkpoint 恢复")
+    return parser
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Anima Train — 一键训练 RVC v2 歌声模型",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python -m scripts.train.cli --character shige_utage
-  python -m scripts.train.cli --character shige_utage --preprocess-only
-  python -m scripts.train.cli --character shige_utage --epochs 500
-  python -m scripts.train.cli --character shige_utage --deploy-only
-        """,
-    )
-    parser.add_argument(
-        "--character",
-        "-c",
-        default=None,
-        help="Character name (from config.yaml). Default: from config",
-    )
-    parser.add_argument(
-        "--data",
-        "-d",
-        default=None,
-        help="Path to training data directory. Default: data/training/ready",
-    )
-    parser.add_argument(
-        "--epochs", "-e", type=int, default=None, help="Training epochs (default: from config: 300)"
-    )
-    parser.add_argument(
-        "--batch-size", "-b", type=int, default=None, help="Batch size (default: from config: 16)"
-    )
-    parser.add_argument("--sr", default=None, help="Sample rate (default: from config: 48000)")
-    parser.add_argument("--gpu", default="0", help="GPU ID (default: 0)")
-    parser.add_argument(
-        "--f0-method", default="rmvpe", help="F0 extraction method (default: rmvpe)"
-    )
-    parser.add_argument(
-        "--pretrained-g",
-        default=None,
-        help="Pretrained generator path (default: auto from sr+version)",
-    )
-    parser.add_argument(
-        "--pretrained-d",
-        default=None,
-        help="Pretrained discriminator path (default: auto from sr+version)",
-    )
-    parser.add_argument(
-        "--skip-prep",
-        action="store_true",
-        help="Skip data preparation (use existing processed data)",
-    )
-    parser.add_argument(
-        "--preprocess-only",
-        action="store_true",
-        help="Only run RVC preprocessing + feature extraction, no training",
-    )
-    parser.add_argument(
-        "--deploy-only", action="store_true", help="Only deploy existing model (no training)"
-    )
-    parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
-
-    args = parser.parse_args()
-    config = load_config()
-
-    # Resolve params
-    char_name = args.character or config["character"]["name"]
-    sr = args.sr or str(config["rvc"]["sample_rate"])
-    version = config["rvc"].get("version", "v2")
-    total_epoch = args.epochs or config["rvc"]["epochs"]
-    batch_size = args.batch_size or config["rvc"]["batch_size"]
-    f0 = 1  # Always enable F0 for singing
-    dataset_dir = args.data or str(Path(config["data"]["processed_dir"]).parent / "ready")
-
-    # Auto-detect pretrained paths
-    pg = (
-        args.pretrained_g or f"assets/pretrained_v2/f0G{sr}.pth"
-        if version == "v2"
-        else f"assets/pretrained/f0G{sr}.pth"
-    )
-    pd = (
-        args.pretrained_d or f"assets/pretrained_v2/f0D{sr}.pth"
-        if version == "v2"
-        else f"assets/pretrained/f0D{sr}.pth"
-    )
-
-    # Verify paths
-    if not args.deploy_only:
-        pg_path = RVC_ROOT / pg
-        pd_path = RVC_ROOT / pd
-        if not pg_path.exists():
-            print(f"[WARN] Pretrained G not found: {pg_path}")
-            print("       Download from: https://huggingface.co/lj1995/VoiceConversionWebUI")
-            pg = ""
-        if not pd_path.exists():
-            print(f"[WARN] Pretrained D not found: {pd_path}")
-            pd = ""
-
-    print(f"\n{'#' * 60}")
-    print(f"  Anima Train — {char_name}")
-    print(f"  SR: {sr}  |  Version: {version}  |  Epochs: {total_epoch}  |  Batch: {batch_size}")
-    print(f"  Data: {dataset_dir}")
-    print(f"{'#' * 60}\n")
-
-    # ── Execute ──
-
-    if args.deploy_only:
-        step_deploy()
-        return
-
-    if args.dry_run:
-        print("Dry-run mode. Commands would be:")
-        return
-
-    # Step A: Data preparation (02-05)
-    if not args.skip_prep:
-        step_preprocess_data()
-    else:
-        print("[SKIP] Skipping data preparation (--skip-prep)")
-
-    # Step B: RVC Preprocessing
-    step_rvc_preprocess(char_name, dataset_dir, sr, version)
-
-    # Step C: F0 Extraction
-    step_rvc_extract_f0(char_name, args.f0_method)
-
-    # Step D: Feature Extraction
-    step_rvc_extract_features(char_name, version)
-
-    if args.preprocess_only:
-        print("[DONE] Preprocessing complete. Ready for training.")
-        print("       Run without --preprocess-only to train.")
-        return
-
-    # Step E: Training
-    step_rvc_train(
-        exp_dir=char_name,
-        sr=sr,
-        f0=f0,
-        batch_size=batch_size,
-        total_epoch=total_epoch,
-        save_epoch=50,
-        version=version,
-        pretrained_g=pg if pg else "",
-        pretrained_d=pd if pd else "",
-        gpu=args.gpu,
-    )
-
-    # Step F: Build Index
-    step_rvc_build_index(char_name, version)
-
-    # Step G: Deploy to Anima
-    step_deploy()
-
-    print(f"\n{'=' * 60}")
-    print(f"  [DONE] Training complete for {char_name}!")
-    print(f"  Model: {RVC_ROOT}/weights/{char_name}.pth")
-    print(f"  Index: {RVC_ROOT}/logs/{char_name}.index")
-    print("  Anima config: config/singing.yaml")
-    print(f"{'=' * 60}\n")
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    project = args.project.resolve()
+    try:
+        plan = build_rvc_plan(project, run_id=args.run_id)
+        if not args.execute:
+            print(
+                json.dumps(
+                    {"schema_version": 1, "steps": [step.as_dict() for step in plan]},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            print("仅生成计划；未启动 GPU 任务。")
+            return 0
+        if args.gpu_probe_evidence is None:
+            raise ValueError("实际训练必须提供 --gpu-probe-evidence")
+        if args.preprocess_only and args.resume:
+            raise ValueError("--preprocess-only 与 --resume 不能同时使用")
+        plan = _preflight(
+            project,
+            args.run_id,
+            args.gpu_probe_evidence,
+            resume=args.resume,
+        )
+        train_index = next(index for index, step in enumerate(plan) if step.name == "train")
+        if args.preprocess_only:
+            selected = plan[:train_index]
+        elif args.resume:
+            selected = plan[train_index:]
+        else:
+            selected = plan
+        for step in selected:
+            run_step(
+                step.name,
+                step.command,
+                cwd=step.cwd,
+                success_exit_codes=step.success_exit_codes,
+            )
+            missing_outputs = [path for path in step.required_outputs if not Path(path).is_file()]
+            if missing_outputs:
+                raise RuntimeError(f"{step.name} 未生成必需产物：{missing_outputs[0]}")
+        print("训练步骤完成；模型尚未晋级到正式宿主运行时。")
+        return 0
+    except (KeyError, OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"[ERROR] {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

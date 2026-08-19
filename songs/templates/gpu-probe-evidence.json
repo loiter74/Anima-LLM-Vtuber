@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "run_id": "character-rvc-v001",
+  "batch_size": 4,
+  "gpu_name": "填写 nvidia-smi 返回的完整型号",
+  "memory_total_mib": 0,
+  "memory_peak_used_mib": 0,
+  "probe_command": ["填写有界峰值探针的完整 argv"],
+  "competing_processes": [],
+  "workspace_lifecycle_clear": false,
+  "observed_at": "填写带时区的 ISO-8601 时间"
+}

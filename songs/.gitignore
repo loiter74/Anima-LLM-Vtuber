@@ -1,0 +1,17 @@
+# 本地音频、模型、分轨、工程和导出产物
+audio/raw/*
+audio/processed/*
+audio/dataset/train/*
+audio/dataset/validation/*
+runs/*
+evaluation/audio/*
+evaluation/renders/*
+production/source/*
+production/stems/*
+production/phrases/*
+production/converted/*
+production/sessions/*
+production/exports/*
+
+# 仅保留目录骨架
+!.gitkeep

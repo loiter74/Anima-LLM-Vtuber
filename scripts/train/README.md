@@ -1,46 +1,13 @@
-# Training Paradigm — Character Singing Voice Model
+# 角色中文翻唱工具
 
-## Quick Start
+本目录只提供 `songs/` 工作区的确定性工具：
 
-```bash
-# 1. Put raw audio in data/training/raw/
-# 2. One command: prep → train → deploy
-python -m scripts.train.cli --character shige_utage
+- `workspace.py`：校验清单、按来源冻结划分、生成 RVC 命令计划。
+- `prepare_data.py`：统一为 48 kHz 单声道 PCM WAV，并写入自动 QC 指标。
+- `materialize_dataset.py`：按 `split.csv` 物化训练集和固定验证集。
+- `cli.py`：带 GPU 证据门禁的 fail-fast RVC v2 + RMVPE runner。
+- `deploy.py`：生成包含模型/index 哈希的晋级候选，不直接改生产配置。
 
-# Or step by step:
-python scripts/train/prepare_data.py                         # 数据预处理
-python -m scripts.train.cli --character shige_utage --skip-prep  # 训练+部署
-python -m scripts.train.cli --character shige_utage --deploy-only  # 仅部署
-python -m scripts.train.cli --character shige_utage --epochs 500   # 自定义轮数
-```
-
-## Data Requirements
-
-- Total: 30-60 minutes clean vocals
-- Singing data: at least 10 minutes (critical)
-- Format: WAV, any sample rate (will be resampled)
-- No background music, no reverb
-
-## Directory Layout
-
-```
-data/training/
-├── raw/              # Raw input — place files here
-├── processed/        # After slicing + denoising
-├── augmented/        # After pitch augmentation
-└── ready/            # Final dataset for RVC training
-```
-
-## CLI Reference
-
-| Flag | Description |
-|------|-------------|
-| `-c, --character` | Character name (from config.yaml) |
-| `-d, --data` | Custom data directory |
-| `-e, --epochs` | Training epochs (default: 300) |
-| `-b, --batch-size` | Batch size (default: 16) |
-| `--sr` | Sample rate (default: 48000) |
-| `--skip-prep` | Skip data preparation |
-| `--preprocess-only` | Only preprocess, no training |
-| `--deploy-only` | Only deploy existing model |
-| `--dry-run` | Show commands without running |
+完整顺序、清单字段和制作流程见 [`songs/README.md`](../../songs/README.md)。Windows 下统一从
+仓库根目录用 `py -3.13 -m scripts.train.<module>` 调用。数据未通过人工复核和冻结划分前，
+不要执行训练；GPU 峰值探针不满足空闲预算时，不要提高 batch 或启动长任务。

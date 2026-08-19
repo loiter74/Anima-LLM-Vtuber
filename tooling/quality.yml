@@ -23,6 +23,12 @@ input_sets:
       - scripts/**/*.py
       - evaluations/**/*.py
       - tests/**/*.py
+  singing-model-workspace:
+    paths:
+      - songs/**
+      - scripts/train/**
+      - tests/scripts/train/**
+      - docs/development/rvc-training-guide.md
   agent-skills:
     paths:
       - .agents/skills/**
@@ -460,6 +466,18 @@ groups:
     resource_weight: 3
     input_sets: [python-toolchain]
 
+  singing-model-workspace-unit:
+    domain: backend
+    kind: unit
+    runner: pytest
+    targets: [tests/scripts/train]
+    args: [-q, -o, addopts=, -m, not slow and not integration]
+    timeout_seconds: 120
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source, singing-model-workspace]
+
   backend-memory-unit:
     domain: backend
     kind: unit
@@ -766,6 +784,7 @@ groups:
       - backend-server-unit
       - backend-graph-unit
       - backend-services-unit
+      - singing-model-workspace-unit
       - backend-memory-unit
       - backend-tools-unit
       - minecraft-contract-unit
@@ -1312,6 +1331,23 @@ components:
       - backend-typecheck
       - backend-deadcode
     impacts: [orchestration-server]
+    risk: normal
+
+  singing-model-workspace:
+    domain: backend
+    paths:
+      - songs/**
+      - scripts/train/**
+      - tests/scripts/train/**
+      - docs/development/rvc-training-guide.md
+    direct_groups:
+      - singing-model-workspace-unit
+      - python-format
+      - backend-static
+      - backend-support-typecheck
+      - backend-deadcode
+      - operational-source-contract
+    impacts: []
     risk: normal
 
   socket-events-contract:

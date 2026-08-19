@@ -44,6 +44,8 @@ silero-vad>=5.0.0
 
 # --- Audio Processing ---
 pydub>=0.25.0
+librosa>=0.11.0
+soundfile>=0.13.1
 
 # --- Host RVC Singing Voice Conversion ---
 faiss-cpu>=1.15.0

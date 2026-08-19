@@ -1,0 +1,1 @@
+clip_id,source_id,audio_relpath,transcript,duration_s,sample_rate,channels,peak_dbfs,noise_floor_dbfs,snr_db,silence_ratio,clipping_ratio,voiced_ratio,f0_min_hz,f0_median_hz,f0_max_hz,audio_sha256,review_status,reviewer,review_notes
