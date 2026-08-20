@@ -11,3 +11,5 @@
 完整顺序、清单字段和制作流程见 [`songs/README.md`](../../songs/README.md)。Windows 下统一从
 仓库根目录用 `py -3.13 -m scripts.train.<module>` 调用。数据未通过人工复核和冻结划分前，
 不要执行训练；GPU 峰值探针不满足空闲预算时，不要提高 batch 或启动长任务。
+大批量预处理可向 `prepare_data` 传入 `--workers 4`；该参数只并行处理互不依赖的音频条目，
+不会改变清单排序、QC 算法或训练划分。

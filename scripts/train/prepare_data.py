@@ -9,6 +9,7 @@ import math
 import re
 import sys
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +187,40 @@ def _read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def prepare_workspace(root: Path) -> int:
+def _process_source_task(
+    task: tuple[Path, Mapping[str, str], Mapping[str, Any], Mapping[str, str] | None],
+) -> tuple[dict[str, str] | None, str | None]:
+    root, row, project, existing = task
+    try:
+        return _process_source(root, row, project=project, existing=existing), None
+    except (OSError, RuntimeError, ValueError) as error:
+        source_id = row.get("source_id", "<missing>")
+        return None, f"{source_id}: {error}"
+
+
+def _process_sources(
+    root: Path,
+    sources: Sequence[Mapping[str, str]],
+    *,
+    project: Mapping[str, Any],
+    existing: Mapping[str, Mapping[str, str]],
+    workers: int,
+) -> tuple[list[dict[str, str]], list[str]]:
+    if workers < 1:
+        raise ValueError("workers 必须大于等于 1")
+
+    tasks = [(root, row, project, existing.get(row["source_id"])) for row in sources]
+    if workers == 1:
+        results = list(map(_process_source_task, tasks))
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            results = list(executor.map(_process_source_task, tasks))
+    processed = [result for result, _failure in results if result is not None]
+    failures = [failure for _result, failure in results if failure is not None]
+    return processed, failures
+
+
+def prepare_workspace(root: Path, *, workers: int = 1) -> int:
     errors = validate_workspace(root, stage="scaffold")
     if errors:
         for error in errors:
@@ -202,15 +236,13 @@ def prepare_workspace(root: Path) -> int:
         for row in _read_rows(root / "manifests" / "clips.csv")
         if row.get("clip_id", "").strip()
     }
-    processed: list[dict[str, str]] = []
-    failures: list[str] = []
-    for row in sources:
-        try:
-            processed.append(
-                _process_source(root, row, project=project, existing=existing.get(row["source_id"]))
-            )
-        except (OSError, RuntimeError, ValueError) as error:
-            failures.append(f"{row.get('source_id', '<missing>')}: {error}")
+    processed, failures = _process_sources(
+        root,
+        sources,
+        project=project,
+        existing=existing,
+        workers=workers,
+    )
     if failures:
         for failure in failures:
             print(f"[ERROR] {failure}", file=sys.stderr)
@@ -236,12 +268,13 @@ def prepare_workspace(root: Path) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="统一角色语音格式并生成 QC 清单")
     parser.add_argument("--project", type=Path, default=Path("songs"))
+    parser.add_argument("--workers", type=int, default=1, help="并行处理进程数，默认 1")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    return prepare_workspace(args.project.resolve())
+    return prepare_workspace(args.project.resolve(), workers=args.workers)
 
 
 if __name__ == "__main__":

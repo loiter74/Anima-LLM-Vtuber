@@ -1,15 +1,15 @@
 # 角色中文翻唱工作区
 
-这里是角色歌声转换的单一离线工作目录。仓库已准备好配置、清单、固定划分、RVC
-Baseline 计划、统一评测、AB 记录和分句精修流程；当前没有加入任何游戏语音、测试歌曲、
-模型权重或制作产物。
+这里是远坂凛中文歌声转换的单一离线工作目录。仓库已准备好配置、清单、固定划分、RVC
+Baseline 计划、统一评测、AB 记录和分句精修流程；本地已导入角色游戏语音并完成首轮自动
+质检，原始音频、处理结果、测试歌曲、模型权重和制作产物均不进入版本控制。
 
 ## 当前状态
 
 | 阶段 | 已准备 | 等待你提供 |
 | --- | --- | --- |
-| 数据登记 | `sources.csv` 协议、来源与使用权字段 | 原始游戏语音、逐条中文文本 |
-| 处理与质检 | 48 kHz 单声道目标、异常指标和复核表 | 实际音频后运行处理并人工听审 |
+| 数据登记 | 远坂凛中文语音 693 条已归档；689 条有可用转写并登记到 `sources.csv` | 补写 4 条无文本语音 |
+| 处理与质检 | 689 条已转为 48 kHz 单声道 PCM WAV；270 条自动标记优先复核 | 逐条人工听审并修正 ASR 回退文本 |
 | 固定划分 | 按 `source_id` 分组的冻结命令 | 至少两个已接受来源组 |
 | Baseline | RVC v2 + RMVPE 参数、fail-fast 命令计划 | GPU 峰值探针、正式训练 |
 | 统一评测 | 低/中/高音区协议、版本和 AB 表 | 有合法使用权的固定中文测试片段 |
@@ -47,7 +47,7 @@ py -3.13 -m scripts.train.workspace --project songs check --stage scaffold
 噪声底、近似 SNR、静音、削波、发声占比和 F0 范围写入 `clips.csv`：
 
 ```powershell
-py -3.13 -m scripts.train.prepare_data --project songs
+py -3.13 -m scripts.train.prepare_data --project songs --workers 4
 ```
 
 自动指标只负责标记候选异常，不能替代耳朵。逐条试听后，把 `review_status` 从 `pending`

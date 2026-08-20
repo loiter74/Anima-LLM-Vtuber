@@ -1,6 +1,6 @@
 schema_version = 1
-project_id = "character-cn-cover"
-display_name = "待填写角色中文翻唱"
+project_id = "tohsaka-rin-cn"
+display_name = "远坂凛中文翻唱"
 
 [data]
 sample_rate = 48000
