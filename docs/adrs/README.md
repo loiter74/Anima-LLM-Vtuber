@@ -14,3 +14,4 @@
 | [ADR-010](ADR-010-bilibili-meme-collection.md) | Bilibili meme collection | Accepted |
 | [ADR-011](ADR-011-realtime-audio-pipeline.md) | Real-time audio pipeline | Accepted |
 | [ADR-012](ADR-012-sqlite-command-inbox.md) | SQLite command Inbox for local idempotency | Accepted |
+| [ADR-013](ADR-013-unidirectional-module-boundaries.md) | Unidirectional module boundaries and frontend feature slices | Accepted |

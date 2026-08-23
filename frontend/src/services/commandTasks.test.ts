@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearCommandTask, readCommandTask, startCommandTask } from '../commandTasks'
+import { clearCommandTask, readCommandTask, startCommandTask } from './commandTasks'
 
 describe('commandTasks', () => {
   beforeEach(() => localStorage.clear())

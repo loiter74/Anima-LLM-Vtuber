@@ -2,9 +2,9 @@ import * as PIXI from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display/cubism4'
 import type { Cubism4InternalModel } from 'pixi-live2d-display/cubism4'
 import { Events } from '@/constants/socket-events'
-import { DisposerStack } from '@/review/disposable'
+import { DisposerStack } from './disposable'
 import type { Live2DAction } from '@/types/live2d'
-import type { LiveSocket } from './controller'
+import type { LiveSocket } from '@/shared/transport/liveSocket'
 import { computeLive2DLayout } from './layout'
 import { bindReviewMouthAfterMotion, createReviewVolumeTimelineLipSync } from './review-lip-sync'
 import type { Live2DPerformancePlanV1 } from '@/types/socket-events'
@@ -12,11 +12,11 @@ import {
   DEFAULT_LIVE2D_PERFORMANCE_PLAN,
   createLive2DPerformanceController,
   Live2DPerformanceController,
-} from '@/components/live2d/live2dPerformanceController'
+} from '@/shared/live2d/performanceController'
 import {
   createCubismParameterAdapter,
   type CubismParameterModel,
-} from '@/components/live2d/live2dPerformanceProfile'
+} from '@/shared/live2d/performanceProfile'
 
 const IDLE_VITALITY_PARAMETERS = [
   { name: 'ParamAngleX', factor: 2.3 },

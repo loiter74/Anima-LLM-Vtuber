@@ -10,7 +10,7 @@ const loadMessagesMock = vi.hoisted(() =>
 )
 
 // Mock IndexedDB-backed message store — IndexedDB is not available in happy-dom
-vi.mock('@/composables/useMessageStore', () => ({
+vi.mock('@/services/messageRepository', () => ({
   useMessageStore: () => ({
     loadMessages: loadMessagesMock,
     saveMessages: () => Promise.resolve(),

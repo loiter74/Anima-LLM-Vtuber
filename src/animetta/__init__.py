@@ -43,7 +43,7 @@ def __getattr__(name: str):
 
         return TTSConfig
     if name == "ServiceContext":
-        from .core.service_context import ServiceContext
+        from .runtime.session_context import ServiceContext
 
         return ServiceContext
     if name == "ASRInterface":

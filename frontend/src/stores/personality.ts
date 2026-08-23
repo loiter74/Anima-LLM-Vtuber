@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getSocket } from '@/composables/useSocket'
+import { getSocket } from '@/services/socket'
 import { Events } from '@/constants/socket-events'
 
 export const usePersonalityStore = defineStore('personality', () => {

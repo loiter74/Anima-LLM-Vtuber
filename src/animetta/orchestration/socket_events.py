@@ -13,33 +13,13 @@ Example:
     await sio.emit(event_name("chat", "transcript"), payload, to=session_id)
 """
 
-import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from loguru import logger
-
-
-def _load_event_names() -> dict[str, Any]:
-    """Load event name configuration from config/socket-events.json."""
-    # Path: orchestration/socket_events.py -> up 4 dirs -> project root
-    config_path = (
-        Path(__file__).resolve().parent.parent.parent.parent / "config" / "socket-events.json"
-    )
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"Failed to load socket-events.json: {e}, using fallback")
-        return {}
-
-
-EVENTS: dict[str, Any] = _load_event_names()
-
+from animetta.socket_event_catalog import EVENTS
 
 IDENTITY_FIELDS = ("message_id", "conversation_id", "task_id")
 EVENT_DEFINITION_KEYS = {

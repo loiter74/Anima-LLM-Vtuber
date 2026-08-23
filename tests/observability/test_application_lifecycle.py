@@ -147,9 +147,18 @@ async def test_ledger_starts_before_other_runtime_work_and_closes_after_workers(
     server.memory_runtime.initialize = AsyncMock(side_effect=lambda: order.append("memory.start"))
     server.memory_runtime.shutdown = AsyncMock(side_effect=lambda: order.append("memory.stop"))
 
-    with patch("animetta.orchestration.server.websocket.ServicePool") as pool:
-        pool.init = AsyncMock(side_effect=lambda *args, **kwargs: order.append("pool.start"))
-        pool.shutdown = AsyncMock(side_effect=lambda: order.append("pool.stop"))
+    with (
+        patch.object(
+            server.provider_pool,
+            "init",
+            new=AsyncMock(side_effect=lambda *args, **kwargs: order.append("pool.start")),
+        ),
+        patch.object(
+            server.provider_pool,
+            "shutdown",
+            new=AsyncMock(side_effect=lambda: order.append("pool.stop")),
+        ),
+    ):
         await server.prewarm_services()
         await server._cleanup_all_resources()
 

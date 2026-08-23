@@ -11,7 +11,8 @@ Python backend for Anima VTuber — Starlette + LangGraph + Socket.IO ASGI orche
 ## STRUCTURE
 ```
 src/animetta/
-├── core/                    # Entry point + service container (6 files)
+├── core/                    # Process entry point + one-release runtime import facades
+├── runtime/                 # Provider/session/checkpoint/readiness lifecycle ownership
 ├── orchestration/           # → see orchestration/AGENTS.md
 │   ├── graph/               # LangGraph nodes + orchestrator
 │   └── server/              # WebSocket routes + sessions
@@ -49,9 +50,10 @@ src/animetta/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Main server entry | `core/socketio_server.py` | Starlette + Socket.IO ASGI app |
-| Service lifecycle | `core/service_pool.py` | Shared engines (LLM/TTS/ASR), per-session VAD/memory |
-| Model loading | `core/model_loading_manager.py` | Loads all models, don't block on failures |
+| Main server entry | `core/socketio_server.py` | Process bootstrap; delegates ASGI composition to the server package |
+| Provider lifecycle | `runtime/provider_pool.py` | Application-owned shared LLM/TTS/ASR engines |
+| Session lifecycle | `runtime/session_context.py` | Per-session VAD/memory/audio/emotion dependencies |
+| Model loading | `runtime/model_loading.py` | Loads all models, don't block on failures |
 | Provider registration | `config/core/registry.py` | `@ProviderRegistry.register_service` decorator |
 | App config | `config/app.py` | Main config schema |
 | Graph node template | `orchestration/graph/__init__.py` | Node docstring explains pattern |
@@ -65,12 +67,12 @@ src/animetta/
 ## KEY PATTERNS
 - **Provider plugin**: `interface.py` ABC → implementations → factory in `__init__.py` → `@ProviderRegistry.register_service`
 - **Graph nodes**: Thin state transformers → delegate to `services/`. Never put business logic in nodes.
-- **ServicePool**: Globally shared engines (LLM/TTS/ASR) vs per-session (VAD, memory, emotion)
+- **ProviderPool**: One instance per application owns shared engines; sessions own VAD, memory and emotion state
 - **ConfigStore**: Workaround for LangGraph config limitation — use `state.get("_config", {})`
 
 ## NOTES
 - ~423 Python files, 30K+ lines, max depth 3
-- `orchestration/server/routes.py` at 386 lines is the critical hotspot
+- `orchestration/server` is the application composition boundary; route modules remain transport adapters
 - Services are FLAT (no `speech/` or `intelligence/` nesting)
 - Provider configs at `config/providers/{type}/` mirror `services/{type}/`
 - Minecraft server, Mineflayer bot and viewer lifecycle belong to independent mc-mcp; Anima communicates only through Streamable HTTP MCP

@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
-from animetta.tools.minecraft.mission.schema import build_golden_fixture
-from animetta.tools.minecraft.showcase.live import (
+from animetta.acceptance.minecraft_showcase import (
     _added_advancement_ids,
     _mission_advancement_events,
     _normalize_model_execute_args,
 )
+from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
+from animetta.tools.minecraft.mission.schema import build_golden_fixture
 from scripts.minecraft_real_model_contract import (
     _collect_independent_calls,
     _starter_shelter_budget_admissible,

@@ -2,17 +2,17 @@ import {
   DEFAULT_LIVE2D_PERFORMANCE_PLAN,
   normalizeLive2DPerformancePlan,
   type Live2DPerformancePlanV1,
-} from './live2dPerformanceContract'
+} from './performanceContract'
 import { MAO_PERFORMANCE_PROFILE } from './maoPerformanceProfile'
-import type { Live2DParameterAdapter, Live2DPerformanceProfile } from './live2dPerformanceProfile'
+import type { Live2DParameterAdapter, Live2DPerformanceProfile } from './performanceProfile'
 import {
   dispatchLive2DPerformanceObservation,
   type Live2DPerformanceObserver,
-} from './live2dPerformanceObservability'
+} from './performanceObservability'
 
 export type Live2DPerformanceState = 'calm' | 'armed' | 'speaking' | 'settling'
 
-export { DEFAULT_LIVE2D_PERFORMANCE_PLAN } from './live2dPerformanceContract'
+export { DEFAULT_LIVE2D_PERFORMANCE_PLAN } from './performanceContract'
 const ACTIVATION_MS = 250
 const SETTLING_MS = 350
 

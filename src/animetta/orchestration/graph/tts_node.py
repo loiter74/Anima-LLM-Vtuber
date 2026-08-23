@@ -12,9 +12,9 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.avatar.performance import parse_performance_plan, validated_performance_payload
-from animetta.core.readiness import resolve_service_identity, unwrap_tracing_proxy
 from animetta.orchestration.chat_contracts import ChatIdentity, ChatTransportMode
 from animetta.orchestration.chat_delivery import ChatDelivery, resolve_delivery_target
+from animetta.runtime.readiness import resolve_service_identity, unwrap_tracing_proxy
 from animetta.services.tts.emotion_instructions import build_emotion_instruction
 from animetta.services.tts.remote_tts import RemoteTTSError
 

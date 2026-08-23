@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
-import { setMouthTarget } from '@/components/live2d/useLipSync'
+import { setMouthTarget } from '@/shared/audio/lipSync'
 
 const props = defineProps<{
   isPlaying: boolean

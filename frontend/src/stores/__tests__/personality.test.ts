@@ -9,7 +9,7 @@ const socket = {
   emit: vi.fn(),
 }
 
-vi.mock('@/composables/useSocket', () => ({
+vi.mock('@/services/socket', () => ({
   getSocket: () => socket,
 }))
 

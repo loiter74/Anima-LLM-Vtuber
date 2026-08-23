@@ -15,7 +15,11 @@ vi.mock('@/composables/useSocket', () => ({
   getSocket: () => socket,
 }))
 
-vi.mock('@/composables/useMessageStore', () => ({
+vi.mock('@/services/socket', () => ({
+  getSocket: () => socket,
+}))
+
+vi.mock('@/services/messageRepository', () => ({
   useMessageStore: () => ({
     loadMessages: () => Promise.resolve([]),
     saveMessages: () => Promise.resolve(),

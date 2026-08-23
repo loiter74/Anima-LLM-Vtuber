@@ -13,7 +13,7 @@ vi.mock('@/composables/useSinging', () => ({
     recover: vi.fn(),
   }),
 }))
-vi.mock('@/components/live2d/useLipSync', () => ({
+vi.mock('@/shared/audio/lipSync', () => ({
   startLipSync: vi.fn(),
   stopLipSync: vi.fn(),
 }))

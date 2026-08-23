@@ -126,15 +126,14 @@ async def test_url_song_reuses_the_pooled_asr_engine(
         return pipeline
 
     monkeypatch.setattr(singing_handlers, "load_singing_config", lambda: "singing-config")
-    monkeypatch.setattr(
-        singing_handlers,
-        "ServicePool",
-        SimpleNamespace(get_context=lambda: {"asr_engine": asr_engine}),
-        raising=False,
+    session_manager = SimpleNamespace(
+        provider_pool=SimpleNamespace(
+            get_context=lambda: {"asr_engine": asr_engine},
+        )
     )
     monkeypatch.setattr(singing_handlers, "SVCPipeline", create_pipeline)
     handler = SingingHandlers(
-        SimpleNamespace(emit=AsyncMock()), MagicMock(), MagicMock(), MagicMock()
+        SimpleNamespace(emit=AsyncMock()), session_manager, MagicMock(), MagicMock()
     )
 
     await handler.on_sing_process(

@@ -11,8 +11,6 @@ from uuid import UUID, uuid4
 
 from loguru import logger
 
-from animetta.core.message_filter import is_probe_message
-from animetta.core.readiness import resolve_service_identity
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.orchestration.chat_contracts import (
     ChatErrorComponent,
@@ -26,12 +24,14 @@ from animetta.orchestration.chat_contracts import (
 )
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
+from animetta.runtime.readiness import resolve_service_identity
 from animetta.services.command_inbox import CommandDecision, CommandInbox, CommandKey
 from animetta.services.dialogue import (
     SandboxConversationError,
     SandboxConversationService,
     SandboxTurn,
 )
+from animetta.services.dialogue.message_filter import is_probe_message
 from animetta.services.effects import (
     EffectPlanner,
     create_default_effect_runtime,

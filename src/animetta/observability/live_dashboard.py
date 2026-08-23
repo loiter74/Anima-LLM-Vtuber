@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 from animetta.observability.ports import ObservationQuery
 
+MinecraftActivityReader = Callable[[str], Awaitable[dict[str, Any] | None]]
 
-async def live_overview(query: ObservationQuery, *, limit: int) -> dict[str, Any]:
+
+async def live_overview(
+    query: ObservationQuery,
+    *,
+    limit: int,
+    minecraft_activity_reader: MinecraftActivityReader | None = None,
+) -> dict[str, Any]:
     bounded_limit = max(1, min(limit, 50))
     summaries = await query.recent_traces(min(100, bounded_limit * 3), 0)
     details: list[Mapping[str, Any]] = []
@@ -41,7 +48,11 @@ async def live_overview(query: ObservationQuery, *, limit: int) -> dict[str, Any
             attrs = operation.get("attributes") or {}
             command_id = attrs.get("minecraft_command_id") if isinstance(attrs, Mapping) else None
             if command_id:
-                mc_activity = await _minecraft_activity(str(command_id), include_details=False)
+                mc_activity = await _minecraft_activity(
+                    minecraft_activity_reader,
+                    str(command_id),
+                    include_details=False,
+                )
                 if mc_activity:
                     turn["mc_status"] = str(mc_activity.get("state") or turn["mc_status"])
                 break
@@ -82,6 +93,7 @@ async def live_turn_detail(
     query: ObservationQuery,
     *,
     trace_id: str,
+    minecraft_activity_reader: MinecraftActivityReader | None = None,
 ) -> dict[str, Any] | None:
     detail = await query.trace_detail(trace_id)
     if detail is None:
@@ -127,6 +139,7 @@ async def live_turn_detail(
         command_id = attributes.get("minecraft_command_id")
         if command_id:
             activity["minecraft"] = await _minecraft_activity(
+                minecraft_activity_reader,
                 str(command_id),
                 include_details=privacy_mode == "full",
             )
@@ -238,10 +251,15 @@ def _latest_mc_status(operations: Sequence[Mapping[str, Any]]) -> str:
     return "idle"
 
 
-async def _minecraft_activity(command_id: str, *, include_details: bool) -> dict[str, Any] | None:
-    from animetta.tools.minecraft.core.tools import read_minecraft_command_activity
-
-    activity = await read_minecraft_command_activity(command_id)
+async def _minecraft_activity(
+    reader: MinecraftActivityReader | None,
+    command_id: str,
+    *,
+    include_details: bool,
+) -> dict[str, Any] | None:
+    if reader is None:
+        return None
+    activity = await reader(command_id)
     if activity is None:
         return None
     if include_details:

@@ -1,9 +1,9 @@
-import type { Live2DStage } from '@/live/live2d-stage'
+import type { Live2DStage } from '@/review/live2d-stage'
 import { DisposerStack } from '@/review/disposable'
 import {
   LIVE2D_PERFORMANCE_OBSERVATION_EVENT,
   type Live2DPerformanceObservation,
-} from '@/components/live2d/live2dPerformanceObservability'
+} from '@/shared/live2d/performanceObservability'
 import { PERFORMANCE_REVIEW_PLANS } from './catalog'
 import { parsePerformanceSamples } from './performanceSamples'
 import { createPerformanceSequenceRunner } from './performanceSequence'

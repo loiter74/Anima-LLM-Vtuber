@@ -107,6 +107,7 @@ def test_quick_selects_direct_server_groups_without_impact_expansion() -> None:
     plan = plan_verification(_catalog(), changes, Tier.QUICK)
 
     assert _group_ids(plan) == [
+        "architecture-boundary-audit",
         "backend-deadcode",
         "backend-route-smoke",
         "backend-server-unit",
@@ -304,6 +305,7 @@ def test_affected_expands_declared_component_impacts() -> None:
     plan = plan_verification(_catalog(), changes, Tier.AFFECTED)
 
     assert set(_group_ids(plan)) == {
+        "architecture-boundary-audit",
         "backend-deadcode",
         "backend-route-smoke",
         "backend-server-unit",

@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const startLipSync = vi.hoisted(() => vi.fn())
 const stopLipSync = vi.hoisted(() => vi.fn())
 const setMouthTarget = vi.hoisted(() => vi.fn())
-const setExpression = vi.hoisted(() => vi.fn())
 
-vi.mock('./useLipSync', () => ({ setMouthTarget, startLipSync, stopLipSync }))
-vi.mock('./useLive2DModel', () => ({ setExpression }))
+vi.mock('./lipSync', () => ({ setMouthTarget, startLipSync, stopLipSync }))
 
 class MockAudio {
   static instances: MockAudio[] = []
@@ -45,7 +43,7 @@ describe('useAudioPlayback', () => {
   })
 
   it('primes and reuses one audio element for delayed chat playback', async () => {
-    const { playAudio, unlockAudioPlayback } = await import('./useAudioPlayback')
+    const { playAudio, unlockAudioPlayback } = await import('./playback')
 
     unlockAudioPlayback()
     expect(MockAudio.instances).toHaveLength(1)
@@ -61,7 +59,7 @@ describe('useAudioPlayback', () => {
   })
 
   it('starts performance only after play resolves and completes it on audio end', async () => {
-    const { playAudio } = await import('./useAudioPlayback')
+    const { playAudio } = await import('./playback')
     const lifecycle = {
       onStart: vi.fn(),
       onComplete: vi.fn(),
@@ -79,7 +77,7 @@ describe('useAudioPlayback', () => {
   })
 
   it('routes a complete-audio mouth timeline to the active stage', async () => {
-    const { playAudio } = await import('./useAudioPlayback')
+    const { playAudio } = await import('./playback')
     const stageMouthTarget = vi.fn()
 
     playAudio(
@@ -92,7 +90,7 @@ describe('useAudioPlayback', () => {
   })
 
   it('plays a generated singing URL without copying it into a blob', async () => {
-    const { playAudio } = await import('./useAudioPlayback')
+    const { playAudio } = await import('./playback')
 
     playAudio({ audio_url: '/api/singing/audio/song_final.wav', format: 'wav' })
 

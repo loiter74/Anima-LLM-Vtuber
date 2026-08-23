@@ -12,6 +12,10 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from animetta.acceptance.minecraft_showcase import (
+    ReviewRconSetupExecutor,
+    ReviewScenarioEnvironment,
+)
 from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
 from animetta.tools.minecraft.core.config import MinecraftConfig, MinecraftMcpConfig
 from animetta.tools.minecraft.core.tools import (
@@ -23,10 +27,6 @@ from animetta.tools.minecraft.core.tools import (
 from animetta.tools.minecraft.mission.adaptive import ExplorationFrontier
 from animetta.tools.minecraft.mission.models import MissionSpec
 from animetta.tools.minecraft.mission.repository import MissionStatus
-from animetta.tools.minecraft.showcase.live import (
-    ReviewRconSetupExecutor,
-    ReviewScenarioEnvironment,
-)
 from animetta.tools.minecraft.showcase.micro_gates import (
     build_acquisition_mission,
     build_combat_mission,

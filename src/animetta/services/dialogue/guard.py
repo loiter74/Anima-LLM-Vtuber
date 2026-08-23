@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from animetta.orchestration.prompting.roleplay_guard import has_drift
-
 from .contracts import ComposerResult, ReasonerResult
 from .models import FinalResponseSelection
+from .roleplay_guard import has_drift
 
 
 def select_final_response(

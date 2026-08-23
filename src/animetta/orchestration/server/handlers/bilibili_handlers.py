@@ -7,11 +7,11 @@ from uuid import uuid4
 
 from loguru import logger
 
+from animetta.checkpointing import CheckpointRequest
 from animetta.config import ProactiveTopicsConfig, ReplyPolicyConfig, SceneAnalysisConfig
 from animetta.memory.v2.context import normalize_actor_id
 from animetta.orchestration.chat_contracts import ChatIdentity
 from animetta.orchestration.chat_delivery import ChatDelivery
-from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.bilibili import (
     PROACTIVE_TOPIC_SOURCE,
     DanmakuBuffer,

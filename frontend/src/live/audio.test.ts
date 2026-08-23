@@ -17,8 +17,8 @@ const lipSync = vi.hoisted(() => ({
   stopLipSync: vi.fn(),
 }))
 
-vi.mock('@/components/live2d/useAudioPlayback', () => playback)
-vi.mock('@/components/live2d/useLipSync', () => lipSync)
+vi.mock('@/shared/audio/playback', () => playback)
+vi.mock('@/shared/audio/lipSync', () => lipSync)
 
 function harness(playResult: Promise<void> = Promise.resolve()) {
   const handlers = new Map<string, (...args: unknown[]) => void>()

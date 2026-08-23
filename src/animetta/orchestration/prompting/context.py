@@ -6,8 +6,8 @@ from typing import Any
 
 from langgraph.types import RunnableConfig
 
-from animetta.config.runtime_reload import build_runtime_system_prompt
 from animetta.services.bilibili.response_policy import is_proactive_topic_turn
+from animetta.services.runtime_config import build_runtime_system_prompt
 from animetta.services.scene_analysis.validation import validate_scene_guidance
 
 from .types import PromptContext

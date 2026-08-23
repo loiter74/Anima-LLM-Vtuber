@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from animetta.orchestration.graph.checkpointing import CheckpointRequest
+from animetta.checkpointing import CheckpointRequest
 
 from .models import (
     EvaluatorType,

@@ -16,12 +16,12 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
-from animetta.orchestration.prompting.reasoning_classifier import is_english_meta_reasoning
 from animetta.services.bilibili.response_policy import (
     constrain_livestream_response,
     constrain_proactive_topic_response,
     is_proactive_topic_turn,
 )
+from animetta.services.dialogue.reasoning_classifier import is_english_meta_reasoning
 from animetta.services.llm.token_counting import make_trim_token_counter
 
 from .conversation_session import ConversationSessionState

@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { getSocket } from '@/composables/useSocket'
+import { getSocket } from '@/services/socket'
 import { Events } from '@/constants/socket-events'
-import { fetchCommandTask, readCommandTask, startCommandTask } from '@/composables/commandTasks'
+import { fetchCommandTask, readCommandTask, startCommandTask } from '@/services/commandTasks'
 
 export interface MemoryRelation {
   source_id: string

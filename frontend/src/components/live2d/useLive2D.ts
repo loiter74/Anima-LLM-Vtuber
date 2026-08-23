@@ -27,20 +27,20 @@ import {
   retryLoad,
   setClampedParameter,
 } from './useLive2DModel'
-import { tickLipSync, setMouthTarget } from './useLipSync'
+import { tickLipSync, setMouthTarget } from '@/shared/audio/lipSync'
 import {
   endAudioStream,
   playAudio,
   pushAudioStreamChunk,
   startAudioStream,
   stopAudio,
-} from './useAudioPlayback'
+} from '@/shared/audio/playback'
 import { playParameterTimeline, setParam, cancelTimeline } from './useParameterTimeline'
 import {
   DEFAULT_LIVE2D_PERFORMANCE_PLAN,
   createLive2DPerformanceController,
-} from './live2dPerformanceController'
-import { dispatchLive2DPerformanceObservation } from './live2dPerformanceObservability'
+} from '@/shared/live2d/performanceController'
+import { dispatchLive2DPerformanceObservation } from '@/shared/live2d/performanceObservability'
 import {
   isLoaded,
   isLoading,
@@ -88,7 +88,7 @@ function isCurrentPerformanceEvent(
 
 function tickPerformanceThenLipSync(): void {
   performanceController.tick()
-  tickLipSync()
+  tickLipSync(getModel())
 }
 
 // ===== Main Composable =====
@@ -200,7 +200,10 @@ export function useLive2D(canvasRef: Ref<HTMLCanvasElement | null>) {
       performanceController.arm(data.performance ?? DEFAULT_LIVE2D_PERFORMANCE_PLAN, data.task_id)
       const lifecycle = {
         onStart: () => performanceController.start(data.task_id),
-        onComplete: () => performanceController.finish(data.task_id),
+        onComplete: () => {
+          performanceController.finish(data.task_id)
+          if (data.return_to_idle) setExpression('idle')
+        },
         onCancel: () => performanceController.cancel(),
       }
       if (data.use_parameter_mapping && data.expressions?.frames) {

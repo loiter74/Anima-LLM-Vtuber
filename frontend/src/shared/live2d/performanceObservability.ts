@@ -1,4 +1,4 @@
-import type { Live2DPerformancePlanV1 } from './live2dPerformanceContract'
+import type { Live2DPerformancePlanV1 } from './performanceContract'
 
 export const LIVE2D_PERFORMANCE_OBSERVATION_EVENT =
   'animetta:live2d-performance-observation' as const

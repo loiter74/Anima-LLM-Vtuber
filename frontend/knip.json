@@ -15,5 +15,6 @@
   ],
   "ignoreBinaries": ["ffmpeg", "py"],
   "ignoreDependencies": ["electron-builder-squirrel-windows"],
+  "ignoreFiles": ["src/composables/useMessageStore.ts"],
   "ignoreExportsUsedInFile": true
 }

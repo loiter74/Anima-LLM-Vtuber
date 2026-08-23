@@ -7,7 +7,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Route
 
-from animetta.core.service_pool import ServicePool
 from animetta.observability.dto import (
     HealthDTO,
     OperationAggregateDTO,
@@ -18,6 +17,12 @@ from animetta.observability.dto import (
 )
 from animetta.observability.live_dashboard import live_overview, live_turn_detail
 from animetta.observability.ports import ObservationQuery
+from animetta.runtime.provider_pool import default_provider_pool
+from animetta.tools.minecraft.core.tools import read_minecraft_command_activity
+
+# One-release test/import compatibility. Real applications inject their own
+# ProviderPool through Starlette state.
+ServicePool = default_provider_pool
 
 # ── Module-level references for health check enrichment ──────
 _model_manager: Any | None = None
@@ -162,7 +167,11 @@ async def stats_live(request: Request) -> JSONResponse:
     """GET /api/stats/live?limit=20 — live-console turns and headline metrics."""
     try:
         limit = int(request.query_params.get("limit", "20"))
-        data = await live_overview(_get_observation_query(request), limit=limit)
+        data = await live_overview(
+            _get_observation_query(request),
+            limit=limit,
+            minecraft_activity_reader=read_minecraft_command_activity,
+        )
         return JSONResponse(data)
     except Exception as exc:
         logger.error(f"[StatsAPI] live failed: {exc}")
@@ -175,6 +184,7 @@ async def stats_live_turn(request: Request) -> JSONResponse:
         data = await live_turn_detail(
             _get_observation_query(request),
             trace_id=request.path_params["trace_id"],
+            minecraft_activity_reader=read_minecraft_command_activity,
         )
         if data is None:
             return JSONResponse({"error": "Turn not found"}, status_code=404)
@@ -213,7 +223,8 @@ async def health_check(request: Request) -> JSONResponse:
 async def readiness_check(request: Request) -> JSONResponse:
     """Return the cached runtime snapshot without performing network/model I/O."""
     try:
-        snapshot = ServicePool.get_readiness_snapshot(
+        provider_pool = getattr(request.app.state, "provider_pool", ServicePool)
+        snapshot = provider_pool.get_readiness_snapshot(
             config=_runtime_config,
             model_manager=_model_manager,
             frontend=_frontend_readiness,

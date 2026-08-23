@@ -397,9 +397,9 @@ async def _store_conversation_to_memory(
             return
 
         vad_tuple = state.get("response_emotion_vad") or state.get("emotion_vad")
-        from animetta.core.shared_memory_runtime import ConversationTurn
         from animetta.memory.v2.context import MemoryContext, normalize_actor_id
         from animetta.memory.v2.emotion_field import VADVector
+        from animetta.runtime.shared_memory import ConversationTurn
 
         vad = VADVector(*vad_tuple) if vad_tuple else None
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createCubismParameterAdapter } from './live2dPerformanceProfile'
+import { createCubismParameterAdapter } from './performanceProfile'
 
 describe('Live2D performance model adapter', () => {
   it('reads and writes known Cubism parameters with model bounds', () => {

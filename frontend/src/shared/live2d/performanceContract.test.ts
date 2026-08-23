@@ -3,7 +3,7 @@ import {
   DEFAULT_LIVE2D_PERFORMANCE_PLAN,
   LIVE2D_PERFORMANCE_BASES,
   normalizeLive2DPerformancePlan,
-} from './live2dPerformanceContract'
+} from './performanceContract'
 
 describe('Live2D performance contract', () => {
   it('publishes only the three accepted semantic bases', () => {

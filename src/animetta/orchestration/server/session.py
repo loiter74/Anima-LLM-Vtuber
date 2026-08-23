@@ -14,19 +14,18 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from animetta.config.manifest import EffectiveConfig
-from animetta.core.service_pool import ServicePool
 from animetta.orchestration.graph.conversation_session import ConversationSessionRegistry
-
-from ...core.service_context import ServiceContext
+from animetta.runtime.provider_pool import ProviderPool, default_provider_pool
+from animetta.runtime.session_context import ServiceContext
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
     from animetta.config.live2d import Live2DConfig
-    from animetta.core.model_loading_manager import ModelLoadingManager
-    from animetta.core.redis_checkpoint import RedisCheckpointRuntime
-    from animetta.core.shared_memory_runtime import SharedMemoryRuntime
     from animetta.observability.ports import ObservationRecorder
+    from animetta.runtime.checkpoint import RedisCheckpointRuntime
+    from animetta.runtime.model_loading import ModelLoadingManager
+    from animetta.runtime.shared_memory import SharedMemoryRuntime
     from animetta.services.audio.simple_vad_processor import SimpleVADProcessor
 
     from ..graph.orchestrator import LangGraphOrchestrator
@@ -50,6 +49,7 @@ class SessionManager:
         memory_runtime: SharedMemoryRuntime | None = None,
         observation_recorder: ObservationRecorder | None = None,
         checkpoint_runtime: RedisCheckpointRuntime | None = None,
+        provider_pool: ProviderPool | None = None,
     ) -> None:
         # Store ServiceContext per session
         # Key: session_id, Value: ServiceContext instance
@@ -58,6 +58,7 @@ class SessionManager:
         self.memory_runtime = memory_runtime
         self.observation_recorder = observation_recorder
         self.checkpoint_runtime = checkpoint_runtime
+        self.provider_pool = provider_pool or default_provider_pool
         self.conversation_registry = ConversationSessionRegistry(max_scopes=256)
 
         # Store orchestrator per session
@@ -100,7 +101,7 @@ class SessionManager:
             ctx.send_text = websocket_send
 
             # Use ServicePool when available — skips LLM/TTS/ASR init
-            pool = ServicePool.get_context()
+            pool = self.provider_pool.get_context()
             if pool:
                 logger.info(f"[{sid}] Using pooled engines (LLM/TTS/ASR)")
                 await ctx.load_cache(config=config, **pool)

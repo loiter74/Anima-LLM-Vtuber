@@ -7,8 +7,8 @@ import type { ModelStatusPayload } from '@/types/model-loading'
 import type { PipelineStage } from '@/types/singing'
 import { Events, type SingCompletePayload } from '@/constants/socket-events'
 import { fetchAuthenticatedSession, type AuthStatus } from '@/auth/session'
+import { getSocket as readSocket, setSocket } from '@/services/socket'
 
-let socket: Socket | null = null
 let _initialized = false
 let _connectFailures = 0
 const MAX_FAILURES_BEFORE_ERROR = 3
@@ -19,6 +19,7 @@ const MAX_FAILURES_BEFORE_ERROR = 3
  */
 export function useSocket() {
   const store = useConnectionStore()
+  let socket = readSocket()
 
   if (!_initialized && !socket) {
     socket = io(window.location.origin, {
@@ -31,6 +32,7 @@ export function useSocket() {
       autoConnect: false,
       withCredentials: true,
     })
+    setSocket(socket)
 
     socket.on('connect', () => {
       _connectFailures = 0
@@ -110,11 +112,12 @@ export function useSocket() {
 
 /** Get the global socket instance for use in composables */
 export function getSocket(): Socket | null {
-  return socket
+  return readSocket()
 }
 
 export async function ensureAuthenticatedSession(): Promise<AuthStatus> {
   const store = useConnectionStore()
+  const socket = readSocket()
   if (!socket) {
     store.setAuthStatus('unavailable')
     return 'unavailable'

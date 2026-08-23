@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { unlockAudioPlayback } from '@/components/live2d/useAudioPlayback'
+import { unlockAudioPlayback } from '@/shared/audio/playback'
 import { useMobile } from '@/composables/useMobile'
 import VoiceButton from './VoiceButton.vue'
 

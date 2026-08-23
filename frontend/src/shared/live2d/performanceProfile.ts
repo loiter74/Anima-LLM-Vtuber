@@ -1,4 +1,4 @@
-import type { Live2DPerformancePlanV1 } from './live2dPerformanceContract'
+import type { Live2DPerformancePlanV1 } from './performanceContract'
 
 export interface Live2DPerformanceParameter {
   name: string

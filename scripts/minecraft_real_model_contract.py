@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import ValidationError
 
+from animetta.acceptance.minecraft_showcase import _normalize_model_execute_args
 from animetta.config.providers.llm.deepseek import DeepSeekLLMConfig
 from animetta.orchestration.graph.state import create_initial_state
 from animetta.orchestration.prompting.pipeline import compile as compile_prompt
@@ -34,7 +35,6 @@ from animetta.tools.minecraft.mission.models import (
     TrustedSkillsCreatedAtLeast,
     VanillaAdvancementsAddedAtLeast,
 )
-from animetta.tools.minecraft.showcase.live import _normalize_model_execute_args
 from animetta.tools.minecraft.showcase.runner import SHOWCASE_USER_TEXT
 from animetta.tools.minecraft.voyager.budget import BudgetUsage
 from animetta.tools.minecraft.voyager.goal_models import (

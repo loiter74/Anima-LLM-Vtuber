@@ -16,9 +16,8 @@ from animetta.config.providers.llm import (
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
-from animetta.core.readiness import unwrap_tracing_proxy
 from animetta.observability.ports import ObservationRecorder
-from animetta.observability.service_proxy import instrument_service
+from animetta.observability.service_proxy import instrument_service, unwrap_service_proxy
 
 from .interface import LLMInterface
 
@@ -92,7 +91,7 @@ class LLMFactory:
                     )
             # Use Registry to automatically find and instantiate
             llm = ProviderRegistry.create_service("llm", config, system_prompt=system_prompt)
-            concrete = unwrap_tracing_proxy(llm)
+            concrete = unwrap_service_proxy(llm)
 
             if config.type in {"openai", "deepseek"}:
                 from .openai_llm import OpenAILLM

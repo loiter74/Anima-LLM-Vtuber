@@ -6,18 +6,18 @@ import pytest
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
+from animetta.acceptance import minecraft_showcase as live_module
+from animetta.acceptance.minecraft_showcase import (
+    ReviewScenarioEnvironment,
+    _adaptive_acquisition_stage_spans,
+    _mission_world_facts,
+)
 from animetta.orchestration.graph.tool_observation import (
     ToolInvocation,
     ToolInvocationCompletion,
 )
 from animetta.services.llm.mock_llm import MockLLM
 from animetta.tools.minecraft.core.tools import MinecraftOperateToolInput
-from animetta.tools.minecraft.showcase import live as live_module
-from animetta.tools.minecraft.showcase.live import (
-    ReviewScenarioEnvironment,
-    _adaptive_acquisition_stage_spans,
-    _mission_world_facts,
-)
 from animetta.tools.minecraft.showcase.scenario import MissionStartBoundary
 from tests.tools.minecraft.mission.test_coordinator import _fixed_mission
 

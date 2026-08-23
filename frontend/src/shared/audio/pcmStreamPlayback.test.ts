@@ -5,7 +5,7 @@ const startLipSync = vi.hoisted(() => vi.fn())
 const stopLipSync = vi.hoisted(() => vi.fn())
 const setExpression = vi.hoisted(() => vi.fn())
 
-vi.mock('./useLipSync', () => ({ setMouthTarget, startLipSync, stopLipSync }))
+vi.mock('./lipSync', () => ({ setMouthTarget, startLipSync, stopLipSync }))
 vi.mock('./useLive2DModel', () => ({ setExpression }))
 
 interface StreamStart {
@@ -123,7 +123,7 @@ function pcmChunk(value: number, durationMs = 50, sampleRate = 24_000): string {
 }
 
 async function loadPlayback(): Promise<PlaybackModule> {
-  return (await import('./useAudioPlayback')) as unknown as PlaybackModule
+  return (await import('./playback')) as unknown as PlaybackModule
 }
 
 function startEvent(streamId = 'stream-a'): StreamStart {

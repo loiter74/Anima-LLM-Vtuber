@@ -1,5 +1,5 @@
 import { expect, type Page } from 'playwright/test'
-import { LIVE2D_PERFORMANCE_REVIEW_DEFINITION } from '../../../src/live2d-performance/catalog'
+import { LIVE2D_PERFORMANCE_REVIEW_DEFINITION } from '../../../src/review/live2d-performance/catalog'
 import type { AssertionRecord, PageAssertionResult, ReviewPageAdapter } from '../browser'
 import { recordAssertion as check } from '../assertions'
 import { TtsHarnessLease } from '../tts-harness-lease'

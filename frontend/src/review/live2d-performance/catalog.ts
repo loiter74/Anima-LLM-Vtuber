@@ -2,7 +2,7 @@ import type { ReviewDefinition } from '@/review/contracts'
 import {
   LIVE2D_PERFORMANCE_BASES,
   type Live2DPerformancePlanV1,
-} from '@/components/live2d/live2dPerformanceContract'
+} from '@/shared/live2d/performanceContract'
 
 export const PERFORMANCE_BASES = LIVE2D_PERFORMANCE_BASES
 export const PERFORMANCE_ACCENTS = [] as const

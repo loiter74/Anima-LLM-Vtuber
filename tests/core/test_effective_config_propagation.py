@@ -44,7 +44,7 @@ def test_run_002_server_holders_share_one_effective_config_object(
     assert server.runtime_reloader.config is effective_config
     assert server.route_handlers is not None
     assert server.route_handlers.global_config is effective_config
-    assert ServicePool._runtime_config is effective_config
+    assert server.provider_pool._state._runtime_config is effective_config
     assert stats_api._runtime_config is effective_config
     assert server.inspection_runtime().readiness_snapshot().profile == "test"
 
@@ -63,15 +63,15 @@ async def test_run_003_new_session_inherits_config_version_and_hash(
     with (
         patch.object(ServicePool, "get_context", return_value=pooled),
         patch(
-            "animetta.core.service_context.ServiceContext.init_vad",
+            "animetta.runtime.session_context.ServiceContext.init_vad",
             new=AsyncMock(),
         ),
         patch(
-            "animetta.core.service_context.ServiceContext.init_memory",
+            "animetta.runtime.session_context.ServiceContext.init_memory",
             new=AsyncMock(),
         ),
         patch(
-            "animetta.core.service_context.ServiceContext.init_emotion_analyzer",
+            "animetta.runtime.session_context.ServiceContext.init_emotion_analyzer",
             new=AsyncMock(),
         ),
     ):

@@ -1,5 +1,7 @@
-import { getModel } from './useLive2DModel'
-import { resolveMouthParameterIndex, type MouthParameterLookup } from './mouthParameter'
+import {
+  resolveMouthParameterIndex,
+  type MouthParameterLookup,
+} from '@/shared/live2d/mouthParameter'
 import { createMouthEnvelope } from './mouthEnvelope'
 
 // ===== LipSync State =====
@@ -21,10 +23,18 @@ export function setMouthTarget(value: number): void {
 
 // ===== PIXI Ticker LipSync =====
 
-export function tickLipSync(): void {
+interface MouthModel {
+  internalModel?: {
+    coreModel?: MouthParameterLookup & {
+      getParameterValueByIndex(index: number): number
+      setParameterValueByIndex(index: number, value: number): void
+    }
+  }
+}
+
+export function tickLipSync(model: MouthModel | null | undefined): void {
   // RAF-based lip sync takes priority over PIXI ticker
   if (_lipSyncRafActive) return
-  const model = getModel()
   if (!model) return
   const coreModel = model.internalModel?.coreModel
   if (!coreModel) return

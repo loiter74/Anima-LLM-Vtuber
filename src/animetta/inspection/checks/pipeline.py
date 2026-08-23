@@ -18,7 +18,7 @@ from uuid import uuid4
 import socketio
 from loguru import logger
 
-from animetta.orchestration.socket_events import EVENTS
+from animetta.socket_event_catalog import EVENTS
 
 from ..models import CheckResult
 from ..runtime import InspectionRuntime

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ChatMessage, MessageRole } from '@/types/chat'
-import { useMessageStore } from '@/composables/useMessageStore'
+import { useMessageStore } from '@/services/messageRepository'
 import { usePersonalityStore } from '@/stores/personality'
 import type {
   ChatErrorEvent,

@@ -4,7 +4,7 @@ import {
   MAO_PERFORMANCE_OWNED_PARAMETERS,
   resolveMaoPerformanceParameters,
 } from './maoPerformanceProfile'
-import { Live2DPerformanceController } from './live2dPerformanceController'
+import { Live2DPerformanceController } from './performanceController'
 
 const ANNOYED: Live2DPerformancePlanV1 = {
   version: 1,

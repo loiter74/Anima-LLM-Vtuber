@@ -26,8 +26,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from animetta.config.providers.llm import DeepSeekLLMConfig, GLMLLMConfig, OpenAILLMConfig
-from animetta.core.service_context import ServiceContext
 from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
+from animetta.runtime.session_context import ServiceContext
 from animetta.services.llm.factory import LLMFactory
 
 

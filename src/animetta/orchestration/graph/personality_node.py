@@ -185,7 +185,7 @@ def _detect_previous_turn_drift(state: AgentState, config: RunnableConfig | None
     """
     from langchain_core.messages import AIMessage
 
-    from animetta.orchestration.prompting.roleplay_guard import (
+    from animetta.services.dialogue.roleplay_guard import (
         CORRECTION_SECTION,
         has_drift,
     )

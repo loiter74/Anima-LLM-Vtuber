@@ -1,7 +1,7 @@
 import {
   resolveMouthParameterIndex,
   type MouthParameterLookup,
-} from '@/components/live2d/mouthParameter'
+} from '@/shared/live2d/mouthParameter'
 
 const FRAME_INTERVAL_SECONDS = 0.02
 const REVIEW_MOUTH_LEAD_SECONDS = 0.06

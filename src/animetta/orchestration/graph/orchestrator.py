@@ -13,21 +13,21 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from loguru import logger
 
-from animetta.core.message_filter import should_skip_llm
-from animetta.core.redis_checkpoint import RedisCheckpointRuntime
+from animetta.checkpointing import (
+    CheckpointConfigMismatchError,
+    CheckpointRequest,
+    CheckpointUnavailableError,
+)
 from animetta.observability.conversation import ConversationObserver
 from animetta.observability.domain import PrivacyMode
 from animetta.observability.ports import (
     NoOpObservationRecorder,
     ObservationRecorder,
 )
+from animetta.runtime.checkpoint import RedisCheckpointRuntime
+from animetta.services.dialogue.message_filter import should_skip_llm
 
 from .builder import CompiledAgentGraph, create_default_graph
-from .checkpointing import (
-    CheckpointConfigMismatchError,
-    CheckpointRequest,
-    CheckpointUnavailableError,
-)
 from .conversation_session import (
     ConversationSessionRegistry,
     resolve_conversation_scope,

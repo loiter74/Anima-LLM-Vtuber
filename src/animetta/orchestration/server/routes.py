@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from socketio.exceptions import ConnectionRefusedError
 
+from animetta.checkpointing import CheckpointRequest
 from animetta.config.manifest import EffectiveConfig
 from animetta.config.user import UserSettings
-from animetta.orchestration.graph.checkpointing import CheckpointRequest
 from animetta.services.command_inbox import (
     ACTIVE_STATUSES,
     CommandInbox,

@@ -1,8 +1,5 @@
-import type { Live2DPerformanceBase, Live2DPerformancePlanV1 } from './live2dPerformanceContract'
-import type {
-  Live2DPerformanceParameter,
-  Live2DPerformanceProfile,
-} from './live2dPerformanceProfile'
+import type { Live2DPerformanceBase, Live2DPerformancePlanV1 } from './performanceContract'
+import type { Live2DPerformanceParameter, Live2DPerformanceProfile } from './performanceProfile'
 
 interface ParameterDefinition {
   min: number

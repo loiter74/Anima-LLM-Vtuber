@@ -689,7 +689,7 @@ async def test_golden_pool_awaits_warmup_and_connectivity_before_ready() -> None
     manager.get_status.return_value = {"tts": "loaded"}
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ):
         await ServicePool.init(config, model_manager=manager)
@@ -722,7 +722,7 @@ async def test_golden_pool_retains_failed_connectivity_as_not_ready() -> None:
     manager.get_status.return_value = {"tts": "loaded"}
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ):
         await ServicePool.init(config, model_manager=manager)
@@ -755,7 +755,7 @@ async def test_repeated_init_does_not_replace_initialized_but_unready_golden_poo
     manager.get_status.return_value = {"tts": "loaded"}
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ) as context_class:
         await ServicePool.init(config, model_manager=manager)
@@ -794,7 +794,7 @@ async def test_concurrent_pool_init_shares_one_initialization_task() -> None:
     }
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ) as context_class:
         first = asyncio.create_task(ServicePool.init(config))
@@ -853,7 +853,7 @@ async def test_cancelled_golden_init_cleans_every_partial_stage(stage: str) -> N
     manager.get_status.return_value = {"tts": "loaded"}
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ):
         init_task = asyncio.create_task(ServicePool.init(config, model_manager=manager))
@@ -911,7 +911,7 @@ async def test_shutdown_waits_for_inflight_init_before_final_cleanup() -> None:
     context.load_from_config = AsyncMock(side_effect=cancellation_resistant_load)
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ):
         init_task = asyncio.create_task(ServicePool.init(config))
@@ -1065,7 +1065,7 @@ async def test_shutdown_gate_prevents_cancellation_resistant_init_ready_writebac
     context.load_from_config = AsyncMock(side_effect=cancellation_resistant_load)
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ):
         init_task = asyncio.create_task(ServicePool.init(config))
@@ -1099,7 +1099,7 @@ async def test_failed_initialization_requires_shutdown_before_retry() -> None:
     context.load_from_config = AsyncMock(side_effect=RuntimeError("secret failure"))
 
     with patch(
-        "animetta.core.service_context.ServiceContext",
+        "animetta.runtime.provider_pool.ServiceContext",
         return_value=context,
     ) as context_class:
         with pytest.raises(RuntimeError, match="secret failure"):

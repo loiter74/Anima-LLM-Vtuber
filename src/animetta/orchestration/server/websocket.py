@@ -18,20 +18,9 @@ from starlette.routing import Mount, Route
 
 from animetta.config.manifest import EffectiveConfig
 from animetta.config.observability import ObservabilityConfig
-from animetta.config.runtime_reload import (
-    RuntimeConfigApplyResult,
-    RuntimeConfigReloader,
-    apply_runtime_config_to_contexts,
-    build_runtime_system_prompt,
-)
+from animetta.config.runtime_reloader import RuntimeConfigReloader
 from animetta.config.singing import load_singing_config
 from animetta.config.user import UserSettings
-from animetta.core.component_readiness import ComponentReadinessCache
-from animetta.core.model_loading_manager import ModelLoadingManager
-from animetta.core.readiness import frontend_asset_readiness, unwrap_tracing_proxy
-from animetta.core.redis_checkpoint import RedisCheckpointRuntime
-from animetta.core.service_pool import ServicePool
-from animetta.core.shared_memory_runtime import SharedMemoryRuntime
 from animetta.inspection.runtime import InspectionRuntime
 from animetta.observability.domain import ObservationHealth
 from animetta.observability.ledger import SQLiteObservationLedger
@@ -46,6 +35,12 @@ from animetta.observability.ports import (
 )
 from animetta.orchestration.graph.translation_state import translation_state
 from animetta.orchestration.socket_events import EVENTS
+from animetta.runtime.checkpoint import RedisCheckpointRuntime
+from animetta.runtime.component_readiness import ComponentReadinessCache
+from animetta.runtime.model_loading import ModelLoadingManager
+from animetta.runtime.provider_pool import ProviderPool
+from animetta.runtime.readiness import frontend_asset_readiness, unwrap_tracing_proxy
+from animetta.runtime.shared_memory import SharedMemoryRuntime
 from animetta.services.command_inbox import CommandInbox
 from animetta.services.program_script import (
     ProgramReplayCoordinator,
@@ -53,6 +48,11 @@ from animetta.services.program_script import (
     ProgramScriptRunner,
 )
 from animetta.services.program_script.runtime import build_script_guidance
+from animetta.services.runtime_config import (
+    RuntimeConfigApplyResult,
+    apply_runtime_config_to_contexts,
+    build_runtime_system_prompt,
+)
 from animetta.utils.env_helper import get_data_dir
 
 from .desktop import DesktopClientManager
@@ -83,9 +83,11 @@ class WebSocketServer:
         config: EffectiveConfig | None = None,
         *,
         redis_url: str | None = None,
+        provider_pool: ProviderPool | None = None,
     ) -> None:
         """Initialize WebSocket server"""
         self.config = config
+        self.provider_pool = provider_pool or ProviderPool()
         translation_state.apply_runtime_config(config)
         self.runtime_reloader = RuntimeConfigReloader(config) if config is not None else None
         self._cleanup_lock = asyncio.Lock()
@@ -350,9 +352,10 @@ class WebSocketServer:
         self.asgi_app.state.program_runner = self.program_runner
         self.asgi_app.state.program_replay = self.program_replay
         self.asgi_app.state.command_inbox = self.command_inbox
+        self.asgi_app.state.provider_pool = self.provider_pool
         self.model_manager = ModelLoadingManager()
         set_model_manager(self.model_manager)
-        ServicePool.configure_runtime(self.config, self.model_manager)
+        self.provider_pool.configure_runtime(self.config, self.model_manager)
         set_runtime_readiness_context(self.config, self.frontend_readiness)
         self.component_readiness_cache = ComponentReadinessCache(self.inspection_runtime())
         set_component_readiness_cache(self.component_readiness_cache)
@@ -367,6 +370,7 @@ class WebSocketServer:
             memory_runtime=self.memory_runtime,
             observation_recorder=self.observation_recorder,
             checkpoint_runtime=self.checkpoint_runtime,
+            provider_pool=self.provider_pool,
         )
         self.desktop_manager = DesktopClientManager()
         self.live2d_manager = Live2DManager()
@@ -450,7 +454,7 @@ class WebSocketServer:
             observation_query=self.observation_query,
             report_store=self.observation_report_store,
             memory_runtime=self.memory_runtime,
-            readiness_snapshot=lambda: ServicePool.get_readiness_snapshot(
+            readiness_snapshot=lambda: self.provider_pool.get_readiness_snapshot(
                 config=self.config,
                 model_manager=self.model_manager,
                 frontend=self.frontend_readiness,
@@ -469,7 +473,7 @@ class WebSocketServer:
 
     async def _probe_remote_tts_dependency(self) -> dict[str, Any]:
         """Probe the selected remote worker from the background readiness owner."""
-        target = unwrap_tracing_proxy(ServicePool.get_context().get("tts_engine"))
+        target = unwrap_tracing_proxy(self.provider_pool.get_context().get("tts_engine"))
         check_readiness = getattr(target, "check_readiness", None)
         if not callable(check_readiness):
             raise RuntimeError("remote TTS readiness is unavailable")
@@ -495,7 +499,7 @@ class WebSocketServer:
         self.config = config
         translation_state.apply_runtime_config(config)
         self.runtime_reloader = RuntimeConfigReloader(config)
-        ServicePool.configure_runtime(config, self.model_manager)
+        self.provider_pool.configure_runtime(config, self.model_manager)
         set_runtime_readiness_context(config, self.frontend_readiness)
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
@@ -513,12 +517,15 @@ class WebSocketServer:
             self.runtime_reloader.version = version
         if self.route_handlers:
             self.route_handlers.set_global_config(config)
-        ServicePool.configure_runtime(config, self.model_manager)
+        self.provider_pool.configure_runtime(config, self.model_manager)
         set_runtime_readiness_context(config, self.frontend_readiness)
 
         llm_config = config.agent.llm_config if config.agent else None
         runtime_prompt = build_runtime_system_prompt(config)
-        ServicePool.apply_llm_config(llm_config, system_prompt=runtime_prompt.system_prompt)
+        self.provider_pool.apply_llm_config(
+            llm_config,
+            system_prompt=runtime_prompt.system_prompt,
+        )
         apply_result = apply_runtime_config_to_contexts(
             config,
             version,
@@ -549,7 +556,7 @@ class WebSocketServer:
             return
 
         await self.memory_runtime.initialize()
-        await ServicePool.init(
+        await self.provider_pool.init(
             self.config,
             model_manager=self.model_manager,
             observation_recorder=self.observation_recorder,
@@ -767,7 +774,7 @@ class WebSocketServer:
         set_auth_user_readiness(self.security.user_health.public_dict())
         await self.checkpoint_runtime.close()
         set_checkpoint_readiness(self.checkpoint_runtime.health.public_dict())
-        await ServicePool.shutdown()
+        await self.provider_pool.shutdown()
         if self.observation_ledger is not None:
             await self.observation_ledger.close()
             self.cached_observation_health = await self.observation_ledger.health()

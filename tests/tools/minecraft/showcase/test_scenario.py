@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from animetta.tools.minecraft.showcase.live import ReviewRconSetupExecutor
+from animetta.acceptance.minecraft_showcase import ReviewRconSetupExecutor
 from animetta.tools.minecraft.showcase.scenario import (
     FilesystemScenarioEnvironment,
     PostStartMutationError,

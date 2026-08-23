@@ -231,3 +231,21 @@ class InstrumentedServiceProxy:
     def __repr__(self) -> str:
         target = object.__getattribute__(self, "_target")
         return f"<InstrumentedServiceProxy of {target!r}>"
+
+
+def unwrap_service_proxy(service: Any) -> Any:
+    """Unwrap supported observation/tracing proxies and fail safely on cycles."""
+    from animetta.tracing.proxy import TracingProxy
+
+    current = service
+    seen: set[int] = set()
+    while isinstance(current, (TracingProxy, InstrumentedServiceProxy)):
+        identity = id(current)
+        if identity in seen:
+            return None
+        seen.add(identity)
+        try:
+            current = current._target
+        except Exception:
+            return None
+    return current

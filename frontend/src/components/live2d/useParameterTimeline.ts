@@ -4,7 +4,7 @@ import {
   playAudio,
   type AudioPlaybackLifecycle,
   type AudioPlaybackPayload,
-} from './useAudioPlayback'
+} from '@/shared/audio/playback'
 
 // ===== Timeline State =====
 

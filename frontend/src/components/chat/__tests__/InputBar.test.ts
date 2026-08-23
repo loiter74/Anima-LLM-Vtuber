@@ -8,7 +8,7 @@ const mockUnlockAudioPlayback = vi.hoisted(() => vi.fn())
 vi.mock('@/composables/useMobile', () => ({
   useMobile: () => ({ isMobile: mockIsMobile }),
 }))
-vi.mock('@/components/live2d/useAudioPlayback', () => ({
+vi.mock('@/shared/audio/playback', () => ({
   unlockAudioPlayback: mockUnlockAudioPlayback,
 }))
 

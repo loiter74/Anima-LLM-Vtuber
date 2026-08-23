@@ -7,11 +7,11 @@
 
 ## OVERVIEW
 
-11 Architecture Decision Records documenting binding technical choices. ADRs are **rationale only** — the enforced rules live in `AGENTS.md`. Each ADR follows Michael Nygard's format: Context → Decision → Status → Consequences.
+13 Architecture Decision Records documenting binding technical choices. ADRs are **rationale only** — the enforced rules live in `AGENTS.md`. Each ADR follows Michael Nygard's format: Context → Decision → Status → Consequences.
 
 ## INDEX
 
-All 11 ADRs are `Accepted` (see `README.md`). Each row states the irreversible decision and what it forbids.
+All 13 ADRs are `Accepted` (see `README.md`). Each row states the irreversible decision and what it forbids.
 
 | # | Title | Irreversible decision / forbids |
 |---|-------|----------------------------------|
@@ -26,6 +26,8 @@ All 11 ADRs are `Accepted` (see `README.md`). Each row states the irreversible d
 | 009 | [Live2D Expression](ADR-009-live2d-expression.md) | Emotion→param via `IEmotionAnalyzer`→`ITimelineStrategy`→`IEmotionParamMapper`. ❌ Never use real-time `getBounds()` for scaling — cache `baseBounds`. |
 | 010 | [Bilibili Meme Collection](ADR-010-bilibili-meme-collection.md) | Meme pipeline bound to Bilibili source + scoring schema. ❌ No parallel ad-hoc meme stores. |
 | 011 | [Real-time Audio Pipeline](ADR-011-realtime-audio-pipeline.md) | Audio I/O routes through the unified realtime pipeline. ❌ No per-feature raw audio handling. |
+| 012 | [SQLite Command Inbox](ADR-012-sqlite-command-inbox.md) | Local long-running commands use one idempotent SQLite inbox. ❌ No parallel ad-hoc task ledgers. |
+| 013 | [Unidirectional Module Boundaries](ADR-013-unidirectional-module-boundaries.md) | Production dependencies are acyclic and enforced by the architecture audit. ❌ No reverse layer imports or store→composable edges. |
 
 ## CONVENTIONS
 
@@ -49,6 +51,7 @@ All 11 ADRs are `Accepted` (see `README.md`). Each row states the irreversible d
 | "How do external tools plug in?" | ADR-008 |
 | "Why are Live2D params computed this way?" | ADR-009 (cached `baseBounds`) |
 | "How does the meme/singing pipeline source audio?" | ADR-010, ADR-011 |
+| "Can this module import a higher layer?" | ADR-013 → **No**; inject a consumer-owned port |
 | Add a new ADR | Next number, Nygard format, update `README.md` index |
 
 ## NOTES

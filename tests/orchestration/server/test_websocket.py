@@ -424,12 +424,14 @@ class TestPrewarmServices:
     async def test_prewarm_services_with_config(self, websocket_server):
         """prewarm_services initializes ServicePool when config is set."""
         websocket_server.memory_runtime.initialize = AsyncMock()
-        with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
-            mock_pool.init = AsyncMock()
-
+        with patch.object(
+            websocket_server.provider_pool,
+            "init",
+            new=AsyncMock(),
+        ) as init:
             await websocket_server.prewarm_services()
 
-            mock_pool.init.assert_called_once_with(
+            init.assert_called_once_with(
                 websocket_server.config,
                 model_manager=websocket_server.model_manager,
                 observation_recorder=websocket_server.observation_recorder,
@@ -451,9 +453,9 @@ class TestPrewarmServices:
 
             server = WebSocketServer(config=None)
 
-        with patch("animetta.orchestration.server.websocket.ServicePool") as mock_pool:
+        with patch.object(server.provider_pool, "init", new=AsyncMock()) as init:
             await server.prewarm_services()
-            mock_pool.init.assert_not_called()
+            init.assert_not_called()
 
 
 # ── WebSocketServer — cleanup ──────────────────────────────────────
@@ -471,8 +473,9 @@ class TestCleanup:
         websocket_server.session_manager.cleanup_all = AsyncMock()
         websocket_server.memory_runtime.shutdown = AsyncMock()
 
-        with patch(
-            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+        with patch.object(
+            websocket_server.provider_pool,
+            "shutdown",
             new=AsyncMock(),
         ) as shutdown:
             await websocket_server._cleanup_all_resources()
@@ -487,8 +490,9 @@ class TestCleanup:
         """stop() triggers _cleanup_all_resources."""
         websocket_server.session_manager.cleanup_all = AsyncMock()
 
-        with patch(
-            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+        with patch.object(
+            websocket_server.provider_pool,
+            "shutdown",
             new=AsyncMock(),
         ) as shutdown:
             await websocket_server.stop()
@@ -506,8 +510,9 @@ class TestCleanup:
         )
 
         with (
-            patch(
-                "animetta.orchestration.server.websocket.ServicePool.shutdown",
+            patch.object(
+                websocket_server.provider_pool,
+                "shutdown",
                 new=AsyncMock(),
             ) as shutdown,
             patch("animetta.orchestration.server.websocket.logger.warning") as warning,
@@ -567,8 +572,9 @@ class TestBackgroundTaskSupervisor:
         await entered.wait()
         websocket_server.session_manager.cleanup_all = AsyncMock()
 
-        with patch(
-            "animetta.orchestration.server.websocket.ServicePool.shutdown",
+        with patch.object(
+            websocket_server.provider_pool,
+            "shutdown",
             new=AsyncMock(),
         ) as shutdown:
             await websocket_server.stop()

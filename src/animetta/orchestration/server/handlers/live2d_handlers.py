@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from animetta.core.message_filter import is_probe_message
+from animetta.services.dialogue.message_filter import is_probe_message
 from animetta.services.live2d.action_queue import ActionMessage
 
 from ...socket_events import EVENTS

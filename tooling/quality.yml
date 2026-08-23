@@ -568,6 +568,19 @@ groups:
     resource_weight: 1
     input_sets: [python-toolchain, python-maintained-source]
 
+  architecture-boundary-audit:
+    domain: repository
+    kind: contract
+    runner: python
+    entrypoint: scripts/check_architecture_boundaries.py
+    args: [--check]
+    timeout_seconds: 120
+    include_in_full: true
+    cacheable: true
+    resource_class: light
+    resource_weight: 1
+    input_sets: [python-toolchain, python-maintained-source, frontend-runtime]
+
   minecraft-adaptive-mission-unit:
     domain: backend
     kind: unit
@@ -985,6 +998,8 @@ components:
     domain: backend
     paths:
       - src/animetta/core/redis_checkpoint.py
+      - src/animetta/checkpointing.py
+      - src/animetta/runtime/checkpoint.py
       - src/animetta/orchestration/graph/checkpointing.py
       - src/animetta/orchestration/graph/builder.py
       - src/animetta/orchestration/graph/orchestrator.py
@@ -1097,6 +1112,7 @@ components:
       - tests/tooling/**
       - scripts/health_check.py
       - scripts/check_minecraft_architecture.py
+      - scripts/check_architecture_boundaries.py
       - tests/smoke/test_health_check.py
     direct_groups:
       - backend-tooling-quality
@@ -1104,6 +1120,7 @@ components:
       - backend-static
       - python-format
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: []
     risk: normal
 
@@ -1261,6 +1278,14 @@ components:
       - src/animetta/core/service_context.py
       - src/animetta/core/service_pool.py
       - src/animetta/core/socketio_server.py
+      - src/animetta/__init__.py
+      - src/animetta/runtime/__init__.py
+      - src/animetta/runtime/component_readiness.py
+      - src/animetta/runtime/model_loading.py
+      - src/animetta/runtime/provider_pool.py
+      - src/animetta/runtime/readiness.py
+      - src/animetta/runtime/session_context.py
+      - scripts/bench.py
     direct_groups:
       - backend-core-unit
       - backend-route-smoke
@@ -1268,12 +1293,15 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-server, orchestration-graph]
     risk: high
 
   backend-memory-runtime:
     domain: backend
-    paths: [src/animetta/core/shared_memory_runtime.py]
+    paths:
+      - src/animetta/core/shared_memory_runtime.py
+      - src/animetta/runtime/shared_memory.py
     direct_groups:
       - backend-core-unit
       - backend-services-unit
@@ -1282,6 +1310,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-server, orchestration-graph]
     risk: normal
 
@@ -1295,6 +1324,7 @@ components:
       - src/animetta/config/observability.py
       - src/animetta/config/proactive_topics.py
       - src/animetta/config/runtime_reload.py
+      - src/animetta/config/runtime_reloader.py
       - src/animetta/config/scene_analysis.py
       - src/animetta/config/system.py
       - src/animetta/config/user.py
@@ -1312,6 +1342,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [backend-core]
     risk: high
 
@@ -1458,6 +1489,8 @@ components:
     domain: backend
     paths:
       - src/animetta/orchestration/server/**
+      - src/animetta/orchestration/socket_events.py
+      - src/animetta/socket_event_catalog.py
       - tests/orchestration/server/**
       - tests/orchestration/*.py
     direct_groups:
@@ -1467,6 +1500,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-graph]
     risk: normal
 
@@ -1483,6 +1517,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: []
     risk: normal
 
@@ -1498,6 +1533,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-graph]
     risk: normal
 
@@ -1512,6 +1548,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-graph]
     risk: normal
 
@@ -1526,6 +1563,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-server]
     risk: normal
 
@@ -1544,6 +1582,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [backend-core]
     risk: normal
 
@@ -1576,6 +1615,7 @@ components:
       - backend-static
       - backend-typecheck
       - backend-deadcode
+      - architecture-boundary-audit
     impacts: [orchestration-graph]
     risk: normal
 
@@ -1596,6 +1636,7 @@ components:
       - frontend-format
       - frontend-deadcode
       - frontend-duplicates
+      - architecture-boundary-audit
     impacts: [frontend-build-control]
     risk: normal
 
@@ -1606,6 +1647,7 @@ components:
       - frontend/tests/review*.test.ts
       - frontend/tests/tts-*.test.ts
       - frontend/src/live2d-performance/**
+      - frontend/src/review/live2d-performance/**
       - frontend/src/tts-failover/**
     direct_groups:
       - frontend-tests
@@ -1614,6 +1656,7 @@ components:
       - frontend-format
       - frontend-deadcode
       - frontend-duplicates
+      - architecture-boundary-audit
     impacts: [frontend-build-control]
     risk: normal
 

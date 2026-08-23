@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from animetta.orchestration.graph.checkpointing import CheckpointRequest
+from animetta.checkpointing import CheckpointRequest
 from animetta.services.bilibili.models import LivestreamEvent, LivestreamEventType
 from animetta.services.bilibili.replay_gateway import ReplayDanmakuGateway
 

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from animetta.orchestration.prompting.roleplay_guard import detect_drift
+from animetta.services.dialogue.roleplay_guard import detect_drift
 
 IDENTITY_KEYS = ("message_id", "conversation_id", "task_id", "turn_id")
 GOLDEN_EVENTS = {

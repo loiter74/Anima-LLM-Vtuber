@@ -2,7 +2,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { useSingingStore } from '@/stores/singing'
 import { useSinging } from '@/composables/useSinging'
-import { startLipSync, stopLipSync } from '@/components/live2d/useLipSync'
+import { startLipSync, stopLipSync } from '@/shared/audio/lipSync'
 import { writeSingingPlayback, type SingingPlaybackState } from '@/singing/playback-sync'
 import WaveformDisplay from './WaveformDisplay.vue'
 import PlaybackControls from './PlaybackControls.vue'

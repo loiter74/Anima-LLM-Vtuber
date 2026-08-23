@@ -63,7 +63,7 @@ vi.mock('@/composables/useSocket', () => ({
   getSocket: () => mockSocket,
 }))
 
-vi.mock('@/components/live2d/useAudioPlayback', () => audioPlayback)
+vi.mock('@/shared/audio/playback', () => audioPlayback)
 
 describe('useLive2D', () => {
   let canvasRef: Ref<HTMLCanvasElement | null>

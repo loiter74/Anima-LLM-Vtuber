@@ -3,16 +3,15 @@ import type {
   AudioStreamEndEvent,
   AudioStreamStartEvent,
   ParameterTimeline,
-} from '@/types/socket-events'
-import { startLipSync, stopLipSync, type MouthTarget } from './useLipSync'
-import { setExpression } from './useLive2DModel'
+} from '@/shared/contracts/socket-events'
+import { startLipSync, stopLipSync, type MouthTarget } from './lipSync'
 import {
   endPcmAudioStream,
   pushPcmAudioStreamChunk,
   startPcmAudioStream,
   stopPcmAudioStream,
   unlockPcmAudioPlayback,
-} from './usePcmStreamPlayback'
+} from './pcmStreamPlayback'
 
 // ===== Audio State =====
 
@@ -121,7 +120,6 @@ export function playAudio(
     const completed = currentLifecycle
     currentLifecycle = null
     stopLipSync()
-    if (data.return_to_idle) setExpression('idle')
     cleanup()
     completed?.onComplete?.()
   }

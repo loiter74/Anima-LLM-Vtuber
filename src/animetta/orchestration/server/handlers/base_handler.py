@@ -20,7 +20,8 @@ from animetta.config.user import UserSettings
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
-    from ....core.service_context import ServiceContext
+    from animetta.runtime.session_context import ServiceContext
+
     from ...graph.orchestrator import LangGraphOrchestrator
     from ..desktop import DesktopClientManager
     from ..live2d import Live2DManager

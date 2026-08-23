@@ -13,8 +13,8 @@ import {
   startAudioStream,
   stopAudio,
   unlockAudioPlayback,
-} from '@/components/live2d/useAudioPlayback'
-import { startLipSync, stopLipSync } from '@/components/live2d/useLipSync'
+} from '@/shared/audio/playback'
+import { startLipSync, stopLipSync } from '@/shared/audio/lipSync'
 import {
   clearSingingPlayback,
   readSingingPlayback,

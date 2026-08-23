@@ -2,9 +2,9 @@ import type {
   AudioStreamChunkEvent,
   AudioStreamEndEvent,
   AudioStreamStartEvent,
-} from '@/types/socket-events'
-import { setMouthTarget, type MouthTarget } from './useLipSync'
-import type { AudioPlaybackLifecycle } from './useAudioPlayback'
+} from '@/shared/contracts/socket-events'
+import { setMouthTarget, type MouthTarget } from './lipSync'
+import type { AudioPlaybackLifecycle } from './playback'
 import { createMouthEnvelope, type MouthEnvelope } from './mouthEnvelope'
 
 const INITIAL_BUFFER_SECONDS = 0.2

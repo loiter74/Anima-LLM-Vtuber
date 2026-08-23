@@ -1,10 +1,8 @@
 import { Events, type BilibiliStatusPayload } from '@/constants/socket-events'
 import type { DanmakuItem } from '@/types/chat'
+import type { LiveSocket } from '@/shared/transport/liveSocket'
 
-export interface LiveSocket {
-  on(event: string, handler: (...args: unknown[]) => void): LiveSocket
-  off(event: string, handler: (...args: unknown[]) => void): LiveSocket
-}
+export type { LiveSocket } from '@/shared/transport/liveSocket'
 
 export interface BackgroundConfig {
   file: string | null

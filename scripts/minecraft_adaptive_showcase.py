@@ -11,10 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
-from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
-from animetta.tools.minecraft.core.config import MinecraftConfig, MinecraftMcpConfig
-from animetta.tools.minecraft.mission.events import ProjectionEventPublisher
-from animetta.tools.minecraft.showcase.live import (
+from animetta.acceptance.minecraft_showcase import (
     ConfiguredModelEvidenceNarrator,
     DesktopShowcaseCapture,
     LiveShowcaseBackend,
@@ -23,6 +20,9 @@ from animetta.tools.minecraft.showcase.live import (
     configured_showcase_llm_from_environment,
     create_ordinary_showcase_submitter,
 )
+from animetta.tools.minecraft.core.bridge import MinecraftMcpBridge
+from animetta.tools.minecraft.core.config import MinecraftConfig, MinecraftMcpConfig
+from animetta.tools.minecraft.mission.events import ProjectionEventPublisher
 from animetta.tools.minecraft.showcase.projection_relay import ShowcaseProjectionServer
 from animetta.tools.minecraft.showcase.promotion import (
     AcceptanceLedger,
