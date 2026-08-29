@@ -556,6 +556,42 @@ def test_system_lifecycle_redacts_image_inspect_summary(monkeypatch, tmp_path) -
     assert "[REDACTED]" in evidence
 
 
+@pytest.mark.parametrize(
+    ("script", "expected_evidence", "expected_success"),
+    [
+        (
+            "import sys; sys.stdout.buffer.write('ready — /api\\n'.encode())",
+            "ready — /api\n",
+            True,
+        ),
+        (
+            "import sys; sys.stdout.buffer.write(b'\\xffservice ERROR\\n')",
+            "\ufffdservice ERROR\n",
+            False,
+        ),
+    ],
+)
+def test_system_lifecycle_preserves_utf8_and_invalid_log_bytes(
+    tmp_path,
+    script: str,
+    expected_evidence: str,
+    expected_success: bool,
+) -> None:
+    driver = runtime_lifecycle._SystemLifecycleDriver(evidence_root=tmp_path)
+    command = (
+        runtime_lifecycle.sys.executable,
+        "-c",
+        script,
+    )
+
+    result = driver.check_logs(command, timeout_seconds=10)
+
+    assert result.succeeded is expected_success
+    command_digest = hashlib.sha256(repr(command).encode()).hexdigest()[:12]
+    evidence = (tmp_path / f"command-{command_digest}.log").read_text(encoding="utf-8")
+    assert evidence == expected_evidence
+
+
 def test_http_body_contract_distinguishes_health_and_readiness() -> None:
     assert runtime_lifecycle._valid_http_body(
         "http://localhost/health",
