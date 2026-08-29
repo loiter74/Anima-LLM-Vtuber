@@ -456,7 +456,13 @@ jobs:
   package:
     name: Publish GHCR image
     needs: quality-gate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{
+        !cancelled()
+        && needs.quality-gate.result == 'success'
+        && github.event_name == 'push'
+        && github.ref == 'refs/heads/main'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     outputs:
@@ -572,7 +578,13 @@ jobs:
   promote-main:
     name: Promote GHCR main tag
     needs: package
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      ${{
+        !cancelled()
+        && needs.package.result == 'success'
+        && github.event_name == 'push'
+        && github.ref == 'refs/heads/main'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:

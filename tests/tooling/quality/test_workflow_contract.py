@@ -183,6 +183,8 @@ def test_main_package_publishes_immutable_amd64_image_with_minimal_write_scope()
     commands = _commands(package)
 
     assert package["needs"] == "quality-gate"
+    assert "!cancelled()" in package["if"]
+    assert "needs.quality-gate.result == 'success'" in package["if"]
     assert "github.event_name == 'push'" in package["if"]
     assert "github.ref == 'refs/heads/main'" in package["if"]
     assert package["permissions"] == {"contents": "read", "packages": "write"}
@@ -254,6 +256,8 @@ def test_main_tag_promotion_is_serialized_and_never_rebuilds_the_image() -> None
     commands = _commands(promotion)
 
     assert promotion["needs"] == "package"
+    assert "!cancelled()" in promotion["if"]
+    assert "needs.package.result == 'success'" in promotion["if"]
     assert promotion["permissions"] == {"contents": "read", "packages": "write"}
     assert promotion["concurrency"] == {
         "group": "animetta-ghcr-main-promotion",
