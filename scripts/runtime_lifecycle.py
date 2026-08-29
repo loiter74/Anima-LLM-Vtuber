@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -166,9 +166,19 @@ def _host_tts_listener_pid() -> int | None:
     return pid if pid > 0 else None
 
 
+def _environment_secret(name: str) -> str:
+    value = os.getenv(name)
+    if value is None:
+        value = dotenv_values(ROOT / ".env").get(name)
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _host_token() -> str:
-    load_dotenv(ROOT / ".env", override=False)
-    return os.getenv("QWEN_TTS_API_KEY", "").strip()
+    return _environment_secret("QWEN_TTS_API_KEY")
+
+
+def _animetta_access_token() -> str:
+    return _environment_secret("ANIMETTA_ACCESS_TOKEN")
 
 
 def _host_request_json(path: str, token: str) -> dict[str, object]:
@@ -597,6 +607,7 @@ class _SystemLifecycleDriver:
         *,
         evidence_root: Path,
         environment: dict[str, str] | None = None,
+        access_token: str | None = None,
     ) -> None:
         from tooling.execution_feedback.lifecycle import LifecycleDriverObservation
 
@@ -604,9 +615,16 @@ class _SystemLifecycleDriver:
         self._evidence_root = evidence_root.resolve()
         self._evidence_root.mkdir(parents=True, exist_ok=True)
         self._environment = dict(environment or {})
+        self._access_token = access_token or ""
+
+    def _redact(self, contents: str) -> str:
+        if self._access_token:
+            contents = contents.replace(self._access_token, "[REDACTED]")
+        return contents
 
     def _evidence(self, name: str, contents: str) -> str:
         path = self._evidence_root / f"{name}.log"
+        contents = self._redact(contents)
         path.write_text(contents, encoding="utf-8")
         return path.resolve().as_posix()
 
@@ -691,7 +709,9 @@ class _SystemLifecycleDriver:
             summary = f"command completed with exit code {completed.returncode}"
             if completed.returncode == 0 and command[:3] == ("docker", "image", "inspect"):
                 digest = completed.stdout.strip()
-                summary = f"resolved image digest: {digest[:240]}" if digest else summary
+                summary = self._redact(
+                    f"resolved image digest: {digest[:240]}" if digest else summary
+                )
             elif completed.returncode != 0 and command[:3] == ("docker", "compose", "pull"):
                 lowered = output.casefold()
                 if "unauthorized" in lowered or "denied" in lowered:
@@ -719,11 +739,28 @@ class _SystemLifecycleDriver:
             )
 
     def check_http(self, target: str, *, timeout_seconds: float):
+        requires_authentication = target == "http://localhost/ready"
+        invalid_access_token = any(character in self._access_token for character in "\r\n")
+        if requires_authentication and (not self._access_token or invalid_access_token):
+            reference = self._evidence(
+                "http-auth-configuration",
+                "ANIMETTA_ACCESS_TOKEN is unavailable or invalid\n",
+            )
+            return self._observation_type(
+                succeeded=False,
+                summary="ANIMETTA_ACCESS_TOKEN is required and must be a valid header value",
+                evidence_refs=(reference,),
+            )
+
+        headers = (
+            {"Authorization": f"Bearer {self._access_token}"} if requires_authentication else {}
+        )
+        request = urllib.request.Request(target, headers=headers)
         deadline = time.monotonic() + timeout_seconds
         last_error = "no response"
         while time.monotonic() < deadline:
             try:
-                with urllib.request.urlopen(target, timeout=3) as response:  # noqa: S310
+                with urllib.request.urlopen(request, timeout=3) as response:  # noqa: S310
                     body = response.read().decode("utf-8", errors="replace")
                     healthy = response.status == 200 and _valid_http_body(target, body)
                     if healthy:
@@ -738,8 +775,12 @@ class _SystemLifecycleDriver:
                             exit_code=0,
                         )
                     last_error = f"HTTP {response.status} or invalid health body"
-            except (OSError, TimeoutError, urllib.error.URLError) as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
+            except urllib.error.HTTPError as exc:
+                last_error = f"HTTP {exc.code}"
+                if exc.code in {401, 403}:
+                    break
+            except (OSError, TimeoutError, urllib.error.URLError, ValueError) as exc:
+                last_error = type(exc).__name__
             time.sleep(5)
         reference = self._evidence("http-timeout", last_error)
         return self._observation_type(
@@ -891,6 +932,7 @@ async def run_bounded_operation(
         driver=_SystemLifecycleDriver(
             evidence_root=run_root / "evidence",
             environment=runtime_environment,
+            access_token=_animetta_access_token() if operation == "anima-deploy" else None,
         ),
         build_controller=build_controller,
     )

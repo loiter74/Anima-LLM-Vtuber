@@ -240,6 +240,12 @@ def test_build_lease_changes_with_the_frozen_plan_input() -> None:
     assert runtime_lifecycle._build_lease_id("same-run", first_digest) != (
         runtime_lifecycle._build_lease_id("same-run", second_digest)
     )
+    for access_token in ("first-secret", "rotated-secret"):
+        assert first_digest == runtime_lifecycle._build_command_digest(
+            runtime_lifecycle._ANIMETTA_BUILD_COMMAND,
+            environment={**environment, "ANIMETTA_ACCESS_TOKEN": access_token},
+            input_fingerprint="a" * 64,
+        )
 
 
 async def test_main_deploy_does_not_reuse_passed_checkpoints(
@@ -247,10 +253,17 @@ async def test_main_deploy_does_not_reuse_passed_checkpoints(
     tmp_path,
 ) -> None:
     driver = FakeLifecycleDriver()
+    driver_arguments: list[dict[str, object]] = []
+
+    def fake_driver(**kwargs):
+        driver_arguments.append(kwargs)
+        return driver
+
+    monkeypatch.setattr(runtime_lifecycle, "_animetta_access_token", lambda: "runtime-secret")
     monkeypatch.setattr(
         runtime_lifecycle,
         "_SystemLifecycleDriver",
-        lambda **_kwargs: driver,
+        fake_driver,
     )
     image = "ghcr.io/loiter74/animetta:main"
 
@@ -283,6 +296,15 @@ async def test_main_deploy_does_not_reuse_passed_checkpoints(
         len(driver.http_targets),
         len(driver.log_commands),
     ) == tuple(count * 2 for count in first_counts)
+    assert [arguments["access_token"] for arguments in driver_arguments] == [
+        "runtime-secret",
+        "runtime-secret",
+    ]
+    assert all(
+        "runtime-secret" not in path.read_text(encoding="utf-8", errors="replace")
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    )
 
 
 @pytest.mark.parametrize(
@@ -475,6 +497,7 @@ def test_system_lifecycle_reports_registry_authentication_failure(
     tmp_path,
 ) -> None:
     image = "ghcr.io/loiter74/animetta:main"
+    access_token = "runtime-secret"
 
     def fake_run(command, **kwargs):
         assert kwargs["env"]["ANIMETTA_IMAGE"] == image
@@ -482,13 +505,14 @@ def test_system_lifecycle_reports_registry_authentication_failure(
             command,
             1,
             "",
-            "unauthorized: access denied",
+            f"unauthorized: access denied for {access_token}",
         )
 
     monkeypatch.setattr(runtime_lifecycle.subprocess, "run", fake_run)
     driver = runtime_lifecycle._SystemLifecycleDriver(
         evidence_root=tmp_path,
         environment={"ANIMETTA_IMAGE": image},
+        access_token=access_token,
     )
 
     result = driver.run_command(
@@ -498,6 +522,38 @@ def test_system_lifecycle_reports_registry_authentication_failure(
 
     assert result.succeeded is False
     assert "docker login ghcr.io" in result.summary
+    assert all(access_token not in path.read_text(encoding="utf-8") for path in tmp_path.iterdir())
+
+
+def test_system_lifecycle_redacts_image_inspect_summary(monkeypatch, tmp_path) -> None:
+    access_token = "runtime-secret"
+
+    def fake_run(command, **_kwargs):
+        return runtime_lifecycle.subprocess.CompletedProcess(
+            command,
+            0,
+            f"sha256:abc{access_token}",
+            "",
+        )
+
+    monkeypatch.setattr(runtime_lifecycle.subprocess, "run", fake_run)
+    driver = runtime_lifecycle._SystemLifecycleDriver(
+        evidence_root=tmp_path,
+        access_token=access_token,
+    )
+
+    result = driver.run_command(
+        ("docker", "image", "inspect", "animetta"),
+        timeout_seconds=240,
+    )
+
+    assert result.succeeded is True
+    assert access_token not in result.summary
+    assert access_token not in "".join(result.evidence_refs)
+    evidence = "\n".join(path.read_text(encoding="utf-8") for path in tmp_path.iterdir())
+    assert access_token not in evidence
+    assert "[REDACTED]" in result.summary
+    assert "[REDACTED]" in evidence
 
 
 def test_http_body_contract_distinguishes_health_and_readiness() -> None:
@@ -513,6 +569,133 @@ def test_http_body_contract_distinguishes_health_and_readiness() -> None:
         "http://localhost/ready",
         '{"ready":false}',
     )
+
+
+def test_system_lifecycle_authenticates_only_the_protected_readiness_check(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    access_token = "runtime-secret"
+    requests: list[tuple[str, str | None]] = []
+    bodies = {
+        "http://localhost/health": '{"status":"ok"}',
+        "http://localhost/ready": (f'{{"ready":true,"unexpected_echo":"{access_token}"}}'),
+        "http://localhost": "<!doctype html><title>Animetta</title>",
+    }
+
+    class FakeResponse:
+        status = 200
+
+        def __init__(self, body: str) -> None:
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self._body.encode()
+
+    def fake_urlopen(request, *, timeout: float):
+        assert timeout == 3
+        requests.append((request.full_url, request.get_header("Authorization")))
+        return FakeResponse(bodies[request.full_url])
+
+    monkeypatch.setattr(runtime_lifecycle.urllib.request, "urlopen", fake_urlopen)
+    driver = runtime_lifecycle._SystemLifecycleDriver(
+        evidence_root=tmp_path,
+        access_token=access_token,
+    )
+
+    for target in bodies:
+        result = driver.check_http(target, timeout_seconds=1)
+        assert result.succeeded is True
+
+    assert requests == [
+        ("http://localhost/health", None),
+        ("http://localhost/ready", f"Bearer {access_token}"),
+        ("http://localhost", None),
+    ]
+    assert all(access_token not in path.read_text(encoding="utf-8") for path in tmp_path.iterdir())
+    assert "[REDACTED]" in "\n".join(
+        path.read_text(encoding="utf-8") for path in tmp_path.iterdir()
+    )
+
+
+def test_system_lifecycle_redacts_http_authentication_errors(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    access_token = "runtime-secret"
+
+    def fake_urlopen(request, *, timeout: float):
+        assert request.get_header("Authorization") == f"Bearer {access_token}"
+        assert timeout == 3
+        raise runtime_lifecycle.urllib.error.HTTPError(
+            request.full_url,
+            401,
+            f"denied {access_token}",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(runtime_lifecycle.urllib.request, "urlopen", fake_urlopen)
+    driver = runtime_lifecycle._SystemLifecycleDriver(
+        evidence_root=tmp_path,
+        access_token=access_token,
+    )
+
+    result = driver.check_http("http://localhost/ready", timeout_seconds=240)
+
+    assert result.succeeded is False
+    assert access_token not in result.summary
+    assert access_token not in "".join(result.evidence_refs)
+    assert access_token not in (tmp_path / "http-timeout.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("access_token", [None, "invalid\r\nheader"])
+def test_system_lifecycle_fails_closed_when_readiness_token_is_unusable(
+    monkeypatch,
+    tmp_path,
+    access_token: str | None,
+) -> None:
+    monkeypatch.setattr(
+        runtime_lifecycle.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: pytest.fail("readiness request must not be sent"),
+    )
+    driver = runtime_lifecycle._SystemLifecycleDriver(
+        evidence_root=tmp_path,
+        access_token=access_token,
+    )
+
+    result = driver.check_http("http://localhost/ready", timeout_seconds=240)
+
+    assert result.succeeded is False
+    assert "ANIMETTA_ACCESS_TOKEN" in result.summary
+    assert "unavailable" in (tmp_path / "http-auth-configuration.log").read_text(encoding="utf-8")
+
+
+def test_environment_secret_reads_dotenv_without_mutating_process_environment(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(runtime_lifecycle, "ROOT", tmp_path)
+    monkeypatch.delenv("ANIMETTA_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("UNRELATED_SECRET", raising=False)
+    (tmp_path / ".env").write_text(
+        "ANIMETTA_ACCESS_TOKEN=file-secret\nUNRELATED_SECRET=hidden\n",
+        encoding="utf-8",
+    )
+
+    assert runtime_lifecycle._animetta_access_token() == "file-secret"
+    assert "ANIMETTA_ACCESS_TOKEN" not in runtime_lifecycle.os.environ
+    assert "UNRELATED_SECRET" not in runtime_lifecycle.os.environ
+
+    monkeypatch.setenv("ANIMETTA_ACCESS_TOKEN", "process-secret")
+    assert runtime_lifecycle._animetta_access_token() == "process-secret"
 
 
 def test_system_lifecycle_preflight_targets_host_runtime(
