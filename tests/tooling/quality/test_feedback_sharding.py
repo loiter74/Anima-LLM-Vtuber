@@ -17,6 +17,7 @@ from tooling.quality.models import (
     Isolation,
     PlannedGroup,
     ResourceClass,
+    ResultStatus,
     Runner,
     SchedulerPolicy,
     Tier,
@@ -163,9 +164,29 @@ def test_timeout_subdivision_uses_only_reported_remaining_tests() -> None:
     )
     assert all(item.root_shard_id == shard.root_shard_id for item in continuations)
     partial = aggregate_quality_group(feedback, "collect", (timed_out,))
+    resumed = aggregate_quality_group(
+        feedback,
+        "collect",
+        (timed_out, *(_result(continuation) for continuation in continuations)),
+    )
+    expired = timed_out.model_copy(update={"status": FeedbackStatus.TIMED_OUT})
+    expired_partial = aggregate_quality_group(feedback, "collect", (expired,))
+    expired_resumed = aggregate_quality_group(
+        feedback,
+        "collect",
+        (expired, *(_result(continuation) for continuation in continuations)),
+    )
     assert partial.complete is False
     assert partial.cache_eligible is False
-    assert partial.result is None
+    assert partial.result is not None
+    assert partial.result.status is ResultStatus.BLOCKED
+    assert resumed.complete is True
+    assert resumed.result is not None
+    assert resumed.result.status is ResultStatus.PASSED
+    assert expired_partial.result is not None
+    assert expired_partial.result.status is ResultStatus.FAILED
+    assert expired_resumed.result is not None
+    assert expired_resumed.result.status is ResultStatus.PASSED
 
 
 def test_sharding_also_bounds_generated_command_line_size() -> None:
@@ -320,4 +341,7 @@ def test_feedback_scheduler_publishes_terminal_evidence_for_dependency_blocked_s
     assert all(
         result.status in {FeedbackStatus.BLOCKED, FeedbackStatus.CANCELLED} for result in blocked
     )
+    assert tuple(result.group_id for result in outcome.group_results) == ("collect", "verify")
+    assert all(result.status is not ResultStatus.PASSED for result in outcome.group_results)
+    assert all(result.artifacts == () for result in outcome.group_results)
     assert outcome.incomplete_groups == ("collect", "verify")

@@ -323,22 +323,14 @@ def aggregate_quality_group(
     completed_set = {test_id for result in relevant for test_id in result.completed_test_ids}
     completed = tuple(test_id for test_id in expected_ids if test_id in completed_set)
     remaining = tuple(test_id for test_id in expected_ids if test_id not in completed_set)
-    represented_roots = {result.root_shard_id for result in relevant}
     expected_roots = {shard.root_shard_id for shard in planned_shards}
-    terminal_empty_shards = {
-        result.root_shard_id
-        for result in relevant
-        if not result.test_ids
-        and result.status
-        in {FeedbackStatus.PASSED, FeedbackStatus.FAILED, FeedbackStatus.CANCELLED}
-    }
-    empty_roots = {shard.root_shard_id for shard in planned_shards if not shard.test_ids}
-    complete = (
-        not remaining
-        and represented_roots.issuperset(expected_roots)
-        and terminal_empty_shards.issuperset(empty_roots)
-    )
-    if not complete:
+    terminal_results = tuple(result for result in relevant if result.phase == "terminal")
+    terminal_roots = {result.root_shard_id for result in terminal_results}
+    statuses = {result.status for result in terminal_results}
+    all_roots_represented = terminal_roots.issuperset(expected_roots)
+    complete = not remaining and all_roots_represented
+    has_nonpassing_result = bool(statuses - {FeedbackStatus.PASSED})
+    if not complete and not (all_roots_represented and has_nonpassing_result):
         return QualityGroupAggregation(
             group_id=group_id,
             complete=False,
@@ -348,27 +340,36 @@ def aggregate_quality_group(
             coverage_artifacts=(),
         )
 
-    failure_statuses = {
-        FeedbackStatus.FAILED,
-        FeedbackStatus.TIMED_OUT,
-        FeedbackStatus.BLOCKED,
-        FeedbackStatus.CANCELLED,
-    }
-    failed = any(result.status in failure_statuses for result in relevant)
-    artifacts = tuple(
-        artifact
-        for artifact in group.artifacts
-        if any(artifact in result.artifacts for result in relevant)
+    if FeedbackStatus.FAILED in statuses or (not complete and FeedbackStatus.TIMED_OUT in statuses):
+        status = ResultStatus.FAILED
+    elif FeedbackStatus.CANCELLED in statuses:
+        status = ResultStatus.CANCELLED
+    elif FeedbackStatus.BLOCKED in statuses or (
+        not complete and FeedbackStatus.IN_PROGRESS in statuses
+    ):
+        status = ResultStatus.BLOCKED
+    else:
+        status = ResultStatus.PASSED
+    artifacts = (
+        tuple(
+            artifact
+            for artifact in group.artifacts
+            if any(artifact in result.artifacts for result in relevant)
+        )
+        if complete
+        else ()
     )
     duration = sum(result.duration_seconds for result in relevant)
     verification = VerificationResult(
         group_id=group.id,
         required=group.required,
-        status=ResultStatus.FAILED if failed else ResultStatus.PASSED,
-        exit_code=1 if failed else 0,
+        status=status,
+        exit_code=(
+            1 if status is ResultStatus.FAILED else 0 if status is ResultStatus.PASSED else None
+        ),
         duration_seconds=duration,
         run_seconds=duration,
-        failure_kind="feedback-shard" if failed else None,
+        failure_kind=None if status is ResultStatus.PASSED else "feedback-shard",
         artifacts=artifacts,
         plan_hash=plan.plan_hash,
         manifest_hash=plan.manifest_hash,
@@ -376,16 +377,17 @@ def aggregate_quality_group(
         output="\n".join(result.output for result in relevant if result.output),
     )
     cache_eligible = (
-        group.cacheable
+        complete
+        and group.cacheable
         and verification.status is ResultStatus.PASSED
         and set(artifacts) == set(group.artifacts)
     )
     return QualityGroupAggregation(
         group_id=group_id,
-        complete=True,
+        complete=complete,
         cache_eligible=cache_eligible,
         completed_test_ids=completed,
-        remaining_test_ids=(),
+        remaining_test_ids=remaining,
         coverage_artifacts=artifacts,
         result=verification,
     )

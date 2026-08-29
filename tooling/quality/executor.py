@@ -249,7 +249,7 @@ def run_group(
     started = time.perf_counter()
     try:
         popen_kwargs: dict[str, Any] = {}
-        if os.name == "nt":
+        if sys.platform == "win32":
             popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             popen_kwargs["start_new_session"] = True

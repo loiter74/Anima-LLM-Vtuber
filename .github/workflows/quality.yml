@@ -172,6 +172,8 @@ jobs:
           name: quality-result-python-${{ matrix.group }}
           path: |
             artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/results/feedback/**
+            artifacts/test-impact/results/events/**
             artifacts/test-impact/logs/${{ matrix.group }}.log
           if-no-files-found: warn
           retention-days: 14
@@ -234,6 +236,8 @@ jobs:
           name: quality-result-node-${{ matrix.group }}
           path: |
             artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/results/feedback/**
+            artifacts/test-impact/results/events/**
             artifacts/test-impact/logs/${{ matrix.group }}.log
           if-no-files-found: warn
           retention-days: 14
@@ -304,6 +308,8 @@ jobs:
           name: quality-result-service-${{ matrix.group }}
           path: |
             artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/results/feedback/**
+            artifacts/test-impact/results/events/**
             artifacts/test-impact/logs/${{ matrix.group }}.log
           if-no-files-found: warn
           retention-days: 14

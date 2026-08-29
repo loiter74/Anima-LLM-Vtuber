@@ -121,6 +121,9 @@ def test_frozen_groups_run_in_dynamic_environment_matrices_without_result_cache(
         assert artifacts[0]["if"] == "always()"
         assert artifacts[0]["with"]["retention-days"] == "14"
         assert "quality-result-" in artifacts[0]["with"]["name"]
+        artifact_paths = artifacts[0]["with"]["path"]
+        assert "artifacts/test-impact/results/feedback/**" in artifact_paths
+        assert "artifacts/test-impact/results/events/**" in artifact_paths
 
     python_actions = _actions(workflow["jobs"]["python-groups"])
     node_actions = _actions(workflow["jobs"]["node-groups"])

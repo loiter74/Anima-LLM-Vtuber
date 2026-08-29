@@ -10,7 +10,12 @@ from pydantic import BaseModel
 
 from tooling.quality import cli as quality_cli
 from tooling.quality.cli import _json_text, main
-from tooling.quality.models import AggregateStatus, AggregateSummary
+from tooling.quality.models import (
+    AggregateStatus,
+    AggregateSummary,
+    ResultStatus,
+    VerificationResult,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -662,6 +667,158 @@ def test_run_group_uses_bounded_shards_by_default(tmp_path: Path, capsys) -> Non
     assert result["status"] == "passed"
     assert (results_dir / "feedback-plan.json").exists()
     assert (results_dir / "feedback" / "python-check-shard-1.json").exists()
+
+
+def test_run_group_writes_failed_result_when_a_later_shard_is_blocked(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    for directory, source in {
+        "first": 'value: int = "not-an-int"\n',
+        "second": "value: int = 1\n",
+    }.items():
+        target = tmp_path / directory
+        target.mkdir()
+        (target / "module.py").write_text(source, encoding="utf-8")
+    manifest = tmp_path / "quality.yml"
+    manifest.write_text(
+        """
+schema_version: 1
+groups:
+  shard-failure:
+    domain: repository
+    kind: typecheck
+    runner: mypy
+    targets: [first, second]
+    timeout_seconds: 180
+    include_in_full: true
+    cacheable: false
+components:
+  source:
+    domain: repository
+    paths: [src/**]
+    direct_groups: [shard-failure]
+fallbacks:
+  backend: [shard-failure]
+  frontend: [shard-failure]
+  repository: [shard-failure]
+""".strip(),
+        encoding="utf-8",
+    )
+    plan_path = tmp_path / "plan.json"
+    output = tmp_path / "results" / "shard-failure.json"
+    assert (
+        main(
+            [
+                "plan",
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--tier",
+                "quick",
+                "--paths",
+                "src/example.py",
+                "--output",
+                str(plan_path),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    code = main(
+        [
+            "run-group",
+            "shard-failure",
+            "--manifest",
+            str(manifest),
+            "--repo-root",
+            str(tmp_path),
+            "--plan",
+            str(plan_path),
+            "--output",
+            str(output),
+            "--cache",
+            "off",
+        ]
+    )
+
+    assert code == 1
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert result["status"] == "failed"
+    assert "Incompatible types in assignment" in result["output"]
+    assert (output.parent / "feedback" / "shard-failure-shard-1.json").exists()
+    blocked = json.loads(
+        (output.parent / "feedback" / "shard-failure-shard-2.json").read_text(encoding="utf-8")
+    )
+    assert blocked["status"] == "blocked"
+
+
+def test_run_group_writes_blocked_result_when_its_only_shard_times_out(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, _ = _write_cli_fixture(tmp_path)
+    plan_path = tmp_path / "plan.json"
+    output = tmp_path / "results" / "python-check.json"
+    assert (
+        main(
+            [
+                "plan",
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--tier",
+                "quick",
+                "--paths",
+                "src/example.py",
+                "--output",
+                str(plan_path),
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    def timed_out_group(loaded, group_id, *, plan_hash, **_kwargs):
+        return VerificationResult(
+            group_id=group_id,
+            required=True,
+            status=ResultStatus.FAILED,
+            exit_code=None,
+            duration_seconds=1,
+            failure_kind="timeout",
+            plan_hash=plan_hash,
+            manifest_hash=loaded.manifest_hash,
+            output="bounded action timed out",
+        )
+
+    monkeypatch.setattr(quality_cli, "run_group", timed_out_group)
+
+    code = main(
+        [
+            "run-group",
+            "python-check",
+            "--manifest",
+            str(manifest),
+            "--repo-root",
+            str(tmp_path),
+            "--plan",
+            str(plan_path),
+            "--output",
+            str(output),
+            "--cache",
+            "off",
+        ]
+    )
+
+    assert code == 1
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert result["status"] == "blocked"
+    assert result["output"] == "bounded action timed out"
 
 
 def test_run_rejects_tampered_frozen_plan(tmp_path: Path, capsys) -> None:
