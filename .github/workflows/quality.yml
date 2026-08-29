@@ -9,18 +9,637 @@ on:
 permissions:
   contents: read
 
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
+concurrency:
+  group: >-
+    ${{ github.event_name == 'pull_request'
+      && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number)
+      || format('{0}-run-{1}', github.workflow, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-      - uses: actions/setup-python@v5
+env:
+  PYTHON_VERSION_FILE: .python-version
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.7.0"
+  QUALITY_PLAN: artifacts/test-impact/ci-plan.json
+
+jobs:
+  plan:
+    name: Plan affected verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      python_groups: ${{ steps.quality-plan.outputs.python_groups }}
+      has_python: ${{ steps.quality-plan.outputs.has_python }}
+      node_groups: ${{ steps.quality-plan.outputs.node_groups }}
+      has_node: ${{ steps.quality-plan.outputs.has_node }}
+      service_groups: ${{ steps.quality-plan.outputs.service_groups }}
+      has_service: ${{ steps.quality-plan.outputs.has_service }}
+      docker_services: ${{ steps.quality-plan.outputs.docker_services }}
+      has_docker_build: ${{ steps.quality-plan.outputs.has_docker_build }}
+      plan_hash: ${{ steps.quality-plan.outputs.plan_hash }}
+    steps:
+      - uses: actions/checkout@v7
         with:
-          python-version-file: .python-version
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install Python verification dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Resolve affected range
+        id: range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_HEAD: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE"
+            head_sha="$PR_HEAD"
+          else
+            base_sha="$EVENT_BEFORE"
+            head_sha="$EVENT_HEAD"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]] \
+            || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            base_sha="$(git rev-parse "${head_sha}^")"
+          fi
+
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
 
       - name: Validate quality catalog
+        shell: bash
         run: |
-          python -m pip install pydantic pyyaml
-          python -m tooling.quality validate
+          set -o pipefail
+          mkdir -p artifacts/test-impact/logs
+          python -m tooling.quality validate 2>&1 \
+            | tee artifacts/test-impact/logs/validate.log
+
+      - name: Freeze affected plan
+        id: quality-plan
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m tooling.quality plan \
+            --tier affected \
+            --base-sha "${{ steps.range.outputs.base_sha }}" \
+            --head-sha "${{ steps.range.outputs.head_sha }}" \
+            --output "$QUALITY_PLAN" \
+            --github-output "$GITHUB_OUTPUT" 2>&1 \
+            | tee artifacts/test-impact/logs/plan.log
+
+      - name: Upload frozen plan
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-plan
+          path: |
+            artifacts/test-impact/ci-plan.json
+            artifacts/test-impact/logs/validate.log
+            artifacts/test-impact/logs/plan.log
+          if-no-files-found: error
+          retention-days: 14
+
+  python-groups:
+    name: Python / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.python_groups) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install Python verification dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Download frozen plan
+        uses: actions/download-artifact@v8
+        with:
+          name: quality-plan
+          path: artifacts/test-impact/plan
+
+      - name: Run frozen Python group
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-impact/results artifacts/test-impact/logs
+          python -m tooling.quality run-group "${{ matrix.group }}" \
+            --plan artifacts/test-impact/plan/ci-plan.json \
+            --output "artifacts/test-impact/results/${{ matrix.group }}.json" \
+            --cache off \
+            --trust-scope "${{ github.event_name == 'pull_request' && 'pr' || 'main' }}" 2>&1 \
+            | tee "artifacts/test-impact/logs/${{ matrix.group }}.log"
+
+      - name: Upload Python result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-result-python-${{ matrix.group }}
+          path: |
+            artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/logs/${{ matrix.group }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  node-groups:
+    name: Node / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_node == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.node_groups) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+
+      - name: Install quality runner dependencies
+        run: python -m pip install pydantic pyyaml
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Download frozen plan
+        uses: actions/download-artifact@v8
+        with:
+          name: quality-plan
+          path: artifacts/test-impact/plan
+
+      - name: Run frozen Node group
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-impact/results artifacts/test-impact/logs
+          python -m tooling.quality run-group "${{ matrix.group }}" \
+            --plan artifacts/test-impact/plan/ci-plan.json \
+            --output "artifacts/test-impact/results/${{ matrix.group }}.json" \
+            --cache off \
+            --trust-scope "${{ github.event_name == 'pull_request' && 'pr' || 'main' }}" 2>&1 \
+            | tee "artifacts/test-impact/logs/${{ matrix.group }}.log"
+
+      - name: Upload Node result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-result-node-${{ matrix.group }}
+          path: |
+            artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/logs/${{ matrix.group }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  service-groups:
+    name: Service / ${{ matrix.group }}
+    needs: plan
+    if: needs.plan.outputs.has_service == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.service_groups) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install Python verification dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Install Chromium for a selected browser group
+        if: matrix.group == 'frontend-playwright-smoke'
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+
+      - name: Download frozen plan
+        uses: actions/download-artifact@v8
+        with:
+          name: quality-plan
+          path: artifacts/test-impact/plan
+
+      - name: Run frozen service group
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-impact/results artifacts/test-impact/logs
+          python -m tooling.quality run-group "${{ matrix.group }}" \
+            --plan artifacts/test-impact/plan/ci-plan.json \
+            --output "artifacts/test-impact/results/${{ matrix.group }}.json" \
+            --cache off \
+            --trust-scope "${{ github.event_name == 'pull_request' && 'pr' || 'main' }}" 2>&1 \
+            | tee "artifacts/test-impact/logs/${{ matrix.group }}.log"
+
+      - name: Upload service result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-result-service-${{ matrix.group }}
+          path: |
+            artifacts/test-impact/results/${{ matrix.group }}.json
+            artifacts/test-impact/logs/${{ matrix.group }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  docker-verify:
+    name: PR Docker build
+    needs: plan
+    if: github.event_name == 'pull_request' && needs.plan.outputs.has_docker_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ANIMETTA_REDIS_PASSWORD: ci-build-only
+      ANIMETTA_ACCESS_TOKEN: ci-build-only
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+
+      - name: Install quality runner dependencies
+        run: python -m pip install pydantic pyyaml
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Download frozen plan
+        uses: actions/download-artifact@v8
+        with:
+          name: quality-plan
+          path: artifacts/test-impact/plan
+
+      - name: Build Docker services selected by the plan
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-impact/logs
+          python -m tooling.quality docker-build \
+            --plan artifacts/test-impact/plan/ci-plan.json \
+            --json 2>&1 | tee artifacts/test-impact/logs/docker-build.log
+
+      - name: Upload Docker build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-docker-build
+          path: artifacts/test-impact/logs/docker-build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  quality-gate:
+    name: quality-gate
+    needs: [plan, python-groups, node-groups, service-groups, docker-verify]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require a frozen plan
+        shell: bash
+        run: |
+          if [[ "${{ needs.plan.result }}" != "success" ]]; then
+            echo "The affected verification plan was not produced." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+
+      - name: Install quality aggregator dependencies
+        run: python -m pip install pydantic pyyaml
+
+      - name: Download frozen plan
+        uses: actions/download-artifact@v8
+        with:
+          name: quality-plan
+          path: artifacts/test-impact/plan
+
+      - name: Download group results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: quality-result-*
+          path: artifacts/test-impact/collected
+          merge-multiple: true
+
+      - name: Aggregate frozen results
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/test-impact/summary
+          python -m tooling.quality aggregate \
+            --plan artifacts/test-impact/plan/ci-plan.json \
+            --results-dir artifacts/test-impact/collected/results \
+            --output artifacts/test-impact/summary/summary.json 2>&1 \
+            | tee artifacts/test-impact/summary/aggregate.log
+
+      - name: Require an exact passing aggregate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          summary = json.loads(
+              Path("artifacts/test-impact/summary/summary.json").read_text(encoding="utf-8")
+          )
+          if summary["status"] != "passed":
+              raise SystemExit(f"quality aggregate is {summary['status']}, not passed")
+          PY
+
+      - name: Require selected group jobs
+        shell: bash
+        env:
+          PYTHON_RESULT: ${{ needs.python-groups.result }}
+          NODE_RESULT: ${{ needs.node-groups.result }}
+          SERVICE_RESULT: ${{ needs.service-groups.result }}
+        run: |
+          for result in "$PYTHON_RESULT" "$NODE_RESULT" "$SERVICE_RESULT"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "A selected verification matrix did not complete successfully." >&2
+              exit 1
+            fi
+          done
+
+      - name: Require selected PR Docker build
+        if: >-
+          github.event_name == 'pull_request'
+          && needs.plan.outputs.has_docker_build == 'true'
+          && needs.docker-verify.result != 'success'
+        run: |
+          echo "The Docker build selected by the frozen plan did not pass." >&2
+          exit 1
+
+      - name: Upload aggregate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-summary
+          path: artifacts/test-impact/summary
+          if-no-files-found: warn
+          retention-days: 14
+
+  package:
+    name: Publish GHCR image
+    needs: quality-gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      image_created: ${{ steps.fingerprint.outputs.created }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ${{ env.PYTHON_VERSION_FILE }}
+
+      - name: Install quality planner dependencies
+        run: python -m pip install pydantic pyyaml
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Resolve Docker scope fingerprint
+        id: fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/test-impact
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          python -m tooling.quality plan \
+            --tier affected \
+            --paths Dockerfile \
+            --output artifacts/test-impact/package-plan.json
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          plan = json.loads(
+              Path("artifacts/test-impact/package-plan.json").read_text(encoding="utf-8")
+          )
+          actions = [
+              action
+              for action in plan["docker_actions"]
+              if action["service"] == "animetta"
+          ]
+          if len(actions) != 1:
+              raise SystemExit("package plan must select exactly one animetta Docker action")
+          fingerprint = actions[0]["input_fingerprint"]
+          if re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None:
+              raise SystemExit("package plan returned an invalid Docker scope fingerprint")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"fingerprint={fingerprint}\n")
+          PY
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Define image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/loiter74/animetta
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=Animetta
+            org.opencontainers.image.created=${{ steps.fingerprint.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and publish immutable image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: mode=min
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: |
+            index:org.opencontainers.image.created=${{ steps.fingerprint.outputs.created }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          build-args: |
+            ANIMETTA_BUILD_FINGERPRINT=${{ steps.fingerprint.outputs.fingerprint }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Animetta GHCR image"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "- Build fingerprint: \`${{ steps.fingerprint.outputs.fingerprint }}\`"
+            echo
+            echo '```powershell'
+            echo "py -3.13 scripts/runtime_lifecycle.py anima-deploy --image ghcr.io/loiter74/animetta@${{ steps.build.outputs.digest }}"
+            echo "py -3.13 scripts/runtime_lifecycle.py anima-deploy --image ghcr.io/loiter74/animetta:sha-${GITHUB_SHA}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  promote-main:
+    name: Promote GHCR main tag
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: animetta-ghcr-main-promotion
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/loiter74/animetta
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Compare current main revision
+        id: promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+
+          current_revision=""
+          if docker buildx imagetools inspect "$IMAGE:main" \
+            --raw > current-main-manifest.json 2>/dev/null; then
+            current_revision="$(python - current-main-manifest.json <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")) or {}
+          annotations = manifest.get("annotations") or {}
+          print(annotations.get("org.opencontainers.image.revision", ""))
+          PY
+            )"
+          fi
+
+          promote=true
+          if [[ "$current_revision" =~ ^[0-9a-f]{40}$ ]] \
+            && git cat-file -e "${current_revision}^{commit}" 2>/dev/null \
+            && git merge-base --is-ancestor "$GITHUB_SHA" "$current_revision"; then
+            promote=false
+          fi
+
+          echo "current_revision=$current_revision" >> "$GITHUB_OUTPUT"
+          echo "promote=$promote" >> "$GITHUB_OUTPUT"
+
+      - name: Promote immutable digest to main
+        if: steps.promotion.outputs.promote == 'true'
+        run: |
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.created=${{ needs.package.outputs.image_created }}" \
+            --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA" \
+            --annotation "index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --prefer-index=false \
+            --tag "$IMAGE:main" \
+            "$IMAGE@${{ needs.package.outputs.image_digest }}"
+
+      - name: Report main promotion
+        shell: bash
+        run: |
+          if [[ "${{ steps.promotion.outputs.promote }}" == "true" ]]; then
+            echo "Promoted ${GITHUB_SHA} to ${IMAGE}:main." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Kept newer ${IMAGE}:main revision ${{ steps.promotion.outputs.current_revision }}." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi

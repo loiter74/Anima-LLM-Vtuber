@@ -188,20 +188,31 @@ cd frontend && pnpm dev
 
 The frontend dev server runs on `http://localhost:3000`; the backend on `http://localhost:12394`.
 
-### Build and run the personal edition (recommended)
+### Build from source or deploy a verified image
 
-```bash
-# Start or reuse host-local Qwen, then build and start Animetta
+Build the current checkout when developing or testing local changes:
+
+```powershell
+# Start or reuse the host runtimes, build animetta:local, and start Animetta.
 py -3.13 scripts/runtime_lifecycle.py anima-up
 ```
 
-This is the single build entrypoint for routine personal use. CI and acceptance
-runs select `smoke` or `selftest` through `ANIMETTA_PROFILE` while reusing the
-same Compose file.
+Deploy an image that has already passed the `main` quality gate without rebuilding
+the application locally:
+
+```powershell
+py -3.13 scripts/runtime_lifecycle.py anima-deploy --image ghcr.io/loiter74/animetta:sha-<40-character-commit>
+```
+
+Use `ghcr.io/loiter74/animetta:main` for the latest successful `main` build. Use
+the full `sha-...` tag, or the published `@sha256:...` digest, when the deployment
+must be reproducible or when rolling back. Private GHCR packages require a prior
+`docker login ghcr.io`; see the [Docker deployment guide](docs/deployment/docker.md).
 
 Routine `py -3.13 scripts/runtime_lifecycle.py anima-down` leaves the host Qwen
-process and its loaded model running. Use `host-tts-stop` only when GPU memory must
-be released. Qwen is not built or managed as a Docker container.
+and RVC processes and their loaded models running. Use `host-tts-stop` or
+`host-rvc-stop` only when GPU memory must be released. Neither host runtime is
+built or managed as a Docker container.
 
 Once healthy, the frontend is served by nginx on **port 80** and the backend health endpoint is at `http://localhost:12394/health` (also proxied at `http://localhost/health`).
 

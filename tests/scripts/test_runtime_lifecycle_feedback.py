@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from scripts import runtime_lifecycle
 from tooling.execution_feedback import (
     FeedbackStatus,
@@ -120,6 +122,204 @@ def test_anima_feedback_plan_contains_every_protocol_stage_under_its_own_step() 
     )
 
 
+def test_deploy_plan_pulls_an_immutable_image_without_a_build_step() -> None:
+    image = "ghcr.io/loiter74/animetta:sha-" + "a" * 40
+    lifecycle = freeze_lifecycle_plan(
+        "anima-deploy",
+        input_fingerprint="a" * 64,
+        image=image,
+    )
+
+    assert tuple(step.id for step in lifecycle.steps) == (
+        "host-tts-start",
+        "host-tts-preflight",
+        "host-rvc-start",
+        "host-rvc-preflight",
+        "animetta-pull",
+        "animetta-image-status",
+        "animetta-start",
+        "animetta-health",
+        "animetta-ready",
+        "frontend-readiness",
+        "default-log-check",
+    )
+    assert all(step.kind is not LifecycleStepKind.BUILD for step in lifecycle.steps)
+    assert lifecycle.steps[4].command == (
+        "docker",
+        "compose",
+        "pull",
+        "--include-deps",
+        "animetta",
+    )
+    assert lifecycle.steps[5].command[3] == image
+    assert [
+        step.target for step in lifecycle.steps if step.kind is LifecycleStepKind.HTTP_CHECK
+    ] == [
+        "http://localhost/health",
+        "http://localhost/ready",
+        "http://localhost",
+    ]
+
+
+def _bounded_fingerprint(
+    operation: str,
+    *,
+    image: str | None,
+    profile: str = "production",
+) -> str:
+    return runtime_lifecycle._bounded_input_fingerprint(
+        operation,
+        image=image,
+        profile=profile,
+    )
+
+
+def test_deploy_image_changes_the_bounded_input_fingerprint() -> None:
+    main = _bounded_fingerprint(
+        "anima-deploy",
+        image="ghcr.io/loiter74/animetta:main",
+    )
+    immutable = _bounded_fingerprint(
+        "anima-deploy",
+        image="ghcr.io/loiter74/animetta:sha-" + "b" * 40,
+    )
+
+    assert main != immutable
+
+
+def test_same_run_build_identity_changes_with_the_final_compose_profile() -> None:
+    production = runtime_lifecycle._compose_environment(
+        image=runtime_lifecycle.LOCAL_ANIMETTA_IMAGE,
+        profile="production",
+    )
+    smoke = runtime_lifecycle._compose_environment(
+        image=runtime_lifecycle.LOCAL_ANIMETTA_IMAGE,
+        profile="smoke",
+    )
+    production_digest = runtime_lifecycle._build_command_digest(
+        runtime_lifecycle._ANIMETTA_BUILD_COMMAND,
+        environment=production,
+        input_fingerprint="a" * 64,
+    )
+    smoke_digest = runtime_lifecycle._build_command_digest(
+        runtime_lifecycle._ANIMETTA_BUILD_COMMAND,
+        environment=smoke,
+        input_fingerprint="a" * 64,
+    )
+
+    production_lease = runtime_lifecycle._build_lease_id(
+        "same-run",
+        production_digest,
+    )
+    smoke_lease = runtime_lifecycle._build_lease_id("same-run", smoke_digest)
+
+    assert production_digest != smoke_digest
+    assert production_lease != smoke_lease
+    assert _bounded_fingerprint("anima-up", image=None, profile="production") != (
+        _bounded_fingerprint("anima-up", image=None, profile="smoke")
+    )
+
+
+def test_build_lease_changes_with_the_frozen_plan_input() -> None:
+    environment = runtime_lifecycle._compose_environment(
+        image=runtime_lifecycle.LOCAL_ANIMETTA_IMAGE,
+        profile="production",
+    )
+    first_digest = runtime_lifecycle._build_command_digest(
+        runtime_lifecycle._ANIMETTA_BUILD_COMMAND,
+        environment=environment,
+        input_fingerprint="a" * 64,
+    )
+    second_digest = runtime_lifecycle._build_command_digest(
+        runtime_lifecycle._ANIMETTA_BUILD_COMMAND,
+        environment=environment,
+        input_fingerprint="b" * 64,
+    )
+
+    assert first_digest != second_digest
+    assert runtime_lifecycle._build_lease_id("same-run", first_digest) != (
+        runtime_lifecycle._build_lease_id("same-run", second_digest)
+    )
+
+
+async def test_main_deploy_does_not_reuse_passed_checkpoints(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    driver = FakeLifecycleDriver()
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_SystemLifecycleDriver",
+        lambda **_kwargs: driver,
+    )
+    image = "ghcr.io/loiter74/animetta:main"
+
+    assert (
+        await runtime_lifecycle.run_bounded_operation(
+            "anima-deploy",
+            run_id="main-deploy",
+            artifacts_root=tmp_path,
+            image=image,
+        )
+        == 0
+    )
+    first_counts = (
+        len(driver.commands),
+        len(driver.http_targets),
+        len(driver.log_commands),
+    )
+
+    assert (
+        await runtime_lifecycle.run_bounded_operation(
+            "anima-deploy",
+            run_id="main-deploy",
+            artifacts_root=tmp_path,
+            image=image,
+        )
+        == 0
+    )
+    assert (
+        len(driver.commands),
+        len(driver.http_targets),
+        len(driver.log_commands),
+    ) == tuple(count * 2 for count in first_counts)
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/loiter74/animetta:sha-" + "c" * 40,
+        "ghcr.io/loiter74/animetta@sha256:" + "d" * 64,
+    ],
+)
+async def test_immutable_deploy_reuses_passed_checkpoints(
+    monkeypatch,
+    tmp_path,
+    image: str,
+) -> None:
+    driver = FakeLifecycleDriver()
+    monkeypatch.setattr(
+        runtime_lifecycle,
+        "_SystemLifecycleDriver",
+        lambda **_kwargs: driver,
+    )
+
+    for _attempt in range(2):
+        assert (
+            await runtime_lifecycle.run_bounded_operation(
+                "anima-deploy",
+                run_id="immutable-deploy",
+                artifacts_root=tmp_path,
+                image=image,
+            )
+            == 0
+        )
+
+    assert len(driver.commands) == 7
+    assert len(driver.http_targets) == 3
+    assert len(driver.log_commands) == 1
+
+
 def test_cleanup_is_one_bounded_animetta_action() -> None:
     lifecycle = freeze_lifecycle_plan("anima-down", input_fingerprint="a" * 64)
 
@@ -196,11 +396,12 @@ def test_buildkit_work_is_resumed_from_exact_process_lease_without_duplicate_lau
 
 
 def test_buildkit_lease_id_is_unique_to_each_lifecycle_run() -> None:
-    first = runtime_lifecycle._build_lease_id("anima-up-first")
-    second = runtime_lifecycle._build_lease_id("anima-up-second")
+    command_digest = "a" * 64
+    first = runtime_lifecycle._build_lease_id("anima-up-first", command_digest)
+    second = runtime_lifecycle._build_lease_id("anima-up-second", command_digest)
 
-    assert first == "anima-up-first-animetta-build"
-    assert second == "anima-up-second-animetta-build"
+    assert first == f"anima-up-first-animetta-build-{'a' * 64}"
+    assert second == f"anima-up-second-animetta-build-{'a' * 64}"
     assert first != second
 
 
@@ -241,8 +442,15 @@ def test_default_command_routes_to_resumable_bounded_operation(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    async def fake_bounded(operation: str, *, run_id: str, artifacts_root) -> int:
+    async def fake_bounded(
+        operation: str,
+        *,
+        run_id: str,
+        artifacts_root,
+        image: str | None,
+    ) -> int:
         assert artifacts_root == tmp_path
+        assert image is None
         calls.append((operation, run_id))
         return 2
 
@@ -260,6 +468,51 @@ def test_default_command_routes_to_resumable_bounded_operation(
 
     assert exit_code == 2
     assert calls == [("anima-up", "run-lifecycle")]
+
+
+def test_system_lifecycle_reports_registry_authentication_failure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    image = "ghcr.io/loiter74/animetta:main"
+
+    def fake_run(command, **kwargs):
+        assert kwargs["env"]["ANIMETTA_IMAGE"] == image
+        return runtime_lifecycle.subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "unauthorized: access denied",
+        )
+
+    monkeypatch.setattr(runtime_lifecycle.subprocess, "run", fake_run)
+    driver = runtime_lifecycle._SystemLifecycleDriver(
+        evidence_root=tmp_path,
+        environment={"ANIMETTA_IMAGE": image},
+    )
+
+    result = driver.run_command(
+        ("docker", "compose", "pull", "--include-deps", "animetta"),
+        timeout_seconds=240,
+    )
+
+    assert result.succeeded is False
+    assert "docker login ghcr.io" in result.summary
+
+
+def test_http_body_contract_distinguishes_health_and_readiness() -> None:
+    assert runtime_lifecycle._valid_http_body(
+        "http://localhost/health",
+        '{"status":"ok"}',
+    )
+    assert runtime_lifecycle._valid_http_body(
+        "http://localhost/ready",
+        '{"ready":true}',
+    )
+    assert not runtime_lifecycle._valid_http_body(
+        "http://localhost/ready",
+        '{"ready":false}',
+    )
 
 
 def test_system_lifecycle_preflight_targets_host_runtime(
@@ -316,6 +569,7 @@ def test_build_helper_runs_from_workspace_with_workspace_on_pythonpath(
         workspace_root=workspace,
         artifacts_root=artifacts,
         receipt_path=artifacts / "receipt.json",
+        environment={"ANIMETTA_IMAGE": "animetta:local"},
     )
 
     launched = driver.launch(("docker", "compose", "build"), log_path="run/build.log")
@@ -324,4 +578,5 @@ def test_build_helper_runs_from_workspace_with_workspace_on_pythonpath(
     assert str(captured["env"]["PYTHONPATH"]).split(runtime_lifecycle.os.pathsep)[0] == str(
         workspace
     )
+    assert captured["env"]["ANIMETTA_IMAGE"] == "animetta:local"
     assert launched.log_path == "run/build.log"

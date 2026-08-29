@@ -8,12 +8,26 @@ root with `PYTHONPATH=src`.
 
 | Script | Purpose |
 |--------|---------|
-| `runtime_lifecycle.py` | Cross-platform lifecycle for the host-local Qwen TTS service and the Animetta Docker compose project (`host-tts-up/status/stop`, `anima-up/down`) |
+| `runtime_lifecycle.py` | Cross-platform lifecycle for host-local Qwen TTS/RVC and the Animetta Compose project, including source builds (`anima-up`) and verified-image deployments (`anima-deploy`) |
 | `release_runtime_gate.py` | Production release gate for full/nightly CI: verifies host Qwen identity, cold-builds the image, requires app health + frontend HTTP + clean logs |
 | `qwen_preflight.py` | Read-only readiness preflight for the persistent local Qwen TTS service on `:8767` |
 | `soak_golden_path.py` | Real 600 s / 12-turn golden-path acceptance gate |
 | `baseline_golden_path.py` | Captures fail-closed evidence for the golden-path baseline |
 | `probe_release_turn.py` | Probes one production Socket.IO turn for typed TTS degradation |
+
+Use `anima-up` for the current checkout; it builds `animetta:local` before
+starting the application. Use `anima-deploy` to pull and start a GHCR image that
+already passed the `main` quality gate:
+
+```powershell
+py -3.13 scripts/runtime_lifecycle.py anima-up
+py -3.13 scripts/runtime_lifecycle.py anima-deploy --image ghcr.io/loiter74/animetta:sha-<40-character-commit>
+```
+
+The `main` tag selects the latest successful build. Full `sha-...` tags and
+`@sha256:...` digests are the reproducible choices for rollback. Authenticate
+private packages separately with `docker login ghcr.io`; the lifecycle script
+does not accept or store registry credentials.
 
 ## Health & quality gates
 

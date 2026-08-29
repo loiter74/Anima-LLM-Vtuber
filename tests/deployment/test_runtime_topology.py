@@ -146,6 +146,17 @@ def test_animetta_compose_http_port_is_overridable_for_isolated_validation() -> 
     assert app["ports"][0] == "${ANIMETTA_HTTP_PORT:-80}:80"
 
 
+def test_animetta_compose_selects_local_or_verified_image_from_one_definition() -> None:
+    app = _compose("docker-compose.yml")["services"]["animetta"]
+
+    assert app["image"] == "${ANIMETTA_IMAGE:-animetta:local}"
+    assert app["build"] == {
+        "context": ".",
+        "dockerfile": "Dockerfile",
+        "args": {"ANIMETTA_BUILD_FINGERPRINT": "${ANIMETTA_BUILD_FINGERPRINT:-untracked}"},
+    }
+
+
 def test_animetta_compose_persists_the_configured_data_directory() -> None:
     app = _compose("docker-compose.yml")["services"]["animetta"]
 

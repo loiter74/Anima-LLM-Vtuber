@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
 
   animetta:
+    image: ${ANIMETTA_IMAGE:-animetta:local}
     build:
       context: .
       dockerfile: Dockerfile

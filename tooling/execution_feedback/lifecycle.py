@@ -37,6 +37,31 @@ class LifecycleStepKind(StrEnum):
     LOG_CHECK = "log-check"
 
 
+type _LifecycleStepDefinition = tuple[
+    str,
+    LifecycleStepKind,
+    tuple[str, ...],
+    str | None,
+]
+
+_HOST_RUNTIME_DEFINITIONS: tuple[_LifecycleStepDefinition, ...] = (
+    ("host-tts-start", LifecycleStepKind.COMMAND, ("host-tts-start",), None),
+    (
+        "host-tts-preflight",
+        LifecycleStepKind.COMMAND,
+        ("host-tts-preflight",),
+        None,
+    ),
+    ("host-rvc-start", LifecycleStepKind.COMMAND, ("host-rvc-start",), None),
+    (
+        "host-rvc-preflight",
+        LifecycleStepKind.COMMAND,
+        ("host-rvc-preflight",),
+        None,
+    ),
+)
+
+
 class LifecycleStepContract(FrozenModel):
     id: str
     kind: LifecycleStepKind
@@ -119,11 +144,13 @@ class LeasedSubprocessBuildDriver:
         workspace_root: Path,
         artifacts_root: Path,
         receipt_path: Path,
+        environment: dict[str, str] | None = None,
     ) -> None:
         self._workspace_root = workspace_root.resolve()
         self._artifacts_root = artifacts_root.resolve()
         self._receipt_path = receipt_path.resolve()
         self._receipt_path.relative_to(self._artifacts_root)
+        self._environment = dict(environment or {})
 
     def launch(self, command: tuple[str, ...], *, log_path: str) -> BuildProcessLaunch:
         destination = (self._artifacts_root / log_path).resolve()
@@ -141,6 +168,7 @@ class LeasedSubprocessBuildDriver:
             *command,
         )
         environment = dict(os.environ)
+        environment.update(self._environment)
         existing = environment.get("PYTHONPATH", "")
         environment["PYTHONPATH"] = os.pathsep.join(
             item for item in (str(self._workspace_root), existing) if item
@@ -379,27 +407,15 @@ class BuildStepController:
         )
 
 
-def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
-    definitions: tuple[
-        tuple[str, LifecycleStepKind, tuple[str, ...], str | None],
-        ...,
-    ]
+def _contracts(
+    operation: str,
+    *,
+    image: str | None = None,
+) -> tuple[LifecycleStepContract, ...]:
+    definitions: tuple[_LifecycleStepDefinition, ...]
     if operation == "anima-up":
         definitions = (
-            ("host-tts-start", LifecycleStepKind.COMMAND, ("host-tts-start",), None),
-            (
-                "host-tts-preflight",
-                LifecycleStepKind.COMMAND,
-                ("host-tts-preflight",),
-                None,
-            ),
-            ("host-rvc-start", LifecycleStepKind.COMMAND, ("host-rvc-start",), None),
-            (
-                "host-rvc-preflight",
-                LifecycleStepKind.COMMAND,
-                ("host-rvc-preflight",),
-                None,
-            ),
+            *_HOST_RUNTIME_DEFINITIONS,
             (
                 "animetta-build",
                 LifecycleStepKind.BUILD,
@@ -413,6 +429,39 @@ def _contracts(operation: str) -> tuple[LifecycleStepContract, ...]:
                 None,
             ),
             ("animetta-health", LifecycleStepKind.HTTP_CHECK, (), "http://localhost/health"),
+            ("frontend-readiness", LifecycleStepKind.HTTP_CHECK, (), "http://localhost"),
+            (
+                "default-log-check",
+                LifecycleStepKind.LOG_CHECK,
+                ("docker", "compose", "logs", "animetta"),
+                None,
+            ),
+        )
+    elif operation == "anima-deploy":
+        if image is None:
+            raise ValueError("anima-deploy requires an image reference")
+        definitions = (
+            *_HOST_RUNTIME_DEFINITIONS,
+            (
+                "animetta-pull",
+                LifecycleStepKind.COMMAND,
+                ("docker", "compose", "pull", "--include-deps", "animetta"),
+                None,
+            ),
+            (
+                "animetta-image-status",
+                LifecycleStepKind.COMMAND,
+                ("docker", "image", "inspect", image, "--format", "{{json .RepoDigests}}"),
+                None,
+            ),
+            (
+                "animetta-start",
+                LifecycleStepKind.COMMAND,
+                ("docker", "compose", "up", "-d", "--no-build", "animetta"),
+                None,
+            ),
+            ("animetta-health", LifecycleStepKind.HTTP_CHECK, (), "http://localhost/health"),
+            ("animetta-ready", LifecycleStepKind.HTTP_CHECK, (), "http://localhost/ready"),
             ("frontend-readiness", LifecycleStepKind.HTTP_CHECK, (), "http://localhost"),
             (
                 "default-log-check",
@@ -480,8 +529,9 @@ def freeze_lifecycle_plan(
     *,
     input_fingerprint: str,
     run_id: str | None = None,
+    image: str | None = None,
 ) -> FrozenLifecyclePlan:
-    steps = _contracts(operation)
+    steps = _contracts(operation, image=image)
     plan = ExecutionPlanManifest(
         run_id=run_id or f"{operation}-plan",
         input_fingerprint=input_fingerprint,

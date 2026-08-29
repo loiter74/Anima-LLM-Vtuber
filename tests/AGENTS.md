@@ -120,5 +120,5 @@ pnpm --dir frontend test:coverage
 - `tests/integration/conftest.py` auto-tags every collected item as `integration`
 - `tests/tracing/conftest.py` `autouse=True` fixture resets: Prometheus REGISTRY, OTel `_TRACER_INITIALIZED`, `metrics._initialized`
 - Required plugins (implicit via addopts): pytest-asyncio, pytest-xdist, pytest-timeout, pytest-cov
-- CI (`.github/workflows/quality.yml`) 只运行 Python 3.13 下的质量目录校验；完整 affected/full 与发布门禁保留为本地显式入口。
+- CI (`.github/workflows/quality.yml`) 通过 `plan` / `run-group` / `aggregate` 执行冻结的 `affected` 计划；测试分组、路径影响和 Docker 范围映射只维护在 `tooling/quality.yml`，不得在工作流中复制。`full` 和真实运行时发布门禁仍保留为显式入口。
 - docs/development/testing.md is stale (claims 21% coverage); frontend/AGENTS.md is stale (claims 0% coverage / no vitest)

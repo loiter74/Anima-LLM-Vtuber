@@ -117,6 +117,7 @@ docker_scopes:
     service: animetta
     compose_file: docker-compose.yml
     environment_identity_fields:
+      - ANIMETTA_IMAGE
       - ANIMETTA_PROFILE
       - ANIMETTA_HOST
       - ANIMETTA_PORT

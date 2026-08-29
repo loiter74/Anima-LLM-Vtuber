@@ -42,6 +42,14 @@ HOST_RVC_PID_FILE = HOST_RVC_RUNTIME_ROOT / "host-rvc.pid.json"
 HOST_RVC_LOG_FILE = HOST_RVC_RUNTIME_ROOT / "log" / "host-rvc.log"
 HOST_RVC_BASE_URL = "http://127.0.0.1:8769"
 HOST_RVC_IDENTITY = HOST_RVC_CONTRACT.identity()
+LOCAL_ANIMETTA_IMAGE = "animetta:local"
+GHCR_ANIMETTA_IMAGE = "ghcr.io/loiter74/animetta"
+_ANIMETTA_BUILD_COMMAND = ("docker", "compose", "build", "animetta")
+_DEPLOY_IMAGE_PATTERN = re.compile(
+    rf"^(?:{re.escape(GHCR_ANIMETTA_IMAGE)}:"
+    r"(?:main|sha-[0-9a-f]{40})|"
+    rf"{re.escape(GHCR_ANIMETTA_IMAGE)}@sha256:[0-9a-f]{{64}})$"
+)
 
 OPERATIONS = (
     "host-tts-up",
@@ -51,9 +59,28 @@ OPERATIONS = (
     "host-rvc-status",
     "host-rvc-stop",
     "anima-up",
+    "anima-deploy",
     "anima-selftest-up",
     "anima-down",
 )
+
+
+def _validate_deploy_image(value: str) -> str:
+    image = value.strip()
+    if _DEPLOY_IMAGE_PATTERN.fullmatch(image) is None:
+        raise ValueError(
+            "image must be ghcr.io/loiter74/animetta:main, "
+            "ghcr.io/loiter74/animetta:sha-<40 lowercase hex characters>, "
+            "or ghcr.io/loiter74/animetta@sha256:<64 lowercase hex characters>"
+        )
+    return image
+
+
+def _image_argument(value: str) -> str:
+    try:
+        return _validate_deploy_image(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _run(
@@ -463,8 +490,24 @@ def _rvc_preflight(*, wait: bool) -> list[str]:
     return command
 
 
-def run_operation(operation: str) -> None:
+def _prepare_host_runtimes(*, wait: bool) -> None:
+    _host_tts_up(best_effort=False)
+    _run(_preflight(wait=wait))
+    _host_rvc_up()
+    _run(_rvc_preflight(wait=wait))
+
+
+def _compose_environment(*, image: str, profile: str | None = None) -> dict[str, str]:
+    return {
+        "ANIMETTA_IMAGE": image,
+        "ANIMETTA_PROFILE": profile or os.getenv("ANIMETTA_PROFILE") or "production",
+    }
+
+
+def run_operation(operation: str, *, image: str | None = None) -> None:
     """Execute one explicit lifecycle operation."""
+    if operation != "anima-deploy" and image is not None:
+        raise ValueError("--image is only valid with anima-deploy")
     if operation == "host-tts-up":
         _host_tts_up(best_effort=False)
     elif operation == "host-tts-status":
@@ -478,27 +521,47 @@ def run_operation(operation: str) -> None:
     elif operation == "host-rvc-stop":
         _host_rvc_stop()
     elif operation == "anima-up":
-        _host_tts_up(best_effort=False)
-        _run(_preflight(wait=False))
-        _host_rvc_up()
-        _run(_rvc_preflight(wait=False))
-        runtime_environment = {"ANIMETTA_PROFILE": os.getenv("ANIMETTA_PROFILE") or "production"}
+        _prepare_host_runtimes(wait=False)
+        runtime_environment = _compose_environment(image=LOCAL_ANIMETTA_IMAGE)
         _run(
-            ["docker", "compose", "build", "animetta"],
+            list(_ANIMETTA_BUILD_COMMAND),
             environment=runtime_environment,
         )
         _run(
             ["docker", "compose", "up", "-d", "--no-build", "animetta"],
             environment=runtime_environment,
         )
-    elif operation == "anima-selftest-up":
-        _host_tts_up(best_effort=False)
-        _run(_preflight(wait=True))
-        _host_rvc_up()
-        _run(_rvc_preflight(wait=True))
-        selftest_environment = {"ANIMETTA_PROFILE": "selftest"}
+    elif operation == "anima-deploy":
+        selected_image = _validate_deploy_image(image or "")
+        _prepare_host_runtimes(wait=False)
+        deploy_environment = _compose_environment(image=selected_image)
         _run(
-            ["docker", "compose", "build", "animetta"],
+            ["docker", "compose", "pull", "--include-deps", "animetta"],
+            environment=deploy_environment,
+        )
+        _run(
+            [
+                "docker",
+                "image",
+                "inspect",
+                selected_image,
+                "--format",
+                "{{json .RepoDigests}}",
+            ],
+            environment=deploy_environment,
+        )
+        _run(
+            ["docker", "compose", "up", "-d", "--no-build", "animetta"],
+            environment=deploy_environment,
+        )
+    elif operation == "anima-selftest-up":
+        _prepare_host_runtimes(wait=True)
+        selftest_environment = _compose_environment(
+            image=LOCAL_ANIMETTA_IMAGE,
+            profile="selftest",
+        )
+        _run(
+            list(_ANIMETTA_BUILD_COMMAND),
             environment=selftest_environment,
         )
         _run(
@@ -506,18 +569,41 @@ def run_operation(operation: str) -> None:
             environment=selftest_environment,
         )
     elif operation == "anima-down":
-        _run(["docker", "compose", "down", "--remove-orphans"])
+        _run(
+            ["docker", "compose", "down", "--remove-orphans"],
+            environment=_compose_environment(image=LOCAL_ANIMETTA_IMAGE),
+        )
     else:
         raise ValueError(f"Unknown lifecycle operation: {operation}")
 
 
+def _valid_http_body(target: str, body: str) -> bool:
+    if not target.endswith(("/health", "/ready")):
+        return True
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if target.endswith("/health"):
+        return payload.get("status") == "ok"
+    return payload.get("ready") is True or payload.get("status") in {"ok", "ready"}
+
+
 class _SystemLifecycleDriver:
-    def __init__(self, *, evidence_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        evidence_root: Path,
+        environment: dict[str, str] | None = None,
+    ) -> None:
         from tooling.execution_feedback.lifecycle import LifecycleDriverObservation
 
         self._observation_type = LifecycleDriverObservation
         self._evidence_root = evidence_root.resolve()
         self._evidence_root.mkdir(parents=True, exist_ok=True)
+        self._environment = dict(environment or {})
 
     def _evidence(self, name: str, contents: str) -> str:
         path = self._evidence_root / f"{name}.log"
@@ -586,6 +672,8 @@ class _SystemLifecycleDriver:
         if command == ("host-rvc-preflight",):
             command = tuple(_rvc_preflight(wait=False))
         try:
+            process_environment = os.environ.copy()
+            process_environment.update(self._environment)
             completed = subprocess.run(
                 command,
                 cwd=ROOT,
@@ -593,15 +681,24 @@ class _SystemLifecycleDriver:
                 check=False,
                 text=True,
                 timeout=timeout_seconds,
+                env=process_environment,
             )
             output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
             reference = self._evidence(
                 f"command-{hashlib.sha256(repr(command).encode()).hexdigest()[:12]}",
                 output,
             )
+            summary = f"command completed with exit code {completed.returncode}"
+            if completed.returncode == 0 and command[:3] == ("docker", "image", "inspect"):
+                digest = completed.stdout.strip()
+                summary = f"resolved image digest: {digest[:240]}" if digest else summary
+            elif completed.returncode != 0 and command[:3] == ("docker", "compose", "pull"):
+                lowered = output.casefold()
+                if "unauthorized" in lowered or "denied" in lowered:
+                    summary = "image pull was denied; authenticate with 'docker login ghcr.io'"
             return self._observation_type(
                 succeeded=completed.returncode == 0,
-                summary=(f"command completed with exit code {completed.returncode}"),
+                summary=summary,
                 evidence_refs=(reference,),
                 exit_code=completed.returncode,
             )
@@ -613,6 +710,13 @@ class _SystemLifecycleDriver:
                 summary=f"command exceeded {timeout_seconds:g} seconds",
                 evidence_refs=(reference,),
             )
+        except OSError as exc:
+            reference = self._evidence("command-error", f"{type(exc).__name__}: {exc}\n")
+            return self._observation_type(
+                succeeded=False,
+                summary=f"command could not start: {type(exc).__name__}",
+                evidence_refs=(reference,),
+            )
 
     def check_http(self, target: str, *, timeout_seconds: float):
         deadline = time.monotonic() + timeout_seconds
@@ -621,9 +725,7 @@ class _SystemLifecycleDriver:
             try:
                 with urllib.request.urlopen(target, timeout=3) as response:  # noqa: S310
                     body = response.read().decode("utf-8", errors="replace")
-                    healthy = response.status == 200 and (
-                        not target.endswith("/health") or '"status":"ok"' in body.replace(" ", "")
-                    )
+                    healthy = response.status == 200 and _valid_http_body(target, body)
                     if healthy:
                         reference = self._evidence(
                             f"http-{hashlib.sha256(target.encode()).hexdigest()[:12]}",
@@ -664,21 +766,58 @@ class _SystemLifecycleDriver:
         )
 
 
-def _bounded_input_fingerprint(operation: str) -> str:
-    material = b"\0".join(
-        (
-            operation.encode(),
-            Path(__file__).read_bytes(),
-            (ROOT / "tooling" / "execution_feedback" / "lifecycle.py").read_bytes(),
-        )
-    )
+def _build_command_digest(
+    command: tuple[str, ...],
+    *,
+    environment: dict[str, str],
+    input_fingerprint: str,
+) -> str:
+    material = json.dumps(
+        {
+            "command": command,
+            "environment": {
+                "ANIMETTA_IMAGE": environment["ANIMETTA_IMAGE"],
+                "ANIMETTA_PROFILE": environment["ANIMETTA_PROFILE"],
+            },
+            "input_fingerprint": input_fingerprint,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
     return hashlib.sha256(material).hexdigest()
 
 
-def _build_lease_id(run_id: str) -> str:
-    """Scope the BuildKit lease to one resumable lifecycle run."""
+def _bounded_input_fingerprint(
+    operation: str,
+    *,
+    image: str | None,
+    profile: str,
+) -> str:
+    parts = [
+        operation.encode(),
+        profile.encode(),
+        Path(__file__).read_bytes(),
+        (ROOT / "tooling" / "execution_feedback" / "lifecycle.py").read_bytes(),
+    ]
+    if image is not None:
+        parts.append(image.encode())
+    material = b"\0".join(parts)
+    return hashlib.sha256(material).hexdigest()
 
-    return f"{run_id}-animetta-build"
+
+def _step_reuse_fingerprint(input_fingerprint: str, step_id: str) -> str:
+    return hashlib.sha256(f"{input_fingerprint}:{step_id}".encode()).hexdigest()
+
+
+def _build_lease_id(run_id: str, command_digest: str) -> str:
+    """Scope the BuildKit lease to one run and one exact build invocation."""
+
+    return f"{run_id}-animetta-build-{command_digest}"
+
+
+def _allows_passed_checkpoint_reuse(operation: str, *, image: str | None) -> bool:
+    return not (operation == "anima-deploy" and image == f"{GHCR_ANIMETTA_IMAGE}:main")
 
 
 async def run_bounded_operation(
@@ -686,6 +825,7 @@ async def run_bounded_operation(
     *,
     run_id: str,
     artifacts_root: Path,
+    image: str | None = None,
 ) -> int:
     from tooling.execution_feedback import (
         ActionResult,
@@ -704,10 +844,28 @@ async def run_bounded_operation(
         freeze_lifecycle_plan,
     )
 
+    if operation != "anima-deploy" and image is not None:
+        raise ValueError("--image is only valid with anima-deploy")
+    selected_image = _validate_deploy_image(image or "") if operation == "anima-deploy" else None
+    runtime_environment = _compose_environment(
+        image=selected_image or LOCAL_ANIMETTA_IMAGE,
+    )
+    input_fingerprint = _bounded_input_fingerprint(
+        operation,
+        image=selected_image,
+        profile=runtime_environment["ANIMETTA_PROFILE"],
+    )
+    build_command_digest = _build_command_digest(
+        _ANIMETTA_BUILD_COMMAND,
+        environment=runtime_environment,
+        input_fingerprint=input_fingerprint,
+    )
+    build_lease_id = _build_lease_id(run_id, build_command_digest)
     frozen = freeze_lifecycle_plan(
         operation,
-        input_fingerprint=_bounded_input_fingerprint(operation),
+        input_fingerprint=input_fingerprint,
         run_id=run_id,
+        image=selected_image,
     )
     store = IterationPlanStore(artifacts_root)
     store.write_plan(frozen.plan)
@@ -717,25 +875,40 @@ async def run_bounded_operation(
         workspace_root=ROOT,
         artifacts_root=artifacts_root.resolve(),
         receipt_path=run_root / "animetta-build-receipt.json",
+        environment=runtime_environment,
     )
     build_controller = BuildStepController(
         lease_manager=LeaseManager(store),
         driver=build_driver,
         run_id=run_id,
         owner="lifecycle-worker",
-        lease_id=_build_lease_id(run_id),
-        command=("docker", "compose", "build", "animetta"),
-        command_digest=hashlib.sha256(b"docker compose build animetta").hexdigest(),
+        lease_id=build_lease_id,
+        command=_ANIMETTA_BUILD_COMMAND,
+        command_digest=build_command_digest,
         log_path=build_log,
     )
     executor = LifecycleStepExecutor(
-        driver=_SystemLifecycleDriver(evidence_root=run_root / "evidence"),
+        driver=_SystemLifecycleDriver(
+            evidence_root=run_root / "evidence",
+            environment=runtime_environment,
+        ),
         build_controller=build_controller,
     )
 
     for step_contract, step_spec in zip(frozen.steps, frozen.plan.steps, strict=True):
         recovered = store.recover_latest_result(run_id, step_contract.id)
-        if recovered.result is not None and recovered.result.status is FeedbackStatus.PASSED:
+        reuse_fingerprint = _step_reuse_fingerprint(
+            frozen.plan.input_fingerprint,
+            step_contract.id,
+        )
+        checkpoint = store.read_checkpoint(run_id, step_contract.id)
+        if (
+            _allows_passed_checkpoint_reuse(operation, image=selected_image)
+            and recovered.result is not None
+            and recovered.result.status is FeedbackStatus.PASSED
+            and checkpoint is not None
+            and checkpoint.reuse_fingerprint == reuse_fingerprint
+        ):
             continue
         sequence = (recovered.latest_window_sequence or 0) + 1
 
@@ -768,9 +941,6 @@ async def run_bounded_operation(
                 .as_posix()
             )
             evidence = result.evidence_refs or (result_reference,)
-            reuse_fingerprint = hashlib.sha256(
-                f"{frozen.plan.input_fingerprint}:{step_contract.id}".encode()
-            ).hexdigest()
             store.write_checkpoint(
                 PlanStepCheckpoint(
                     run_id=run_id,
@@ -790,6 +960,7 @@ async def run_bounded_operation(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=OPERATIONS)
+    parser.add_argument("--image", type=_image_argument)
     parser.add_argument("--run-id")
     parser.add_argument(
         "--artifacts-root",
@@ -800,14 +971,23 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.operation == "anima-deploy" and args.image is None:
+        parser.error("anima-deploy requires --image")
+    if args.operation != "anima-deploy" and args.image is not None:
+        parser.error("--image is only valid with anima-deploy")
     run_id = args.run_id or f"{args.operation}-{uuid.uuid4().hex[:12]}"
-    print(json.dumps({"run_id": run_id, "mode": "bounded-feedback"}, sort_keys=True))
+    invocation = {"run_id": run_id, "mode": "bounded-feedback"}
+    if args.image is not None:
+        invocation["image"] = args.image
+    print(json.dumps(invocation, sort_keys=True))
     return asyncio.run(
         run_bounded_operation(
             args.operation,
             run_id=run_id,
             artifacts_root=args.artifacts_root,
+            image=args.image,
         )
     )
 
