@@ -221,7 +221,7 @@ def test_main_package_publishes_immutable_amd64_image_with_minimal_write_scope()
     assert build["push"] == "true"
     assert build["provenance"] == "mode=min"
     assert build["cache-from"] == "type=gha"
-    assert build["cache-to"] == "type=gha,mode=max"
+    assert build["cache-to"] == "type=gha,mode=max,ignore-error=true"
     assert (
         "index:org.opencontainers.image.created=${{ steps.fingerprint.outputs.created }}"
         in build["annotations"]

@@ -557,7 +557,7 @@ jobs:
           build-args: |
             ANIMETTA_BUILD_FINGERPRINT=${{ steps.fingerprint.outputs.fingerprint }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Write deployment summary
         shell: bash
