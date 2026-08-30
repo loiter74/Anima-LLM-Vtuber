@@ -25,6 +25,15 @@ from tooling.quality.models import (
 from tooling.quality.planner import plan_verification
 
 ROOT = Path(__file__).resolve().parents[3]
+MINECRAFT_MCP_BOOTSTRAP_SOURCES = (
+    "src/animetta/tools/minecraft/core/bridge.py",
+    "src/animetta/tools/minecraft/core/config.py",
+)
+MINECRAFT_CORE_SOURCES = tuple(
+    path.relative_to(ROOT).as_posix()
+    for path in sorted((ROOT / "src/animetta/tools/minecraft/core").glob("*.py"))
+    if path.relative_to(ROOT).as_posix() not in MINECRAFT_MCP_BOOTSTRAP_SOURCES
+)
 
 
 @pytest.fixture(autouse=True)
@@ -224,6 +233,38 @@ def test_bilibili_mcp_avoids_repository_and_docker_fallbacks() -> None:
     }
     assert plan.fallbacks == ()
     assert plan.docker_actions == ()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "services/mc-mcp/package.json",
+        "services/mc-mcp/src/index.js",
+        "services/mc-mcp/tests/mcpLifecycle.test.js",
+    ],
+)
+def test_mc_mcp_service_uses_focused_node_gate_without_backend_fallback(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert "mc-mcp-node-quality" in _group_ids(plan)
+    assert "minecraft-architecture-audit" in _group_ids(plan)
+    assert "backend-full" not in _group_ids(plan)
+    assert plan.fallbacks == ()
+    assert plan.unmapped_paths == ()
+
+
+def test_gamebot_root_contract_change_selects_node_contract_gate() -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths(["contracts/gamebot/v2/schema.json"], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+
+    assert "mc-mcp-node-contract" in _group_ids(plan)
 
 
 def test_bilibili_contract_support_paths_have_explicit_components() -> None:
@@ -528,6 +569,63 @@ def test_minecraft_decoupling_paths_have_explicit_component_ownership(
 
     assert required_group in selected_or_covered
     assert not any("unknown" in fallback for fallback in plan.fallbacks)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "tests/tools/minecraft/core/test_bridge.py",
+        "tests/tools/minecraft/core/test_gamebot_v2_adapter.py",
+    ],
+)
+def test_minecraft_runtime_tests_do_not_inherit_production_fallbacks(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+    selected = _group_ids(plan)
+
+    assert "minecraft-runtime-unit" in selected
+    assert "backend-full" not in selected
+    assert "minecraft-real-conversation" not in selected
+    assert plan.fallbacks == ()
+
+
+@pytest.mark.parametrize("path", MINECRAFT_MCP_BOOTSTRAP_SOURCES)
+def test_minecraft_mcp_bootstrap_uses_focused_normal_risk_gates(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+    selected = _group_ids(plan)
+
+    assert {
+        "minecraft-runtime-unit",
+        "minecraft-architecture-audit",
+        "python-format",
+        "backend-static",
+        "backend-typecheck",
+        "backend-deadcode",
+    }.issubset(selected)
+    assert "backend-full" not in selected
+    assert "minecraft-real-conversation" not in selected
+    assert plan.fallbacks == ()
+
+
+@pytest.mark.parametrize("path", MINECRAFT_CORE_SOURCES)
+def test_other_minecraft_core_sources_remain_high_risk(path: str) -> None:
+    plan = plan_verification(
+        _catalog(),
+        from_paths([path], repo_root=ROOT),
+        Tier.AFFECTED,
+    )
+    selected = _group_ids(plan)
+
+    assert "backend-full" in selected
+    assert "minecraft-real-conversation" in selected
+    assert "high-risk component: minecraft-runtime-adapter" in plan.fallbacks
 
 
 @pytest.mark.parametrize(

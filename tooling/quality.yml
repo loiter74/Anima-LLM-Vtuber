@@ -68,6 +68,10 @@ input_sets:
       - frontend/scripts/**
       - frontend/*.mjs
       - frontend/*.ts
+  mc-mcp-runtime:
+    paths:
+      - services/mc-mcp/**
+      - contracts/gamebot/v2/**
   operational-source:
     paths:
       - scripts/check_source_standards.py
@@ -503,6 +507,30 @@ groups:
     resource_weight: 3
     input_sets: [python-toolchain]
 
+  mc-mcp-node-contract:
+    domain: backend
+    kind: contract
+    runner: npm
+    cwd: services/mc-mcp
+    args: [ci, "::", run, test:contract]
+    timeout_seconds: 300
+    resource_class: cpu
+    resource_weight: 2
+    input_sets: [mc-mcp-runtime]
+
+  mc-mcp-node-quality:
+    domain: backend
+    kind: unit
+    runner: npm
+    cwd: services/mc-mcp
+    args: [ci, "::", run, check, "::", test]
+    timeout_seconds: 600
+    include_in_full: true
+    resource_class: cpu
+    resource_weight: 3
+    input_sets: [mc-mcp-runtime]
+    covers: [mc-mcp-node-contract]
+
   minecraft-contract-unit:
     domain: backend
     kind: contract
@@ -561,7 +589,7 @@ groups:
     kind: contract
     runner: python
     entrypoint: scripts/check_minecraft_architecture.py
-    args: [--report]
+    args: [--check]
     timeout_seconds: 120
     include_in_full: true
     cacheable: true
@@ -1125,6 +1153,16 @@ components:
     impacts: []
     risk: normal
 
+  mc-mcp-service:
+    domain: backend
+    paths:
+      - services/mc-mcp/**
+    direct_groups:
+      - mc-mcp-node-quality
+      - minecraft-architecture-audit
+    impacts: []
+    risk: normal
+
   minecraft-gamebot-contract:
     domain: backend
     paths:
@@ -1132,8 +1170,8 @@ components:
       - contracts/gamebot/**
       - scripts/generate_gamebot_v2_contracts.py
       - tests/tools/gamebot/**
-      - tests/tools/minecraft/core/test_gamebot_v2_adapter.py
     direct_groups:
+      - mc-mcp-node-contract
       - minecraft-contract-unit
       - minecraft-cross-runtime-contract
       - minecraft-architecture-audit
@@ -1179,17 +1217,30 @@ components:
     impacts: [minecraft-voyager-control-plane]
     risk: high
 
+  minecraft-mcp-bootstrap:
+    domain: backend
+    paths:
+      - src/animetta/tools/minecraft/core/bridge.py
+      - src/animetta/tools/minecraft/core/config.py
+    direct_groups:
+      - minecraft-runtime-unit
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-typecheck
+      - backend-deadcode
+    impacts: []
+    risk: normal
+
   minecraft-runtime-adapter:
     domain: backend
     paths:
       - src/animetta/tools/mcp_bridge.py
-      - src/animetta/tools/minecraft/core/**
+      - src/animetta/tools/minecraft/core/__init__.py
+      - src/animetta/tools/minecraft/core/adapter.py
+      - src/animetta/tools/minecraft/core/assembly.py
+      - src/animetta/tools/minecraft/core/tools.py
       - src/animetta/orchestration/server/handlers/minecraft_handlers.py
-      - tests/tools/test_mcp_bridge.py
-      - tests/tools/minecraft/core/**
-      - tests/tools/minecraft/test_spectator.py
-      - tests/tools/minecraft/test_voyager_bridge_wiring.py
-      - tests/orchestration/server/handlers/test_minecraft_voyager_wiring.py
     direct_groups:
       - minecraft-runtime-unit
       - minecraft-cross-runtime-contract
@@ -1201,6 +1252,25 @@ components:
       - backend-deadcode
     impacts: [minecraft-voyager-control-plane, orchestration-server]
     risk: high
+
+  minecraft-runtime-adapter-tests:
+    domain: backend
+    paths:
+      - tests/tools/test_mcp_bridge.py
+      - tests/tools/minecraft/core/**
+      - tests/tools/minecraft/test_spectator.py
+      - tests/tools/minecraft/test_voyager_bridge_wiring.py
+      - tests/orchestration/server/handlers/test_minecraft_voyager_wiring.py
+    direct_groups:
+      - minecraft-runtime-unit
+      - minecraft-cross-runtime-contract
+      - minecraft-architecture-audit
+      - python-format
+      - backend-static
+      - backend-support-typecheck
+      - backend-deadcode
+    impacts: []
+    risk: normal
 
   minecraft-adaptive-missions:
     domain: backend

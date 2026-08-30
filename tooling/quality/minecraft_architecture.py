@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import ast
+import json
+import os
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+import yaml
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +37,10 @@ _ALLOWED_RUNTIME_PATHS = frozenset(
 )
 _CANONICAL_SCHEDULER_PATH = "src/animetta/tools/minecraft/voyager/scheduler.py"
 _CANONICAL_EXECUTOR_PATH = "src/animetta/tools/minecraft/voyager/command_executor.py"
+_REPOSITORY_CLI_BRIDGE_PATH = "src/animetta/tools/minecraft/core/bridge.py"
+_MC_MCP_SERVICE_PATH = "services/mc-mcp"
+_MC_MCP_PACKAGE_PATH = f"{_MC_MCP_SERVICE_PATH}/package.json"
+_MC_MCP_CONTRACT_COPY_PATH = f"{_MC_MCP_SERVICE_PATH}/contracts/gamebot/v2"
 _DOMAIN_PATH_PARTS = frozenset({"discovery", "skill", "survival", "tech_tree"})
 _FORBIDDEN_DOMAIN_IMPORTS = (
     "animetta.tools.minecraft.core.adapter",
@@ -49,6 +57,22 @@ _FORBIDDEN_RUNTIME_COUPLING = (
     "resolve_external_runtime_dir",
     "runtime_path",
     "voyager-mc-bot",
+)
+_ROOT_COMPOSE_RUNTIME_MARKERS = (
+    "mc-mcp",
+    "mineflayer",
+    "minecraft-server",
+    "services/mc-mcp",
+    "src/mcp/cli.js",
+)
+_PROCESS_SPAWN_METHODS = frozenset(
+    {
+        "create_subprocess_exec",
+        "create_subprocess_shell",
+        "Popen",
+        "check_call",
+        "check_output",
+    }
 )
 
 
@@ -70,6 +94,18 @@ def _string_literal(node: ast.expr) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return None
+
+
+def _is_process_spawn_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Attribute):
+        return False
+    if node.attr in _PROCESS_SPAWN_METHODS:
+        return True
+    if not isinstance(node.value, ast.Name):
+        return False
+    if node.value.id == "subprocess" and node.attr in {"call", "run"}:
+        return True
+    return node.value.id == "os" and (node.attr == "system" or node.attr.startswith("spawn"))
 
 
 class _AuditVisitor(ast.NodeVisitor):
@@ -109,12 +145,22 @@ class _AuditVisitor(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             self._check_domain_import(alias.name, node)
+            self._check_mineflayer_import(alias.name, node)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
             self._check_domain_import(node.module, node)
+            self._check_mineflayer_import(node.module, node)
         self.generic_visit(node)
+
+    def _check_mineflayer_import(self, module: str, node: ast.AST) -> None:
+        if "mineflayer" in module.casefold():
+            self._report(
+                node,
+                "ANIMA_MINEFLAYER_OWNERSHIP",
+                "Mineflayer dependencies belong only to services/mc-mcp",
+            )
 
     def _check_domain_import(self, module: str, node: ast.AST) -> None:
         parts = set(self.path.parts)
@@ -178,6 +224,12 @@ class _AuditVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         name = _attribute_name(node.func)
         path = self.path.as_posix()
+        if _is_process_spawn_call(node.func) and path != _REPOSITORY_CLI_BRIDGE_PATH:
+            self._report(
+                node,
+                "MC_MCP_PROCESS_OWNERSHIP",
+                "Minecraft subprocess bootstrap is allowed only in minecraft/core/bridge.py",
+            )
         if name in _DIRECT_BRIDGE_METHODS and path not in _ALLOWED_BRIDGE_PATHS:
             self._report(
                 node,
@@ -218,6 +270,19 @@ class _AuditVisitor(ast.NodeVisitor):
                     "LEGACY_CODE_BODY",
                     "legacy skill body code must not drive production execution",
                 )
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if (
+            isinstance(node.value, str)
+            and ("cli.js" in node.value or "services/mc-mcp" in node.value)
+            and self.path.as_posix() != _REPOSITORY_CLI_BRIDGE_PATH
+        ):
+            self._report(
+                node,
+                "MC_MCP_CLI_BOOTSTRAP_OUTSIDE_BRIDGE",
+                "repo-local mc-mcp CLI resolution is allowed only in minecraft/core/bridge.py",
+            )
         self.generic_visit(node)
 
 
@@ -268,6 +333,10 @@ def audit_repository(root: Path) -> tuple[ArchitectureViolation, ...]:
     for disk_path in sorted(source_root.rglob("*.py")):
         relative = PurePosixPath(disk_path.relative_to(root).as_posix())
         violations.extend(audit_source(relative, disk_path.read_text(encoding="utf-8")))
+    base_tools_path = root / "src" / "animetta" / "tools" / "base.py"
+    if base_tools_path.is_file():
+        relative = PurePosixPath(base_tools_path.relative_to(root).as_posix())
+        violations.extend(audit_source(relative, base_tools_path.read_text(encoding="utf-8")))
     coupling_paths = (
         root / "src" / "animetta" / "acceptance" / "minecraft_gameplay_review.py",
         root / "config" / "tools.yaml",
@@ -294,7 +363,141 @@ def audit_repository(root: Path) -> tuple[ArchitectureViolation, ...]:
                         message=f"Anima must reach Minecraft runtime only through mc-mcp: {token}",
                     )
                 )
+    violations.extend(_audit_mc_mcp_service(root))
+    violations.extend(_audit_root_compose_ownership(root))
     return tuple(sorted(violations, key=lambda item: (item.path, item.line, item.code)))
+
+
+def _audit_mc_mcp_service(root: Path) -> list[ArchitectureViolation]:
+    service_root = root / _MC_MCP_SERVICE_PATH
+    package_path = root / _MC_MCP_PACKAGE_PATH
+    if not service_root.is_dir() or not package_path.is_file():
+        return [
+            ArchitectureViolation(
+                path=_MC_MCP_PACKAGE_PATH,
+                line=1,
+                code="MC_MCP_SERVICE_MISSING",
+                message="the repository-owned Node service must live at services/mc-mcp",
+            )
+        ]
+
+    violations: list[ArchitectureViolation] = []
+    try:
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return [
+            ArchitectureViolation(
+                path=_MC_MCP_PACKAGE_PATH,
+                line=1,
+                code="MC_MCP_PACKAGE_INVALID",
+                message=f"mc-mcp package.json must be readable JSON: {exc}",
+            )
+        ]
+
+    binary = package.get("bin") if isinstance(package, dict) else None
+    dependencies = package.get("dependencies") if isinstance(package, dict) else None
+    scripts = package.get("scripts") if isinstance(package, dict) else None
+    package_expectations = (
+        (
+            isinstance(binary, dict) and binary.get("mc-mcp") == "src/mcp/cli.js",
+            "MC_MCP_CLI_CONTRACT",
+            "package bin.mc-mcp must resolve to src/mcp/cli.js",
+        ),
+        (
+            isinstance(dependencies, dict) and "mineflayer" in dependencies,
+            "MC_MCP_MINEFLAYER_CONTRACT",
+            "Mineflayer must be owned as a services/mc-mcp dependency",
+        ),
+        (
+            isinstance(scripts, dict) and {"check", "test"}.issubset(scripts),
+            "MC_MCP_QUALITY_CONTRACT",
+            "mc-mcp package scripts must expose check and test",
+        ),
+    )
+    for satisfied, code, message in package_expectations:
+        if not satisfied:
+            violations.append(
+                ArchitectureViolation(
+                    path=_MC_MCP_PACKAGE_PATH,
+                    line=1,
+                    code=code,
+                    message=message,
+                )
+            )
+
+    duplicate_contract = root / _MC_MCP_CONTRACT_COPY_PATH
+    if duplicate_contract.is_dir() and any(
+        candidate.is_file() for candidate in duplicate_contract.rglob("*")
+    ):
+        violations.append(
+            ArchitectureViolation(
+                path=_MC_MCP_CONTRACT_COPY_PATH,
+                line=1,
+                code="DUPLICATE_GAMEBOT_CONTRACT_COPY",
+                message="services/mc-mcp must read contracts/gamebot/v2 from the repository root",
+            )
+        )
+
+    for current_root, directories, filenames in os.walk(service_root):
+        directories[:] = [
+            name for name in directories if name not in {"node_modules", ".git", ".cache"}
+        ]
+        for filename in sorted(filenames):
+            if not filename.endswith(".py"):
+                continue
+            python_path = Path(current_root) / filename
+            violations.append(
+                ArchitectureViolation(
+                    path=python_path.relative_to(root).as_posix(),
+                    line=1,
+                    code="MC_MCP_PYTHON_RUNTIME",
+                    message="services/mc-mcp is an independently owned Node.js runtime",
+                )
+            )
+    return violations
+
+
+def _audit_root_compose_ownership(root: Path) -> list[ArchitectureViolation]:
+    violations: list[ArchitectureViolation] = []
+    compose_paths = sorted((*root.glob("docker-compose*.yml"), *root.glob("docker-compose*.yaml")))
+    for compose_path in compose_paths:
+        try:
+            content = compose_path.read_text(encoding="utf-8")
+            document = yaml.safe_load(content)
+        except (OSError, UnicodeError, yaml.YAMLError):
+            continue
+        services = document.get("services") if isinstance(document, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for service_name, service in services.items():
+            serialized = json.dumps(service, ensure_ascii=True, sort_keys=True).casefold()
+            candidate = f"{service_name} {serialized}".casefold()
+            marker = next(
+                (item for item in _ROOT_COMPOSE_RUNTIME_MARKERS if item in candidate),
+                None,
+            )
+            if marker is None:
+                continue
+            line = next(
+                (
+                    number
+                    for number, source_line in enumerate(content.splitlines(), start=1)
+                    if str(service_name) in source_line or marker in source_line.casefold()
+                ),
+                1,
+            )
+            violations.append(
+                ArchitectureViolation(
+                    path=compose_path.relative_to(root).as_posix(),
+                    line=line,
+                    code="ANIMA_MC_COMPOSE_OWNERSHIP",
+                    message=(
+                        "root Compose must not own mc-mcp, Mineflayer, or Minecraft runtime; "
+                        f"found {marker!r}"
+                    ),
+                )
+            )
+    return violations
 
 
 def render_report(violations: tuple[ArchitectureViolation, ...]) -> str:

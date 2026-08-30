@@ -140,8 +140,16 @@ class TestLoadToolsFromConfig:
         assert tools_map == {}
 
     def test_unavailable_minecraft_runtime_is_not_exposed_to_the_model(self, monkeypatch):
+        from animetta.tools.minecraft.core.bridge import MinecraftMcpError
+
         monkeypatch.delenv("MC_MCP_AUTH_TOKEN", raising=False)
-        with patch("animetta.tools.base.shutil.which", return_value=None):
+        with patch(
+            "animetta.tools.minecraft.core.bridge.resolve_mc_mcp_runtime",
+            side_effect=MinecraftMcpError(
+                "MC_MCP_DEPENDENCIES_NOT_INSTALLED:"
+                "Run 'npm ci --prefix services/mc-mcp' from the repository root"
+            ),
+        ):
             _tools, tools_map = load_tools_from_config(
                 {
                     "builtin_tools": ["calculator"],
@@ -158,6 +166,19 @@ class TestLoadToolsFromConfig:
         assert set(tools_map) == {"calculator"}
         assert "mc_connection" not in tools_map
         assert "mc_operate_bot" not in tools_map
+
+    def test_runtime_availability_delegates_to_shared_resolver(self):
+        from animetta.tools.base import _minecraft_runtime_available
+        from animetta.tools.minecraft.core.bridge import MinecraftMcpRuntime
+
+        with patch(
+            "animetta.tools.minecraft.core.bridge.resolve_mc_mcp_runtime",
+            return_value=MinecraftMcpRuntime(command=("node", "services/mc-mcp/src/mcp/cli.js")),
+        ) as resolve:
+            available = _minecraft_runtime_available({"mcp": {"cli_command": "mc-mcp"}})
+
+        assert available is True
+        resolve.assert_called_once_with({"cli_command": "mc-mcp"})
 
     def test_configured_minecraft_token_makes_runtime_available(self, monkeypatch):
         from animetta.tools.base import _minecraft_runtime_available

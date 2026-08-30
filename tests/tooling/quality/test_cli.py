@@ -164,8 +164,38 @@ def test_plan_command_writes_frozen_plan_and_github_matrices(
     assert code == 0
     assert plan_path.exists()
     assert payload["groups"][0]["id"] == "python-check"
-    assert 'python_groups=["python-check"]' in outputs
+    assert 'python_groups=[{"group":"python-check","runner":"python"}]' in outputs
     assert "python " not in outputs
+
+
+def test_repository_npm_group_is_exported_to_node_matrix(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    plan_path = tmp_path / "mc-mcp-plan.json"
+    github_output = tmp_path / "github-output.txt"
+
+    code = main(
+        [
+            "plan",
+            "--repo-root",
+            str(ROOT),
+            "--tier",
+            "affected",
+            "--paths",
+            "services/mc-mcp/src/index.js",
+            "--output",
+            str(plan_path),
+            "--github-output",
+            str(github_output),
+            "--json",
+        ]
+    )
+    capsys.readouterr()
+    outputs = github_output.read_text(encoding="utf-8")
+
+    assert code == 0
+    assert 'node_groups=[{"group":"mc-mcp-node-quality","runner":"npm"}]' in outputs
 
 
 def test_run_command_executes_plan_and_writes_aggregate_evidence(

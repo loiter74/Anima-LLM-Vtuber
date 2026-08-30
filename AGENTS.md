@@ -17,7 +17,7 @@ Animetta 是 AI 伙伴与虚拟主播框架。后端使用 Python 3.13、Starlet
 | 记忆              | `src/animetta/memory/v2/`                                |
 | Live2D          | `src/animetta/avatar/`、`frontend/src/components/live2d/` |
 | 歌唱              | `src/animetta/services/singing/`                         |
-| Minecraft       | `src/animetta/tools/minecraft/`                          |
+| Minecraft       | `src/animetta/tools/{minecraft,gamebot}/`、`services/mc-mcp/` |
 | 架构决策            | `docs/adrs/`                                             |
 
 ## 智能体配置
@@ -64,9 +64,12 @@ LLM / ASR / TTS Provider 遵循 `interface.py → implementation → factory →
 
 ## Minecraft
 
-`src/animetta/tools/minecraft/` 是位于 Python 仓库中的 Node.js 项目。
+`src/animetta/tools/{minecraft,gamebot}/` 是 Python 控制平面；`services/mc-mcp/`
+是同仓但独立进程运行的 Node.js/Mineflayer 服务。Python 侧只可通过
+`minecraft/core/bridge.py` 解析并启动 mc-mcp CLI，再经 loopback Streamable HTTP MCP
+交互，不得直接启动 Mineflayer bot、Minecraft Compose 或调用内部 Node 模块。
 
-修改前读取该目录自己的 `AGENTS.md`，不要套用普通 Python 模块规则。
+修改前读取目标目录自己的 `AGENTS.md`；Node 服务不得套用普通 Python 模块规则。
 
 ## 前端与 Live2D
 

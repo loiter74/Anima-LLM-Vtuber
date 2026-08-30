@@ -28,6 +28,7 @@ def build_argv(
     group: VerificationGroup,
     *,
     python_executable: str = sys.executable,
+    npm_executable: str = "npm",
     pnpm_executable: str = "pnpm",
     docker_executable: str = "docker",
 ) -> list[str]:
@@ -44,6 +45,16 @@ def build_argv(
     if group.runner is Runner.PYTHON:
         assert group.entrypoint is not None
         return [python_executable, group.entrypoint, *group.args]
+    if group.runner is Runner.NPM:
+        return [
+            python_executable,
+            "-m",
+            "tooling.quality.npm_runner",
+            "--npm",
+            npm_executable,
+            "--",
+            *group.args,
+        ]
     if group.runner is Runner.PNPM:
         return [pnpm_executable, *group.args]
     if group.runner is Runner.VITEST:
@@ -235,11 +246,13 @@ def run_group(
             remediation=f"Install or enable required capabilities: {', '.join(missing)}",
         )
 
+    npm = shutil.which("npm.cmd") or shutil.which("npm") or "npm"
     pnpm = shutil.which("pnpm.cmd") or shutil.which("pnpm") or "pnpm"
     docker = shutil.which("docker") or "docker"
     argv = build_argv(
         group,
         python_executable=sys.executable,
+        npm_executable=npm,
         pnpm_executable=pnpm,
         docker_executable=docker,
     )

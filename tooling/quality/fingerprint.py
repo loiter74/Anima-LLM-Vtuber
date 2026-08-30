@@ -399,16 +399,18 @@ class FingerprintContext:
                 identity[package] = importlib.metadata.version(package)
             except importlib.metadata.PackageNotFoundError:
                 identity[package] = "missing"
-        if runner in {Runner.PNPM, Runner.VITEST, Runner.PLAYWRIGHT}:
-            identity.update(self._javascript_identity())
+        if runner is Runner.NPM:
+            identity.update(self._javascript_identity(("node", "npm")))
+        elif runner in {Runner.PNPM, Runner.VITEST, Runner.PLAYWRIGHT}:
+            identity.update(self._javascript_identity(("node", "pnpm")))
         identity["runner"] = runner.value
         self._toolchain_cache[runner] = dict(sorted(identity.items()))
         return self._toolchain_cache[runner].copy()
 
     @staticmethod
-    def _javascript_identity() -> dict[str, str]:
+    def _javascript_identity(executables: tuple[str, ...]) -> dict[str, str]:
         identity: dict[str, str] = {}
-        for executable in ("node", "pnpm"):
+        for executable in executables:
             resolved = shutil.which(executable)
             if resolved is None:
                 identity[executable] = "missing"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Literal
@@ -32,10 +33,36 @@ class Runner(StrEnum):
     VULTURE = "vulture"
     PYTEST = "pytest"
     PYTHON = "python"
+    NPM = "npm"
     PNPM = "pnpm"
     VITEST = "vitest"
     PLAYWRIGHT = "playwright"
     DOCKER = "docker"
+
+
+NPM_COMMAND_SEPARATOR = "::"
+
+
+def parse_npm_commands(arguments: Sequence[str]) -> tuple[tuple[str, ...], ...]:
+    """Split a catalog npm payload into non-empty command argv sequences."""
+
+    if not arguments:
+        raise ValueError("npm command sequence requires at least one command")
+
+    commands: list[tuple[str, ...]] = []
+    current: list[str] = []
+    for argument in arguments:
+        if argument == NPM_COMMAND_SEPARATOR:
+            if not current:
+                raise ValueError("npm command sequence contains an empty command")
+            commands.append(tuple(current))
+            current = []
+            continue
+        current.append(argument)
+    if not current:
+        raise ValueError("npm command sequence contains an empty command")
+    commands.append(tuple(current))
+    return tuple(commands)
 
 
 class Isolation(StrEnum):
@@ -252,6 +279,8 @@ class VerificationGroup(FrozenModel):
     def validate_runner_payload(self) -> VerificationGroup:
         if self.runner is Runner.PYTHON and not self.entrypoint:
             raise ValueError("python runner requires entrypoint")
+        if self.runner is Runner.NPM:
+            parse_npm_commands(self.args)
         if (
             self.runner
             in {Runner.RUFF, Runner.RUFF_FORMAT, Runner.MYPY, Runner.VULTURE, Runner.PYTEST}

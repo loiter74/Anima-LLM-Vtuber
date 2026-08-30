@@ -205,18 +205,23 @@ def _discover_changes(args: argparse.Namespace) -> tuple[ChangeSet, str | None]:
         return ChangeSet(changes=(), source="worktree"), str(exc)
 
 
-def _environment_groups(plan: VerificationPlan) -> dict[str, list[str]]:
-    matrices: dict[str, list[str]] = {"python": [], "node": [], "service": []}
+def _environment_groups(plan: VerificationPlan) -> dict[str, list[dict[str, str]]]:
+    matrices: dict[str, list[dict[str, str]]] = {
+        "python": [],
+        "node": [],
+        "service": [],
+    }
     for group in plan.groups:
+        matrix_entry = {"group": group.id, "runner": group.runner.value}
         if group.isolation.value != "hermetic" or group.runner in {
             Runner.PLAYWRIGHT,
             Runner.DOCKER,
         }:
-            matrices["service"].append(group.id)
-        elif group.runner in {Runner.PNPM, Runner.VITEST}:
-            matrices["node"].append(group.id)
+            matrices["service"].append(matrix_entry)
+        elif group.runner in {Runner.NPM, Runner.PNPM, Runner.VITEST}:
+            matrices["node"].append(matrix_entry)
         else:
-            matrices["python"].append(group.id)
+            matrices["python"].append(matrix_entry)
     return matrices
 
 

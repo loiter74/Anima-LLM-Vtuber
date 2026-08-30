@@ -1,7 +1,7 @@
 # Minecraft bot architecture
 
 Minecraft has two public Anima capabilities, one Anima mutation chain and one
-independently deployed MC runtime service.
+same-repository MC runtime service that runs as an independent process.
 
 ## Invariants
 
@@ -11,13 +11,14 @@ independently deployed MC runtime service.
   state, and remains readable while disconnected.
 - `mc_operate_bot.cancel` commits a durable stop barrier before cooperative cancel.
 - Server, bot and viewer lifecycle policy belongs to `mc-mcp`.
-- Anima contains no Minecraft Compose command, Node entrypoint or sibling-repository
-  path.
+- Anima may invoke only `services/mc-mcp/src/mcp/cli.js service ensure` through Node
+  to discover/start the service. It contains no Minecraft Compose command and never
+  starts the Mineflayer bot directly.
 
 ## Request flow
 
 ```text
-user -> mc_connection.connect(profile) -> loopback Streamable HTTP MCP
+user -> mc_connection.connect(profile) -> mc-mcp service ensure -> loopback Streamable HTTP MCP
 user -> mc_operate_bot.execute(typed request)
      -> VoyagerGateway -> scheduler/controller -> CommandExecutor
      -> MinecraftGameBotV2Adapter -> mc-mcp GameBot v2 tool -> Mineflayer
@@ -25,6 +26,11 @@ user -> mc_operate_bot.execute(typed request)
 runtime events -> mc-mcp cursor buffer -> Anima event projection
 durable journal -> mc_operate_bot.progress -> Socket.IO/frontend/narration
 ```
+
+Resolution prefers the configured token environment variable, then a configured/PATH
+CLI, and finally the repository CLI. The repository fallback requires Node and
+preinstalled `services/mc-mcp` dependencies; installation remains an explicit
+`npm ci --prefix services/mc-mcp` setup step.
 
 ## Capability semantics
 

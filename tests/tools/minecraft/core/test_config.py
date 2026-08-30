@@ -18,6 +18,17 @@ def test_mcp_config_has_path_independent_defaults() -> None:
     assert config.default_profile == "external-local"
 
 
+def test_mcp_config_accepts_multi_argument_cli_command() -> None:
+    config = MinecraftMcpConfig(cli_command=["node", "services/mc-mcp/src/mcp/cli.js"])
+
+    assert config.cli_command == ("node", "services/mc-mcp/src/mcp/cli.js")
+
+
+def test_mcp_config_rejects_empty_cli_arguments() -> None:
+    with pytest.raises(ValidationError, match="non-empty arguments"):
+        MinecraftMcpConfig(cli_command=["node", ""])
+
+
 def test_minecraft_config_keeps_anima_policy_and_persistence() -> None:
     config = MinecraftConfig(enabled=True, safety=MinecraftSafetyConfig(max_distance=300))
 

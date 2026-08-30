@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -9,6 +10,28 @@ from tooling.quality.minecraft_architecture import audit_repository, audit_sourc
 
 def _codes(path: str, source: str) -> set[str]:
     return {violation.code for violation in audit_source(PurePosixPath(path), source)}
+
+
+def _write_mc_mcp_service(root: Path) -> None:
+    service = root / "services" / "mc-mcp"
+    service.mkdir(parents=True, exist_ok=True)
+    (service / "package.json").write_text(
+        json.dumps(
+            {
+                "type": "module",
+                "bin": {"mc-mcp": "src/mcp/cli.js"},
+                "scripts": {"check": "node --check src/index.js", "test": "node --test"},
+                "dependencies": {"mineflayer": "4.20.0"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    managed_compose = service / "server" / "docker-compose.yml"
+    managed_compose.parent.mkdir(parents=True)
+    managed_compose.write_text(
+        "services:\n  minecraft:\n    image: itzg/minecraft-server\n",
+        encoding="utf-8",
+    )
 
 
 def test_audit_reports_direct_gameplay_calls_outside_executor_boundary() -> None:
@@ -135,6 +158,45 @@ from animetta.tools.minecraft.voyager.gateway import VoyagerGateway
     assert "DOMAIN_CONTROL_PLANE_IMPORT" in codes
 
 
+def test_audit_allows_repo_cli_resolution_only_in_bridge() -> None:
+    source = 'CLI = ROOT / "services" / "mc-mcp" / "src" / "mcp" / "cli.js"\n'
+
+    assert "MC_MCP_CLI_BOOTSTRAP_OUTSIDE_BRIDGE" not in _codes(
+        "src/animetta/tools/minecraft/core/bridge.py",
+        source,
+    )
+    assert "MC_MCP_CLI_BOOTSTRAP_OUTSIDE_BRIDGE" in _codes(
+        "src/animetta/tools/minecraft/core/runtime.py",
+        source,
+    )
+
+
+def test_audit_rejects_python_mineflayer_imports() -> None:
+    codes = _codes(
+        "src/animetta/tools/minecraft/core/runtime.py",
+        "import mineflayer\n",
+    )
+
+    assert "ANIMA_MINEFLAYER_OWNERSHIP" in codes
+
+
+def test_audit_allows_process_bootstrap_only_in_bridge() -> None:
+    source = """
+async def start(command):
+    await asyncio.create_subprocess_exec(*command)
+    subprocess.run(command)
+"""
+
+    assert "MC_MCP_PROCESS_OWNERSHIP" not in _codes(
+        "src/animetta/tools/minecraft/core/bridge.py",
+        source,
+    )
+    assert "MC_MCP_PROCESS_OWNERSHIP" in _codes(
+        "src/animetta/tools/minecraft/core/runtime.py",
+        source,
+    )
+
+
 def test_audit_reports_duplicate_gameplay_scheduler_and_executor() -> None:
     codes = _codes(
         "src/animetta/tools/minecraft/mission/coordinator.py",
@@ -166,6 +228,7 @@ def test_audit_reports_mission_and_discovery_runtime_calls() -> None:
 
 
 def test_repository_audit_rejects_sibling_runtime_paths(tmp_path: Path) -> None:
+    _write_mc_mcp_service(tmp_path)
     target = tmp_path / "scripts" / "minecraft_probe.py"
     target.parent.mkdir(parents=True)
     target.write_text('runtime_path = "../voyager-mc-bot"\n', encoding="utf-8")
@@ -173,6 +236,68 @@ def test_repository_audit_rejects_sibling_runtime_paths(tmp_path: Path) -> None:
     violations = audit_repository(tmp_path)
 
     assert {item.code for item in violations} == {"ANIMA_MC_RUNTIME_COUPLING"}
+
+
+def test_repository_audit_requires_repo_owned_node_service(tmp_path: Path) -> None:
+    violations = audit_repository(tmp_path)
+
+    assert {item.code for item in violations} == {"MC_MCP_SERVICE_MISSING"}
+
+
+def test_repository_audit_allows_service_owned_mineflayer_and_compose(
+    tmp_path: Path,
+) -> None:
+    _write_mc_mcp_service(tmp_path)
+
+    assert audit_repository(tmp_path) == ()
+
+
+def test_repository_audit_requires_service_cli_dependency_and_quality_contracts(
+    tmp_path: Path,
+) -> None:
+    _write_mc_mcp_service(tmp_path)
+    package_path = tmp_path / "services" / "mc-mcp" / "package.json"
+    package_path.write_text("{}\n", encoding="utf-8")
+
+    violations = audit_repository(tmp_path)
+
+    assert {item.code for item in violations} == {
+        "MC_MCP_CLI_CONTRACT",
+        "MC_MCP_MINEFLAYER_CONTRACT",
+        "MC_MCP_QUALITY_CONTRACT",
+    }
+
+
+def test_repository_audit_rejects_python_and_contract_copies_inside_service(
+    tmp_path: Path,
+) -> None:
+    _write_mc_mcp_service(tmp_path)
+    python_runtime = tmp_path / "services" / "mc-mcp" / "runtime.py"
+    python_runtime.write_text("print('runtime')\n", encoding="utf-8")
+    duplicate_contract = tmp_path / "services" / "mc-mcp" / "contracts" / "gamebot" / "v2"
+    duplicate_contract.mkdir(parents=True)
+    (duplicate_contract / "schema.json").write_text("{}\n", encoding="utf-8")
+
+    violations = audit_repository(tmp_path)
+
+    assert {item.code for item in violations} == {
+        "DUPLICATE_GAMEBOT_CONTRACT_COPY",
+        "MC_MCP_PYTHON_RUNTIME",
+    }
+
+
+def test_repository_audit_rejects_root_compose_minecraft_ownership(
+    tmp_path: Path,
+) -> None:
+    _write_mc_mcp_service(tmp_path)
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n  mc-mcp:\n    build: services/mc-mcp\n",
+        encoding="utf-8",
+    )
+
+    violations = audit_repository(tmp_path)
+
+    assert {item.code for item in violations} == {"ANIMA_MC_COMPOSE_OWNERSHIP"}
 
 
 def test_report_cli_runs_from_the_repository_root() -> None:

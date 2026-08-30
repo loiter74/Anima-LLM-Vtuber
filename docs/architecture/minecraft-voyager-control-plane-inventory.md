@@ -25,10 +25,11 @@ mc_operate_bot.execute -> VoyagerGateway -> journal/scheduler
   -> UnifiedVoyagerController -> CommandExecutor -> MCP adapter
 ```
 
-The independent `mc-mcp` service owns Minecraft server, Mineflayer bot, viewer
-controller and GameBot v2 runtime lifecycle. Anima stores only the loopback MCP URL,
-CLI name, default profile, authentication environment key and timeouts. It never
-resolves a sibling repository, launches Node, or runs Minecraft Compose.
+The same-repository, independently running `mc-mcp` service owns Minecraft server,
+Mineflayer bot, viewer controller and GameBot v2 runtime lifecycle. Anima stores only
+the loopback MCP URL, CLI command, default profile, authentication environment key and
+timeouts. `core/bridge.py` may resolve the repository CLI and use Node to run only
+`service ensure`; it never starts the Mineflayer bot or runs Minecraft Compose.
 
 `managed` profiles may start a server and hold an exact ownership token. `external`
 profiles only probe and connect. `disconnect` stops only the bot. `shutdown` stops the
@@ -49,5 +50,6 @@ projects viewer events and can request `reattach_viewer`.
 | Advancement store | canonical vanilla advancement events |
 | mc-mcp | owned managed-server identity and lifecycle generation |
 
-The MC repository owns its MCP transport and runtime contracts. Anima contract
-generation does not copy files into a sibling checkout.
+`services/mc-mcp` owns its MCP transport and runtime contracts. Anima contract
+generation consumes that same-repository service without copying its Node modules
+into the Python package.

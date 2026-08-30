@@ -4,7 +4,8 @@ Viewer attachment is owned entirely by `mc-mcp` and its Mineflayer-side viewer
 controller. Anima only displays the projected state and exposes a manual retry via
 `mc_connection(operation="reattach_viewer")`.
 
-Configure the selected profile in the MC repository's `config/mc-mcp.json`:
+Configure the selected profile in this repository's
+`services/mc-mcp/config/mc-mcp.json`:
 
 ```json
 {
@@ -24,6 +25,6 @@ until attachment is confirmed. Optional attachment failure leaves the bot usable
 appears as a warning state.
 
 The UI shows three independent layers: server, bot and viewer. If viewer attachment
-fails, verify the selected MC profile's server permissions and use “重新附身” to ask
-the MC-side controller to retry. Do not add retry, username or operator policy to
-Anima configuration.
+fails, verify the selected mc-mcp profile's server permissions and use “重新附身” to
+ask the service-side controller to retry. Do not add retry, username or operator
+policy to Anima configuration.

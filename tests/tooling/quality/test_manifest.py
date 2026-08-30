@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from tooling.quality.manifest import load_catalog
-from tooling.quality.models import Catalog
+from tooling.quality.models import Catalog, VerificationGroup
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -122,6 +122,22 @@ def test_catalog_rejects_unknown_enum_value() -> None:
 
     with pytest.raises(ValidationError, match="isolation"):
         Catalog.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [[], ["::", "test"], ["ci", "::"], ["ci", "::", "::", "test"]],
+)
+def test_npm_group_rejects_empty_command_segments(arguments: list[str]) -> None:
+    with pytest.raises(ValidationError, match="npm command sequence"):
+        VerificationGroup.model_validate(
+            {
+                "domain": "backend",
+                "kind": "unit",
+                "runner": "npm",
+                "args": arguments,
+            }
+        )
 
 
 def test_catalog_rejects_unknown_component_group() -> None:
@@ -250,7 +266,7 @@ def test_repository_catalog_covers_runtime_environments() -> None:
         for capability in group.capabilities
     }
 
-    assert {"pytest", "pnpm", "playwright", "docker"}.issubset(runners)
+    assert {"pytest", "npm", "pnpm", "playwright", "docker"}.issubset(runners)
     assert {"browser", "docker"}.issubset(capabilities)
     assert set(loaded.catalog.fallbacks.model_dump()) == {
         "backend",
@@ -408,8 +424,50 @@ def test_repository_catalog_has_minecraft_control_plane_components() -> None:
         }.issubset(component.direct_groups)
 
     assert catalog.groups["minecraft-architecture-audit"].runner.value == "python"
-    assert catalog.groups["minecraft-architecture-audit"].args == ("--report",)
+    assert catalog.groups["minecraft-architecture-audit"].args == ("--check",)
     assert set(expected.values()).issubset(catalog.groups["backend-full"].covers)
+
+    bootstrap = catalog.components["minecraft-mcp-bootstrap"]
+    assert bootstrap.paths == (
+        "src/animetta/tools/minecraft/core/bridge.py",
+        "src/animetta/tools/minecraft/core/config.py",
+    )
+    assert bootstrap.risk.value == "normal"
+    assert bootstrap.impacts == ()
+    assert bootstrap.direct_groups == (
+        "minecraft-runtime-unit",
+        "minecraft-architecture-audit",
+        "python-format",
+        "backend-static",
+        "backend-typecheck",
+        "backend-deadcode",
+    )
+
+
+def test_repository_catalog_has_lockfile_backed_mc_mcp_node_gates() -> None:
+    catalog = load_catalog(ROOT / "tooling" / "quality.yml").catalog
+    component = catalog.components["mc-mcp-service"]
+    quality_group = catalog.groups["mc-mcp-node-quality"]
+    contract_group = catalog.groups["mc-mcp-node-contract"]
+
+    assert component.paths == ("services/mc-mcp/**",)
+    assert component.direct_groups == (
+        "mc-mcp-node-quality",
+        "minecraft-architecture-audit",
+    )
+    assert quality_group.runner.value == "npm"
+    assert quality_group.cwd == "services/mc-mcp"
+    assert quality_group.args == ("ci", "::", "run", "check", "::", "test")
+    assert quality_group.include_in_full is True
+    assert quality_group.cacheable is False
+    assert quality_group.covers == ("mc-mcp-node-contract",)
+    assert contract_group.args == (
+        "ci",
+        "::",
+        "run",
+        "test:contract",
+    )
+    assert "mc-mcp-node-contract" in catalog.components["minecraft-gamebot-contract"].direct_groups
 
 
 def test_repository_catalog_has_frontend_lint_and_format_gates() -> None:

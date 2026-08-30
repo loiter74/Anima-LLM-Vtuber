@@ -132,7 +132,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.python_groups) }}
+        include: ${{ fromJSON(needs.plan.outputs.python_groups) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -187,7 +187,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.node_groups) }}
+        include: ${{ fromJSON(needs.plan.outputs.node_groups) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -198,17 +198,29 @@ jobs:
       - name: Install quality runner dependencies
         run: python -m pip install pydantic pyyaml
 
+      - name: Set up Node for npm
+        if: matrix.runner == 'npm'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: services/mc-mcp/package-lock.json
+
       - uses: pnpm/action-setup@v6
+        if: matrix.runner == 'pnpm' || matrix.runner == 'vitest'
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v6
+      - name: Set up Node for pnpm
+        if: matrix.runner == 'pnpm' || matrix.runner == 'vitest'
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install frontend dependencies
+        if: matrix.runner == 'pnpm' || matrix.runner == 'vitest'
         run: pnpm --dir frontend install --frozen-lockfile
 
       - name: Download frozen plan
@@ -251,7 +263,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.plan.outputs.service_groups) }}
+        include: ${{ fromJSON(needs.plan.outputs.service_groups) }}
     steps:
       - uses: actions/checkout@v7
 

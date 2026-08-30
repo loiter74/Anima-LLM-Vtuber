@@ -107,7 +107,7 @@ def test_frozen_groups_run_in_dynamic_environment_matrices_without_result_cache(
 
         assert job["needs"] == "plan"
         assert strategy["fail-fast"] == "false"
-        assert strategy["matrix"]["group"] == (
+        assert strategy["matrix"]["include"] == (
             "${{ fromJSON(needs.plan.outputs." + plan_output + ") }}"
         )
         assert "python -m tooling.quality run-group" in commands
@@ -135,6 +135,27 @@ def test_frozen_groups_run_in_dynamic_environment_matrices_without_result_cache(
         "pnpm/action-setup@v6",
         "actions/setup-node@v6",
     } <= set(service_actions)
+
+
+def test_node_matrix_prepares_only_the_selected_package_manager() -> None:
+    node_job = _load_workflow("quality.yml")["jobs"]["node-groups"]
+    pnpm_condition = "matrix.runner == 'pnpm' || matrix.runner == 'vitest'"
+    setup_node_steps = [
+        step for step in node_job["steps"] if step.get("uses") == "actions/setup-node@v6"
+    ]
+    pnpm_setup = _action_step(node_job, "pnpm/action-setup@v6")
+    frontend_install = next(
+        step for step in node_job["steps"] if step.get("name") == "Install frontend dependencies"
+    )
+
+    assert len(setup_node_steps) == 2
+    assert {step["if"] for step in setup_node_steps} == {
+        "matrix.runner == 'npm'",
+        pnpm_condition,
+    }
+    assert pnpm_setup["if"] == pnpm_condition
+    assert frontend_install["if"] == pnpm_condition
+    assert "npm ci" not in _commands(node_job)
 
 
 def test_pr_docker_build_and_aggregate_gate_follow_the_frozen_plan() -> None:
@@ -282,13 +303,14 @@ def test_main_tag_promotion_is_serialized_and_never_rebuilds_the_image() -> None
     assert '--tag "$IMAGE:main"' in commands
 
 
-def test_dependency_caches_are_limited_to_pip_pnpm_and_buildkit() -> None:
+def test_dependency_caches_are_limited_to_pip_npm_pnpm_and_buildkit() -> None:
     workflow = _load_workflow("quality.yml")
     text = (WORKFLOWS / "quality.yml").read_text(encoding="utf-8")
 
     assert "actions/cache@" not in text
     assert ".quality-cache" not in text
     assert "cache: pip" in text
+    assert "cache: npm" in text
     assert "cache: pnpm" in text
     assert "cache-from: type=gha" in text
     assert "cache-to: type=gha,mode=max" in text

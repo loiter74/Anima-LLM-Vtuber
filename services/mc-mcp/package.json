@@ -1,0 +1,24 @@
+{
+  "name": "@animetta/mc-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Animetta Mineflayer runtime and loopback Streamable HTTP MCP service.",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "mc-mcp": "src/mcp/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:contract": "node --test tests/gamebotContractV2Parity.test.js",
+    "check": "node --check src/index.js && node --check src/actionDeadline.js && node --check src/gamebotRuntimeV2.js && node --check src/runtime/gamebotV2Adapter.js && node --check src/runtime/processProtocol.js && node --check src/mcp/server.js && node --check src/mcp/tools.js && node --check src/mcp/cli.js && node --check src/mcp/lifecycle.js && node --check src/mcp/managedServer.js && node --check src/mcp/profile.js && node --check src/mcp/secureState.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "mineflayer": "^4.20.0",
+    "mineflayer-pathfinder": "^2.4.0",
+    "mineflayer-pvp": "^1.3.0",
+    "vec3": "^0.1.8",
+    "zod": "^3.25.76"
+  }
+}

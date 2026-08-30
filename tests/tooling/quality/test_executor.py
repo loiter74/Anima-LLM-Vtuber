@@ -191,6 +191,31 @@ def test_code_standard_groups_use_canonical_local_commands() -> None:
     ]
 
 
+def test_npm_group_uses_shell_free_reproducible_command_sequence() -> None:
+    loaded = _repository_catalog()
+
+    argv = build_argv(
+        loaded.catalog.groups["mc-mcp-node-quality"],
+        python_executable=sys.executable,
+        npm_executable="npm",
+    )
+
+    assert argv == [
+        sys.executable,
+        "-m",
+        "tooling.quality.npm_runner",
+        "--npm",
+        "npm",
+        "--",
+        "ci",
+        "::",
+        "run",
+        "check",
+        "::",
+        "test",
+    ]
+
+
 def test_required_frontend_lint_fails_closed_when_pnpm_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

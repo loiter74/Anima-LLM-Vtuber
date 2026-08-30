@@ -31,7 +31,9 @@
 
 ## Minecraft 产品工具
 
-Minecraft 对 LLM 只公开两个工具。它们通过独立 `mc-mcp` 服务操作资源；Animetta 不直接启动 Node/Minecraft 进程。
+Minecraft 对 LLM 只公开两个工具。它们通过同仓、独立进程运行的
+`services/mc-mcp` 服务操作资源；Animetta 不直接启动 Mineflayer bot 或
+Minecraft Compose。
 
 ### `mc_connection`
 
@@ -68,7 +70,22 @@ profile?: string，仅 connect 可用
 
 `kind="atomic"` 时使用 `action` 替代 `mission`，只供受信任内部探针。完整 mission、action 与 budget schema 由 `src/animetta/tools/minecraft/voyager/` 的 Pydantic 模型生成，额外字段会被拒绝。
 
-Minecraft 工具仅在 `minecraft.enabled=true` 且 `MC_MCP_AUTH_TOKEN` 存在或本地 `mc-mcp` CLI 可发现时加载。
+Minecraft 工具仅在 `minecraft.enabled=true` 且以下任一入口可用时加载：
+`mcp.auth_token_env` 指向的环境变量、配置/PATH 中的 `mc-mcp` CLI，或仓内
+`services/mc-mcp/src/mcp/cli.js`。环境 token 优先于所有 CLI；仓内入口通过 PATH
+中的 `node` 执行，只调用 `service ensure` 来取得服务描述符；它不直接启动 bot
+或 Compose。
+
+首次克隆后先执行：
+
+```powershell
+npm ci --prefix services/mc-mcp
+```
+
+运行请求不会自动联网安装依赖。缺少 Node、仓内 CLI 或服务依赖时，桥接层分别
+返回 `MC_MCP_NODE_NOT_FOUND`、`MC_MCP_REPO_CLI_NOT_FOUND` 或
+`MC_MCP_DEPENDENCIES_NOT_INSTALLED`。`mcp.cli_command` 可写成字符串；需要固定多个
+argv 时使用 YAML 列表，例如 `['node', 'path/to/cli.js']`。
 
 ## 外部 MCP 桥
 

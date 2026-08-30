@@ -2,8 +2,6 @@
 Anima tool base classes and tool registry
 """
 
-import os
-import shutil
 from collections.abc import Callable
 from typing import Any
 
@@ -226,29 +224,27 @@ def load_tools_from_config(config: dict[str, Any]) -> tuple:
 
     # Minecraft tools (requires Node.js subprocess)
     minecraft_config = config.get("minecraft", {})
-    if minecraft_config.get("enabled", False):
-        if _minecraft_runtime_available(minecraft_config):
-            try:
-                from .minecraft.core.tools import get_minecraft_tools, init_bridge
+    if minecraft_config.get("enabled", False) and _minecraft_runtime_available(minecraft_config):
+        try:
+            from .minecraft.core.tools import get_minecraft_tools, init_bridge
 
-                init_bridge(minecraft_config)
-                mc_tools = get_minecraft_tools()
-                extra_tools.extend(mc_tools)
-                logger.info(
-                    f"[Minecraft Tools] Loaded {len(mc_tools)} tools: {[t.name for t in mc_tools]}"
-                )
-            except Exception as e:
-                logger.error(f"[Minecraft Tools] Failed to load: {e}")
-        else:
-            logger.warning("[Minecraft Tools] Skipped: mc-mcp has no configured token or local CLI")
-
+            init_bridge(minecraft_config)
+            mc_tools = get_minecraft_tools()
+            extra_tools.extend(mc_tools)
+            logger.info(
+                f"[Minecraft Tools] Loaded {len(mc_tools)} tools: {[t.name for t in mc_tools]}"
+            )
+        except Exception as e:
+            logger.error(f"[Minecraft Tools] Failed to load: {e}")
     return create_tool_registry(builtin_enabled=builtin_enabled, extra_tools=extra_tools)
 
 
 def _minecraft_runtime_available(config: dict[str, Any]) -> bool:
-    mcp_config = config.get("mcp", {})
-    token_env = str(mcp_config.get("auth_token_env", "MC_MCP_AUTH_TOKEN")).strip()
-    if token_env and os.getenv(token_env):
+    from .minecraft.core.bridge import MinecraftMcpError, resolve_mc_mcp_runtime
+
+    try:
+        resolve_mc_mcp_runtime(config.get("mcp", {}))
         return True
-    cli_command = str(mcp_config.get("cli_command", "mc-mcp")).strip()
-    return bool(cli_command and shutil.which(cli_command))
+    except MinecraftMcpError as exc:
+        logger.warning(f"[Minecraft Tools] Runtime unavailable: {exc}")
+        return False

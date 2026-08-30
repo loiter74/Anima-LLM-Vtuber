@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "event_buffer_capacity": 512,
+  "profiles": {
+    "managed-local": {
+      "mode": "managed",
+      "connect_timeout_ms": 60000,
+      "prepare_timeout_ms": 180000,
+      "server": {
+        "compose_file": "server/docker-compose.yml",
+        "project_name": "mc-mcp-managed-local",
+        "host": "127.0.0.1",
+        "port": 25565,
+        "connect_readiness_timeout_ms": 45000,
+        "environment": {
+          "MC_MCP_SERVER_PORT": "25565",
+          "MC_MCP_DATA_VOLUME": "mc-mcp-managed-local-data",
+          "MC_MCP_LEVEL_TYPE": "DEFAULT"
+        }
+      },
+      "bot": {
+        "username": "AnimettaBot",
+        "version": "1.21",
+        "login_timeout_ms": 10000
+      },
+      "viewer": {
+        "username": "LUN077",
+        "auto_attach": true,
+        "required": false,
+        "attach_timeout_ms": 30000
+      }
+    },
+    "external-local": {
+      "mode": "external",
+      "connect_timeout_ms": 60000,
+      "server": {
+        "host": "127.0.0.1",
+        "port": 25565
+      },
+      "bot": {
+        "username": "AnimettaBot",
+        "version": "1.21",
+        "login_timeout_ms": 10000
+      },
+      "viewer": {
+        "username": "LUN077",
+        "auto_attach": true,
+        "required": false
+      }
+    },
+    "external-review": {
+      "mode": "external",
+      "connect_timeout_ms": 60000,
+      "server": {
+        "host": "127.0.0.1",
+        "port": 25566
+      },
+      "bot": {
+        "username": "AnimettaBot",
+        "version": "1.21",
+        "login_timeout_ms": 10000
+      },
+      "viewer": {
+        "username": "LUN077",
+        "auto_attach": true,
+        "required": false
+      }
+    },
+    "managed-review": {
+      "mode": "managed",
+      "connect_timeout_ms": 60000,
+      "prepare_timeout_ms": 180000,
+      "server": {
+        "compose_file": "server/docker-compose.yml",
+        "project_name": "mc-mcp-managed-review",
+        "host": "127.0.0.1",
+        "port": 25566,
+        "connect_readiness_timeout_ms": 45000,
+        "environment": {
+          "MC_MCP_SERVER_PORT": "25566",
+          "MC_MCP_WORLD_SEED": "8675309",
+          "MC_MCP_DATA_VOLUME": "mc-mcp-managed-review-data",
+          "MC_MCP_LEVEL_TYPE": "FLAT"
+        }
+      },
+      "bot": {
+        "username": "AnimettaBot",
+        "version": "1.21",
+        "login_timeout_ms": 10000
+      },
+      "viewer": {
+        "username": "LUN077",
+        "auto_attach": true,
+        "required": false,
+        "attach_timeout_ms": 30000
+      }
+    },
+    "managed-survival": {
+      "mode": "managed",
+      "connect_timeout_ms": 60000,
+      "prepare_timeout_ms": 180000,
+      "server": {
+        "compose_file": "server/docker-compose.yml",
+        "project_name": "mc-mcp-managed-survival",
+        "host": "127.0.0.1",
+        "port": 25567,
+        "connect_readiness_timeout_ms": 45000,
+        "environment": {
+          "MC_MCP_SERVER_PORT": "25567",
+          "MC_MCP_WORLD_SEED": "8675309",
+          "MC_MCP_DATA_VOLUME": "mc-mcp-managed-survival-data",
+          "MC_MCP_LEVEL_TYPE": "DEFAULT",
+          "MC_MCP_DIFFICULTY": "peaceful"
+        }
+      },
+      "bot": {
+        "username": "AnimettaBot",
+        "version": "1.21",
+        "login_timeout_ms": 10000
+      },
+      "viewer": {
+        "username": "LUN077",
+        "auto_attach": true,
+        "required": false,
+        "attach_timeout_ms": 30000
+      }
+    }
+  }
+}

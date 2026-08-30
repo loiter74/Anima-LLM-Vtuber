@@ -54,7 +54,7 @@ tools/
 
 ## NOTES
 
-- Anima never launches Minecraft Node or Compose directly; mc-mcp profiles own those policies
+- Anima may run only the repository mc-mcp CLI's `service ensure`; it never launches the Mineflayer bot or Minecraft Compose directly, and mc-mcp profiles own those policies
 - MCP bridge supports stdio, SSE and Streamable HTTP transports
 - Tool execution timeout: 30s (configurable in tools.yaml)
 - Max 5 tool calls per LLM turn

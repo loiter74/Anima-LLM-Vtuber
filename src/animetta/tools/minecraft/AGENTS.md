@@ -18,9 +18,11 @@ tools, raw Socket.IO command execution, long-lived mode sessions, or config-leve
 `mode`/`autonomous` fields.
 
 Minecraft server, bot, viewer attachment, retry, permission and GameBot runtime
-lifecycle belong to the independent `mc-mcp` service. Anima may configure only its
-URL, CLI name, profile, authentication environment key and timeouts. Never add a
-sibling repository path, Node entrypoint or Minecraft Compose command here.
+lifecycle belong to the same-repository, independently running `mc-mcp` service.
+Anima may configure its URL, CLI command, profile, authentication environment key and
+timeouts. Only `core/bridge.py` may resolve the repository's
+`services/mc-mcp/src/mcp/cli.js` and run its `service ensure` command. Never start the
+Mineflayer bot or Minecraft Compose directly from Python.
 
 常规运行、调试和验证必须使用 `external-local` 复用既有 `animetta-mc`，不得创建
 新的 Minecraft 容器。只有用户在当前任务中明确授权隔离世界时，受信任的内部评审

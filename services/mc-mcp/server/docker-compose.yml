@@ -1,0 +1,33 @@
+services:
+  minecraft:
+    image: itzg/minecraft-server:java21
+    restart: unless-stopped
+    ports:
+      - "${MC_MCP_SERVER_PORT:-25565}:25565"
+    environment:
+      EULA: "TRUE"
+      ONLINE_MODE: "false"
+      TYPE: "VANILLA"
+      VERSION: "1.21"
+      DIFFICULTY: "${MC_MCP_DIFFICULTY:-normal}"
+      GAMEMODE: "survival"
+      LEVEL_TYPE: "${MC_MCP_LEVEL_TYPE:-DEFAULT}"
+      MOTD: "mc-mcp managed server"
+      MAX_PLAYERS: "10"
+      OPS_FILE: "/config/ops.json"
+      VIEW_DISTANCE: "6"
+      SIMULATION_DISTANCE: "4"
+      ALLOW_FLIGHT: "true"
+      SPAWN_PROTECTION: "0"
+      ENABLE_COMMAND_BLOCK: "true"
+      MAX_TICK_TIME: "180000"
+      INIT_MEMORY: "512M"
+      MAX_MEMORY: "4G"
+      SEED: "${MC_MCP_WORLD_SEED:-8675309}"
+    volumes:
+      - minecraft-data:/data
+      - ./ops.json:/config/ops.json:ro
+
+volumes:
+  minecraft-data:
+    name: "${MC_MCP_DATA_VOLUME:-mc-mcp-managed-data}"

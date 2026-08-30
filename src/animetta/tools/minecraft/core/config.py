@@ -2,7 +2,7 @@
 Minecraft configuration models
 """
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class MinecraftSafetyConfig(BaseModel):
@@ -12,15 +12,23 @@ class MinecraftSafetyConfig(BaseModel):
 
 
 class MinecraftMcpConfig(BaseModel):
-    """Connection to the independently installed mc-mcp service."""
+    """Connection to the repository-owned, independently running mc-mcp service."""
 
     url: str = "http://127.0.0.1:8768/mcp"
-    cli_command: str = "mc-mcp"
+    cli_command: str | tuple[str, ...] = "mc-mcp"
     default_profile: str = "external-local"
     startup_timeout_seconds: float = Field(default=10, gt=0, le=120)
     request_timeout_seconds: float = Field(default=60, gt=0, le=60)
     event_poll_seconds: float = Field(default=0.5, gt=0, le=10)
     auth_token_env: str = "MC_MCP_AUTH_TOKEN"
+
+    @field_validator("cli_command")
+    @classmethod
+    def validate_cli_command(cls, value: str | tuple[str, ...]) -> str | tuple[str, ...]:
+        parts = (value,) if isinstance(value, str) else value
+        if not parts or any(not part.strip() for part in parts):
+            raise ValueError("mc-mcp cli_command must contain non-empty arguments")
+        return value
 
 
 class MinecraftConfig(BaseModel):
