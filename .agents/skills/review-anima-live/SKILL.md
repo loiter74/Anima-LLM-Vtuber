@@ -1,6 +1,6 @@
 ---
 name: review-anima-live
-description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser Source、Live2D 性能、TTS 故障转移和真实 Bilibili 数据，并采集需要的新鲜证据。用户要求打开真实直播、显示 OBS 页面或场景、检查直播界面、视觉回归、Live2D 表现或音频故障转移时使用。
+description: 打开、显示或评审 Animetta 真实直播页面，执行演示前确认的轻量真实验收，并在明确要求时完成 OBS、发布矩阵、Live2D 性能、TTS 故障转移和真实 Bilibili 数据评审。用户要求打开真实直播、检查直播界面、真实演示、视觉回归、Live2D 表现或音频故障转移时使用。
 ---
 
 # 评审 Animetta 直播
@@ -11,23 +11,27 @@ description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser 
 
 - **display**：用户只要求打开、显示或获取直播页面时，运行
   `pnpm --silent -C frontend run review -- --feature <id> --base-url <当前前端源> --print-url`，再用用户指定或当前浏览器打开其唯一输出。不得启动 OBS、评审浏览器或写评审证据。
-- **review**：用户要求检查、截图、OBS、视觉、音频或性能证据时，执行下述完整评审流程。
+- **review**：用户要求检查、截图、OBS、视觉、音频或性能证据时，执行下述对应强度的评审流程。
+
+## 验收强度
+
+- **smoke（默认）**：用户未明确要求发布、production、完整矩阵或全能力覆盖时，只执行一个代表性真实场景一次。演示前请求一次确认；确认覆盖已列明的准备、执行、证据采集和收尾。只采集动作、表现、收尾三类证据。
+- **release**：只有用户明确要求发布、production、完整矩阵、全能力覆盖或启用正式 `full` 时才进入。按受影响范围执行必要矩阵，不把所有历史场景机械套到每次验收。
 
 ## 流程
 
-1. 读取 `frontend/AGENTS.md`，并按 [features.md](references/features.md) 选择唯一 feature。
-2. 请求还包含启动、停止或恢复 Animetta 时，先使用 `$operate-anima-runtime`；等待运行时 ready，完成用户要求的 Anima 后台动作，再进入 display 或 review 模式。
-3. display 模式只解析并打开 CLI 返回的 URL；不得读取前端路由器或使用兼容重定向入口。
-4. review 模式在需要浏览器证据时加载 `$qa-testing-playwright`。
-5. 使用 `pnpm -C frontend run review -- --feature <id>` 采集当前页面、控制台、请求、截图和摘要；不要为同一场景启动重复浏览器。
-6. 修改背景、层级、缩放或位置时，进入最终门禁和运行时部署前先用 `--no-obs` 做一次目标视口浏览器诊断；同一份新证据必须同时确认背景资源已加载、Live2D 关键区域不被面板覆盖、弹幕标题与正文不被模型覆盖。任一方向失败都留在本地修正，不得先部署再补另一方向。
-7. 稳定评审需要 OBS 时使用专用场景和 Browser Source；`--no-obs` 只能用于浏览器诊断。
-8. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。
-9. 只根据本轮新证据判断通过、调整或重做。
-10. 验收真实 TTS 播放时，不等待“声音播放中”等瞬时文案。触发前记录
-    `#audioStatus[data-playback-count]`，触发后断言计数递增、
-    `data-last-audio-task-id` 等于本轮 `task_id`，且最终
-    `data-playback-state` 为 `playing` 或 `completed`；同时检查控制台没有播放失败。
+1. 读取 `frontend/AGENTS.md`，按 [features.md](references/features.md) 选择唯一 feature，并确定 `display`、`smoke` 或 `release`。
+2. display 只解析并打开 CLI 返回的规范 URL；不得读取前端路由器、启动 OBS 或使用兼容重定向入口。
+3. review 在启动运行时前完成一次有界只读预检：确认产品调用路径存在、场景能产生目标证据、动作影响和预算可界定、收尾可恢复。smoke 用一句话向用户说明“演示场景、实际动作、最大影响、收尾方式”并等待一次确认；任一条件不成立就停止，不启动运行时，也不替换成旁路探针。
+4. 确认后，请求若包含启动、停止或恢复 Animetta，先交给 `$operate-anima-runtime`；运行时 ready 后完成已确认的后台动作。需要浏览器证据时加载 `$qa-testing-playwright`，并只运行一次 `pnpm -C frontend run review -- --feature <id>`，不得为同一场景启动重复浏览器。
+5. smoke 只执行已确认的一个真实场景一次，并并行采集三类证据：
+   - **动作**：结果、预算和相关 receipt；
+   - **表现**：目标页面上的事件、状态或画面；
+   - **收尾**：恢复预期模式和运行时健康。
+   只有场景涉及世界修改、取消或音频时，才分别增加相关前后状态、静止收敛或真实播放证据。首次失败立即停止，不自动重试、不改走其他 capability；诊断和下一次演示分开，下一次仍需用户确认。
+6. release 只执行本次受影响的必要矩阵。背景、层级、缩放或位置变更先用 `--no-obs` 做一次目标视口诊断，并同时确认资源加载、Live2D 不遮挡面板、弹幕标题与正文不被模型覆盖；稳定 OBS 评审再使用专用场景和 Browser Source。`--no-obs` 不得冒充 OBS 稳定证据。
+7. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。只根据本轮新证据判断通过或失败。
+8. 验收真实 TTS 播放时，触发前记录 `#audioStatus[data-playback-count]`；触发后必须同时证明计数递增、`data-last-audio-task-id` 等于本轮 `task_id`、最终 `data-playback-state` 为 `playing` 或 `completed`，且控制台没有播放失败。合成成功或收到事件不能替代真实播放证据。
 
 ## 不变量
 
@@ -39,4 +43,4 @@ description: 打开、显示或评审 Animetta 真实直播页面、OBS Browser 
 
 ## 报告
 
-报告 feature、运行模式、页面与 OBS 来源、关键断言、证据路径和失败点。明确区分浏览器诊断结果与稳定评审结果。
+报告 feature、验收强度、已确认场景、动作/表现/收尾证据、结论和失败点。release 另报告页面与 OBS 来源，并明确区分浏览器诊断与稳定评审。
