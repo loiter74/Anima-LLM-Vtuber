@@ -49,6 +49,82 @@ function probeSequence(...values) {
 }
 
 describe('MinecraftLifecycle', () => {
+  it('uses application tempo and seed while a profile may only reduce mode', async () => {
+    const runtime = new FakeRuntime();
+    const instance = new MinecraftLifecycle({
+      config: {
+        root: 'C:/mc',
+        profiles: {
+          test: {
+            mode: 'external',
+            server: { host: '127.0.0.1', port: 25565 },
+            bot: {
+              username: 'Bot',
+              presentation: { mode: 'visual_only', tempo: 'normal', seed: 'profile-seed' },
+            },
+            viewer: {},
+          },
+        },
+      },
+      runtime,
+      eventBuffer: new FakeEventBuffer(),
+      stateFile: null,
+      probe: async () => true,
+    });
+
+    const result = await instance.connect('test', 'connect-presentation', false, {
+      mode: 'full',
+      tempo: 'calm',
+      seed: 'application-seed',
+    });
+
+    assert.deepEqual(runtime.starts[0].presentation, {
+      mode: 'visual_only',
+      tempo: 'calm',
+      seed: 'application-seed',
+    });
+    assert.equal(result.bot.presentation_mode, 'visual_only');
+  });
+
+  it('applies the force-off kill switch to status, child config, and idempotency', async () => {
+    const runtime = new FakeRuntime();
+    const instance = new MinecraftLifecycle({
+      config: {
+        root: 'C:/mc',
+        profiles: {
+          test: {
+            mode: 'external',
+            server: { host: '127.0.0.1', port: 25565 },
+            bot: {
+              username: 'Bot',
+              presentation: { mode: 'full', tempo: 'normal', seed: 'profile-seed' },
+            },
+            viewer: {},
+          },
+        },
+      },
+      runtime,
+      eventBuffer: new FakeEventBuffer(),
+      stateFile: null,
+      probe: async () => true,
+      env: { MC_MCP_PRESENTATION_FORCE_OFF: 'true' },
+    });
+    const requested = { mode: 'full', tempo: 'calm', seed: 'application-seed' };
+
+    const first = await instance.connect('test', 'force-off-first', false, requested);
+    const replay = await instance.connect('test', 'force-off-replay', false, requested);
+
+    assert.deepEqual(runtime.starts[0].presentation, {
+      mode: 'off',
+      tempo: 'calm',
+      seed: 'application-seed',
+    });
+    assert.equal(first.bot.presentation_mode, 'off');
+    assert.equal(replay.bot.presentation_mode, 'off');
+    assert.equal(replay.idempotency_reused, true);
+    assert.equal(runtime.starts.length, 1);
+  });
+
   it('disconnects a managed bot without stopping its server', async () => {
     const runtime = new FakeRuntime();
     const commands = [];
@@ -98,7 +174,11 @@ describe('MinecraftLifecycle', () => {
               compose_file: 'server/compose.yml', host: '127.0.0.1', port: 25565,
               connect_readiness_timeout_ms: 45_000,
             },
-            bot: { username: 'Bot', login_timeout_ms: 10_000 },
+            bot: {
+              username: 'Bot',
+              login_timeout_ms: 10_000,
+              presentation: { mode: 'off', tempo: 'normal', seed: 'managed-seed' },
+            },
             viewer: {},
           },
         },
@@ -109,10 +189,12 @@ describe('MinecraftLifecycle', () => {
       command: async (argv) => { commands.push(argv); },
       probe: probeSequence(false, true, true),
     });
+    instance.presentation = { mode: 'full', tempo: 'calm', seed: 'stale-profile-seed' };
 
     const prepared = await instance.prepare('test', 'prepare-1', true);
     assert.equal(prepared.state, 'server_ready');
     assert.equal(prepared.bot.state, 'stopped');
+    assert.equal(prepared.bot.presentation_mode, 'off');
     const prepareUp = commands.find((argv) => argv.includes('up'));
     assert.deepEqual(
       prepareUp.slice(prepareUp.indexOf('--wait-timeout')),
@@ -165,7 +247,10 @@ describe('MinecraftLifecycle', () => {
           test: {
             mode: 'external',
             server: { host: 'example.test', port: 25565 },
-            bot: { username: 'Bot' },
+            bot: {
+              username: 'Bot',
+              presentation: { mode: 'full', tempo: 'normal', seed: 'formal-seed' },
+            },
             viewer: {},
           },
         },
@@ -182,6 +267,7 @@ describe('MinecraftLifecycle', () => {
 
     assert.deepEqual(commands, []);
     assert.equal(instance.snapshot().state, 'stopped');
+    assert.equal(instance.snapshot().bot.presentation_mode, 'off');
   });
 
   it('projects optional viewer attachment without blocking ready', async () => {

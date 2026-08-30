@@ -73,6 +73,12 @@ from animetta.tools.minecraft.voyager.gateway import VoyagerGateway
 from animetta.tools.minecraft.voyager.goal_evidence import RuntimeGoalEvidenceCollector
 from animetta.tools.minecraft.voyager.goal_models import GoalSpec
 from animetta.tools.minecraft.voyager.journal import JournalCommand
+from animetta.tools.minecraft.voyager.public_activity import (
+    PublicActivityEventPublisher,
+    PublicActivityOutcome,
+    PublicActivityRecorder,
+    RuntimePublicActivityAggregator,
+)
 from animetta.tools.minecraft.voyager.scheduler import VoyagerCommandScheduler
 from animetta.tools.minecraft.voyager.sqlite_repository import SQLiteCommandJournal
 from animetta.tools.minecraft.voyager.stop import GlobalStopBarrier
@@ -212,10 +218,13 @@ class MinecraftControlPlane:
     advancement_store: SQLiteAdvancementEventStore
     evidence_collector: RuntimeGoalEvidenceCollector
     adaptive_runtime: AdaptiveMissionRuntime | None
+    activity_recorder: PublicActivityRecorder
+    activity_aggregator: RuntimePublicActivityAggregator
 
     async def close(self) -> None:
         await self.repository.begin_shutdown(occurred_at_ms=_now_ms())
         await self.scheduler.stop()
+        await self.activity_aggregator.drain()
         await self.repository.recover_startup(occurred_at_ms=_now_ms())
         await self.evidence_collector.drain()
         await self.advancement_store.close()
@@ -238,6 +247,16 @@ async def assemble_control_plane(
     manifest = await adapter.get_manifest()
     repository = SQLiteCommandJournal(config.journal_path, queue_capacity=config.queue_capacity)
     await repository.connect()
+    bridge_mode = getattr(bridge, "active_presentation_mode", None)
+    presentation_mode = (
+        bridge_mode
+        if bridge_mode in {"off", "visual_only", "full"}
+        else config.presentation.effective_mode
+    )
+    activity_enabled = presentation_mode != "off"
+    await repository.expire_activity(
+        before_ms=_now_ms() - config.presentation.retention_seconds * 1_000
+    )
     mission_repository = SQLiteMissionRepository(config.journal_path)
     await mission_repository.connect()
     world_fact_store = SQLiteWorldFactStore(config.journal_path)
@@ -276,6 +295,25 @@ async def assemble_control_plane(
         if event_emit is not None
         else None
     )
+    activity_publisher = (
+        PublicActivityEventPublisher(emit=event_emit)
+        if activity_enabled and event_emit is not None
+        else None
+    )
+    activity_recorder = PublicActivityRecorder(
+        repository=repository,
+        enabled=activity_enabled,
+        now_ms=_now_ms,
+        publisher=activity_publisher,
+        retention_ms=config.presentation.retention_seconds * 1_000,
+    )
+    activity_aggregator = RuntimePublicActivityAggregator(
+        bridge=bridge,
+        repository=repository,
+        recorder=activity_recorder,
+    )
+    if activity_enabled and callable(getattr(bridge, "add_runtime_event_callback", None)):
+        activity_aggregator.start()
     advanced_mission_commands: set[str] = set()
     adaptive_runtime: AdaptiveMissionRuntime | None = None
 
@@ -283,6 +321,43 @@ async def assemble_control_plane(
         if event_publisher is not None:
             await event_publisher.publish_command(command_id)
         command = await repository.get_command(command_id)
+        if command is not None:
+            if command.state in {CommandState.QUEUED, CommandState.RUNNING}:
+                await activity_recorder.record_command(
+                    command,
+                    source_key=f"{command.command_id}:planning",
+                    phase="planning",
+                )
+            elif command.state is CommandState.RECONCILING:
+                await activity_recorder.record_command(
+                    command,
+                    source_key=f"{command.command_id}:recovering",
+                    phase="recovering",
+                )
+            elif command.state in TERMINAL_COMMAND_STATES:
+                outcome: PublicActivityOutcome
+                if command.state in {
+                    CommandState.SUCCEEDED,
+                    CommandState.SUCCEEDED_RECONCILED,
+                }:
+                    outcome = "succeeded"
+                elif command.state in {
+                    CommandState.CANCELLED,
+                    CommandState.CANCELLED_RECONCILED,
+                    CommandState.CANCELLED_BY_STOP,
+                    CommandState.INTERRUPTED_BEFORE_START,
+                }:
+                    outcome = "cancelled"
+                elif command.state is CommandState.BLOCKED_UNKNOWN:
+                    outcome = "blocked"
+                else:
+                    outcome = "failed"
+                await activity_recorder.record_command(
+                    command,
+                    source_key=f"{command.command_id}:finished:{command.state.value}",
+                    phase="finished",
+                    outcome=outcome,
+                )
         if (
             command is None
             or command.mode != "mission"
@@ -351,6 +426,7 @@ async def assemble_control_plane(
         now_ms=_now_ms,
         make_id=_make_id,
         reconciliation_grace_seconds=config.cancellation_grace_seconds,
+        activity_recorder=activity_recorder,
     )
     workflow_registry = WorkflowRegistry()
     workflow_registry.register(iron_survival_workflow())
@@ -587,6 +663,7 @@ async def assemble_control_plane(
         now_ms=_now_ms,
         on_strategy_complete=persist_strategy_completion,
         on_strategy_failed=persist_strategy_failure,
+        activity_recorder=activity_recorder,
         initial_state=(
             ControllerState.QUARANTINED if startup_recovery.quarantined else ControllerState.IDLE
         ),
@@ -648,6 +725,8 @@ async def assemble_control_plane(
         mission_coordinator=mission_coordinator,
         mission_projection=mission_projection,
         mission_events=mission_events,
+        activity_enabled=activity_enabled,
+        max_activity_replay=config.presentation.replay_limit,
     )
     result = MinecraftControlPlane(
         adapter=adapter,
@@ -664,6 +743,8 @@ async def assemble_control_plane(
         advancement_store=advancement_store,
         evidence_collector=evidence_collector,
         adaptive_runtime=adaptive_runtime,
+        activity_recorder=activity_recorder,
+        activity_aggregator=activity_aggregator,
     )
     scheduler.start()
     return result

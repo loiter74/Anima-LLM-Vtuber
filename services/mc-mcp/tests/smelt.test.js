@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createSmelt, fuelUnitsForSmelt } from '../src/smelt.js';
+import { createOperationScope } from '../src/runtime/operationScope.js';
 
 test('smelt allocates two planks for three furnace operations', () => {
   assert.equal(fuelUnitsForSmelt('oak_planks', 3), 2);
@@ -128,7 +129,6 @@ test('smelt accepts a placed furnace when placeBlock times out after world updat
     getMcData: async () => createMcData(),
     wait: async () => {},
   });
-
   const result = await smelt.smelt('raw_iron', 'coal', 3);
 
   assert.match(result, /Smelted 3\/3 raw_iron -> iron_ingot/);
@@ -138,6 +138,7 @@ test('smelt accepts a placed furnace when placeBlock times out after world updat
 
 test('smelt continues when putInput throws after moving the item into the furnace', async () => {
   const calls = [];
+  const presentation = [];
   const furnaceBlock = { name: 'furnace', position: { x: 1, y: 64, z: 1 } };
   let input = null;
   let fuel = null;
@@ -188,11 +189,23 @@ test('smelt continues when putInput throws after moving the item into the furnac
     wait: async () => {},
   });
 
-  const result = await smelt.smelt('raw_iron', 'coal', 3);
+  const result = await smelt.smelt('raw_iron', 'coal', 3, {
+    report_phase: (phase, data) => presentation.push(['phase', phase, data]),
+    presentation: {
+      focus: async (request) => presentation.push(['focus', request]),
+    },
+  });
 
   assert.match(result, /Smelted 3\/3 raw_iron -> iron_ingot/);
   assert(calls.some((call) => call[0] === 'takeOutput'));
   assert(calls.some((call) => call[0] === 'close'));
+  assert.equal(presentation[0][1], 'aiming');
+  assert.deepEqual(presentation[1], ['focus', {
+    phase: 'aiming',
+    ordinal: 0,
+    target: { x: 1.5, y: 64.5, z: 1.5 },
+  }]);
+  assert.equal(presentation[2][1], 'acting');
 });
 
 test('smelt retries opening furnace after a stale windowOpen timeout', async () => {
@@ -238,12 +251,95 @@ test('smelt retries opening furnace after a stale windowOpen timeout', async () 
     getMcData: async () => createMcData(),
     wait: async () => {},
   });
+  const phases = [];
 
-  const result = await smelt.smelt('raw_iron', 'coal', 3);
+  const result = await smelt.smelt('raw_iron', 'coal', 3, {
+    report_phase: (phase, data) => phases.push([phase, data]),
+  });
 
   assert.match(result, /Smelted 3\/3 raw_iron -> iron_ingot/);
   assert.equal(openAttempts, 2);
   assert(calls.some((call) => call[0] === 'takeOutput'));
+  assert.deepEqual(
+    phases.filter(([phase]) => phase === 'recovering'),
+    [['recovering', { attempt: 2, reason_code: 'CONTAINER_OPEN_RETRY' }]],
+  );
+});
+
+
+test('smelt cancellation closes a live furnace before rejecting', async () => {
+  const controller = new AbortController();
+  const furnaceBlock = { name: 'furnace', position: { x: 1, y: 64, z: 1 } };
+  let bot;
+  let closes = 0;
+  let markInputStarted;
+  const inputStarted = new Promise((resolve) => { markInputStarted = resolve; });
+  let releaseInput;
+  const inputGate = new Promise((resolve) => { releaseInput = resolve; });
+  const furnaceWindow = {
+    putInput: async () => {
+      markInputStarted();
+      await inputGate;
+    },
+    inputItem: () => null,
+    close: async () => {
+      closes += 1;
+      bot.currentWindow = null;
+    },
+  };
+  bot = {
+    entity: {
+      position: { x: 1.5, y: 64, z: 1.5 },
+      onGround: true,
+      velocity: { x: 0, y: 0, z: 0 },
+    },
+    health: 20,
+    food: 20,
+    controlState: {},
+    currentWindow: null,
+    inventory: {
+      items: () => [
+        { name: 'raw_iron', count: 1 },
+        { name: 'coal', count: 1 },
+      ],
+    },
+    findBlock: ({ matching }) => (matching === 61 ? furnaceBlock : null),
+    blockAt: () => furnaceBlock,
+    pathfinder: {
+      goto: async () => {},
+      isMoving: () => false,
+      stop: () => {},
+    },
+    pvp: { target: null, stop: () => {} },
+    lookAt: async () => {},
+    openFurnace: async () => {
+      bot.currentWindow = furnaceWindow;
+      return furnaceWindow;
+    },
+    setControlState: (control, state) => { bot.controlState[control] = state; },
+    stopDigging: () => {},
+  };
+  const scope = createOperationScope({
+    bot,
+    signal: controller.signal,
+    deadlineMs: Date.now() + 10_000,
+    waitMs: async () => {},
+    containerCapable: true,
+  });
+  const smelt = createSmelt({
+    bot,
+    getMcData: async () => createMcData(),
+    wait: async () => {},
+  });
+
+  const pending = smelt.smelt('raw_iron', 'coal', 1, { operation_scope: scope });
+  await inputStarted;
+  controller.abort('operator stop');
+  releaseInput();
+
+  await assert.rejects(pending, (error) => error.name === 'AbortError');
+  assert.ok(closes >= 1);
+  assert.equal(bot.currentWindow, null);
 });
 
 test('smelt clears an occupied target block before placing a carried furnace', async () => {

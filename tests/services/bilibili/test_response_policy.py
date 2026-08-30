@@ -4,9 +4,12 @@ import pytest
 
 from animetta.services.bilibili.response_policy import (
     LIVESTREAM_REPLY_MAX_CHARS,
+    MINECRAFT_NARRATION_REPLY_MAX_CHARS,
     PROACTIVE_TOPIC_REPLY_MAX_CHARS,
     constrain_livestream_response,
+    constrain_minecraft_narration_response,
     constrain_proactive_topic_response,
+    is_minecraft_narration_turn,
     is_proactive_topic_turn,
 )
 
@@ -14,6 +17,7 @@ from animetta.services.bilibili.response_policy import (
 def test_production_livestream_response_limit_fits_remote_tts_budget() -> None:
     assert LIVESTREAM_REPLY_MAX_CHARS == 18
     assert PROACTIVE_TOPIC_REPLY_MAX_CHARS == 36
+    assert MINECRAFT_NARRATION_REPLY_MAX_CHARS == 60
 
 
 def test_short_livestream_response_is_preserved() -> None:
@@ -78,3 +82,21 @@ def test_only_exact_server_owned_proactive_identity_is_trusted() -> None:
     assert is_proactive_topic_turn(trusted) is True
     assert is_proactive_topic_turn({**trusted, "actor_role": "viewer"}) is False
     assert is_proactive_topic_turn({"actor_role": "host", "audience": "livestream"}) is False
+
+
+def test_minecraft_narration_has_a_distinct_trusted_identity_and_limit() -> None:
+    trusted = {
+        "source": "minecraft:narration",
+        "actor_role": "host",
+        "audience": "livestream",
+    }
+
+    assert is_minecraft_narration_turn(trusted) is True
+    assert is_proactive_topic_turn(trusted) is True
+    assert is_minecraft_narration_turn({**trusted, "actor_role": "viewer"}) is False
+    result = constrain_minecraft_narration_response(
+        "我正在确认这批橡木是否真的收集完成，确认之前不会宣布成功。后句不该出现。"
+    )
+    assert result == "我正在确认这批橡木是否真的收集完成，确认之前不会宣布成功。"
+    assert len(result) <= 60
+    assert constrain_minecraft_narration_response("完成了吗？") == ""

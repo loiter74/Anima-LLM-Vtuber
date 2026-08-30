@@ -1,13 +1,18 @@
 import * as PIXI from 'pixi.js'
 import { io } from 'socket.io-client'
 
-import type { LiveSocket } from '@/live/controller'
+import { createLiveController, type LiveSocket } from '@/live/controller'
+import { createLiveAudioController } from '@/live/audio'
 import { Events } from '@/constants/socket-events'
 import { isStageIOView, type StageIOView } from '@/types/minecraft-stage'
 import { createLive2DStage } from '@/review/live2d-stage'
+import { createPublicActivityController } from '@/shared/broadcast/publicActivity'
+import { createPublicMediaOwnership } from '@/shared/broadcast/mediaOwnership'
+import { PUBLIC_LIVE_SOCKET_AUTH, startPublicLiveSocket } from '@/shared/transport/publicLiveSocket'
 import { mountMinecraftGameplayShell } from './page'
 import 'virtual:uno.css'
 import './styles.css'
+import '@/shared/broadcast/public-activity.css'
 
 declare global {
   interface Window {
@@ -17,16 +22,23 @@ declare global {
 
 window.PIXI = PIXI
 
+const search = new URLSearchParams(window.location.search)
+const mediaOwnership = createPublicMediaOwnership(search, 'muted')
 const socketClient = io(window.location.origin, {
   path: '/socket.io/',
   transports: ['websocket', 'polling'],
   reconnection: true,
+  reconnectionDelay: 3000,
+  reconnectionAttempts: Infinity,
+  timeout: 120000,
+  autoConnect: false,
   withCredentials: true,
+  auth: PUBLIC_LIVE_SOCKET_AUTH,
 })
 const socket = socketClient as unknown as LiveSocket
 
-const shell = mountMinecraftGameplayShell(document, new URLSearchParams(window.location.search))
-const search = new URLSearchParams(window.location.search)
+const shell = mountMinecraftGameplayShell(document, search)
+const liveController = createLiveController({ socket, view: shell, search })
 const projectedStages = new Map<string, StageIOView>()
 const onStageProjection = (value: unknown): void => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return
@@ -45,28 +57,46 @@ const onStageProjection = (value: unknown): void => {
   )
 }
 socketClient.on(Events.MINECRAFT.STAGE_PROJECTION, onStageProjection)
+const onViewerStatus = (value: unknown): void => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return
+  const payload = value as Record<string, unknown>
+  if (
+    typeof payload.binding_state !== 'string' ||
+    typeof payload.confirmed !== 'boolean' ||
+    (payload.target !== undefined && typeof payload.target !== 'string')
+  ) {
+    return
+  }
+  shell.setViewerStatus({
+    bindingState: payload.binding_state,
+    confirmed: payload.confirmed,
+    target: typeof payload.target === 'string' ? payload.target : 'AnimettaBot',
+  })
+}
+socketClient.on(Events.MINECRAFT.VIEWER_STATUS, onViewerStatus)
 const avatar = shell.element.querySelector<HTMLElement>('.game-avatar')
 const stage = createLive2DStage(socket, { resizeTo: avatar ?? window })
+const publicActivity = createPublicActivityController(socket, shell, {
+  onVisualCue: (cue) => stage.applyPublicCue(cue),
+})
+const liveAudio = createLiveAudioController(socket, document, stage.setMouth, undefined, {
+  ownership: mediaOwnership,
+})
 const reviewRuntime = shell.element.querySelector<HTMLElement>('.minecraft-review-runtime')
 const reviewAudio = reviewRuntime?.querySelector<HTMLAudioElement>('#reviewAudio')
 
 if (reviewRuntime && reviewAudio) {
   const volumes = JSON.parse(reviewRuntime.dataset.mouthTimeline ?? '[]') as number[]
-  reviewAudio.addEventListener(
-    'ended',
-    () => {
-      reviewAudio.dataset.complete = 'true'
-    },
-    { once: true },
+  reviewRuntime.dataset.playbackCountBefore =
+    document.getElementById('audioStatus')?.dataset.playbackCount ?? '0'
+  void stage.ready.then(() =>
+    liveAudio.playReviewAudio({
+      taskId: reviewRuntime.dataset.taskId ?? 'minecraft-review-audio',
+      audio: reviewAudio,
+      volumes,
+      runtime: reviewRuntime,
+    }),
   )
-  reviewAudio.addEventListener(
-    'error',
-    () => {
-      reviewAudio.dataset.complete = 'error'
-    },
-    { once: true },
-  )
-  void stage.ready.then(() => stage.playReviewAudio(reviewRuntime, volumes))
 }
 
 const resize = (): void => {
@@ -80,6 +110,11 @@ const dispose = (): void => {
   disposed = true
   window.removeEventListener('resize', resize)
   socketClient.off(Events.MINECRAFT.STAGE_PROJECTION, onStageProjection)
+  socketClient.off(Events.MINECRAFT.VIEWER_STATUS, onViewerStatus)
+  liveController.dispose()
+  publicActivity.dispose()
+  liveAudio.dispose()
+  mediaOwnership.dispose()
   socketClient.disconnect()
   stage.dispose()
   shell.dispose()
@@ -88,3 +123,4 @@ const dispose = (): void => {
 resize()
 window.addEventListener('resize', resize)
 window.addEventListener('beforeunload', dispose, { once: true })
+startPublicLiveSocket(socketClient, shell)

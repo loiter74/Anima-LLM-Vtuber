@@ -1,0 +1,187 @@
+.public-activity-panel[hidden],
+.public-narration-state[hidden] {
+  display: none;
+}
+
+.public-activity-panel {
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-panel) 78%, transparent);
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--c-bg) 64%, transparent);
+  backdrop-filter: blur(20px);
+  pointer-events: none;
+}
+
+.public-activity-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.public-activity-kicker {
+  color: var(--c-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.public-activity-title {
+  margin: 0;
+  color: var(--c-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.public-narration-state {
+  display: grid;
+  gap: 6px;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border-accent);
+  border-radius: 12px;
+  background: var(--c-accent-soft);
+  animation: public-activity-enter 200ms var(--ease-out-expo);
+}
+
+.public-narration-state-label,
+.public-activity-phase {
+  color: var(--c-accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.public-narration-copy,
+.public-activity-copy {
+  margin: 0;
+  color: var(--c-text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.public-narration-copy {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.public-activity-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 12px 0;
+}
+
+.public-activity-summary-slot {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+
+.public-activity-summary-slot dt {
+  color: var(--c-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.public-activity-summary-slot dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-activity-list {
+  display: grid;
+  gap: 0;
+  max-height: 230px;
+  margin: 0;
+  padding: 8px 14px 12px;
+  overflow: hidden;
+  list-style: none;
+}
+
+.public-activity-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--c-border);
+  animation: public-activity-enter 200ms var(--ease-out-expo);
+}
+
+.public-activity-item:last-child {
+  border-bottom: 0;
+}
+
+.public-activity-item[data-outcome='succeeded'] .public-activity-phase {
+  color: var(--c-success);
+}
+
+.public-activity-item[data-outcome='failed'] .public-activity-phase,
+.public-activity-item[data-outcome='blocked'] .public-activity-phase {
+  color: var(--c-error);
+}
+
+.public-activity-copy {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.live-shell > .public-activity-panel {
+  position: absolute;
+  top: var(--live-activity-panel-top, 108px);
+  left: 28px;
+  z-index: 2;
+  width: min(430px, calc(100vw - 56px));
+}
+
+.minecraft-gameplay > .public-activity-panel {
+  position: absolute;
+  left: calc(var(--screen-x) + 30px);
+  top: calc(var(--screen-y) + var(--screen-height) - 254px);
+  z-index: 6;
+  width: 500px;
+}
+
+@keyframes public-activity-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .live-shell > .public-activity-panel {
+    top: auto;
+    bottom: 116px;
+    left: 16px;
+    width: calc(100vw - 32px);
+  }
+
+  .live-shell .public-activity-list {
+    max-height: 112px;
+  }
+
+  .public-activity-summary {
+    grid-template-columns: 1fr;
+  }
+}

@@ -15,6 +15,11 @@ from animetta.orchestration.graph.delivery_nodes import (
 from animetta.orchestration.graph.media_status import MediaStatus
 from animetta.orchestration.graph.state import create_initial_state
 from animetta.orchestration.graph.tts_node import tts_node
+from animetta.services.bilibili.reply_media import (
+    BroadcastMediaArbiter,
+    BroadcastMediaTurn,
+    bind_reply_media_turn,
+)
 
 
 def state():
@@ -101,3 +106,27 @@ async def test_every_phase_uses_the_same_identity() -> None:
         for _, payload in emitted(socket)
     }
     assert len(identities) == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_response_never_acquires_the_media_turn() -> None:
+    socket = AsyncMock()
+    current = state()
+    current["response_text"] = ""
+    on_acquired = AsyncMock()
+    turn = BroadcastMediaTurn(
+        BroadcastMediaArbiter(),
+        priority=50,
+        on_acquired=on_acquired,
+    )
+
+    with bind_reply_media_turn(turn):
+        result = await reply_output_node(
+            current,
+            RunnableConfig(configurable={"socketio": socket}),
+        )
+
+    assert result == {"error": "No authored response"}
+    on_acquired.assert_not_awaited()
+    socket.emit.assert_not_awaited()
+    await turn.finish()

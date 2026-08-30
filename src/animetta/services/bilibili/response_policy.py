@@ -8,6 +8,8 @@ from typing import Any
 LIVESTREAM_REPLY_MAX_CHARS = 18
 PROACTIVE_TOPIC_REPLY_MAX_CHARS = 36
 PROACTIVE_TOPIC_SOURCE = "bilibili:proactive_topic"
+MINECRAFT_NARRATION_REPLY_MAX_CHARS = 60
+MINECRAFT_NARRATION_SOURCE = "minecraft:narration"
 _SENTENCE_ENDINGS = frozenset("。！？!?")
 _CLAUSE_ENDINGS = frozenset("，、；：,;:")
 
@@ -45,10 +47,38 @@ def is_proactive_topic_turn(metadata: Mapping[str, Any] | None) -> bool:
     """Recognize the server-owned host source that may address the whole room."""
     return bool(
         isinstance(metadata, Mapping)
-        and metadata.get("source") == PROACTIVE_TOPIC_SOURCE
+        and metadata.get("source") in {PROACTIVE_TOPIC_SOURCE, MINECRAFT_NARRATION_SOURCE}
         and metadata.get("actor_role") == "host"
         and metadata.get("audience") == "livestream"
     )
+
+
+def is_minecraft_narration_turn(metadata: Mapping[str, Any] | None) -> bool:
+    """Recognize the fact-only server-owned Minecraft narration source."""
+
+    return bool(
+        isinstance(metadata, Mapping)
+        and metadata.get("source") == MINECRAFT_NARRATION_SOURCE
+        and metadata.get("actor_role") == "host"
+        and metadata.get("audience") == "livestream"
+    )
+
+
+def constrain_minecraft_narration_response(
+    text: str,
+    *,
+    max_chars: int = MINECRAFT_NARRATION_REPLY_MAX_CHARS,
+) -> str:
+    """Keep one non-question narration sentence within its speech budget."""
+
+    bounded_limit = min(max(2, max_chars), MINECRAFT_NARRATION_REPLY_MAX_CHARS)
+    normalized = " ".join(text.split())
+    if not normalized or "？" in normalized or "?" in normalized:
+        return ""
+    endings = [index for index, char in enumerate(normalized) if char in "。！!"]
+    if endings:
+        normalized = normalized[: endings[0] + 1]
+    return constrain_livestream_response(normalized, max_chars=bounded_limit)
 
 
 def constrain_proactive_topic_response(

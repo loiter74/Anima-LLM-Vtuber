@@ -1552,6 +1552,20 @@
         "payload": "object"
       }
     },
+    "activity_projection": {
+      "name": "minecraft:activity_projection",
+      "payload": {
+        "schema_version": "string",
+        "event": "string",
+        "event_id": "string",
+        "projection_kind": "string",
+        "projection_version": "number",
+        "occurred_at_ms": "number",
+        "mission_id?": "string",
+        "entity_id": "string",
+        "payload": "object"
+      }
+    },
     "bot_state": {
       "name": "minecraft:bot_state",
       "payload": {
@@ -1566,6 +1580,22 @@
         "action_target?": "string",
         "held_item?": "string",
         "inventory?": "array"
+      }
+    }
+  },
+  "livestream": {
+    "narration_state": {
+      "name": "livestream:narration_state",
+      "payload": {
+        "schema_version": "string",
+        "cue_id": "string",
+        "source_event_id": "string",
+        "task_id?": "string",
+        "phase": "string",
+        "visual_text": "string",
+        "emotion": "string",
+        "speech_state": "string",
+        "occurred_at_ms": "number"
       }
     }
   },

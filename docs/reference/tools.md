@@ -52,7 +52,7 @@ profile?: string，仅 connect 可用
 | operation | 允许字段 | 说明 |
 |-----------|----------|------|
 | `execute` | 仅 `execute`，顶层 `request_id?` 必须与内部一致 | 提交 `contract_version="2"` 的 mission 或 atomic 请求 |
-| `progress` | `request_id?` 或 `command_id?` 二选一，也可用 `cursor?`、`limit=20`、`projection_kind=commands|missions` | 读取持久化 projection，不直接查询实时世界 |
+| `progress` | `request_id?` 或 `command_id?` 二选一，也可用 `cursor?`、`limit=20`、`projection_kind=commands|missions|activities` | 读取持久化 projection，不直接查询实时世界；activities 只返回调用者范围内的脱敏公开活动 |
 | `cancel` | `request_id`、`reason="operator stop"` | 先写 durable stop barrier，再协作取消运行时 |
 
 `execute` 对象：
@@ -69,6 +69,10 @@ profile?: string，仅 connect 可用
 ```
 
 `kind="atomic"` 时使用 `action` 替代 `mission`，只供受信任内部探针。完整 mission、action 与 budget schema 由 `src/animetta/tools/minecraft/voyager/` 的 Pydantic 模型生成，额外字段会被拒绝。
+
+Minecraft 的直播表现由 `minecraft.presentation` 配置控制：`mode=off|visual_only|full`、`tempo=calm|normal|brisk`、确定性字符串 `seed`、`replay_limit` 和 retention。默认语义是 `off`；正式直播配置必须显式启用。环境变量 `MC_MCP_PRESENTATION_FORCE_OFF=true` 只能强制关闭，不能由 LLM 或单次 action 打开。非法枚举值会在配置加载时失败。
+
+`activities` 不暴露工具参数、内部 ID、坐标、receipt 或 reasoning。事件先写入 append-only journal，再 best-effort 广播；已验证终态才允许产生 `succeeded`。表现模式不得改变 action outcome、budget、背包、方块、路径或最终水平位置。
 
 Minecraft 工具仅在 `minecraft.enabled=true` 且以下任一入口可用时加载：
 `mcp.auth_token_env` 指向的环境变量、配置/PATH 中的 `mc-mcp` CLI，或仓内

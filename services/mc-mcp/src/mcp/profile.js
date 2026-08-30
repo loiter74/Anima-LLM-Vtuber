@@ -8,6 +8,8 @@ export const DEFAULT_SERVER_READINESS_TIMEOUT_MS = 45_000;
 const SETUP_COMMAND = /^(gamerule [A-Za-z]+ (?:true|false)|time set \d+|forceload add -?\d+ -?\d+ -?\d+ -?\d+|clear [A-Za-z0-9_]{1,16}|give [A-Za-z0-9_]{1,16} minecraft:[a-z0-9_]+ \d+|fill -?\d+ -?\d+ -?\d+ -?\d+ -?\d+ -?\d+ minecraft:[a-z0-9_]+ replace|summon minecraft:(?:zombie|skeleton|spider) -?\d+ -?\d+ -?\d+ \{NoAI:1b,PersistenceRequired:1b\}|setblock -?\d+ -?\d+ -?\d+ minecraft:[a-z0-9_]+ replace|tp [A-Za-z0-9_]{1,16} -?\d+ -?\d+ -?\d+)$/;
 const MINECRAFT_USERNAME = /^[A-Za-z0-9_]{1,16}$/;
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const PRESENTATION_MODES = new Set(['off', 'visual_only', 'full']);
+const PRESENTATION_TEMPOS = new Set(['brisk', 'normal', 'calm']);
 
 
 function isPositiveInteger(value, maximum = Number.MAX_SAFE_INTEGER) {
@@ -97,6 +99,33 @@ export function validateProfile(profile) {
     throw new Error('INVALID_BOT_VERSION');
   }
   if (
+    profile.bot.presentation !== undefined
+    && (
+      profile.bot.presentation === null
+      || typeof profile.bot.presentation !== 'object'
+      || Array.isArray(profile.bot.presentation)
+      || Object.keys(profile.bot.presentation).some((key) => !['mode', 'tempo', 'seed'].includes(key))
+      || (
+        profile.bot.presentation.mode !== undefined
+        && !PRESENTATION_MODES.has(profile.bot.presentation.mode)
+      )
+      || (
+        profile.bot.presentation.tempo !== undefined
+        && !PRESENTATION_TEMPOS.has(profile.bot.presentation.tempo)
+      )
+      || (
+        profile.bot.presentation.seed !== undefined
+        && (
+          typeof profile.bot.presentation.seed !== 'string'
+          || profile.bot.presentation.seed.trim().length < 1
+          || profile.bot.presentation.seed.length > 128
+        )
+      )
+    )
+  ) {
+    throw new Error('INVALID_BOT_PRESENTATION');
+  }
+  if (
     profile.mode === 'managed'
     && !isRepositoryRelativeFile(profile.server.compose_file)
   ) {
@@ -146,6 +175,23 @@ export function validateProfile(profile) {
     throw new Error('INVALID_REQUIRED_VIEWER_PROFILE');
   }
   return profile;
+}
+
+
+export function validateConfig(config) {
+  if (
+    !config
+    || typeof config !== 'object'
+    || Array.isArray(config)
+    || !config.profiles
+    || typeof config.profiles !== 'object'
+    || Array.isArray(config.profiles)
+    || Object.keys(config.profiles).length === 0
+  ) {
+    throw new Error('INVALID_PROFILES');
+  }
+  for (const profile of Object.values(config.profiles)) validateProfile(profile);
+  return config;
 }
 
 

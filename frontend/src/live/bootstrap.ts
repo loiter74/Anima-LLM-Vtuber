@@ -1,11 +1,17 @@
 import { createLiveController, type LiveSocket, type LiveView } from './controller'
 import { createLiveSocketRuntime, type LiveSocketRuntime } from './socket-runtime'
 import { DisposerStack } from '@/review/disposable'
+import {
+  createPublicActivityController,
+  type PublicActivityView,
+  type PublicLive2DCue,
+} from '@/shared/broadcast/publicActivity'
 
 export interface BootstrapLiveSessionOptions {
   search: URLSearchParams
-  view: LiveView
+  view: LiveView & PublicActivityView
   createNetworkRuntime: () => LiveSocketRuntime
+  onPublicVisualCue?: (cue: PublicLive2DCue) => void
 }
 
 export interface LiveSession {
@@ -25,9 +31,13 @@ export function bootstrapLiveSession(options: BootstrapLiveSessionOptions): Live
     view: options.view,
     search: options.search,
   })
+  const publicActivity = createPublicActivityController(runtime.socket, options.view, {
+    onVisualCue: options.onPublicVisualCue,
+  })
   options.view.setSocketState('connecting')
   disposers.add(() => runtime.dispose())
   disposers.add(() => controller.dispose())
+  disposers.add(() => publicActivity.dispose())
 
   return {
     mode: runtime.mode,

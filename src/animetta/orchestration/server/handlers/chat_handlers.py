@@ -25,6 +25,10 @@ from animetta.orchestration.chat_contracts import (
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.orchestration.graph.interrupt_handler import get_interrupt_handler
 from animetta.runtime.readiness import resolve_service_identity
+from animetta.services.bilibili.reply_media import (
+    BroadcastMediaArbiter,
+    BroadcastMediaTurn,
+)
 from animetta.services.command_inbox import CommandDecision, CommandInbox, CommandKey
 from animetta.services.dialogue import (
     SandboxConversationError,
@@ -60,6 +64,7 @@ class ChatHandlers:
         session_manager: "SessionManager",
         admin: "BaseSocketHandler",
         command_inbox: CommandInbox | None = None,
+        media_arbiter: BroadcastMediaArbiter | None = None,
     ):
         self.sio = sio
         self.session_manager = session_manager
@@ -70,6 +75,7 @@ class ChatHandlers:
         self._sandbox_task_sids: dict[str, str] = {}
         self._sandbox_subscribers: dict[str, set[str]] = {}
         self._command_inbox = command_inbox or CommandInbox(":memory:")
+        self._media_arbiter = media_arbiter
 
     # ── Text input ────────────────────────────────────────────────────
 
@@ -245,7 +251,14 @@ class ChatHandlers:
             await self._command_inbox.succeed(key, {"text": "", "chunks": []})
             return
 
+        media_turn = (
+            BroadcastMediaTurn(self._media_arbiter, priority=10)
+            if developer_console and self._media_arbiter is not None
+            else None
+        )
         try:
+            if media_turn is not None:
+                await media_turn.acquire()
             orchestrator = await self.admin._get_or_create_orchestrator(sid)
             channel = (
                 "developer_console"
@@ -342,6 +355,9 @@ class ChatHandlers:
                 phase=ChatErrorPhase.WORKFLOW,
                 transport_mode=command.transport_mode,
             )
+        finally:
+            if media_turn is not None:
+                await media_turn.finish()
 
     async def _replay_chat_text(
         self,

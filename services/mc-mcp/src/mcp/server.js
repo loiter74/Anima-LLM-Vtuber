@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RuntimeEventBuffer } from './eventBuffer.js';
 import { MinecraftLifecycle } from './lifecycle.js';
+import { validateConfig } from './profile.js';
 import { BotRuntimeClient } from './runtimeClient.js';
 import { createMcpServer } from './tools.js';
 
@@ -16,7 +17,7 @@ const host = process.env.MC_MCP_HOST || '127.0.0.1';
 const LOCAL_ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '[::1]', 'host.docker.internal'];
 const token = process.env.MC_MCP_AUTH_TOKEN;
 if (!token) throw new Error('MC_MCP_AUTH_TOKEN is required');
-const config = JSON.parse(await readFile(configPath, 'utf8'));
+const config = validateConfig(JSON.parse(await readFile(configPath, 'utf8')));
 config.root = packageRoot;
 const events = new RuntimeEventBuffer(config.event_buffer_capacity ?? 512);
 const runtime = new BotRuntimeClient({

@@ -95,6 +95,15 @@ class TestOrchestratorInit:
         assert orchestrator._is_running is False
 
     @pytest.mark.asyncio
+    async def test_force_standard_graph_overrides_golden_runtime(self, orchestrator):
+        """A restricted subgraph must not inherit the golden two-pass branch."""
+
+        orchestrator.service_context.config.system.runtime_profile = "golden"
+        orchestrator.force_standard_graph = True
+
+        assert orchestrator._graph_options()["golden_profile"] is False
+
+    @pytest.mark.asyncio
     async def test_start_reuses_prebuilt_tool_manager_without_loading_config(
         self, mock_service_context, mock_socketio, monkeypatch
     ):

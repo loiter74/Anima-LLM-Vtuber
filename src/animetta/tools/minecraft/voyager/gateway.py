@@ -24,6 +24,7 @@ from .budget import ModeBudgetPolicy, RequestedBudget, effective_budget
 from .command_models import TERMINAL_COMMAND_STATES
 from .goal_models import AtomicAction
 from .journal import CommandDraft, CommandJournal, JournalCommand, ProjectionPage
+from .public_activity import PublicActivityPage, project_activity_page
 from .stop import GlobalStopBarrier, StopResult
 
 
@@ -98,6 +99,8 @@ class VoyagerGateway:
         mission_coordinator: MissionCoordinator | None = None,
         mission_projection: MissionProjectionService | None = None,
         mission_events: ProjectionEventPublisher | None = None,
+        activity_enabled: bool = False,
+        max_activity_replay: int = 64,
     ) -> None:
         self._repository = repository
         self._stop_barrier = stop_barrier
@@ -111,6 +114,8 @@ class VoyagerGateway:
         self._mission_coordinator = mission_coordinator
         self._mission_projection = mission_projection
         self._mission_events = mission_events
+        self._activity_enabled = activity_enabled
+        self._max_activity_replay = max_activity_replay
 
     def bind_missions(
         self,
@@ -306,6 +311,36 @@ class VoyagerGateway:
             limit=limit,
             cursor=cursor,
         )
+
+    async def status_activities(
+        self,
+        *,
+        caller_scope: str,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> PublicActivityPage:
+        if not self._activity_enabled:
+            return PublicActivityPage(events=())
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        page = await self._repository.read_activity(
+            caller_scope,
+            limit=min(limit, self._max_activity_replay, 100),
+            cursor=cursor,
+        )
+        return project_activity_page(page)
+
+    async def replay_public_activities(self, *, limit: int = 20) -> PublicActivityPage:
+        """Return the latest global public stream for trusted server-side replay."""
+
+        if not self._activity_enabled:
+            return PublicActivityPage(events=())
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        page = await self._repository.read_recent_activity(
+            limit=min(limit, self._max_activity_replay, 100)
+        )
+        return project_activity_page(page)
 
     async def stop(self, *, caller_scope: str, request_id: str, reason: str) -> StopResult:
         result = await self._stop_barrier.stop(

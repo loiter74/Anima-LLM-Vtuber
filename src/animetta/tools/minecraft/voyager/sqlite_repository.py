@@ -23,6 +23,7 @@ from .journal import (
     StepRecord,
     StopBarrierCommit,
 )
+from .public_activity import ActivityDraft, ActivityRecord, ActivityRecordPage
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS journal_schema_meta (
@@ -145,6 +146,15 @@ CREATE TABLE IF NOT EXISTS idempotency_tombstones (
   created_at_ms INTEGER NOT NULL,
   PRIMARY KEY (caller_scope, request_id)
 );
+CREATE TABLE IF NOT EXISTS public_activity_events (
+  activity_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_key TEXT NOT NULL UNIQUE,
+  command_id TEXT NOT NULL REFERENCES commands(command_id),
+  caller_scope TEXT NOT NULL,
+  mission_id TEXT,
+  payload_json TEXT NOT NULL,
+  occurred_at_ms INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_commands_state_sequence
 ON commands(state, queue_sequence);
 CREATE INDEX IF NOT EXISTS idx_commands_queue_deadline
@@ -157,6 +167,12 @@ CREATE INDEX IF NOT EXISTS idx_receipts_command_ordinal
 ON action_receipts(command_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_recovery_command
 ON recovery_attempts(command_id, completed_at_ms);
+CREATE INDEX IF NOT EXISTS idx_activity_scope_sequence
+ON public_activity_events(caller_scope, activity_sequence);
+CREATE INDEX IF NOT EXISTS idx_activity_command_sequence
+ON public_activity_events(command_id, activity_sequence);
+CREATE INDEX IF NOT EXISTS idx_activity_occurred_at
+ON public_activity_events(occurred_at_ms);
 """
 
 
@@ -165,7 +181,7 @@ def _dump(value: object) -> str:
 
 
 class SQLiteCommandJournal:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, db_path: str | Path, *, queue_capacity: int = 100) -> None:
         if queue_capacity < 1:
@@ -468,6 +484,134 @@ class SQLiteCommandJournal:
             )
             for row in await cursor.fetchall()
         ]
+
+    @staticmethod
+    def _row_to_activity(row: Any) -> ActivityRecord:
+        return ActivityRecord(
+            sequence=row["activity_sequence"],
+            source_key=row["source_key"],
+            command_id=row["command_id"],
+            caller_scope=row["caller_scope"],
+            mission_id=row["mission_id"],
+            payload=json.loads(row["payload_json"]),
+            occurred_at_ms=row["occurred_at_ms"],
+        )
+
+    async def append_activity(
+        self,
+        draft: ActivityDraft,
+        *,
+        retention_before_ms: int | None = None,
+    ) -> tuple[ActivityRecord, bool]:
+        db = self._require_db()
+        async with self._lock:
+            await db.execute("BEGIN IMMEDIATE")
+            try:
+                existing_cursor = await db.execute(
+                    "SELECT * FROM public_activity_events WHERE source_key=?",
+                    (draft.source_key,),
+                )
+                existing = await existing_cursor.fetchone()
+                if existing is not None:
+                    record = self._row_to_activity(existing)
+                    if not record.matches(draft):
+                        raise ValueError("activity source key conflicts with committed payload")
+                    if retention_before_ms is not None:
+                        await db.execute(
+                            """DELETE FROM public_activity_events
+                            WHERE occurred_at_ms<? AND source_key<>?""",
+                            (retention_before_ms, record.source_key),
+                        )
+                    await db.commit()
+                    return record, True
+                command_cursor = await db.execute(
+                    "SELECT caller_scope FROM commands WHERE command_id=?",
+                    (draft.command_id,),
+                )
+                command = await command_cursor.fetchone()
+                if command is None or command["caller_scope"] != draft.caller_scope:
+                    raise ValueError("activity command scope mismatch")
+                if draft.payload.phase != "finished":
+                    terminal_cursor = await db.execute(
+                        """SELECT 1 FROM public_activity_events
+                        WHERE command_id=?
+                          AND json_extract(payload_json, '$.phase')='finished'
+                        LIMIT 1""",
+                        (draft.command_id,),
+                    )
+                    if await terminal_cursor.fetchone() is not None:
+                        raise ValueError("active activity cannot follow terminal activity")
+                inserted = await db.execute(
+                    """INSERT INTO public_activity_events
+                    (source_key,command_id,caller_scope,mission_id,payload_json,occurred_at_ms)
+                    VALUES (?,?,?,?,?,?)""",
+                    (
+                        draft.source_key,
+                        draft.command_id,
+                        draft.caller_scope,
+                        draft.mission_id,
+                        _dump(draft.payload.model_dump(mode="json")),
+                        draft.occurred_at_ms,
+                    ),
+                )
+                if retention_before_ms is not None:
+                    await db.execute(
+                        """DELETE FROM public_activity_events
+                        WHERE occurred_at_ms<? AND source_key<>?""",
+                        (retention_before_ms, draft.source_key),
+                    )
+                await db.commit()
+                return ActivityRecord(
+                    sequence=int(inserted.lastrowid),
+                    **draft.model_dump(mode="python"),
+                ), False
+            except Exception:
+                await db.rollback()
+                raise
+
+    async def read_activity(
+        self,
+        caller_scope: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> ActivityRecordPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        after = int(cursor) if cursor else 0
+        cursor_result = await self._require_db().execute(
+            """SELECT * FROM public_activity_events
+            WHERE caller_scope=? AND activity_sequence>?
+            ORDER BY activity_sequence LIMIT ?""",
+            (caller_scope, after, limit + 1),
+        )
+        rows = await cursor_result.fetchall()
+        page_rows = rows[:limit]
+        return ActivityRecordPage(
+            records=tuple(self._row_to_activity(row) for row in page_rows),
+            next_cursor=(str(page_rows[-1]["activity_sequence"]) if len(rows) > limit else None),
+        )
+
+    async def expire_activity(self, *, before_ms: int) -> int:
+        cursor = await self._require_db().execute(
+            "DELETE FROM public_activity_events WHERE occurred_at_ms<?",
+            (before_ms,),
+        )
+        await self._require_db().commit()
+        return cursor.rowcount
+
+    async def read_recent_activity(self, *, limit: int = 20) -> ActivityRecordPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        cursor = await self._require_db().execute(
+            """SELECT * FROM (
+              SELECT * FROM public_activity_events ORDER BY activity_sequence DESC LIMIT ?
+            ) ORDER BY activity_sequence""",
+            (limit,),
+        )
+        return ActivityRecordPage(
+            records=tuple(self._row_to_activity(row) for row in await cursor.fetchall())
+        )
 
     async def append_receipt(self, command_id: str, ordinal: int, receipt: dict[str, Any]) -> None:
         await self._require_db().execute(
@@ -935,13 +1079,27 @@ class SQLiteCommandJournal:
         )
 
     async def expire_terminal_payloads(self, *, before_ms: int) -> int:
-        cursor = await self._require_db().execute(
-            """UPDATE commands SET payload_json='{}',terminal_result_json=NULL
-            WHERE terminal_at_ms IS NOT NULL AND terminal_at_ms<?""",
-            (before_ms,),
-        )
-        await self._require_db().commit()
-        return cursor.rowcount
+        db = self._require_db()
+        async with self._lock:
+            await db.execute("BEGIN IMMEDIATE")
+            try:
+                await db.execute(
+                    """DELETE FROM public_activity_events WHERE command_id IN (
+                      SELECT command_id FROM commands
+                      WHERE terminal_at_ms IS NOT NULL AND terminal_at_ms<?
+                    )""",
+                    (before_ms,),
+                )
+                cursor = await db.execute(
+                    """UPDATE commands SET payload_json='{}',terminal_result_json=NULL
+                    WHERE terminal_at_ms IS NOT NULL AND terminal_at_ms<?""",
+                    (before_ms,),
+                )
+                await db.commit()
+                return cursor.rowcount
+            except Exception:
+                await db.rollback()
+                raise
 
     async def pragmas(self) -> dict[str, Any]:
         db = self._require_db()

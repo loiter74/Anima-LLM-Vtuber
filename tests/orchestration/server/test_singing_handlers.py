@@ -9,6 +9,7 @@ import pytest
 
 from animetta.orchestration.server.handlers import singing_handlers
 from animetta.orchestration.server.handlers.singing_handlers import SingingHandlers
+from animetta.services.bilibili.reply_media import BroadcastMediaArbiter, BroadcastMediaTurn
 from animetta.services.command_inbox import CommandInbox, CommandKey
 from animetta.services.singing.interface import SongResult
 
@@ -182,3 +183,26 @@ async def test_pipeline_error_with_json_braces_reaches_terminal_state() -> None:
     )
     pipeline.close.assert_awaited_once()
     await inbox.close()
+
+
+async def test_singing_holds_exclusive_media_lease_until_cancel() -> None:
+    arbiter = BroadcastMediaArbiter()
+    handler = SingingHandlers(
+        SimpleNamespace(emit=AsyncMock()),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        media_arbiter=arbiter,
+    )
+    await handler._begin_media_lease("song-task", 60.0)
+    viewer = BroadcastMediaTurn(arbiter, priority=20)
+    waiting = asyncio.create_task(viewer.acquire())
+    await asyncio.sleep(0)
+
+    assert handler.busy is True
+    assert waiting.done() is False
+
+    await handler.on_sing_cancel("sid", {"task_id": "song-task"})
+    await asyncio.wait_for(waiting, timeout=1.0)
+    assert handler.busy is False
+    await viewer.finish()

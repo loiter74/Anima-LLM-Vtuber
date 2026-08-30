@@ -22,6 +22,7 @@ from .goal_evidence import EmptyGoalEvidenceCollector, GoalEvidenceCollector
 from .goal_models import AtomicAction, GoalSpec
 from .goal_verifier import GoalVerifier
 from .journal import CommandJournal, JournalCommand
+from .public_activity import PublicActivityRecorder
 from .reconciliation import RecoveryDecision
 from .scheduler import CommandExecutionError
 from .strategies.atomic import AtomicStrategy
@@ -87,6 +88,7 @@ class UnifiedVoyagerController:
         make_id: Callable[[str], str],
         now_ms: Callable[[], int],
         initial_state: ControllerState = ControllerState.IDLE,
+        activity_recorder: PublicActivityRecorder | None = None,
     ) -> None:
         self._runtime = runtime
         self._repository = repository
@@ -98,6 +100,7 @@ class UnifiedVoyagerController:
         self._on_strategy_failed = on_strategy_failed
         self._make_id = make_id
         self._now_ms = now_ms
+        self._activity_recorder = activity_recorder
         self.state = initial_state
         self.active_command_id: str | None = None
         self._active_correlation_id: str | None = None
@@ -117,6 +120,12 @@ class UnifiedVoyagerController:
         except ExecutorError as exc:
             if not exc.error.outcome_known:
                 self.state = ControllerState.RECONCILING
+                if self._activity_recorder is not None:
+                    await self._activity_recorder.record_command(
+                        command,
+                        source_key=f"{command.command_id}:recovering",
+                        phase="recovering",
+                    )
                 recovery = await self._executor.reconcile_unknown(command=command, error=exc.error)
                 terminal = _reconciled_terminal_for_command(
                     command=command,
@@ -219,6 +228,12 @@ class UnifiedVoyagerController:
                 deadline_ms=command.execution_deadline_ms or self._now_ms() + 5_000,
             )
         )
+        if self._activity_recorder is not None:
+            await self._activity_recorder.record_command(
+                command,
+                source_key=f"{command.command_id}:observing",
+                phase="observing",
+            )
         initial = observation
         receipts = []
         previous_hash = ""
@@ -230,6 +245,12 @@ class UnifiedVoyagerController:
                     raise RuntimeError(f"{decision.code}: {decision.message}")
                 if isinstance(decision, Complete):
                     if goal is not None:
+                        if self._activity_recorder is not None:
+                            await self._activity_recorder.record_command(
+                                command,
+                                source_key=f"{command.command_id}:goal-checking",
+                                phase="checking",
+                            )
                         evidence = await self._evidence_collector.collect(
                             command=command,
                             manifest=manifest,

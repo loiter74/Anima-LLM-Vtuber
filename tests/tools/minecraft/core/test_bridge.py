@@ -295,8 +295,57 @@ async def test_start_uses_profile_and_never_spawns_node_directly(monkeypatch) ->
             "profile": "external-local",
             "request_id": "connect-1",
             "allow_create": False,
+            "presentation": {
+                "mode": "off",
+                "tempo": "normal",
+                "seed": "animetta-live-v1",
+            },
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_profile_can_only_reduce_application_presentation_mode() -> None:
+    client = SimpleNamespace(
+        session=object(),
+        call_tool=AsyncMock(
+            side_effect=[
+                _response(
+                    {
+                        "state": "ready",
+                        "profile": "external-review",
+                        "bot": {"presentation_mode": "off"},
+                    }
+                ),
+                _response({"events": [], "next_cursor": 0, "overflowed": False}),
+            ]
+        ),
+        disconnect=AsyncMock(),
+    )
+    bridge = MinecraftMcpBridge(MinecraftConfig(enabled=True, presentation={"mode": "full"}))
+    bridge._client = client
+
+    await bridge.start(profile="external-review", request_id="connect-review")
+    await asyncio.sleep(0)
+    await bridge.close()
+
+    assert bridge.active_presentation_mode == "off"
+
+
+@pytest.mark.asyncio
+async def test_invalid_runtime_presentation_mode_fails_connection() -> None:
+    client = SimpleNamespace(
+        session=object(),
+        call_tool=AsyncMock(
+            return_value=_response({"state": "ready", "bot": {"presentation_mode": "unexpected"}})
+        ),
+        disconnect=AsyncMock(),
+    )
+    bridge = MinecraftMcpBridge(MinecraftConfig(enabled=True))
+    bridge._client = client
+
+    with pytest.raises(MinecraftMcpError, match="MC_MCP_PRESENTATION_MODE_INVALID"):
+        await bridge.start(profile="external-local", request_id="invalid-presentation")
 
 
 @pytest.mark.asyncio
@@ -322,6 +371,11 @@ async def test_managed_creation_requires_explicit_internal_authorization() -> No
             "profile": "managed-review",
             "request_id": "connect-managed",
             "allow_create": True,
+            "presentation": {
+                "mode": "off",
+                "tempo": "normal",
+                "seed": "animetta-live-v1",
+            },
         },
     )
 
@@ -400,3 +454,16 @@ def test_viewer_events_are_projected_without_attachment_logic() -> None:
     callback.assert_called_once_with(
         "client_viewer_status", {"type": "client_viewer_status", "confirmed": True}
     )
+
+
+def test_runtime_event_callback_can_be_unsubscribed() -> None:
+    bridge = MinecraftMcpBridge(MinecraftConfig(enabled=True))
+    callback = Mock()
+    unsubscribe = bridge.add_runtime_event_callback(callback)
+
+    bridge._dispatch_event({"type": "action_phase", "phase_sequence": 1})
+    unsubscribe()
+    unsubscribe()
+    bridge._dispatch_event({"type": "action_phase", "phase_sequence": 2})
+
+    callback.assert_called_once_with({"type": "action_phase", "phase_sequence": 1})

@@ -20,6 +20,10 @@ from animetta.tools.minecraft.mission.repository import SQLiteMissionRepository
 from animetta.tools.minecraft.voyager.budget import RequestedBudget
 from animetta.tools.minecraft.voyager.gateway import EXECUTE_REQUEST_ADAPTER, ExecuteRequest
 from animetta.tools.minecraft.voyager.goal_models import AtomicAction
+from animetta.tools.minecraft.voyager.public_activity import (
+    PublicActivityPage,
+    project_activity_page,
+)
 from animetta.tools.minecraft.voyager.sqlite_repository import SQLiteCommandJournal
 
 from .assembly import MinecraftControlPlane, assemble_control_plane
@@ -28,6 +32,7 @@ from .config import MinecraftConfig
 
 _bridge: MinecraftMcpBridge | None = None
 _control_plane: MinecraftControlPlane | None = None
+_event_emit: Callable[[dict[str, Any]], Awaitable[None]] | None = None
 _caller_scope: ContextVar[str] = ContextVar("minecraft_caller_scope", default="system:animetta")
 
 
@@ -99,7 +104,7 @@ class MinecraftOperateToolInput(BaseModel):
     command_id: str | None = None
     cursor: str | None = None
     limit: int = Field(default=20, ge=1, le=100)
-    projection_kind: Literal["commands", "missions"] = "commands"
+    projection_kind: Literal["commands", "missions", "activities"] = "commands"
     reason: str = Field(default="operator stop", min_length=1, max_length=256)
 
     @model_validator(mode="after")
@@ -120,8 +125,8 @@ class MinecraftOperateToolInput(BaseModel):
                 raise ValueError("progress cannot include execute or reason")
             if self.command_id and self.request_id:
                 raise ValueError("command_id and request_id are mutually exclusive")
-            if self.projection_kind == "missions" and (self.command_id or self.request_id):
-                raise ValueError("mission progress cannot use command selectors")
+            if self.projection_kind != "commands" and (self.command_id or self.request_id):
+                raise ValueError("aggregate progress cannot use command selectors")
         else:
             if (
                 self.request_id is None
@@ -158,6 +163,25 @@ def init_bridge(config: dict[str, Any] | None = None) -> None:
 
     bridge_module._bridge = _bridge
     logger.info("[MinecraftTools] mc-mcp client created")
+
+
+def set_minecraft_event_emit(
+    event_emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
+) -> None:
+    """Bind the application-owned projection sink used by both public tools and sockets."""
+
+    global _event_emit
+    _event_emit = event_emit
+
+
+def _presentation_mode(bridge: Any) -> str:
+    mode = getattr(bridge, "active_presentation_mode", None)
+    if mode in {"off", "visual_only", "full"}:
+        return str(mode)
+    config = getattr(bridge, "config", None)
+    presentation = getattr(config, "presentation", None)
+    configured = getattr(presentation, "effective_mode", "off")
+    return str(configured) if configured in {"off", "visual_only", "full"} else "off"
 
 
 async def configure_voyager_control_plane(
@@ -208,9 +232,27 @@ async def manage_minecraft_connection(
 ) -> dict[str, Any]:
     bridge = _require_bridge()
     if operation == "connect":
-        result = await bridge.start(profile=profile, request_id=request_id)
+        sink = event_emit if event_emit is not None else _event_emit
         try:
-            await configure_voyager_control_plane(bridge, event_emit=event_emit)
+            result = await bridge.start(profile=profile, request_id=request_id)
+            if sink is not None:
+                try:
+                    await sink(
+                        {
+                            "event": "minecraft.presentation.configured",
+                            "mode": _presentation_mode(bridge),
+                            "profile": result.get("profile"),
+                            "tempo": bridge.config.presentation.tempo,
+                            "seed": bridge.config.presentation.seed,
+                            "replay_limit": bridge.config.presentation.replay_limit,
+                        }
+                    )
+                except Exception:
+                    logger.exception("[MinecraftTools] presentation audit sink failed")
+            await configure_voyager_control_plane(
+                bridge,
+                event_emit=sink,
+            )
         except Exception:
             try:
                 await bridge.disconnect_runtime(request_id=f"{request_id}:rollback")
@@ -259,7 +301,7 @@ async def mc_operate_bot(
     command_id: str | None = None,
     cursor: str | None = None,
     limit: int = 20,
-    projection_kind: Literal["commands", "missions"] = "commands",
+    projection_kind: Literal["commands", "missions", "activities"] = "commands",
     reason: str = "operator stop",
 ) -> str:
     """提交 typed Minecraft 任务、读取持久化进度或取消全部 bot 行动。
@@ -314,6 +356,15 @@ async def _read_progress(
     await journal.connect()
     mission_repository: SQLiteMissionRepository | None = None
     try:
+        if validated.projection_kind == "activities":
+            if _presentation_mode(bridge) == "off":
+                return PublicActivityPage(events=()).model_dump(mode="json")
+            page = await journal.read_activity(
+                caller_scope,
+                limit=min(validated.limit, bridge.config.presentation.replay_limit),
+                cursor=validated.cursor,
+            )
+            return project_activity_page(page).model_dump(mode="json")
         if validated.projection_kind == "missions":
             mission_repository = SQLiteMissionRepository(bridge.config.journal_path)
             await mission_repository.connect()
@@ -345,12 +396,41 @@ async def _read_progress(
         await journal.close()
 
 
+async def read_minecraft_public_activity_replay(*, limit: int = 20) -> PublicActivityPage:
+    """Read the latest global public activity for trusted server-side reconnect replay."""
+
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    if _control_plane is not None:
+        return await _control_plane.gateway.replay_public_activities(limit=limit)
+    bridge = _require_bridge()
+    if _presentation_mode(bridge) == "off":
+        return PublicActivityPage(events=())
+    journal = SQLiteCommandJournal(
+        bridge.config.journal_path,
+        queue_capacity=bridge.config.queue_capacity,
+    )
+    await journal.connect()
+    try:
+        page = await journal.read_recent_activity(
+            limit=min(limit, bridge.config.presentation.replay_limit)
+        )
+        return project_activity_page(page)
+    finally:
+        await journal.close()
+
+
 async def _read_gateway_progress(
     gateway: Any,
     validated: MinecraftOperateToolInput,
     *,
     caller_scope: str,
 ) -> dict[str, Any]:
+    if validated.projection_kind == "activities":
+        page = await gateway.status_activities(
+            caller_scope=caller_scope, limit=validated.limit, cursor=validated.cursor
+        )
+        return page.model_dump(mode="json")
     if validated.projection_kind == "missions":
         page = await gateway.status_missions(
             caller_scope=caller_scope, limit=validated.limit, cursor=validated.cursor

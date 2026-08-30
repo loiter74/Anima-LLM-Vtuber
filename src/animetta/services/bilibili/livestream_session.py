@@ -21,6 +21,7 @@ from .models import (
     LivestreamEventMetrics,
     LivestreamEventType,
 )
+from .reply_media import BroadcastMediaArbiter
 from .reply_queue import DanmakuReplyRuntime, ReplyMetrics, ReplySubmissionResult
 
 GatewayFactory = Callable[[int, str], DanmakuGateway]
@@ -106,6 +107,9 @@ class LivestreamSession:
         self._candidate_sink = candidate_sink
         self._reply_decision_sink = reply_decision_sink
         self._reply_runtime = reply_runtime
+        self._media_arbiter = (
+            reply_runtime.media_arbiter if reply_runtime is not None else BroadcastMediaArbiter()
+        )
         self._scene_runtime = scene_runtime
         self._buffer = buffer
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
@@ -138,6 +142,12 @@ class LivestreamSession:
     def reply_busy(self) -> bool:
         """Whether the viewer reply pipeline currently owns pending work."""
         return bool(self._reply_runtime and self._reply_runtime.busy)
+
+    @property
+    def media_arbiter(self) -> BroadcastMediaArbiter:
+        """Shared priority gate for every public livestream media turn."""
+
+        return self._media_arbiter
 
     def configure_reply_policy(self, policy: ReplyPolicyConfig) -> None:
         """Configure the reply runtime before it becomes active."""

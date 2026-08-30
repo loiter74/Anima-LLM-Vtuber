@@ -565,6 +565,8 @@ async def test_socket_requires_auth_and_chat_aliases_cannot_bypass_rate_limit(
     assert limited["error"]["code"] == "RATE_LIMITED"
     assert limited["retry_after"] >= 1
     assert handlers.chat.on_text_event.await_count == 3
+    await handlers.command_inbox.close()
+    await security.close()
 
 
 @pytest.mark.asyncio
@@ -606,6 +608,7 @@ async def test_public_live_socket_requires_allowed_origin_and_blocks_every_busin
         session_id="public-live:https://animetta.example",
         source="public-live",
     )
+    mock_socketio.enter_room.assert_not_awaited()
     handlers.on_connect.assert_awaited_once_with("public-live", live_environ, read_only=True)
     handlers.on_tool_approval_list.assert_not_awaited()
     for event, handler in registered.items():
@@ -619,6 +622,8 @@ async def test_public_live_socket_requires_allowed_origin_and_blocks_every_busin
                 "message": "Public live connections are read-only",
             },
         }, event
+    await handlers.command_inbox.close()
+    await security.close()
 
 
 @pytest.mark.asyncio
@@ -647,6 +652,8 @@ async def test_socket_rejects_session_until_required_password_change(
 
     assert "PASSWORD_CHANGE_REQUIRED" in str(refused.value)
     assert security.socket_principal("restricted") is None
+    await handlers.command_inbox.close()
+    await security.close()
 
 
 @pytest.mark.asyncio
@@ -684,3 +691,5 @@ async def test_cookie_socket_fails_closed_but_machine_token_ignores_redis_failur
         session_id="shared-token",
         source="socket-auth",
     )
+    await handlers.command_inbox.close()
+    await security.close()

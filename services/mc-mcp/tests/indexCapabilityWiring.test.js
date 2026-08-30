@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 
 const indexUrl = new URL('../src/index.js', import.meta.url);
 const adapterUrl = new URL('../src/runtime/gamebotV2Adapter.js', import.meta.url);
+const smeltUrl = new URL('../src/smelt.js', import.meta.url);
+const equipUrl = new URL('../src/equip.js', import.meta.url);
 
 
 test('production process surface contains only v2, review, and viewer commands', async () => {
@@ -110,7 +112,7 @@ test('collection reuses the bounded mine shaft before deep resource search', asy
   );
   assert.match(
     source,
-    /mineShaftMod\.mineShaft\(preparation\.targetY, preparation\.minimumCobblestone\)/,
+    /mineShaftMod\.mineShaft\(\s*preparation\.targetY,\s*preparation\.minimumCobblestone,\s*context,\s*\)/,
   );
 });
 
@@ -130,7 +132,7 @@ test('v2 collection propagates cooperative cancellation into the bounded loop', 
     readFile(adapterUrl, 'utf8'),
   ]);
 
-  assert.match(adapter, /descriptor\.invoke\(parameters, context\)/);
+  assert.match(adapter, /descriptor\.invoke\(parameters, scopedContext\)/);
   assert.match(adapter, /actions\.collectWithEvidence\(block_type, count, context\)/);
   assert.match(source, /collectWithEvidence:\s*_collectWithEvidence/);
   assert.match(source, /context\.signal\?\.throwIfAborted\(\)/);
@@ -168,7 +170,97 @@ test('v2 placement uses adjacent references and returns exact block mutations', 
   assert.match(source, /max_blocks_changed:\s*explainedMutations\.length/);
   assert.match(
     adapter,
-    /actions\.placeWithEvidence\(block_type, x, y, z, facing\)/,
+    /actions\.placeWithEvidence\(block_type, x, y, z, facing, context\)/,
   );
   assert.match(source, /placeWithEvidence:\s*_placeWithEvidence/);
+});
+
+
+test('every v2 capability receives the shared operation context', async () => {
+  const adapter = await readFile(adapterUrl, 'utf8');
+
+  for (const invocation of [
+    /actions\.goto\(x, y, z, context\)/,
+    /actions\.collectWithEvidence\(block_type, count, context\)/,
+    /actions\.mine\(block_type, count, context\)/,
+    /actions\.craft\(recipe, count, context\)/,
+    /actions\.placeWithEvidence\(block_type, x, y, z, facing, context\)/,
+    /actions\.smelt\(item, fuel, count, context\)/,
+    /actions\.equip\(item, destination, context\)/,
+    /actions\.attackWithEvidence\(target, context\)/,
+    /actions\.chat\(message, context\)/,
+    /actions\.recipes\(item, context\)/,
+    /actions\.mineShaft\(target_y, minimum_cobblestone, context\)/,
+  ]) {
+    assert.match(adapter, invocation);
+  }
+  assert.match(adapter, /createOperationScope\(/);
+  assert.match(adapter, /reportPhase:\s*context\.report_phase/);
+});
+
+
+test('pathfinder completion is verified instead of falling back to blind forward motion', async () => {
+  const source = await readFile(indexUrl, 'utf8');
+
+  assert.match(source, /scope\.navigate\(goal/);
+  assert.doesNotMatch(source, /pathfinder timeout[\s\S]*?setControlState\('forward', true\)/);
+});
+
+
+test('every adapter preserves and normalizes capability-reported budget usage', async () => {
+  const adapter = await readFile(adapterUrl, 'utf8');
+
+  assert.match(adapter, /return normalizeCapabilityResult\(value, \{ readOnly \}\)/);
+  assert.doesNotMatch(adapter, /if \(descriptor\.evidence\)/);
+});
+
+
+test('visual presentation capabilities use only real anchors resolved by their actions', async () => {
+  const [source, adapter, smelt, equip] = await Promise.all([
+    readFile(indexUrl, 'utf8'),
+    readFile(adapterUrl, 'utf8'),
+    readFile(smeltUrl, 'utf8'),
+    readFile(equipUrl, 'utf8'),
+  ]);
+
+  assert.match(adapter, /VISUAL_PRESENTATION_CAPABILITIES = Object\.freeze\(\[[\s\S]*?'goto'[\s\S]*?'place'[\s\S]*?'collect'[\s\S]*?'mine'[\s\S]*?'craft'[\s\S]*?'smelt'[\s\S]*?'equip'/);
+  for (const eventOnly of ['attack', 'mine_shaft', 'observe', 'status', 'recipes', 'chat']) {
+    const visualList = adapter.match(/VISUAL_PRESENTATION_CAPABILITIES = Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || '';
+    assert.doesNotMatch(visualList, new RegExp(`'${eventOnly}'`));
+  }
+  assert.ok([...source.matchAll(/presentBlockTarget\(\{/g)].length >= 3);
+  assert.match(source, /phase:\s*'locating',[\s\S]*?position:\s*b\.position/);
+  assert.match(source, /phase:\s*'locating',[\s\S]*?position:\s*block\.position/);
+  assert.match(source, /phase:\s*'aiming',[\s\S]*?position:\s*craftingTable\?\.position/);
+  assert.match(smelt, /phase:\s*'aiming',[\s\S]*?position:\s*furnaceBlock\?\.position/);
+  assert.match(equip, /mcDest === 'hand' && bot\.heldItem\?\.name === itemName[\s\S]*?presentHeldItem/);
+});
+
+
+test('mine and collect report recovery only on a real dig retry', async () => {
+  const source = await readFile(indexUrl, 'utf8');
+  const recoveryReports = source.match(
+    /report_phase\?\.\('recovering', \{[\s\S]*?reason_code: 'DIG_RETRY'/g,
+  ) || [];
+
+  assert.equal(recoveryReports.length, 2);
+  assert.equal(source.match(/retry < 2[\s\S]*?reason_code: 'DIG_RETRY'/g)?.length, 2);
+  assert.equal(
+    source.match(/phase: 'recovering',[\s\S]*?target: presentationTarget\.position/g)?.length,
+    2,
+  );
+  const firstRetry = source.indexOf('for (let retry = 0; retry < 3');
+  const secondRetry = source.indexOf('for (let retry = 0; retry < 3', firstRetry + 1);
+  assert.ok(source.indexOf('const stillThere = bot.blockAt(b.position)', firstRetry)
+    < source.indexOf("report_phase?.('recovering'", firstRetry));
+  assert.ok(source.indexOf('if (!isCollectionBlockStillPresent(bot, block))', secondRetry)
+    < source.indexOf("report_phase?.('recovering'", secondRetry));
+});
+
+
+test('transport quarantine is reflected by the v2 health readiness', async () => {
+  const source = await readFile(indexUrl, 'utf8');
+
+  assert.match(source, /const transport = protocol\.getState\(\)/);
+  assert.match(source, /ready:\s*health\.ready && Boolean\(bot\.entity\) && !transport\.quarantined/);
 });

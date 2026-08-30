@@ -16,7 +16,12 @@ from animetta.config import ReplyPolicyConfig
 
 from .models import DanmakuMessage
 from .reply_admission import ReplyAdmissionController, ReplyPriority
-from .reply_media import OrderedReplyMediaCoordinator, ReplyMediaTurn
+from .reply_media import (
+    BroadcastMediaArbiter,
+    BroadcastMediaTurn,
+    OrderedReplyMediaCoordinator,
+    ReplyMediaTurn,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,7 +316,12 @@ class DanmakuReplyRuntime:
         self._submission_sequence = 0
         self._active_replies = 0
         self._media_coordinator = OrderedReplyMediaCoordinator()
+        self._media_arbiter = BroadcastMediaArbiter()
         self.metrics = ReplyMetrics()
+
+    @property
+    def media_arbiter(self) -> BroadcastMediaArbiter:
+        return self._media_arbiter
 
     @property
     def worker_running(self) -> bool:
@@ -388,7 +398,14 @@ class DanmakuReplyRuntime:
             admitted_at=time.time(),
             room_id=room_id,
             sequence=self._submission_sequence,
-            media_turn=ReplyMediaTurn(self._media_coordinator, self._submission_sequence),
+            media_turn=ReplyMediaTurn(
+                self._media_coordinator,
+                self._submission_sequence,
+                BroadcastMediaTurn(
+                    self._media_arbiter,
+                    priority=20 + int(decision.priority),
+                ),
+            ),
         )
         self._submission_sequence += 1
         result = await (

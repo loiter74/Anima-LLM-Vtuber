@@ -227,6 +227,21 @@ body {
   box-shadow: 0 0 12px color-mix(in srgb, var(--c-warning) 65%, transparent);
 }
 
+.possession-status[data-binding-state='following'] .status-dot {
+  background: var(--c-success);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-success) 65%, transparent);
+}
+
+.possession-status[data-binding-state='degraded'] .status-dot {
+  background: var(--c-error);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-error) 65%, transparent);
+}
+
+.game-danmaku[hidden],
+.game-subtitle[hidden] {
+  display: none;
+}
+
 .game-danmaku {
   position: absolute;
   left: var(--danmaku-x);

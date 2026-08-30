@@ -8,6 +8,10 @@ import {
   actionTimeoutFromDeadline,
   withTimeout,
 } from '../src/actionDeadline.js';
+import {
+  createOperationScope,
+  runWithOperationScope,
+} from '../src/runtime/operationScope.js';
 
 test('action deadline extends a state-changing runtime call beyond sixty seconds', () => {
   const nowMs = 1_000_000;
@@ -33,6 +37,27 @@ test('operation timeout runs cleanup exactly once', async () => {
     /Action "mine" timed out after 5ms/,
   );
   assert.equal(cleanupCount, 1);
+});
+
+
+test('scoped timeout does not start a lazy operation without settlement reserve', async () => {
+  let invoked = false;
+  const bot = {
+    entity: { onGround: true, velocity: { x: 0, y: 0, z: 0 } },
+    pathfinder: { isMoving: () => false, stop: () => {} },
+    pvp: { target: null, stop: () => {} },
+    setControlState: () => {},
+  };
+  const scope = createOperationScope({ bot, deadlineMs: Date.now() + 2_000 });
+
+  await assert.rejects(
+    () => runWithOperationScope(
+      scope,
+      () => withTimeout(() => { invoked = true; }, 1_000, 'lazy action'),
+    ),
+    (error) => error.code === 'ACTION_DEADLINE_EXPIRED',
+  );
+  assert.equal(invoked, false);
 });
 
 test('mc-mcp and the bot child both derive execute timeout from the request deadline', async () => {

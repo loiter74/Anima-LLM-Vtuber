@@ -30,15 +30,21 @@ function runtimeResult(response) {
 
 export function createMcpServer(lifecycle, runtime, eventBuffer) {
   const server = new McpServer({ name: 'mc-mcp', version: '1.0.0' });
+  const presentation = z.object({
+    mode: z.enum(['off', 'visual_only', 'full']),
+    tempo: z.enum(['calm', 'normal', 'brisk']),
+    seed: z.string().trim().min(1).max(128),
+  }).strict();
   server.registerTool('minecraft_connect', {
     description: '连接一个由 mc-mcp 配置的托管或外部 Minecraft profile。',
     inputSchema: {
       profile: z.string().min(1),
       request_id: requestId,
       allow_create: z.boolean().default(false),
+      presentation: presentation.optional(),
     },
-  }, async ({ profile, request_id, allow_create }) => toolResult(
-    await lifecycle.connect(profile, request_id, allow_create),
+  }, async ({ profile, request_id, allow_create, presentation: requestedPresentation }) => toolResult(
+    await lifecycle.connect(profile, request_id, allow_create, requestedPresentation),
   ));
   server.registerTool('minecraft_prepare', {
     description: '在目标指令到来前准备托管 Minecraft 服务端，不启动 bot。',

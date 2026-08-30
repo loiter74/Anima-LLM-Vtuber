@@ -28,6 +28,7 @@ from animetta.tools.minecraft.voyager.command_models import CommandState
 from animetta.tools.minecraft.voyager.control_plane import _reconciled_terminal_for_command
 from animetta.tools.minecraft.voyager.goal_verifier import GoalVerifier
 from animetta.tools.minecraft.voyager.journal import CommandDraft, InMemoryCommandJournal
+from animetta.tools.minecraft.voyager.public_activity import PublicActivityRecorder
 from animetta.tools.minecraft.voyager.reconciliation import RecoveryDecision
 from animetta.tools.minecraft.voyager.strategies.base import ExecuteStep
 
@@ -49,7 +50,7 @@ def budget() -> ExecutionBudget:
     )
 
 
-async def command(repository: InMemoryCommandJournal):
+async def command(repository: InMemoryCommandJournal, *, mode: str = "atomic"):
     created = (
         await repository.create_command(
             CommandDraft(
@@ -58,8 +59,12 @@ async def command(repository: InMemoryCommandJournal):
                 request_id="request-1",
                 request_hash="a" * 64,
                 kind="execute",
-                mode="atomic",
-                payload={},
+                mode=mode,
+                payload=(
+                    {"goal": {"intent": "acquire", "target": "minecraft:oak_log"}}
+                    if mode == "mission"
+                    else {}
+                ),
                 requested_budget={},
                 effective_budget={},
                 accepted_at_ms=1,
@@ -201,14 +206,24 @@ def test_grounded_motion_settlement_accepts_only_bounded_gravity_remainder() -> 
 async def test_executor_reserves_before_dispatch_validates_receipt_and_observes_after() -> None:
     repository = InMemoryCommandJournal()
     runtime = Runtime(repository)
+    activity_recorder = PublicActivityRecorder(
+        repository=repository,
+        enabled=True,
+        now_ms=lambda: 1_800_000_000_000,
+    )
     executor = CommandExecutor(
         runtime=runtime,
         repository=repository,
         now_ms=lambda: 1_800_000_000_000,
         make_id=lambda prefix: f"{prefix}-1",
+        activity_recorder=activity_recorder,
     )
-    cmd = await command(repository)
-    cmd = cmd.model_copy(update={"execution_deadline_ms": 1_800_000_090_000})
+    cmd = await command(repository, mode="mission")
+    cmd = cmd.model_copy(
+        update={
+            "execution_deadline_ms": 1_800_000_090_000,
+        }
+    )
     before = Observation.model_validate(MESSAGES["Observation"])
     step = ExecuteStep(
         capability="collect",
@@ -227,8 +242,15 @@ async def test_executor_reserves_before_dispatch_validates_receipt_and_observes_
 
     persisted = await repository.get_step("step-1")
     facts = await repository.command_facts(cmd.command_id)
+    activity = await repository.read_activity(cmd.caller_scope)
     assert persisted is not None and persisted.state == "settled"
     assert facts["checkpoints"] == 1
+    assert [record.payload.phase for record in activity.records] == [
+        "committed",
+        "acting",
+        "checking",
+        "checking",
+    ]
     assert runtime.timeouts == [100.0]
     assert result.account.remaining.max_actions == 3
     assert result.after.action_sequence >= result.receipt.action_sequence

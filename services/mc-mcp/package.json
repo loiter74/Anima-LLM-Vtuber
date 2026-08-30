@@ -11,7 +11,7 @@
   "scripts": {
     "test": "node --test",
     "test:contract": "node --test tests/gamebotContractV2Parity.test.js",
-    "check": "node --check src/index.js && node --check src/actionDeadline.js && node --check src/gamebotRuntimeV2.js && node --check src/runtime/gamebotV2Adapter.js && node --check src/runtime/processProtocol.js && node --check src/mcp/server.js && node --check src/mcp/tools.js && node --check src/mcp/cli.js && node --check src/mcp/lifecycle.js && node --check src/mcp/managedServer.js && node --check src/mcp/profile.js && node --check src/mcp/secureState.js"
+    "check": "node --check src/index.js && node --check src/actionDeadline.js && node --check src/gamebotRuntimeV2.js && node --check src/runtime/broadcastMotionPolicy.js && node --check src/runtime/gamebotV2Adapter.js && node --check src/runtime/operationScope.js && node --check src/runtime/presentationAnchors.js && node --check src/runtime/presentationPort.js && node --check src/runtime/processProtocol.js && node --check src/mcp/server.js && node --check src/mcp/tools.js && node --check src/mcp/cli.js && node --check src/mcp/lifecycle.js && node --check src/mcp/managedServer.js && node --check src/mcp/profile.js && node --check src/mcp/secureState.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

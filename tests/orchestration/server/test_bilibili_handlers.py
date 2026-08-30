@@ -9,6 +9,7 @@ import pytest
 
 from animetta.config import ReplyPolicyConfig
 from animetta.orchestration.graph.checkpointing import CheckpointRequest
+from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 from animetta.orchestration.server.handlers.bilibili_handlers import BilibiliHandlers
 from animetta.services.bilibili import (
     DanmakuMessage,
@@ -17,6 +18,12 @@ from animetta.services.bilibili import (
     TopicSeed,
 )
 from animetta.services.bilibili.livestream_session import StaleGenerationError
+from animetta.services.bilibili.reply_media import (
+    BroadcastMediaTurn,
+    acquire_reply_media_turn,
+    finish_reply_media_turn,
+)
+from animetta.services.livestream_narration import NarrationCue
 from animetta.services.scene_analysis.models import SceneGuidance
 
 
@@ -225,6 +232,97 @@ async def test_session_status_sink_broadcasts_full_snapshot(handler_harness) -> 
     await handler.emit_status_snapshot(payload)
 
     sio.emit.assert_awaited_once_with("bilibili:danmaku_status", payload)
+
+
+@pytest.mark.asyncio
+async def test_session_generation_change_cancels_minecraft_narration(handler_harness) -> None:
+    handler, _, _ = handler_harness
+    switch_generation = AsyncMock()
+    handler.bind_narration_generation_switch(switch_generation)
+    first = _snapshot("live")
+    first["generation_id"] = 4
+    second = {**first, "generation_id": 5}
+
+    await handler.emit_status_snapshot(first)
+    await handler.emit_status_snapshot(first)
+    await handler.emit_status_snapshot(second)
+
+    switch_generation.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_minecraft_narration_owns_a_tool_memory_and_checkpoint_free_graph(
+    handler_harness,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handler, sio, _ = handler_harness
+    context = MagicMock()
+    dedicated = MagicMock()
+    dedicated.stop = AsyncMock()
+    create = AsyncMock(return_value=dedicated)
+    handler.admin.get_or_create_context = AsyncMock(return_value=context)
+    monkeypatch.setattr(LangGraphOrchestrator, "create", create)
+
+    first = await handler._get_or_create_minecraft_narration_orchestrator()
+    second = await handler._get_or_create_minecraft_narration_orchestrator()
+
+    assert first is second is dedicated
+    handler.admin.get_or_create_context.assert_awaited_once_with("minecraft:narration")
+    create.assert_awaited_once_with(
+        session_id="minecraft:narration",
+        service_context=context,
+        socketio=sio,
+        emotion_analyzer=context.emotion_analyzer,
+        enable_tools=False,
+        enable_memory=False,
+        tools_config={},
+        checkpoint_runtime=None,
+        force_standard_graph=True,
+    )
+
+    await handler.close_minecraft_narration()
+    dedicated.stop.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_viewer_media_can_start_while_minecraft_composer_is_pending(
+    handler_harness,
+) -> None:
+    handler, _, _ = handler_harness
+    composer_started = asyncio.Event()
+    release_composer = asyncio.Event()
+    narration_started = AsyncMock()
+
+    class SlowNarrationOrchestrator:
+        async def process_text(self, **_kwargs):
+            composer_started.set()
+            await release_composer.wait()
+            await acquire_reply_media_turn()
+            await finish_reply_media_turn()
+            return {"response_text": "目标已经确认完成。"}
+
+    handler._minecraft_narration_orchestrator = SlowNarrationOrchestrator()
+    cue = NarrationCue(
+        cue_id="cue-1",
+        source_event_id="activity:1",
+        phase="finished",
+        visual_text="目标已经确认完成。",
+        emotion="relieved",
+        priority=40,
+        expires_at=time.monotonic() + 60,
+    )
+    narration = asyncio.create_task(handler.process_minecraft_narration(cue, narration_started))
+    await composer_started.wait()
+
+    viewer = BroadcastMediaTurn(handler.media_arbiter, priority=20)
+    await asyncio.wait_for(viewer.acquire(), timeout=0.1)
+    release_composer.set()
+    await asyncio.sleep(0)
+    narration_started.assert_not_awaited()
+
+    await viewer.finish()
+    assert await narration == "目标已经确认完成。"
+    narration_started.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

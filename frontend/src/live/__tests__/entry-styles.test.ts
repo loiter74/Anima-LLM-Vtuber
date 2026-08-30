@@ -23,4 +23,12 @@ describe('live review entry styles', () => {
     expect(liveMarkup).toContain('id="subtitleOverlay"')
     expect(liveMarkup).toContain('id="subtitleText"')
   })
+
+  it('provides shared public activity and audio ownership evidence', () => {
+    expect(liveMarkup).toContain('id="publicActivityPanel"')
+    expect(liveMarkup).toContain('id="publicActivityList"')
+    expect(liveMarkup).toContain('id="publicNarrationState"')
+    expect(liveMarkup).toContain('data-audio-owner="active"')
+    expect(mainSource).toContain("createPublicMediaOwnership(search, 'active')")
+  })
 })

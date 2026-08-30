@@ -69,6 +69,12 @@ minecraft:
     no_griefing: true           # 不破坏玩家建筑
     auto_heal: true             # 自动回血
     max_distance: 500           # 最大活动半径
+  presentation:
+    mode: "off"                 # 通过固定世界与真实直播验收后，再由正式部署显式开启 full
+    tempo: normal
+    seed: animetta-live-v1
+    replay_limit: 64
+    retention_seconds: 86400
   mcp:
     url: "http://127.0.0.1:8768/mcp"
     cli_command: "mc-mcp"

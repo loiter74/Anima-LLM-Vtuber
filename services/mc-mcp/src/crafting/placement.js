@@ -1,4 +1,14 @@
+import { activeOperationScope, operationWait } from '../runtime/operationScope.js';
+
+
 export async function placeCraftingTableWithTimeout(place, timeoutMs = 8_000) {
+  const scope = activeOperationScope();
+  if (scope) {
+    return scope.runInterruptible(
+      () => Promise.resolve().then(place),
+      { label: 'crafting table placement', timeoutMs, includeContainers: true },
+    );
+  }
   let timer;
   try {
     return await Promise.race([
@@ -20,7 +30,7 @@ export async function recoverPlacedCraftingTableAfterTimeout({
   error,
   findPlaced,
   graceMs = 500,
-  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  wait = operationWait,
 }) {
   if (error?.code !== 'CRAFT_TABLE_PLACE_TIMEOUT') return null;
   const safelyFindPlaced = () => {

@@ -171,6 +171,33 @@ describe('createLive2DStage', () => {
     stage.dispose()
   })
 
+  it('maps sanitized public cues only to existing Mao motion assets', async () => {
+    const { createLive2DStage } = await import('./live2d-stage')
+    const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }
+    const stage = createLive2DStage(socket)
+
+    stage.applyPublicCue({
+      sourceEventId: 'activity:1',
+      phase: 'planning',
+      emotion: 'thinking',
+    })
+    await stage.ready
+    stage.applyPublicCue({
+      sourceEventId: 'activity:1',
+      phase: 'planning',
+      emotion: 'thinking',
+    })
+    stage.applyPublicCue({
+      sourceEventId: 'activity:2',
+      phase: 'recovering',
+      emotion: 'thinking',
+    })
+
+    expect(fixtures.model.motion).toHaveBeenCalledOnce()
+    expect(fixtures.model.motion).toHaveBeenCalledWith('TapBody', 0)
+    stage.dispose()
+  })
+
   it('keeps authored idle motion continuous when the same motion loops', async () => {
     const { createLive2DStage } = await import('./live2d-stage')
     const socket = { on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis() }

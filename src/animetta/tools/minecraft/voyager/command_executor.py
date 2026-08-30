@@ -32,6 +32,7 @@ from .budget import (
 )
 from .command_models import CommandState, ControlPlaneError
 from .journal import CommandJournal, JournalCommand, StepRecord
+from .public_activity import PublicActivityProgress, PublicActivityRecorder
 from .reconciliation import RecoveryDecision, RecoveryEvidence, decide_recovery
 from .strategies.base import ExecuteStep
 
@@ -113,6 +114,7 @@ class CommandExecutor:
         make_id: Callable[[str], str],
         reconciliation_grace_seconds: float = 10.0,
         reconciliation_poll_seconds: float = 0.1,
+        activity_recorder: PublicActivityRecorder | None = None,
     ) -> None:
         self._runtime = runtime
         self._repository = repository
@@ -120,6 +122,7 @@ class CommandExecutor:
         self._make_id = make_id
         self._reconciliation_grace_seconds = reconciliation_grace_seconds
         self._reconciliation_poll_seconds = reconciliation_poll_seconds
+        self._activity_recorder = activity_recorder
         self._dispatch_observer: Callable[[str, str], None] | None = None
 
     def set_dispatch_observer(self, observer: Callable[[str, str], None]) -> None:
@@ -515,6 +518,12 @@ class CommandExecutor:
             before_observation_hash=before.content_hash,
         )
         await self._repository.reserve_step(step_record)  # type: ignore[attr-defined]
+        if self._activity_recorder is not None:
+            await self._activity_recorder.record_command(
+                command,
+                source_key=f"{step_id}:committed",
+                phase="committed",
+            )
         request = ActionRequest(
             transport_id=self._make_id("transport"),
             command_id=command.command_id,
@@ -528,6 +537,12 @@ class CommandExecutor:
             previous_receipt_hash=previous_receipt_hash,
         )
         await self._repository.update_step_state(step_id, "dispatched")  # type: ignore[attr-defined]
+        if self._activity_recorder is not None:
+            await self._activity_recorder.record_command(
+                command,
+                source_key=f"{step_id}:acting",
+                phase="acting",
+            )
         if self._dispatch_observer is not None:
             self._dispatch_observer(command.command_id, correlation_id)
         try:
@@ -605,6 +620,12 @@ class CommandExecutor:
         await self._repository.record_step_receipt(  # type: ignore[attr-defined]
             step_id, receipt.model_dump(mode="json")
         )
+        if self._activity_recorder is not None:
+            await self._activity_recorder.record_command(
+                command,
+                source_key=f"{step_id}:checking",
+                phase="checking",
+            )
 
         if receipt.reconciliation is not ReconciliationStatus.ACCEPTED:
             await self._repository.update_step_state(step_id, "unknown")  # type: ignore[attr-defined]
@@ -697,6 +718,23 @@ class CommandExecutor:
                 "runtime_instance_id": manifest.runtime_instance_id,
             },
         )
+        if self._activity_recorder is not None:
+            total_actions = command.effective_budget.get("max_actions")
+            progress = (
+                PublicActivityProgress(
+                    current=ordinal,
+                    total=int(total_actions),
+                    unit="actions",
+                )
+                if isinstance(total_actions, int) and total_actions >= ordinal
+                else None
+            )
+            await self._activity_recorder.record_command(
+                command,
+                source_key=f"{step_id}:settled",
+                phase="checking",
+                progress=progress,
+            )
         if receipt.outcome is ReceiptOutcome.CANCELLED:
             raise _error(
                 "CANCELLATION_REQUESTED",

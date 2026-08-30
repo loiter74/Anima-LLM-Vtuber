@@ -635,3 +635,169 @@ test('v2 runtime has no arbitrary-code execution surface', () => {
 
   assert.equal(runtime.evalSkill, undefined);
 });
+
+
+test('private action phases are ordered, bounded, and not replayed with a receipt', async () => {
+  const events = [];
+  const { runtime } = fixture({
+    runtimeOptions: {
+      presentationMode: 'visual_only',
+      emitActionPhase: (event) => events.push(event),
+    },
+  });
+
+  await runtime.executeAction(request('correlation-phases'));
+  const eventCount = events.length;
+  await runtime.executeAction(request('correlation-phases'));
+
+  assert.deepEqual(events.map((event) => event.phase), [
+    'accepted', 'assessing', 'verifying', 'completed',
+  ]);
+  assert.deepEqual(events.map((event) => event.phase_sequence), [1, 2, 3, 4]);
+  assert.equal(events.every((event) => event.presentation_mode === 'visual_only'), true);
+  assert.equal(events.length, eventCount);
+  assert.ok(events.length <= 32);
+});
+
+
+test('phase projection failures are counted without changing the action receipt', async () => {
+  const publishers = [
+    () => { throw new Error('projection unavailable'); },
+    async () => { throw new Error('async projection unavailable'); },
+  ];
+  for (const [index, emitActionPhase] of publishers.entries()) {
+    const { runtime } = fixture({
+      runtimeOptions: { emitActionPhase, presentationMode: 'visual_only' },
+    });
+
+    assert.equal(
+      (await runtime.executeAction(request(`correlation-projection-${index}`))).outcome,
+      'success',
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await runtime.health()).action_phase_publish_failures_total, 4);
+  }
+});
+
+
+test('off mode records no private action activity', async () => {
+  const events = [];
+  const { runtime } = fixture({
+    runtimeOptions: { emitActionPhase: (event) => events.push(event), presentationMode: 'off' },
+  });
+
+  assert.equal((await runtime.executeAction(request('correlation-off'))).outcome, 'success');
+  assert.deepEqual(events, []);
+  assert.equal((await runtime.health()).action_phase_publish_failures_total, 0);
+});
+
+
+test('runtime preserves enumerable capability error details', async () => {
+  const { runtime } = fixture({
+    invoke: async () => {
+      const error = new Error('partial collection');
+      error.code = 'PARTIAL_COLLECT';
+      error.collected = 2;
+      error.requested = 4;
+      error.details = { resource: 'oak_log' };
+      throw error;
+    },
+  });
+
+  const receipt = await runtime.executeAction(request('correlation-details'));
+
+  assert.equal(receipt.error.details.collected, 2);
+  assert.equal(receipt.error.details.requested, 4);
+  assert.equal(receipt.error.details.resource, 'oak_log');
+});
+
+
+test('failed cancellation settlement quarantines later state-changing actions', async () => {
+  const lateSettlement = deferred();
+  const { runtime } = fixture({
+    invoke: async () => {
+      const error = new Error('still moving');
+      error.code = 'CANCEL_SETTLEMENT_TIMEOUT';
+      error.details = { world_may_have_changed: true };
+      Object.defineProperty(error, 'operationSettlement', {
+        value: lateSettlement.promise,
+      });
+      throw error;
+    },
+  });
+
+  const receipt = await runtime.executeAction(request('correlation-quarantine'));
+  assert.equal(receipt.outcome, 'unknown');
+  assert.equal(receipt.error.code, 'CANCEL_SETTLEMENT_TIMEOUT');
+  assert.deepEqual(
+    { ready: (await runtime.health()).ready, busy: (await runtime.health()).busy },
+    { ready: false, busy: true },
+  );
+  assert.deepEqual(
+    await runtime.executeAction(request('correlation-quarantine')),
+    receipt,
+  );
+  await assert.rejects(
+    () => runtime.executeAction(request('correlation-after-quarantine')),
+    (error) => error.code === 'RUNTIME_QUARANTINED',
+  );
+  lateSettlement.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await runtime.health()).busy, false);
+});
+
+
+test('action phase stream reserves a terminal slot and never exceeds 32 events', async () => {
+  const events = [];
+  const { runtime } = fixture({
+    invoke: async (_parameters, context) => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        context.report_phase('recovering', { attempt, reason_code: 'RETRY' });
+      }
+      return {
+        output: {},
+        explained_mutations: [],
+        budget_usage: budget({ max_actions: 1 }),
+      };
+    },
+    runtimeOptions: {
+      emitActionPhase: (event) => events.push(event),
+      presentationMode: 'visual_only',
+    },
+  });
+
+  await runtime.executeAction(request('correlation-phase-cap'));
+
+  assert.equal(events.length, 32);
+  assert.deepEqual(events.map((event) => event.phase_sequence), Array.from({ length: 32 }, (_, i) => i + 1));
+  assert.equal(events.at(-1).phase, 'completed');
+});
+
+
+test('waiting heartbeats are limited to one event per five seconds', async () => {
+  const events = [];
+  let clock = 10_000;
+  const { runtime } = fixture({
+    invoke: async (_parameters, context) => {
+      context.report_phase('waiting');
+      clock += 4_999;
+      context.report_phase('waiting');
+      clock += 1;
+      context.report_phase('waiting');
+      return {
+        output: {},
+        explained_mutations: [],
+        budget_usage: budget({ max_actions: 1 }),
+      };
+    },
+    runtimeOptions: {
+      nowMs: () => clock,
+      emitActionPhase: (event) => events.push(event),
+      presentationMode: 'visual_only',
+    },
+  });
+
+  await runtime.executeAction({ ...request('correlation-waiting'), deadline_ms: 100_000 });
+
+  assert.equal(events.filter((event) => event.phase === 'waiting').length, 2);
+});

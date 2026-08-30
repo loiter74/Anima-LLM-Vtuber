@@ -303,6 +303,39 @@ async def test_proactive_finalizer_keeps_only_safe_session_context() -> None:
     memory.encode.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_minecraft_narration_is_not_committed_to_conversation_or_memory() -> None:
+    memory = SimpleNamespace(encode=AsyncMock())
+    provider = SequencedLLM([])
+    session = ConversationSessionState()
+    runtime = {
+        "configurable": {
+            "service_context": SimpleNamespace(
+                llm_engine=provider,
+                memory_system=memory,
+                config=SimpleNamespace(system=SimpleNamespace(long_term_memory_mode="read_write")),
+            ),
+            "conversation_session": session,
+        }
+    }
+    current = state()
+    current["user_text"] = "根据当前公开 Minecraft 活动生成一句旁白。"
+    current["response_text"] = "我正在确认橡木是否已经收集完成。"
+    current["metadata"] = {
+        "dialogue_status": "direct",
+        "text_ready_at": 1.0,
+        "source": "minecraft:narration",
+        "actor_role": "host",
+        "audience": "livestream",
+    }
+
+    result = await conversation_finalizer_node(current, runtime)
+
+    assert result["metadata"]["conversation_committed"] is False
+    assert session.completed_turns == ()
+    memory.encode.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("response", "metadata", "is_mock", "expected_commit"),
     [

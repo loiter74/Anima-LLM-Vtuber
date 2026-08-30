@@ -64,13 +64,13 @@ async def conversation_start_node(
 async def reply_output_node(
     state: AgentState, config: RunnableConfig | None = None
 ) -> dict[str, Any]:
+    response = state.get("response_text", "")
+    if not response:
+        return {"error": "No authored response"}
     await acquire_reply_media_turn()
     delivery, to = _delivery(state, config)
     if delivery is None:
         return {"error": "Socket.IO not configured"}
-    response = state.get("response_text", "")
-    if not response:
-        return {"error": "No authored response"}
     if has_reply_media_turn():
         await delivery.emit("chat", "control", {"signal": "conversation-start"}, to=to)
     lang = translation_state.source_language.lower()[:2]

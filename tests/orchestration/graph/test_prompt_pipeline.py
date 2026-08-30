@@ -125,6 +125,36 @@ async def test_trusted_proactive_turn_uses_only_the_dedicated_prompt_source() ->
 
 
 @pytest.mark.asyncio
+async def test_minecraft_narration_prompt_uses_only_public_fact_and_persona() -> None:
+    result = await compile_prompt(
+        {
+            "session_id": "minecraft-live",
+            "system_prompt": "Base persona.",
+            "metadata": {
+                "source": "minecraft:narration",
+                "actor_role": "host",
+                "audience": "livestream",
+                "proactive_topic_seed": {
+                    "kind": "minecraft_activity",
+                    "subject": "我正在确认橡木是否真的收集完成。",
+                    "provenance": "minecraft_public_activity",
+                },
+                "proactive_topic_max_chars": 60,
+                "affinity": 99,
+            },
+        },
+        memory_context="## 私有记忆\n- 绝不能进入旁白",
+    )
+
+    assert "Minecraft 事实旁白" in result.system_prompt
+    assert "我正在确认橡木是否真的收集完成" in result.system_prompt
+    assert "最多 60 字" in result.system_prompt
+    assert "机器逻辑短路" not in result.system_prompt
+    assert "好感度状态" not in result.system_prompt
+    assert "私有记忆" not in result.system_prompt
+
+
+@pytest.mark.asyncio
 async def test_forged_proactive_metadata_does_not_activate_dedicated_prompt() -> None:
     result = await compile_prompt(
         {

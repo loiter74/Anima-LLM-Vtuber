@@ -1,4 +1,5 @@
 import { withTimeout } from './actionDeadline.js';
+import { operationWait } from './runtime/operationScope.js';
 import { getResourceDefinition, isUndergroundCategory } from './resources/registry.js';
 
 const SOFT_LOCATOR_FAILURES = new Set(['RESOURCE_NOT_FOUND', 'SEARCH_TIMEOUT']);
@@ -52,7 +53,7 @@ export async function waitForCollectionMovementToSettle(bot, {
   pollMs = 100,
   stableSamples = 3,
   nowMs = () => Date.now(),
-  waitMs = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  waitMs = operationWait,
 } = {}) {
   stopCollectionMovement(bot);
   const deadline = nowMs() + timeoutMs;
@@ -170,7 +171,7 @@ export function shouldPrepareUndergroundCollection(
 export async function digCollectionBlock(bot, block, timeoutMs = 10000) {
   try {
     return await withTimeout(
-      bot.dig(block),
+      () => bot.dig(block),
       timeoutMs,
       `collect dig ${block.name}@${block.position.x},${block.position.y},${block.position.z}`,
       () => bot.stopDigging?.(),

@@ -6,7 +6,10 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
-from animetta.services.bilibili.response_policy import is_proactive_topic_turn
+from animetta.services.bilibili.response_policy import (
+    is_minecraft_narration_turn,
+    is_proactive_topic_turn,
+)
 from animetta.services.dialogue import AnimaComposer, DialogueServiceError, Reasoner
 from animetta.services.dialogue.contracts import ComposerResult, ReasonerResult
 from animetta.services.dialogue.guard import select_final_response
@@ -195,7 +198,7 @@ async def conversation_finalizer_node(
     )
     committed = False
     proactive_topic = is_proactive_topic_turn(metadata)
-    if policy.allowed:
+    if policy.allowed and not is_minecraft_narration_turn(metadata):
         composer = scratch.get("composer")
         committed = session.commit(
             task_id=task_id,

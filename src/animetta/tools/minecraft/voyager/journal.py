@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from .command_models import TERMINAL_COMMAND_STATES, CommandState, validate_transition
+from .public_activity import ActivityDraft, ActivityRecord, ActivityRecordPage
 
 
 class IdempotencyConflictError(ValueError):
@@ -117,6 +118,27 @@ class CommandJournal(Protocol):
 
     async def transitions(self, command_id: str) -> list[CommandTransition]: ...
 
+    async def append_activity(
+        self,
+        draft: ActivityDraft,
+        *,
+        retention_before_ms: int | None = None,
+    ) -> tuple[ActivityRecord, bool]: ...
+
+    async def read_activity(
+        self,
+        caller_scope: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> ActivityRecordPage: ...
+
+    async def read_recent_activity(self, *, limit: int = 20) -> ActivityRecordPage: ...
+
+    async def expire_activity(self, *, before_ms: int) -> int: ...
+
+    async def expire_terminal_payloads(self, *, before_ms: int) -> int: ...
+
     async def apply_stop_barrier(
         self, draft: CommandDraft, *, occurred_at_ms: int
     ) -> StopBarrierCommit: ...
@@ -149,6 +171,9 @@ class InMemoryCommandJournal:
         self._projection_version = 0
         self._facts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._steps: dict[str, StepRecord] = {}
+        self._activities: list[ActivityRecord] = []
+        self._activity_by_source: dict[str, ActivityRecord] = {}
+        self._activity_sequence = 0
         self._accepting_execute = True
 
     @property
@@ -568,3 +593,114 @@ class InMemoryCommandJournal:
                 commands=tuple(item.model_copy(deep=True) for item in page),
                 next_cursor=next_cursor,
             )
+
+    async def append_activity(
+        self,
+        draft: ActivityDraft,
+        *,
+        retention_before_ms: int | None = None,
+    ) -> tuple[ActivityRecord, bool]:
+        async with self._lock:
+            existing = self._activity_by_source.get(draft.source_key)
+            if existing is not None:
+                if not existing.matches(draft):
+                    raise ValueError("activity source key conflicts with committed payload")
+                self._retain_recent_activity(
+                    before_ms=retention_before_ms,
+                    preserve_source_key=existing.source_key,
+                )
+                return existing.model_copy(deep=True), True
+            command = self._commands.get(draft.command_id)
+            if command is None or command.caller_scope != draft.caller_scope:
+                raise ValueError("activity command scope mismatch")
+            if draft.payload.phase != "finished" and any(
+                record.command_id == draft.command_id and record.payload.phase == "finished"
+                for record in self._activities
+            ):
+                raise ValueError("active activity cannot follow terminal activity")
+            self._activity_sequence += 1
+            record = ActivityRecord(
+                sequence=self._activity_sequence,
+                **draft.model_dump(mode="python"),
+            )
+            self._activities.append(record)
+            self._activity_by_source[record.source_key] = record
+            self._retain_recent_activity(
+                before_ms=retention_before_ms,
+                preserve_source_key=record.source_key,
+            )
+            return record.model_copy(deep=True), False
+
+    def _retain_recent_activity(
+        self,
+        *,
+        before_ms: int | None,
+        preserve_source_key: str,
+    ) -> None:
+        if before_ms is None:
+            return
+        self._activities = [
+            record
+            for record in self._activities
+            if record.occurred_at_ms >= before_ms or record.source_key == preserve_source_key
+        ]
+        self._activity_by_source = {record.source_key: record for record in self._activities}
+
+    async def read_activity(
+        self,
+        caller_scope: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> ActivityRecordPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        after = int(cursor) if cursor else 0
+        async with self._lock:
+            records = [
+                record
+                for record in self._activities
+                if record.caller_scope == caller_scope and record.sequence > after
+            ]
+            page = records[:limit]
+            next_cursor = str(page[-1].sequence) if len(records) > len(page) else None
+            return ActivityRecordPage(
+                records=tuple(record.model_copy(deep=True) for record in page),
+                next_cursor=next_cursor,
+            )
+
+    async def read_recent_activity(self, *, limit: int = 20) -> ActivityRecordPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        async with self._lock:
+            return ActivityRecordPage(
+                records=tuple(record.model_copy(deep=True) for record in self._activities[-limit:])
+            )
+
+    async def expire_activity(self, *, before_ms: int) -> int:
+        async with self._lock:
+            retained = [record for record in self._activities if record.occurred_at_ms >= before_ms]
+            removed = len(self._activities) - len(retained)
+            self._activities = retained
+            self._activity_by_source = {record.source_key: record for record in retained}
+            return removed
+
+    async def expire_terminal_payloads(self, *, before_ms: int) -> int:
+        async with self._lock:
+            expired_ids = {
+                command.command_id
+                for command in self._commands.values()
+                if command.terminal_at_ms is not None and command.terminal_at_ms < before_ms
+            }
+            if not expired_ids:
+                return 0
+            self._activities = [
+                record for record in self._activities if record.command_id not in expired_ids
+            ]
+            self._activity_by_source = {record.source_key: record for record in self._activities}
+            for command_id in expired_ids:
+                command = self._commands[command_id]
+                self._commands[command_id] = command.model_copy(
+                    update={"payload": {}, "terminal_result": None}, deep=True
+                )
+            return len(expired_ids)

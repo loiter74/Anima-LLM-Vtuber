@@ -3,6 +3,11 @@ import { Events } from '@/constants/socket-events'
 import { createLiveAudioController } from './audio'
 import type { LiveSocket } from './controller'
 import { SINGING_PLAYBACK_STORAGE_KEY, writeSingingPlayback } from '@/singing/playback-sync'
+import {
+  createPublicMediaOwnership,
+  type PublicMediaLock,
+  type PublicMediaLockManager,
+} from '@/shared/broadcast/mediaOwnership'
 
 const playback = vi.hoisted(() => ({
   endAudioStream: vi.fn(),
@@ -20,7 +25,31 @@ const lipSync = vi.hoisted(() => ({
 vi.mock('@/shared/audio/playback', () => playback)
 vi.mock('@/shared/audio/lipSync', () => lipSync)
 
-function harness(playResult: Promise<void> = Promise.resolve()) {
+class FakeLockManager implements PublicMediaLockManager {
+  private readonly held = new Set<string>()
+
+  async request(
+    name: string,
+    _options: { mode: 'exclusive'; ifAvailable: true },
+    callback: (lock: PublicMediaLock | null) => Promise<void> | void,
+  ): Promise<void> {
+    if (this.held.has(name)) {
+      await callback(null)
+      return
+    }
+    this.held.add(name)
+    try {
+      await callback({ name })
+    } finally {
+      this.held.delete(name)
+    }
+  }
+}
+
+function harness(
+  playResult: Promise<void> = Promise.resolve(),
+  mediaMode: 'active' | 'muted' = 'active',
+) {
   const handlers = new Map<string, (...args: unknown[]) => void>()
   const setMouthTarget = vi.fn()
   const socket: LiveSocket = {
@@ -43,7 +72,7 @@ function harness(playResult: Promise<void> = Promise.resolve()) {
   vi.spyOn(singingAudio, 'pause').mockImplementation(() => undefined)
   vi.spyOn(singingAudio, 'load').mockImplementation(() => undefined)
   const bgm = { duck: vi.fn(), release: vi.fn(), unlock: vi.fn() }
-  const controller = createLiveAudioController(socket, document, setMouthTarget, bgm)
+  const controller = createLiveAudioController(socket, document, setMouthTarget, bgm, { mediaMode })
   return { bgm, controller, handlers, setMouthTarget, singingAudio, socket }
 }
 
@@ -250,6 +279,208 @@ describe('standalone live audio', () => {
       'completed',
     )
     controller.dispose()
+  })
+
+  it('records correlated audio while the muted surface never starts playback', () => {
+    const { controller, handlers } = harness(Promise.resolve(), 'muted')
+    const identity = {
+      message_id: 'message',
+      conversation_id: 'conversation',
+      task_id: 'muted-task',
+      turn_id: 'muted-task',
+    }
+
+    handlers.get(Events.CHAT.AUDIO_WITH_EXPRESSION)!({
+      ...identity,
+      audio_data: 'audio',
+      format: 'wav',
+    })
+    handlers.get(Events.CHAT.AUDIO_STREAM_START)!({
+      ...identity,
+      stream_id: 'stream',
+      format: 'pcm_s16le',
+      sample_rate: 24_000,
+      channels: 1,
+    })
+    handlers.get(Events.SING.COMPLETE)!({ task_id: 'muted-song', audio_url: '/song.wav' })
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+
+    const status = document.getElementById('audioStatus')!
+    expect(status.dataset.audioOwner).toBe('muted')
+    expect(status.dataset.playbackState).toBe('muted')
+    expect(status.dataset.playbackCount).toBe('0')
+    expect(status.dataset.lastAudioTaskId).toBe('muted-song')
+    expect(playback.playAudio).not.toHaveBeenCalled()
+    expect(playback.startAudioStream).not.toHaveBeenCalled()
+    expect(playback.unlockAudioPlayback).not.toHaveBeenCalled()
+    controller.dispose()
+    expect(playback.stopAudio).not.toHaveBeenCalled()
+  })
+
+  it('plays a shared task only after a concurrent active candidate wins fencing', async () => {
+    const handlers = new Map<string, Array<(...args: unknown[]) => void>>()
+    const socket: LiveSocket = {
+      on: vi.fn((event, handler) => {
+        handlers.set(event, [...(handlers.get(event) ?? []), handler])
+        return socket
+      }),
+      off: vi.fn((event, handler) => {
+        handlers.set(
+          event,
+          (handlers.get(event) ?? []).filter((registered) => registered !== handler),
+        )
+        return socket
+      }),
+    }
+    const page = (): Document => {
+      const pageDocument = document.implementation.createHTMLDocument()
+      pageDocument.body.innerHTML = `
+        <span id="audioStatus" data-playback-state="idle" data-playback-count="0"></span>
+        <audio id="singingAudio"></audio>
+      `
+      const audio = pageDocument.getElementById('singingAudio') as HTMLAudioElement
+      vi.spyOn(audio, 'pause').mockImplementation(() => undefined)
+      vi.spyOn(audio, 'load').mockImplementation(() => undefined)
+      return pageDocument
+    }
+    const liveDocument = page()
+    const gameplayDocument = page()
+    const lockManager = new FakeLockManager()
+    const liveOwnership = createPublicMediaOwnership(
+      new URLSearchParams('media=active'),
+      'active',
+      { ownerId: 'live-page', lockManager, retryMs: 5 },
+    )
+    const gameplayOwnership = createPublicMediaOwnership(
+      new URLSearchParams('media=active'),
+      'muted',
+      { ownerId: 'gameplay-page', lockManager, retryMs: 5 },
+    )
+    const liveController = createLiveAudioController(socket, liveDocument, vi.fn(), undefined, {
+      ownership: liveOwnership,
+    })
+    const gameplayController = createLiveAudioController(
+      socket,
+      gameplayDocument,
+      vi.fn(),
+      undefined,
+      { ownership: gameplayOwnership },
+    )
+    let resolvedLifecycle: { onStart?: () => void } | undefined
+    playback.playAudio.mockImplementationOnce(
+      (_event: unknown, lifecycle: { onStart?: () => void }) => {
+        resolvedLifecycle = lifecycle
+      },
+    )
+
+    for (const handler of handlers.get(Events.CHAT.AUDIO_WITH_EXPRESSION) ?? []) {
+      handler({
+        message_id: 'shared-task',
+        conversation_id: 'shared-task',
+        task_id: 'shared-task',
+        turn_id: 'shared-task',
+        audio_data: 'audio',
+        format: 'wav',
+      })
+    }
+
+    await vi.waitFor(() => expect(playback.playAudio).toHaveBeenCalledOnce())
+    expect(liveDocument.getElementById('audioStatus')?.dataset.audioOwner).toBe('active')
+    expect(gameplayDocument.getElementById('audioStatus')?.dataset.audioOwner).toBe('standby')
+
+    liveOwnership.dispose()
+    await vi.waitFor(() =>
+      expect(gameplayDocument.getElementById('audioStatus')?.dataset.audioOwner).toBe('active'),
+    )
+    playback.stopAudio.mockClear()
+    resolvedLifecycle?.onStart?.()
+    expect(playback.stopAudio).toHaveBeenCalledOnce()
+    expect(liveDocument.getElementById('audioStatus')?.dataset.playbackCount).toBe('0')
+    expect(liveDocument.getElementById('audioStatus')?.dataset.playbackState).toBe('standby')
+
+    playback.playAudio.mockClear()
+    for (const handler of handlers.get(Events.CHAT.AUDIO_WITH_EXPRESSION) ?? []) {
+      handler({
+        message_id: 'replacement-task',
+        conversation_id: 'replacement-task',
+        task_id: 'replacement-task',
+        turn_id: 'replacement-task',
+        audio_data: 'audio',
+        format: 'wav',
+      })
+    }
+    await vi.waitFor(() => expect(playback.playAudio).toHaveBeenCalledOnce())
+    playback.playAudio.mock.calls[0][1].onStart()
+    expect(gameplayDocument.getElementById('audioStatus')?.dataset.playbackCount).toBe('1')
+    expect(gameplayDocument.getElementById('audioStatus')?.dataset.lastAudioTaskId).toBe(
+      'replacement-task',
+    )
+    liveController.dispose()
+    gameplayController.dispose()
+    gameplayOwnership.dispose()
+  })
+
+  it('plays review TTS through the shared lifecycle and persists actual playback evidence', () => {
+    const { controller, setMouthTarget } = harness()
+    const runtime = document.createElement('section')
+    const audio = document.createElement('audio')
+    audio.src = 'http://127.0.0.1:49152/review.wav'
+    audio.dataset.complete = 'pending'
+    runtime.dataset.lipSync = 'pending'
+
+    controller.playReviewAudio({ taskId: 'review-task', audio, volumes: [0.2, 0.8], runtime })
+
+    expect(playback.playAudio).toHaveBeenCalledWith(
+      { audio_url: audio.src, volumes: [0.2, 0.8] },
+      expect.any(Object),
+      expect.any(Function),
+    )
+    const [, lifecycle, mouthTarget] = playback.playAudio.mock.calls.at(-1)!
+    lifecycle.onStart()
+    mouthTarget(0.8)
+    expect(setMouthTarget).toHaveBeenCalledWith(0.8, 'review-task')
+    expect(runtime.dataset.lipSync).toBe('observed')
+    expect(document.getElementById('audioStatus')?.dataset).toEqual(
+      expect.objectContaining({
+        audioOwner: 'active',
+        playbackCount: '1',
+        lastAudioTaskId: 'review-task',
+        lastAudioKind: 'review',
+        playbackState: 'playing',
+      }),
+    )
+
+    lifecycle.onComplete()
+    expect(audio.dataset.complete).toBe('true')
+    expect(document.getElementById('audioStatus')?.dataset.playbackState).toBe('completed')
+    controller.dispose()
+  })
+
+  it('keeps review TTS silent when muted and cancels it on generation stop', () => {
+    const muted = harness(Promise.resolve(), 'muted')
+    const mutedAudio = document.createElement('audio')
+    mutedAudio.src = 'http://127.0.0.1:49152/muted.wav'
+    muted.controller.playReviewAudio({ taskId: 'muted-review', audio: mutedAudio, volumes: [] })
+    expect(playback.playAudio).not.toHaveBeenCalled()
+    expect(mutedAudio.dataset.complete).toBe('muted')
+    muted.controller.dispose()
+
+    const active = harness()
+    const activeAudio = document.createElement('audio')
+    activeAudio.src = 'http://127.0.0.1:49152/active.wav'
+    active.controller.playReviewAudio({ taskId: 'active-review', audio: activeAudio, volumes: [] })
+    const lifecycle = playback.playAudio.mock.calls.at(-1)?.[1]
+    lifecycle.onStart()
+    playback.stopAudio.mockImplementationOnce(() => lifecycle.onCancel())
+    active.handlers.get(Events.CHAT.STOP_AUDIO)!({
+      message_id: 'active-review',
+      conversation_id: 'active-review',
+      task_id: 'active-review',
+      turn_id: 'active-review',
+    })
+    expect(activeAudio.dataset.complete).toBe('cancelled')
+    expect(document.getElementById('audioStatus')?.dataset.playbackState).toBe('cancelled')
+    active.controller.dispose()
   })
 
   it('exposes the same task identity for a Bilibili reply and its actual playback', () => {

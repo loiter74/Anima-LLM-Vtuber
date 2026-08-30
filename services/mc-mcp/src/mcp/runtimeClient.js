@@ -17,13 +17,24 @@ export class BotRuntimeClient {
     return Boolean(this.process && this.process.exitCode === null);
   }
 
-  async start({ host, port, username, version, viewer = {}, timeoutMs = 20_000 }) {
+  async start({
+    host,
+    port,
+    username,
+    version,
+    viewer = {},
+    presentation = {},
+    timeoutMs = 20_000,
+  }) {
     if (this.running) return;
     const args = [this.entrypoint, host, String(port), username];
     if (version) args.push(version);
     const env = {
       ...process.env,
       GAMEBOT_CONTROL_PLANE_MODE: 'true',
+      GAMEBOT_PRESENTATION_MODE: presentation.mode ?? 'off',
+      GAMEBOT_PRESENTATION_TEMPO: presentation.tempo ?? 'normal',
+      GAMEBOT_PRESENTATION_SEED: presentation.seed ?? 'animetta-live-v1',
       MC_CLIENT_VIEWER_ENABLED: viewer.username ? 'true' : 'false',
       MC_CLIENT_VIEWER_USERNAME: viewer.username || '',
       MC_CLIENT_VIEWER_MODE: 'spectator',

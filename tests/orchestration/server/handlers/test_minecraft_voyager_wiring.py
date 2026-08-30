@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from animetta.orchestration.server.handlers import minecraft_handlers as handlers_module
-from animetta.orchestration.server.handlers.minecraft_handlers import MinecraftHandlers
+from animetta.orchestration.server.handlers.minecraft_handlers import (
+    TRUSTED_MINECRAFT_ROOM,
+    MinecraftHandlers,
+)
 from animetta.orchestration.socket_events import EVENTS
 
 
@@ -13,12 +16,15 @@ async def test_handler_routes_control_plane_projections() -> None:
     handler = MinecraftHandlers(AsyncMock())
     await handler._emit_transition({"event_id": "1"})
     handler.sio.emit.assert_awaited_with(
-        EVENTS["minecraft"]["command_transition"]["name"], {"event_id": "1"}
+        EVENTS["minecraft"]["command_transition"]["name"],
+        {"event_id": "1"},
+        to=TRUSTED_MINECRAFT_ROOM,
     )
     await handler._emit_transition({"event": "minecraft.skill.trust", "event_id": "trust:1"})
     handler.sio.emit.assert_awaited_with(
         EVENTS["minecraft"]["skill_trust"]["name"],
         {"event": "minecraft.skill.trust", "event_id": "trust:1"},
+        to=TRUSTED_MINECRAFT_ROOM,
     )
 
 

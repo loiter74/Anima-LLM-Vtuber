@@ -1,4 +1,5 @@
 import Vec3 from 'vec3';
+import { activeOperationScope, operationWait } from './runtime/operationScope.js';
 
 // mine_shaft.js — 系统下矿（垂直挖矿井，从 index.js 提取，中度重构）。
 // 依赖注入：bot / disableAuto / enableAuto。
@@ -9,7 +10,7 @@ export function createMineShaft({
   disableAuto,
   enableAuto,
   getSurvivalThreat = () => null,
-  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  wait = operationWait,
 }) {
   function debug(message) {
     if (process.env.MINE_SHAFT_DEBUG) {
@@ -17,11 +18,19 @@ export function createMineShaft({
     }
   }
 
-  async function withActionTimeout(promise, timeoutMs, label, onTimeout = () => {}) {
+  async function withActionTimeout(operation, timeoutMs, label, onTimeout = () => {}) {
+    const start = typeof operation === 'function' ? operation : () => operation;
+    const scope = activeOperationScope();
+    if (scope) {
+      return scope.runInterruptible(
+        start,
+        { label, timeoutMs, includeContainers: false },
+      );
+    }
     let timer;
     try {
       return await Promise.race([
-        promise,
+        Promise.resolve().then(start),
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             try { onTimeout(); } catch {}
@@ -39,7 +48,7 @@ export function createMineShaft({
 
   async function withDigTimeout(block, timeoutMs = 8000) {
     return withActionTimeout(
-      bot.dig(block),
+      () => bot.dig(block),
       timeoutMs,
       `dig ${block.name}@${block.position.x},${block.position.y},${block.position.z}`,
       () => bot.stopDigging?.()
@@ -188,7 +197,11 @@ export function createMineShaft({
   async function digIfNeeded(block) {
     if (isClear(block)) return false;
     if (!isSolid(block)) return false;
-    const tool = await withActionTimeout(equipBestPickaxe(block.name), 3000, 'equip pickaxe');
+    const tool = await withActionTimeout(
+      () => equipBestPickaxe(block.name),
+      3000,
+      'equip pickaxe',
+    );
     if (!tool && isRockLike(block.name)) {
       const err = new Error(`pickaxe required for ${block.name}`);
       err.code = 'TOOL_REQUIRED';
@@ -203,7 +216,7 @@ export function createMineShaft({
     }
     if (typeof bot.lookAt === 'function' && block.position?.offset) {
       await withActionTimeout(
-        bot.lookAt(block.position.offset(0.5, 0.5, 0.5), true),
+        () => bot.lookAt(block.position.offset(0.5, 0.5, 0.5), true),
         2000,
         'look at stair block'
       );
@@ -242,16 +255,20 @@ export function createMineShaft({
       );
       if (!isSolid(refBlock)) continue;
       try {
-        await withActionTimeout(bot.equip(item, 'hand'), 3000, 'equip shaft seal block');
+        await withActionTimeout(
+          () => bot.equip(item, 'hand'),
+          3000,
+          'equip shaft seal block',
+        );
         if (typeof bot.lookAt === 'function' && targetPos?.offset) {
           await withActionTimeout(
-            bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true),
+            () => bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true),
             2000,
             'look at shaft seal block'
           );
         }
         await withActionTimeout(
-          bot.placeBlock(refBlock, ref.face),
+          () => bot.placeBlock(refBlock, ref.face),
           4000,
           `place shaft seal block@${targetPos.x},${targetPos.y},${targetPos.z}`
         );
@@ -320,7 +337,7 @@ export function createMineShaft({
       await digIfNeeded(feetBlock);
       if (typeof bot.lookAt === 'function' && feetPos?.offset) {
         await withActionTimeout(
-          bot.lookAt(feetPos.offset(0.5, 0.5, 0.5), true),
+          () => bot.lookAt(feetPos.offset(0.5, 0.5, 0.5), true),
           2000,
           'look toward supported ledge'
         );
@@ -355,7 +372,7 @@ export function createMineShaft({
 
       if (typeof bot.lookAt === 'function' && feetPos?.offset) {
         await withActionTimeout(
-          bot.lookAt(feetPos.offset(0.5, 1.0, 0.5), true),
+          () => bot.lookAt(feetPos.offset(0.5, 1.0, 0.5), true),
           2000,
           'look into stair step'
         );
@@ -484,7 +501,8 @@ export function createMineShaft({
     }
   }
 
-  async function mineShaft(targetY = 20, minimumCobblestone = 0) {
+  async function mineShaft(targetY = 20, minimumCobblestone = 0, context = {}) {
+    context.operation_scope?.checkpoint();
     if (!bot.entity) throw new Error('bot not spawned');
     const cobblestoneTarget = Math.max(0, Number(minimumCobblestone) || 0);
     const startingCobblestone = inventoryCount('cobblestone');

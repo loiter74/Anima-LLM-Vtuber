@@ -262,15 +262,21 @@ def test_animetta_lifecycle_targets_never_reference_qwen_compose() -> None:
 
 def test_animetta_starts_and_preflights_host_tts_before_build() -> None:
     lifecycle = _text("scripts/runtime_lifecycle.py")
+    host_runtime_setup = lifecycle.split("def _prepare_host_runtimes", maxsplit=1)[1].split(
+        "def _compose_environment", maxsplit=1
+    )[0]
+    anima_up = lifecycle.split('elif operation == "anima-up":', maxsplit=1)[1].split(
+        'elif operation == "anima-deploy":', maxsplit=1
+    )[0]
 
     assert 'operation == "anima-up"' in lifecycle
-    assert lifecycle.index("_host_tts_up(best_effort=False)") < lifecycle.index(
-        "_run(_preflight(wait=False))"
+    assert host_runtime_setup.index("_host_tts_up(best_effort=False)") < host_runtime_setup.index(
+        "_run(_preflight(wait=wait))"
     )
-    assert lifecycle.index("_run(_preflight(wait=False))") < lifecycle.index(
-        '["docker", "compose", "build", "animetta"]'
+    assert anima_up.index("_prepare_host_runtimes(wait=False)") < anima_up.index(
+        "list(_ANIMETTA_BUILD_COMMAND)"
     )
-    assert "_run(_rvc_preflight(wait=False))" in lifecycle
+    assert "_run(_rvc_preflight(wait=wait))" in host_runtime_setup
 
 
 def test_hosted_descriptors_use_core_image_and_production_profile() -> None:

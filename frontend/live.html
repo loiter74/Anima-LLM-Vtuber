@@ -24,6 +24,41 @@
       >
         <p id="subtitleText"></p>
       </section>
+      <aside
+        class="public-activity-panel"
+        id="publicActivityPanel"
+        aria-label="公开行动轨迹"
+        hidden
+      >
+        <header class="public-activity-header">
+          <div>
+            <div class="public-activity-kicker">AGENCY TRACE</div>
+            <h2 class="public-activity-title">行动轨迹</h2>
+          </div>
+        </header>
+        <section
+          class="public-narration-state"
+          id="publicNarrationState"
+          aria-label="当前旁白"
+          aria-live="polite"
+          hidden
+        ></section>
+        <dl class="public-activity-summary" aria-label="当前行动摘要">
+          <div class="public-activity-summary-slot">
+            <dt>当前意图</dt>
+            <dd id="publicCurrentIntent">等待任务</dd>
+          </div>
+          <div class="public-activity-summary-slot">
+            <dt>最近观察</dt>
+            <dd id="publicRecentObservation">尚无观察</dd>
+          </div>
+          <div class="public-activity-summary-slot">
+            <dt>下一阶段</dt>
+            <dd id="publicNextPhase">等待计划</dd>
+          </div>
+        </dl>
+        <ol class="public-activity-list" id="publicActivityList" aria-live="polite"></ol>
+      </aside>
       <aside class="status-rail" aria-label="直播状态">
         <span class="status-pill" id="socketStatus" data-state="connecting">服务连接中</span>
         <span class="status-pill" id="livestreamStatus" data-state="stopped">直播未启动</span>
@@ -32,6 +67,7 @@
           id="audioStatus"
           data-playback-state="idle"
           data-playback-count="0"
+          data-audio-owner="active"
           data-last-audio-task-id=""
           data-last-audio-kind=""
           data-bgm-state="idle"

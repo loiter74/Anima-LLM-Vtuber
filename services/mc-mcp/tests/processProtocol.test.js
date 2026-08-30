@@ -88,12 +88,89 @@ test('process timeout aborts the active Mineflayer operation once', async () => 
       timeoutMs: 5,
       execute: () => new Promise(() => {}),
     },
-  }, { abortActive: () => { aborts += 1; } });
+  }, {
+    abortActive: () => { aborts += 1; },
+    timeoutSettlementMs: 5,
+  });
 
   await protocol.dispatch({ id: 1, action: 'gamebot_v2_execute_action' });
 
   assert.equal(aborts, 1);
   assert.equal(messages[0].result.code, 'RUNTIME_TIMEOUT');
+});
+
+
+test('process busy releases only after timeout cleanup settles the operation', async () => {
+  let release;
+  let invocations = 0;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const { messages, protocol } = createHarness({
+    gamebot_v2_execute_action: {
+      timeoutMs: 5,
+      execute: () => {
+        invocations += 1;
+        return invocations === 1 ? blocked : { outcome: 'success' };
+      },
+    },
+  }, {
+    abortActive: async () => { release({ outcome: 'cancelled' }); },
+    timeoutSettlementMs: 20,
+  });
+
+  await protocol.dispatch({ id: 1, action: 'gamebot_v2_execute_action' });
+  await protocol.dispatch({ id: 2, action: 'gamebot_v2_execute_action' });
+
+  assert.equal(messages.find((message) => message.id === 1).result.code, 'RUNTIME_TIMEOUT');
+  assert.equal(messages.find((message) => message.id === 2).status, 'success');
+});
+
+
+test('an operation that ignores timeout cleanup stays busy until late terminal', async () => {
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const { messages, protocol } = createHarness({
+    gamebot_v2_execute_action: {
+      timeoutMs: 5,
+      execute: () => blocked,
+    },
+  }, {
+    timeoutSettlementMs: 5,
+  });
+
+  await protocol.dispatch({ id: 1, action: 'gamebot_v2_execute_action' });
+  assert.deepEqual(protocol.getState(), { busy: true, quarantined: true });
+  await protocol.dispatch({ id: 2, action: 'gamebot_v2_execute_action' });
+
+  assert.equal(messages.find((message) => message.id === 1).result.quarantined, true);
+  assert.equal(messages.find((message) => message.id === 2).result.code, 'RUNTIME_QUARANTINED');
+
+  release({ outcome: 'cancelled' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(protocol.getState(), { busy: false, quarantined: true });
+  await protocol.dispatch({ id: 3, action: 'gamebot_v2_execute_action' });
+  assert.equal(messages.find((message) => message.id === 3).result.code, 'RUNTIME_QUARANTINED');
+});
+
+
+test('unknown receipt keeps process busy until its internal operation settles', async () => {
+  let release;
+  const settlement = new Promise((resolve) => { release = resolve; });
+  const receipt = { outcome: 'unknown' };
+  Object.defineProperty(receipt, 'operationSettlement', { value: settlement });
+  const { messages, protocol } = createHarness({
+    gamebot_v2_execute_action: { execute: () => receipt },
+  });
+
+  await protocol.dispatch({ id: 1, action: 'gamebot_v2_execute_action' });
+
+  assert.equal(messages[0].status, 'success');
+  assert.deepEqual(protocol.getState(), { busy: true, quarantined: true });
+  await protocol.dispatch({ id: 2, action: 'gamebot_v2_execute_action' });
+  assert.equal(messages[1].result.code, 'RUNTIME_QUARANTINED');
+
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(protocol.getState(), { busy: false, quarantined: true });
 });
 
 

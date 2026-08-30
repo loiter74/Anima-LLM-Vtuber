@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from animetta.services.bilibili.response_policy import MINECRAFT_NARRATION_SOURCE
+
 from .types import (
     PromptContext,
     PromptSection,
@@ -326,28 +328,38 @@ class ProactiveTopicPromptSource:
         else:
             seed = ctx.proactive_topic_seed or {}
             subject = str(seed.get("subject") or "").strip()
-            subject_rule = (
-                f"优先围绕当前场景话题「{subject}」自然起句，但不要照抄或解释话题来源。"
-                if subject
-                else "当前没有新场景话题，自由选择一个日常、科学或机器逻辑前提。"
-            )
-            recent_rule = ""
-            if ctx.proactive_recent_outputs:
-                recent_rule = "\n- 不得重复这些本场近期发言：" + "；".join(
-                    ctx.proactive_recent_outputs
+            if ctx.source == MINECRAFT_NARRATION_SOURCE:
+                content = (
+                    "## Minecraft 事实旁白\n\n"
+                    "这是后台从公开、脱敏的活动事实生成的主持人旁白，不是观众弹幕。\n"
+                    f"唯一可用事实：{subject or '当前活动状态已更新。'}\n\n"
+                    "只用当前人格把这条事实润色成一句清晰中文，不添加新事实、坐标、"
+                    "候选方案、分数、推理过程或工具细节。"
+                    f"最多 {ctx.proactive_topic_max_chars} 字；禁止问句、标题、列表和舞台指令。"
                 )
-            content = (
-                "## 直播主动找话题\n\n"
-                "这是主持人自主发言触发，不是观众弹幕，不要回应、称呼或追问某位观众。\n"
-                f"{subject_rule}\n\n"
-                "只输出一句中文，语法和前提一本正经，结论却蠢得自然，带一点机器逻辑短路感。\n"
-                f"- 最多 {ctx.proactive_topic_max_chars} 字，禁止标题、列表、解释笑点和舞台指令。\n"
-                "- 禁止问句、求互动、喊人、说「有人在吗」以及高风险事实误导。\n"
-                "- 风格锚点：鲨鱼住在海里，因为陆地上很难游泳。\n"
-                "- 风格锚点：企鹅不会飞，主要是因为没有买机票。\n"
-                "- 风格锚点：每天睡八小时，三天就能睡满一天。"
-                f"{recent_rule}"
-            )
+            else:
+                subject_rule = (
+                    f"优先围绕当前场景话题「{subject}」自然起句，但不要照抄或解释话题来源。"
+                    if subject
+                    else "当前没有新场景话题，自由选择一个日常、科学或机器逻辑前提。"
+                )
+                recent_rule = ""
+                if ctx.proactive_recent_outputs:
+                    recent_rule = "\n- 不得重复这些本场近期发言：" + "；".join(
+                        ctx.proactive_recent_outputs
+                    )
+                content = (
+                    "## 直播主动找话题\n\n"
+                    "这是主持人自主发言触发，不是观众弹幕，不要回应、称呼或追问某位观众。\n"
+                    f"{subject_rule}\n\n"
+                    "只输出一句中文，语法和前提一本正经，结论却蠢得自然，带一点机器逻辑短路感。\n"
+                    f"- 最多 {ctx.proactive_topic_max_chars} 字，禁止标题、列表、解释笑点和舞台指令。\n"
+                    "- 禁止问句、求互动、喊人、说「有人在吗」以及高风险事实误导。\n"
+                    "- 风格锚点：鲨鱼住在海里，因为陆地上很难游泳。\n"
+                    "- 风格锚点：企鹅不会飞，主要是因为没有买机票。\n"
+                    "- 风格锚点：每天睡八小时，三天就能睡满一天。"
+                    f"{recent_rule}"
+                )
         return [
             PromptSection(
                 name=self.name,

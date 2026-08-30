@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { mountMinecraftGameplayShell } from './page'
+import mainSource from './main.ts?raw'
 
 describe('minecraft gameplay preview shell', () => {
   it('renders only the broadcast surfaces required by the approved composition', () => {
-    const handle = mountMinecraftGameplayShell(document, new URLSearchParams('preview=1'))
+    const handle = mountMinecraftGameplayShell(document, new URLSearchParams('review=1&preview=1'))
 
     expect(handle.element.dataset.mode).toBe('preview')
     expect(handle.element.style.getPropertyValue('--broadcast-width')).toBe('1920px')
@@ -39,6 +40,97 @@ describe('minecraft gameplay preview shell', () => {
     expect(() => handle.dispose()).not.toThrow()
   })
 
+  it('keeps every preview fixture behind review=1 and defaults to a muted media surface', () => {
+    const handle = mountMinecraftGameplayShell(
+      document,
+      new URLSearchParams({
+        preview: '1',
+        bindingState: 'following',
+        confirmed: 'true',
+        subtitle: '不应进入正式直播的夹具字幕',
+        timeline: '1',
+      }),
+    )
+
+    expect(handle.element.dataset.review).toBe('false')
+    expect(handle.element.dataset.media).toBe('muted')
+    expect(handle.element.querySelector('.preview-world')).toBeNull()
+    expect(handle.element.querySelector('.danmaku-item')).toBeNull()
+    expect(handle.element.querySelector<HTMLElement>('.game-danmaku')?.hidden).toBe(true)
+    expect(handle.element.querySelector<HTMLElement>('.game-subtitle')?.hidden).toBe(true)
+    expect(handle.element.querySelector('.showcase-timeline')).toBeNull()
+    expect(handle.element.querySelector('[aria-label="附身状态"]')?.textContent).toContain(
+      '等待 LUN077',
+    )
+    const audioStatus = handle.element.querySelector<HTMLElement>('#audioStatus')
+    expect(audioStatus?.dataset.audioOwner).toBe('muted')
+    expect(audioStatus?.dataset.playbackState).toBe('muted')
+    expect(audioStatus?.dataset.playbackCount).toBe('0')
+
+    handle.dispose()
+  })
+
+  it('renders real chat, subtitles, viewer state, and shared public activity through the view', () => {
+    const handle = mountMinecraftGameplayShell(
+      document,
+      new URLSearchParams('overlay=1&media=active'),
+    )
+
+    handle.renderMessages([
+      {
+        source_message_id: 'message-1',
+        user_name: '真实观众',
+        user_id: 7,
+        text: '这次往左边看看？',
+        timestamp: 1,
+      },
+    ])
+    handle.setSubtitle('我先观察一下左边。')
+    handle.setViewerStatus({ bindingState: 'following', confirmed: true, target: 'AnimettaBot' })
+    handle.renderPublicActivities([
+      {
+        schema_version: '1',
+        event: 'minecraft.activity.projection',
+        event_id: 'activity:1',
+        projection_kind: 'activity',
+        projection_version: 1,
+        occurred_at_ms: 1,
+        entity_id: 'minecraft',
+        payload: { phase: 'observing', outcome: 'active' },
+        phaseLabel: '观察',
+        visualText: '观察 · 左侧矿道',
+      },
+    ])
+    handle.setPublicNarration({
+      schema_version: '1',
+      cue_id: 'cue:1',
+      source_event_id: 'activity:1',
+      task_id: 'task-1',
+      phase: 'observing',
+      visual_text: '左边好像有东西。',
+      emotion: 'thinking',
+      speech_state: 'speaking',
+      occurred_at_ms: 2,
+    })
+
+    expect(handle.element.querySelector('.game-danmaku')?.textContent).toContain('真实观众')
+    expect(handle.element.querySelector('.game-subtitle')?.textContent).toBe('我先观察一下左边。')
+    expect(handle.element.querySelector('[aria-label="附身状态"]')?.textContent).toContain(
+      '已附身 LUN077 → AnimettaBot',
+    )
+    expect(handle.element.querySelector('[data-event-id="activity:1"]')?.textContent).toContain(
+      '左侧矿道',
+    )
+    expect(handle.element.querySelector('#publicNarrationState')?.textContent).toContain(
+      '左边好像有东西',
+    )
+    expect(handle.element.querySelector<HTMLElement>('#audioStatus')?.dataset.audioOwner).toBe(
+      'active',
+    )
+
+    handle.dispose()
+  })
+
   it('renders confirmed attachment and bounded review audio parameters', () => {
     const handle = mountMinecraftGameplayShell(
       document,
@@ -52,6 +144,7 @@ describe('minecraft gameplay preview shell', () => {
         reason: 'viewer_joined',
         audio: 'http://127.0.0.1:49152/artifacts/review.wav',
         mouthTimeline: '[0,0.3,0.8,0.1]',
+        reviewTaskId: 'minecraft-review-run-001-1',
         subtitle: '铁装流程开始，本小姐要认真起来了。',
       }),
     )
@@ -63,6 +156,7 @@ describe('minecraft gameplay preview shell', () => {
     expect(document.querySelector('[aria-label="直播字幕"]')?.textContent).toContain('铁装流程开始')
     const runtime = document.querySelector<HTMLElement>('.minecraft-review-runtime')
     expect(runtime?.dataset.mouthTimeline).toBe('[0,0.3,0.8,0.1]')
+    expect(runtime?.dataset.taskId).toBe('minecraft-review-run-001-1')
     expect(runtime?.querySelector('audio')?.src).toBe('http://127.0.0.1:49152/artifacts/review.wav')
 
     handle.dispose()
@@ -87,6 +181,7 @@ describe('minecraft gameplay preview shell', () => {
       document,
       new URLSearchParams({
         preview: '1',
+        review: '1',
         timeline: '1',
         runId: 'showcase-run-001',
         missionId: 'adaptive-showcase-001',
@@ -170,6 +265,7 @@ describe('minecraft gameplay preview shell', () => {
       document,
       new URLSearchParams({
         preview: '1',
+        review: '1',
         timeline: '1',
         stage: 'combat',
         stageIO: JSON.stringify(stageIO),
@@ -187,5 +283,16 @@ describe('minecraft gameplay preview shell', () => {
     expect(combat?.textContent).not.toContain('private_reasoning')
 
     handle.dispose()
+  })
+
+  it('uses the public-live handshake and shared live controllers before connecting', () => {
+    expect(mainSource).toContain('auth: PUBLIC_LIVE_SOCKET_AUTH')
+    expect(mainSource).toContain('autoConnect: false')
+    expect(mainSource).toContain('createLiveController({ socket, view: shell, search })')
+    expect(mainSource).toContain('createPublicActivityController(socket, shell, {')
+    expect(mainSource).toContain("createPublicMediaOwnership(search, 'muted')")
+    expect(mainSource.indexOf('createPublicActivityController')).toBeLessThan(
+      mainSource.indexOf('startPublicLiveSocket(socketClient, shell)'),
+    )
   })
 })

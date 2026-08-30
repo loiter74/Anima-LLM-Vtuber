@@ -71,6 +71,7 @@ describe('managed Minecraft Compose configuration', () => {
     const cli = await readFile('src/mcp/cli.js', 'utf8');
 
     assert.match(server, /const host = process\.env\.MC_MCP_HOST \|\| '127\.0\.0\.1'/);
+    assert.match(server, /validateConfig\(JSON\.parse\(await readFile\(configPath, 'utf8'\)\)\)/);
     assert.match(server, /createMcpExpressApp\(\{ host, allowedHosts: LOCAL_ALLOWED_HOSTS \}\)/);
     assert.match(server, /'host\.docker\.internal'/);
     assert.match(cli, /token: process\.env\.MC_MCP_AUTH_TOKEN \|\| randomBytes\(32\)/);

@@ -48,4 +48,15 @@ describe('standalone live BGM', () => {
     expect(document.getElementById('audioStatus')).toHaveProperty('dataset.bgmState', 'off')
     controller.dispose()
   })
+
+  it('keeps BGM muted on a non-owner surface', () => {
+    const audio = document.getElementById('bgmAudio') as HTMLAudioElement
+    const controller = createLiveBgmController(document, new URLSearchParams(), {
+      mediaMode: 'muted',
+    })
+
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(document.getElementById('audioStatus')).toHaveProperty('dataset.bgmState', 'muted')
+    controller.dispose()
+  })
 })

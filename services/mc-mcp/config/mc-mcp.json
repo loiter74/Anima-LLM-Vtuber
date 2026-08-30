@@ -21,7 +21,12 @@
       "bot": {
         "username": "AnimettaBot",
         "version": "1.21",
-        "login_timeout_ms": 10000
+        "login_timeout_ms": 10000,
+        "presentation": {
+          "mode": "off",
+          "tempo": "normal",
+          "seed": "animetta-live-v1"
+        }
       },
       "viewer": {
         "username": "LUN077",
@@ -40,7 +45,12 @@
       "bot": {
         "username": "AnimettaBot",
         "version": "1.21",
-        "login_timeout_ms": 10000
+        "login_timeout_ms": 10000,
+        "presentation": {
+          "mode": "off",
+          "tempo": "normal",
+          "seed": "animetta-live-v1"
+        }
       },
       "viewer": {
         "username": "LUN077",
@@ -58,7 +68,12 @@
       "bot": {
         "username": "AnimettaBot",
         "version": "1.21",
-        "login_timeout_ms": 10000
+        "login_timeout_ms": 10000,
+        "presentation": {
+          "mode": "off",
+          "tempo": "normal",
+          "seed": "animetta-live-v1"
+        }
       },
       "viewer": {
         "username": "LUN077",
@@ -86,7 +101,12 @@
       "bot": {
         "username": "AnimettaBot",
         "version": "1.21",
-        "login_timeout_ms": 10000
+        "login_timeout_ms": 10000,
+        "presentation": {
+          "mode": "off",
+          "tempo": "normal",
+          "seed": "animetta-live-v1"
+        }
       },
       "viewer": {
         "username": "LUN077",
@@ -116,7 +136,12 @@
       "bot": {
         "username": "AnimettaBot",
         "version": "1.21",
-        "login_timeout_ms": 10000
+        "login_timeout_ms": 10000,
+        "presentation": {
+          "mode": "off",
+          "tempo": "normal",
+          "seed": "animetta-live-v1"
+        }
       },
       "viewer": {
         "username": "LUN077",

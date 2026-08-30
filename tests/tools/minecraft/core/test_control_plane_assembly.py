@@ -17,9 +17,9 @@ from animetta.tools.minecraft.core.config import MinecraftConfig
 from animetta.tools.minecraft.survival.workflows import diamond_survival_workflow
 from animetta.tools.minecraft.voyager.budget import BudgetUsage
 from animetta.tools.minecraft.voyager.command_models import CommandState
-from animetta.tools.minecraft.voyager.gateway import ExecuteMissionRequest
-from animetta.tools.minecraft.voyager.goal_models import GoalSpec
-from animetta.tools.minecraft.voyager.journal import JournalCommand, StepRecord
+from animetta.tools.minecraft.voyager.gateway import ExecuteAtomicRequest, ExecuteMissionRequest
+from animetta.tools.minecraft.voyager.goal_models import AtomicAction, GoalSpec
+from animetta.tools.minecraft.voyager.journal import CommandDraft, JournalCommand, StepRecord
 from tests.tools.minecraft.mission.test_coordinator import _fixed_mission
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -61,6 +61,176 @@ async def test_assembly_validates_manifest_starts_one_worker_and_closes_it(
     assert worker is not None
     assert worker.done()
     assert plane.scheduler._worker is None
+
+
+async def test_assembly_wires_presentation_to_durable_activity_and_emit(tmp_path) -> None:
+    config = MinecraftConfig.model_validate(
+        {
+            "enabled": True,
+            "journal_path": str(tmp_path / "commands.db"),
+            "skill_path": str(tmp_path / "skills.db"),
+            "presentation": {"mode": "visual_only"},
+        }
+    )
+    emitted: list[dict[str, object]] = []
+
+    async def emit(event: dict[str, object]) -> None:
+        emitted.append(event)
+
+    plane = await assemble_control_plane(ManifestBridge(config), config, event_emit=emit)
+    await plane.scheduler.stop()
+    try:
+        atomic = await plane.gateway.execute(
+            caller_scope="conversation:viewer",
+            request=ExecuteAtomicRequest(
+                request_id="public-activity-request",
+                action=AtomicAction(capability="collect", parameters={"count": 1}),
+            ),
+        )
+        current = await plane.repository.get_command(atomic.command_id)
+        assert current is not None
+        running_atomic = await plane.repository.transition(
+            atomic.command_id,
+            expected_version=current.state_version,
+            target=CommandState.RUNNING,
+            reason_code="DISPATCHED",
+            actor="test",
+            occurred_at_ms=current.accepted_at_ms + 1,
+        )
+        await plane.gateway._notify(atomic.command_id)
+        await plane.repository.transition(
+            atomic.command_id,
+            expected_version=running_atomic.state_version,
+            target=CommandState.SUCCEEDED,
+            reason_code="RECEIPT_ONLY",
+            actor="test",
+            occurred_at_ms=current.accepted_at_ms + 2,
+        )
+        await plane.gateway._notify(atomic.command_id)
+
+        goal_command = (
+            await plane.repository.create_command(
+                CommandDraft(
+                    command_id="verified-goal-command",
+                    caller_scope="conversation:viewer",
+                    request_id="verified-goal-request",
+                    request_hash="d" * 64,
+                    kind="execute",
+                    mode="mission",
+                    payload={
+                        "mission_id": "public-goal-mission",
+                        "goal": {"intent": "acquire", "target": "minecraft:oak_log"},
+                    },
+                    requested_budget={},
+                    effective_budget={},
+                    accepted_at_ms=100,
+                )
+            )
+        )[0]
+        await plane.gateway._notify(goal_command.command_id)
+        for target in (
+            CommandState.RUNNING,
+            CommandState.BLOCKED_UNKNOWN,
+            CommandState.RECONCILING,
+            CommandState.SUCCEEDED_RECONCILED,
+        ):
+            current = await plane.repository.get_command(goal_command.command_id)
+            assert current is not None
+            await plane.repository.transition(
+                goal_command.command_id,
+                expected_version=current.state_version,
+                target=target,
+                reason_code="TEST_TRANSITION",
+                actor="test",
+                occurred_at_ms=current.accepted_at_ms + current.state_version + 1,
+            )
+            await plane.gateway._notify(goal_command.command_id)
+        page = await plane.gateway.replay_public_activities()
+    finally:
+        await plane.close()
+
+    activity_events = [
+        event for event in emitted if event.get("event") == "minecraft.activity.projection"
+    ]
+    assert plane.activity_recorder.enabled is True
+    assert [event.payload.phase for event in page.events] == [
+        "planning",
+        "finished",
+        "finished",
+    ]
+    assert [event.payload.outcome for event in page.events] == [
+        "active",
+        "blocked",
+        "succeeded",
+    ]
+    assert page.events[0].payload.intent == "acquire"
+    assert activity_events == [event.model_dump(mode="json") for event in page.events]
+
+
+async def test_presentation_force_off_disables_journal_emit_and_replay(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("MC_MCP_PRESENTATION_FORCE_OFF", "true")
+    config = MinecraftConfig.model_validate(
+        {
+            "enabled": True,
+            "journal_path": str(tmp_path / "commands.db"),
+            "skill_path": str(tmp_path / "skills.db"),
+            "presentation": {"mode": "full"},
+        }
+    )
+    emitted: list[dict[str, object]] = []
+
+    async def emit(event: dict[str, object]) -> None:
+        emitted.append(event)
+
+    plane = await assemble_control_plane(ManifestBridge(config), config, event_emit=emit)
+    await plane.scheduler.stop()
+    try:
+        command = (
+            await plane.repository.create_command(
+                CommandDraft(
+                    command_id="force-off-command",
+                    caller_scope="conversation:viewer",
+                    request_id="force-off-request",
+                    request_hash="e" * 64,
+                    kind="execute",
+                    mode="mission",
+                    payload={"goal": {"intent": "build", "target": "minecraft:shelter"}},
+                    requested_budget={},
+                    effective_budget={},
+                    accepted_at_ms=100,
+                )
+            )
+        )[0]
+        await plane.gateway._notify(command.command_id)
+        raw_page = await plane.repository.read_recent_activity()
+        public_page = await plane.gateway.replay_public_activities()
+    finally:
+        await plane.close()
+
+    assert plane.activity_recorder.enabled is False
+    assert raw_page.records == ()
+    assert public_page.events == ()
+    assert not any(event.get("event") == "minecraft.activity.projection" for event in emitted)
+
+
+async def test_runtime_profile_off_disables_python_activity_projection(tmp_path) -> None:
+    config = MinecraftConfig.model_validate(
+        {
+            "enabled": True,
+            "journal_path": str(tmp_path / "commands.db"),
+            "skill_path": str(tmp_path / "skills.db"),
+            "presentation": {"mode": "full"},
+        }
+    )
+    bridge = ManifestBridge(config)
+    bridge.active_presentation_mode = "off"
+
+    plane = await assemble_control_plane(bridge, config)
+    await plane.close()
+
+    assert plane.activity_recorder.enabled is False
 
 
 async def test_atomic_completion_does_not_commit_goal_evidence(tmp_path) -> None:

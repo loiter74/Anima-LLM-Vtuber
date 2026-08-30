@@ -32,6 +32,7 @@ describe('mountLive2DPerformanceReview', () => {
       cancelReviewAudio() {
         interruptions += 1
       },
+      applyPublicCue() {},
       dispose() {},
     }
     const params = new URLSearchParams({

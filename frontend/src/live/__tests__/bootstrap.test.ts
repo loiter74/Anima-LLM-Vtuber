@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LiveView } from '../controller'
+import type { PublicActivityView } from '@/shared/broadcast/publicActivity'
 import { bootstrapLiveSession } from '../bootstrap'
 import type { LiveSocketRuntime } from '../socket-runtime'
 
-function viewHarness(): LiveView {
+function viewHarness(): LiveView & PublicActivityView {
   return {
     renderMessages: vi.fn(),
     setSocketState: vi.fn(),
@@ -11,6 +12,8 @@ function viewHarness(): LiveView {
     setBilibiliReplyEvidence: vi.fn(),
     setBackground: vi.fn(),
     setSubtitle: vi.fn(),
+    renderPublicActivities: vi.fn(),
+    setPublicNarration: vi.fn(),
   }
 }
 

@@ -13,6 +13,13 @@ describe('standalone live DOM view', () => {
       <span id="livestreamStatus"></span>
       <div id="liveBackground"></div>
       <section id="subtitleOverlay" hidden><p id="subtitleText"></p></section>
+      <aside id="publicActivityPanel" hidden>
+        <section id="publicNarrationState" hidden></section>
+        <span id="publicCurrentIntent"></span>
+        <span id="publicRecentObservation"></span>
+        <span id="publicNextPhase"></span>
+        <ol id="publicActivityList"></ol>
+      </aside>
     `
     return createDomLiveView(document)
   }
@@ -79,6 +86,49 @@ describe('standalone live DOM view', () => {
     view.setSubtitle(null)
     expect(overlay.hidden).toBe(true)
     expect(document.getElementById('subtitleText')?.textContent).toBe('')
+  })
+
+  it('shares the ordered public activity and narration DOM contract', () => {
+    const view = mountLiveView()
+    view.renderPublicActivities([
+      {
+        schema_version: '1',
+        event: 'minecraft.activity.projection',
+        event_id: 'activity:1',
+        projection_kind: 'activity',
+        projection_version: 1,
+        occurred_at_ms: 10,
+        entity_id: 'minecraft',
+        payload: {
+          phase: 'observing',
+          intent: 'acquire',
+          focus: { kind: 'item', label: '铁矿' },
+          outcome: 'active',
+        },
+        phaseLabel: '观察',
+        visualText: '观察 · 铁矿',
+      },
+    ])
+    view.setPublicNarration({
+      schema_version: '1',
+      cue_id: 'cue:1',
+      source_event_id: 'activity:1',
+      task_id: 'task-1',
+      phase: 'observing',
+      visual_text: '这里看起来有铁矿。',
+      emotion: 'thinking',
+      speech_state: 'speaking',
+      occurred_at_ms: 11,
+    })
+
+    expect(document.querySelector('[data-event-id="activity:1"]')?.textContent).toContain(
+      '观察 · 铁矿',
+    )
+    expect(document.getElementById('publicNarrationState')?.dataset.taskId).toBe('task-1')
+    expect(document.getElementById('publicCurrentIntent')?.textContent).toBe('收集 · 铁矿')
+    expect(document.getElementById('publicRecentObservation')?.textContent).toBe('铁矿')
+    expect(document.getElementById('publicNextPhase')?.textContent).toBe('确认行动')
+    expect(document.getElementById('publicActivityPanel')?.hidden).toBe(false)
   })
 
   it('persists Bilibili reply identities without changing visible status text', () => {

@@ -1,7 +1,10 @@
 """Thin Socket.IO adapter for the process-owned Bilibili session."""
 
+from __future__ import annotations
+
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
@@ -13,6 +16,7 @@ from animetta.memory.v2.context import normalize_actor_id
 from animetta.orchestration.chat_contracts import ChatIdentity
 from animetta.orchestration.chat_delivery import ChatDelivery
 from animetta.services.bilibili import (
+    MINECRAFT_NARRATION_SOURCE,
     PROACTIVE_TOPIC_SOURCE,
     DanmakuBuffer,
     DanmakuMessage,
@@ -25,7 +29,12 @@ from animetta.services.bilibili import (
     TopicSeed,
 )
 from animetta.services.bilibili.livestream_session import StaleGenerationError
-from animetta.services.bilibili.reply_media import bind_reply_media_turn
+from animetta.services.bilibili.reply_media import (
+    BroadcastMediaArbiter,
+    BroadcastMediaTurn,
+    bind_reply_media_turn,
+)
+from animetta.services.livestream_narration import NarrationCue
 from animetta.services.scene_analysis import SceneModelGateway, SceneRuntime
 
 from ...chat_contracts import ChatTransportMode
@@ -33,6 +42,8 @@ from ...socket_events import EVENTS
 
 if TYPE_CHECKING:
     from socketio import AsyncServer
+
+    from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
 
     from ..session import SessionManager
     from .base_handler import BaseSocketHandler
@@ -47,9 +58,9 @@ class BilibiliHandlers:
 
     def __init__(
         self,
-        sio: "AsyncServer",
-        session_manager: "SessionManager",
-        admin: "BaseSocketHandler",
+        sio: AsyncServer,
+        session_manager: SessionManager,
+        admin: BaseSocketHandler,
         *,
         session: LivestreamSession | None = None,
         sessdata: str = "",
@@ -93,6 +104,12 @@ class BilibiliHandlers:
                 **session_kwargs,
             )
         self.session = session
+        candidate_arbiter = getattr(session, "media_arbiter", None)
+        self.media_arbiter = (
+            candidate_arbiter
+            if isinstance(candidate_arbiter, BroadcastMediaArbiter)
+            else BroadcastMediaArbiter()
+        )
         self.scene_runtime = scene_runtime
         if self.scene_runtime is not None:
             configure_runtime = getattr(self.scene_runtime, "configure", None)
@@ -106,6 +123,10 @@ class BilibiliHandlers:
             scene_snapshot=self._scene_snapshot,
             busy=lambda: bool(getattr(self.session, "reply_busy", False)),
         )
+        self._narration_generation_switch: Callable[[], Awaitable[None]] | None = None
+        self._narration_generation_id: int | None = None
+        self._minecraft_narration_orchestrator: LangGraphOrchestrator | None = None
+        self._minecraft_narration_lock = asyncio.Lock()
 
         # Deprecated compatibility attributes. Lifecycle ownership lives in session.
         self._bilibili_service = None
@@ -179,6 +200,15 @@ class BilibiliHandlers:
 
     async def emit_status_snapshot(self, payload: dict[str, object]) -> None:
         """Broadcast one authoritative session snapshot to all clients."""
+        generation = payload.get("generation_id")
+        if isinstance(generation, int) and not isinstance(generation, bool):
+            if (
+                self._narration_generation_id is not None
+                and generation != self._narration_generation_id
+                and self._narration_generation_switch is not None
+            ):
+                await self._narration_generation_switch()
+            self._narration_generation_id = generation
         await self._proactive_topics.update_status(payload)
         await self.sio.emit(
             EVENTS["bilibili"]["danmaku_status"]["name"],
@@ -245,6 +275,27 @@ class BilibiliHandlers:
         generation_id: int,
         recent_outputs: tuple[str, ...],
     ) -> str:
+        media_turn = BroadcastMediaTurn(self.media_arbiter, priority=60)
+        await media_turn.acquire()
+        try:
+            return await self._generate_proactive_topic(
+                seed,
+                task_id,
+                room_id,
+                generation_id,
+                recent_outputs,
+            )
+        finally:
+            await media_turn.finish()
+
+    async def _generate_proactive_topic(
+        self,
+        seed: TopicSeed,
+        task_id: str,
+        room_id: int,
+        generation_id: int,
+        recent_outputs: tuple[str, ...],
+    ) -> str:
         """Generate one host-only turn through the canonical chat and TTS path."""
         if not self._is_current_live_identity(room_id, generation_id):
             raise StaleGenerationError("livestream generation changed")
@@ -290,6 +341,104 @@ class BilibiliHandlers:
                     type(exc).__name__,
                 )
         return response
+
+    def bind_narration_generation_switch(
+        self,
+        callback: Callable[[], Awaitable[None]],
+    ) -> None:
+        """Cancel Minecraft cues when the authoritative livestream generation changes."""
+
+        self._narration_generation_switch = callback
+
+    async def process_minecraft_narration(
+        self,
+        cue: NarrationCue,
+        on_started: Callable[[], Awaitable[None]],
+    ) -> str | None:
+        """Speak one sanitized Minecraft activity through the canonical host path."""
+
+        media_turn = BroadcastMediaTurn(
+            self.media_arbiter,
+            cue.priority,
+            on_acquired=on_started,
+        )
+        try:
+            orchestrator = await self._get_or_create_minecraft_narration_orchestrator()
+            with bind_reply_media_turn(media_turn):
+                async with asyncio.timeout(15):
+                    result = await orchestrator.process_text(
+                        text="根据当前已验证的 Minecraft 活动生成一句直播旁白。",
+                        user_id="minecraft:host",
+                        channel_id="minecraft",
+                        source=MINECRAFT_NARRATION_SOURCE,
+                        message_id=cue.cue_id,
+                        conversation_id=cue.cue_id,
+                        task_id=cue.cue_id,
+                        turn_id=cue.cue_id,
+                        transport_mode=ChatTransportMode.CANONICAL.value,
+                        channel="minecraft",
+                        stream_id="minecraft:livestream",
+                        live_session_id=self.admin.live_session_id,
+                        actor_role="host",
+                        audience="livestream",
+                        reply_id=cue.cue_id,
+                        received_at=time.time(),
+                        proactive_topic_seed={
+                            "kind": "minecraft_activity",
+                            "subject": cue.visual_text,
+                            "provenance": "minecraft_public_activity",
+                        },
+                        proactive_recent_outputs=[],
+                        proactive_topic_max_chars=60,
+                        minecraft_narration_max_chars=60,
+                    )
+            response = str(result.get("response_text") or "").strip()
+            return response or None
+        except TimeoutError:
+            logger.warning("Minecraft narration exceeded its media deadline")
+            return None
+        finally:
+            await media_turn.finish()
+
+    async def _get_or_create_minecraft_narration_orchestrator(
+        self,
+    ) -> LangGraphOrchestrator:
+        """Own one tool-free, memory-free and checkpoint-free narration graph."""
+
+        if self._minecraft_narration_orchestrator is not None:
+            return self._minecraft_narration_orchestrator
+        async with self._minecraft_narration_lock:
+            if self._minecraft_narration_orchestrator is not None:
+                return self._minecraft_narration_orchestrator
+            from animetta.orchestration.graph.orchestrator import LangGraphOrchestrator
+
+            context = await self.admin.get_or_create_context("minecraft:narration")
+            self._minecraft_narration_orchestrator = await LangGraphOrchestrator.create(
+                session_id="minecraft:narration",
+                service_context=context,
+                socketio=self.sio,
+                emotion_analyzer=getattr(context, "emotion_analyzer", None),
+                enable_tools=False,
+                enable_memory=False,
+                tools_config={},
+                checkpoint_runtime=None,
+                force_standard_graph=True,
+            )
+            return self._minecraft_narration_orchestrator
+
+    async def close_minecraft_narration(self) -> None:
+        """Stop the dedicated narration graph during server shutdown."""
+
+        async with self._minecraft_narration_lock:
+            orchestrator = self._minecraft_narration_orchestrator
+            self._minecraft_narration_orchestrator = None
+        if orchestrator is not None:
+            await orchestrator.stop()
+
+    async def interrupt_minecraft_narration(self, cue: NarrationCue) -> None:
+        """Stop only the correlated Minecraft narration on public live clients."""
+
+        await self._interrupt_proactive_audio(cue.cue_id)
 
     async def _interrupt_proactive_audio(self, task_id: str) -> None:
         """Stop only the correlated proactive task on public live clients."""

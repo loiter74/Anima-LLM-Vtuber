@@ -11,6 +11,35 @@ import {
 } from './profile.js';
 
 const TERMINAL_STATES = new Set(['stopped', 'ready', 'error']);
+const PRESENTATION_RANK = Object.freeze({ off: 0, visual_only: 1, full: 2 });
+
+function forcePresentationOff(value) {
+  return String(value || '').trim().toLowerCase() === 'true';
+}
+
+
+function effectivePresentation(
+  profilePresentation = {},
+  requestedPresentation = null,
+  forceOff = false,
+) {
+  const profile = {
+    mode: profilePresentation.mode ?? 'off',
+    tempo: profilePresentation.tempo ?? 'normal',
+    seed: profilePresentation.seed ?? 'animetta-live-v1',
+  };
+  const requested = requestedPresentation === null || requestedPresentation === undefined
+    ? profile
+    : requestedPresentation;
+  const requestedMode = PRESENTATION_RANK[requested.mode] <= PRESENTATION_RANK[profile.mode]
+    ? requested.mode
+    : profile.mode;
+  return {
+    mode: forceOff ? 'off' : requestedMode,
+    tempo: requested.tempo,
+    seed: requested.seed,
+  };
+}
 
 export async function tcpProbe(host, port, timeoutMs = 1_000) {
   return new Promise((resolve) => {
@@ -48,7 +77,7 @@ export function runCommand(argv, { cwd, env = process.env } = {}) {
 export class MinecraftLifecycle {
   constructor({
     config, runtime, eventBuffer, stateFile, command = runCommand, probe = tcpProbe,
-    clock = Date.now, managedRegistryFile = null,
+    clock = Date.now, managedRegistryFile = null, env = process.env,
   }) {
     this.config = config;
     this.runtime = runtime;
@@ -57,6 +86,7 @@ export class MinecraftLifecycle {
     this.command = command;
     this.probe = probe;
     this.clock = clock;
+    this.presentationForceOff = forcePresentationOff(env.MC_MCP_PRESENTATION_FORCE_OFF);
     this.managedServer = new ManagedMinecraftServer({
       root: config.root,
       registryFile: managedRegistryFile,
@@ -70,6 +100,7 @@ export class MinecraftLifecycle {
     this.state = 'stopped';
     this.profileName = null;
     this.profile = null;
+    this.presentation = null;
     this.serverAvailable = false;
     this.lastError = null;
     this.connectStartedAtMs = null;
@@ -90,14 +121,29 @@ export class MinecraftLifecycle {
       this.generation = Number(saved.generation) || 0;
       this.profileName = saved.profile_name ?? null;
       this.profile = this.config.profiles?.[this.profileName] ?? null;
+      this.presentation = effectivePresentation(
+        this.profile?.bot?.presentation,
+        null,
+        this.presentationForceOff,
+      );
       this.serverAvailable = false;
     } catch {}
   }
 
-  connect(profileName, requestId, allowCreate = false) {
+  connect(profileName, requestId, allowCreate = false, requestedPresentation = null) {
     return this.#exclusive(async () => {
       const profile = configuredProfile(this.config, profileName);
-      if (this.state === 'ready' && this.profileName === profileName) return this.snapshot(requestId, true);
+      const presentation = effectivePresentation(
+        profile.bot.presentation,
+        requestedPresentation,
+        this.presentationForceOff,
+      );
+      if (this.state === 'ready' && this.profileName === profileName) {
+        if (JSON.stringify(this.presentation) !== JSON.stringify(presentation)) {
+          throw new Error('PRESENTATION_CONFIG_CHANGED');
+        }
+        return this.snapshot(requestId, true);
+      }
       const prepared = this.state === 'server_ready' && this.profileName === profileName;
       if (!prepared && this.state !== 'stopped' && this.state !== 'error') {
         throw new Error(`INVALID_STATE:${this.state}`);
@@ -106,6 +152,7 @@ export class MinecraftLifecycle {
       this.state = profile.mode === 'managed' ? 'starting_server' : 'probing_server';
       this.profileName = profileName;
       this.profile = profile;
+      this.presentation = presentation;
       this.serverAvailable = prepared && this.serverAvailable;
       this.lastError = null;
       this.connectStartedAtMs = this.clock();
@@ -142,6 +189,7 @@ export class MinecraftLifecycle {
           username: profile.bot.username,
           version: profile.bot.version,
           viewer: profile.viewer,
+          presentation: this.presentation,
           timeoutMs: botTimeoutMs,
         });
         await this.#waitForRequiredViewer(profile.viewer ?? {}, connectDeadlineMs);
@@ -175,6 +223,11 @@ export class MinecraftLifecycle {
       this.state = 'starting_server';
       this.profileName = profileName;
       this.profile = profile;
+      this.presentation = effectivePresentation(
+        profile.bot.presentation,
+        null,
+        this.presentationForceOff,
+      );
       this.serverAvailable = false;
       this.lastError = null;
       const startedAtMs = this.clock();
@@ -222,6 +275,7 @@ export class MinecraftLifecycle {
         await this.managedServer.stop();
         this.profile = null;
         this.profileName = null;
+        this.presentation = null;
         this.serverAvailable = false;
         this.viewer = { state: 'disabled', confirmed: false, required: false };
         this.state = 'stopped';
@@ -271,6 +325,7 @@ export class MinecraftLifecycle {
       bot: {
         state: this.runtime.running ? 'ready' : 'stopped',
         username: profile?.bot?.username ?? null,
+        presentation_mode: this.presentation?.mode ?? profile?.bot?.presentation?.mode ?? 'off',
       },
       viewer: structuredClone(this.viewer),
       error: this.lastError,

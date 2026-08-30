@@ -1324,6 +1324,47 @@ class TestLLMTimeout:
     """LLM timeout triggers fallback response with error metadata."""
 
     @pytest.mark.asyncio
+    async def test_minecraft_narration_uses_two_second_generation_deadline(
+        self,
+        mock_service_context,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Minecraft narration times out before TTS instead of speaking fallback text."""
+
+        recorded_deadlines: list[float] = []
+
+        class ImmediateTimeout:
+            async def __aenter__(self) -> None:
+                raise TimeoutError
+
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        def timeout(seconds: float) -> ImmediateTimeout:
+            recorded_deadlines.append(seconds)
+            return ImmediateTimeout()
+
+        llm_module = importlib.import_module("animetta.orchestration.graph.llm_node")
+        monkeypatch.setattr(llm_module.asyncio, "timeout", timeout)
+        state = create_initial_state(
+            session_id="minecraft:narration",
+            user_text="根据公开活动生成一句旁白。",
+        )
+        state["metadata"] = {
+            "source": "minecraft:narration",
+            "actor_role": "host",
+            "audience": "livestream",
+        }
+        config = _make_config(service_context=mock_service_context)
+
+        result = await llm_node(state, config)
+
+        assert recorded_deadlines == [2.0]
+        assert result["response_text"] == ""
+        assert result["response_chunks"] == []
+        assert result["tool_calls"] is None
+
+    @pytest.mark.asyncio
     async def test_llm_timeout_triggers_fallback(self, mock_service_context):
         """When LLM streaming times out, fallback text is returned, no exception propagates."""
 

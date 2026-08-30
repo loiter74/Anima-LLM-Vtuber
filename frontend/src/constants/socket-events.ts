@@ -124,7 +124,11 @@ export const Events = {
     SKILL_VALIDATION: socketEvents.minecraft.skill_validation.name,
     ADVANCEMENT_PROJECTION: socketEvents.minecraft.advancement_projection.name,
     STAGE_PROJECTION: socketEvents.minecraft.stage_projection.name,
+    ACTIVITY_PROJECTION: socketEvents.minecraft.activity_projection.name,
     BOT_STATE: socketEvents.minecraft.bot_state.name,
+  },
+  LIVESTREAM: {
+    NARRATION_STATE: socketEvents.livestream.narration_state.name,
   },
   TRANSLATION: {
     CONFIGURE: socketEvents.translation.configure.name,

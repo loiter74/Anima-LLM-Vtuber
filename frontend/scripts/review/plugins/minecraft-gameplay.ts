@@ -46,7 +46,7 @@ async function assertPage(page: Page): Promise<PageAssertionResult> {
     expect(page.getByLabel('Minecraft 游戏画面')).toBeVisible({ timeout: 20_000 }),
   )
   await check(assertions, 'live2d-avatar-visible', () =>
-    expect(page.getByLabel('Hiyori 主播')).toBeVisible({ timeout: 20_000 }),
+    expect(page.locator('.game-avatar')).toBeVisible({ timeout: 20_000 }),
   )
   await check(assertions, 'viewer-following-confirmed', () =>
     expect(status).toHaveAttribute('data-confirmed', 'true', { timeout: 30_000 }),
@@ -56,8 +56,29 @@ async function assertPage(page: Page): Promise<PageAssertionResult> {
       timeout: 60_000,
     }),
   )
+  const reviewRuntime = page.locator('.minecraft-review-runtime')
+  const audioStatus = page.locator('#audioStatus')
+  const reviewTaskId = await reviewRuntime.getAttribute('data-task-id')
+  await check(assertions, 'review-audio-owner-active', async () => {
+    await expect(audioStatus).toHaveAttribute('data-audio-owner', 'active')
+    await expect(audioStatus).toHaveAttribute('data-audio-owner-requested', 'active')
+    await expect(audioStatus).toHaveAttribute('data-audio-owner-id', /.+/)
+    await expect(audioStatus).toHaveAttribute('data-audio-owner-fence', /^[1-9]\d*$/)
+  })
+  await check(assertions, 'review-audio-playback-evidence', async () => {
+    expect(reviewTaskId).toBeTruthy()
+    const playbackCountBefore = Number(
+      await reviewRuntime.getAttribute('data-playback-count-before'),
+    )
+    const playbackCount = Number(await audioStatus.getAttribute('data-playback-count'))
+    expect(Number.isInteger(playbackCountBefore)).toBe(true)
+    expect(playbackCount).toBe(playbackCountBefore + 1)
+    await expect(audioStatus).toHaveAttribute('data-last-audio-task-id', reviewTaskId ?? '')
+    await expect(audioStatus).toHaveAttribute('data-last-audio-kind', 'review')
+    await expect(audioStatus).toHaveAttribute('data-playback-state', 'completed')
+  })
   await check(assertions, 'lip-sync-observed', () =>
-    expect(page.locator('.minecraft-review-runtime')).toHaveAttribute('data-lip-sync', 'observed'),
+    expect(reviewRuntime).toHaveAttribute('data-lip-sync', 'observed'),
   )
   await check(assertions, 'debug-instrumentation-hidden', async () => {
     await expect(page.getByText('BotDashboard', { exact: false })).toHaveCount(0)
@@ -79,13 +100,18 @@ async function assertPage(page: Page): Promise<PageAssertionResult> {
 const pageAdapter: ReviewPageAdapter<never> = {
   viewport: { width: 1920, height: 1080 },
   stableMismatchThreshold: 0.25,
-  buildUrl({ baseUrl, pageParams }) {
+  buildUrl({ baseUrl, runId, sceneId, attempt, pageParams }) {
     const url = new URL(MINECRAFT_GAMEPLAY_REVIEW_DEFINITION.route, baseUrl)
     url.searchParams.set('overlay', '1')
     url.searchParams.set('review', '1')
     for (const [key, value] of Object.entries(pageParams ?? {})) {
       url.searchParams.set(key, value)
     }
+    const reviewTaskId = `minecraft-review-${runId}-${sceneId}-${attempt}`
+      .replace(/[^A-Za-z0-9_.-]/g, '-')
+      .slice(0, 128)
+    url.searchParams.set('reviewTaskId', reviewTaskId)
+    url.searchParams.set('media', 'active')
     return url.href
   },
   assertPage,

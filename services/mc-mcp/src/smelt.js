@@ -3,6 +3,8 @@
 
 import Vec3 from 'vec3';
 import pathfinderPkg from 'mineflayer-pathfinder';
+import { operationWait } from './runtime/operationScope.js';
+import { presentBlockTarget } from './runtime/presentationAnchors.js';
 
 const { goals } = pathfinderPkg;
 const { GoalNear } = goals;
@@ -32,7 +34,7 @@ export function fuelUnitsForSmelt(fuel, count) {
   return Math.max(1, Math.ceil(requested / capacity));
 }
 
-export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function createSmelt({ bot, getMcData, wait = operationWait }) {
   const replaceableBlocks = new Set(['air', 'cave_air', 'void_air']);
   const supportItemNames = [
     'cobblestone',
@@ -372,7 +374,17 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
     throw new Error(`No placeable support block for furnace nearby${suffix}`);
   }
 
-  async function smelt(item, fuel, count = 1) {
+  async function smelt(item, fuel, count = 1, context = {}) {
+    context.operation_scope?.checkpoint();
+    const runContainerOperation = (label, operation, timeoutMs = 10_000) => (
+      context.operation_scope?.runInterruptible
+        ? context.operation_scope.runInterruptible(operation, {
+            label,
+            timeoutMs,
+            includeContainers: true,
+          })
+        : operation()
+    );
     const result = SMELT_RESULT[item];
     if (!result) throw new Error(`Unknown smelt recipe for ${item} (add to SMELT_RESULT if needed)`);
     const mcData = await getMcData();
@@ -381,6 +393,12 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
     const inputItem = mcData.itemsByName[item];
     const fuelItem = mcData.itemsByName[fuel];
     if (!inputItem || !fuelItem) throw new Error(`Unknown item: ${item} or ${fuel}`);
+    const presentationTarget = await presentBlockTarget({
+      context,
+      phase: 'aiming',
+      position: furnaceBlock?.position,
+    });
+    context.report_phase?.('acting', presentationTarget ? { target: presentationTarget } : {});
 
     const inventoryCount = (name) => bot.inventory.items()
       .filter((stack) => stack.name === name)
@@ -424,16 +442,33 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
               furnaceBlock.position.z + 0.5,
             ), true);
           }
-          return await bot.openFurnace(furnaceBlock);
+          return await runContainerOperation(
+            'open furnace',
+            () => bot.openFurnace(furnaceBlock),
+          );
         } catch (err) {
           lastError = err;
-          await wait(500);
+          if (attempt < 2) {
+            context.report_phase?.('recovering', {
+              attempt: attempt + 2,
+              reason_code: 'CONTAINER_OPEN_RETRY',
+            });
+            if (presentationTarget?.position) {
+              await context.presentation?.focus?.({
+                phase: 'recovering',
+                ordinal: attempt + 1,
+                target: presentationTarget.position,
+              });
+            }
+            await wait(500);
+          }
         }
       }
       throw lastError;
     }
 
     const furnace = await openReachableFurnace();
+    context.operation_scope?.trackContainer(furnace);
     try {
       const acceptMovedStack = async (operation, getStack, expectedName, minCount) => {
         try {
@@ -451,13 +486,19 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
       // Mineflayer can throw a stale inventory lookup error after the item has
       // already moved into the furnace slot. Trust the furnace slot state.
       await acceptMovedStack(
-        () => furnace.putInput(inputItem.id, null, count),
+        () => runContainerOperation(
+          'put furnace input',
+          () => furnace.putInput(inputItem.id, null, count),
+        ),
         () => (typeof furnace.inputItem === 'function' ? furnace.inputItem() : null),
         item,
         count,
       );
       await acceptMovedStack(
-        () => furnace.putFuel(fuelItem.id, null, fuelUnitsForSmelt(fuel, count)),
+        () => runContainerOperation(
+          'put furnace fuel',
+          () => furnace.putFuel(fuelItem.id, null, fuelUnitsForSmelt(fuel, count)),
+        ),
         () => (typeof furnace.fuelItem === 'function' ? furnace.fuelItem() : null),
         fuel,
         1,
@@ -479,7 +520,10 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
         const beforeTake = inventoryCount(result);
         let taken = null;
         try {
-          taken = await furnace.takeOutput();
+          taken = await runContainerOperation(
+            'take furnace output',
+            () => furnace.takeOutput(),
+          );
         } catch (err) {
           const afterFailedTake = inventoryCount(result);
           if (afterFailedTake <= beforeTake) throw err;
@@ -507,6 +551,7 @@ export function createSmelt({ bot, getMcData, wait = (ms) => new Promise((r) => 
       return `Smelted ${acceptedGain}/${count} ${item} -> ${result} (putInput + tick + takeOutput)`;
     } finally {
       try { await furnace.close(); } catch (_) {}
+      context.operation_scope?.releaseContainer(furnace);
     }
   }
 

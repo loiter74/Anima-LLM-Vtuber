@@ -61,7 +61,7 @@ All use `MagicMock` + `AsyncMock`; each exposes `.close = AsyncMock()`. Prefer t
 ## COMMANDS
 
 ```powershell
-# Windows canonical entrypoints; validate Python once before the first command
+# Windows canonical entrypoints; Python 3.13 is required and validated once before the first command
 py -3.13 -c "import sys; assert sys.version_info >= (3, 13)"
 
 # Default daily gate: pass the exact current-task paths and run once

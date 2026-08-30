@@ -63,6 +63,7 @@ class LangGraphOrchestrator:
         tool_manager: ToolManager | None = None,
         conversation_registry: ConversationSessionRegistry | None = None,
         checkpoint_runtime: RedisCheckpointRuntime | None = None,
+        force_standard_graph: bool = False,
     ):
         self.service_context = service_context
         self.socketio = socketio
@@ -72,6 +73,7 @@ class LangGraphOrchestrator:
         self.tools_config = tools_config or {}
         self.observation_recorder = observation_recorder or NoOpObservationRecorder()
         self.checkpoint_runtime = checkpoint_runtime
+        self.force_standard_graph = force_standard_graph
 
         raw_session_id = getattr(service_context, "session_id", None)
         self.session_id = (
@@ -180,6 +182,8 @@ class LangGraphOrchestrator:
             )
 
     def _is_golden_profile(self) -> bool:
+        if self.force_standard_graph:
+            return False
         system = getattr(getattr(self.service_context, "config", None), "system", None)
         return getattr(system, "runtime_profile", None) == "golden"
 
@@ -731,6 +735,7 @@ class LangGraphOrchestrator:
         tool_manager: ToolManager | None = None,
         conversation_registry: ConversationSessionRegistry | None = None,
         checkpoint_runtime: RedisCheckpointRuntime | None = None,
+        force_standard_graph: bool = False,
     ) -> LangGraphOrchestrator:
         """Create orchestrator instance
 
@@ -749,6 +754,7 @@ class LangGraphOrchestrator:
             tool_manager=tool_manager,
             conversation_registry=conversation_registry,
             checkpoint_runtime=checkpoint_runtime,
+            force_standard_graph=force_standard_graph,
         )
 
         await orchestrator.start()

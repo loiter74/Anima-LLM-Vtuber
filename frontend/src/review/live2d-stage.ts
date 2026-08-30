@@ -5,6 +5,7 @@ import { Events } from '@/constants/socket-events'
 import { DisposerStack } from './disposable'
 import type { Live2DAction } from '@/types/live2d'
 import type { LiveSocket } from '@/shared/transport/liveSocket'
+import type { PublicLive2DCue } from '@/shared/broadcast/publicActivity'
 import { computeLive2DLayout } from './layout'
 import { bindReviewMouthAfterMotion, createReviewVolumeTimelineLipSync } from './review-lip-sync'
 import type { Live2DPerformancePlanV1 } from '@/types/socket-events'
@@ -29,6 +30,16 @@ const IDLE_VITALITY_PARAMETERS = [
 ] as const
 
 const PARAMETER_LIMIT_KNEE_RATIO = 0.8
+
+const PUBLIC_CUE_ACTIONS = {
+  planning: { emotion: 'thinking', group: 'TapBody', index: 0 },
+  observing: { emotion: 'thinking', group: 'TapBody', index: 1 },
+  committed: { emotion: 'confident', group: 'TapBody', index: 2 },
+  acting: { emotion: 'focused', group: 'TapBody', index: 3 },
+  checking: { emotion: 'thinking', group: 'TapBody', index: 1 },
+  recovering: { emotion: 'alert', group: 'TapBody', index: 4 },
+  finished: { emotion: 'relieved', group: 'TapBody', index: 5 },
+} as const
 
 function softlyLimitParameter(
   value: number,
@@ -97,6 +108,7 @@ export interface Live2DStage {
     performance?: Live2DPerformancePlanV1,
   ): void
   cancelReviewAudio(): void
+  applyPublicCue(cue: PublicLive2DCue): void
   dispose(): void
 }
 
@@ -118,6 +130,7 @@ export function createLive2DStage(
       setMouth() {},
       playReviewAudio() {},
       cancelReviewAudio() {},
+      applyPublicCue() {},
       dispose() {},
     }
   }
@@ -131,6 +144,11 @@ export function createLive2DStage(
   let activeMouthTaskId = ''
   let reviewLipSync: ReturnType<typeof createReviewVolumeTimelineLipSync> | null = null
   let performanceController: Live2DPerformanceController | null = null
+  let pendingPublicCue: PublicLive2DCue | null = null
+  let lastPublicCueSource = ''
+  let applyPublicCueAction: (cue: PublicLive2DCue) => void = (cue) => {
+    pendingPublicCue = cue
+  }
 
   const ready = (async (): Promise<void> => {
     try {
@@ -205,6 +223,18 @@ export function createLive2DStage(
         if (action.type === 'expression' && action.name) model.expression(action.name)
         if (action.type === 'motion' && action.group) model.motion(action.group, action.index ?? 0)
       }
+      applyPublicCueAction = (cue): void => {
+        if (cue.sourceEventId === lastPublicCueSource) return
+        const action = PUBLIC_CUE_ACTIONS[cue.phase]
+        if (cue.emotion !== action.emotion) return
+        lastPublicCueSource = cue.sourceEventId
+        void model.motion(action.group, action.index)
+      }
+      if (pendingPublicCue) {
+        const cue = pendingPublicCue
+        pendingPublicCue = null
+        applyPublicCueAction(cue)
+      }
 
       app.stage.addChild(model)
       layout()
@@ -270,6 +300,9 @@ export function createLive2DStage(
       reviewLipSync = null
       setStageMouth(0)
       performanceController?.cancel()
+    },
+    applyPublicCue(cue: PublicLive2DCue): void {
+      applyPublicCueAction(cue)
     },
     dispose(): void {
       if (disposed) return

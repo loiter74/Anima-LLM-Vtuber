@@ -37,6 +37,14 @@ const MAX_VISIBLE_BLOCKS = 512;
 const MAX_VISIBLE_ENTITIES = 128;
 const MAX_ACTIVE_ADVANCEMENTS = 512;
 const ABSOLUTE_MAX_REGION_INSPECTION_VOLUME = 4096;
+const ACTION_PHASES = new Set([
+  'accepted', 'assessing', 'locating', 'moving', 'aiming', 'acting',
+  'waiting', 'verifying', 'recovering', 'completed', 'failed', 'cancelled',
+]);
+const TERMINAL_ACTION_PHASES = new Set(['completed', 'failed', 'cancelled']);
+const MAX_ACTION_PHASE_EVENTS = 32;
+const ACTION_PHASE_DEDUPE_MS = 250;
+const WAITING_PHASE_INTERVAL_MS = 5_000;
 
 
 function normalizeResourceId(value) {
@@ -247,6 +255,19 @@ function structuredError({
 }
 
 
+function caughtErrorDetails(error) {
+  if (!error || typeof error !== 'object') return {};
+  const enumerable = Object.fromEntries(
+    Object.entries(error).filter(([key, value]) => (
+      !['name', 'message', 'stack', 'code', 'details'].includes(key)
+      && typeof value !== 'function'
+      && value !== undefined
+    )),
+  );
+  return { ...enumerable, ...(error.details || {}) };
+}
+
+
 function emptyBudget() {
   return {
     max_actions: 0,
@@ -324,6 +345,8 @@ export function createGameBotRuntimeV2({
   postActionSettlePollMs = 100,
   postActionStableSamples = 3,
   waitMs = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  emitActionPhase = () => {},
+  presentationMode = 'off',
 }) {
   if (!environmentProfile || environmentProfile.runtime_protocol !== '2.0') {
     throw new TypeError('a GameBot v2 environmentProfile is required');
@@ -356,11 +379,60 @@ export function createGameBotRuntimeV2({
   if (typeof waitMs !== 'function') {
     throw new TypeError('waitMs must be a function');
   }
+  if (typeof emitActionPhase !== 'function') {
+    throw new TypeError('emitActionPhase must be a function');
+  }
 
   const ledger = new Map();
   let active = null;
   let actionSequence = 0;
   let previousReceiptHash = '';
+  let quarantine = null;
+  let actionPhasePublishFailures = 0;
+
+  function reportActionPhase(entry, request, phase, data = {}) {
+    if (presentationMode === 'off') return false;
+    if (!ACTION_PHASES.has(phase)) return false;
+    const terminal = TERMINAL_ACTION_PHASES.has(phase);
+    if (entry.phaseSequence >= MAX_ACTION_PHASE_EVENTS) return false;
+    if (!terminal && entry.phaseSequence >= MAX_ACTION_PHASE_EVENTS - 1) return false;
+    const occurredAtMs = nowMs();
+    const dedupeKey = JSON.stringify(canonicalize({
+      phase,
+      target: data.target ?? null,
+      attempt: data.attempt ?? null,
+    }));
+    const minimumInterval = phase === 'waiting'
+      ? WAITING_PHASE_INTERVAL_MS
+      : ACTION_PHASE_DEDUPE_MS;
+    const previous = entry.lastPhaseByKey.get(dedupeKey);
+    if (previous !== undefined && occurredAtMs - previous < minimumInterval) return false;
+    entry.lastPhaseByKey.set(dedupeKey, occurredAtMs);
+    entry.phaseSequence += 1;
+    const event = {
+      schema_version: '1',
+      runtime_instance_id: runtimeInstanceId,
+      correlation_id: request.correlation_id,
+      command_id: request.command_id,
+      step_id: request.step_id,
+      capability: request.capability,
+      phase_sequence: entry.phaseSequence,
+      phase,
+      occurred_at_ms: occurredAtMs,
+      presentation_mode: presentationMode,
+    };
+    for (const key of ['target', 'attempt', 'progress', 'reason_code']) {
+      if (data[key] !== undefined && data[key] !== null) event[key] = data[key];
+    }
+    try {
+      Promise.resolve(emitActionPhase(event)).catch(() => {
+        actionPhasePublishFailures += 1;
+      });
+    } catch {
+      actionPhasePublishFailures += 1;
+    }
+    return true;
+  }
 
   function sweepLedger() {
     const now = nowMs();
@@ -611,6 +683,13 @@ export function createGameBotRuntimeV2({
       }
       return existing.promise;
     }
+    if (quarantine && descriptor.effectClass !== 'read_only') {
+      throw new RuntimeV2Error(
+        'RUNTIME_QUARANTINED',
+        'State-changing actions are disabled until the runtime is reconciled',
+        quarantine,
+      );
+    }
     const suppliedPreviousHash = request.previous_receipt_hash || '';
     if (suppliedPreviousHash && suppliedPreviousHash !== previousReceiptHash) {
       throw new RuntimeV2Error(
@@ -632,14 +711,19 @@ export function createGameBotRuntimeV2({
       acceptedAtMs: nowMs(),
       retainedUntilMs: nowMs() + recoveryHorizonMs,
       promise: null,
+      phaseSequence: 0,
+      lastPhaseByKey: new Map(),
     };
     ledger.set(request.correlation_id, entry);
+    reportActionPhase(entry, request, 'accepted');
 
     entry.promise = (async () => {
       entry.state = 'running';
       active = { correlationId: request.correlation_id, abortController, cancellable: true };
       let invocationStarted = false;
+      let invocationSettlement = null;
       try {
+        reportActionPhase(entry, request, 'assessing');
         const before = await captureObservation(`${request.correlation_id}:before`);
         const startedAtMs = nowMs();
         const startedTick = Math.max(before.tick, Number(getTick()) || 0);
@@ -657,6 +741,15 @@ export function createGameBotRuntimeV2({
               budget: request.remaining_budget,
               deadline_ms: request.deadline_ms,
               correlation_id: request.correlation_id,
+              command_id: request.command_id,
+              step_id: request.step_id,
+              capability: request.capability,
+              report_phase: (phase, data = {}) => reportActionPhase(
+                entry,
+                request,
+                phase,
+                data,
+              ),
             }),
           );
           explainedMutations = result?.explained_mutations || [];
@@ -713,18 +806,34 @@ export function createGameBotRuntimeV2({
             });
           }
         } catch (caught) {
-          const cancelled = abortController.signal.aborted || caught?.name === 'AbortError';
-          outcome = cancelled ? 'cancelled' : 'error';
+          const settlementTimedOut = [
+            'CANCEL_SETTLEMENT_TIMEOUT',
+            'ACTION_SETTLEMENT_TIMEOUT',
+          ].includes(caught?.code);
+          const cancelled = !settlementTimedOut
+            && (abortController.signal.aborted || caught?.name === 'AbortError');
+          outcome = settlementTimedOut ? 'unknown' : (cancelled ? 'cancelled' : 'error');
+          if (settlementTimedOut) {
+            invocationSettlement = caught?.operationSettlement ?? new Promise(() => {});
+            quarantine = {
+              code: String(caught.code),
+              correlation_id: request.correlation_id,
+              quarantined_at_ms: nowMs(),
+            };
+            reportActionPhase(entry, request, 'recovering', { reason_code: caught.code });
+          }
           error = cancelled ? null : structuredError({
             code: String(caught?.code || 'ACTION_FAILED'),
             message: String(caught?.message || caught || 'Action failed'),
             commandId: request.command_id,
             stepId: request.step_id,
             correlationId: request.correlation_id,
-            outcomeKnown: true,
+            outcomeKnown: !settlementTimedOut,
             worldMayHaveChanged: true,
-            operatorAction: 'inspect the terminal receipt and post-action observation',
-            details: caught?.details || {},
+            operatorAction: settlementTimedOut
+              ? 'quarantine runtime and reconcile the action receipt'
+              : 'inspect the terminal receipt and post-action observation',
+            details: caughtErrorDetails(caught),
           });
         } finally {
           active.cancellable = false;
@@ -734,6 +843,7 @@ export function createGameBotRuntimeV2({
         let postAction;
         let reconciliationError;
         try {
+          reportActionPhase(entry, request, 'verifying');
           postAction = descriptor.effectClass === 'read_only'
             ? {
               observation: await captureObservation(
@@ -827,16 +937,30 @@ export function createGameBotRuntimeV2({
           previous_receipt_hash: request.previous_receipt_hash || previousReceiptHash,
         };
         const receipt = { ...receiptBase, content_hash: contentHash(receiptBase) };
+        if (invocationSettlement) {
+          Object.defineProperty(receipt, 'operationSettlement', {
+            value: invocationSettlement,
+          });
+        }
         previousReceiptHash = receipt.content_hash;
         entry.receipt = receipt;
         entry.state = 'terminal';
         entry.retainedUntilMs = nowMs() + recoveryHorizonMs;
+        reportActionPhase(
+          entry,
+          request,
+          outcome === 'success' ? 'completed' : outcome === 'cancelled' ? 'cancelled' : 'failed',
+          error?.code ? { reason_code: error.code } : {},
+        );
         return receipt;
       } catch (caught) {
         const failure = caught instanceof Error
           ? caught
           : new RuntimeV2Error('RUNTIME_INTERNAL_ERROR', String(caught || 'Runtime action failed'));
         if (!invocationStarted) {
+          reportActionPhase(entry, request, 'failed', {
+            reason_code: String(caught?.code || 'ACTION_FAILED'),
+          });
           ledger.delete(request.correlation_id);
         } else {
           entry.failure = failure;
@@ -845,7 +969,16 @@ export function createGameBotRuntimeV2({
         }
         throw failure;
       } finally {
-        if (active?.correlationId === request.correlation_id) active = null;
+        if (active?.correlationId === request.correlation_id) {
+          if (invocationSettlement) {
+            const settling = active;
+            void invocationSettlement.finally(() => {
+              if (active === settling) active = null;
+            });
+          } else {
+            active = null;
+          }
+        }
       }
     })();
     return entry.promise;
@@ -897,11 +1030,12 @@ export function createGameBotRuntimeV2({
   async function health() {
     return {
       schema_version: '2',
-      ready: true,
+      ready: quarantine === null,
       busy: active !== null,
       runtime_instance_id: runtimeInstanceId,
       active_correlation_id: active?.correlationId || null,
       last_completed_action_sequence: actionSequence,
+      action_phase_publish_failures_total: actionPhasePublishFailures,
     };
   }
 

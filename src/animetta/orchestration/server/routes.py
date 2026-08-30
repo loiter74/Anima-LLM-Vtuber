@@ -20,6 +20,7 @@ from animetta.services.command_inbox import (
     CommandInboxError,
     CommandKey,
 )
+from animetta.services.livestream_narration import BroadcastNarrationDirector
 
 from ..socket_events import EVENTS, event_aliases, event_name
 from .auth_session import AuthSessionStoreUnavailableError
@@ -33,7 +34,7 @@ from .handlers.lifecycle_handlers import LifecycleHandlers
 from .handlers.live2d_handlers import Live2DHandlers
 from .handlers.meme_handlers import MemeHandlers
 from .handlers.memory_handlers import MemoryHandlers
-from .handlers.minecraft_handlers import MinecraftHandlers
+from .handlers.minecraft_handlers import TRUSTED_MINECRAFT_ROOM, MinecraftHandlers
 from .handlers.persona_handlers import PersonaHandlers
 from .handlers.singing_handlers import SingingHandlers
 from .live2d import Live2DManager
@@ -94,11 +95,16 @@ class RouteHandlers:
             sio, session_manager, self.desktop_manager, self.live2d_manager
         )
         self.bilibili = BilibiliHandlers(sio, session_manager, self.base)
-        self.chat = ChatHandlers(sio, session_manager, self.base, self.command_inbox)
+        self.chat = ChatHandlers(
+            sio,
+            session_manager,
+            self.base,
+            self.command_inbox,
+            media_arbiter=self.bilibili.media_arbiter,
+        )
         self.live2d = Live2DHandlers(sio, self.live2d_manager, self.base)
         self.memory = MemoryHandlers(sio, session_manager, self.base, self.command_inbox)
         self.meme = MemeHandlers(sio, session_manager, self.base, self.command_inbox)
-        self.minecraft = MinecraftHandlers(sio)
         self.persona = PersonaHandlers(
             sio, session_manager, self.desktop_manager, self.live2d_manager, self.base
         )
@@ -111,7 +117,17 @@ class RouteHandlers:
             self.desktop_manager,
             self.live2d_manager,
             self.command_inbox,
+            media_arbiter=self.bilibili.media_arbiter,
         )
+        self.narration = BroadcastNarrationDirector(
+            self._emit_broadcast_event,
+            speaker=self.bilibili.process_minecraft_narration,
+            busy=lambda: self.bilibili.session.reply_busy,
+            singing=lambda: self.singing.busy,
+            interrupt=self.bilibili.interrupt_minecraft_narration,
+        )
+        self.bilibili.bind_narration_generation_switch(self.narration.switch_generation)
+        self.minecraft = MinecraftHandlers(sio, self.narration)
 
         # Wire up Live2D callback
         self.live2d._setup_live2d_callback()
@@ -156,6 +172,17 @@ class RouteHandlers:
             self.lifecycle,
             self.singing,
         ]
+
+    async def _emit_broadcast_event(
+        self,
+        event: str,
+        payload: dict[str, Any],
+        to: str | None,
+    ) -> None:
+        if to is None:
+            await self.sio.emit(event, payload)
+        else:
+            await self.sio.emit(event, payload, to=to)
 
     @property
     def _bilibili_service(self):
@@ -221,6 +248,8 @@ class RouteHandlers:
         """Stop async domain runtimes during server shutdown."""
         await self.singing.shutdown()
         await self.bilibili.stop_bilibili()
+        await self.narration.close()
+        await self.bilibili.close_minecraft_narration()
 
     async def on_task_status(self, sid: str, data: dict) -> dict[str, Any]:
         """Return a durable task snapshot without trusting a client-supplied scope."""
@@ -382,6 +411,8 @@ class RouteHandlers:
     async def on_connect(self, sid: str, environ: dict, *, read_only: bool = False) -> None:
         await self.lifecycle.on_connect(sid, environ, read_only=read_only)
         await self.bilibili.emit_current_snapshot(sid)
+        if read_only:
+            await self.minecraft.replay_public(sid)
 
     async def on_disconnect(self, sid: str) -> None:
         self.chat.cancel_sandbox_tasks_for_sid(sid)
@@ -664,6 +695,8 @@ def register_routes(
             raise ConnectionRefusedError({"code": "PASSWORD_CHANGE_REQUIRED"})
         security.bind_socket(sid, principal)
         public_live = principal.source == PUBLIC_LIVE_SOURCE
+        if not public_live:
+            await sio.enter_room(sid, TRUSTED_MINECRAFT_ROOM)
         await handlers.on_connect(sid, environ, read_only=public_live)
         if not public_live:
             pending = await handlers.on_tool_approval_list(sid)

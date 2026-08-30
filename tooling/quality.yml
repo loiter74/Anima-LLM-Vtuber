@@ -93,6 +93,7 @@ input_sets:
       - tests/AGENTS.md
       - .github/assets/**
       - docs/**
+      - openspec/**/*.md
 
 default_input_sets: [quality-engine]
 
@@ -1880,6 +1881,7 @@ components:
       - CONTRIBUTING.md
       - .github/assets/**
       - docs/**
+      - openspec/**/*.md
       - scripts/README.md
     direct_groups: [docs-contract]
     impacts: []

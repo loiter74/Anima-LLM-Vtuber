@@ -1,3 +1,10 @@
+import events from '../../../../config/socket-events.json'
+
+export const PublicLiveEvents = {
+  ACTIVITY_PROJECTION: events.minecraft.activity_projection.name,
+  NARRATION_STATE: events.livestream.narration_state.name,
+} as const
+
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 
 export type CommandTaskStatus =
@@ -117,6 +124,76 @@ export interface AudioStreamEndEvent extends ChatIdentity {
   final_sequence: number
   status: 'completed' | 'failed' | 'cancelled'
   reason?: 'timeout' | 'provider_error' | 'cancelled'
+}
+
+export type MinecraftPublicActivityOutcome =
+  'active' | 'succeeded' | 'failed' | 'cancelled' | 'blocked'
+
+export type MinecraftPublicActivityPhase =
+  'planning' | 'observing' | 'committed' | 'acting' | 'checking' | 'recovering' | 'finished'
+
+export type MinecraftPublicActivityIntent =
+  | 'acquire'
+  | 'craft'
+  | 'build'
+  | 'travel'
+  | 'combat'
+  | 'survive'
+  | 'learn'
+  | 'discover'
+  | 'interact'
+
+export type MinecraftPublicActivityFocusKind =
+  'item' | 'entity' | 'place' | 'structure' | 'condition'
+
+export type MinecraftPublicActivityProgressUnit = 'objectives' | 'items' | 'blocks' | 'actions'
+
+export interface MinecraftPublicActivityFocus {
+  kind: MinecraftPublicActivityFocusKind
+  label: string
+}
+
+export interface MinecraftPublicActivityProgress {
+  current: number
+  total: number
+  unit: MinecraftPublicActivityProgressUnit
+}
+
+export interface MinecraftPublicActivityPayload {
+  phase: MinecraftPublicActivityPhase
+  intent?: MinecraftPublicActivityIntent
+  focus?: MinecraftPublicActivityFocus
+  progress?: MinecraftPublicActivityProgress
+  outcome: MinecraftPublicActivityOutcome
+}
+
+export interface MinecraftActivityProjectionEvent {
+  schema_version: '1'
+  event: 'minecraft.activity.projection'
+  event_id: string
+  projection_kind: 'activity'
+  projection_version: number
+  occurred_at_ms: number
+  mission_id?: string
+  entity_id: 'minecraft'
+  payload: MinecraftPublicActivityPayload
+}
+
+export type LivestreamNarrationSpeechState =
+  'none' | 'queued' | 'speaking' | 'completed' | 'cancelled'
+
+export type LivestreamNarrationEmotion = 'thinking' | 'confident' | 'focused' | 'alert' | 'relieved'
+
+export interface LivestreamNarrationStateEvent {
+  schema_version: '1'
+  cue_id: string
+  source_event_id: string
+  task_id?: string
+  phase: MinecraftPublicActivityPhase
+  visual_text: string
+  emotion: LivestreamNarrationEmotion
+  speech_state: LivestreamNarrationSpeechState
+  occurred_at_ms: number
 }
 
 export interface ChatErrorEvent extends ChatIdentity {

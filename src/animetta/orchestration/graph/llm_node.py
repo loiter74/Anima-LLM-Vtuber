@@ -18,7 +18,9 @@ from loguru import logger
 from animetta.memory.v2.context import MemoryContext, normalize_actor_id
 from animetta.services.bilibili.response_policy import (
     constrain_livestream_response,
+    constrain_minecraft_narration_response,
     constrain_proactive_topic_response,
+    is_minecraft_narration_turn,
     is_proactive_topic_turn,
 )
 from animetta.services.dialogue.reasoning_classifier import is_english_meta_reasoning
@@ -65,7 +67,7 @@ def _explicit_history_messages(
             [HumanMessage(content=user), AIMessage(content=assistant)]
             for user, assistant in session.prompt_window
         ]
-        if session is not None
+        if session is not None and not is_minecraft_narration_turn(state.get("metadata", {}))
         else []
     )
     raw_budget = state.get("max_context_tokens")
@@ -183,6 +185,12 @@ def _response_for_delivery(state: AgentState, text: str) -> str:
     """Apply the service-owned delivery policy selected by graph state."""
     visible = _strip_emotion_tags(text)
     metadata = state.get("metadata", {})
+    if is_minecraft_narration_turn(metadata):
+        max_chars = metadata.get("minecraft_narration_max_chars", 60)
+        return constrain_minecraft_narration_response(
+            visible,
+            max_chars=int(max_chars) if isinstance(max_chars, int) else 60,
+        )
     if is_proactive_topic_turn(metadata):
         max_chars = metadata.get("proactive_topic_max_chars", 36)
         recent = metadata.get("proactive_recent_outputs", [])
@@ -857,7 +865,11 @@ async def _llm_without_tools(
     full_response = ""
     interrupted = False
 
-    timeout_seconds = _get_config_value(config, "llm_timeout", TIMEOUT_SECONDS)
+    timeout_seconds = (
+        2.0
+        if is_minecraft_narration_turn(state.get("metadata", {}))
+        else _get_config_value(config, "llm_timeout", TIMEOUT_SECONDS)
+    )
 
     t_llm = time_module.perf_counter()
     try:

@@ -66,6 +66,14 @@ class ExecutorStub:
         self.observer = observer
 
 
+class ActivityRecorderStub:
+    def __init__(self) -> None:
+        self.phases: list[str] = []
+
+    async def record_command(self, _command, *, phase, **_kwargs):
+        self.phases.append(phase)
+
+
 class CompleteStrategy:
     def prepare(self, goal):
         return {"goal": goal}
@@ -153,6 +161,7 @@ async def test_missing_failed_command_has_empty_projected_evidence() -> None:
 async def test_controller_passes_collected_typed_evidence_to_goal_verifier() -> None:
     collector = EvidenceCollectorStub()
     verifier = VerifierStub()
+    activity = ActivityRecorderStub()
     controller = UnifiedVoyagerController(
         runtime=RuntimeStub(),
         repository=object(),
@@ -162,12 +171,14 @@ async def test_controller_passes_collected_typed_evidence_to_goal_verifier() -> 
         evidence_collector=collector,
         make_id=lambda prefix: f"{prefix}-id",
         now_ms=lambda: 10,
+        activity_recorder=activity,
     )
 
     await controller.execute_command(_command())
 
     assert collector.called is True
     assert verifier.received["technology_evidence"] == ("technology:stone-age",)
+    assert activity.phases == ["observing", "checking"]
 
 
 async def test_goal_verification_failure_retains_auditable_evidence() -> None:
@@ -229,6 +240,7 @@ async def test_blocked_unknown_retains_reconciliation_quarantine_evidence() -> N
                 receipt=receipt,
             )
 
+    activity = ActivityRecorderStub()
     controller = UnifiedVoyagerController(
         runtime=RuntimeStub(),
         repository=object(),
@@ -238,6 +250,7 @@ async def test_blocked_unknown_retains_reconciliation_quarantine_evidence() -> N
         evidence_collector=EvidenceCollectorStub(),
         make_id=lambda prefix: f"{prefix}-id",
         now_ms=lambda: 10,
+        activity_recorder=activity,
     )
 
     async def fail_with_unknown(_command):
@@ -264,6 +277,7 @@ async def test_blocked_unknown_retains_reconciliation_quarantine_evidence() -> N
     assert error.terminal_result["receipt_ids"] == [receipt.receipt_id]
     assert error.terminal_result["output"]["reconciliation"] == recovery_details
     assert error.terminal_result["error"]["details"] == recovery_details
+    assert activity.phases == ["recovering"]
 
 
 async def test_runtime_collector_inspects_the_exact_compiled_blueprint_region() -> None:

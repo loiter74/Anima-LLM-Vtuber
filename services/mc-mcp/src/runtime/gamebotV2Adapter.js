@@ -7,12 +7,35 @@ import {
   projectVisibleDiscovery,
 } from '../gamebotEvidenceV2.js';
 import { createGameBotRuntimeV2 } from '../gamebotRuntimeV2.js';
+import {
+  BroadcastMotionPolicy,
+  resolvePresentationConfig,
+} from './broadcastMotionPolicy.js';
+import {
+  OperationScopeError,
+  createOperationScope,
+  runWithOperationScope,
+} from './operationScope.js';
+import {
+  capturePresentationSnapshot,
+  createPresentationPort,
+  executePresentationDecision,
+} from './presentationPort.js';
 
 
 const schemaDigest = readFileSync(
   new URL('../../../../contracts/gamebot/v2/schema.sha256', import.meta.url),
   'utf8',
 ).trim();
+export const VISUAL_PRESENTATION_CAPABILITIES = Object.freeze([
+  'goto',
+  'place',
+  'collect',
+  'mine',
+  'craft',
+  'smelt',
+  'equip',
+]);
 
 
 function sha256(value) {
@@ -30,6 +53,95 @@ function emptyBudget(overrides = {}) {
     protected_items: [],
     resource_consumption: {},
     ...overrides,
+  };
+}
+
+
+function normalizedBudgetNumber(rawValue, field, fallback, { integer = false } = {}) {
+  if (rawValue === undefined) return fallback;
+  const value = Number(rawValue);
+  if (!Number.isFinite(value) || value < 0 || (integer && !Number.isInteger(value))) {
+    const error = new TypeError(`Invalid capability budget field: ${field}`);
+    error.code = 'INVALID_BUDGET_USAGE';
+    error.details = { field, value: rawValue };
+    throw error;
+  }
+  return value;
+}
+
+
+function normalizeBudgetUsage(usage, defaultMaxActions) {
+  const source = usage && typeof usage === 'object' && !Array.isArray(usage) ? usage : {};
+  const protectedItems = source.protected_items ?? [];
+  const resourceConsumption = source.resource_consumption ?? {};
+  if (!Array.isArray(protectedItems) || protectedItems.some((item) => typeof item !== 'string')) {
+    const error = new TypeError('Invalid capability budget field: protected_items');
+    error.code = 'INVALID_BUDGET_USAGE';
+    error.details = { field: 'protected_items' };
+    throw error;
+  }
+  if (
+    !resourceConsumption
+    || typeof resourceConsumption !== 'object'
+    || Array.isArray(resourceConsumption)
+  ) {
+    const error = new TypeError('Invalid capability budget field: resource_consumption');
+    error.code = 'INVALID_BUDGET_USAGE';
+    error.details = { field: 'resource_consumption' };
+    throw error;
+  }
+  const normalizedResources = Object.fromEntries(
+    Object.entries(resourceConsumption).map(([item, amount]) => [
+      item,
+      normalizedBudgetNumber(amount, `resource_consumption.${item}`, 0, { integer: true }),
+    ]),
+  );
+  return {
+    max_actions: normalizedBudgetNumber(
+      source.max_actions,
+      'max_actions',
+      defaultMaxActions,
+      { integer: true },
+    ),
+    max_strategy_attempts: normalizedBudgetNumber(
+      source.max_strategy_attempts,
+      'max_strategy_attempts',
+      0,
+      { integer: true },
+    ),
+    max_travel_distance: normalizedBudgetNumber(
+      source.max_travel_distance,
+      'max_travel_distance',
+      0,
+    ),
+    max_blocks_changed: normalizedBudgetNumber(
+      source.max_blocks_changed,
+      'max_blocks_changed',
+      0,
+      { integer: true },
+    ),
+    max_damage_taken: normalizedBudgetNumber(source.max_damage_taken, 'max_damage_taken', 0),
+    protected_items: [...protectedItems],
+    resource_consumption: normalizedResources,
+  };
+}
+
+
+function normalizeCapabilityResult(value, { readOnly }) {
+  const structured = value && typeof value === 'object' && !Array.isArray(value) && [
+    'output',
+    'explained_mutations',
+    'budget_usage',
+    'combat',
+  ].some((field) => Object.hasOwn(value, field));
+  const result = structured ? { ...value } : { output: value };
+  return {
+    ...result,
+    output: Object.hasOwn(result, 'output') ? result.output : null,
+    explained_mutations: Array.isArray(result.explained_mutations)
+      ? [...result.explained_mutations]
+      : [],
+    budget_usage: normalizeBudgetUsage(result.budget_usage, readOnly ? 0 : 1),
   };
 }
 
@@ -119,7 +231,8 @@ function capabilityDescriptors(bot, actions) {
     },
     goto: {
       parameters: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
-      invoke: ({ x, y, z }) => actions.goto(x, y, z),
+      invoke: ({ x, y, z }, context) => actions.goto(x, y, z, context),
+      target: ({ x, y, z }) => ({ x, y: y + 0.5, z }),
     },
     collect: {
       parameters: {
@@ -129,21 +242,20 @@ function capabilityDescriptors(bot, actions) {
       invoke: ({ block_type, count = 1 }, context) => (
         actions.collectWithEvidence(block_type, count, context)
       ),
-      evidence: true,
     },
     mine: {
       parameters: {
         block_type: { type: 'string' },
         count: { type: 'integer', minimum: 1, maximum: 64 },
       },
-      invoke: ({ block_type, count = 1 }) => actions.mine(block_type, count),
+      invoke: ({ block_type, count = 1 }, context) => actions.mine(block_type, count, context),
     },
     craft: {
       parameters: {
         recipe: { type: 'string' },
         count: { type: 'integer', minimum: 1, maximum: 64 },
       },
-      invoke: ({ recipe, count = 1 }) => actions.craft(recipe, count),
+      invoke: ({ recipe, count = 1 }, context) => actions.craft(recipe, count, context),
     },
     place: {
       parameters: {
@@ -153,10 +265,10 @@ function capabilityDescriptors(bot, actions) {
         z: { type: 'number' },
         facing: { type: 'string', enum: ['north', 'south', 'east', 'west'] },
       },
-      invoke: ({ block_type, x, y, z, facing }) => (
-        actions.placeWithEvidence(block_type, x, y, z, facing)
+      invoke: ({ block_type, x, y, z, facing }, context) => (
+        actions.placeWithEvidence(block_type, x, y, z, facing, context)
       ),
-      evidence: true,
+      target: ({ x, y, z }) => ({ x: x + 0.5, y: y + 0.5, z: z + 0.5 }),
     },
     smelt: {
       parameters: {
@@ -164,67 +276,123 @@ function capabilityDescriptors(bot, actions) {
         fuel: { type: 'string' },
         count: { type: 'integer', minimum: 1, maximum: 64 },
       },
-      invoke: ({ item, fuel, count = 1 }) => actions.smelt(item, fuel, count),
+      invoke: ({ item, fuel, count = 1 }, context) => actions.smelt(item, fuel, count, context),
     },
     equip: {
       parameters: { item: { type: 'string' }, destination: { type: 'string' } },
-      invoke: ({ item, destination = 'hand' }) => actions.equip(item, destination),
+      invoke: ({ item, destination = 'hand' }, context) => actions.equip(item, destination, context),
     },
     attack: {
       parameters: { target: { type: 'string' } },
       invoke: ({ target = 'nearest_hostile' }, context) => (
         actions.attackWithEvidence(target, context)
       ),
-      evidence: true,
     },
     chat: {
       parameters: { message: { type: 'string' } },
-      invoke: ({ message }) => actions.chat(message),
+      invoke: ({ message }, context) => actions.chat(message, context),
     },
     recipes: {
       parameters: { item: { type: 'string' } },
-      invoke: ({ item }) => actions.recipes(item),
+      invoke: ({ item }, context) => actions.recipes(item, context),
     },
     mine_shaft: {
       parameters: {
         target_y: { type: 'integer', minimum: -64, maximum: 64 },
         minimum_cobblestone: { type: 'integer', minimum: 0, maximum: 64 },
       },
-      invoke: ({ target_y = 50, minimum_cobblestone = 0 }) => (
-        actions.mineShaft(target_y, minimum_cobblestone)
+      invoke: ({ target_y = 50, minimum_cobblestone = 0 }, context) => (
+        actions.mineShaft(target_y, minimum_cobblestone, context)
       ),
     },
   };
 }
 
 
-function guardBotAction(bot, abortActive, invoke) {
+function guardBotAction(
+  bot,
+  abortActive,
+  invoke,
+  context,
+  includeContainers,
+  abortLifecycle,
+) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let lifecycleError = null;
+    let invocationSettlement = Promise.resolve();
     const cleanup = () => {
       bot.removeListener('death', onDeath);
       bot.removeListener('end', onEnd);
+      context.signal?.removeEventListener('abort', onAbort);
     };
     const fail = (code, message) => {
-      cleanup();
-      abortActive();
+      if (settled) return;
       const error = new Error(message);
       error.code = code;
       error.retryable = true;
-      reject(error);
+      lifecycleError ??= error;
+      abortLifecycle(message);
+      void Promise.resolve(abortActive()).catch(() => {});
     };
     const onDeath = () => fail('BOT_DIED', 'Bot died during capability execution');
     const onEnd = (reason) => fail(
       'RUNTIME_DISCONNECTED',
       `Runtime disconnected during capability execution: ${reason || 'unknown'}`,
     );
+    const onAbort = async () => {
+      if (settled) return;
+      let quiet = false;
+      try {
+        quiet = await context.operation_scope.interrupt({
+          includeContainers,
+          operationSettlement: invocationSettlement,
+        });
+      } catch {
+        // Failed cleanup is treated as a settlement timeout below.
+      }
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (!quiet) {
+        const settlementError = new OperationScopeError(
+          'CANCEL_SETTLEMENT_TIMEOUT',
+          'Mineflayer operation did not settle after cancellation',
+          { world_may_have_changed: true },
+        );
+        Object.defineProperty(settlementError, 'operationSettlement', {
+          value: Promise.all([
+            invocationSettlement,
+            context.operation_scope.waitForEventualQuiescence({ includeContainers }),
+          ]).then(() => {}),
+        });
+        reject(settlementError);
+        return;
+      }
+      reject(lifecycleError || new OperationScopeError('ACTION_CANCELLED', 'Action cancelled'));
+    };
     bot.once('death', onDeath);
     bot.once('end', onEnd);
-    Promise.resolve().then(invoke).then(
+    context.signal?.addEventListener('abort', onAbort, { once: true });
+    if (context.signal?.aborted) {
+      void onAbort();
+      return;
+    }
+    const invocationPromise = Promise.resolve().then(invoke);
+    invocationSettlement = invocationPromise.then(
+      () => undefined,
+      (error) => error?.operationSettlement ?? undefined,
+    );
+    invocationPromise.then(
       (value) => {
+        if (settled || context.signal?.aborted) return;
+        settled = true;
         cleanup();
         resolve(value);
       },
       (error) => {
+        if (settled || context.signal?.aborted) return;
+        settled = true;
         cleanup();
         reject(error);
       },
@@ -233,7 +401,7 @@ function guardBotAction(bot, abortActive, invoke) {
 }
 
 
-function runtimeCapabilities(bot, actions, abortActive) {
+function runtimeCapabilities(bot, actions, abortActive, motionPolicy) {
   return Object.fromEntries(
     Object.entries(capabilityDescriptors(bot, actions)).map(([name, descriptor]) => {
       const readOnly = ['observe', 'status', 'recipes'].includes(name);
@@ -248,19 +416,104 @@ function runtimeCapabilities(bot, actions, abortActive) {
         maximumCost: emptyBudget({ max_actions: readOnly ? 0 : 1 }),
         async invoke(parameters, context) {
           context.signal?.throwIfAborted();
-          const value = await guardBotAction(
+          const lifecycleController = new AbortController();
+          const operationSignal = context.signal
+            ? AbortSignal.any([context.signal, lifecycleController.signal])
+            : lifecycleController.signal;
+          const scope = createOperationScope({
+            bot,
+            signal: operationSignal,
+            deadlineMs: context.deadline_ms,
+            reportPhase: context.report_phase,
+            containerCapable: ['craft', 'smelt'].includes(name),
+          });
+          const targetPosition = descriptor.target?.(parameters) || null;
+          const target = targetPosition
+            ? { kind: name === 'place' ? 'block' : 'position', position: targetPosition }
+            : undefined;
+          const effectPort = createPresentationPort({
+            bot,
+            scope,
+            reportPhase: context.report_phase,
+          });
+          let presentationUsage = { anchorCount: 0, dwellMs: 0 };
+          const safeFocus = async ({
+            phase,
+            ordinal = 0,
+            target: focusTarget = targetPosition,
+            heldItemName = null,
+          }) => {
+            try {
+              const presentation = {
+                correlationId: context.correlation_id,
+                capability: name,
+                phase,
+                ordinal,
+                snapshot: capturePresentationSnapshot(bot, scope),
+                usage: presentationUsage,
+              };
+              const decision = heldItemName
+                ? motionPolicy.decideFocus({
+                    ...presentation,
+                    heldItemName,
+                  })
+                : motionPolicy.decideFocus({ ...presentation, target: focusTarget });
+              presentationUsage = decision.nextUsage;
+              await executePresentationDecision(decision, effectPort);
+              return decision;
+            } catch (error) {
+              if (scope.signal?.aborted || error?.name === 'AbortError') throw error;
+              return { applied: false, reason: 'presentation_error' };
+            }
+          };
+          const presentationFacade = VISUAL_PRESENTATION_CAPABILITIES.includes(name)
+            ? Object.freeze({
+                focus: ({ phase, ordinal = 0, target: focusTarget }) => safeFocus({
+                  phase,
+                  ordinal,
+                  target: focusTarget,
+                }),
+                focusHeldItem: ({ phase, ordinal = 0, itemName }) => safeFocus({
+                  phase,
+                  ordinal,
+                  heldItemName: itemName,
+                }),
+              })
+            : undefined;
+          const scopedContext = Object.freeze({
+            ...context,
+            signal: operationSignal,
+            operation_scope: scope,
+            presentation: presentationFacade,
+          });
+          const value = await runWithOperationScope(scope, () => guardBotAction(
             bot,
             abortActive,
-            () => descriptor.invoke(parameters, context),
-          );
-          if (descriptor.evidence) {
-            return { ...value, budget_usage: emptyBudget({ max_actions: 1 }) };
-          }
-          return {
-            output: value,
-            explained_mutations: [],
-            budget_usage: emptyBudget({ max_actions: readOnly ? 0 : 1 }),
-          };
+            async () => {
+              if (name === 'goto') {
+                context.report_phase?.('aiming', { target });
+                await safeFocus({ phase: 'aiming' });
+                context.report_phase?.('moving', { target });
+              } else if (name === 'place') {
+                context.report_phase?.('aiming', { target });
+                await safeFocus({ phase: 'aiming' });
+                context.report_phase?.('acting', { target });
+              } else if (['collect', 'mine', 'craft', 'smelt'].includes(name)) {
+                context.report_phase?.('locating');
+              } else {
+                context.report_phase?.('acting');
+              }
+              const result = await descriptor.invoke(parameters, scopedContext);
+              if (targetPosition && ['goto', 'place'].includes(name)) {
+                await safeFocus({ phase: 'verifying', ordinal: 1 });
+              }
+              return result;
+            },
+            scopedContext,
+            ['craft', 'smelt'].includes(name),
+            (reason) => lifecycleController.abort(reason),
+          ));
+          return normalizeCapabilityResult(value, { readOnly });
         },
       }];
     }),
@@ -306,22 +559,27 @@ export function createGameBotV2Adapter({
   actions,
   abortActive,
   emitEvent,
+  presentation = resolvePresentationConfig(),
 }) {
   const runtimeInstanceId = [
     `${connection.username}@${connection.host}:${connection.port}`,
     process.pid,
     Date.now(),
   ].join(':');
+  const presentationConfig = resolvePresentationConfig(presentation);
+  const motionPolicy = new BroadcastMotionPolicy(presentationConfig);
   let advancementAdapter = null;
   const runtime = createGameBotRuntimeV2({
     runtimeInstanceId,
     environmentProfile: environmentProfile(bot, connection),
-    capabilities: runtimeCapabilities(bot, actions, abortActive),
+    capabilities: runtimeCapabilities(bot, actions, abortActive, motionPolicy),
     observeState: async () => observationState(bot, advancementAdapter),
     inspectRegionState: async (bounds) => inspectRegionBlocks(bot, bounds),
     maxRegionInspectionVolume: 4096,
     cancelActive: async () => abortActive(),
     getTick: () => bot.time?.age || 0,
+    presentationMode: presentationConfig.mode,
+    emitActionPhase: (event) => emitEvent('action_phase', event),
   });
   advancementAdapter = createAdvancementAdapterV2({
     runtimeInstanceId,

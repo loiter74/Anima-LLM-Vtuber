@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from animetta.config.singing import load_singing_config
+from animetta.services.bilibili.reply_media import (
+    BroadcastMediaArbiter,
+    BroadcastMediaTurn,
+)
 from animetta.services.command_inbox import (
     CommandDecision,
     CommandInbox,
@@ -43,6 +47,7 @@ class SingingHandlers(BaseSocketHandler):
         desktop_manager: "DesktopClientManager",
         live2d_manager: "Live2DManager",
         command_inbox: CommandInbox | None = None,
+        media_arbiter: BroadcastMediaArbiter | None = None,
     ):
         super().__init__(sio, session_manager, desktop_manager, live2d_manager)
         self._pipeline: SVCPipeline | None = None
@@ -51,6 +56,20 @@ class SingingHandlers(BaseSocketHandler):
         self._subscribers: dict[str, set[str]] = {}
         self._command_inbox = command_inbox or CommandInbox(":memory:")
         self._start_lock = asyncio.Lock()
+        self._media_arbiter = media_arbiter
+        self._media_turn: BroadcastMediaTurn | None = None
+        self._media_task_id: str | None = None
+        self._media_release_task: asyncio.Task[None] | None = None
+
+    @property
+    def busy(self) -> bool:
+        """Whether singing currently owns generation or playback preparation."""
+
+        return (
+            self._active_task_id is not None
+            or self._pipeline is not None
+            or self._media_turn is not None
+        )
 
     async def on_sing_process(self, sid: str, data: dict) -> None:
         """Start singing pipeline.
@@ -307,6 +326,7 @@ class SingingHandlers(BaseSocketHandler):
                 ],
             }
             await self._command_inbox.succeed(key, payload)
+            await self._begin_media_lease(task_id, result.duration_sec)
             subscribers = tuple(self._subscribers.get(task_id, ()))
             if not subscribers:
                 await self.sio.emit(EVENTS["sing"]["complete"]["name"], payload)
@@ -354,6 +374,8 @@ class SingingHandlers(BaseSocketHandler):
                 CommandKey("dashboard", "singing.process", task_id)
             )
             await self._pipeline.cancel()
+        if task_id and task_id == self._media_task_id:
+            await self._finish_media_lease()
         if not task_id:
             return {"ok": False, "error": "TASK_NOT_FOUND"}
         current = await self._command_inbox.get(CommandKey("dashboard", "singing.process", task_id))
@@ -378,6 +400,44 @@ class SingingHandlers(BaseSocketHandler):
             await self._pipeline.cancel()
         if self._run_task is not None:
             await asyncio.gather(self._run_task, return_exceptions=True)
+        await self._finish_media_lease()
+
+    async def _begin_media_lease(self, task_id: str, duration_seconds: float) -> None:
+        if self._media_arbiter is None:
+            return
+        await self._finish_media_lease()
+        turn = BroadcastMediaTurn(self._media_arbiter, priority=5)
+        await turn.acquire()
+        self._media_turn = turn
+        self._media_task_id = task_id
+        self._media_release_task = asyncio.create_task(
+            self._release_media_after(max(0.0, float(duration_seconds))),
+            name=f"singing-media-{task_id}",
+        )
+
+    async def _release_media_after(self, duration_seconds: float) -> None:
+        try:
+            await asyncio.sleep(duration_seconds)
+        except asyncio.CancelledError:
+            return
+        finally:
+            if asyncio.current_task() is self._media_release_task:
+                await self._release_current_media_turn()
+
+    async def _finish_media_lease(self) -> None:
+        release_task = self._media_release_task
+        self._media_release_task = None
+        if release_task is not None and release_task is not asyncio.current_task():
+            release_task.cancel()
+            await asyncio.gather(release_task, return_exceptions=True)
+        await self._release_current_media_turn()
+
+    async def _release_current_media_turn(self) -> None:
+        turn = self._media_turn
+        self._media_turn = None
+        self._media_task_id = None
+        if turn is not None:
+            await turn.finish()
 
     async def on_sing_subtitle_sync(self, sid: str, data: dict) -> None:
         """Forward subtitle line to all clients.

@@ -1,6 +1,8 @@
 import type { BilibiliStatusPayload } from '@/constants/socket-events'
 import type { DanmakuItem } from '@/types/chat'
 import type { BackgroundConfig, LiveView } from './controller'
+import type { PublicActivityView } from '@/shared/broadcast/publicActivity'
+import { createDomPublicActivityView } from '@/shared/broadcast/publicActivityView'
 
 const MAX_VISIBLE_MESSAGES = 60
 const FOLLOW_TAIL_THRESHOLD_PX = 48
@@ -18,7 +20,7 @@ function requiredElement<T extends HTMLElement>(document: Document, id: string):
   return element as T
 }
 
-export function createDomLiveView(document: Document): LiveView {
+export function createDomLiveView(document: Document): LiveView & PublicActivityView {
   const list = requiredElement<HTMLDivElement>(document, 'danmakuList')
   const empty = requiredElement<HTMLDivElement>(document, 'emptyState')
   const count = requiredElement<HTMLSpanElement>(document, 'messageCount')
@@ -27,6 +29,7 @@ export function createDomLiveView(document: Document): LiveView {
   const background = requiredElement<HTMLDivElement>(document, 'liveBackground')
   const subtitle = requiredElement<HTMLElement>(document, 'subtitleOverlay')
   const subtitleText = requiredElement<HTMLParagraphElement>(document, 'subtitleText')
+  const publicActivity = createDomPublicActivityView(document)
 
   const createMessageElement = (message: DanmakuItem): HTMLElement => {
     const item = document.createElement('article')
@@ -67,6 +70,7 @@ export function createDomLiveView(document: Document): LiveView {
   }
 
   return {
+    ...publicActivity,
     renderMessages(messages: readonly DanmakuItem[]): void {
       const followsTail =
         list.scrollHeight - list.scrollTop - list.clientHeight <= FOLLOW_TAIL_THRESHOLD_PX

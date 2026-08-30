@@ -1,11 +1,23 @@
 import { MINECRAFT_GAMEPLAY_LAYOUT, resolveMinecraftGameplayMode, toCssVariables } from './layout'
 import { isStageIOView, type EvidenceRefView, type StageIOView } from '@/types/minecraft-stage'
+import type { DanmakuItem } from '@/types/chat'
+import type { LiveView } from '@/live/controller'
+import type { PublicActivityView } from '@/shared/broadcast/publicActivity'
+import { createDomPublicActivityView } from '@/shared/broadcast/publicActivityView'
+import { resolvePublicMediaMode } from '@/shared/broadcast/mediaOwnership'
 
 export type { StageIOView } from '@/types/minecraft-stage'
 
-export interface MinecraftGameplayShellHandle {
+export interface MinecraftViewerStatusView {
+  bindingState: string
+  confirmed: boolean
+  target: string
+}
+
+export interface MinecraftGameplayShellHandle extends LiveView, PublicActivityView {
   readonly element: HTMLElement
   updateWalkthrough(stages: readonly StageIOView[]): void
+  setViewerStatus(status: MinecraftViewerStatusView): void
   dispose(): void
 }
 
@@ -16,6 +28,8 @@ const PREVIEW_DANMAKU = [
 ] as const
 
 const BINDING_STATES = new Set(['disabled', 'waiting', 'attaching', 'following', 'degraded'])
+
+const MAX_GAME_DANMAKU = 4
 
 const SHOWCASE_STAGES = [
   ['scenario-setup', '场景布置'],
@@ -75,6 +89,29 @@ function createElement<K extends keyof HTMLElementTagNameMap>(
   element.className = className
   if (text !== undefined) element.textContent = text
   return element
+}
+
+function appendDanmakuItem(
+  document: Document,
+  parent: HTMLElement,
+  name: string,
+  message: string,
+  messageId?: string,
+): void {
+  const item = createElement(document, 'div', 'danmaku-item')
+  if (messageId) item.dataset.messageId = messageId
+  item.append(
+    createElement(document, 'strong', 'danmaku-name', name),
+    createElement(document, 'span', 'danmaku-copy', message),
+  )
+  parent.append(item)
+}
+
+function danmakuMessageId(message: DanmakuItem): string {
+  return (
+    message.source_message_id ??
+    `${message.timestamp}:${message.user_id}:${message.user_name}:${message.text}`
+  )
 }
 
 function createPreviewWorld(document: Document): HTMLElement {
@@ -268,9 +305,13 @@ export function mountMinecraftGameplayShell(
   search: URLSearchParams,
 ): MinecraftGameplayShellHandle {
   const mode = resolveMinecraftGameplayMode(search)
+  const review = search.get('review') === '1'
+  const mediaMode = resolvePublicMediaMode(search, 'muted')
   const root = createElement(document, 'main', 'minecraft-gameplay')
   root.dataset.mode = mode
-  root.dataset.timeline = String(search.get('timeline') === '1')
+  root.dataset.review = String(review)
+  root.dataset.media = mediaMode
+  root.dataset.timeline = String(review && search.get('timeline') === '1')
   for (const [name, value] of Object.entries(toCssVariables(MINECRAFT_GAMEPLAY_LAYOUT))) {
     root.style.setProperty(name, value)
   }
@@ -282,16 +323,16 @@ export function mountMinecraftGameplayShell(
   television.setAttribute('aria-label', 'Minecraft 游戏画面')
   const aperture = createElement(document, 'div', 'game-aperture')
   aperture.dataset.transparent = String(mode === 'overlay')
-  if (mode === 'preview') aperture.append(createPreviewWorld(document))
+  if (review && mode === 'preview') aperture.append(createPreviewWorld(document))
   television.append(aperture)
 
   const status = createElement(document, 'div', 'possession-status')
   status.setAttribute('aria-label', '附身状态')
-  const bindingState = search.get('bindingState')
+  const bindingState = review ? search.get('bindingState') : null
   const safeBindingState =
     bindingState && BINDING_STATES.has(bindingState) ? bindingState : 'waiting'
-  const confirmed = safeBindingState === 'following' && search.get('confirmed') === 'true'
-  const target = search.get('target')?.slice(0, 32) || 'AnimettaBot'
+  const confirmed = review && safeBindingState === 'following' && search.get('confirmed') === 'true'
+  const target = (review ? search.get('target')?.slice(0, 32) : null) || 'AnimettaBot'
   status.dataset.bindingState = safeBindingState
   status.dataset.confirmed = String(confirmed)
   status.append(
@@ -303,25 +344,27 @@ export function mountMinecraftGameplayShell(
       confirmed ? `已附身 LUN077 → ${target}` : '等待 LUN077 · 准备附身',
     ),
   )
+  const socketStatus = createElement(document, 'span', 'visually-hidden', '服务连接中')
+  socketStatus.id = 'gameSocketStatus'
+  socketStatus.dataset.state = 'connecting'
+  status.append(socketStatus)
 
   const danmaku = createElement(document, 'aside', 'game-danmaku')
   danmaku.setAttribute('aria-label', '实时弹幕')
-  for (const [name, message] of PREVIEW_DANMAKU) {
-    const item = createElement(document, 'div', 'danmaku-item')
-    item.append(
-      createElement(document, 'strong', 'danmaku-name', name),
-      createElement(document, 'span', 'danmaku-copy', message),
-    )
-    danmaku.append(item)
+  if (review) {
+    for (const [name, message] of PREVIEW_DANMAKU) {
+      appendDanmakuItem(document, danmaku, name, message)
+    }
+  } else {
+    danmaku.hidden = true
   }
 
-  const subtitle = createElement(
-    document,
-    'div',
-    'game-subtitle',
-    search.get('subtitle')?.slice(0, 120) || '本小姐今天一定要把铁装做出来。',
-  )
+  const fixtureSubtitle = review
+    ? search.get('subtitle')?.slice(0, 120) || '本小姐今天一定要把铁装做出来。'
+    : ''
+  const subtitle = createElement(document, 'div', 'game-subtitle', fixtureSubtitle)
   subtitle.setAttribute('aria-label', '直播字幕')
+  subtitle.hidden = !fixtureSubtitle
 
   const avatar = createElement(document, 'section', 'game-avatar')
   avatar.setAttribute('aria-label', '虹色 Mao 主播')
@@ -331,32 +374,162 @@ export function mountMinecraftGameplayShell(
   modelState.id = 'modelStatus'
   avatar.append(canvas, modelState)
 
-  root.append(ambient, television, status, danmaku, subtitle, avatar)
-  const timeline = search.get('timeline') === '1' ? createShowcaseTimeline(document, search) : null
+  const activityPanel = createElement(document, 'aside', 'public-activity-panel')
+  activityPanel.id = 'publicActivityPanel'
+  activityPanel.setAttribute('aria-label', '公开行动轨迹')
+  activityPanel.hidden = true
+  const activityHeader = createElement(document, 'header', 'public-activity-header')
+  const activityHeading = createElement(document, 'div', '')
+  activityHeading.append(
+    createElement(document, 'div', 'public-activity-kicker', 'AGENCY TRACE'),
+    createElement(document, 'h2', 'public-activity-title', '行动轨迹'),
+  )
+  activityHeader.append(activityHeading)
+  const narration = createElement(document, 'section', 'public-narration-state')
+  narration.id = 'publicNarrationState'
+  narration.setAttribute('aria-label', '当前旁白')
+  narration.setAttribute('aria-live', 'polite')
+  narration.hidden = true
+  const activitySummary = createElement(document, 'dl', 'public-activity-summary')
+  activitySummary.setAttribute('aria-label', '当前行动摘要')
+  for (const [label, id, fallback] of [
+    ['当前意图', 'publicCurrentIntent', '等待任务'],
+    ['最近观察', 'publicRecentObservation', '尚无观察'],
+    ['下一阶段', 'publicNextPhase', '等待计划'],
+  ] as const) {
+    const slot = createElement(document, 'div', 'public-activity-summary-slot')
+    const value = createElement(document, 'dd', '', fallback)
+    value.id = id
+    slot.append(createElement(document, 'dt', '', label), value)
+    activitySummary.append(slot)
+  }
+  const activityList = createElement(document, 'ol', 'public-activity-list')
+  activityList.id = 'publicActivityList'
+  activityList.setAttribute('aria-live', 'polite')
+  activityPanel.append(activityHeader, narration, activitySummary, activityList)
+
+  const audioStatus = createElement(document, 'span', 'visually-hidden')
+  audioStatus.id = 'audioStatus'
+  audioStatus.hidden = true
+  Object.assign(audioStatus.dataset, {
+    playbackState: mediaMode === 'active' ? 'idle' : 'muted',
+    playbackCount: '0',
+    lastAudioTaskId: '',
+    lastAudioKind: '',
+    audioOwner: mediaMode,
+    bgmState: 'off',
+    lipSyncState: 'idle',
+    lipSyncAppliedCount: '0',
+    lipSyncPeak: '0',
+    lastLipSyncTaskId: '',
+    lastLipSyncAppliedAt: '',
+  })
+  const singingAudio = createElement(document, 'audio', '')
+  singingAudio.id = 'singingAudio'
+  singingAudio.preload = 'metadata'
+  singingAudio.hidden = true
+
+  root.append(
+    ambient,
+    television,
+    status,
+    danmaku,
+    subtitle,
+    activityPanel,
+    avatar,
+    audioStatus,
+    singingAudio,
+  )
+  const timeline =
+    review && search.get('timeline') === '1' ? createShowcaseTimeline(document, search) : null
   if (timeline) root.append(timeline.element)
-  const audioUrl = parseLoopbackAudio(search.get('audio'))
-  const mouthTimeline = parseMouthTimeline(search.get('mouthTimeline'))
-  if (search.get('review') === '1' && audioUrl && mouthTimeline) {
+  const audioUrl = review ? parseLoopbackAudio(search.get('audio')) : null
+  const mouthTimeline = review ? parseMouthTimeline(search.get('mouthTimeline')) : null
+  if (review && audioUrl && mouthTimeline) {
     const runtime = createElement(document, 'section', 'minecraft-review-runtime')
     runtime.setAttribute('aria-hidden', 'true')
+    runtime.dataset.taskId = safeEvidenceIdentity(
+      search.get('reviewTaskId'),
+      'minecraft-review-audio',
+    )
     runtime.dataset.mouthTimeline = JSON.stringify(mouthTimeline)
     runtime.dataset.lipSync = 'pending'
     const audio = createElement(document, 'audio', '')
     audio.id = 'reviewAudio'
     audio.src = audioUrl
-    audio.preload = 'auto'
+    audio.preload = 'none'
     audio.dataset.complete = 'pending'
     runtime.append(audio)
     root.append(runtime)
   }
   document.body.append(root)
+  const publicActivityView = createDomPublicActivityView(document)
+
+  const setViewerStatus = (viewer: MinecraftViewerStatusView): void => {
+    const bindingState = BINDING_STATES.has(viewer.bindingState) ? viewer.bindingState : 'degraded'
+    const confirmed = bindingState === 'following' && viewer.confirmed
+    const target = viewer.target.slice(0, 32) || 'AnimettaBot'
+    status.dataset.bindingState = bindingState
+    status.dataset.confirmed = String(confirmed)
+    const copy = status.querySelector<HTMLElement>('.status-copy')
+    if (copy) {
+      copy.textContent = confirmed
+        ? `已附身 LUN077 → ${target}`
+        : bindingState === 'degraded'
+          ? '观战连接异常 · 等待恢复'
+          : '等待 LUN077 · 准备附身'
+    }
+  }
 
   let disposed = false
   return {
     element: root,
+    renderMessages(messages: readonly DanmakuItem[]): void {
+      danmaku.replaceChildren()
+      for (const message of messages.slice(-MAX_GAME_DANMAKU)) {
+        appendDanmakuItem(
+          document,
+          danmaku,
+          message.user_name || '匿名观众',
+          message.text,
+          danmakuMessageId(message),
+        )
+      }
+      danmaku.hidden = messages.length === 0
+      danmaku.dataset.messageCount = String(messages.length)
+    },
+    setSocketState(state): void {
+      const labels = {
+        connecting: '服务连接中',
+        connected: '服务已连接',
+        disconnected: '服务已断开',
+        error: '服务连接异常',
+      } as const
+      socketStatus.dataset.state = state
+      socketStatus.textContent = labels[state]
+      root.dataset.socketState = state
+    },
+    setLivestreamStatus(livestream): void {
+      root.dataset.livestreamState = livestream.state
+      root.dataset.livestreamGeneration = String(livestream.generation_id)
+    },
+    setBilibiliReplyEvidence(reply): void {
+      root.dataset.lastBilibiliSourceMessageId = reply.source_message_id
+      root.dataset.lastBilibiliReplyId = reply.reply_id
+    },
+    setBackground(): void {
+      // The Minecraft aperture owns its game capture and never accepts a live-room background.
+    },
+    setSubtitle(text: string | null): void {
+      subtitle.textContent = text ?? ''
+      subtitle.hidden = !text
+    },
+    renderPublicActivities: publicActivityView.renderPublicActivities,
+    setPublicNarration: publicActivityView.setPublicNarration,
     updateWalkthrough(stages: readonly StageIOView[]): void {
       timeline?.update(stages)
     },
+    setViewerStatus,
     dispose(): void {
       if (disposed) return
       disposed = true

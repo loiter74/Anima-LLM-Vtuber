@@ -16,13 +16,13 @@ io('/', { auth: { token: '<ANIMETTA_ACCESS_TOKEN>' } })
 - 握手的 `Authorization: Bearer ...`；
 - HTTP 登录得到的 `animetta_session` Cookie。
 
-`/live.html` 使用同一默认命名空间，但无需账号：
+`/live.html` 与 `/minecraft-gameplay.html` 使用同一默认命名空间，但无需账号：
 
 ```ts
 io('/', { auth: { surface: 'live' } })
 ```
 
-该握手只有在 `Origin` 精确匹配 `security.allowed_origins` 时才建立 `public-live` 身份。机器 token 优先于 Live 标记；Live 标记优先于用户 Cookie，因此从已登录浏览器打开 Live 也不会提升权限。`public-live` 可以接收现有直播广播，但任何客户端主动业务事件都返回 `LIVE_READ_ONLY`，并且不会收到工具审批列表或麦克风启动控制。
+该握手只有在 `Origin` 精确匹配 `security.allowed_origins` 时才建立 `public-live` 身份。机器 token 优先于 Live 标记；Live 标记优先于用户 Cookie，因此从已登录浏览器打开 Live 也不会提升权限。`public-live` 可以接收现有直播广播和脱敏 Minecraft 活动，但任何客户端主动业务事件都返回 `LIVE_READ_ONLY`，并且不会收到工具审批列表、麦克风启动控制或原始 Minecraft 执行 projection。
 
 连接失败时，服务端以 `ConnectionRefusedError` 返回 `UNAUTHORIZED`、`RATE_LIMITED`、`PASSWORD_CHANGE_REQUIRED`、`ACCOUNT_DISABLED`、`AUTH_SESSION_STORE_UNAVAILABLE` 或 `AUTH_USER_STORE_UNAVAILABLE`。首次改密会话不会建立 Dashboard Socket；机器 token 不受浏览器用户库与 Session 故障影响。认证连接成功后收到 `system:connection_established`，并重发仍待处理的 `tool:approval_required`；匿名 Live 只收到连接确认和直播状态快照。
 
@@ -146,18 +146,22 @@ io('/', { auth: { surface: 'live' } })
 | `minecraft:shutdown` | C→S | `request_id:string` |
 | `minecraft:reattach_viewer` | C→S | `request_id:string` |
 | `minecraft:viewer_status` | S→C | `status`，以及可选 schema、username、error、mode、reason、binding_state、confirmed、target、attempt、retry_in_ms |
-| `minecraft:command_transition` | S→C | `event`、`event_id`、`transition_id`、`command_id`、`from_state?`、`to_state`、`reason_code`、`occurred_at_ms` |
-| `minecraft:skill_trust` | S→C | `event`、`event_id`、`revision_hash`、`environment_fingerprint`、`status`、`source_command_id` |
-| `minecraft:mission_projection` | S→C | 公共 projection envelope |
-| `minecraft:objective_projection` | S→C | 公共 projection envelope |
-| `minecraft:proposal_projection` | S→C | 公共 projection envelope |
-| `minecraft:discovery_projection` | S→C | 公共 projection envelope |
-| `minecraft:skill_validation` | S→C | 公共 projection envelope |
-| `minecraft:advancement_projection` | S→C | 公共 projection envelope |
-| `minecraft:stage_projection` | S→C | 公共 projection envelope |
+| `minecraft:activity_projection` | S→C | 脱敏 public activity envelope；`payload.phase/intent/focus/progress/outcome` |
+| `livestream:narration_state` | S→C | `schema_version`、`cue_id`、`source_event_id`、`task_id?`、`phase`、`visual_text`、`emotion`、`speech_state`、`occurred_at_ms` |
+| `minecraft:command_transition` | S→C（trusted/admin） | `event`、`event_id`、`transition_id`、`command_id`、`from_state?`、`to_state`、`reason_code`、`occurred_at_ms` |
+| `minecraft:skill_trust` | S→C（trusted/admin） | `event`、`event_id`、`revision_hash`、`environment_fingerprint`、`status`、`source_command_id` |
+| `minecraft:mission_projection` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:objective_projection` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:proposal_projection` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:discovery_projection` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:skill_validation` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:advancement_projection` | S→C（trusted/admin） | 私有 projection envelope |
+| `minecraft:stage_projection` | S→C（trusted/admin） | 私有 projection envelope |
 | `minecraft:bot_state` | S→C | 可选 health、food、position、dimension、biome、time、weather、action、action_target、held_item、inventory |
 
-公共 projection envelope 为 `schema_version`、`event`、`event_id`、`projection_kind`、`projection_version:number`、`occurred_at_ms:number`、`mission_id?:string`、`entity_id:string`、`payload:object`。连接类命令通过后续 `minecraft:status` 推送返回结果。
+public activity envelope 固定为 `schema_version="1"`、`event="minecraft.activity.projection"`、`event_id="activity:<sequence>"`、`projection_kind="activity"`、单调 `projection_version/occurred_at_ms`、可选的现有 `mission_id`、`entity_id="minecraft"` 和受限 `payload`。服务端在 public-live 连接后自动按 sequence 升序重放最近 64 条；交付允许重复，客户端按 activity sequence/event identity 去重。它不包含 command、objective、step、correlation、request/runtime ID、caller scope、receipt、坐标、参数、证据路径或 reasoning。
+
+原始 Minecraft command/mission/objective 等 projection 只发送到认证的 `minecraft:trusted` room，不向 `public-live` 广播。`livestream:narration_state` 是视觉导演状态；真正字幕与音频仍使用 `chat:sentence`、`chat:audio_*` 和 `chat:control`。连接类命令通过后续 `minecraft:status` 推送返回结果。
 
 ### Translation 与 Persona
 

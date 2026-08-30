@@ -4,7 +4,7 @@ import pvpPkg from 'mineflayer-pvp';
 import Vec3 from 'vec3';
 import { stdin, stdout, argv } from 'node:process';
 
-import { actionTimeoutFromDeadline, withTimeout } from './actionDeadline.js';
+import { actionTimeoutFromDeadline } from './actionDeadline.js';
 import { findReachableCraftingTable } from './craftingTable.js';
 import { availableMaterialCount, craftOperations } from './crafting/counts.js';
 import {
@@ -46,6 +46,17 @@ import { runSurvivalIron } from './survival/runner.js';
 import { setupClientViewer } from './clientViewer.js';
 import { createGameBotV2Adapter } from './runtime/gamebotV2Adapter.js';
 import { createRuntimeProcessProtocol } from './runtime/processProtocol.js';
+import { presentBlockTarget } from './runtime/presentationAnchors.js';
+import {
+  activeOperationScope,
+  createOperationScope,
+  interruptRunningOperation,
+  operationWait,
+} from './runtime/operationScope.js';
+import {
+  presentationSeedDigest,
+  resolvePresentationConfig,
+} from './runtime/broadcastMotionPolicy.js';
 
 const { pathfinder, Movements, goals } = pathfinderPkg;
 const { GoalBlock, GoalNear } = goals;
@@ -75,37 +86,35 @@ function patchPathfinder() {
   _pathfinderPatched = true;
   const _originalGoto = bot.pathfinder.goto.bind(bot.pathfinder);
   bot.pathfinder.goto = async function patchedGoto(goal, ...args) {
-    const timeoutMs = 15000;
-    let timer;
-    const timeoutPromise = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('pathfinder timeout')), timeoutMs);
+    const scope = activeOperationScope() || createOperationScope({
+      bot,
+      deadlineMs: Date.now() + 15_000,
     });
-    try {
-      const result = await Promise.race([_originalGoto(goal, ...args), timeoutPromise]);
-      clearTimeout(timer);
-      return result;
-    } catch (e) {
-      clearTimeout(timer);
-      if (e.message === 'pathfinder timeout') {
-        bot.pathfinder.stop();
-        const goalPos = goal?.end || goal?.target || goal?.position;
-        if (goalPos && bot.entity?.position) {
-          const pos = bot.entity.position;
-          const dx = goalPos.x - pos.x, dz = goalPos.z - pos.z;
-          const dist = Math.sqrt(dx * dx + dz * dz);
-          if (dist > 1) {
-            const yaw = Math.atan2(-dx, -dz);
-            await bot.look(yaw, 0, true);
-            bot.setControlState('forward', true);
-            await new Promise(r => setTimeout(r, Math.min(dist * 250, 5000)));
-            bot.setControlState('forward', false);
-          }
-        }
-        return;
-      }
-      throw e;
-    }
+    return scope.navigate(goal, () => _originalGoto(goal, ...args), { timeoutMs: 15_000 });
   };
+}
+
+let _operationMethodsPatched = false;
+function patchInterruptibleBotMethods() {
+  if (_operationMethodsPatched) return;
+  _operationMethodsPatched = true;
+  for (const [method, timeoutMs, includeContainers] of [
+    ['dig', 10_000, false],
+    ['placeBlock', 8_000, false],
+    ['craft', 30_000, true],
+    ['equip', 5_000, false],
+  ]) {
+    if (typeof bot[method] !== 'function') continue;
+    const original = bot[method].bind(bot);
+    bot[method] = (...args) => {
+      const scope = activeOperationScope();
+      if (!scope) return original(...args);
+      return scope.runInterruptible(
+        () => original(...args),
+        { label: `bot.${method}`, timeoutMs, includeContainers },
+      );
+    };
+  }
 }
 
 // --- Lazy dynamic import for minecraft-data (CJS interop) ---
@@ -130,7 +139,8 @@ async function setupMovements() {
 
 // ── Core action functions (single source of truth) ──
 
-async function _goto(x, y, z) {
+async function _goto(x, y, z, context = {}) {
+  context.operation_scope?.checkpoint();
   await setupMovements();
   await bot.pathfinder.goto(new GoalBlock(Math.floor(x), Math.floor(y), Math.floor(z)));
   return `Moved to (${x}, ${y}, ${z})`;
@@ -173,7 +183,7 @@ async function _explore_for_block(
           if (belowBlock && belowBlock.name !== 'air' && belowBlock.name !== 'bedrock') {
             try {
               await bot.dig(belowBlock);
-              await new Promise(resolve => setTimeout(resolve, 100));
+              await operationWait(100);
             } catch (e) {
               break;
             }
@@ -201,27 +211,24 @@ async function _explore_for_block(
     const targetZ = bot.entity.position.z + dz;
 
     try {
-      await withTimeout(
-        bot.pathfinder.goto(new GoalBlock(targetX, bot.entity.position.y, targetZ)),
-        10000,
-        'explore walk'
-      );
+      await bot.pathfinder.goto(new GoalBlock(targetX, bot.entity.position.y, targetZ));
     } catch (e) {
       // Ignore pathfinding errors
     }
 
     // Wait a bit for blocks to load
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await operationWait(500);
   }
 
   throw new Error(`Could not find ${block_type} after ${max_attempts} exploration attempts`);
 }
 
-async function _mine(block_type, count = 1) {
-  return _mineInner(block_type, count);
+async function _mine(block_type, count = 1, context = {}) {
+  return _mineInner(block_type, count, context);
 }
 
-async function _mineInner(block_type, count) {
+async function _mineInner(block_type, count, context = {}) {
+  context.operation_scope?.checkpoint();
   const mcData = await setupMovements();
 
   // If block_type is an item name, map to the block that drops it
@@ -235,6 +242,7 @@ async function _mineInner(block_type, count) {
 
   let mined = 0;
   for (let i = 0; i < count; i++) {
+    context.operation_scope?.checkpoint();
     let b = bot.findBlock({ matching: bi.id, maxDistance: 10 });
 
     // If not found nearby, use Resource Locator (registry strategies + memory) first,
@@ -266,18 +274,26 @@ async function _mineInner(block_type, count) {
 
     if (!b) throw new Error(`No more ${resolvedBlockType}, mined ${mined}`);
 
+    const presentationTarget = await presentBlockTarget({
+      context,
+      phase: 'locating',
+      position: b.position,
+      ordinal: i,
+      data: { attempt: i + 1 },
+    });
+
     // Navigate with timeout
     try {
-      await withTimeout(
-        bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z)),
-        15000,
-        'navigate to mine'
-      );
+      await bot.pathfinder.goto(new GoalBlock(b.position.x, b.position.y + 1, b.position.z));
     } catch (e) {
       // Navigation failed, try to dig from current position
     }
 
     // Dig block (with retry on abort)
+    context.report_phase?.('acting', {
+      attempt: i + 1,
+      ...(presentationTarget ? { target: presentationTarget } : {}),
+    });
     let digSuccess = false;
     for (let retry = 0; retry < 3 && !digSuccess; retry++) {
       try {
@@ -289,13 +305,25 @@ async function _mineInner(block_type, count) {
           retry < 2 &&
           (e.code === 'COLLECT_FAILED' || (e.message && e.message.includes('aborted')))
         ) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const stillThere = bot.findBlock({ matching: bi.id, maxDistance: 3 });
-          if (!stillThere) {
+          const stillThere = bot.blockAt(b.position);
+          if (!stillThere || stillThere.type !== bi.id) {
             digSuccess = true;
             break;
           }
           b = stillThere;
+          context.report_phase?.('recovering', {
+            attempt: retry + 2,
+            reason_code: 'DIG_RETRY',
+            ...(presentationTarget ? { target: presentationTarget } : {}),
+          });
+          if (presentationTarget?.position) {
+            await context.presentation?.focus?.({
+              phase: 'recovering',
+              ordinal: retry + 1,
+              target: presentationTarget.position,
+            });
+          }
+          await operationWait(500);
         } else {
           throw e;
         }
@@ -303,14 +331,15 @@ async function _mineInner(block_type, count) {
     }
 
     if (digSuccess) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await operationWait(500);
       mined++;
     }
   }
   return `Mined ${mined} ${block_type}`;
 }
 
-async function _place(block_type, x, y, z, facing = undefined) {
+async function _place(block_type, x, y, z, facing = undefined, context = {}) {
+  context.operation_scope?.checkpoint();
   await setupMovements();
   const targetPosition = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
   const blockName = normalizePlacementBlockName(block_type);
@@ -336,7 +365,7 @@ async function _place(block_type, x, y, z, facing = undefined) {
     await bot.lookAt(targetPosition.offset(0.5, 0.5, 0.5), true);
   }
   await placeOrientedBlock(bot, placement, blockName, facing);
-  await new Promise(resolve => setTimeout(resolve, 250));
+  await operationWait(250);
   const placed = bot.blockAt(targetPosition);
   if (!placed || placed.name !== blockName) {
     throw new Error(`Placement not observed at (${x}, ${y}, ${z})`);
@@ -344,9 +373,9 @@ async function _place(block_type, x, y, z, facing = undefined) {
   return `Placed ${block_type} at (${x}, ${y}, ${z})`;
 }
 
-async function _placeWithEvidence(block_type, x, y, z, facing = undefined) {
+async function _placeWithEvidence(block_type, x, y, z, facing = undefined, context = {}) {
   const targetPosition = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
-  const output = await _place(block_type, x, y, z, facing);
+  const output = await _place(block_type, x, y, z, facing, context);
   const blockName = normalizePlacementBlockName(block_type);
   const observedSecondaryPositions = blockName.endsWith('_bed')
     ? [
@@ -403,6 +432,7 @@ function _resolveAttackTarget(target = 'nearest_hostile') {
 }
 
 async function _attackWithEvidence(target = 'nearest_hostile', context = {}) {
+  context.operation_scope?.checkpoint();
   await setupMovements();
   const entity = _resolveAttackTarget(target);
   const combat = await executeCombatWithEvidence({
@@ -470,7 +500,7 @@ async function _waitForInventoryIncrease(itemName, beforeCount, minimumIncrease 
   const expected = beforeCount + Math.max(1, minimumIncrease);
   while (Date.now() < deadline) {
     if (_inventoryCount(itemName) >= expected) return true;
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await operationWait(100);
   }
   if (_inventoryCount(itemName) >= expected) return true;
   throw craftError(`Craft result not observed: ${itemName}`, 'CRAFT_FAILED');
@@ -531,12 +561,7 @@ async function _stabilizePosition(timeout = 7000) {
 
   try {
     _collectDebug(`stabilize goto=${standPos.x},${standPos.y},${standPos.z}`);
-    await withTimeout(
-      bot.pathfinder.goto(new GoalBlock(standPos.x, standPos.y, standPos.z)),
-      timeout,
-      'stabilize position',
-      () => stopCollectionMovement(bot),
-    );
+    await bot.pathfinder.goto(new GoalBlock(standPos.x, standPos.y, standPos.z));
   } catch (e) {
     _collectDebug(`stabilize path failed: ${e.message}`);
     stopCollectionMovement(bot);
@@ -544,7 +569,7 @@ async function _stabilizePosition(timeout = 7000) {
       await bot.lookAt(standPos.offset(0.5, 0.25, 0.5), true);
       bot.setControlState('forward', true);
       if (isCollectionFluidHazard(bot)) bot.setControlState('jump', true);
-      await new Promise(resolve => setTimeout(resolve, 900));
+      await operationWait(900);
     } finally {
       bot.setControlState('forward', false);
     }
@@ -552,7 +577,7 @@ async function _stabilizePosition(timeout = 7000) {
     stopCollectionMovement(bot);
   }
 
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await operationWait(300);
   return bot.entity?.onGround !== false && !isCollectionFluidHazard(bot);
 }
 
@@ -593,7 +618,7 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
   await _stabilizePosition(5000);
 
   // Wait for items to drop
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await operationWait(300);
 
   const deadline = Date.now() + timeout;
   let attempts = 0;
@@ -604,7 +629,7 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
       await bot.lookAt(pos.offset ? pos.offset(0, 0.25, 0) : new Vec3(pos.x, pos.y + 0.25, pos.z), true);
       bot.setControlState('forward', true);
       bot.setControlState('sprint', true);
-      await new Promise(resolve => setTimeout(resolve, 650));
+      await operationWait(650);
     } catch (e) {
       _collectDebug(`manual pickup move failed (${label}): ${e.message}`);
     } finally {
@@ -635,12 +660,7 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
         triedFallbackPosition = true;
         try {
           _collectDebug(`no item entity visible; moving to fallback=${fallbackPos.x},${fallbackPos.y},${fallbackPos.z}`);
-          await withTimeout(
-            bot.pathfinder.goto(new GoalNear(fallbackPos.x, fallbackPos.y, fallbackPos.z, 1)),
-            5000,
-            'pickup fallback position',
-            () => stopCollectionMovement(bot),
-          );
+          await bot.pathfinder.goto(new GoalNear(fallbackPos.x, fallbackPos.y, fallbackPos.z, 1));
           stopCollectionMovement(bot);
           await walkToward(fallbackPos, 'fallback');
         } catch (e) {
@@ -648,7 +668,7 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
           await walkToward(fallbackPos, 'fallback after path failure');
         }
       }
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await operationWait(500);
       continue;
     }
 
@@ -659,11 +679,8 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
 
     try {
       const pos = closest.position;
-      await withTimeout(
-        bot.pathfinder.goto(new GoalNear(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), 1)),
-        5000,
-        'pickup item',
-        () => stopCollectionMovement(bot),
+      await bot.pathfinder.goto(
+        new GoalNear(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), 1),
       );
       stopCollectionMovement(bot);
       await walkToward(pos, 'item entity');
@@ -673,7 +690,7 @@ async function _pickupDroppedItems(timeout = 5000, fallbackPos = null) {
     }
 
     // Wait for pickup to register
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await operationWait(200);
     _collectDebug(`pickup wait done inventory=${JSON.stringify(Object.fromEntries(bot.inventory.items().map((it) => [it.name, it.count])))}`);
   }
 
@@ -752,7 +769,11 @@ async function _collectInner(block_type, count, mcData, context = {}) {
     Boolean(discoveredTarget),
   );
   if (preparation) {
-    await mineShaftMod.mineShaft(preparation.targetY, preparation.minimumCobblestone);
+    await mineShaftMod.mineShaft(
+      preparation.targetY,
+      preparation.minimumCobblestone,
+      context,
+    );
     collected = Math.min(
       Math.max(0, _inventoryCount(dropItem) - startingCount),
       count,
@@ -806,14 +827,18 @@ async function _collectInner(block_type, count, mcData, context = {}) {
 
     if (!block) break;
     _collectDebug(`target block=${block.name}@${block.position.x},${block.position.y},${block.position.z}`);
+    const presentationTarget = await presentBlockTarget({
+      context,
+      phase: 'locating',
+      position: block.position,
+      ordinal: attempts - 1,
+      data: { attempt: attempts },
+    });
 
     // Navigate to block with timeout
     try {
-      await withTimeout(
-        bot.pathfinder.goto(new GoalNear(block.position.x, block.position.y, block.position.z, 3)),
-        15000,
-        'navigate to block',
-        () => stopCollectionMovement(bot),
+      await bot.pathfinder.goto(
+        new GoalNear(block.position.x, block.position.y, block.position.z, 3),
       );
     } catch (e) {
       context.signal?.throwIfAborted();
@@ -822,7 +847,7 @@ async function _collectInner(block_type, count, mcData, context = {}) {
 
     // Stop pathfinder and wait for bot to fully stop
     bot.pathfinder.stop();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await operationWait(200);
     _collectDebug(`after navigation pos=${bot.entity.position.x.toFixed(2)},${bot.entity.position.y.toFixed(2)},${bot.entity.position.z.toFixed(2)}`);
     if (bot.entity.position.distanceTo(block.position) > 5.5) {
       excludedTargets.add(collectionBlockKey(block));
@@ -831,6 +856,10 @@ async function _collectInner(block_type, count, mcData, context = {}) {
     }
 
     // Dig block (with retry on abort)
+    context.report_phase?.('acting', {
+      attempt: attempts,
+      ...(presentationTarget ? { target: presentationTarget } : {}),
+    });
     let digSuccess = false;
     for (let retry = 0; retry < 3 && !digSuccess; retry++) {
       try {
@@ -843,12 +872,24 @@ async function _collectInner(block_type, count, mcData, context = {}) {
         context.signal?.throwIfAborted();
         _collectDebug(`dig failed retry=${retry} message=${e.message}`);
         if (retry < 2 && isRecoverableCollectionDigError(e)) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          // Check if block was actually broken despite abort
           if (!isCollectionBlockStillPresent(bot, block)) {
-            digSuccess = true; // Block was broken
+            digSuccess = true;
             break;
           }
+          block = bot.blockAt(block.position) || block;
+          context.report_phase?.('recovering', {
+            attempt: retry + 2,
+            reason_code: 'DIG_RETRY',
+            ...(presentationTarget ? { target: presentationTarget } : {}),
+          });
+          if (presentationTarget?.position) {
+            await context.presentation?.focus?.({
+              phase: 'recovering',
+              ordinal: retry + 1,
+              target: presentationTarget.position,
+            });
+          }
+          await operationWait(500);
         } else if (isRecoverableCollectionDigError(e)) {
           excludedTargets.add(collectionBlockKey(block));
           _collectDebug(`excluded stalled dig target=${collectionBlockKey(block)}`);
@@ -869,7 +910,7 @@ async function _collectInner(block_type, count, mcData, context = {}) {
         ));
       }
       // Wait for item entity to register and pick up drops
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await operationWait(500);
       await _pickupDroppedItems(8000, block.position);
       context.signal?.throwIfAborted();
       const actual = Math.max(0, _inventoryCount(dropItem) - startingCount);
@@ -895,7 +936,7 @@ async function _ensureCraftingTable(mcData) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (bot.entity?.onGround) return;
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await operationWait(100);
     }
   };
 
@@ -916,7 +957,7 @@ async function _ensureCraftingTable(mcData) {
         const recipes = bot.recipesFor(tableInfo.id, null, 1, null) || [];
         if (recipes.length > 0) {
           await bot.craft(recipes[0], 1, null);
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await operationWait(500);
           tableItem = bot.inventory.items().find(i => i.name === 'crafting_table');
         }
       }
@@ -939,7 +980,7 @@ async function _ensureCraftingTable(mcData) {
           if (targetBlock && !['air', 'water', 'lava', 'crafting_table'].includes(targetBlock.name)) {
             await _equipToolForBlock(targetBlock);
             await bot.dig(targetBlock);
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await operationWait(300);
             targetBlock = bot.blockAt(targetPos);
           }
           if (targetBlock?.name === 'crafting_table') return targetBlock;
@@ -954,13 +995,13 @@ async function _ensureCraftingTable(mcData) {
           const directUnderfoot = dx === 0 && dy === -1 && dz === 0;
           if (canControl && directUnderfoot) {
             bot.setControlState('jump', true);
-            await new Promise(resolve => setTimeout(resolve, 150));
+            await operationWait(150);
             bot.setControlState('jump', false);
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await operationWait(200);
           }
           if (canControl) {
             bot.setControlState('sneak', true);
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await operationWait(100);
           }
           try {
             await placementBudget.place(
@@ -969,7 +1010,7 @@ async function _ensureCraftingTable(mcData) {
           } finally {
             if (canControl) bot.setControlState('sneak', false);
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await operationWait(1000);
           const placed = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 5 });
           if (placed) return placed;
         } catch (e) {
@@ -1010,7 +1051,7 @@ async function _ensureCraftingTable(mcData) {
               await bot.equip(tableItem, 'hand');
               await bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true);
               await placementBudget.place(() => bot.placeBlock(refBlock, face));
-              await new Promise(resolve => setTimeout(resolve, 700));
+              await operationWait(700);
               const placed = bot.findBlock({ matching: mcData.blocksByName.crafting_table.id, maxDistance: 5 });
               if (placed) return placed;
             } catch (e) {
@@ -1249,7 +1290,8 @@ async function _craftWithFallback(recipe, count, craftingTable) {
   }
 }
 
-async function _craft(recipe, count = 1) {
+async function _craft(recipe, count = 1, context = {}) {
+  context.operation_scope?.checkpoint();
   const mcData = await getMcData();
   const fallbackRecipe = FALLBACK_RECIPES[recipe] || null;
   const needsCraftingTable = fallbackRecipe ? fallbackRecipe.requiresTable : null;
@@ -1264,6 +1306,12 @@ async function _craft(recipe, count = 1) {
   // Inventory recipes like logs -> planks must stay local, otherwise the bot can
   // waste the command timeout pathing to an old table in the world.
   const craftingTable = needsCraftingTable === false ? null : await _ensureCraftingTable(mcData);
+  const presentationTarget = await presentBlockTarget({
+    context,
+    phase: 'aiming',
+    position: craftingTable?.position,
+  });
+  context.report_phase?.('acting', presentationTarget ? { target: presentationTarget } : {});
   if (fallbackRecipe?.requiresTable) {
     const deterministicResult = await _craftWithFallback(recipe, count, craftingTable);
     if (deterministicResult) return deterministicResult;
@@ -1473,7 +1521,7 @@ async function _manualCraft(recipeObj, itemName, count) {
   }
 
   // Wait for crafting result
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await operationWait(500);
 
   // Check if we have a result
   const result = window.slots[0];
@@ -1556,7 +1604,8 @@ const mineShaftMod = createMineShaft({
   bot,
 });
 
-async function _recipes(item) {
+async function _recipes(item, context = {}) {
+  context.operation_scope?.checkpoint();
   const mcData = await getMcData();
   const itemInfo = mcData.itemsByName[item];
   if (!itemInfo) throw new Error(`Unknown item: ${item}`);
@@ -1617,10 +1666,11 @@ function _orderRecipesForInventory(recipes, mcData) {
 }
 
 
-function abortCurrentAction() {
+async function abortCurrentAction() {
   stopCollectionMovement(bot);
-  bot.pvp?.stop();
+  await bot.pvp?.stop?.();
   bot.stopDigging?.();
+  return interruptRunningOperation();
 }
 
 
@@ -1665,7 +1715,11 @@ const protocol = createRuntimeProcessProtocol({
       timeoutMs: 5_000,
       async execute() {
         const health = await gameBotV2Adapter.runtime.health();
-        return { ...health, ready: health.ready && Boolean(bot.entity) };
+        const transport = protocol.getState();
+        return {
+          ...health,
+          ready: health.ready && Boolean(bot.entity) && !transport.quarantined,
+        };
       },
     },
     survival_iron: {
@@ -1703,28 +1757,31 @@ const protocol = createRuntimeProcessProtocol({
   },
 });
 const { sendEvent } = protocol;
+const presentation = resolvePresentationConfig();
 
 gameBotV2Adapter = createGameBotV2Adapter({
   bot,
   connection: { host, port, username, version },
   abortActive: abortCurrentAction,
   emitEvent: sendEvent,
+  presentation,
   actions: {
     goto: _goto,
     collectWithEvidence: _collectWithEvidence,
     mine: _mine,
     craft: _craft,
     placeWithEvidence: _placeWithEvidence,
-    smelt: (item, fuel, count) => smeltMod.smelt(item, fuel, count),
-    equip: (item, destination) => equipMod.equip(item, destination),
+    smelt: (item, fuel, count, context) => smeltMod.smelt(item, fuel, count, context),
+    equip: (item, destination, context) => equipMod.equip(item, destination, context),
     attackWithEvidence: _attackWithEvidence,
-    chat(message) {
+    chat(message, context = {}) {
+      context.operation_scope?.checkpoint();
       bot.chat(assertSurvivalChat(message));
       return 'Chat message sent';
     },
     recipes: _recipes,
-    mineShaft: (targetY, minimumCobblestone) => (
-      mineShaftMod.mineShaft(targetY, minimumCobblestone)
+    mineShaft: (targetY, minimumCobblestone, context) => (
+      mineShaftMod.mineShaft(targetY, minimumCobblestone, context)
     ),
   },
 });
@@ -1739,10 +1796,16 @@ if (clientViewerCtx.config?.enabled) {
 
 bot.on('login', () => {
   sendEvent('login', { username: bot.username });
+  sendEvent('presentation_configured', {
+    mode: presentation.mode,
+    tempo: presentation.tempo,
+    seed_digest: presentationSeedDigest(presentation.seed),
+  });
 });
 
 bot.on('spawn', () => {
   patchPathfinder();
+  patchInterruptibleBotMethods();
   sendEvent('spawn');
   bot._collect = _collect;
   bot._craft = _craft;

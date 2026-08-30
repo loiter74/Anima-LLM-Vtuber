@@ -11,7 +11,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from loguru import logger
@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from animetta.tools.mcp_bridge import MCPClient
 
-from .config import MinecraftConfig, MinecraftMcpConfig
+from .config import MinecraftConfig, MinecraftMcpConfig, MinecraftPresentationMode
 
 _bridge: MinecraftMcpBridge | None = None
 
@@ -189,6 +189,13 @@ class MinecraftMcpBridge:
         self._event_cursor = 0
         self._event_task: asyncio.Task[None] | None = None
         self._connect_lock = asyncio.Lock()
+        self._active_presentation_mode = config.presentation.effective_mode
+
+    @property
+    def active_presentation_mode(self) -> MinecraftPresentationMode:
+        """Return the most restrictive application/runtime presentation mode."""
+
+        return self._active_presentation_mode
 
     async def start(
         self,
@@ -206,10 +213,28 @@ class MinecraftMcpBridge:
                 "profile": profile or self.config.mcp.default_profile,
                 "request_id": request_id,
                 "allow_create": allow_server_create,
+                "presentation": {
+                    "mode": self.config.presentation.effective_mode,
+                    "tempo": self.config.presentation.tempo,
+                    "seed": self.config.presentation.seed,
+                },
             },
         )
         if result.get("state") != "ready":
             raise MinecraftMcpError(f"MC_MCP_NOT_READY:{result.get('state')}")
+        bot = result.get("bot")
+        runtime_mode = bot.get("presentation_mode") if isinstance(bot, dict) else None
+        configured_mode = self.config.presentation.effective_mode
+        if runtime_mode is None:
+            self._active_presentation_mode = configured_mode
+        elif runtime_mode not in {"off", "visual_only", "full"}:
+            raise MinecraftMcpError("MC_MCP_PRESENTATION_MODE_INVALID")
+        else:
+            rank = {"off": 0, "visual_only": 1, "full": 2}
+            self._active_presentation_mode = cast(
+                MinecraftPresentationMode,
+                min((configured_mode, runtime_mode), key=rank.__getitem__),
+            )
         self._running = True
         await self._stop_event_task()
         self._event_task = asyncio.create_task(self._poll_events())
@@ -325,8 +350,17 @@ class MinecraftMcpBridge:
     def set_viewer_callback(self, callback: Callable[..., Any]) -> None:
         self._viewer_callback = callback
 
-    def add_runtime_event_callback(self, callback: Callable[[dict[str, Any]], None]) -> None:
+    def add_runtime_event_callback(
+        self,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> Callable[[], None]:
         self._event_callbacks.append(callback)
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._event_callbacks.remove(callback)
+
+        return unsubscribe
 
     @property
     def is_running(self) -> bool:

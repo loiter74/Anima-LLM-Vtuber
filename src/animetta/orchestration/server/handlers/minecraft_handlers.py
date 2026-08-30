@@ -19,6 +19,11 @@ from ...socket_events import EVENTS
 if TYPE_CHECKING:
     from socketio import AsyncServer
 
+    from animetta.services.livestream_narration import BroadcastNarrationDirector
+
+
+TRUSTED_MINECRAFT_ROOM = "minecraft:trusted"
+
 
 _VIEWER_BINDING_STATES = frozenset({"disabled", "waiting", "attaching", "following", "degraded"})
 _VIEWER_REASONS = frozenset(
@@ -109,10 +114,46 @@ class MinecraftHandlers:
     Uses the global Minecraft bridge singleton (init_bridge / cleanup_bridge).
     """
 
-    def __init__(self, sio: "AsyncServer"):
+    def __init__(
+        self,
+        sio: "AsyncServer",
+        director: "BroadcastNarrationDirector | None" = None,
+    ):
         self.sio = sio
+        self._director = director
+        mc_tools.set_minecraft_event_emit(self._emit_transition)
 
     async def _emit_transition(self, payload: dict[str, Any]) -> None:
+        if payload.get("event") == "minecraft.presentation.configured":
+            mode = payload.get("mode")
+            if self._director is not None and mode in {"off", "visual_only", "full"}:
+                replay_limit = payload.get("replay_limit")
+                self._director.configure(
+                    mode,
+                    replay_limit=(
+                        replay_limit
+                        if isinstance(replay_limit, int) and not isinstance(replay_limit, bool)
+                        else None
+                    ),
+                )
+            logger.info(
+                "[Minecraft] presentation configured: mode={} profile={}",
+                mode,
+                payload.get("profile"),
+            )
+            return
+        if payload.get("event") == "minecraft.activity.projection":
+            if self._director is not None:
+                bridge = get_bridge()
+                if bridge is not None:
+                    self._director.configure(
+                        bridge.active_presentation_mode,
+                        replay_limit=bridge.config.presentation.replay_limit,
+                    )
+                await self._director.submit(payload)
+            else:
+                await self.sio.emit(EVENTS["minecraft"]["activity_projection"]["name"], payload)
+            return
         event_key = {
             "minecraft.skill.trust": "skill_trust",
             "minecraft.mission.projection": "mission_projection",
@@ -123,7 +164,26 @@ class MinecraftHandlers:
             "minecraft.advancement.projection": "advancement_projection",
             "minecraft.stage.projection": "stage_projection",
         }.get(str(payload.get("event")), "command_transition")
-        await self.sio.emit(EVENTS["minecraft"][event_key]["name"], payload)
+        await self.sio.emit(
+            EVENTS["minecraft"][event_key]["name"],
+            payload,
+            to=TRUSTED_MINECRAFT_ROOM,
+        )
+
+    async def replay_public(self, sid: str) -> None:
+        if self._director is None:
+            return
+        try:
+            page = await mc_tools.read_minecraft_public_activity_replay(
+                limit=self._director.replay_limit
+            )
+        except RuntimeError:
+            await self._director.replay(sid)
+            return
+        await self._director.replay_persisted(
+            [event.model_dump(mode="json") for event in page.events],
+            sid,
+        )
 
     def _setup_viewer_callback(self, bridge: MinecraftMcpBridge) -> None:
         """Register callback to forward viewer join/leave events to frontend."""
@@ -162,6 +222,11 @@ class MinecraftHandlers:
                 mc_cfg_dict = tools_yaml.get("minecraft", {}) or {}
             mc_cfg_dict["enabled"] = True
             config = MinecraftConfig(**mc_cfg_dict)
+            if self._director is not None:
+                self._director.configure(
+                    config.presentation.effective_mode,
+                    replay_limit=config.presentation.replay_limit,
+                )
             init_bridge(config.model_dump())
             bridge = get_bridge()
             if bridge is None:
@@ -174,6 +239,11 @@ class MinecraftHandlers:
                 profile=payload.get("profile"),
                 event_emit=self._emit_transition,
             )
+            if self._director is not None:
+                self._director.configure(
+                    bridge.active_presentation_mode,
+                    replay_limit=bridge.config.presentation.replay_limit,
+                )
             await self.sio.emit(EVENTS["minecraft"]["status"]["name"], result, to=sid)
         except Exception as e:
             logger.error(f"[Minecraft] Failed to connect: {e}")

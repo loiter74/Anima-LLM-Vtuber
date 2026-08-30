@@ -2,6 +2,7 @@
 // This is used after reaching diamond depth to expose new ore faces without cheats.
 
 import { Vec3 } from 'vec3';
+import { activeOperationScope, operationWait } from './runtime/operationScope.js';
 
 export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedWait }) {
   const SUPPORT_BLOCKS = [
@@ -17,14 +18,22 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
 
   function wait(ms) {
     if (typeof injectedWait === 'function') return injectedWait(ms);
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return operationWait(ms);
   }
 
-  async function withActionTimeout(promise, timeoutMs, label, onTimeout = () => {}) {
+  async function withActionTimeout(operation, timeoutMs, label, onTimeout = () => {}) {
+    const start = typeof operation === 'function' ? operation : () => operation;
+    const scope = activeOperationScope();
+    if (scope) {
+      return scope.runInterruptible(
+        start,
+        { label, timeoutMs, includeContainers: false },
+      );
+    }
     let timer;
     try {
       return await Promise.race([
-        promise,
+        Promise.resolve().then(start),
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             try { onTimeout(); } catch {}
@@ -101,13 +110,13 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
       if (!item) return false;
       if (typeof bot.lookAt === 'function' && targetPos?.offset) {
         await withActionTimeout(
-          bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true),
+          () => bot.lookAt(targetPos.offset(0.5, 0.5, 0.5), true),
           2000,
           'look at support placement'
         );
       }
       await withActionTimeout(
-        bot.placeBlock(reference, face),
+        () => bot.placeBlock(reference, face),
         5000,
         `place support at ${targetPos.x},${targetPos.y},${targetPos.z}`
       );
@@ -153,7 +162,7 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
   async function digIfNeeded(block) {
     if (isClear(block)) return false;
     if (!isSolid(block)) return false;
-    const tool = await withActionTimeout(equipBestPickaxe(), 3000, 'equip pickaxe');
+    const tool = await withActionTimeout(() => equipBestPickaxe(), 3000, 'equip pickaxe');
     if ((!tool || tool === 'wooden_pickaxe') && block.name?.includes('deepslate')) {
       const err = new Error(`stone pickaxe or better required for ${block.name}`);
       err.code = 'TOOL_REQUIRED';
@@ -162,7 +171,7 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
     }
     if (typeof bot.lookAt === 'function' && block.position?.offset) {
       await withActionTimeout(
-        bot.lookAt(block.position.offset(0.5, 0.5, 0.5), true),
+        () => bot.lookAt(block.position.offset(0.5, 0.5, 0.5), true),
         2000,
         'look at branch block'
       );
@@ -170,7 +179,7 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await withActionTimeout(
-          bot.dig(block),
+          () => bot.dig(block),
           10000,
           `dig ${block.name}@${block.position.x},${block.position.y},${block.position.z}`,
           () => bot.stopDigging?.()
@@ -225,7 +234,7 @@ export function createBranchMine({ bot, disableAuto, enableAuto, wait: injectedW
 
         if (typeof bot.lookAt === 'function' && feetPos?.offset) {
           await withActionTimeout(
-            bot.lookAt(feetPos.offset(0.5, 0.8, 0.5), true),
+            () => bot.lookAt(feetPos.offset(0.5, 0.8, 0.5), true),
             2000,
             'look down tunnel'
           );

@@ -1,9 +1,12 @@
+import { operationWait } from './runtime/operationScope.js';
+
+
 export async function findReachableCraftingTable({
   bot,
   craftingTableId,
   GoalNear,
   maxDistance = 96,
-  wait = async (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+  wait = operationWait,
 }) {
   const table = bot.findBlock({ matching: craftingTableId, maxDistance });
   if (!table) return null;

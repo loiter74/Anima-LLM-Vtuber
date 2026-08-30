@@ -9,6 +9,7 @@
 
 import Vec3 from 'vec3';
 import pathfinderPkg from 'mineflayer-pathfinder';
+import { operationWait } from '../runtime/operationScope.js';
 import { createBranchMine } from '../branch_mine.js';
 import { TOOL_TIER } from './registry.js';
 
@@ -323,7 +324,7 @@ async function safeDescent(bot, ctx) {
     }
     try {
       await bot.dig(target);
-      await new Promise((r) => setTimeout(r, 80));
+      await operationWait(80);
     } catch (_e) {
       break;
     }

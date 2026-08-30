@@ -10,11 +10,13 @@ import { applyLiveReviewLayout } from '@/review/layout'
 import { createLive2DStage } from '@/review/live2d-stage'
 import { parseReviewMouthTimeline } from '@/review/review-lip-sync'
 import { mountLive2DPerformanceReview } from '@/review/live2d-performance/main'
-import { PUBLIC_LIVE_SOCKET_AUTH, startPublicLiveSocket } from './public-live-socket'
+import { PUBLIC_LIVE_SOCKET_AUTH, startPublicLiveSocket } from '@/shared/transport/publicLiveSocket'
+import { createPublicMediaOwnership } from '@/shared/broadcast/mediaOwnership'
 import type { LiveSocketRuntime } from './socket-runtime'
 import { createDomLiveView } from './view'
 import 'virtual:uno.css'
 import './styles.css'
+import '@/shared/broadcast/public-activity.css'
 import '@/tts-failover/styles.css'
 import '@/review/live2d-performance/styles.css'
 
@@ -27,7 +29,9 @@ declare global {
 window.PIXI = PIXI
 applyLiveReviewLayout(document.documentElement)
 const search = new URLSearchParams(window.location.search)
+const mediaOwnership = createPublicMediaOwnership(search, 'active')
 const liveView = createDomLiveView(document)
+let live2dStage: ReturnType<typeof createLive2DStage> | null = null
 
 function createNetworkRuntime(): LiveSocketRuntime {
   const socket = io(window.location.origin, {
@@ -67,17 +71,22 @@ const session = bootstrapLiveSession({
   search,
   view: liveView,
   createNetworkRuntime,
+  onPublicVisualCue: (cue) => live2dStage?.applyPublicCue(cue),
 })
 
 const pageDisposers = new DisposerStack()
 let pageDisposed = false
-const live2dStage = createLive2DStage(session.socket, { idleVitality: true })
-const liveBgm = createLiveBgmController(document, search)
-const liveAudio = createLiveAudioController(session.socket, document, live2dStage.setMouth, liveBgm)
+const stage = createLive2DStage(session.socket, { idleVitality: true })
+live2dStage = stage
+const liveBgm = createLiveBgmController(document, search, { ownership: mediaOwnership })
+const liveAudio = createLiveAudioController(session.socket, document, stage.setMouth, liveBgm, {
+  ownership: mediaOwnership,
+})
+pageDisposers.add(() => mediaOwnership.dispose())
 pageDisposers.add(() => session.dispose())
 pageDisposers.add(() => liveAudio.dispose())
 pageDisposers.add(() => liveBgm.dispose())
-pageDisposers.add(() => live2dStage.dispose())
+pageDisposers.add(() => stage.dispose())
 const disposePage = (): void => {
   if (pageDisposed) return
   pageDisposed = true
@@ -86,15 +95,15 @@ const disposePage = (): void => {
 window.addEventListener('beforeunload', disposePage, { once: true })
 pageDisposers.add(() => window.removeEventListener('beforeunload', disposePage))
 
-void live2dStage.ready.finally(() => {
+void stage.ready.finally(() => {
   if (pageDisposed) return
   const notification = mountTtsFailoverReviewNotification(document, search, { autoplay: false })
   if (notification) {
     pageDisposers.add(() => notification.dispose())
     const volumes = parseReviewMouthTimeline(search.get('mouthTimeline'))
-    live2dStage.playReviewAudio(notification.element, volumes)
+    stage.playReviewAudio(notification.element, volumes)
   }
-  const performanceReview = mountLive2DPerformanceReview(document, search, live2dStage)
+  const performanceReview = mountLive2DPerformanceReview(document, search, stage)
   if (performanceReview) pageDisposers.add(() => performanceReview.dispose())
   session.start()
 })

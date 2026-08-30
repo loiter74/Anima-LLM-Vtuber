@@ -33,21 +33,44 @@ function commandTimeout(command, descriptor, defaultTimeoutMs) {
 }
 
 
-function withTimeout(operation, timeoutMs, action, onTimeout) {
+async function withTimeout(operation, timeoutMs, action, onTimeout, settlementTimeoutMs) {
   let timer;
+  const operationPromise = Promise.resolve(operation);
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      try {
-        onTimeout();
-      } catch {
-        // Cleanup cannot replace the protocol timeout.
-      }
       const error = new Error(`Action "${action}" timed out after ${timeoutMs}ms`);
       error.code = 'RUNTIME_TIMEOUT';
       reject(error);
     }, timeoutMs);
   });
-  return Promise.race([Promise.resolve(operation), timeout]).finally(() => clearTimeout(timer));
+  try {
+    return await Promise.race([operationPromise, timeout]);
+  } catch (error) {
+    if (error?.code !== 'RUNTIME_TIMEOUT') throw error;
+    try {
+      await onTimeout();
+    } catch {
+      // Cleanup cannot replace the protocol timeout.
+    }
+    let settled = false;
+    await Promise.race([
+      operationPromise.then(
+        () => { settled = true; },
+        () => { settled = true; },
+      ),
+      new Promise((resolve) => setTimeout(resolve, settlementTimeoutMs)),
+    ]);
+    error.quarantined = !settled;
+    if (!settled) {
+      error.world_may_have_changed = true;
+      Object.defineProperty(error, 'operationSettlement', {
+        value: operationPromise.then(() => {}, () => {}),
+      });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 
@@ -57,11 +80,13 @@ export function createRuntimeProcessProtocol({
   commands,
   abortActive = () => {},
   defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutSettlementMs = 2_000,
 }) {
   if (!input || !output) throw new TypeError('input and output are required');
   if (!commands || typeof commands !== 'object') throw new TypeError('commands are required');
 
   let busy = false;
+  let quarantined = false;
   let lines = null;
   const write = (message) => output.write(`${JSON.stringify(message)}\n`);
 
@@ -81,6 +106,17 @@ export function createRuntimeProcessProtocol({
       });
       return;
     }
+    if (quarantined && descriptor.bypassBusy !== true) {
+      write({
+        id,
+        status: 'error',
+        result: {
+          code: 'RUNTIME_QUARANTINED',
+          message: 'Runtime timed out before the active operation became terminal',
+        },
+      });
+      return;
+    }
     if (busy && descriptor.bypassBusy !== true) {
       write({
         id,
@@ -91,6 +127,7 @@ export function createRuntimeProcessProtocol({
     }
 
     const consumesBusy = descriptor.bypassBusy !== true;
+    let lateSettlement = null;
     if (consumesBusy) busy = true;
     try {
       const timeoutMs = commandTimeout(command, descriptor, defaultTimeoutMs);
@@ -99,13 +136,26 @@ export function createRuntimeProcessProtocol({
         timeoutMs,
         action,
         consumesBusy ? abortActive : () => {},
+        timeoutSettlementMs,
       );
+      if (consumesBusy && result?.operationSettlement) {
+        lateSettlement = result.operationSettlement;
+        quarantined = true;
+      }
       write({ id, status: 'success', result });
     } catch (error) {
-      if (consumesBusy && error?.code !== 'RUNTIME_TIMEOUT') abortActive();
+      if (consumesBusy && error?.quarantined === true) quarantined = true;
+      if (consumesBusy && error?.operationSettlement) {
+        lateSettlement = error.operationSettlement;
+      }
+      if (consumesBusy && error?.code !== 'RUNTIME_TIMEOUT') await abortActive();
       write({ id, status: 'error', result: serializeError(error) });
     } finally {
-      if (consumesBusy) busy = false;
+      if (consumesBusy && lateSettlement) {
+        void lateSettlement.finally(() => { busy = false; });
+      } else if (consumesBusy) {
+        busy = false;
+      }
     }
   }
 
@@ -131,5 +181,6 @@ export function createRuntimeProcessProtocol({
     lines = null;
   }
 
-  return { close, dispatch, sendEvent, start };
+  const getState = () => Object.freeze({ busy, quarantined });
+  return { close, dispatch, getState, sendEvent, start };
 }

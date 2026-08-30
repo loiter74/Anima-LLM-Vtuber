@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { validateProfile } from '../src/mcp/profile.js';
+import { validateConfig, validateProfile } from '../src/mcp/profile.js';
 
 
 function managedProfile(overrides = {}) {
@@ -74,4 +74,68 @@ test('managed profile validation confines Compose and environment configuration'
     })),
     /INVALID_MANAGED_ENVIRONMENT/,
   );
+});
+
+
+test('profile validation accepts only the three bounded presentation modes', () => {
+  const profile = managedProfile({
+    bot: {
+      ...managedProfile().bot,
+      presentation: { mode: 'visual_only', tempo: 'brisk', seed: 'review-seed' },
+    },
+  });
+  assert.equal(validateProfile(profile), profile);
+
+  assert.throws(
+    () => validateProfile(managedProfile({
+      bot: {
+        ...managedProfile().bot,
+        presentation: { mode: 'enabled', tempo: 'normal', seed: 'seed' },
+      },
+    })),
+    /INVALID_BOT_PRESENTATION/,
+  );
+  assert.throws(
+    () => validateProfile(managedProfile({
+      bot: {
+        ...managedProfile().bot,
+        presentation: { mode: 'full', tempo: 'random', seed: 'seed' },
+      },
+    })),
+    /INVALID_BOT_PRESENTATION/,
+  );
+});
+
+
+test('profile validation rejects blank presentation seeds', () => {
+  assert.throws(
+    () => validateProfile(managedProfile({
+      bot: {
+        username: 'AnimettaBot',
+        presentation: { mode: 'full', tempo: 'normal', seed: '   ' },
+      },
+    })),
+    /INVALID_BOT_PRESENTATION/,
+  );
+});
+
+
+test('service config validates every profile presentation before startup', () => {
+  for (const presentation of [
+    { mode: 'enabled', tempo: 'normal', seed: 'seed' },
+    { mode: 'full', tempo: 'random', seed: 'seed' },
+    { mode: 'full', tempo: 'normal', seed: '   ' },
+  ]) {
+    assert.throws(
+      () => validateConfig({
+        profiles: {
+          valid: managedProfile(),
+          invalid: managedProfile({
+            bot: { username: 'AnimettaBot', presentation },
+          }),
+        },
+      }),
+      /INVALID_BOT_PRESENTATION/,
+    );
+  }
 });

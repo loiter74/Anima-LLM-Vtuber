@@ -2,6 +2,9 @@
 Minecraft configuration models
 """
 
+import os
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -31,6 +34,31 @@ class MinecraftMcpConfig(BaseModel):
         return value
 
 
+MinecraftPresentationMode = Literal["off", "visual_only", "full"]
+
+
+class MinecraftPresentationConfig(BaseModel):
+    """Public-safe livestream presentation policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: MinecraftPresentationMode = "off"
+    tempo: Literal["calm", "normal", "brisk"] = "normal"
+    seed: str = Field(
+        default="animetta-live-v1",
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+    )
+    replay_limit: int = Field(default=64, ge=1, le=256)
+    retention_seconds: int = Field(default=86_400, ge=60, le=604_800)
+
+    @property
+    def effective_mode(self) -> MinecraftPresentationMode:
+        force_off = os.getenv("MC_MCP_PRESENTATION_FORCE_OFF", "").strip().lower()
+        return "off" if force_off == "true" else self.mode
+
+
 class MinecraftConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +71,7 @@ class MinecraftConfig(BaseModel):
     skill_path: str = "data/mc_skills.db"
     safety: MinecraftSafetyConfig = Field(default_factory=MinecraftSafetyConfig)
     mcp: MinecraftMcpConfig = Field(default_factory=MinecraftMcpConfig)
+    presentation: MinecraftPresentationConfig = Field(default_factory=MinecraftPresentationConfig)
 
     @model_validator(mode="before")
     @classmethod

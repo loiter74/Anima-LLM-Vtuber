@@ -18,6 +18,7 @@ from animetta.tools.minecraft.mission.repository import InMemoryMissionRepositor
 from animetta.tools.minecraft.showcase.micro_gates import build_construction_mission
 from animetta.tools.minecraft.voyager.gateway import CommandHandle, VoyagerGateway
 from animetta.tools.minecraft.voyager.journal import CommandDraft, InMemoryCommandJournal
+from animetta.tools.minecraft.voyager.public_activity import PublicActivityRecorder
 from animetta.tools.minecraft.voyager.sqlite_repository import SQLiteCommandJournal
 from animetta.tools.minecraft.voyager.stop import GlobalStopBarrier
 
@@ -59,6 +60,11 @@ def test_caller_scope_is_not_model_generated_schema() -> None:
         "execute",
         "progress",
         "cancel",
+    }
+    assert set(schemas["mc_operate_bot"]["properties"]["projection_kind"]["enum"]) == {
+        "commands",
+        "missions",
+        "activities",
     }
 
 
@@ -259,6 +265,49 @@ async def test_connect_rolls_back_bot_when_control_plane_assembly_fails(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_public_tool_connect_uses_application_projection_sink(monkeypatch) -> None:
+    class StubBridge:
+        config = MinecraftConfig(enabled=True)
+
+        async def start(self, *, profile, request_id):
+            return {"state": "ready", "profile": profile, "request_id": request_id}
+
+    configured: dict[str, object] = {}
+
+    emitted: list[dict[str, object]] = []
+
+    async def sink(payload: dict[str, object]) -> None:
+        emitted.append(payload)
+
+    async def capture_assembly(bridge, *, event_emit=None, **_kwargs):
+        configured["bridge"] = bridge
+        configured["event_emit"] = event_emit
+        return SimpleNamespace()
+
+    bridge = StubBridge()
+    monkeypatch.setattr(tools, "_bridge", bridge)
+    monkeypatch.setattr(tools, "_event_emit", sink)
+    monkeypatch.setattr(tools, "configure_voyager_control_plane", capture_assembly)
+
+    result = await tools.manage_minecraft_connection(
+        "connect", request_id="public-tool-connect", profile="external-local"
+    )
+
+    assert result["state"] == "ready"
+    assert configured == {"bridge": bridge, "event_emit": sink}
+    assert emitted == [
+        {
+            "event": "minecraft.presentation.configured",
+            "mode": "off",
+            "profile": "external-local",
+            "tempo": "normal",
+            "seed": "animetta-live-v1",
+            "replay_limit": 64,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_progress_reads_durable_projection_while_disconnected(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -293,6 +342,102 @@ async def test_progress_reads_durable_projection_while_disconnected(
         )
 
     assert json.loads(response)["commands"][0]["command_id"] == "command-offline-1"
+
+
+@pytest.mark.asyncio
+async def test_activity_progress_replays_public_projection_while_disconnected(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = MinecraftConfig.model_validate(
+        {
+            "enabled": True,
+            "journal_path": str(tmp_path / "activity-journal.sqlite3"),
+            "skill_path": str(tmp_path / "skills.sqlite3"),
+            "presentation": {"mode": "full", "replay_limit": 1},
+        }
+    )
+    journal = SQLiteCommandJournal(config.journal_path)
+    await journal.connect()
+    command = (
+        await journal.create_command(
+            CommandDraft(
+                command_id="private-command-id",
+                caller_scope="conversation:offline-user",
+                request_id="request-offline-activity",
+                request_hash="b" * 64,
+                kind="execute",
+                mode="mission",
+                payload={
+                    "mission_id": "public-mission",
+                    "goal": {"intent": "build", "target": "minecraft:starter_shelter"},
+                },
+                requested_budget={},
+                effective_budget={},
+                accepted_at_ms=1,
+            )
+        )
+    )[0]
+    other_command = (
+        await journal.create_command(
+            CommandDraft(
+                command_id="other-private-command-id",
+                caller_scope="conversation:other-operator",
+                request_id="request-other-activity",
+                request_hash="c" * 64,
+                kind="execute",
+                mode="mission",
+                payload={
+                    "mission_id": "other-public-mission",
+                    "goal": {"intent": "combat", "target": "minecraft:zombie"},
+                },
+                requested_budget={},
+                effective_budget={},
+                accepted_at_ms=2,
+            )
+        )
+    )[0]
+    times = iter((100, 101, 102))
+    recorder = PublicActivityRecorder(
+        repository=journal,
+        enabled=True,
+        now_ms=lambda: next(times),
+    )
+    await recorder.record_command(command, source_key="planning", phase="planning")
+    await recorder.record_command(command, source_key="observing", phase="observing")
+    await recorder.record_command(other_command, source_key="other-planning", phase="planning")
+    await journal.close()
+    monkeypatch.setattr(tools, "_control_plane", None)
+    monkeypatch.setattr(tools, "_bridge", SimpleNamespace(config=config))
+
+    with tools.bind_minecraft_caller_scope("conversation:offline-user"):
+        first_response = await tools.mc_operate_bot.ainvoke(
+            {"operation": "progress", "projection_kind": "activities", "limit": 20}
+        )
+        first_page = json.loads(first_response)
+        second_response = await tools.mc_operate_bot.ainvoke(
+            {
+                "operation": "progress",
+                "projection_kind": "activities",
+                "limit": 20,
+                "cursor": first_page["next_cursor"],
+            }
+        )
+    global_replay = await tools.read_minecraft_public_activity_replay(limit=20)
+
+    first = first_page["events"][0]
+    second = json.loads(second_response)["events"][0]
+    assert first["payload"]["phase"] == "planning"
+    assert second["payload"]["phase"] == "observing"
+    assert first["payload"]["focus"] == {"kind": "structure", "label": "starter shelter"}
+    assert first["event"] == "minecraft.activity.projection"
+    assert "private-command-id" not in first_response
+    assert "conversation:offline-user" not in first_response
+    assert len(global_replay.events) == 1
+    assert global_replay.events[0].mission_id == "other-public-mission"
+    assert global_replay.events[0].payload.intent == "combat"
+    global_json = global_replay.model_dump_json()
+    assert "conversation:other-operator" not in global_json
+    assert "other-private-command-id" not in global_json
 
 
 async def _noop() -> None:

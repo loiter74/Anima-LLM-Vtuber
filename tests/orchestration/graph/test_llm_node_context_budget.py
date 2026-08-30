@@ -72,6 +72,31 @@ class TestExplicitHistoryBudget:
 
         assert result == current
 
+    def test_minecraft_narration_never_reads_conversation_window(self) -> None:
+        session = ConversationSessionState()
+        session.commit(
+            task_id="private-turn",
+            user_text="private viewer message",
+            final_response="private host response",
+        )
+        current = HumanMessage(content="sanitized public fact")
+        config = {"configurable": {"conversation_session": session}}
+
+        result = _explicit_history_messages(
+            [current],
+            _make_state(
+                metadata={
+                    "source": "minecraft:narration",
+                    "actor_role": "host",
+                    "audience": "livestream",
+                }
+            ),
+            config,
+            "minecraft-narration",
+        )
+
+        assert result == [current]
+
     def test_zero_budget_keeps_all_completed_pairs(self) -> None:
         session = ConversationSessionState()
         for index in range(3):
