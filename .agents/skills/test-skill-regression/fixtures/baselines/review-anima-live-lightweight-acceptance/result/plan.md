@@ -5,4 +5,6 @@
 失败: 立即停止, 不自动重试
 发布矩阵: 仅显式 release
 音频: playbackCount + task_id + completed
+计时: summary.json 或 run.json
+对比: 相同 workflow_fingerprint
 状态: 待生成

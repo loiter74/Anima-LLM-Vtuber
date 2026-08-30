@@ -33,6 +33,12 @@ description: 打开、显示或评审 Animetta 真实直播页面，执行演示
 7. 使用真实 Bilibili 数据时调用项目 Bilibili MCP 控制现有会话，不直接启动 `DanmakuService` 或第二条网关连接。只根据本轮新证据判断通过或失败。
 8. 验收真实 TTS 播放时，触发前记录 `#audioStatus[data-playback-count]`；触发后必须同时证明计数递增、`data-last-audio-task-id` 等于本轮 `task_id`、最终 `data-playback-state` 为 `playing` 或 `completed`，且控制台没有播放失败。合成成功或收到事件不能替代真实播放证据。
 
+## 计时
+
+- 每次 review 都从本轮 `summary.json` 的 `started_at` 与 `finished_at` 计算 `duration_seconds`；评审在生成 summary 前失败或中断时改用 `run.json` 的同名字段。沿用现有 evidence，不新增计时台账或手工秒表。
+- 计时记录同时携带 `feature_id`、`profile`、`workflow_fingerprint` 和 `status`。存在相同 `workflow_fingerprint` 的上一轮时，报告上一轮耗时、本轮耗时和差值；没有可比记录时标注为首次基线。
+- 旧记录只用于迭代耗时比较，不参与本轮功能、视觉或播放通过判定。未显式设置性能阈值时，耗时变长只报告，不自动判失败。
+
 ## 不变量
 
 - 保留 `text-boundaries` 与 `sparse` 的名称、消息、弹幕文案和精确断言；只能新增场景，不得替换这些固定夹具。
@@ -43,4 +49,4 @@ description: 打开、显示或评审 Animetta 真实直播页面，执行演示
 
 ## 报告
 
-报告 feature、验收强度、已确认场景、动作/表现/收尾证据、结论和失败点。release 另报告页面与 OBS 来源，并明确区分浏览器诊断与稳定评审。
+报告 feature、验收强度、已确认场景、动作/表现/收尾证据、结论、失败点和本轮耗时；有相同 workflow fingerprint 的历史记录时附耗时差。release 另报告页面与 OBS 来源，并明确区分浏览器诊断与稳定评审。

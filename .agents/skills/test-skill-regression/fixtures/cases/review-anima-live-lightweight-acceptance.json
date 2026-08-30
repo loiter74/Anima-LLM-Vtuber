@@ -17,12 +17,15 @@
         "证据: 动作, 表现, 收尾",
         "失败: 立即停止, 不自动重试",
         "发布矩阵: 仅显式 release",
-        "音频: playbackCount + task_id + completed"
+        "音频: playbackCount + task_id + completed",
+        "计时: summary.json 或 run.json",
+        "对比: 相同 workflow_fingerprint"
       ],
       "not_contains": [
         "每个子步骤都确认",
         "默认完整矩阵",
-        "收到事件即通过"
+        "收到事件即通过",
+        "旧证据参与通过判定"
       ]
     }
   ]
